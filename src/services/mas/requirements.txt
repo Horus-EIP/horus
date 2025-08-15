@@ -1,0 +1,9 @@
+pytest
+pytest-cov
+pytest-asyncio
+uvicorn
+pika
+fastapi
+httpx
+websockets
+wsproto

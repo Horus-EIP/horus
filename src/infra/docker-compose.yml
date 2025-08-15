@@ -1,0 +1,94 @@
+services:
+  rabbitmq:
+    image: rabbitmq:4.1.2
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+    networks:
+      - horus-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mas:
+    build:
+      context: ../services/mas
+      dockerfile: Dockerfile
+    container_name: mas
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    networks:
+      - horus-net
+
+  agent:
+    build:
+      context: ../services/agent
+      dockerfile: Dockerfile
+    container_name: agent
+    environment:
+      - ORCHESTRATOR_URL=http://mas:8000
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      mas:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8001:8001"
+    networks:
+      - horus-net
+    volumes:
+      - ../services/agent/app:/app
+
+  knowledge_store:
+    build:
+      context: ../services/knowledge-store
+      dockerfile: Dockerfile
+    container_name: knowledge_store
+    environment:
+      - CHROMA_TELEMETRY_ENABLED=0
+      - SENTENCE_TRANSFORMERS_NO_TELEMETRY=1
+      - HF_HUB_DISABLE_TELEMETRY=1
+    ports:
+      - "8080:8080"
+    networks:
+      - horus-net
+    volumes:
+      - knowledge_store_documents:/documents
+      - knowledge_store_chroma:/chroma_data
+
+  web-client:
+    build:
+      context: ../services/web-client
+      dockerfile: Dockerfile
+    container_name: web_client
+    depends_on:
+      - mas
+    ports:
+      - "3000:3000"
+    networks:
+      - horus-net
+    volumes:
+      - ../services/web-client/app:/app/app
+      - /app/app/node_modules
+    environment:
+      - NEXT_TELEMETRY_DISABLED=1
+      - NEXT_PUBLIC_KNOWLEDGE_STORE_URL=http://localhost:8080
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+
+networks:
+  horus-net: {}
+
+volumes:
+  knowledge_store_documents: {}
+  knowledge_store_chroma: {}
+
+
