@@ -117,7 +117,13 @@ def _consume_messages():
 
     try:
         rabbit_host = os.getenv("RABBITMQ_HOST", "localhost")
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host=rabbit_host))
+        connection = pika.BlockingConnection(
+            pika.ConnectionParameters(
+                host=rabbit_host,
+                heartbeat=600,
+                blocked_connection_timeout=300,
+            )
+        )
         channel = connection.channel()
         # Declare a durable queue to avoid RabbitMQ 'transient_nonexcl_queues' deprecation
         channel.queue_declare(
