@@ -1,9 +1,10 @@
 services:
   rabbitmq:
-    image: rabbitmq:4.1.2
+    image: rabbitmq:4.1.2-management
     container_name: rabbitmq
     ports:
       - "5672:5672"
+      - "15672:15672"
     networks:
       - horus-net
     healthcheck:
@@ -11,6 +12,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    volumes:
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
 
   mas:
     build:
@@ -54,6 +57,7 @@ services:
     container_name: knowledge_store
     environment:
       - CHROMA_TELEMETRY_ENABLED=0
+      - POSTHOG_DISABLED=true
       - SENTENCE_TRANSFORMERS_NO_TELEMETRY=1
       - HF_HUB_DISABLE_TELEMETRY=1
     ports:
