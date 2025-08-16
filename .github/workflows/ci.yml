@@ -11,7 +11,9 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
-      - name: Install dependencies
+      - name: Install MAS dependencies
+        working-directory: src/services/mas
         run: pip install -r requirements.txt
-      - name: Run tests
-        run: pytest --cov=.
+      - name: Run MAS tests
+        working-directory: src/services/mas
+        run: pytest -vv --maxfail=1 --disable-warnings --cov=.

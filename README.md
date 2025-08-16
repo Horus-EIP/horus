@@ -8,19 +8,19 @@ Empower businesses to build autonomous, real-time, and modular AI workflows with
 
 ## 📁 Repository Structure
 
-- `src/orchestrator`: Agent orchestrator logic
-- `src/agents`: Modular agents (RAG, task manager, etc.)
-- `src/api`: FastAPI backend interface
-- `src/frontend`: React-based front-end UI
+- `src/infra`: Docker Compose orchestration and infrastructure
+- `src/services/mas`: FastAPI orchestrator (agent registry, conversations, chat, tasks)
+- `src/services/agent`: FastAPI agent (RAG pipeline, RabbitMQ consumer, heartbeats)
+- `src/services/knowledge-store`: FastAPI + Chroma (upload/list/delete/query documents)
+- `src/services/web-client`: Next.js dashboard (chat, dashboard, knowledge store UI)
 - `docs/`: Markdown documentation
-- `tests/`: Unit and integration tests
-- `docker/`: Dockerfiles and container config
 - `.github/`: GitHub Actions and CI/CD
 
 ## 🚀 Getting Started
 
 ```bash
-docker-compose up --build
+cd src/infra
+docker compose up --build
 ```
 
 ## 👥 Contribution
