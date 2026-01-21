@@ -1,14 +1,13 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
-# Work in nested Next.js app folder
-WORKDIR /app/app
+WORKDIR /app
 
 # Install dependencies
-COPY app/package*.json ./
+COPY package*.json ./
 RUN npm install
 
 # Copy source
-COPY app/ ./
+COPY . ./
 
 EXPOSE 3000
 

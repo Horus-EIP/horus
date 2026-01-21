@@ -1,9 +1,39 @@
 __pycache__/
 *.pyc
-.env
 .vscode/
 .idea/
 .DS_Store
 node_modules/
 dist/
 build/
+.venv/
+docs/agent_architecture.md
+
+# Environment Configuration (NEVER commit sensitive data)
+.env
+.env.local
+.env.*.local
+.env.production
+!.env.example
+!.env.*.example
+
+# IDE
+*.swp
+*.swo
+*~
+.vscode/settings.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Runtime files
+*.log
+*.pid
+uvicorn.pid

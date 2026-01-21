@@ -36,12 +36,10 @@ async def query_knowledge_store(query: str, n_results: int = 1):
     
             results (dict): The results of the query.
     """
-    print("CHECKING")
     try:
         results = await query_knowledge(query, n_results)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-    print(results)
 
     if not results['documents'][0]:
         raise HTTPException(status_code=404, detail="No results found")

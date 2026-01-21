@@ -1,25 +1,32 @@
-import os
-import time
-import pika
+from fastapi import APIRouter, Response, status
+
+from core.logger import get_logger
+from core.rabbitmq_manager import RabbitMQ
+
+router = APIRouter(prefix="/rabbitmq", tags=["RabbitMQ"])
+logger = get_logger("rabbitmq")
+
+rabbitmq_instance = RabbitMQ()
 
 
-def _connect_with_retry(host: str, retries: int = 20, delay_seconds: float = 1.0):
-    last_err = None
-    for _ in range(retries):
-        try:
-            return pika.BlockingConnection(
-                pika.ConnectionParameters(
-                    host=host,
-                    heartbeat=600,  # increase heartbeat interval to tolerate long tasks
-                    blocked_connection_timeout=300,
-                )
-            )
-        except Exception as e:
-            last_err = e
-            time.sleep(delay_seconds)
-    raise last_err
+def check_rabbit_mq():
+    try:
+        instance = RabbitMQ(retries=1, delay=0.1)
+        instance.connect()
+        if instance.connection and instance.connection.is_open:
+            instance.close()
+            return True
+        return False
+    except Exception:
+        return False
 
 
-RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
-connection = _connect_with_retry(RABBITMQ_HOST)
-channel = connection.channel()
+@router.post("/heartbeat")
+def test_rabbitmq_connectivity():
+    if check_rabbit_mq():
+        return {"status": "ok"}
+    return Response(
+        content='{"status"}: "unhealthy"',
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        media_type="application/json",
+    )

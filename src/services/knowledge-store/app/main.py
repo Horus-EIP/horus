@@ -1,7 +1,17 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_client import make_asgi_app
+
 from app.api.routes import ROUTERS
+from app.core.logging import get_logger
+from app.core.middleware import CorrelationIDMiddleware
+from app.core.metrics import set_system_info
+
+logger = get_logger("main")
+
+# OpenTelemetry auto-instrumentation is handled by opentelemetry-instrument wrapper
+# See Dockerfile CMD for details
 
 description = """
 The Knowledge Store is a centralized designed to store, organize and retrieve data for the Horus Agents.
@@ -15,6 +25,12 @@ You can:
 * **Add a document**: Add a document to the knowledge store by providing a _**unique id**_, _**title**_ and _**content**_.
 * **Query the knowledge store**: Query the knowledge store with a _**query string**_ to retrieve relevant documents.
 * **Delete a document**: Delete a document from the knowledge store by providing the _**id**_ of the document.
+
+### Observability
+
+* **Metrics**: `/metrics` - Prometheus metrics endpoint
+* **Health**: Health checks via standard HTTP status codes
+* **Logging**: Structured JSON logging with correlation IDs
 """
 
 app = FastAPI(
@@ -22,27 +38,78 @@ app = FastAPI(
     root_path="/api/knowledge-store",
     title="Horus Knowledge Store",
     description=description,
-    summary="",
+    summary="Vector database and document retrieval service",
     version="1.0.0",
     contact={
         "name": "Horus",
     }
 )
 
+# Mount Prometheus metrics endpoint
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
+logger.info("Prometheus metrics endpoint mounted at /metrics")
+
+# Add correlation ID middleware for request tracing
+app.add_middleware(CorrelationIDMiddleware)
+logger.info("Correlation ID middleware added")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
+    expose_headers=["X-Request-ID", "X-Correlation-ID"]
 )
+
+# Set system info for metrics
+set_system_info(version="1.0.0", embedding_model="all-MiniLM-L6-v2")
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Log startup event."""
+    logger.info(
+        "Knowledge Store starting up",
+        extra={
+            "type": "startup",
+            "version": "1.0.0",
+        }
+    )
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Log shutdown event."""
+    logger.info(
+        "Knowledge Store shutting down",
+        extra={"type": "shutdown"}
+    )
+
+
+@app.get("/health", tags=["Health"])
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy", "service": "knowledge-store"}
+
 
 @app.exception_handler(HTTPException)
 def handle_http_exception(_: Request, exc: HTTPException):
-    return (JSONResponse(
-	status_code=exc.status_code,
-	content={"error": exc.detail}
-    ))
+    logger.warning(
+        f"HTTP exception: {exc.status_code} - {exc.detail}",
+        extra={
+            "type": "http_exception",
+            "status_code": exc.status_code,
+            "detail": exc.detail,
+        }
+    )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": exc.detail}
+    )
+
 
 for prefix, router in zip(ROUTERS.keys(), ROUTERS.values()):
     app.include_router(router, prefix=prefix)
+    logger.info(f"Router mounted at {prefix}")

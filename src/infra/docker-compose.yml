@@ -1,12 +1,19 @@
 services:
+  # =============================================================================
+  # CORE APPLICATION SERVICES
+  # =============================================================================
+  
   rabbitmq:
     image: rabbitmq:4.1.2-management
     container_name: rabbitmq
     ports:
-      - "5672:5672"
+      - "${RABBITMQ_PORT}:5672"
       - "15672:15672"
     networks:
       - horus-net
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -20,15 +27,76 @@ services:
       context: ../services/mas
       dockerfile: Dockerfile
     container_name: mas
+    mem_limit: 8g
+    memswap_limit: 10g
+    env_file:
+      - .env
     environment:
       - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - DB_PORT=${DB_PORT}
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - SUPER_USER_USERNAME=${SUPER_USER_USERNAME}
+      - SUPER_USER_PASSWORD=${SUPER_USER_PASSWORD}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+      - LLM_AUTOINIT=${LLM_AUTOINIT:-0}
+      - LLM_BACKEND=${LLM_BACKEND:-mock}
+      - LLM_FORCE_CPU=${LLM_FORCE_CPU:-0}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      # OpenTelemetry - Send to Tempo
+      - OTEL_ENABLED=true
+      - OTEL_SERVICE_NAME=mas
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
+      - JSON_LOGGING=true
+      - LOG_LEVEL=INFO
+      - TASK_TIMEOUT_SECONDS=300
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-X", "POST", "http://localhost:8000/rabbitmq/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     depends_on:
       rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+      redis:
         condition: service_healthy
     ports:
       - "8000:8000"
     networks:
       - horus-net
+
+  web-client:
+    build:
+      context: ../services/web-client
+      dockerfile: Dockerfile
+    container_name: web_client
+    depends_on:
+      - mas
+    ports:
+      - "3000:3000"
+    networks:
+      - horus-net
+    volumes:
+      - ../services/web-client:/app
+      - /app/node_modules
+    environment:
+      - NEXT_TELEMETRY_DISABLED=1
+      - NEXT_PUBLIC_KNOWLEDGE_STORE_URL=http://localhost:8080
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
 
   agent:
     build:
@@ -37,12 +105,26 @@ services:
     container_name: agent
     environment:
       - ORCHESTRATOR_URL=http://mas:8000
+      - ORCHESTRATOR_USERNAME=admin
+      - ORCHESTRATOR_PASSWORD=secret
       - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - KNOWLEDGE_STORE_URL=http://knowledge_store:8080
+      - KNOWLEDGE_STORE_TIMEOUT=10.0
+      - KNOWLEDGE_STORE_MAX_RETRIES=3
+      - KNOWLEDGE_STORE_RETRY_DELAY=1.0
+      # OpenTelemetry instrumentation for Tempo
+      - OTEL_ENABLED=true
+      - OTEL_SERVICE_NAME=agent
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
     depends_on:
       mas:
         condition: service_started
       rabbitmq:
         condition: service_healthy
+      knowledge_store:
+        condition: service_started
     ports:
       - "8001:8001"
     networks:
@@ -60,39 +142,169 @@ services:
       - POSTHOG_DISABLED=true
       - SENTENCE_TRANSFORMERS_NO_TELEMETRY=1
       - HF_HUB_DISABLE_TELEMETRY=1
+      # OpenTelemetry instrumentation for Tempo
+      - OTEL_ENABLED=true
+      - OTEL_SERVICE_NAME=knowledge-store
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
     ports:
-      - "8080:8080"
+      - "8081:8080"
     networks:
       - horus-net
     volumes:
       - knowledge_store_documents:/documents
       - knowledge_store_chroma:/chroma_data
 
-  web-client:
-    build:
-      context: ../services/web-client
-      dockerfile: Dockerfile
-    container_name: web_client
-    depends_on:
-      - mas
+  # =============================================================================
+  # DATA STORES
+  # =============================================================================
+
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    volumes:
+      - postgresql_data:/var/lib/postgresql
+      - ./initdb.d:/docker-entrypoint-initdb.d:ro
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command: postgres -c 'shared_preload_libraries=pg_stat_statements' -c 'pg_stat_statements.track=all'
     ports:
-      - "3000:3000"
+      - "${DB_PORT}:5432"
     networks:
       - horus-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "${REDIS_PORT}:6379"
+    env_file:
+      - .env
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${REDIS_PASSWORD}"]
     volumes:
-      - ../services/web-client/app:/app/app
-      - /app/app/node_modules
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - horus-net
+    restart: unless-stopped
+
+  # =============================================================================
+  # ADMIN TOOLS
+  # =============================================================================
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    env_file:
+      - .env
     environment:
-      - NEXT_TELEMETRY_DISABLED=1
-      - NEXT_PUBLIC_KNOWLEDGE_STORE_URL=http://localhost:8080
-      - CHOKIDAR_USEPOLLING=true
-      - WATCHPACK_POLLING=true
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    depends_on:
+      - postgres
+    ports:
+      - "5433:80"
+    networks:
+      - horus-net
+
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: redisinsight
+    depends_on:
+      - redis
+    ports:
+      - "5540:5540"
+    restart: unless-stopped
+    volumes:
+      - redisinsight_data:/data
+    networks:
+      - horus-net
+
+  # =============================================================================
+  # OBSERVABILITY - Grafana + Tempo + Prometheus (Simple & Reliable)
+  # Single UI at http://localhost:3301 for traces and metrics
+  # =============================================================================
+
+  # Tempo - Distributed tracing backend (receives OTLP traces)
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./grafana/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+    networks:
+      - horus-net
+    restart: unless-stopped
+
+  # Prometheus - Metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./grafana/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - horus-net
+    restart: unless-stopped
+
+  # Grafana - Single UI for traces and metrics
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3301:3000"
+    depends_on:
+      - tempo
+      - prometheus
+    networks:
+      - horus-net
+    restart: unless-stopped
 
 networks:
-  horus-net: {}
+  horus-net:
+    driver: bridge
 
 volumes:
   knowledge_store_documents: {}
   knowledge_store_chroma: {}
-
-
+  postgresql_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  redis_data:
+  redisinsight_data:
+  tempo_data:
+  prometheus_data:
+  grafana_data:

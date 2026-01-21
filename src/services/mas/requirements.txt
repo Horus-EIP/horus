@@ -1,9 +1,57 @@
+# PyTorch CPU-only (default, works on CI and machines without GPUs)
+# For GPU support, replace with: --extra-index-url https://download.pytorch.org/whl/cu124
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# Testing
 pytest
 pytest-cov
 pytest-asyncio
+
+# Web framework
 uvicorn
-pika
 fastapi
 httpx
 websockets
 wsproto
+python-multipart
+
+# Messaging
+pika
+
+# ML/AI
+protobuf>=5.26
+sentencepiece>=0.2.0
+transformers>=4.44.2
+huggingface_hub>=0.24
+tokenizers>=0.19
+accelerate>=0.33.0
+torch>=2.3
+bitsandbytes
+hf-transfer
+openai>=1.0.0
+
+# Authentication
+PyJWT>=2.8.0
+passlib[bcrypt]==1.7.4
+bcrypt<4.0
+
+# Database
+SQLAlchemy>=2.0
+alembic>=1.12.0
+psycopg2-binary==2.9.10
+
+# Cache
+redis
+
+# Configuration
+pydantic-settings
+python-dotenv
+
+# Logging & Monitoring
+colorama
+rich
+prometheus-client
+
+# OpenTelemetry for distributed tracing (SigNoz auto-instrumentation)
+opentelemetry-distro
+opentelemetry-exporter-otlp

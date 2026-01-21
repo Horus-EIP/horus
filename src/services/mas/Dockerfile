@@ -1,16 +1,37 @@
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 
 COPY ./requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+
+# Install build dependencies for grpcio and other packages
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir --use-deprecated=legacy-resolver -r requirements.txt
+
+# Install OpenTelemetry auto-instrumentation
+RUN opentelemetry-bootstrap --action=install
 
 COPY . .
 
 ENV RABBITMQ_HOST=rabbitmq
 
+# OpenTelemetry Configuration for Tempo
+ENV OTEL_SERVICE_NAME=mas
+ENV OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
+ENV OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+ENV OTEL_TRACES_EXPORTER=otlp
+ENV OTEL_METRICS_EXPORTER=none
+ENV OTEL_LOGS_EXPORTER=none
+
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+RUN chmod +x entrypoint.sh
+
+ENTRYPOINT ["./entrypoint.sh"]
 
 
