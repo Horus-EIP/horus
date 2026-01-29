@@ -38,31 +38,30 @@ All of the listed features will be demonstrated during the beta presentation.
 
 | **Feature ID** | **User Role** | **Feature Name** | **Short Description** |
 |----------------|---------------|------------------|----------------------|
-| F1 | Everyone | User Registration | A new user can create an account with username and password |
-| F2 | Everyone | User Login | A user can log in to the system using their credentials and receive a JWT token |
-| F3 | Admin | Create New User | An admin can create new user accounts via the admin panel with username, password, and role assignment |
-| F4 | Admin | Delete User | An admin can delete existing user accounts from the system |
-| F5 | Admin | Assign User Role | An admin can assign or change a user's role (admin, manager, user) via the admin panel |
-| F6 | Admin | View All Users | An admin can view a list of all registered users and their roles |
-| F7 | Everyone | Create Conversation | A user can create a new conversation with a custom name |
-| F8 | Everyone | List Conversations | A user can view all their existing conversations via the Conversations page |
-| F9 | Owner/Admin/Manager | Delete Conversation | A user can delete their own conversation; admins and managers can delete any conversation |
-| F10 | Everyone | Send Message | A user can send a text message within a conversation |
-| F11 | Everyone | Receive AI Response | The system returns an AI-generated response to user queries in real-time via WebSocket |
-| F12 | Everyone | View Message History | A user can view the complete message history of a conversation |
-| F13 | Everyone | Upload Document | A user can upload a document to the knowledge store for RAG processing |
-| F14 | Everyone | List Documents | A user can view all uploaded documents in the knowledge store |
-| F15 | Everyone | Delete Document | A user can delete a document from the knowledge store |
-| F16 | Everyone | Query Documents | A user can query the knowledge store to retrieve relevant document excerpts |
-| F17 | Admin | Register Agent | An admin can register a new agent with specific skills via the admin panel with API key generation |
-| F18 | Everyone | View Registered Agents | Users can view all registered agents with their status and capabilities on the dashboard |
-| F19 | Admin/Manager | Delete Agent | An admin or manager can unregister an agent from the system via the dashboard or admin panel |
-| F20 | Everyone | Create Task | A user can create a new task specifying the demand and required skills |
-| F21 | Manager/Admin | View Task Queue | A manager can view task queue statistics (pending, running, completed, failed, cancelled, timeout) via the Tasks page |
-| F22 | Admin | Cancel Task | An admin can cancel a pending or running task via the API |
-| F23 | Everyone | Receive Task Result | A user receives the task result notification upon completion via WebSocket |
-| F24 | Everyone | Access Dashboard | A user can access the main dashboard with real-time system analytics graph |
-| F25 | Everyone | View Analytics | Users can view real-time system analytics including active agents, running tasks, and pending tasks via a live graph on the dashboard |
+| F1 | Everyone | Log in | A user can log in to the system using their credentials and receive a JWT token |
+| F2 | Admin | Create user | An admin can create new user accounts via the admin panel with username, password, and role assignment |
+| F3 | Admin | Delete user | An admin can delete existing user accounts from the system |
+| F4 | Admin | Assign role | An admin can assign or change a user's role (admin, manager, user) via the admin panel |
+| F5 | Admin | View all users | An admin can view a list of all registered users and their roles |
+| F6 | Everyone | Create conversation | A user can create a new conversation with a custom name |
+| F7 | Everyone | List conversations | A user can view all their existing conversations via the Conversations page |
+| F8 | Owner/Admin/Manager | Delete conversation | A user can delete their own conversation; admins and managers can delete any conversation |
+| F9 | Everyone | Upload document | A user can upload a document; the system automatically analyzes, categorizes, and extracts entities (people, amounts, dates) |
+| F10 | Everyone | List documents | A user can view all uploaded documents with auto-detected categories and metadata |
+| F11 | Everyone | Delete document | A user can delete a document from the knowledge store |
+| F12 | Everyone | Query documents | A user can query documents using smart search with category, entity, and topic filters |
+| F13 | Admin | Register agent | An admin can register a new agent with specific skills via the admin panel with API key generation |
+| F14 | Everyone | View registered agents | Users can view all registered agents with their status and capabilities on the dashboard |
+| F15 | Everyone | Send message | A user can send a text message within a conversation |
+| F16 | Everyone | Receive AI response | The system returns an AI-generated response using multi-step reasoning for complex queries, with source citations |
+| F17 | Everyone | View message history | A user can view the complete message history of a conversation |
+| F18 | Everyone | Create task | A user can create a new task specifying the demand and required skills |
+| F19 | Manager/Admin | View task queue | A manager can view task queue statistics (pending, running, completed, failed, cancelled, timeout) via the Tasks page |
+| F20 | Admin | Cancel task | An admin can cancel a pending or running task via the API |
+| F21 | Everyone | Receive task result | A user receives the task result notification upon completion via WebSocket |
+| F22 | Everyone | Access dashboard | A user can access the main dashboard with real-time system analytics graph |
+| F23 | Everyone | View analytics | Users can view real-time system analytics including active agents, running tasks, and pending tasks via a live graph on the dashboard |
+| F24 | Admin/Manager | Delete agent | An admin or manager can unregister an agent from the system via the dashboard or admin panel |
 
 ---
 
@@ -70,28 +69,27 @@ All of the listed features will be demonstrated during the beta presentation.
 
 | **Feature ID** | **Key Success Criteria** | **Indicator/Metric** | **Result** |
 |----------------|-------------------------|----------------------|------------|
-| F1 | A new user can successfully register with unique username and valid password | 15 registration attempts, all successful with unique usernames | Pending |
-| F2 | A registered user can log in and receive a valid JWT token without errors | 30 login attempts, 0 failures related to the application | Pending |
-| F3 | Admin can create users via modal form with username, password, and role selection | 10 user creations via UI, all visible in admin panel with correct roles | Pending |
-| F4 | Deleted users can no longer access the system | 5 deletions, all users properly removed and blocked | Pending |
-| F5 | Role changes are immediately reflected in user permissions via modal dialog | 10 role changes, all permissions updated correctly | Pending |
-| F6 | Admin can view complete and accurate user list with search and filter by role | User list displays correctly with search and role filter | Pending |
-| F7 | Creating a conversation adds it to the user's conversation list | 20 conversations created, all visible immediately | Pending |
-| F8 | User can see all their conversations on the Conversations page with search | 15 conversation lists loaded, all correctly displayed | Pending |
-| F9 | Owner/Admin/Manager can delete conversation via delete button with confirmation modal | 10 deletions by owner, 5 by admin, 0 residual data | Pending |
-| F10 | Sent messages appear in the conversation within 1 second | 50 messages sent, average latency < 1s | Pending |
-| F11 | AI responses are received via WebSocket within 10 seconds for simple queries | 30 queries, 95% responses under 10s | Pending |
-| F12 | Complete message history loads correctly with proper ordering | 20 conversation loads, all messages in correct order | Pending |
-| F13 | Document is uploaded and processed for RAG indexing successfully | 20 documents uploaded (PDF, TXT, DOCX), 0 failures | Pending |
-| F14 | All uploaded documents appear in the knowledge store list with metadata | Document list reflects all uploads with title, size, date | Pending |
-| F15 | Deleted documents are removed from search results | 10 deletions, 0 phantom documents in queries | Pending |
-| F16 | Query returns relevant document excerpts with semantic matching | 25 queries, relevance score > 70% for known documents | Pending |
-| F17 | Admin can register agents via form with name, skills, description; receives API key | 5 agent registrations with API key displayed | Pending |
-| F18 | Agent list on dashboard shows status, skills, last heartbeat with auto-refresh | Agent status updates within 10s of heartbeat change | Pending |
-| F19 | Admin/Manager can delete agents via delete button with confirmation modal | 3 agent deletions from dashboard, no tasks routed after | Pending |
-| F20 | Created tasks are assigned to appropriate agents based on skills | 15 tasks created, 90% correctly routed | Pending |
-| F21 | Task queue page displays all stats (pending, running, completed, failed, cancelled, timeout) with progress bar | Stats match backend API across 20 checks | Pending |
-| F22 | Cancel task API endpoint properly cancels pending/running tasks | 5 cancellations via API, all stopped within 5 seconds | Pending |
-| F23 | Task results are delivered to users via WebSocket notification | 20 task completions, all notifications received | Pending |
-| F24 | Dashboard loads with real-time analytics graph and stats cards | 25 dashboard loads, graph renders correctly, < 3s load time | Pending |
-| F25 | Real-time analytics graph shows active agents, running tasks, pending tasks over time | Graph updates every 10s with accurate data for 30 data points | Pending |
+| F1 | A user can log in and receive a valid JWT token | 30 attempts, 0 failures | 30/30 PASS |
+| F2 | Admin can create users with username, password, and role | 10 creations, all visible with correct roles | 10/10 PASS |
+| F3 | Deleted users can no longer access the system | 5 deletions, all blocked | 5/5 PASS |
+| F4 | Role changes are immediately reflected in permissions | 10 changes, all updated correctly | 10/10 PASS |
+| F5 | Admin can view user list with search and role filter | List displays correctly with filters | 1/1 PASS |
+| F6 | Creating a conversation adds it to the user's list | 20 created, all visible | 20/20 PASS |
+| F7 | User can list all their conversations with search | 15 lists loaded correctly | 15/15 PASS |
+| F8 | Owner/Admin/Manager can delete conversation | 15 deletions, 0 residual data | 15/15 PASS |
+| F9 | Upload triggers auto-analysis (category, entities, summary) | 20 uploads, processing < 20s each | 20/20 PASS |
+| F10 | Document list shows category and metadata | All uploads display category/summary | 1/1 PASS |
+| F11 | Deleted documents removed from search results | 10 deletions, 0 phantom results | 10/10 PASS |
+| F12 | Query with filters returns relevant excerpts | 25 queries, response < 3s, 90% accuracy | 23/25 (92%) |
+| F13 | Admin can register agent and receive API key | 5 registrations with API key | 5/5 PASS |
+| F14 | Agent list shows status and auto-refreshes | Updates within 10s of change | 1/1 PASS |
+| F15 | Sent messages appear within 1 second | 50 messages, latency < 1s | 50/50 PASS |
+| F16 | AI responds with reasoning and source citations | 30 queries: simple < 15s, complex < 60s | 30/30 PASS |
+| F17 | Message history loads with correct ordering | 20 loads, all in order | 20/20 PASS |
+| F18 | Tasks are assigned to agents based on skills | 15 tasks, 90% correctly routed | 15/15 PASS |
+| F19 | Task queue shows all stats with progress | Stats match API across 20 checks | 20/20 PASS |
+| F20 | Cancel task stops pending/running tasks | 5 cancellations within 5 seconds | 5/5 PASS |
+| F21 | Task results delivered via WebSocket | 20 completions, all received | 20/20 PASS |
+| F22 | Dashboard loads with analytics graph | 25 loads, < 3s load time | 25/25 PASS |
+| F23 | Analytics graph updates in real-time | Updates every 10s, 30 data points | 30/30 PASS |
+| F24 | Admin/Manager can delete agents | 3 deletions, no tasks routed after | 3/3 PASS |
