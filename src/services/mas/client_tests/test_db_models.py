@@ -375,13 +375,15 @@ def run_all_tests() -> None:
         # Create a dummy conversation for testing
         # We need to create a real conversation because of FK constraints
         print("Creating test conversation...")
-        test_conv = Conversations(name="DB Model Test Conversation", owner_username="admin")
+        test_conv = Conversations(
+            name="DB Model Test Conversation", owner_username="admin"
+        )
         session.add(test_conv)
         session.commit()
         session.refresh(test_conv)
         conversation_id = test_conv.id
         print(f"Created test conversation with ID: {conversation_id}")
-        
+
         # Run tests in sequence
         task_id = test_task_model_creation(session, conversation_id)
         task_result_id = test_task_result_model_creation(session, task_id)

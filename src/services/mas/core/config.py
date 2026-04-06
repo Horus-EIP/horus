@@ -16,7 +16,7 @@ The application expects the following environment variables:
 
 Database Configuration:
 - POSTGRES_USER: PostgreSQL username (required)
-- POSTGRES_PASSWORD: PostgreSQL password (required)  
+- POSTGRES_PASSWORD: PostgreSQL password (required)
 - POSTGRES_DB: Database name (required)
 - DB_PORT: Database port (must be numeric, required)
 
@@ -52,9 +52,9 @@ Environment variables always override .env file values.
 
 Usage:
     Import the settings object from this module:
-    
+
     from core.config import settings
-    
+
     Access configuration values via:
     - settings.jwt_secret_key
     - settings.db_port
@@ -64,12 +64,14 @@ Usage:
 
 from pathlib import Path
 from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SERVICES_DIR = BASE_DIR.parent
 SRC_DIR = SERVICES_DIR.parent
 INFRA_DIR = SRC_DIR / "infra"
+
 
 class Settings(BaseSettings):
     # Database Configuration
@@ -99,24 +101,29 @@ class Settings(BaseSettings):
     rabbitmq_password: str = "guest"
 
     # Application Configuration
-    llm_autoinit: int = 0
+    llm_autoinit: int = 0 # Force 0 for tests
+
+    otel_exporter_otlp_endpoint: str = "http://jaeger:4317"
+
+    task_timeout: int = 300  # in seconds
 
     model_config = SettingsConfigDict(
         env_file=INFRA_DIR / ".env" if (INFRA_DIR / ".env").exists() else ".env",
-        env_file_encoding='utf-8',
-        extra='ignore',
-        case_sensitive=False
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
     )
+
 
 # Initialize settings
 # This will raise a ValidationError if required environment variables are missing
 try:
     settings = Settings()
 except Exception as e:
-    import logging
-    logging.warning(f"Configuration validation failed: {e}")
+    print(f"Warning: Configuration validation failed: {e}")
+
     class DummySettings:
         def __getattr__(self, name):
             return None
-    settings = DummySettings()
 
+    settings = DummySettings()

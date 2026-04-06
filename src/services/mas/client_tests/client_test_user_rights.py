@@ -16,7 +16,7 @@ def bearer_headers(token: str) -> dict:
 
 
 async def register_user(username: str, password: str):
-    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=120.0) as client:
         r = await client.post(
             "/auth/register", json={"username": username, "password": password}
         )
@@ -27,7 +27,7 @@ async def register_user(username: str, password: str):
 
 
 async def login(username: str, password: str) -> str:
-    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=120.0) as client:
         r = await client.post(
             "/auth/token",
             data={"username": username, "password": password},
@@ -41,7 +41,7 @@ async def login(username: str, password: str) -> str:
 
 async def logout(headers: dict):
     async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=10.0
+        base_url=BASE_URL, headers=headers, timeout=120.0
     ) as client:
         r = await client.post("/auth/logout")
         print("LOGOUT →", r.json())
@@ -49,7 +49,7 @@ async def logout(headers: dict):
 
 async def make_admin(target_user: str, headers: dict):
     async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=10.0
+        base_url=BASE_URL, headers=headers, timeout=120.0
     ) as client:
         r = await client.post(
             "/users/update_role",
@@ -60,7 +60,7 @@ async def make_admin(target_user: str, headers: dict):
 
 async def remove_admin(target_user: str, headers: dict):
     async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=10.0
+        base_url=BASE_URL, headers=headers, timeout=120.0
     ) as client:
         r = await client.post(
             "/users/update_role",

@@ -1,6 +1,6 @@
 export type HistoryItemRole = "user" | "assistant";
 
-export type UserRole = "admin" | "manager" | "user"; 
+export type UserRole = "admin" | "manager" | "user";
 
 export interface UpdateRole {
   username: string;

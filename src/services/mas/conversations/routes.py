@@ -4,18 +4,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from auth.auth_tool_functions import get_current_user, PermissionChecker
-from auth.permissions import Permission
+from auth.auth_tool_functions import PermissionChecker, get_current_user
+from auth.permissions import Permission, Role
 from chat.chat_tool_functions import active_connections
-from conversations.conversation_tool_functions import (
-    get_history,
-    get_conversations,
-)
+from conversations.conversation_tool_functions import (get_conversations,
+                                                       get_history)
 from core.logger import get_logger
 from db.database import get_db
 from db.models import Conversations
 from schemas.schemas import ConversationCreation
-from auth.permissions import Role
 
 """
 Conversation Management Routes - Multi-Agent System API
@@ -271,7 +268,9 @@ async def create_new_conversation(
         db.commit()
         db.refresh(new_conversation)
         logger.info(
-            f"Conversation {new_conversation.id} created for user {user.get('username')}"
+            "Conversation created",
+            conversation_id=new_conversation.id,
+            username=user.get("username"),
         )
         return {
             "conversation_id": new_conversation.id,
@@ -279,15 +278,15 @@ async def create_new_conversation(
 
     except IntegrityError as e:
         db.rollback()
-        logger.error(f"Integrity error creating conversation: {str(e)}")
+        logger.error("Integrity error creating conversation", error=str(e))
         raise HTTPException(status_code=400, detail="Conversation creation failed")
     except SQLAlchemyError as e:
         db.rollback()
-        logger.error(f"Database error creating conversation: {str(e)}")
+        logger.error("Database error creating conversation", error=str(e))
         raise HTTPException(status_code=500, detail="Error: Database error occurred")
     except Exception as e:
         db.rollback()
-        logger.error(f"Unexpected error creating conversation: {str(e)}")
+        logger.error("Unexpected error creating conversation", error=str(e))
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
@@ -439,13 +438,22 @@ async def get_conversation_history(
     conversation = db.query(Conversations).filter(Conversations.id == chat_id).first()
     if not conversation:
         raise HTTPException(status_code=404, detail=f"Conversation {chat_id} not found")
-    
-    if conversation.owner_username != user.get("username") and user.get("role") != Role.ADMIN.value:
+
+    if (
+        conversation.owner_username != user.get("username")
+        and user.get("role") != Role.ADMIN.value
+    ):
         raise HTTPException(status_code=404, detail=f"Conversation {chat_id} not found")
 
     history = get_history(chat_id, db)
     if not history:
-        logger.warning(f"No history found for conversation {chat_id}")
+        logger.info("No history found for conversation", conversation_id=chat_id)
+    else:
+        logger.info(
+            "Retrieved conversation history",
+            conversation_id=chat_id,
+            message_count=len(history),
+        )
     return history
 
 
@@ -602,28 +610,44 @@ async def remove_conversation(
     conv_owner = (getattr(conv, "owner_username", "") or "").casefold().strip()
     req_user = (user.get("username") or "").casefold().strip()
 
-    if (not conv_owner or conv_owner != req_user) and user.get("role") != Role.ADMIN.value:
+    if (not conv_owner or conv_owner != req_user) and user.get(
+        "role"
+    ) != Role.ADMIN.value:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     try:
         db.delete(conv)
         db.commit()
-        logger.info(f"Conversation {chat_id} deleted successfully for user {req_user}")
+        logger.info(
+            "Conversation deleted successfully",
+            conversation_id=chat_id,
+            username=req_user,
+        )
     except IntegrityError as e:
         db.rollback()
         logger.error(
-            f"Delete failed due to FK constraint for conversation_id={chat_id}, Error: {str(e)}"
+            "Delete failed due to FK constraint",
+            conversation_id=chat_id,
+            error=str(e),
         )
         raise HTTPException(
             status_code=409, detail="Conversation has dependent records"
         )
     except SQLAlchemyError as e:
         db.rollback()
-        logger.error(f"Database error deleting conversation {chat_id}: {str(e)}")
+        logger.error(
+            "Database error deleting conversation",
+            conversation_id=chat_id,
+            error=str(e),
+        )
         raise HTTPException(status_code=500, detail="Error: Database error occurred")
     except Exception as e:
         db.rollback()
-        logger.error(f"Unexpected error deleting conversation {chat_id}: {str(e)}")
+        logger.error(
+            "Unexpected error deleting conversation",
+            conversation_id=chat_id,
+            error=str(e),
+        )
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
     try:

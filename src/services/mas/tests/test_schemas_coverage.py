@@ -90,7 +90,11 @@ class TestRegistrationForm:
         form = RegistrationForm(**data)
         result_dict = form.model_dump()
 
-        assert result_dict == data
+        # Add default type field to expected data
+        expected = data.copy()
+        expected["type"] = None
+
+        assert result_dict == expected
 
     def test_registration_form_json_export(self):
         """Test RegistrationForm can be exported to JSON."""
@@ -114,21 +118,21 @@ class TestTaskForm:
         """Test TaskForm with valid data."""
         data = {
             "demand": "Process this data",
-            "conversation_id": "conv_123",
+            "conversation_id": 123,
             "skills_required": ["data_processing", "python"],
         }
 
         form = TaskForm(**data)
 
         assert form.demand == "Process this data"
-        assert form.conversation_id == "conv_123"
+        assert form.conversation_id == 123
         assert form.skills_required == ["data_processing", "python"]
 
     def test_task_form_empty_skills_required(self):
         """Test TaskForm with empty skills_required list."""
         data = {
             "demand": "Simple task",
-            "conversation_id": "conv_123",
+            "conversation_id": 123,
             "skills_required": [],
         }
 
@@ -511,16 +515,24 @@ class TestSchemaValidationEdgeCases:
         # Test that Pydantic v2 is strict with types
 
         # Integer conversation_id should cause validation error in Pydantic v2
+        # But we changed the schema to accept int, so we test with something invalid, like a dict
         data = {
             "demand": "test",
-            "conversation_id": 123,  # int instead of str
+            "conversation_id": {"id": 123},  # dict instead of int
             "skills_required": ["python"],
         }
 
         with pytest.raises(ValidationError) as exc_info:
             TaskForm(**data)
 
-        # Should fail validation for string type
+        # Also test with string that is not a valid int
+        data_str = {
+            "demand": "test",
+            "conversation_id": "invalid_int",
+            "skills_required": ["python"],
+        }
+        with pytest.raises(ValidationError):
+            TaskForm(**data_str)
         errors = exc_info.value.errors()
         assert any(error["loc"] == ("conversation_id",) for error in errors)
-        assert any(error["type"] == "string_type" for error in errors)
+        assert any(error["type"] == "int_type" for error in errors)

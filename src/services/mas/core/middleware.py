@@ -3,8 +3,11 @@ Middleware pour logging automatique des requêtes FastAPI
 """
 
 import time
+import uuid
+from contextvars import ContextVar
 from typing import Callable
 
+import structlog
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -26,17 +29,34 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         self.logger = get_logger("middleware")
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        """
+        Intercepts requests to add logging and correlation IDs.
+
+        1. Generates a UUID for the request (X-Request-ID).
+        2. Binds the UUID to structlog's contextvars.
+        3. Logs the request start event.
+        4. Executes the request and measures duration.
+        5. Logs the request completion (or failure).
+        6. Adds X-Request-ID header to the response.
+        7. Clears contextvars.
+        """
         # Skip logging for excluded paths
         if request.url.path in self.exclude_paths:
             return await call_next(request)
 
         # Log request start
+        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        structlog.contextvars.bind_contextvars(correlation_id=str(request_id))
         start_time = time.time()
         client_ip = request.client.host if request.client else "unknown"
         user_agent = request.headers.get("user-agent", "unknown")
 
         self.logger.info(
-            f"📥 Incoming {request.method} {request.url.path} from {client_ip}"
+            "Request started",
+            method=request.method,
+            path=request.url.path,
+            ip=client_ip,
+            user_agent=user_agent,
         )
 
         # Process request
@@ -59,8 +79,10 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 "api",
                 f"{request.method} {request.url.path}",
                 duration=duration / 1000,  # en secondes
-                details=f"Status: {response.status_code}, IP: {client_ip}",
+                details=f"Status: {response.status_code}, IP: {client_ip} ({duration:.3f}ms)",
             )
+
+            response.headers["X-Request-ID"] = str(request_id)
 
             return response
 
@@ -68,9 +90,15 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             # Log error
             duration = (time.time() - start_time) * 1000
             self.logger.error(
-                f"💥 Error processing {request.method} {request.url.path}: {str(e)}",
+                "Request failed",
+                method=request.method,
+                path=request.url.path,
+                error=str(e),
+                duration=duration,
                 exc_info=True,
             )
 
             # Re-raise the exception
             raise e
+        finally:
+            structlog.contextvars.clear_contextvars()

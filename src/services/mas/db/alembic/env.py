@@ -10,11 +10,10 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from db.database import URL_DATABASE, Base
-
 # Import models to register them with Base metadata (required for Alembic tracking)
 # This must happen BEFORE target_metadata is set
 import db.models  # noqa: F401
+from db.database import URL_DATABASE, Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

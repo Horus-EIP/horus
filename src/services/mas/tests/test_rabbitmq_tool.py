@@ -1,10 +1,13 @@
 from unittest.mock import MagicMock, patch
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from core.rabbitmq_tool import router
 
-client = TestClient(router)
+app = FastAPI()
+app.include_router(router)
+client = TestClient(app)
 
 
 def test_heartbeat_success():

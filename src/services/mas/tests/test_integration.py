@@ -62,10 +62,10 @@ async def test_agent_registration_and_task_flow(authenticated_client):
             "description": description,
         }
         resp = await client.post("/agents/register", json=agent_data)
-        
+
         if resp.status_code == 200:
             return resp.json()["agent_id"], resp.json()["api_key"]
-        
+
         # If failed (likely exists), find it and delete it to get a new key
         resp = await client.get("/agents/details/")
         assert resp.status_code == 200
@@ -75,30 +75,26 @@ async def test_agent_registration_and_task_flow(authenticated_client):
             if agent["name"] == name:
                 agent_id = agent["id"]
                 break
-        
+
         if agent_id:
             # Delete existing agent
             del_resp = await client.delete(f"/agents/unregister/{agent_id}")
             assert del_resp.status_code == 200
-            
+
             # Re-register
             resp = await client.post("/agents/register", json=agent_data)
             assert resp.status_code == 200
             return resp.json()["agent_id"], resp.json()["api_key"]
-            
+
         pytest.fail(f"Could not create or find agent {name}")
 
     # 1. Register Agents (Use fixed names to match LLM mock)
     agent1_id, agent1_key = await get_or_create_agent(
-        "test_agent_math_fixed", 
-        ["math", "calculation"], 
-        "Integration test math agent"
+        "test_agent_math_fixed", ["math", "calculation"], "Integration test math agent"
     )
 
     agent2_id, agent2_key = await get_or_create_agent(
-        "test_agent_trans_fixed",
-        ["translation"],
-        "Integration test translation agent"
+        "test_agent_trans_fixed", ["translation"], "Integration test translation agent"
     )
 
     # 2. Create Conversation
@@ -132,10 +128,10 @@ async def test_agent_registration_and_task_flow(authenticated_client):
 
     # Agent needs to authenticate with its API Key
     # Format expected by verify_agent_api_key is "agent_id:api_key"
-    agent_headers = {
-        "X-API-Key": f"{agent1_id}:{agent1_key}"
-    }
-    resp = await client.post("/tasks/task-result/", json=result_payload_1, headers=agent_headers)
+    agent_headers = {"X-API-Key": f"{agent1_id}:{agent1_key}"}
+    resp = await client.post(
+        "/tasks/task-result/", json=result_payload_1, headers=agent_headers
+    )
     assert resp.status_code == 200
 
     # 5. Submit Task Result (Agent 2)

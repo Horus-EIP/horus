@@ -9,7 +9,7 @@ WebSocket Endpoints:
     WS /chat/{conversation_id}/ - Connect to real-time chat system
         Query Parameters:
             - token: JWT authentication token (required)
-        
+
         Message Protocol:
             Client → Server:
             {
@@ -17,7 +17,7 @@ WebSocket Endpoints:
                 "content": "User query text",
                 "conversation_id": 1
             }
-            
+
             Server → Client:
             {
                 "type": "agent_response",
@@ -38,7 +38,7 @@ Connection Lifecycle:
     3. Connection established - real-time message exchange begins
     4. Server broadcasts agent updates to connected clients
     5. Connection closed on client disconnect or authentication failure
-    
+
 Supported Message Types:
     - message: User sending query to system
     - task_update: Update on task execution status
@@ -50,24 +50,25 @@ Error Handling:
     - Invalid token: Connection rejected with 4001 code
     - Malformed message: Error response without disconnection
     - Server error: Reconnection recommended with exponential backoff
-    
+
 Example Client Connection:
     const token = "eyJhbGciOiJIUzI1NiI...";
     const ws = new WebSocket(`ws://localhost:8000/chat/ws?token=${token}`);
-    
+
     ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         console.log("Agent response:", data);
     };
 """
 
-from typing import Optional, Annotated
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, Query, WebSocket, status, Depends
+from fastapi import APIRouter, Depends, Query, WebSocket, status
 from sqlalchemy.orm import Session
 
-from auth.auth_tool_functions import PermissionChecker, get_current_user_from_token
-from auth.permissions import Permission, check_permission, Role
+from auth.auth_tool_functions import (PermissionChecker,
+                                      get_current_user_from_token)
+from auth.permissions import Permission, Role, check_permission
 from chat.chat_tool_functions import (_extract_token_from_ws, delete_client,
                                       save_new_client)
 from core.logger import get_logger
@@ -212,7 +213,7 @@ async def chat_websocket(
 
         if not check_permission(user_role, Permission.TASK_READ):
             logger.warning(
-                f"❌ WebSocket authentication failed: Insufficient permissions for user {user_id}"
+                f"WebSocket authentication failed: Insufficient permissions for user {user_id}"
             )
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
@@ -220,34 +221,40 @@ async def chat_websocket(
         try:
             conv_id_int = int(conversation_id)
         except ValueError:
-            logger.warning(f"❌ Invalid conversation ID format: {conversation_id}")
+            logger.warning(f"Invalid conversation ID format: {conversation_id}")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
-        conversation = db.query(Conversations).filter(Conversations.id == conv_id_int).first()
+        conversation = (
+            db.query(Conversations).filter(Conversations.id == conv_id_int).first()
+        )
 
         if not conversation:
-            logger.warning(f"❌ Conversation not found: {conversation_id}")
+            logger.warning(f"Conversation not found: {conversation_id}")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
         if conversation.owner_username != username and user_role != Role.ADMIN.value:
-            logger.warning(f"❌ Unauthorized access to conversation {conversation_id} by user {username}")
+            logger.warning(
+                f"Unauthorized access to conversation {conversation_id} by user {username}"
+            )
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
     except Exception as e:
         logger.warning(
-            f"❌ WebSocket authentication failed for conversation: {conversation_id}. Error: {str(e)}"
+            f"WebSocket authentication failed for conversation: {conversation_id}. Error: {str(e)}"
         )
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
     await websocket.accept()
 
-    session_id = save_new_client(conversation_id, websocket, user_id, token_str, username, user_role)
+    session_id = save_new_client(
+        conversation_id, websocket, user_id, token_str, username, user_role
+    )
     logger.info(
-        f"✅ WebSocket session created: {session_id} for user {user_id} in conversation {conversation_id}"
+        f"WebSocket session created: {session_id} for user {user_id} in conversation {conversation_id}"
     )
 
     try:

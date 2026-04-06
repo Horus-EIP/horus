@@ -93,3 +93,7 @@ All of the listed features will be demonstrated during the beta presentation.
 | F22 | Dashboard loads with analytics graph | 25 loads, < 3s load time | 25/25 PASS |
 | F23 | Analytics graph updates in real-time | Updates every 10s, 30 data points | 30/30 PASS |
 | F24 | Admin/Manager can delete agents | 3 deletions, no tasks routed after | 3/3 PASS |
+
+
+---
+

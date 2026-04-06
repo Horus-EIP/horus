@@ -80,14 +80,16 @@ async def setup_agents_and_conversation(headers_http: dict) -> tuple[dict, str]:
                 "description": "Agent specialized in mathematical operations",
             },
         )
-        
+
         if response.status_code == 409:
             print("ℹ️  Agent agent_test already exists, cleaning up...")
             # Get existing agent ID
             r = await client.get("/agents/details/")
             r.raise_for_status()
             agents = r.json()
-            existing_id = next((a["id"] for a in agents if a["name"] == "agent_test"), None)
+            existing_id = next(
+                (a["id"] for a in agents if a["name"] == "agent_test"), None
+            )
             if existing_id:
                 await client.delete(f"/agents/unregister/{existing_id}")
                 # Retry registration
@@ -122,7 +124,9 @@ async def setup_agents_and_conversation(headers_http: dict) -> tuple[dict, str]:
             r = await client.get("/agents/details/")
             r.raise_for_status()
             agents = r.json()
-            existing_id = next((a["id"] for a in agents if a["name"] == "agent_test2"), None)
+            existing_id = next(
+                (a["id"] for a in agents if a["name"] == "agent_test2"), None
+            )
             if existing_id:
                 await client.delete(f"/agents/unregister/{existing_id}")
                 # Retry registration
@@ -272,7 +276,34 @@ async def websocket_listener(token: str, conv_id: str, agent_id: str, timeout: i
 
 
 async def simulate_agent_task_flow(
-    headers_http: dict, agent_ids: dict, agent_keys: dict, conv_id: str, initial_task_id: str
+    headers_http: dict, agent_ids: dict, conv_id: str, initial_task_id: str
+):
+    """
+    Simulate agents completing tasks in sequence.
+
+    Flow:
+    1. Agent 1 (math) completes calculation task
+    2. System creates Agent 2 (translation) subtask
+    3. Agent 2 completes translation task
+    4. Conversation ends (no more future_actions)
+
+    Args:
+        headers_http (dict): HTTP headers with Bearer token
+        agent_ids (dict): Agent IDs mapping
+        conv_id (str): Conversation ID
+        initial_task_id (str): Initial task ID created
+    """
+    print("\n" + "=" * 60)
+    print("SIMULATING AGENT TASK FLOW")
+    print("=" * 60)
+
+
+async def simulate_agent_task_flow(
+    headers_http: dict,
+    agent_ids: dict,
+    agent_keys: dict,
+    conv_id: str,
+    initial_task_id: str,
 ):
     """
     Simulate agents completing tasks in sequence.
@@ -310,7 +341,7 @@ async def simulate_agent_task_flow(
     combined_key1 = f"{agent_ids['agent_test']}:{agent_keys['agent_test']}"
     headers_agent1 = {
         "X-API-Key": combined_key1,
-        "Authorization": headers_http["Authorization"]
+        "Authorization": headers_http["Authorization"],
     }
 
     result_1 = await submit_task_result(
@@ -344,7 +375,7 @@ async def simulate_agent_task_flow(
     combined_key2 = f"{agent_ids['agent_test2']}:{agent_keys['agent_test2']}"
     headers_agent2 = {
         "X-API-Key": combined_key2,
-        "Authorization": headers_http["Authorization"]
+        "Authorization": headers_http["Authorization"],
     }
 
     # Note: In real scenario, the system would have created a new task_id for the subtask
@@ -397,7 +428,9 @@ async def main():
         # Step 5: Simulate agent task flow
         print("\n[Step 5] Simulating agent task flow...")
         print("-" * 60)
-        await simulate_agent_task_flow(headers, agent_ids, agent_keys, conv_id, initial_task_id)
+        await simulate_agent_task_flow(
+            headers, agent_ids, agent_keys, conv_id, initial_task_id
+        )
 
         # Wait for WebSocket to finish (timeout)
         await ws_task
@@ -409,6 +442,7 @@ async def main():
     except Exception as e:
         print(f"\n❌ Test failed with error: {e}")
         import traceback
+
         traceback.print_exc()
 
 

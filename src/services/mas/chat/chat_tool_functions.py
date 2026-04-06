@@ -11,10 +11,26 @@ from db.redis_client import redis_db
 
 logger = get_logger("chat")
 
+# Global registry of active WebSocket connections
+# Structure: {conversation_id: [WebSocket1, WebSocket2, ...]}
 active_connections: dict[str, list[WebSocket]] = {}
 
 
 async def send_messages_via_websockets(conversation_id: str, message: str):
+    """
+    Broadcast a message to all active WebSocket connections for a given conversation.
+
+    Sends a formatted JSON message with type 'agent' to all connected clients
+    listening to the specified conversation ID. Handles disconnected clients
+    gracefully by removing them from the active list.
+
+    Args:
+        conversation_id (str): The ID of the target conversation
+        message (str): The text content to broadcast
+
+    Returns:
+        None
+    """
     conns = active_connections.get(conversation_id, [])
     if not conns:
         return
@@ -34,7 +50,32 @@ async def send_messages_via_websockets(conversation_id: str, message: str):
                 pass
 
 
-def save_new_client(conv_id: str, websocket: WebSocket, user_id: str, token: str, username: str = None, role: str = None):
+def save_new_client(
+    conv_id: str,
+    websocket: WebSocket,
+    user_id: str,
+    token: str,
+    username: str = None,
+    role: str = None,
+):
+    """
+    Register a new WebSocket client and create a session record.
+
+    Adds the WebSocket connection to the in-memory active_connections registry
+    and persists session metadata in Redis. This enables tracking of active
+    users per conversation and validates session existence.
+
+    Args:
+        conv_id (str): Conversation ID
+        websocket (WebSocket): The active WebSocket connection object
+        user_id (str): User ID associated with the connection
+        token (str): JWT token used for authentication
+        username (str, optional): Username for display/logging
+        role (str, optional): User role (e.g., 'admin', 'user')
+
+    Returns:
+        str: Generated unique session ID (UUID4)
+    """
     conns = active_connections.setdefault(conv_id, [])
     if websocket not in conns:
         conns.append(websocket)
@@ -64,6 +105,20 @@ def save_new_client(conv_id: str, websocket: WebSocket, user_id: str, token: str
 
 
 def delete_client(conv_id: str, websocket: WebSocket, session_id: str):
+    """
+    Remove a WebSocket client and clean up session data.
+
+    Deregisters the WebSocket from active_connections and removes associated
+    session data from Redis. Use this on connection close or error.
+
+    Args:
+        conv_id (str): Conversation ID
+        websocket (WebSocket): The WebSocket object to remove
+        session_id (str): The session ID associated with this connection
+
+    Returns:
+        None
+    """
     conns = active_connections.get(conv_id)
     if not conns:
         logger.debug(f"WebSocket disconnected (no list) for conversation: {conv_id}")
@@ -84,6 +139,15 @@ def delete_client(conv_id: str, websocket: WebSocket, session_id: str):
 
 
 def get_active_sessions(conv_id: str) -> list[dict]:
+    """
+    Retrieve all active session metadata for a conversation from Redis.
+
+    Args:
+        conv_id (str): Conversation ID to query
+
+    Returns:
+        list[dict]: List of session data dictionaries for all active clients
+    """
     session_ids = redis_db.smembers(f"conversation_sessions:{conv_id}")
     sessions = []
 

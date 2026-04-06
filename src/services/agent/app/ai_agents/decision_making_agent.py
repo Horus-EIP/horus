@@ -171,7 +171,7 @@ class DecisionMakingAgent:
 
         return [{"generated_text": answer}]
 
-    def decide(self, query: str, context: str) -> str:
+    async def decide(self, query: str, context: str) -> str:
         """
         Answer the user's query using the provided context.
 

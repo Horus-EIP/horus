@@ -11,6 +11,7 @@ Tests the task workflow functions:
 """
 
 import json
+import sys
 import uuid
 from unittest.mock import MagicMock, patch
 
@@ -19,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from agents.registry_tool_functions import create_agent, get_available_agents
 from db.database import Base, SessionLocal, engine
-from db.models import Conversations, Task, TaskResult, Users
+from db.models import AgentTypes, Conversations, Task, TaskResult, Users
 from tasks.task_tool_functions import (build_action_list, clean_json_output,
                                        get_prompt, insert_new_task,
                                        select_agent_for_task,
@@ -44,6 +45,13 @@ def db_session():
 
 
 @pytest.fixture(scope="function")
+def mock_ask_llm():
+    """Mock the ask_llm function imported in tasks.task_tool_functions."""
+    with patch("tasks.task_tool_functions.ask_llm") as mock:
+        yield mock
+
+
+@pytest.fixture(scope="function")
 def sample_conversation(db_session: Session):
     """Create a sample conversation for testing."""
     user = Users(username="testuser", hashed_password="hashed", role="user")
@@ -63,8 +71,8 @@ def sample_conversation(db_session: Session):
 def test_get_prompt_includes_agents_and_user_input():
     """Test that get_prompt creates correct message structure."""
     suitable_agents = [
-        ("id-a", "A1", "alpha agent"),
-        ("id-b", "A2", "beta agent"),
+        ("id-a", "A1", "alpha agent", "score_a"),
+        ("id-b", "A2", "beta agent", "score_b"),
     ]
     user_input = "Find me tomorrow's weather in Paris."
 
@@ -155,8 +163,8 @@ def test_clean_json_output_strips_whitespace():
 
 def test_build_action_list_success_maps_names_to_ids(db_session: Session):
     """Test that build_action_list correctly maps agent names to IDs."""
-    a1_id, _ = create_agent("A1", ["x"], "alpha", db_session)
-    a2_id, _ = create_agent("A2", ["y"], "beta", db_session)
+    a1_id, _ = create_agent("A1", ["x"], "alpha", db_session, AgentTypes.GENERAL)
+    a2_id, _ = create_agent("A2", ["y"], "beta", db_session, AgentTypes.GENERAL)
 
     actions_dict = [
         {"agent": "A1", "input": "question-1"},
@@ -174,7 +182,7 @@ def test_build_action_list_success_maps_names_to_ids(db_session: Session):
 
 def test_build_action_list_raises_on_empty_agent_name(db_session: Session):
     """Test that build_action_list raises error for empty agent name."""
-    create_agent("A1", [], "desc", db_session)
+    create_agent("A1", [], "desc", db_session, AgentTypes.GENERAL)
 
     with pytest.raises(ValueError) as exc:
         build_action_list([{"agent": "", "input": "q"}], [], db_session)
@@ -184,7 +192,7 @@ def test_build_action_list_raises_on_empty_agent_name(db_session: Session):
 
 def test_build_action_list_raises_on_unknown_agent(db_session: Session):
     """Test that build_action_list raises error for unknown agent."""
-    create_agent("A1", [], "desc", db_session)
+    create_agent("A1", [], "desc", db_session, AgentTypes.GENERAL)
 
     with pytest.raises(ValueError) as exc:
         build_action_list([{"agent": "DoesNotExist", "input": "q"}], [], db_session)
@@ -194,7 +202,7 @@ def test_build_action_list_raises_on_unknown_agent(db_session: Session):
 
 def test_build_action_list_raises_on_empty_input(db_session: Session):
     """Test that build_action_list raises error for empty input."""
-    create_agent("A1", [], "desc", db_session)
+    create_agent("A1", [], "desc", db_session, AgentTypes.GENERAL)
 
     with pytest.raises(ValueError) as exc:
         build_action_list([{"agent": "A1", "input": ""}], [], db_session)
@@ -219,13 +227,12 @@ def test_select_agent_for_task_no_agents_returns_nones(db_session: Session):
     assert remaining == []
 
 
-@patch("tasks.task_tool_functions.ask_llm")
 def test_select_agent_for_task_respond_to_user(mock_ask_llm, db_session: Session):
     """Test when LLM decides to respond to user directly."""
     unique_name = f"TestAgent_{uuid.uuid4().hex[:8]}"
-    create_agent(unique_name, ["test"], "Test agent", db_session)
+    create_agent(unique_name, ["test"], "Test agent", db_session, AgentTypes.GENERAL)
 
-    mock_ask_llm.return_value = '{"next_action": "respond_to_user", "actions": [], "final_answer": "I can help!"}'
+    mock_ask_llm.return_value = '{"classification": "DIRECT_ANSWER", "final_answer": "I can help!"}'
 
     first_agent, first_action, final_answer, remaining = select_agent_for_task(
         "Hello", db_session
@@ -237,17 +244,20 @@ def test_select_agent_for_task_respond_to_user(mock_ask_llm, db_session: Session
     assert remaining == []
 
 
-@patch("tasks.task_tool_functions.ask_llm")
 def test_select_agent_for_task_run_single_agent(mock_ask_llm, db_session: Session):
     """Test when LLM decides to run a single agent."""
     unique_name = f"TestAgent_{uuid.uuid4().hex[:8]}"
-    agent_id, _ = create_agent(unique_name, ["test"], "Test agent", db_session)
+    agent_id, _ = create_agent(
+        unique_name, ["test"], "Test agent", db_session, AgentTypes.GENERAL
+    )
 
-    mock_ask_llm.return_value = json.dumps({
-        "next_action": "run_agents", 
-        "actions": [{"agent": unique_name, "input": "Do something"}], 
-        "final_answer": ""
-    })
+    mock_ask_llm.return_value = json.dumps(
+        {
+            "classification": "SINGLE_AGENT",
+            "agent_name": unique_name,
+            "rewritten_input": "Do something",
+        }
+    )
 
     with patch("tasks.task_tool_functions.rabbitmq_instance.create_queue"):
         first_agent, first_action, final_answer, remaining = select_agent_for_task(
@@ -260,30 +270,39 @@ def test_select_agent_for_task_run_single_agent(mock_ask_llm, db_session: Sessio
     assert remaining == []
 
 
-@patch("tasks.task_tool_functions.ask_llm")
 def test_select_agent_for_task_run_multiple_agents(mock_ask_llm, db_session: Session):
     """Test when LLM decides to run multiple agents."""
     unique_name1 = f"Agent1_{uuid.uuid4().hex[:8]}"
     unique_name2 = f"Agent2_{uuid.uuid4().hex[:8]}"
-    agent_id1, _ = create_agent(unique_name1, ["test"], "First agent", db_session)
-    agent_id2, _ = create_agent(unique_name2, ["test"], "Second agent", db_session)
+    agent_id1, _ = create_agent(
+        unique_name1, ["test"], "First agent", db_session, AgentTypes.GENERAL
+    )
+    agent_id2, _ = create_agent(
+        unique_name2, ["test"], "Second agent", db_session, AgentTypes.GENERAL
+    )
 
-    mock_ask_llm.return_value = json.dumps({
-        "next_action": "run_agents", 
-        "actions": [{"agent": unique_name1, "input": "Task 1"}, {"agent": unique_name2, "input": "Task 2"}], 
-        "final_answer": ""
-    })
+    mock_ask_llm.return_value = json.dumps(
+        {
+            "classification": "COMPLEX_TASK",
+            "next_action": "run_agents",
+            "actions": [
+                {"agent": unique_name1, "input": "Task 1"},
+                {"agent": unique_name2, "input": "Task 2"},
+            ],
+            "final_answer": "",
+        }
+    )
 
     with patch("tasks.task_tool_functions.rabbitmq_instance.create_queue"):
         first_agent, first_action, final_answer, remaining = select_agent_for_task(
             "Do multiple tasks", db_session
         )
 
-    assert first_agent == agent_id1
-    assert first_action == "Task 1"
+    # Complex task execution is delegated to decompose_task, so select_agent_for_task returns None
+    assert first_agent is None
+    assert first_action is None
     assert final_answer is None
-    assert len(remaining) == 1
-    assert remaining[0] == (agent_id2, "Task 2")
+    assert remaining == []
 
 
 # ---------- Tests: insert_new_task ----------
@@ -321,13 +340,19 @@ def test_insert_new_task_creates_task_and_result(
 def test_insert_new_task_returns_none_on_error(db_session: Session):
     """Test that insert_new_task returns None on database error."""
     # Try to insert with invalid conversation_id
+    # Since SQLite in-memory doesn't enforce FKs by default in SQLAlchemy session
+    # unless PRAGMA foreign_keys=ON is set, we will mock the session to raise an error
+    # to test the exception handling logic.
+    mock_db = MagicMock()
+    mock_db.commit.side_effect = Exception("DB Error")
+
     task_id = insert_new_task(
         conversation_id=99999,  # Non-existent
         agent_id="agent_001",
         query="Test query",
         history=[],
         future_actions=[],
-        db=db_session,
+        db=mock_db,
     )
 
     assert task_id is None

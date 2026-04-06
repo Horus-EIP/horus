@@ -2,9 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install only the runtime deps we need
-RUN pip install --no-cache-dir fastapi uvicorn requests pika pypdf httpx pytest pytest-asyncio pytest-html prometheus-client starlette \
-    opentelemetry-distro opentelemetry-exporter-otlp
+COPY requirements.txt /app/requirements.txt
+
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Install OpenTelemetry auto-instrumentation
 RUN opentelemetry-bootstrap --action=install

@@ -49,7 +49,7 @@ async def login_and_get_token() -> str:
     Raises:
         RuntimeError: If token cannot be extracted from response
     """
-    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=120.0) as client:
         response = await client.post(
             LOGIN_PATH,
             data={"username": USERNAME, "password": PASSWORD},
@@ -85,7 +85,7 @@ async def setup_agents_and_conversation(headers_http: dict) -> tuple:
     agent_ids = {}
     agent_keys = {}
     async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers_http, timeout=150.0
+        base_url=BASE_URL, headers=headers_http, timeout=300.0
     ) as client:
         # Helper to get agent ID by name
         async def get_agent_id_by_name(name):
@@ -105,27 +105,29 @@ async def setup_agents_and_conversation(headers_http: dict) -> tuple:
             "description": "Agent specialized in mathematical operations and calculations",
         }
         response = await client.post("/agents/register", json=agent_payload)
-        
+
         if response.status_code == 409:
             print("ℹ️  Agent agent_test already exists, cleaning up to get new key...")
             temp_id = await get_agent_id_by_name("agent_test")
             if temp_id:
-                 await client.delete(f"/agents/unregister/{temp_id}")
+                await client.delete(f"/agents/unregister/{temp_id}")
             # Register again
             response = await client.post("/agents/register", json=agent_payload)
-        
+
         response.raise_for_status()
         data = response.json()
         agent_ids["agent_test"] = data["agent_id"]
         agent_keys["agent_test"] = data["api_key"]
         print(f"✅ Registered agent_test: {agent_ids['agent_test']}")
-        
+
         # Send heartbeat
         # headers_agent = {"X-API-Key": agent_keys["agent_test"], "Agent-ID": agent_ids["agent_test"]}
         # Use combined key format for compatibility
         combined_key = f"{agent_ids['agent_test']}:{agent_keys['agent_test']}"
         headers_agent = {"X-API-Key": combined_key}
-        await client.post(f"/agents/heartbeat/{agent_ids['agent_test']}", headers=headers_agent)
+        await client.post(
+            f"/agents/heartbeat/{agent_ids['agent_test']}", headers=headers_agent
+        )
 
         # Register second agent - translation
         print("[Agents] Registering agent_test2 for translation...")
@@ -135,12 +137,12 @@ async def setup_agents_and_conversation(headers_http: dict) -> tuple:
             "description": "Agent specialized in text translation and language operations",
         }
         response = await client.post("/agents/register", json=agent2_payload)
-        
+
         if response.status_code == 409:
             print("ℹ️  Agent agent_test2 already exists, cleaning up to get new key...")
             temp_id = await get_agent_id_by_name("agent_test2")
             if temp_id:
-                 await client.delete(f"/agents/unregister/{temp_id}")
+                await client.delete(f"/agents/unregister/{temp_id}")
             # Register again
             response = await client.post("/agents/register", json=agent2_payload)
 
@@ -154,7 +156,9 @@ async def setup_agents_and_conversation(headers_http: dict) -> tuple:
         # headers_agent2 = {"X-API-Key": agent_keys["agent_test2"], "Agent-ID": agent_ids["agent_test2"]}
         combined_key2 = f"{agent_ids['agent_test2']}:{agent_keys['agent_test2']}"
         headers_agent2 = {"X-API-Key": combined_key2}
-        await client.post(f"/agents/heartbeat/{agent_ids['agent_test2']}", headers=headers_agent2)
+        await client.post(
+            f"/agents/heartbeat/{agent_ids['agent_test2']}", headers=headers_agent2
+        )
 
         # Create conversation
         print("[Conversation] Creating new conversation...")
@@ -232,10 +236,7 @@ async def submit_agent_results(
         #     "Agent-ID": agent_ids["agent_test"]
         # }
         combined_key1 = f"{agent_ids['agent_test']}:{agent_keys['agent_test']}"
-        headers_1 = {
-            "X-API-Key": combined_key1,
-            "Authorization": f"Bearer {token}"
-        }
+        headers_1 = {"X-API-Key": combined_key1, "Authorization": f"Bearer {token}"}
 
         response = await client.post(
             "/tasks/task-result/",
@@ -247,7 +248,7 @@ async def submit_agent_results(
                 "history": history_1,
                 "future_actions": future_actions_1,
             },
-            headers=headers_1
+            headers=headers_1,
         )
         response.raise_for_status()
         result_1 = response.json()
@@ -273,10 +274,7 @@ async def submit_agent_results(
         #     "Agent-ID": agent_ids["agent_test2"]
         # }
         combined_key2 = f"{agent_ids['agent_test2']}:{agent_keys['agent_test2']}"
-        headers_2 = {
-            "X-API-Key": combined_key2,
-            "Authorization": f"Bearer {token}"
-        }
+        headers_2 = {"X-API-Key": combined_key2, "Authorization": f"Bearer {token}"}
 
         response = await client.post(
             "/tasks/task-result/",
@@ -288,7 +286,7 @@ async def submit_agent_results(
                 "history": history_2,
                 "future_actions": [],
             },
-            headers=headers_2
+            headers=headers_2,
         )
         response.raise_for_status()
         result_2 = response.json()
@@ -395,7 +393,9 @@ async def main():
         # Step 2: Setup agents and conversation
         print("\n[Setup] Initializing agents and conversation...")
         print("-" * 70)
-        agent_ids, agent_keys, conv_id, task_id = await setup_agents_and_conversation(headers_http)
+        agent_ids, agent_keys, conv_id, task_id = await setup_agents_and_conversation(
+            headers_http
+        )
         print(f"✅ Setup complete")
         print(f"   Agents: {list(agent_ids.keys())}")
         print(f"   Conversation ID: {conv_id}")

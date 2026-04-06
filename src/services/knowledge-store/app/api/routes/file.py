@@ -1,138 +1,246 @@
-from fastapi import APIRouter, HTTPException, File, UploadFile
-from app.api.utils import pdf_to_text, save_file, image_pdf_to_text, docx_to_text
-from app.chroma_db import store_file, DocumentModel, knowledge_collection
-from typing import List
+"""
+File Management Routes - File Storage API
+
+Provides endpoints for handling file uploads, deletions, and retrieval.
+Supports PDF, DOCX, TXT, and image-based PDFs.
+
+Endpoints:
+    POST   /file/           - Upload multiple files
+    GET    /file/           - List all stored files and metadata
+    DELETE /file/{filename} - Delete a specific file
+    POST   /file/{type}     - Upload and convert a single file by type
+"""
+
 import os
 import uuid
-import datetime
+import asyncio
+from typing import List
 
-router = APIRouter()
+from fastapi import APIRouter, HTTPException, File, UploadFile
 
-@router.post('', tags=['file'])
+from app.api.utils import pdf_to_text, save_file, image_pdf_to_text, docx_to_text
+from app.chroma_db import store_file, DocumentModel, knowledge_collection
+from app.services.content_analyzer import ContentAnalyzer
+from app.core.logging import get_logger
+
+router = APIRouter(tags=["File"])
+logger = get_logger("FileRouter")
+
+_content_analyzer = ContentAnalyzer()
+
+
+@router.post(
+    "",
+    summary="Upload files",
+    description="Upload multiple files to the knowledge store. Supports PDF, DOCX, and TXT.",
+    responses={
+        200: {
+            "description": "Files processed successfully",
+            "content": {
+                "application/json": {
+                    "example": [
+                        {"filename": "doc.pdf", "doc_id": "123", "stored_at": "/path/to/doc.pdf"}
+                    ]
+                }
+            },
+        }
+    },
+)
 async def upload_file(files: List[UploadFile] = File(...)):
     """
-    Upload a file to the documents folder.
+    Upload multiple files to the documents folder, analyze, and index them.
 
-    Parameters:
-    
-            file (UploadFile): The file to upload to the knowledge store.
+    Args:
+        files: List of files to upload.
 
     Returns:
-        
-            filename (str): The name of the uploaded file.
-            stored_at (str): The path where the file is stored.
+        List of results with filenames, IDs, paths, and auto-analysis.
     """
     responses = []
+    logger.info(f"Received request to upload {len(files)} files.")
 
     for file in files:
         try:
             doc_id = uuid.uuid4().hex
-            type = file.filename.split('.')[-1]
-            doc_path = await save_file(file, type)
+            logger.info(f"Processing file: {file.filename}, generated ID: {doc_id}")
+            file_ext = file.filename.split(".")[-1].lower()
+            doc_path = await save_file(file, file_ext)
 
-            if type == 'pdf':
+            if file_ext == "pdf":
                 text = await pdf_to_text(doc_path)
-            elif type == 'docx':
+            elif file_ext == "docx":
                 text = await docx_to_text(doc_path)
-            elif type == 'txt':
-                with open(doc_path, 'r') as f:
+            elif file_ext == "txt":
+                with open(doc_path, "r") as f:
+                    text = f.read()
+            else:
+                with open(doc_path, "r", encoding="utf-8", errors="ignore") as f:
                     text = f.read()
 
-            await store_file(DocumentModel(
-                id=doc_id,
-                title=file.filename,
-                content=text,
-                size=os.path.getsize(doc_path)
-            ))
+            auto_analysis = await asyncio.to_thread(
+                _content_analyzer.analyze,
+                text,
+                file.filename,
+            )
 
-            responses.append({'filename': file.filename, 'doc_id': doc_id, 'stored_at': doc_path})
+            await store_file(
+                DocumentModel(
+                    id=doc_id,
+                    title=file.filename,
+                    content=text,
+                    size=os.path.getsize(doc_path),
+                ),
+                auto_analysis=auto_analysis,
+            )
+
+            logger.info(f"File {file.filename} stored successfully with ID {doc_id}")
+            responses.append({
+                "filename": file.filename,
+                "doc_id": doc_id,
+                "stored_at": doc_path,
+                "auto_analysis": auto_analysis,
+            })
+
         except Exception as e:
-            responses.append({'filename': file.filename, 'error': str(e)})
+            logger.error(f"Error processing file {file.filename}: {str(e)}")
+            responses.append({"filename": file.filename, "error": str(e)})
 
     return responses
 
-@router.get('', tags=['file'])
-async def get_all_files():
-    """
-    Get all files in the knowledge store.
 
-    Returns:
-        
-            files (List[str]): A list of all files in the knowledge store.
-    """
+@router.get(
+    "",
+    summary="List all files",
+    description="Retrieve a list of all files currently indexed in the knowledge store.",
+    responses={
+        200: {
+            "description": "List of documents",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "documents": [
+                            {"id": "123", "title": "doc.pdf", "content": "Sample text", "date": "2023-01-01", "size": 1024}
+                        ]
+                    }
+                }
+            },
+        },
+        404: {"description": "Error retrieving files"},
+    },
+)
+async def get_all_files():
+    """Get all files in the knowledge store."""
     try:
         stored_files = knowledge_collection.get(include=["documents", "metadatas"])
-        
+
         files = [
             {
-                'id': doc_id,
-                'title': meta.get('title', 'Untitled'),
-                'content': doc_content,
-                'date': meta.get('date', 'Unknown'),
-                'size': meta.get('size', 0)
+                "id": doc_id,
+                "title": meta.get("title", "Untitled"),
+                "content": doc_content,
+                "date": meta.get("date", "Unknown"),
+                "size": meta.get("size", 0),
             }
             for doc_id, doc_content, meta in zip(
-                stored_files['ids'],
-                stored_files['documents'],
-                stored_files['metadatas']
+                stored_files["ids"],
+                stored_files["documents"],
+                stored_files["metadatas"],
             )
         ]
 
-        return {'documents': files}
+        return {"documents": files}
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-@router.delete('/{filename}', tags=['file'])
-async def delete_file(filepath: str):
-    """
-    Delete a file from the knowledge store.
 
-    Parameters:
-    
-            filename (str): The name of the file to delete.
+@router.delete(
+    "/{filename}",
+    summary="Delete a file",
+    description="Delete a file from the physical storage by its filename.",
+    responses={
+        200: {
+            "description": "File deleted",
+            "content": {"application/json": {"example": {"msg": "doc.pdf deleted"}}},
+        },
+        404: {"description": "File not found"},
+    },
+)
+async def delete_file(filename: str):
+    """Delete a file from the knowledge store storage."""
+    logger.info(f"Request to delete file: {filename}")
+    file_path = None
+    for root, dirs, files in os.walk("documents"):
+        if filename in files:
+            file_path = os.path.join(root, filename)
+            break
 
-    Returns:
-        
-            msg (str): The message indicating the file was deleted.
-    """
-    path = os.path.join('documents', filepath)
-    if os.path.exists(path):
-        os.remove(path)
-        return {"msg": f'{filepath} deleted'}
+    if file_path:
+        os.remove(file_path)
+        logger.info(f"File {filename} deleted successfully from disk.")
+        return {"msg": f"{filename} deleted"}
     else:
+        logger.warning(f"File {filename} not found for deletion.")
         raise HTTPException(status_code=404, detail="File not found")
 
-@router.post('/{type}', tags=['file'])
+
+@router.post(
+    "/{type}",
+    summary="Upload and Convert Specific Type",
+    description="Upload a single file specifying its type (pdf, docx, image) and document ID, then convert to text.",
+    responses={
+        200: {
+            "description": "File uploaded and converted",
+            "content": {
+                "application/json": {
+                    "example": {"filename": "doc.pdf", "stored_at": "/path/doc.pdf", "text": "Extracted text"}
+                }
+            },
+        },
+        400: {"description": "Invalid file type"},
+    },
+)
 async def upload_file_to_text(type: str, doc_id: str, file: UploadFile = File(...)):
     """
-    Upload a file to the knowledge store and convert it to text.
+    Upload a single file, convert it to text, analyze, and store it.
 
-    Parameters:
-        
-            type (str): The type of file to upload. Can be 'pdf', 'docx' or 'image'.
-            doc_id (str): The id of the document to upload
-            file (UploadFile): The file to upload to the knowledge store.
-            
+    Args:
+        type: File type ('pdf', 'docx', 'image').
+        doc_id: Pre-assigned document ID.
+        file: The file to upload.
+
     Returns:
-        
-            filename (str): The filename of the uploaded file.
-            stored_at (str): The path where the file is stored.
-            text (str): The text extracted from the file
+        Filename, storage path, extracted text, and auto-analysis.
     """
     path = await save_file(file, type)
 
-    if type == 'pdf':
+    if type == "pdf":
         text = await pdf_to_text(path)
-    elif type == 'docx':
+    elif type == "docx":
         text = await docx_to_text(path)
-    elif type == 'image':
+    elif type == "image":
         text = await image_pdf_to_text(path)
     else:
         raise HTTPException(status_code=400, detail="Invalid file type")
 
-    await store_file(DocumentModel(
-        id=doc_id,
-        title=file.filename,
-        content=text
-    ))
-    return {'filename': file.filename, 'stored_at': path, 'text': text}
+    auto_analysis = await asyncio.to_thread(
+        _content_analyzer.analyze,
+        text,
+        file.filename,
+    )
+
+    await store_file(
+        DocumentModel(
+            id=doc_id,
+            title=file.filename,
+            content=text,
+            size=os.path.getsize(path) if os.path.exists(path) else 0,
+        ),
+        auto_analysis=auto_analysis,
+    )
+
+    return {
+        "filename": file.filename,
+        "stored_at": path,
+        "text": text,
+        "auto_analysis": auto_analysis,
+    }

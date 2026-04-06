@@ -1,7 +1,7 @@
 """initial: create all tables with proper foreign keys and indexes
 
 Revision ID: 3f524312486e
-Revises: 
+Revises:
 Create Date: 2025-11-18 22:00:00.000000
 
 """

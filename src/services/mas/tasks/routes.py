@@ -8,18 +8,13 @@ for processing.
 Endpoints:
     POST   /tasks/new_task/         - Create and dispatch a new task
     POST   /tasks/task-result/      - Submit task result from agent
-    GET    /tasks/{task_id}         - Get task status and details
-    PATCH  /tasks/{task_id}/cancel  - Cancel a running task
-    GET    /tasks/stats             - Get task queue statistics
 
 Task Lifecycle:
-    1. PENDING    → Task created, waiting for assignment
-    2. RUNNING    → Task assigned and being processed by agent
-    3. COMPLETED  → Task execution finished successfully
-    4. FAILED     → Task execution failed
-    5. CANCELLED  → Task was cancelled by user
-    6. TIMEOUT    → Task exceeded timeout threshold
-    
+    1. CREATED    → Task created, waiting for assignment
+    2. ASSIGNED   → Task assigned to agent(s)
+    3. EXECUTING  → Agent actively processing task
+    4. COMPLETED  → Task execution finished
+
 Request/Response Examples:
     POST /tasks/new_task/
     {
@@ -27,17 +22,20 @@ Request/Response Examples:
         "conversation_id": 1,
         "skills_required": ["summarization"]
     }
-    
+
     Response:
     {
         "message": "Task 'Summarize this text' assigned to agent 8b9f1a3e...",
         "conversation_id": 1,
         "task_id": "task-uuid-1234"
     }
-    
-    PATCH /tasks/{task_id}/cancel
+
+    POST /tasks/task-result/
     {
-        "reason": "User requested cancellation"
+        "task_id": "task-uuid-1234",
+        "result": "Summary content...",
+        "conversation_id": 1,
+        "agent_id": "8b9f1a3e..."
     }
 
 Task Assignment Strategy:
@@ -45,47 +43,129 @@ Task Assignment Strategy:
     - Load balancing across available agents
 
 Error Codes:
-    400 - Bad Request (invalid task definition or cannot cancel)
+    400 - Bad Request (invalid task definition)
     401 - Unauthorized (authentication required)
     404 - Not Found (task does not exist)
     500 - Internal Server Error
 """
 
 import json
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
-from auth.auth_tool_functions import get_current_user, PermissionChecker, verify_agent_api_key
+from auth.auth_tool_functions import (PermissionChecker, get_current_user,
+                                      verify_agent_api_key)
 from auth.permissions import Permission
 from chat.chat_tool_functions import send_messages_via_websockets
 from conversations.conversation_tool_functions import add_messages
-from core.logger import log_agent_operation, log_error
-from core.metrics import record_task_created, update_task_queue_depth
+from core.logger import get_logger, log_agent_operation, log_error
+from core.metrics import TASK_ERRORS, TASK_QUEUE_DEPTH
 from core.rabbitmq_tool import rabbitmq_instance
-from core.structured_logging import log_task_event
 from db.database import get_db
 from db.models import Task, TaskResult
 from schemas.schemas import TaskForm, TaskResultForm
-from tasks.task_tool_functions import (
-    TaskStatus,
-    cancel_task,
-    get_task_queue_stats,
-    get_task_status,
-    insert_new_task,
-    select_agent_for_task,
-    validating_task_results,
-)
+from tasks.status import TaskStatus
+from tasks.task_tool_functions import (aggregate_results, decompose_task,
+                                       insert_new_task, interrupt_task,
+                                       select_agent_for_task,
+                                       validating_task_results)
+
+logger = get_logger("task_routes")
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
 
-class TaskCancelRequest(BaseModel):
-    """Request body for task cancellation."""
-    reason: Optional[str] = "User requested cancellation"
+def get_task_queue_stats():
+    """Retrieve current task queue statistics."""
+    # This is a placeholder that returns stats from metrics/queue system
+    # In a real implementation, this would query RabbitMQ or internal counters
+    try:
+        current_depth = (
+            TASK_QUEUE_DEPTH.ephemeral_val()
+            if hasattr(TASK_QUEUE_DEPTH, "ephemeral_val")
+            else 0
+        )
+    except:
+        current_depth = 0
 
+    return {
+        "pending": current_depth,
+        "running": 0,
+        "completed": 0,
+        "failed": 0,
+        "cancelled": 0,
+        "timeout": 0,
+        "total": current_depth,
+    }
+
+
+def update_task_queue_depth(depth: int):
+    """Update task queue depth metric."""
+    TASK_QUEUE_DEPTH.set(depth)
+
+
+@router.get(
+    "/list",
+    summary="List all tasks",
+    description="Retrieve all tasks from the database. Requires TASK_READ permission.",
+    status_code=200,
+    dependencies=[Depends(PermissionChecker(Permission.TASK_READ))],
+)
+def list_tasks(db: Session = Depends(get_db)):
+    tasks = db.query(Task).all()
+    logger.info("Listing all tasks", count=len(tasks))
+    return tasks
+
+
+@router.get(
+    "/stats/queue",
+    summary="Get task queue statistics",
+    description="Retrieve current statistics about the task queue including pending, running, and completed tasks. Requires VIEW_ANALYTICS permission.",
+    status_code=200,
+    dependencies=[Depends(PermissionChecker(Permission.VIEW_ANALYTICS))],
+    responses={
+        200: {
+            "description": "Queue statistics retrieved successfully",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "stats": {
+                            "summary": "Current queue stats",
+                            "value": {
+                                "pending": 5,
+                                "running": 2,
+                                "completed": 150,
+                                "failed": 1,
+                                "total": 158,
+                            },
+                        }
+                    }
+                }
+            },
+        },
+        403: {
+            "description": "Forbidden",
+            "content": {
+                "application/json": {"example": {"detail": "Insufficient permissions"}}
+            },
+        },
+    },
+)
+async def get_queue_stats(
+    user: Annotated[dict, Depends(PermissionChecker(Permission.VIEW_ANALYTICS))],
+):
+    """
+    Retrieve real-time task statistics from the message queue.
+
+    Returns:
+        dict: A dictionary of queue statistics (depth, processed count, error rate).
+    """
+    stats = get_task_queue_stats()
+    logger.info("Queue statistics retrieved", stats=stats)
+    return stats
 
 
 @router.post(
@@ -275,16 +355,99 @@ class TaskCancelRequest(BaseModel):
     },
 )
 async def create_new_task(
-    task: TaskForm, user: Annotated[dict, Depends(PermissionChecker(Permission.TASK_CREATE))], db: Session = Depends(get_db)
+    task: TaskForm,
+    user: Annotated[dict, Depends(PermissionChecker(Permission.TASK_CREATE))],
+    db: Session = Depends(get_db),
 ):
+    """
+    Create and dispatch a new task to the most suitable agent.
+
+    This endpoint orchestrates the task creation process:
+    1. Selects the best agent based on the demand and required skills (via LLM).
+    2. If no agent is found, attempts to decompose the task or returns an error.
+    3. If an immediate answer is available (e.g. from cache/LLM), returns it.
+    4. Otherwise, creates a Task record in the DB and publishes a message to RabbitMQ.
+
+    Args:
+        task (TaskForm): The task definition payload containing demand and requirements.
+        user (dict): The authenticated user making the request (injected dependency).
+        db (Session): Database session (injected dependency).
+
+    Returns:
+        dict: A dictionary containing the assigned agent ID, task ID, and confirmation message.
+
+    Raises:
+        HTTPException:
+            - 401: If user authentication fails.
+            - 500: If there are database or messaging errors.
+    """
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
 
-    agent_id, user_demand, anticipated_answer, future_actions = select_agent_for_task(
+    logger.info(
+        "Starting agent selection process for new task",
+        demand=task.demand[:50],
+        conversation_id=task.conversation_id,
+    )
+
+    # 1. Selection Phase
+    agent_id, user_demand, direct_response, future_actions = select_agent_for_task(
         task.demand, db
     )
 
-    if agent_id is None and anticipated_answer is None:
+    # 2. Direct Answer Handling
+    if direct_response:
+        add_messages("user", task.demand, task.conversation_id, db)
+        add_messages("assistant", direct_response, task.conversation_id, db)
+        # We don't create a task, just return the answer
+        return {
+            "message": "Processing complete",
+            "conversation_id": task.conversation_id,
+            "result": direct_response,
+        }
+
+    # 3. Single Agent Assignment
+    if agent_id:
+        logger.info("Agent selected for task", agent_id=agent_id)
+
+        history = [{"role": "user", "message": task.demand}]
+
+        task_id = insert_new_task(
+            task.conversation_id, agent_id, user_demand, history, future_actions, db
+        )
+
+        if not task_id:
+            raise HTTPException(status_code=500, detail="Failed to create task")
+
+        message = json.dumps(
+            {
+                "conversation_id": task.conversation_id,
+                "task_id": task_id,
+            }
+        )
+        rabbitmq_instance.publish(agent_id, message)
+        TASK_QUEUE_DEPTH.inc()
+        log_agent_operation(
+            agent_id, "TASK", f"Assigned task {task_id}: {task.demand[:50]}..."
+        )
+
+        add_messages("user", task.demand, task.conversation_id, db)
+        return {
+            "message": f"Task '{task.demand}' assigned to agent {agent_id}",
+            "conversation_id": task.conversation_id,
+            "task_id": task_id,
+        }
+
+    # 4. Decomposition Fallback
+    logger.info(
+        "No single agent found or COMPLEX_TASK classified. Attempting decomposition."
+    )
+
+    first_action, actions_list = await run_in_threadpool(
+        decompose_task, task.demand, db
+    )
+
+    if not first_action:
         add_messages(
             "assistant",
             "No agent registered to assign a task",
@@ -293,14 +456,12 @@ async def create_new_task(
         )
         return {"message": "No agent registered to assign a task"}
 
-    if anticipated_answer is not None and "Response for user" in anticipated_answer:
-        add_messages("assistant", anticipated_answer, task.conversation_id, db)
-        return {"message": anticipated_answer}
+    agent_id, user_demand = first_action
 
-    history = [{"role": "user", "message": user_demand}]
+    history = [{"role": "user", "message": task.demand}]
 
     task_id = insert_new_task(
-        task.conversation_id, agent_id, user_demand, history, future_actions, db
+        task.conversation_id, agent_id, user_demand, history, actions_list, db
     )
     message = json.dumps(
         {
@@ -310,11 +471,14 @@ async def create_new_task(
     )
     rabbitmq_instance.publish(agent_id, message)
 
-    log_agent_operation(agent_id, "TASK", f"Assigned task {task_id}: {task.demand[:50]}...")
+    TASK_QUEUE_DEPTH.inc()
+    log_agent_operation(
+        agent_id, "TASK", f"Assigned task {task_id}: {task.demand[:50]}..."
+    )
 
     add_messages("user", task.demand, task.conversation_id, db)
     return {
-        "message": f"Task '{task.demand}' assigned to agent {agent_id}",
+        "message": f"Task '{task.demand}' decomposed and assigned to agent {agent_id}",
         "conversation_id": task.conversation_id,
         "task_id": task_id,
     }
@@ -326,7 +490,7 @@ async def create_new_task(
     description="Receive the result from an agent, add to conversation history, distribute via WebSocket. Handles subtasks and future actions if defined. Requires TASK_EXECUTE permission. Requires 'X-API-Key' and 'Agent-ID' headers for authentication.",
     status_code=200,
     tags=["Tasks"],
-    dependencies=[Depends(PermissionChecker(Permission.TASK_EXECUTE))],
+    dependencies=[Depends(verify_agent_api_key)],
     responses={
         200: {
             "description": "Task result received and processed successfully",
@@ -530,6 +694,29 @@ async def sharing_agent_result(
     verified_agent: Annotated[tuple[str, str], Depends(verify_agent_api_key)],
     db: Session = Depends(get_db),
 ):
+    """
+    Process the result submitted by an agent upon task completion.
+
+    This endpoint handles the final step of a task execution:
+    1. Validates the submission and verifies the agent's identity.
+    2. Updates the task status to COMPLETED and stores the result.
+    3. Handles potential future actions/subtasks (task chaining).
+    4. If no further actions, aggregates history and notifies the user via WebSocket.
+
+    Args:
+        task_result (TaskResultForm): The task result payload (output, status, suggestions).
+        verified_agent (tuple[str, str]): Authenticated agent identifier (unpacked).
+        db (Session): Database session (injected dependency).
+
+    Returns:
+        dict: Confirmation message on success.
+
+    Raises:
+        HTTPException:
+            - 403: If agent ID mismatches or lacks permission.
+            - 404: If the task or associated result record does not exist.
+            - 500: If there is an internal error processing the result (e.g., recursive loop).
+    """
     verified_agent_id, _ = verified_agent
     if verified_agent_id != task_result.agent_id:
         raise HTTPException(
@@ -549,7 +736,7 @@ async def sharing_agent_result(
         action_list = current_task_result.future_actions or []
         history = current_task_result.history or []
 
-        task.status = "completed"
+        task.status = TaskStatus.COMPLETED.value
 
         history.append({"role": "assistant", "message": task_result.result})
 
@@ -557,17 +744,24 @@ async def sharing_agent_result(
         current_task_result.history = history
         db.commit()
 
-        log_agent_operation(task_result.agent_id, "TASK", f"Completed task {task_result.task_id}")
+        TASK_QUEUE_DEPTH.dec()
+        log_agent_operation(
+            task_result.agent_id, "TASK", f"Completed task {task_result.task_id}"
+        )
 
         if len(action_list) > 0:
             new_agent = action_list[0][0]
             new_action = action_list[0][1]
             remaining_actions = action_list[1:]
 
+            new_action_context = (
+                f"Previous task result: {task_result.result}\n\n Action: {new_action}"
+            )
+
             new_subtask_id = insert_new_task(
                 task_result.conversation_id,
                 new_agent,
-                new_action,
+                new_action_context,
                 history,
                 remaining_actions,
                 db,
@@ -585,150 +779,145 @@ async def sharing_agent_result(
                 }
             )
             rabbitmq_instance.publish(new_agent, message)
+            TASK_QUEUE_DEPTH.inc()
+            logger.info(
+                f"Chained to next task: {new_subtask_id} assigned to agent {new_agent}"
+            )
             return {"message": f"Result received from agent {task_result.agent_id}"}
 
-        add_messages("assistant", task_result.result, task_result.conversation_id, db)
-        await send_messages_via_websockets(
-            task_result.conversation_id, task_result.result
-        )
+        final_answer = aggregate_results(history, task_result.result)
+        add_messages("assistant", final_answer, task_result.conversation_id, db)
+        await send_messages_via_websockets(task_result.conversation_id, final_answer)
         return {"message": f"Result received from agent {task_result.agent_id}"}
     except HTTPException:
         raise
     except Exception as e:
+        TASK_ERRORS.labels(
+            agent_id=task_result.agent_id, error_type="processing_error"
+        ).inc()
         db.rollback()
         raise HTTPException(
             status_code=500, detail=f"Error processing task result: {str(e)}"
         )
 
 
-@router.get(
-    "/{task_id}",
-    summary="Get task status and details",
-    description="Retrieve the current status and details of a specific task. Requires TASK_READ permission.",
-    status_code=200,
-    tags=["Tasks"],
-    dependencies=[Depends(PermissionChecker(Permission.TASK_READ))],
-    responses={
-        200: {
-            "description": "Task details retrieved successfully",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "task_id": "task-uuid-1234",
-                        "status": "running",
-                        "agent_id": "8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
-                        "conversation_id": 1,
-                        "query": "Summarize this document",
-                        "created_at": "2025-01-12T10:30:00Z",
-                        "result": None,
-                    }
-                }
-            },
-        },
-        404: {"description": "Task not found"},
-    },
-)
-async def get_task(
-    task_id: str,
-    user: Annotated[dict, Depends(PermissionChecker(Permission.TASK_READ))],
-    db: Session = Depends(get_db),
-):
-    """Get the status and details of a specific task."""
-    return get_task_status(task_id, db)
-
-
 @router.patch(
-    "/{task_id}/cancel",
+    "/task-cancel/{task_id}",
     summary="Cancel a running task",
-    description="Cancel a task that is currently pending or running. Sends a cancellation signal to the assigned agent. Requires TASK_CANCEL permission.",
+    description="Interrupts a running task by updating its status to CANCELED and sending a high-priority cancellation signal to the assigned agent via RabbitMQ. Requires TASK_DELETE permission.",
     status_code=200,
     tags=["Tasks"],
-    dependencies=[Depends(PermissionChecker(Permission.TASK_CANCEL))],
+    dependencies=[Depends(PermissionChecker(Permission.TASK_DELETE))],
     responses={
         200: {
-            "description": "Task cancelled successfully",
+            "description": "Task successfully canceled",
             "content": {
                 "application/json": {
-                    "example": {
-                        "task_id": "task-uuid-1234",
-                        "status": "cancelled",
-                        "previous_status": "running",
-                        "reason": "User requested cancellation",
+                    "examples": {
+                        "success": {
+                            "summary": "Task canceled",
+                            "value": {
+                                "message": "Task task-uuid-1234 has been canceled successfully."
+                            },
+                        }
                     }
                 }
             },
         },
         400: {
-            "description": "Task cannot be cancelled (already completed or cancelled)",
+            "description": "Bad Request - Task cannot be canceled",
             "content": {
                 "application/json": {
-                    "example": {"detail": "Cannot cancel task with status: completed"}
+                    "examples": {
+                        "already_completed": {
+                            "summary": "Task already finished",
+                            "value": {"detail": "Cannot interrupt a completed task"},
+                        }
+                    }
                 }
             },
         },
-        404: {"description": "Task not found"},
-    },
-)
-async def cancel_task_endpoint(
-    task_id: str,
-    cancel_request: TaskCancelRequest,
-    user: Annotated[dict, Depends(PermissionChecker(Permission.TASK_CANCEL))],
-    db: Session = Depends(get_db),
-):
-    """Cancel a pending or running task."""
-    result = cancel_task(task_id, cancel_request.reason, db)
-    
-    # Update metrics
-    stats = get_task_queue_stats(db)
-    update_task_queue_depth(
-        pending=stats.get("pending", 0),
-        running=stats.get("running", 0),
-        completed=stats.get("completed", 0),
-        failed=stats.get("failed", 0) + stats.get("cancelled", 0) + stats.get("timeout", 0),
-    )
-    
-    return result
-
-
-@router.get(
-    "/stats/queue",
-    summary="Get task queue statistics",
-    description="Get statistics about the task queue including counts by status. Requires TASK_READ permission.",
-    status_code=200,
-    tags=["Tasks"],
-    dependencies=[Depends(PermissionChecker(Permission.TASK_READ))],
-    responses={
-        200: {
-            "description": "Task queue statistics",
+        401: {
+            "description": "Authentication Failed",
             "content": {
                 "application/json": {
-                    "example": {
-                        "pending": 5,
-                        "running": 3,
-                        "completed": 150,
-                        "failed": 2,
-                        "cancelled": 1,
-                        "timeout": 0,
-                        "total": 161,
+                    "examples": {
+                        "auth_failed": {
+                            "summary": "Missing or invalid authentication",
+                            "value": {"detail": "Authentication Failed"},
+                        },
+                    }
+                }
+            },
+        },
+        404: {
+            "description": "Task not found",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "task_not_found": {
+                            "summary": "Task ID does not exist",
+                            "value": {"detail": "Task not found"},
+                        },
+                    }
+                }
+            },
+        },
+        500: {
+            "description": "Internal Server Error",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "cancellation_error": {
+                            "summary": "Failed to cancel task",
+                            "value": {"detail": "Error Canceling task: Database error"},
+                        }
                     }
                 }
             },
         },
     },
 )
-async def get_queue_stats(
-    user: Annotated[dict, Depends(PermissionChecker(Permission.TASK_READ))],
+async def cancel_task(
+    task_id: str,
+    user: Annotated[dict, Depends(PermissionChecker(Permission.TASK_DELETE))],
     db: Session = Depends(get_db),
 ):
-    """Get task queue statistics."""
-    stats = get_task_queue_stats(db)
-    
-    # Update Prometheus metrics
-    update_task_queue_depth(
-        pending=stats.get("pending", 0),
-        running=stats.get("running", 0),
-        completed=stats.get("completed", 0),
-        failed=stats.get("failed", 0) + stats.get("cancelled", 0) + stats.get("timeout", 0),
-    )
-    
-    return stats
+    """
+    Cancel an active task and interrupt its execution.
+
+    This endpoint requests immediate cancellation of a task.
+    1. Updates the task status to CANCELLED in the database.
+    2. Sends a high-priority cancellation event to the assigned agent via RabbitMQ.
+    3. Logs the cancellation (auditable action).
+
+    Args:
+        task_id (str): The unique identifier (UUID) of the task to be canceled.
+        user (dict): The authenticated user requesting cancellation.
+        db (Session): Database session (injected dependency).
+
+    Returns:
+        dict: Confirmation message if successfully canceled.
+
+    Raises:
+        HTTPException:
+            - 401: If user authentication fails.
+            - 404: If the task ID is not found.
+            - 500: If the cancellation process fails (e.g., agent unreachable or DB lock).
+    """
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication Failed")
+    try:
+        if interrupt_task(task_id, db):
+            log_agent_operation(
+                "system",
+                "TASK_CANCEL",
+                f"User {user.get('username')} canceled task {task_id}",
+            )
+            return {"message": f"Task {task_id} has been canceled successfully."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        TASK_ERRORS.labels(agent_id="system", error_type="cancellation_error").inc()
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error Canceling task: {str(e)}")

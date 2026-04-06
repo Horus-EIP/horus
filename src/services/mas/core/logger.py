@@ -2,44 +2,36 @@
 Logger Module - Multi-Agent System Logging Infrastructure
 
 This module provides comprehensive logging functionality for the MAS application,
-featuring colored console output, structured file logging, and component-based
-log organization.
+featuring structured JSON logging via structlog, correlation ID support, and
+component-based log organization.
 
 Key Features:
-- Colored console output with component identification
+- Structured JSON output for machine parsing (Datadog, ELK, etc.)
+- Correlation ID tracking across requests (via contextvars)
 - Separate log files for general logs and error logs
 - Timestamp tracking for performance monitoring
-- Structured logging for database operations, authentication, and API requests
+- Specialized logging for database operations, authentication, and API requests
 - Agent operation tracking and monitoring
 - Singleton pattern for logger management
 - Support for multiple log levels (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
 Logger Hierarchy:
-The module uses Python's logging hierarchy where each component (auth, db, agent, etc.)
-gets its own logger instance, allowing for granular control over log levels.
+The module uses structlog's logger factory. Each component (auth, db, agent, etc.)
+gets its own logger instance bound with the component name.
 
 Usage Examples:
     from core.logger import get_logger, log_agent_operation
-    
+
     logger = get_logger("my_module")
-    logger.info("Application started")
-    
+    logger.info("event_name", key="value")
+
     # Or use convenience functions
     log_agent_operation("Agent-001", "START", "Task assignment")
     log_db_operation("CREATE", "users_table", "New user registered")
 
 Log File Output:
-- Daily log files: logs/mas_YYYYMMDD.log (all logs)
-- Daily error files: logs/mas_errors_YYYYMMDD.log (errors only)
-- Console output: Colored for better readability during development
-
-Color Scheme:
-- DEBUG: Cyan
-- INFO: Green
-- WARNING: Yellow
-- ERROR: Red
-- CRITICAL: Magenta (bright)
-- Component tags: Different colors for different components
+- Daily log files: logs/mas_YYYYMMDD.log (all logs in JSON)
+- Daily error files: logs/mas_errors_YYYYMMDD.log (errors only in JSON)
 """
 
 import logging
@@ -49,6 +41,7 @@ from pathlib import Path
 from typing import Optional
 
 import colorama
+import structlog
 from colorama import Back, Fore, Style
 
 colorama.init(autoreset=True)
@@ -57,6 +50,9 @@ colorama.init(autoreset=True)
 class ColoredFormatter(logging.Formatter):
     """
     Custom logging formatter with color support for terminal output.
+
+    Note: Currently unused in favor of structlog's JSONRenderer, but kept
+    for potential dev-mode toggle.
 
     Features:
     - Colored log levels and component names
@@ -118,6 +114,7 @@ class MASLogger:
 
     Provides centralized logger creation, configuration, and specialized
     logging methods for different operation types (database, authentication, API, etc.).
+    Configures structlog for JSON output and context management.
 
     Attributes:
         log_dir (Path): Directory for storing log files (logs/)
@@ -125,7 +122,7 @@ class MASLogger:
         _loggers (dict): Cache of logger instances by name
 
     Methods:
-        get_logger(name, level): Get or create a logger instance
+        get_logger(name, level): Get or create a structlog logger instance
         log_startup(component, message): Log startup messages
         log_success(component, message): Log successful operations
         log_warning(component, message): Log warning messages
@@ -153,80 +150,127 @@ class MASLogger:
         self.log_dir = Path("logs")
         self.log_dir.mkdir(exist_ok=True)
 
+        # Configure structlog to use standard library logger
+        structlog.configure(
+            processors=[
+                structlog.contextvars.merge_contextvars,
+                structlog.processors.add_log_level,
+                structlog.processors.StackInfoRenderer(),
+                structlog.dev.set_exc_info,
+                structlog.processors.TimeStamper(fmt="iso", utc=False),
+                structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+            ],
+            logger_factory=structlog.stdlib.LoggerFactory(),
+            wrapper_class=structlog.stdlib.BoundLogger,
+            cache_logger_on_first_use=True,
+        )
+
         self._setup_root_logger()
 
     def _setup_root_logger(self):
         root_logger = logging.getLogger()
         root_logger.setLevel(logging.INFO)
-
         root_logger.handlers.clear()
 
+        # Console Handler - Pretty printing
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(logging.INFO)
-        console_handler.setFormatter(ColoredFormatter())
+        console_handler.setFormatter(
+            structlog.stdlib.ProcessorFormatter(
+                processor=structlog.dev.ConsoleRenderer(colors=True)
+            )
+        )
+        root_logger.addHandler(console_handler)
 
+        # File Handler - JSON logging
         log_file = self.log_dir / f"mas_{datetime.now().strftime('%Y%m%d')}.log"
         file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setLevel(logging.DEBUG)
-
-        file_formatter = logging.Formatter(
-            fmt="%(asctime)s [%(levelname)-8s] [%(name)-10s] %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
+        file_handler.setFormatter(
+            structlog.stdlib.ProcessorFormatter(
+                processor=structlog.processors.JSONRenderer(ensure_ascii=False)
+            )
         )
-        file_handler.setFormatter(file_formatter)
+        root_logger.addHandler(file_handler)
 
+        # Error File Handler - JSON logging
         error_file = (
             self.log_dir / f"mas_errors_{datetime.now().strftime('%Y%m%d')}.log"
         )
         error_handler = logging.FileHandler(error_file, encoding="utf-8")
         error_handler.setLevel(logging.ERROR)
-        error_handler.setFormatter(file_formatter)
-
-        root_logger.addHandler(console_handler)
-        root_logger.addHandler(file_handler)
+        error_handler.setFormatter(
+            structlog.stdlib.ProcessorFormatter(
+                processor=structlog.processors.JSONRenderer(ensure_ascii=False)
+            )
+        )
         root_logger.addHandler(error_handler)
 
     def get_logger(self, name: str, level: Optional[int] = None) -> logging.Logger:
         """
-        Get or create a logger instance with the specified name.
-
-        Args:
-            name (str): Logger name (typically the module name)
-            level (Optional[int]): Optional log level (defaults to root level)
-
-        Returns:
-            logging.Logger: Logger instance configured for the given name
-
-        Example:
-            logger = get_logger("agents.registry")
-            logger.info("Agent registered successfully")
+        Get or create a structlog logger instance with the specified name.
         """
+        # Ensure standard logger exists to capture messages
         if name not in self._loggers:
             logger = logging.getLogger(name)
             if level:
                 logger.setLevel(level)
             self._loggers[name] = logger
 
-        return self._loggers[name]
+        return structlog.get_logger(name)
 
     def log_startup(self, component: str, message: str):
+        """
+        Log a startup event.
+
+        Args:
+            component (str): Component name
+            message (str): Startup message
+        """
         logger = self.get_logger(component)
-        separator = "=" * 60
-        logger.info(f"\n{Fore.CYAN}{Style.BRIGHT}{separator}")
-        logger.info(f"🚀 {component.upper()} STARTUP: {message}")
-        logger.info(f"{separator}{Style.RESET_ALL}")
+        logger.info(
+            "startup_event", component=component.upper(), message=message, icon="🚀"
+        )
 
     def log_success(self, component: str, message: str):
+        """
+        Log a success event.
+
+        Args:
+            component (str): Component name
+            message (str): Success message
+        """
         logger = self.get_logger(component)
-        logger.info(f"✅ {message}")
+        logger.info("success_event", component=component, message=message, icon="✅")
 
     def log_warning(self, component: str, message: str):
+        """
+        Log a warning event.
+
+        Args:
+            component (str): Component name
+            message (str): Warning message
+        """
         logger = self.get_logger(component)
-        logger.warning(f"⚠️  {message}")
+        logger.warning("warning_event", component=component, message=message, icon="⚠️")
 
     def log_error(self, component: str, message: str, exc_info=False):
+        """
+        Log an error event.
+
+        Args:
+            component (str): Component name
+            message (str): Error message
+            exc_info (bool): Whether to include exception info
+        """
         logger = self.get_logger(component)
-        logger.error(f"❌ {message}", exc_info=exc_info)
+        logger.error(
+            "error_event",
+            component=component,
+            message=message,
+            icon="❌",
+            exc_info=exc_info,
+        )
 
     def log_db_operation(self, operation: str, table: str, details: str = ""):
         """
@@ -250,9 +294,24 @@ class MASLogger:
             "INIT": "🏗️",
         }.get(operation.upper(), "💾")
 
-        logger.info(f"{emoji} {operation.upper()} {table} {details}")
+        # logger.info(f"{emoji} {operation.upper()} {table} {details}")
+        logger.info(
+            "db_operations",
+            icon=emoji,
+            operation=operation.upper(),
+            table=table,
+            details=details,
+        )
 
     def log_auth_operation(self, operation: str, username: str, success: bool = True):
+        """
+        Log an authentication operation.
+
+        Args:
+            operation (str): Operation type (LOGIN, LOGOUT, REGISTER, TOKEN)
+            username (str): Username involved
+            success (bool): Whether the operation was successful
+        """
         logger = self.get_logger("auth")
         if success:
             emoji = {
@@ -261,13 +320,35 @@ class MASLogger:
                 "REGISTER": "📝",
                 "TOKEN": "🎫",
             }.get(operation.upper(), "🔑")
-            logger.info(f"{emoji} {operation.upper()} successful for user: {username}")
+            description = f"{operation.upper()} successful for user: {username}"
+            logger.info(
+                "authentification_event",
+                icon=emoji,
+                operation=operation.upper(),
+                details=description,
+            )
         else:
-            logger.warning(f"🚫 {operation.upper()} failed for user: {username}")
+            emoji = "🚫"
+            description = f"{operation.upper()} failed for user: {username}"
+            logger.warning(
+                "authentification_event_failure",
+                icon=emoji,
+                operation=operation.upper(),
+                details=description,
+            )
 
     def log_api_request(
         self, method: str, endpoint: str, status_code: int, duration: float = None
     ):
+        """
+        Log an API request.
+
+        Args:
+            method (str): HTTP method
+            endpoint (str): Request endpoint
+            status_code (int): HTTP status code
+            duration (float): Request duration in ms
+        """
         logger = self.get_logger("api")
 
         if 200 <= status_code < 300:
@@ -284,11 +365,25 @@ class MASLogger:
             level = "error"
 
         duration_str = f" ({duration:.2f}ms)" if duration else ""
-        message = f"{emoji} {method} {endpoint} → {status_code}{duration_str}"
 
-        getattr(logger, level)(message)
+        getattr(logger, level)(
+            "api_request",
+            icon=emoji,
+            method=method,
+            endpoint=endpoint,
+            status_code=status_code,
+            duration=duration_str,
+        )
 
     def log_agent_operation(self, agent_name: str, operation: str, details: str = ""):
+        """
+        Log an agent operation.
+
+        Args:
+            agent_name (str): Name of the agent
+            operation (str): Operation type (START, STOP, HEARTBEAT, TASK, ERROR)
+            details (str): Additional details
+        """
         logger = self.get_logger("agent")
         emoji = {
             "START": "🤖",
@@ -298,7 +393,13 @@ class MASLogger:
             "ERROR": "💥",
         }.get(operation.upper(), "🔧")
 
-        logger.info(f"{emoji} Agent [{agent_name}] {operation.upper()} {details}")
+        logger.info(
+            "agent_operation",
+            icon=emoji,
+            agent_name=agent_name,
+            operation=operation.upper(),
+            details=details,
+        )
 
 
 mas_logger = MASLogger()

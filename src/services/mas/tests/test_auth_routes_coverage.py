@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -21,13 +21,8 @@ class TestAuthRoutesCoverage:
         mock_db = MagicMock()
         mock_bcrypt.hash.return_value = "hashed_password"
 
-        # Mock the dependency injection for db
-        app.dependency_overrides = {}  # Reset overrides
-        # We can't easily override the db dependency here because it's used in the route function signature
-        # But we can mock the db session object if we could inject it.
-        # Instead, let's rely on patching the db dependency if possible, or mocking the session operations.
+        mock_users.return_value = MagicMock()  # Ensure Users() returns a mock
 
-        # Since `db: db_dependency` is used, we need to override it.
         from db.dependency import get_db
 
         app.dependency_overrides[get_db] = lambda: mock_db
@@ -53,6 +48,8 @@ class TestAuthRoutesCoverage:
         mock_db.commit.side_effect = IntegrityError(
             None, None, Exception("UNIQUE constraint failed")
         )
+
+        mock_users.return_value = MagicMock()
 
         from db.dependency import get_db
 
@@ -108,9 +105,8 @@ class TestAuthRoutesCoverage:
 
         assert response.status_code == 401
 
-    @patch("auth.routes.get_current_user")
     @patch("auth.routes.redis_db")
-    def test_user_logout_success(self, mock_redis, mock_get_user):
+    def test_user_logout_success(self, mock_redis):
         # Mock get_current_user dependency
         from auth.auth_tool_functions import get_current_user
 
@@ -120,10 +116,32 @@ class TestAuthRoutesCoverage:
             "nonce": "nonce123",
         }
 
-        from datetime import datetime
-
         response = client.post("/auth/logout")
 
         assert response.status_code == 200
         assert response.json() == {"message": "Successfully logout"}
         mock_redis.setex.assert_called_once()
+
+    def test_user_logout_unauthorized(self):
+        from auth.auth_tool_functions import get_current_user
+
+        app.dependency_overrides[get_current_user] = lambda: None
+
+        response = client.post("/auth/logout")
+        assert response.status_code == 401
+
+    @patch("auth.routes.redis_db")
+    def test_user_logout_expired_token(self, mock_redis):
+        from auth.auth_tool_functions import get_current_user
+
+        # Token expired 10 minutes ago
+        app.dependency_overrides[get_current_user] = lambda: {
+            "sub": "user",
+            "exp": int((datetime.now() - timedelta(minutes=10)).timestamp()),
+            "nonce": "nonce123",
+        }
+
+        response = client.post("/auth/logout")
+        assert response.status_code == 200
+        # Should not set redis key if expired
+        mock_redis.setex.assert_not_called()

@@ -59,22 +59,27 @@ class TestRabbitMQManager:
         assert mock_connection.call_count == 3
 
     def test_publish_without_connection(self, rabbitmq):
-        with pytest.raises(Exception) as excinfo:
-            rabbitmq.publish("test_queue", "message")
-        assert "Connection is not established" in str(excinfo.value)
+        # Mock connect to verify behavior when connection fails
+        with patch.object(rabbitmq, 'connect', side_effect=Exception("Connection is not established")):
+            with pytest.raises(Exception) as excinfo:
+                rabbitmq.publish("test_queue", "message")
+            assert "Connection is not established" in str(excinfo.value)
 
     def test_consume_without_connection(self, rabbitmq):
-        with pytest.raises(Exception) as excinfo:
-            rabbitmq.consume("test_queue", lambda x: x)
-        assert "Connection is not established" in str(excinfo.value)
+        with patch.object(rabbitmq, 'connect', side_effect=Exception("Connection is not established")):
+            with pytest.raises(Exception) as excinfo:
+                rabbitmq.consume("test_queue", lambda x: x)
+            assert "Connection is not established" in str(excinfo.value)
 
     def test_create_queue_without_connection(self, rabbitmq):
-        with pytest.raises(Exception) as excinfo:
-            rabbitmq.create_queue("test_queue")
-        assert "Connection is not established" in str(excinfo.value)
+        with patch.object(rabbitmq, 'connect', side_effect=Exception("Connection is not established")):
+            with pytest.raises(Exception) as excinfo:
+                rabbitmq.create_queue("test_queue")
+            assert "Connection is not established" in str(excinfo.value)
 
     @patch("core.rabbitmq_manager.pika.BlockingConnection")
-    def test_publish_success(self, mock_connection, rabbitmq):
+    @patch("core.rabbitmq_manager.inject")
+    def test_publish_success(self, mock_inject, mock_connection, rabbitmq):
         # Setup connection
         mock_conn_instance = MagicMock()
         mock_channel = MagicMock()
@@ -87,10 +92,13 @@ class TestRabbitMQManager:
         rabbitmq.publish("test_queue", "message")
 
         # Verify
+        mock_inject.assert_called_once()
         mock_channel.basic_publish.assert_called_once()
         args, kwargs = mock_channel.basic_publish.call_args
         assert kwargs["routing_key"] == "test_queue"
         assert kwargs["body"] == "message"
+        assert kwargs["properties"].delivery_mode == 2
+        assert kwargs["properties"].headers is not None
 
     @patch("core.rabbitmq_manager.pika.BlockingConnection")
     def test_close(self, mock_connection, rabbitmq):
@@ -124,6 +132,7 @@ class TestRabbitMQManager:
             durable=True,
             exclusive=False,
             auto_delete=False,
+            arguments={"x-max-priority": 10},
         )
 
     @patch("core.rabbitmq_manager.pika.BlockingConnection")
@@ -143,7 +152,11 @@ class TestRabbitMQManager:
         mock_channel.queue_delete.assert_called_once_with("test_queue")
 
     @patch("core.rabbitmq_manager.pika.BlockingConnection")
-    def test_consume_success(self, mock_connection, rabbitmq):
+    @patch("core.rabbitmq_manager.tracer")
+    @patch("core.rabbitmq_manager.extract")
+    def test_consume_success(
+        self, mock_extract, mock_tracer, mock_connection, rabbitmq
+    ):
         # Setup connection
         mock_conn_instance = MagicMock()
         mock_channel = MagicMock()
@@ -151,13 +164,45 @@ class TestRabbitMQManager:
         mock_conn_instance.channel.return_value = mock_channel
 
         rabbitmq.connect()
-        callback = MagicMock()
+        original_callback = MagicMock()
 
         # Execute
-        rabbitmq.consume("test_queue", callback)
+        rabbitmq.consume("test_queue", original_callback)
 
-        # Verify
-        mock_channel.basic_consume.assert_called_once_with(
-            queue="test_queue", on_message_callback=callback, auto_ack=True
+        # Verify basic_consume called with a wrapper
+        mock_channel.basic_consume.assert_called_once()
+        call_args = mock_channel.basic_consume.call_args
+        assert call_args.kwargs["queue"] == "test_queue"
+        assert call_args.kwargs["auto_ack"] is True
+
+        # Get the wrapper function
+        traced_callback = call_args.kwargs["on_message_callback"]
+        assert callable(traced_callback)
+
+        # Test the wrapper function
+        mock_ch = MagicMock()
+        mock_method = MagicMock()
+        mock_properties = MagicMock()
+        mock_properties.headers = {"trace-id": "123"}
+        mock_body = b"test"
+
+        mock_extract.return_value = "context"
+        mock_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
+            mock_span
+        )
+
+        # Call the wrapper
+        traced_callback(mock_ch, mock_method, mock_properties, mock_body)
+
+        # Verify tracing calls
+        mock_extract.assert_called_once_with({"trace-id": "123"})
+        mock_tracer.start_as_current_span.assert_called_once()
+        assert mock_tracer.start_as_current_span.call_args[0][0] == "test_queue process"
+        assert mock_tracer.start_as_current_span.call_args[1]["context"] == "context"
+
+        # Verify original callback called
+        original_callback.assert_called_once_with(
+            mock_ch, mock_method, mock_properties, mock_body
         )
         mock_channel.start_consuming.assert_called_once()

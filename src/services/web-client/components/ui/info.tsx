@@ -53,6 +53,9 @@ const statusClass = (val: string) => {
   if (v === 'pending') {
     return 'bg-gray-500/20 text-gray-300 ring-1 ring-gray-500/30';
   }
+  if (v === 'offline'){
+    return 'bg-red-500/20 text-red-400 ring-1 ring-red-500/30';
+  }
   return '';
 };
 
@@ -164,7 +167,11 @@ export default function Info({
                         {String(data)}
                       </a>
                     ) : (
+                      typeof data === 'object' && data !== null && !Array.isArray(data) ? (
+                      <span>{data as ReactNode}</span>
+                    ) : (
                       <span title={String(data)}>{String(data)}</span>
+                    )
                     )}
                   </td>
                 ))}

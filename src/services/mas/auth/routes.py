@@ -15,20 +15,20 @@ Security Features:
     - Token expiration with refresh token support
     - Bcrypt password hashing with salt
     - Role-based access control (admin, user, guest)
-    
+
 Request/Response Examples:
     POST /auth/token
     {
         "username": "john_doe",
         "password": "securepassword123"
     }
-    
+
     Response:
     {
         "access_token": "eyJhbGciOiJIUzI1NiI...",
         "token_type": "bearer"
     }
-    
+
     POST /auth/register
     {
         "username": "new_user",
@@ -60,7 +60,7 @@ from schemas.schemas import CreateUserRequest, Token
 
 user_dependency = Annotated[dict, Depends(get_current_user)]
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.post(
@@ -68,7 +68,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     summary="Register a new user account",
     description="Create a new user with a hashed password and store it in the database. Username must be unique across the system.",
     status_code=status.HTTP_201_CREATED,
-    tags=["auth"],
+    tags=["Authentication"],
     responses={
         201: {
             "description": "User successfully created",
@@ -205,7 +205,7 @@ async def create_user(db: db_dependency, create_user_request: CreateUserRequest)
     summary="Authenticate user and generate access token",
     description="Validates user credentials and returns a JWT token if authentication is successful. Token expires in 20 minutes. Returns Bearer token for API authorization.",
     response_model=Token,
-    tags=["auth"],
+    tags=["Authentication"],
     responses={
         200: {
             "description": "Authentication successful - JWT token issued",
@@ -412,7 +412,7 @@ async def login_for_access_token(
     "/logout",
     summary="Log out user by invalidating JWT token",
     description="Adds the current JWT token to a Redis blacklist to prevent further use. The token remains blacklisted until its natural expiration time.",
-    tags=["auth"],
+    tags=["Authentication"],
     responses={
         200: {
             "description": "Successfully logged out",

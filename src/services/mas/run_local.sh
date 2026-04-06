@@ -53,4 +53,4 @@ echo -e "${GREEN}✅ Database initialized successfully.${NC}"
 echo -e "${GREEN}🚀 Starting Uvicorn Server...${NC}"
 # Disable LLM auto-init for faster local startup by default, unless specified
 export LLM_AUTOINIT=${LLM_AUTOINIT:-0}
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn main:app --host 0.0.0.0 --port 8000

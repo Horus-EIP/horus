@@ -31,17 +31,28 @@ Security Considerations:
 
 import secrets
 import uuid
+from enum import Enum
+from typing import Dict, List, Set
 
-from sqlalchemy import (JSON, Column, DateTime, ForeignKey, Index, Integer,
-                        String, Text, event)
+from sqlalchemy import JSON, Column, DateTime
+from sqlalchemy import Enum as SQLEnum
+from sqlalchemy import ForeignKey, Index, Integer, String, Text, event
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
+from auth.permissions import Role
 from core.logger import get_logger, log_db_operation
 from db.database import Base
-from auth.permissions import Role
+from tasks.status import TaskStatus
 
 logger = get_logger("models")
+
+
+class AgentTypes(str, Enum):
+    RESEARCHER = "researcher"
+    ANALYST = "analyst"
+    WRITER = "writer"
+    GENERAL = "general"
 
 
 class Users(Base):
@@ -233,6 +244,7 @@ class Agents(Base):
         nullable=False,
         index=True,
     )
+    type = Column(SQLEnum(AgentTypes), nullable=False, default=AgentTypes.GENERAL)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -251,11 +263,20 @@ class Task(Base):
     )
     parent_task_id = Column(String, ForeignKey("tasks.id"), nullable=True)
     agent_id = Column(String, nullable=False)
-    status = Column(String, default="pending")
+    status = Column(
+        SQLEnum(TaskStatus, values_callable=lambda obj: [e.value for e in obj]),
+        default=TaskStatus.PENDING.value,
+    )
     query = Column(String, nullable=False)
     order = Column(Integer, nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )
 
     conversation = relationship(

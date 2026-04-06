@@ -3,22 +3,21 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Annotated, Any, Dict, Optional
 
-from fastapi import Depends, HTTPException, status, Request, Security, Header
-from fastapi.security import OAuth2PasswordBearer, APIKeyHeader
-import jwt
-from jwt.exceptions import InvalidTokenError
+from fastapi import Depends, Header, HTTPException, Request, Security, status
+from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
+from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 from starlette import status
 
+from auth.permissions import Permission, check_permission
 from core.config import settings
 from core.hybrid_logging import log_security_event, log_user_action
 from core.logger import get_logger, log_auth_operation, log_error, log_warning
-from db.models import Users, Agents
-from db.redis_client import redis_db
 from db.dependency import get_db
-from auth.permissions import Permission, check_permission
+from db.models import Agents, Users
+from db.redis_client import redis_db
 
 logger = get_logger("auth")
 
@@ -49,8 +48,12 @@ def authenticate_user(username: str, password: str, db, ip_address: str = None):
         try:
             all_users = db.query(Users).all()
             user_list = [u.username for u in all_users]
-            logger.error(f"DEBUG: User '{username}' not found. Existing users: {user_list}")
-            logger.error(f"DEBUG: Username type: {type(username)}, length: {len(username)}")
+            logger.error(
+                f"DEBUG: User '{username}' not found. Existing users: {user_list}"
+            )
+            logger.error(
+                f"DEBUG: Username type: {type(username)}, length: {len(username)}"
+            )
             logger.error(f"DEBUG: DB Session ID: {id(db)}")
         except Exception as e:
             logger.error(f"DEBUG: Failed to list users: {e}")
@@ -105,19 +108,26 @@ def create_access_token(
         }
     )
 
-    token = jwt.encode(encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    token = jwt.encode(
+        encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
+    )
     log_auth_operation("TOKEN", username, success=True)
     logger.info(f"Token created successfully for user: {username}, expires: {expires}")
 
     return token
 
-def get_current_user(token: Annotated[str, Depends(oauth2_bearer)], db: Session = Depends(get_db)):
+
+def get_current_user(
+    token: Annotated[str, Depends(oauth2_bearer)], db: Session = Depends(get_db)
+):
     """
     Decodes the JWT token and retrieves user details.
     Raises an exception if the token is invalid or expired.
     """
     try:
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+        )
         username: str = payload.get("sub")
         user_id: str = payload.get("id")
         nonce: str = payload.get("nonce")
@@ -136,51 +146,75 @@ def get_current_user(token: Annotated[str, Depends(oauth2_bearer)], db: Session 
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token revoked",
             )
-        
+
         user = db.query(Users).filter(Users.id == user_id).first()
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
 
         logger.debug(f"Token validated successfully for user: {username}")
-        return {"username": username, "id": user_id, "nonce": nonce, "exp": exp, "role": user.role}
+        return {
+            "username": username,
+            "id": user_id,
+            "nonce": nonce,
+            "exp": exp,
+            "role": user.role,
+        }
 
-    except InvalidTokenError as e:
+    except JWTError as e:
         log_error("auth", f"JWT validation error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user"
         )
 
+
 def get_current_user_from_token(token: str) -> Dict[str, Any]:
     """Extract user info from token string"""
     try:
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+        )
         username = payload.get("sub")
         user_id = payload.get("id")
 
         if not username or not user_id:
             log_error("auth", "Token parsing failed: missing username or user_id")
-            raise InvalidTokenError("Invalid token payload")
+            raise JWTError("Invalid token payload")
 
         logger.debug(f"User info extracted from token for: {username}")
 
         return {"username": username, "id": user_id, "payload": payload}
 
-    except InvalidTokenError as e:
+    except JWTError as e:
         log_error("auth", f"Token parsing error: {str(e)}")
         raise
+
 
 class PermissionChecker:
     def __init__(self, required_permission: Permission):
         self.required_permission = required_permission
 
     def __call__(self, user: dict = Depends(get_current_user)):
+        logger.info(
+            f"DEBUG: PermissionChecker called for user {user.get('username')}, required: {self.required_permission}"
+        )
         if not check_permission(user.get("role"), self.required_permission):
-            log_warning("auth", f"User {user.get("username")} (role: {user.get("role")}) denied permission {self.required_permission}")
+            log_warning(
+                "auth",
+                f"User {user.get('username')} (role: {user.get('role')}) denied permission {self.required_permission}",
+            )
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions"
+                status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
             )
         return user
+
+    def __eq__(self, other):
+        if isinstance(other, PermissionChecker):
+            return self.required_permission == other.required_permission
+        return False
+
+    def __hash__(self):
+        return hash(self.required_permission)
+
 
 def modify_user_password(
     username: str, old_password: str, new_password: str, db: Session
@@ -222,15 +256,22 @@ def modify_user_password(
         message = f"User Password Modification Error : {error_message}"
         raise HTTPException(status_code=409, detail=message)
 
-def verify_agent_api_key(key: str = Security(api_key), db: Session = Depends(get_db)) -> tuple[str, str]:
+
+def verify_agent_api_key(
+    key: str = Security(api_key), db: Session = Depends(get_db)
+) -> tuple[str, str]:
     """
     Verifies the provided API key against stored agent API keys.
     Returns (agent_id, api_key) if the API key is valid, otherwise raises an HTTPException.
     """
     try:
+        if ":" not in key:
+            raise ValueError("Invalid API key format")
 
         agent_id, api_key = key.split(":", 1)
+
         agent = db.query(Agents).filter(Agents.id == agent_id).first()
+
         if not agent:
             log_security_event(
                 "AGENT_API_KEY_INVALID",
@@ -241,7 +282,7 @@ def verify_agent_api_key(key: str = Security(api_key), db: Session = Depends(get
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid API key",
             )
-        
+
         if not bcrypt_context.verify(api_key, agent.api_key):
             log_security_event(
                 "AGENT_API_KEY_INVALID",
@@ -262,6 +303,7 @@ def verify_agent_api_key(key: str = Security(api_key), db: Session = Depends(get
 
     logger.info(f"API key verified successfully for agent: {agent.id}")
     return agent_id, api_key
+
 
 def hash_api_key(api_key: str) -> str:
     """Hash API key for secure storage"""

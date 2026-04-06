@@ -1,15 +1,45 @@
-FROM python:3.9-slim
+# Builder stage
+FROM python:3.11-slim AS builder
 
-WORKDIR /
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /venv
+ENV PATH="/venv/bin:$PATH"
+
+RUN pip install --upgrade pip setuptools wheel
 
 COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Final image
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Runtime system dependencies for PDF and OCR processing
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    poppler-utils \
+    tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /venv /venv
+ENV PATH=/venv/bin:$PATH
+
 COPY ./app/ app/
 COPY ./chroma_data/ chroma_data/
 
-RUN pip install --no-cache-dir -r requirements.txt
+ENV SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence_transformers
 
 # Install OpenTelemetry auto-instrumentation
 RUN opentelemetry-bootstrap --action=install
+# Pre-download embedding model at build time to avoid latency on first request
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-base-en-v1.5')"
 
 # Create document storage directories
 RUN mkdir -p documents/txt documents/pdf documents/docx documents/image
@@ -24,7 +54,4 @@ ENV OTEL_LOGS_EXPORTER=none
 
 EXPOSE 8080
 
-# Use opentelemetry-instrument for auto-instrumentation (no --reload flag)
 CMD ["opentelemetry-instrument", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
-
-

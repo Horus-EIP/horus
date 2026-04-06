@@ -33,15 +33,15 @@ Database Operations:
 
 Usage Examples:
     from conversations.conversation_tool_functions import get_history, add_messages
-    
+
     # Get conversation history
     messages = get_history(conversation_id=1)
     for msg in messages:
         print(f"{msg.role}: {msg.content}")
-    
+
     # Add message to conversation
     new_msg = add_messages("user", "Hello, analyze this document", 1)
-    
+
     # Get all conversations for user
     convs = get_conversations("john_doe")
 """
@@ -231,17 +231,17 @@ def get_conversations(
         if close_db and db:
             db.close()
 
-def get_all_conversations(
-    db: Session = Depends(get_db)
-) -> List[Dict[str, Any]]:
-    """
-    Retrieve all conversations system-wide.
 
-    Fetches all conversations from the database, ordered by
+def get_all_conversations(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
+    """
+    Retrieve all conversations owned by a specific user.
+
+    Fetches all conversations where the user is the owner, ordered by
     most recent modification time (descending) for UI display.
     Ensures proper transaction handling and connection cleanup.
 
     Args:
+        user_name (str): Username of the conversation owner
         db (Session): Database session (injected by FastAPI dependency or passed directly)
 
     Returns:
@@ -264,9 +264,7 @@ def get_all_conversations(
             close_db = True
 
         conversations = (
-            db.query(Conversations)
-            .order_by(Conversations.modified_at.desc())
-            .all()
+            db.query(Conversations).order_by(Conversations.modified_at.desc()).all()
         )
 
         if conversations:
@@ -299,7 +297,7 @@ def get_all_conversations(
         return []
     finally:
         if close_db and db:
-            db.close()  
+            db.close()
 
 
 def add_messages(

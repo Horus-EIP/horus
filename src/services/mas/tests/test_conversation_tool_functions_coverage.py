@@ -169,10 +169,10 @@ class TestConversationToolFunctionsCoverage:
         mock_conv.created_at.isoformat.return_value = "2025-01-01"
         mock_conv.modified_at = MagicMock()
         mock_conv.modified_at.isoformat.return_value = "2025-01-01"
-        
+
         mock_db.query.return_value.order_by.return_value.all.return_value = [mock_conv]
 
         result = get_all_conversations(db=mock_db)
-        
+
         assert len(result) == 1
         assert result[0]["id"] == 1

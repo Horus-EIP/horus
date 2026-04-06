@@ -9,6 +9,7 @@ from agents.registry_tool_functions import (
     _update_dead_agent_status_internal, create_agent, delete_agent,
     get_agent_details, get_agent_id, get_available_agents,
     update_active_status, update_alive_agent_status, update_dead_agent_status)
+from db.models import AgentTypes
 
 
 def test_get_all_agents_internal_exception():
@@ -50,7 +51,7 @@ def test_create_agent_exception():
     mock_db = MagicMock()
     mock_db.add.side_effect = Exception("DB Error")
 
-    result = create_agent("Agent 1", [], "Desc", mock_db)
+    result = create_agent("Agent 1", [], "Desc", mock_db, AgentTypes.GENERAL)
     assert result == (None, None)
     mock_db.rollback.assert_called_once()
 

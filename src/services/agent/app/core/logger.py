@@ -43,7 +43,7 @@ class StructuredFormatter(logging.Formatter):
         if hasattr(record, "extra_fields"):
             log_data.update(record.extra_fields)
 
-        return json.dumps(log_data)
+        return json.dumps(log_data, default=str)
 
 
 class AgentLogger:

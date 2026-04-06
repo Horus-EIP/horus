@@ -19,9 +19,7 @@ class TestAppCoverage:
     @patch("core.app.init_db")
     @patch("core.app.check_agent_heartbeat")
     @patch("core.app.rabbitmq_instance")
-    def test_lifespan_success(
-        self, mock_rabbitmq, mock_heartbeat, mock_init_db
-    ):
+    def test_lifespan_success(self, mock_rabbitmq, mock_heartbeat, mock_init_db):
         # Mock async heartbeat
         async def fake_heartbeat():
             try:

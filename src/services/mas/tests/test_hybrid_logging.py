@@ -81,7 +81,9 @@ class TestHybridLogger:
 
         # Verify log operation was called
         mock_log_db_operation.assert_called_once_with(
-            "LOGIN_ATTEMPT", "auth", "Failed login for user admin"
+            operation="LOGIN_ATTEMPT",
+            table="auth",
+            details="Failed login for user admin",
         )
 
     @patch("core.hybrid_logging.SessionLocal")
@@ -107,8 +109,9 @@ class TestHybridLogger:
         )
 
         # Verify error was logged
-        mock_logger.error.assert_called_once()
-        assert "Failed to store critical log" in str(mock_logger.error.call_args)
+        mock_logger.error.assert_called_once_with(
+            "critical_log_storage_failed", details="Database error"
+        )
 
         # Verify database was still closed
         mock_db.close.assert_called_once()
@@ -130,7 +133,7 @@ class TestHybridLogger:
 
             # But operation should still be logged
             mock_log_db_operation.assert_called_once_with(
-                "STARTUP", "system", "System started"
+                operation="STARTUP", table="system", details="System started"
             )
 
     @patch("core.hybrid_logging.get_logger")
@@ -147,7 +150,7 @@ class TestHybridLogger:
 
         mock_get_logger.assert_called_once_with("test_component")
         mock_logger_instance.warning.assert_called_once_with(
-            "test_operation test details"
+            "system_log", message="test_operation test details"
         )
 
     @patch("core.hybrid_logging.get_logger")
@@ -160,7 +163,9 @@ class TestHybridLogger:
 
         logger_instance.log_system(LogLevel.INFO, "test_component", "test_operation")
 
-        mock_logger_instance.info.assert_called_once_with("test_operation")
+        mock_logger_instance.info.assert_called_once_with(
+            "system_log", message="test_operation"
+        )
 
 
 class TestConvenienceFunctions:

@@ -29,8 +29,7 @@ def run_command(cmd, description=""):
 
 def main():
     if len(sys.argv) < 2:
-        print(
-            """
+        print("""
 ╔════════════════════════════════════════════════════════════════╗
 ║            Alembic Migration Management Helper                ║
 ╚════════════════════════════════════════════════════════════════╝
@@ -53,8 +52,7 @@ Examples:
   python alembic_helper.py test        # Test migrations work
 
 Run from: src/services/mas/
-        """
-        )
+        """)
         sys.exit(1)
 
     command = sys.argv[1].lower()
@@ -86,13 +84,11 @@ Run from: src/services/mas/
         run_command(cmd, f"Creating new migration: {description}")
 
     elif command == "test":
-        print(
-            """
+        print("""
 ╔════════════════════════════════════════════════════════════════╗
 ║                  Testing Migration Cycle                       ║
 ╚════════════════════════════════════════════════════════════════╝
-        """
-        )
+        """)
 
         # Test sequence
         print("1️⃣ Checking current status...")
@@ -110,14 +106,12 @@ Run from: src/services/mas/
         print("\n5️⃣ Verifying final status...")
         run_command("alembic current", "Final Status")
 
-        print(
-            """
+        print("""
 ✅ Migration cycle test complete!
    - Downgrade: OK
    - Upgrade: OK
    - Status: REVERSIBLE
-        """
-        )
+        """)
 
     elif command == "current":
         run_command("alembic current", "Current Revision Details")

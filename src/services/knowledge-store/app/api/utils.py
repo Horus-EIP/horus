@@ -6,17 +6,17 @@ import pytesseract
 from pdf2image import convert_from_path
 from docx import Document
 
-async def docx_to_text(filepath: str):
+async def docx_to_text(filepath: str) -> str:
     """
-    Convert a .docx file to text.
+    Extract text content from a DOCX file.
 
-    Parameters:
-    
-            filepath (str): The path to the DOCX file.
+    Iterates through paragraphs and tables to compile the full text.
+
+    Args:
+        filepath (str): The absolute or relative path to the .docx file.
 
     Returns:
-        
-            text (str): The text extracted from the DOCX file.
+        str: The extracted text content.
     """
     doc = Document(filepath)
     text = []
@@ -30,34 +30,30 @@ async def docx_to_text(filepath: str):
 
     return '\n'.join(text)
 
-async def image_pdf_to_text(filepath: str):
+async def image_pdf_to_text(filepath: str) -> str:
     """
-    Convert a PDF file to text using OCR.
+    Convert a scanned/image-based PDF file to text using OCR (Tesseract).
 
-    Parameters:
-    
-            filepath (str): The path to the PDF file.
+    Args:
+        filepath (str): The path to the PDF file.
 
     Returns:
-        
-            text (str): The text extracted from the PDF file.
+        str: The extracted text from OCR.
     """
     images = convert_from_path(filepath)
     text = '\n'.join([pytesseract.image_to_string(img) for img in images])
 
     return text
 
-async def pdf_to_text(filepath: str):
+async def pdf_to_text(filepath: str) -> str:
     """
-    Convert a PDF file to text.
+    Extract text from a text-based PDF file.
 
-    Parameters:
-    
-            filepath (str): The path to the PDF file.
+    Args:
+        filepath (str): The path to the PDF file.
 
     Returns:
-        
-            text (str): The text extracted from the PDF file.
+        str: The extracted text.
     """
     text = ''
     with pdfplumber.open(filepath) as pdf:
@@ -65,20 +61,19 @@ async def pdf_to_text(filepath: str):
             text += page.extract_text() + '\n'
     return text
 
-async def save_file(file: UploadFile, dir_name: str):
+async def save_file(file: UploadFile, dir_name: str) -> str:
     """
-    Save a file to a specified path.
+    Save an uploaded file to the local filesystem.
 
-    Parameters:
-    
-            file (UploadFile): The file to save.
-            dir_name (str): The directory to save the file in.
+    Args:
+        file (UploadFile): The file object uploaded via FastAPI.
+        dir_name (str): The subdirectory name within 'documents/' to save the file.
 
     Returns:
-        
-            path (str): The path where the file is saved
+        str: The full path to the saved file.
     """
     path = os.path.join('documents/', dir_name, file.filename)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'wb') as buffer:
         shutil.copyfileobj(file.file, buffer)
     return path

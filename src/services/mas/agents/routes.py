@@ -16,7 +16,7 @@ Security:
     - All endpoints require user authentication via JWT token
     - Agent registration and deletion require admin privileges
     - Heartbeat updates are performed by agents themselves
-    
+
 Request/Response Examples:
     POST /agents/register
     {
@@ -24,7 +24,7 @@ Request/Response Examples:
         "skills": ["pdf_parsing", "text_extraction", "ocr"],
         "description": "Processes and extracts information from PDF documents"
     }
-    
+
     Response:
     {
         "message": "agent with name DocumentProcessor successfully created",
@@ -48,14 +48,18 @@ from agents.registry_tool_functions import (create_agent, delete_agent,
                                             get_agent_details, get_agent_id,
                                             get_all_agents,
                                             update_alive_agent_status)
-from auth.auth_tool_functions import get_current_user, PermissionChecker, verify_agent_api_key
+from auth.auth_tool_functions import (PermissionChecker, get_current_user,
+                                      verify_agent_api_key)
 from auth.permissions import Permission
 from core.logger import log_agent_operation, log_error
+from core.metrics import AGENT_COUNT
 from core.rabbitmq_tool import rabbitmq_instance
 from db.database import get_db
+from db.models import AgentTypes
 from schemas.schemas import RegistrationForm
 
 router = APIRouter(prefix="/agents", tags=["Agents"])
+
 
 @router.post(
     "/register",
@@ -75,7 +79,7 @@ router = APIRouter(prefix="/agents", tags=["Agents"])
                             "value": {
                                 "message": "agent with name DocumentAnalyzer successfully created",
                                 "agent_id": "8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
-                                "api_key": "generated_api_key_base64_encoded"
+                                "api_key": "generated_api_key_base64_encoded",
                             },
                         },
                         "with_multiple_skills": {
@@ -83,7 +87,7 @@ router = APIRouter(prefix="/agents", tags=["Agents"])
                             "value": {
                                 "message": "agent with name MultiSkillAgent successfully created",
                                 "agent_id": "550e8400-e29b-41d4-a716-446655440000",
-                                "api_key": "generated_api_key_base64_encoded"
+                                "api_key": "generated_api_key_base64_encoded",
                             },
                         },
                     }
@@ -244,8 +248,32 @@ router = APIRouter(prefix="/agents", tags=["Agents"])
     },
 )
 async def handle_agent_creation(
-    agent: RegistrationForm, user: Annotated[dict, Depends(PermissionChecker(Permission.AGENT_CREATE))], db: Session = Depends(get_db)
+    agent: RegistrationForm,
+    user: Annotated[dict, Depends(PermissionChecker(Permission.AGENT_CREATE))],
+    db: Session = Depends(get_db),
 ):
+    """
+    Register a new agent in the system and provision its resources.
+
+    This function:
+    1. Checks if an agent with the same name already exists.
+    2. Creates a new agent record in the database with an API key.
+    3. Provisions a dedicated RabbitMQ queue for the agent.
+    4. Logs the registration event.
+
+    Args:
+        agent (RegistrationForm): The agent registration details (name, skills, description).
+        user (dict): The authenticated user performing the registration.
+        db (Session): Database session.
+
+    Returns:
+        dict: detailed response containing the new agent ID and API Key.
+
+    Raises:
+        HTTPException:
+            - 409: If agent name already exists.
+            - 500: If database or message queue provisioning fails.
+    """
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
 
@@ -256,7 +284,13 @@ async def handle_agent_creation(
             status_code=409, detail=f"An agent already has the name '{agent.name}'"
         )
 
-    agent_id, api_key = create_agent(agent.name, agent.skills, agent.description, db)
+    agent_id, api_key = create_agent(
+        agent.name,
+        agent.skills,
+        agent.description,
+        db,
+        agent.type or AgentTypes.GENERAL,
+    )
 
     if agent_id is None:
         log_error("AGENT", f"Failed to create agent {agent.name}")
@@ -265,12 +299,18 @@ async def handle_agent_creation(
     try:
         rabbitmq_instance.create_queue(agent_id)
     except Exception as e:
-        log_error("AGENT", f"Failed to create RabbitMQ queue for {agent.name}: {str(e)}")
+        log_error(
+            "AGENT", f"Failed to create RabbitMQ queue for {agent.name}: {str(e)}"
+        )
         raise HTTPException(
             status_code=500, detail=f"Failed to create RabbitMQ queue: {str(e)}"
         )
 
-    log_agent_operation(agent.name, "REGISTER", f"ID: {agent_id}, Skills: {agent.skills}")
+    log_agent_operation(
+        agent.name, "REGISTER", f"ID: {agent_id}, Skills: {agent.skills}"
+    )
+
+    AGENT_COUNT.labels(status="active").inc()
 
     return {
         "message": f"agent with name {agent.name} successfully created",
@@ -375,8 +415,29 @@ async def handle_agent_creation(
     },
 )
 async def unregister_agent(
-    agent_id: str, user: Annotated[dict, Depends(PermissionChecker(Permission.AGENT_DELETE))], db: Session = Depends(get_db)
+    agent_id: str,
+    user: Annotated[dict, Depends(PermissionChecker(Permission.AGENT_DELETE))],
+    db: Session = Depends(get_db),
 ):
+    """
+    Unregister an agent and clean up its resources.
+
+    1. Removes the agent record from the database.
+    2. Deletes the associated RabbitMQ queue (if possible).
+    3. Logs the deletion event.
+
+    Args:
+        agent_id (str): The UUID of the agent to unregister.
+        user (dict): The authenticated user performing the deletion.
+        db (Session): Database session.
+
+    Returns:
+        dict: Confirmation message.
+
+    Raises:
+        HTTPException:
+            - 404: If the agent is not found.
+    """
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
     if delete_agent(agent_id, db):
@@ -385,8 +446,9 @@ async def unregister_agent(
         except Exception as e:
             log_error("AGENT", f"Failed to delete queue for {agent_id}: {str(e)}")
             pass  # Log but don't fail if queue deletion fails
-        
+
         log_agent_operation(agent_id, "UNREGISTER", "Agent deleted")
+        AGENT_COUNT.labels(status="active").dec()
         return {"message": f"Agent {agent_id} successfully unregistered"}
     else:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
@@ -503,7 +565,28 @@ async def unregister_agent(
         },
     },
 )
-async def agent_details(id: str, user: Annotated[dict, Depends(PermissionChecker(Permission.AGENT_READ))], db: Session = Depends(get_db)):
+async def agent_details(
+    id: str,
+    user: Annotated[dict, Depends(PermissionChecker(Permission.AGENT_READ))],
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieve static details and current status for a single agent.
+
+    Returns critical metadata: name, skills, description, creation date, and last seen stats.
+
+    Args:
+        id (str): The UUID of the agent.
+        user (dict): The authenticated user.
+        db (Session): Database session.
+
+    Returns:
+        dict: Detailed agent information.
+
+    Raises:
+        HTTPException:
+            - 404: If the agent is not found.
+    """
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
     (
@@ -516,6 +599,7 @@ async def agent_details(id: str, user: Annotated[dict, Depends(PermissionChecker
         agent_creation_date,
     ) = get_agent_details(id, db)
     if agent_id is not None:
+        log_agent_operation(agent_name, "READ", "Details viewed")
         return {
             "name": agent_name,
             "skills": agent_skills,
@@ -565,10 +649,28 @@ async def agent_details(id: str, user: Annotated[dict, Depends(PermissionChecker
         }
     },
 )
-async def get_all_agents_details(user: Annotated[dict, Depends(PermissionChecker(Permission.AGENT_READ))], db: Session = Depends(get_db)):
+async def get_all_agents_details(
+    user: Annotated[dict, Depends(PermissionChecker(Permission.AGENT_READ))],
+    db: Session = Depends(get_db),
+):
+    """
+    List all registered agents in the system.
+
+    Provides a summary view of all agents, including their latest heartbeat and status.
+    Useful for monitoring and administrative overview.
+
+    Args:
+        user (dict): The authenticated user.
+        db (Session): Database session.
+
+    Returns:
+        list[dict]: A list of agent summaries.
+    """
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
-    return get_all_agents(db)
+    agents = get_all_agents(db)
+    log_agent_operation("ALL", "LIST", f"Retrieved {len(agents)} agents")
+    return agents
 
 
 @router.post(
@@ -620,6 +722,25 @@ async def detect_alive_agents(
     verified_agent: Annotated[tuple[str, str], Depends(verify_agent_api_key)],
     db: Session = Depends(get_db),
 ):
+    """
+    Process a heartbeat signal from an agent to confirm it is active.
+
+    Updates the agent's `last_heartbeat` timestamp in the database.
+    This endpoint is vital for system health monitoring and load balancing.
+
+    Args:
+        agent_id (str): The ID of the agent reporting in.
+        verified_agent (tuple): Authenticated agent details (ID, name/key).
+        db (Session): Database session.
+
+    Returns:
+        dict: Confirmation message.
+
+    Raises:
+        HTTPException:
+            - 403: If the provided API key does not match the agent ID.
+            - 404: If the agent record is not found.
+    """
     verified_agent_id, _ = verified_agent
     if verified_agent_id != agent_id:
         raise HTTPException(status_code=403, detail="Agent ID mismatch")

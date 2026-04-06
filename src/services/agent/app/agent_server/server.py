@@ -18,13 +18,20 @@ import pika
 from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from prometheus_client import make_asgi_app
+from fastapi import FastAPI, Request
+from starlette.middleware.base import BaseHTTPMiddleware
+from prometheus_client import make_asgi_app
 from pydantic import BaseModel
+from contextlib import contextmanager
 from contextlib import contextmanager
 from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
 from ai_agents.decision_making_agent import DecisionMakingAgent
 from ai_agents.rag_pipeline import RAGPipeline
 from ai_agents.tool_registry import ToolRegistry
 from ai_agents.knowledge_store_client import KnowledgeStoreClient
+from specialized.analyst_agent import AnalystAgent
+from specialized.researcher_agent import ResearcherAgent
+from specialized.writer_agent import WriterAgent
 from config.settings import (
     ORCHESTRATOR_URL,
     ORCHESTRATOR_USERNAME,
@@ -33,6 +40,9 @@ from config.settings import (
     AGENT_DESCRIPTION,
     MODEL_NAME,
     MODEL_DEVICE,
+    AGENT_TYPE
+    DELEGATION_TIMEOUT,
+    MAX_DELEGATION_DEPTH,
 )
 from core.logger import get_logger, set_correlation_id, get_correlation_id
 from core.metrics import (
@@ -88,19 +98,34 @@ app.add_middleware(CorrelationIDMiddleware)
 # Will be set after successful registration with MAS
 AGENT_ID = None
 AGENT_API_KEY = None  # Plain API key returned at registration, used for agent auth
+AGENT_API_KEY = None  # Plain API key returned at registration, used for agent auth
 AGENT_NAME = "HorusAgent"
 SKILLS = ["knowledge_retrieval", "decision_making", "rag_pipeline"]
+AGENT_CAPABILITIES = {
+    "knowledge_retrieval": "Search and retrieve information from knowledge stores",
+    "decision_making": "Analyze data and make informed decisions",
+    "rag_pipeline": "Full retrieval-augmented generation pipeline",
+    "delegation": "Can delegate sub-tasks to other agents",
+}
 
 # Initialize the RAG pipeline components
 knowledge_store_client = KnowledgeStoreClient()
 retrieval_agent = KnowledgeRetrievalAgent(store_interface=knowledge_store_client)
 decision_agent = DecisionMakingAgent(model_name=MODEL_NAME, device=MODEL_DEVICE)
 tool_registry = ToolRegistry()  # default tools will be added by pipeline if empty
-rag_pipeline = RAGPipeline(
+
+if AGENT_TYPE == "researcher":
+    active_agent = ResearcherAgent(retrieval_agent)
+elif AGENT_TYPE == "analyst":
+    active_agent = AnalystAgent()
+elif AGENT_TYPE == "writer":
+    active_agent = WriterAgent(decision_agent)
+else:
+    active_agent = RAGPipeline(
     retrieval_agent,
     decision_agent,
     tool_registry=tool_registry,
-)
+    )
 
 class Task(BaseModel):
     """
@@ -108,7 +133,16 @@ class Task(BaseModel):
     """
     task_id: str = None  # Auto-generated if not provided.
     query: str | None = None
+    query: str | None = None
     conversation_id: str
+    operation: str | None = None
+    expression: str | None = None
+    file_url: str | None = None
+    file_content: str | None = None  # base64/utf-8 text; small files only
+    file_type: str | None = None
+    filename: str | None = None
+    text: str | None = None
+    max_sentences: int | None = None
     operation: str | None = None
     expression: str | None = None
     file_url: str | None = None
@@ -172,11 +206,59 @@ def _build_headers(include_api_key: bool = False) -> dict:
         headers["Agent-ID"] = AGENT_ID
     return headers
 
+
+_AUTH_TOKEN = None  # cached bearer token for orchestrator requests
+
+
+def _get_orchestrator_token():
+    """Return a bearer token to talk to MAS (from env or by logging in)."""
+    global _AUTH_TOKEN
+    if _AUTH_TOKEN:
+        return _AUTH_TOKEN
+
+    if ORCHESTRATOR_TOKEN:
+        _AUTH_TOKEN = ORCHESTRATOR_TOKEN
+        return _AUTH_TOKEN
+
+    if ORCHESTRATOR_USERNAME and ORCHESTRATOR_PASSWORD:
+        try:
+            response = requests.post(
+                f"{ORCHESTRATOR_URL}/auth/token",
+                data={"username": ORCHESTRATOR_USERNAME, "password": ORCHESTRATOR_PASSWORD},
+                timeout=5,
+            )
+            if response.status_code == 200:
+                _AUTH_TOKEN = response.json().get("access_token")
+                return _AUTH_TOKEN
+            logger.warning(f"Failed to obtain MAS auth token: {response.status_code} - {response.text}")
+        except Exception as exc:  # network/login errors shouldn't crash the agent
+            logger.warning(f"Error fetching MAS auth token: {exc}")
+    return None
+
+
+def _build_headers(include_api_key: bool = False) -> dict:
+    """
+    Construct headers for MAS requests.
+
+    - Always tries to attach Authorization if available.
+    - Optionally attaches X-API-Key (agent_id:api_key) for agent-auth endpoints.
+    """
+    headers: dict = {}
+    token = _get_orchestrator_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    if include_api_key and AGENT_ID and AGENT_API_KEY:
+        headers["X-API-Key"] = f"{AGENT_ID}:{AGENT_API_KEY}"
+        headers["Agent-ID"] = AGENT_ID
+    return headers
+
 def register_agent():
     """Register the agent with MAS. Keep retrying until successful.
 
     Uses a simple backoff to handle MAS not being ready at container start.
     """
+    global AGENT_ID, AGENT_API_KEY
     global AGENT_ID, AGENT_API_KEY
     url = f"{ORCHESTRATOR_URL}/agents/register"
     base_name = AGENT_NAME
@@ -188,6 +270,7 @@ def register_agent():
                 "name": name_variant,
                 "skills": SKILLS,
                 "description": AGENT_DESCRIPTION,
+                "type": AGENT_TYPE
             }
             response = requests.post(
                 url, json=payload, headers=_build_headers(), timeout=5
@@ -200,14 +283,24 @@ def register_agent():
                 agent_registered.set(1)
                 if not AGENT_API_KEY:
                     logger.warning("MAS did not return api_key; agent auth will fail.")
+                AGENT_API_KEY = data.get("api_key")
+                logger.info(f"Agent registered successfully with id: {AGENT_ID}")
+                agent_registered.set(1)
+                if not AGENT_API_KEY:
+                    logger.warning("MAS did not return api_key; agent auth will fail.")
                 break
             if response.status_code == 409:
                 name_variant = f"{base_name}-{uuid.uuid4().hex[:6]}"
                 logger.warning(f"Agent name conflict. Retrying with name '{name_variant}'")
+                logger.warning(f"Agent name conflict. Retrying with name '{name_variant}'")
             else:
                 logger.error(f"Agent registration failed: {response.status_code} - {response.text}")
                 agent_errors_total.labels(error_type="registration").inc()
+                logger.error(f"Agent registration failed: {response.status_code} - {response.text}")
+                agent_errors_total.labels(error_type="registration").inc()
         except Exception as e:
+            logger.error(f"Error registering agent (will retry): {e}", exc_info=True)
+            agent_errors_total.labels(error_type="registration").inc()
             logger.error(f"Error registering agent (will retry): {e}", exc_info=True)
             agent_errors_total.labels(error_type="registration").inc()
         time.sleep(backoff_seconds)
@@ -222,14 +315,23 @@ def send_heartbeat():
     url = f"{ORCHESTRATOR_URL}/agents/heartbeat/{AGENT_ID}"
     try:
         response = requests.post(url, headers=_build_headers(include_api_key=True))
+        response = requests.post(url, headers=_build_headers(include_api_key=True))
         if response.status_code != 200:
+            logger.warning(f"Heartbeat failed: {response.status_code} - {response.text}")
+            agent_heartbeat_total.labels(status="error").inc()
+            agent_errors_total.labels(error_type="heartbeat").inc()
             logger.warning(f"Heartbeat failed: {response.status_code} - {response.text}")
             agent_heartbeat_total.labels(status="error").inc()
             agent_errors_total.labels(error_type="heartbeat").inc()
         else:
             logger.debug(f"Heartbeat sent successfully: {response.json()}")
             agent_heartbeat_total.labels(status="success").inc()
+            logger.debug(f"Heartbeat sent successfully: {response.json()}")
+            agent_heartbeat_total.labels(status="success").inc()
     except Exception as e:
+        logger.error(f"Error sending heartbeat: {e}", exc_info=True)
+        agent_heartbeat_total.labels(status="error").inc()
+        agent_errors_total.labels(error_type="heartbeat").inc()
         logger.error(f"Error sending heartbeat: {e}", exc_info=True)
         agent_heartbeat_total.labels(status="error").inc()
         agent_errors_total.labels(error_type="heartbeat").inc()
@@ -249,10 +351,14 @@ def _consume_messages():
     is expected to be a JSON string with at least 'demand' and 'conversation_id'.
     It is transformed into the internal task format and processed by the RAG pipeline.
     Uses asyncio to handle async pipeline processing.
+    Uses asyncio to handle async pipeline processing.
     """
     import asyncio
     
+    import asyncio
+    
     if not AGENT_ID:
+        logger.error("Cannot start consumer: AGENT_ID not set")
         logger.error("Cannot start consumer: AGENT_ID not set")
         return
 
@@ -261,9 +367,13 @@ def _consume_messages():
         rabbit_user = os.getenv("RABBITMQ_USER", "guest")
         rabbit_pass = os.getenv("RABBITMQ_PASSWORD", "guest")
         credentials = pika.PlainCredentials(rabbit_user, rabbit_pass)
+        rabbit_user = os.getenv("RABBITMQ_USER", "guest")
+        rabbit_pass = os.getenv("RABBITMQ_PASSWORD", "guest")
+        credentials = pika.PlainCredentials(rabbit_user, rabbit_pass)
         connection = pika.BlockingConnection(
             pika.ConnectionParameters(
                 host=rabbit_host,
+                credentials=credentials,
                 credentials=credentials,
                 heartbeat=600,
                 blocked_connection_timeout=300,
@@ -277,6 +387,7 @@ def _consume_messages():
             durable=True,
             exclusive=False,
             auto_delete=False,
+            arguments={"x-max-priority": 10},
         )
 
         def _on_message(ch, method, properties, body):
@@ -289,6 +400,16 @@ def _consume_messages():
             demand = payload.get("demand", "")
             conversation_id = payload.get("conversation_id", "")
             task_id = payload.get("task_id") or ("task_" + uuid.uuid4().hex)
+            
+            # Extract correlation ID from message properties if available
+            corr_id = properties.headers.get("X-Request-ID") if properties.headers else None
+            if corr_id:
+                set_correlation_id(corr_id)
+
+            logger.info(
+                f"Received task: task_id={task_id}, conversation_id={conversation_id}, "
+                f"demand_length={len(demand)}, correlation_id={get_correlation_id()}"
+            )
             
             # Extract correlation ID from message properties if available
             corr_id = properties.headers.get("X-Request-ID") if properties.headers else None
@@ -312,6 +433,9 @@ def _consume_messages():
                 "filename": payload.get("filename"),
                 "text": payload.get("text"),
                 "max_sentences": payload.get("max_sentences"),
+                "format": payload.get("format"),
+                "extraction_type": payload.get("extraction_type"),
+                "analysis_type": payload.get("analysis_type"),
             }
             
             # Process task asynchronously (pika is sync, but pipeline is async)
@@ -326,7 +450,18 @@ def _consume_messages():
             import time as time_module
             start_time = time_module.time()
             try:
-                result_dict = loop.run_until_complete(rag_pipeline.process_task(task_dict))
+                if AGENT_TYPE == "general":
+                    result_pipeline = loop.run_until_complete(active_agent.process_task(task_dict))
+                    final_result_text = result_pipeline["response"]
+                elif AGENT_TYPE in ["researcher", "analyst", "writer"]:
+                    final_result_text = loop.run_until_complete(
+                        active_agent.process_request(
+                            task_type=task_dict.get("operation"),
+                            data=task_dict.get("query"),
+                            extra_parameters=task_dict
+                        )
+                    )
+
                 processing_duration = time_module.time() - start_time
                 
                 task_processing_duration.observe(processing_duration)
@@ -339,7 +474,7 @@ def _consume_messages():
 
                 # Send result back to MAS (requires conversation_id and task_id)
                 if conversation_id and task_id:
-                    send_result(result_dict["response"], conversation_id, task_id)
+                    send_result(final_result_text, conversation_id, task_id)
             except Exception as e:
                 processing_duration = time_module.time() - start_time
                 task_processing_duration.observe(processing_duration)
@@ -363,12 +498,175 @@ def _consume_messages():
         logger.error(f"Error in RabbitMQ consumer: {e}", exc_info=True)
         agent_errors_total.labels(error_type="rabbitmq").inc()
 
+def _consume_agent_messages():
+    """
+    Consume inter-agent messages from the agent's communication queue.
+    Handles delegation requests from other agents routed through MAS.
+    """
+    import asyncio
+
+    if not AGENT_ID:
+        logger.error("Cannot start agent message consumer: AGENT_ID not set")
+        return
+
+    try:
+        rabbit_host = os.getenv("RABBITMQ_HOST", "localhost")
+        rabbit_user = os.getenv("RABBITMQ_USER", "guest")
+        rabbit_pass = os.getenv("RABBITMQ_PASSWORD", "guest")
+        credentials = pika.PlainCredentials(rabbit_user, rabbit_pass)
+        connection = pika.BlockingConnection(
+            pika.ConnectionParameters(
+                host=rabbit_host,
+                credentials=credentials,
+                heartbeat=600,
+                blocked_connection_timeout=300,
+            )
+        )
+        channel = connection.channel()
+        queue_name = f"agent_comm_{AGENT_ID}"
+        channel.queue_declare(
+            queue=queue_name,
+            passive=False,
+            durable=True,
+            exclusive=False,
+            auto_delete=False,
+            arguments={"x-max-priority": 10},
+        )
+
+        def _on_agent_message(ch, method, properties, body):
+            try:
+                payload = json.loads(body.decode("utf-8")) if body else {}
+            except Exception:
+                logger.error("Failed to decode agent message")
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+                return
+
+            message_type = payload.get("message_type", "")
+            message_id = payload.get("id", "")
+            sender = payload.get("sender_agent_id", "")
+
+            logger.info(
+                f"Received agent message: id={message_id}, type={message_type}, "
+                f"from={sender}"
+            )
+
+            if message_type == "delegation":
+                _process_delegation_message(payload)
+            else:
+                logger.warning(f"Unknown agent message type: {message_type}")
+
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+
+        channel.basic_qos(prefetch_count=1)
+        channel.basic_consume(queue=queue_name, on_message_callback=_on_agent_message)
+        logger.info(f"Agent message consumer started on queue '{queue_name}'")
+        channel.start_consuming()
+    except Exception as e:
+        logger.error(f"Error in agent message consumer: {e}", exc_info=True)
+
+
+def _format_delegation_context(context_entries: list) -> str:
+    """Build a readable summary of accumulated delegation context."""
+    if not context_entries:
+        return ""
+    parts = []
+    for i, entry in enumerate(context_entries, 1):
+        agent_id = entry.get("agent_id", "unknown")
+        req = entry.get("request", "")
+        data = entry.get("data", {})
+        section = f"[Agent {i} — {agent_id}]\n  Request: {req}"
+        if data:
+            section += f"\n  Data: {json.dumps(data)}"
+        parts.append(section)
+    return "Prior delegation context:\n" + "\n".join(parts)
+
+
+def _process_delegation_message(payload: dict):
+    """Process a delegation request received from another agent via MAS."""
+    import asyncio
+
+    content = payload.get("content", {})
+    request_text = content.get("request", "")
+    data = content.get("data", {})
+    message_id = payload.get("id", "")
+    sender = payload.get("sender_agent_id", "")
+    delegation_chain = payload.get("delegation_chain", [])
+    delegation_context = payload.get("delegation_context", [])
+
+    logger.info(
+        f"Processing delegation from {sender}: {request_text[:100]}... "
+        f"(chain depth={len(delegation_chain)}, context entries={len(delegation_context)})"
+    )
+
+    query = request_text
+    if data:
+        query = f"{request_text}\n\nData: {json.dumps(data)}"
+
+    context_summary = _format_delegation_context(delegation_context)
+    if context_summary:
+        query = f"{context_summary}\n\n---\nCurrent request:\n{query}"
+
+    task_dict = {
+        "task_id": f"delegation_{message_id}",
+        "query": query,
+        "mode": "react",
+    }
+
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    if hasattr(rag_pipeline, "react_agent") and rag_pipeline.react_agent:
+        rag_pipeline.react_agent._incoming_delegation_context = delegation_context
+
+    try:
+        result_dict = loop.run_until_complete(rag_pipeline.process_task(task_dict))
+        result_text = result_dict.get("response", "")
+        logger.info(f"Delegation {message_id} completed successfully")
+    except Exception as e:
+        result_text = f"Delegation processing failed: {e}"
+        logger.error(f"Delegation {message_id} failed: {e}", exc_info=True)
+    finally:
+        if hasattr(rag_pipeline, "react_agent") and rag_pipeline.react_agent:
+            rag_pipeline.react_agent._incoming_delegation_context = None
+
+    _send_delegation_result(message_id, result_text)
+
+
+def _send_delegation_result(delegation_id: str, result: str):
+    """Send delegation result back to MAS orchestrator."""
+    url = f"{ORCHESTRATOR_URL}/rabbitmq/delegation-result"
+    payload = {
+        "delegation_id": delegation_id,
+        "result": result,
+        "agent_id": AGENT_ID,
+    }
+    try:
+        response = requests.post(
+            url, json=payload, headers=_build_headers(include_api_key=True), timeout=10
+        )
+        if response.status_code != 200:
+            logger.warning(
+                f"Failed to send delegation result: {response.status_code} - {response.text}"
+            )
+        else:
+            logger.debug(f"Delegation result sent: {delegation_id}")
+    except Exception as e:
+        logger.error(f"Error sending delegation result: {e}", exc_info=True)
+
+
+def send_result(result: str, conversation_id: str, task_id: str):
 def send_result(result: str, conversation_id: str, task_id: str):
     """
+    Sends the processed task result to the MAS Orchestrator using the /tasks/task-result/ endpoint.
     Sends the processed task result to the MAS Orchestrator using the /tasks/task-result/ endpoint.
 
     Args:
         result: The result string generated by the RAG pipeline.
+        conversation_id: The conversation ID for this task.
+        task_id: The unique task ID.
         conversation_id: The conversation ID for this task.
         task_id: The unique task ID.
     """
@@ -378,7 +676,18 @@ def send_result(result: str, conversation_id: str, task_id: str):
         "result": result,
         "conversation_id": conversation_id,
         "task_id": task_id,
+        "task_id": task_id,
     }
+    try:
+        response = requests.post(
+            url, json=payload, headers=_build_headers(include_api_key=True)
+        )
+        if response.status_code != 200:
+            logger.warning(f"Failed to send result: {response.status_code} - {response.text}")
+        else:
+            logger.debug(f"Result sent successfully: {response.json()}")
+    except Exception as e:
+        logger.error(f"Error sending result: {e}", exc_info=True)
     try:
         response = requests.post(
             url, json=payload, headers=_build_headers(include_api_key=True)
@@ -396,10 +705,12 @@ async def startup_event():
     On startup, register the agent with the MAS Orchestrator and start the heartbeat thread.
     """
     logger.info("Agent service starting up...")
+    logger.info("Agent service starting up...")
     register_agent()
     # Start heartbeat if registration succeeded and we have an id
     heartbeat_thread = threading.Thread(target=heartbeat_task, daemon=True)
     heartbeat_thread.start()
+    logger.info("Heartbeat thread started")
     logger.info("Heartbeat thread started")
 
     # Start RabbitMQ consumer in background
@@ -407,14 +718,48 @@ async def startup_event():
     consumer_thread.start()
     logger.info("Agent service startup complete")
 
-@app.post("/task")
+    # Start agent-to-agent message consumer
+    agent_msg_thread = threading.Thread(target=_consume_agent_messages, daemon=True)
+    agent_msg_thread.start()
+    logger.info("Agent-to-agent message consumer started")
+
+    logger.info("Agent service startup complete")
+
+@app.get(
+    "/capabilities",
+    summary="Get agent capabilities",
+    description="Returns the capabilities and skills this agent supports, including delegation.",
+    tags=["Agent Info"],
+)
+def get_capabilities():
+    return {
+        "agent_id": AGENT_ID,
+        "agent_name": AGENT_NAME,
+        "skills": SKILLS,
+        "capabilities": AGENT_CAPABILITIES,
+        "supports_delegation": True,
+        "max_delegation_depth": MAX_DELEGATION_DEPTH,
+    }
+
+
+@app.post(
+    "/task",
+    response_model=Result,
+    summary="Process a generic task",
+    description="Receives a task from the MAS Orchestrator, processes it via the RAG pipeline, and returns the result.",
+    tags=["Agent Tasks"],
+    responses={
+        200: {"description": "Task processed successfully"},
+        500: {"description": "Internal server error during task processing"}
+    }
+)
 async def receive_task(task: Task, request: Request):
     """
     Endpoint to receive a task from the MAS Orchestrator.
 
     When a POST request with a task payload is received, the agent:
       1. Auto-generates a task_id if one isn't provided.
-      2. Processes the task using the RAG pipeline (async).
+      2. Processes the task using the active agent (General RAG Pipeline or Specialized Agent).
       3. Sends the result back to the MAS Orchestrator.
       4. Returns the task result.
     """
@@ -430,12 +775,32 @@ async def receive_task(task: Task, request: Request):
         f"Received task via HTTP: task_id={task.task_id}, conversation_id={task.conversation_id}, "
         f"correlation_id={get_correlation_id()}"
     )
+    
+    # Extract correlation ID from request headers
+    corr_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
+    if corr_id:
+        set_correlation_id(corr_id)
+    
+    logger.info(
+        f"Received task via HTTP: task_id={task.task_id}, conversation_id={task.conversation_id}, "
+        f"correlation_id={get_correlation_id()}"
+    )
 
     # Process the task using the RAG pipeline (async) with metrics
     import time as time_module
     start_time = time_module.time()
     try:
-        result_dict = await rag_pipeline.process_task(task.dict())
+        task_dict = task.dict()
+        if AGENT_TYPE == "general":
+            result_pipeline = await active_agent.process_task(task_dict)
+            final_result_text = result_pipeline["response"]
+        elif AGENT_TYPE in ["researcher", "analyst", "writer"]:
+             final_result_text = await active_agent.process_request(
+                task_type=task_dict.get("operation"),
+                data=task_dict.get("query"),
+                extra_parameters=task_dict
+            )
+
         processing_duration = time_module.time() - start_time
         
         task_processing_duration.observe(processing_duration)
@@ -447,9 +812,13 @@ async def receive_task(task: Task, request: Request):
         )
 
         # Send the result back to the orchestrator.
-        send_result(result_dict["response"], task.conversation_id, task.task_id)
+        send_result(final_result_text, task.conversation_id, task.task_id)
 
-        return result_dict
+        # Return the result in the format expected by the response_model
+        return Result(
+            agent_id=AGENT_ID if AGENT_ID else "unknown",
+            result=final_result_text
+        )
     except Exception as e:
         processing_duration = time_module.time() - start_time
         task_processing_duration.observe(processing_duration)

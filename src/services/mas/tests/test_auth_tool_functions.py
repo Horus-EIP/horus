@@ -8,13 +8,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
-import jwt
+from jose import jwt
 from starlette import status
 
 from auth.auth_tool_functions import (authenticate_user, bcrypt_context,
                                       create_access_token, get_current_user,
                                       get_current_user_from_token,
-                                      modify_user_password, verify_agent_api_key, hash_api_key)
+                                      hash_api_key, modify_user_password,
+                                      verify_agent_api_key)
 from core.config import settings
 from db.models import Agents
 
@@ -130,7 +131,9 @@ class TestCreateAccessToken:
         token = create_access_token("testuser", 1, expires_delta, "user")
 
         # Decode token to verify contents
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+        )
 
         assert payload["sub"] == "testuser"
         assert payload["id"] == 1
@@ -149,7 +152,9 @@ class TestCreateAccessToken:
 
         token = create_access_token("adminuser", 2, expires_delta, "admin")
 
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+        )
 
         assert payload["sub"] == "adminuser"
         assert payload["id"] == 2
@@ -162,7 +167,9 @@ class TestCreateAccessToken:
 
         token = create_access_token("testuser", 1, expires_delta, "user")
 
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+        )
         token_exp = datetime.fromtimestamp(payload["exp"])
         expected_exp = before_creation + expires_delta
 
@@ -188,7 +195,9 @@ class TestGetCurrentUser:
             "nbf": int(datetime.now().timestamp()),
         }
         self.valid_token = jwt.encode(
-            self.valid_payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
+            self.valid_payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
         )
         self.mock_db = MagicMock()
         self.mock_user = MagicMock()
@@ -242,7 +251,9 @@ class TestGetCurrentUser:
             "exp": int((datetime.now() + timedelta(hours=1)).timestamp()),
         }
         token = jwt.encode(
-            payload_without_username, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
+            payload_without_username,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
         )
 
         with pytest.raises(HTTPException) as exc_info:
@@ -259,7 +270,11 @@ class TestGetCurrentUser:
             "nonce": "test-nonce-123",
             "exp": int((datetime.now() + timedelta(hours=1)).timestamp()),
         }
-        token = jwt.encode(payload_without_id, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+        token = jwt.encode(
+            payload_without_id,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
 
         with pytest.raises(HTTPException) as exc_info:
             get_current_user(token, self.mock_db)
@@ -280,7 +295,9 @@ class TestGetCurrentUserFromToken:
             "exp": int((datetime.now() + timedelta(hours=1)).timestamp()),
         }
         self.valid_token = jwt.encode(
-            self.valid_payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
+            self.valid_payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
         )
 
     def test_get_current_user_from_token_success(self):
@@ -306,7 +323,9 @@ class TestGetCurrentUserFromToken:
             "exp": int((datetime.now() + timedelta(hours=1)).timestamp()),
         }
         token = jwt.encode(
-            payload_without_username, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
+            payload_without_username,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
         )
 
         with pytest.raises(Exception):  # JWTError
@@ -319,7 +338,11 @@ class TestGetCurrentUserFromToken:
             "role": "user",
             "exp": int((datetime.now() + timedelta(hours=1)).timestamp()),
         }
-        token = jwt.encode(payload_without_id, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+        token = jwt.encode(
+            payload_without_id,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
 
         with pytest.raises(Exception):  # JWTError
             get_current_user_from_token(token)
@@ -475,7 +498,7 @@ class TestAgentAuthentication:
     def test_verify_agent_api_key_success(self, mock_log_security):
         """Test successful API key verification."""
         self.mock_db.query().filter().first.return_value = self.mock_agent
-        
+
         agent_id = "test-agent-id"
         api_key = "valid-api-key"
         header_value = f"{agent_id}:{api_key}"
@@ -499,7 +522,7 @@ class TestAgentAuthentication:
     def test_verify_agent_api_key_agent_not_found(self, mock_log_security):
         """Test API key for non-existent agent."""
         self.mock_db.query().filter().first.return_value = None
-        
+
         header_value = "unknown-agent:some-key"
 
         with pytest.raises(HTTPException) as exc_info:
@@ -516,7 +539,7 @@ class TestAgentAuthentication:
     def test_verify_agent_api_key_wrong_key(self, mock_log_security):
         """Test incorrect API key for existing agent."""
         self.mock_db.query().filter().first.return_value = self.mock_agent
-        
+
         agent_id = "test-agent-id"
         api_key = "wrong-key"
         header_value = f"{agent_id}:{api_key}"
@@ -536,6 +559,6 @@ class TestAgentAuthentication:
         """Test API key hashing."""
         api_key = "test-key"
         hashed = hash_api_key(api_key)
-        
+
         assert hashed != api_key
         assert bcrypt_context.verify(api_key, hashed) is True

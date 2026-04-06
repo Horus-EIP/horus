@@ -22,13 +22,17 @@ def test_user_modifications():
 
     print(f"\n[Setup] Registering user '{username}'...")
     requests.post(
-        f"{BASE_URL}/auth/register", json={"username": username, "password": password}
+        f"{BASE_URL}/auth/register",
+        json={"username": username, "password": password},
+        timeout=120.0,
     )
 
     # 2. Login to get token
     print(f"[Setup] Logging in...")
     response = requests.post(
-        f"{BASE_URL}/auth/token", data={"username": username, "password": password}
+        f"{BASE_URL}/auth/token",
+        data={"username": username, "password": password},
+        timeout=120.0,
     )
     if response.status_code != 200:
         print(f"❌ Login failed: {response.text}")
@@ -44,7 +48,10 @@ def test_user_modifications():
     payload = {"old_password": password, "new_password": new_password}
 
     resp = requests.post(
-        f"{BASE_URL}/users/me/password_modification", json=payload, headers=headers
+        f"{BASE_URL}/users/me/password_modification",
+        json=payload,
+        headers=headers,
+        timeout=120.0,
     )
     if resp.status_code == 200:
         print("✅ Password changed successfully")

@@ -9,29 +9,36 @@ from __future__ import annotations
 
 from typing import Dict, Any, List, Optional, Tuple
 import re
+import logging
 
-try:
-    from transformers import pipeline  # type: ignore
-    _TRANSFORMERS_AVAILABLE = True
-except Exception:
-    pipeline = None  # type: ignore
-    _TRANSFORMERS_AVAILABLE = False
-
+logger = logging.getLogger(__name__)
 
 class SummarizerTool:
     name = "summarize"
 
     def __init__(self):
-        if _TRANSFORMERS_AVAILABLE:
-            try:
-                self._pipe = pipeline("summarization")
-            except Exception:
-                self._pipe = None
-        else:
+        self._pipe = None
+        # Lazy load transformers to prevent import-time hangs
+        try:
+            from transformers import pipeline
+            self._pipe = pipeline("summarization")
+        except (ImportError, Exception) as e:
+            logger.debug(f"Transformers not available: {e}")
             self._pipe = None
 
     def run(self, payload: Dict[str, Any]) -> str:
+        """
+        Run the summarization tool.
+        
+        Args:
+            payload: Dict containing 'text' or 'query', optional 'max_sentences', 'protect_keywords'.
+            
+        Returns:
+            The summary text.
+        """
         text = (payload.get("text") or payload.get("query") or "").strip()
+        logger.debug(f"SummarizerTool run invoke (text len={len(text)})")
+
         if not text:
             return ""
         max_sentences = int(payload.get("max_sentences") or 3)

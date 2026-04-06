@@ -9,6 +9,9 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 import ast
 import math
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class CalculatorTool:
@@ -53,11 +56,35 @@ class CalculatorTool:
     }
 
     def run(self, payload: Dict[str, Any]) -> str:
+        """
+        Execute the calculation tool.
+        
+        Args:
+            payload: Dictionary containing 'expression' or 'query'.
+            
+        Returns:
+            The calculated result as a string.
+        """
         expression = payload.get("expression") or payload.get("query") or ""
-        result_value = self.evaluate(expression)
-        return str(result_value)
+        logger.debug(f"CalculatorTool.run requested with expression: '{expression}'")
+        try:
+            result_value = self.evaluate(expression)
+            logger.info(f"CalculatorTool result: {result_value}")
+            return str(result_value)
+        except Exception as e:
+            logger.error(f"CalculatorTool failed: {e}")
+            raise ValueError(e)
 
     def evaluate(self, expression: str) -> float:
+        """
+        Safely evaluate a mathematical expression using AST.
+        
+        Args:
+            expression: The math string to evaluate.
+            
+        Returns:
+            The float result.
+        """
         try:
             parsed = ast.parse(expression, mode="eval")
             return float(self._eval_node(parsed.body))
@@ -65,8 +92,6 @@ class CalculatorTool:
             raise ValueError(f"Invalid expression: {exc}")
 
     def _eval_node(self, node: ast.AST) -> float:
-        if isinstance(node, ast.Num):
-            return float(node.n)
         if isinstance(node, ast.Constant):
             if isinstance(node.value, (int, float)):
                 return float(node.value)

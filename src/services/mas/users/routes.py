@@ -12,14 +12,14 @@ Endpoints:
 Security:
     - User management operations restricted to admin users
     - Role changes require explicit admin authorization
-    
+
 Request/Response Examples:
     POST /users/make-admin/john_doe
     Response:
     {
         "message": "Operation successfully happened"
     }
-    
+
     POST /users/remove-admin-grant/john_doe
     Response:
     {
@@ -42,13 +42,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from auth.auth_tool_functions import (get_current_user, modify_user_password,
-                                      PermissionChecker)
+from auth.auth_tool_functions import (PermissionChecker, get_current_user,
+                                      modify_user_password)
 from auth.permissions import Permission
 from core.logger import get_logger
 from db.database import get_db
 from db.models import Users
-from schemas.schemas import UserPasswordModification, UpdateRole
+from schemas.schemas import UpdateRole, UserPasswordModification
 from users.user_tool_functions import delete_user as delete_user_tool
 from users.user_tool_functions import (get_all_users, get_user_details,
                                        modify_user_username)
@@ -111,9 +111,7 @@ user_dependency = Annotated[dict, Depends(get_current_user)]
                         },
                         "forbidden": {
                             "summary": "Caller does not have permissions",
-                            "value": {
-                                "detail": "Insufficient permissions"
-                            },
+                            "value": {"detail": "Insufficient permissions"},
                         },
                     }
                 }
@@ -160,6 +158,26 @@ async def update_roles(
     user: Annotated[dict, Depends(PermissionChecker(Permission.USER_UPDATE))],
     db: Session = Depends(get_db),
 ):
+    """
+    Update the role of a specific user.
+
+    Allows administrators to elevate or demote users (e.g. USER -> ADMIN).
+    Validates that the target user exists and doesn't already have the role.
+
+    Args:
+        user_info (UpdateRole): Payload containing target user ID and new role.
+        user (dict): Authenticated admin user.
+        db (Session): Database session.
+
+    Returns:
+        dict: Success message.
+
+    Raises:
+        HTTPException:
+            - 403: If user already has the role or permission is denied.
+            - 404: If target user is not found.
+            - 500: Database error.
+    """
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
 
@@ -178,7 +196,8 @@ async def update_roles(
                 f"Failed to update user role: User {user_info.user_id} already has role {user_info.new_role.value}"
             )
             raise HTTPException(
-                status_code=403, detail=f"User already has role {user_info.new_role.value}"
+                status_code=403,
+                detail=f"User already has role {user_info.new_role.value}",
             )
 
         target_user = (
@@ -201,6 +220,7 @@ async def update_roles(
         db.rollback()
         logger.error(f"Error updating role for {user_info.user_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
 
 @router.get(
     "/users_list",
@@ -255,11 +275,22 @@ async def update_roles(
         },
     },
 )
-def obtain_users_details(user: Annotated[dict, Depends(PermissionChecker(Permission.USER_READ))], db: Session = Depends(get_db)):
+def obtain_users_details(
+    user: Annotated[dict, Depends(PermissionChecker(Permission.USER_READ))],
+    db: Session = Depends(get_db),
+):
     """
-    Retrieve a list of all registered users.
+    Retrieve listing of all system users.
 
-    Requires admin privileges.
+    Provides administrative overview of all registered accounts.
+    Includes role and status information.
+
+    Args:
+        user (dict): Authenticated admin user.
+        db (Session): Database session.
+
+    Returns:
+        list[dict]: List of user objects.
     """
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
@@ -331,11 +362,27 @@ def obtain_users_details(user: Annotated[dict, Depends(PermissionChecker(Permiss
         },
     },
 )
-def user_details(user_id: int, user: Annotated[dict, Depends(PermissionChecker(Permission.USER_READ))], db: Session = Depends(get_db)):
+def user_details(
+    user_id: int,
+    user: Annotated[dict, Depends(PermissionChecker(Permission.USER_READ))],
+    db: Session = Depends(get_db),
+):
     """
-    Retrieve detailed information for a specific user by ID.
+    Get detailed profile of a specific user by their ID.
 
-    Requires admin privileges.
+    Returns extended profile information useful for user management.
+
+    Args:
+        user_id (int): Numeric ID of the user.
+        user (dict): Authenticated admin user.
+        db (Session): Database session.
+
+    Returns:
+        dict: User profile (id, username, role).
+
+    Raises:
+        HTTPException:
+            - 404: If user is not found.
     """
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
@@ -393,7 +440,9 @@ def user_details(user_id: int, user: Annotated[dict, Depends(PermissionChecker(P
 )
 def get_current_user_info(user: user_dependency, db: Session = Depends(get_db)):
     """
-    Retrieve the profile information of the currently authenticated user.
+    Get profile information for the authenticated session.
+
+    Used by the frontend to display current user identity and permissions.
     """
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
@@ -493,11 +542,29 @@ def get_current_user_info(user: user_dependency, db: Session = Depends(get_db)):
         },
     },
 )
-def delete_user(user_id: int, user: Annotated[dict, Depends(PermissionChecker(Permission.USER_DELETE))], db: Session = Depends(get_db)):
+def delete_user(
+    user_id: int,
+    user: Annotated[dict, Depends(PermissionChecker(Permission.USER_DELETE))],
+    db: Session = Depends(get_db),
+):
     """
-    Permanently delete a user account.
+    Permanently remove a user account from the system.
 
-    Requires admin privileges. Cannot delete the main 'admin' account or yourself.
+    This action is irreversible.
+    It contains safeguards to prevent administrators from deleting themselves
+    or the main admin account.
+
+    Args:
+        user_id (int): ID of the user to delete.
+        user (dict): Authenticated admin user performing the action.
+        db (Session): Database session.
+
+    Returns:
+        bool: True on success.
+
+    Raises:
+        HTTPException:
+            - 403: If attempting to delete self or protected admin account.
     """
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
@@ -613,6 +680,24 @@ def obtain_new_password(
     user: user_dependency,
     db: Session = Depends(get_db),
 ):
+    """
+    Allow authenticated users to change their account password.
+
+    Requires verification of the old password before setting the new one.
+    Updates the hashed password in the database.
+
+    Args:
+        password_info (UserPasswordModification): Old and new password container.
+        user (dict): Authenticated user.
+        db (Session): Database session.
+
+    Returns:
+        dict: Success message.
+
+    Raises:
+        HTTPException:
+            - 400: If old password validation fails.
+    """
     if modify_user_password(
         user.get("username"), password_info.old_password, password_info.new_password, db
     ):
@@ -707,6 +792,24 @@ def obtain_new_password(
 def obtain_new_username(
     new_username: str, user: user_dependency, db: Session = Depends(get_db)
 ):
+    """
+    Update the username for the current account.
+
+    Checks for uniqueness constraint before applying the change.
+    Use with caution as this may affect client-side caching or session state.
+
+    Args:
+        new_username (str): The desired unique username.
+        user (dict): Authenticated user.
+        db (Session): Database session.
+
+    Returns:
+        dict: Success message.
+
+    Raises:
+        HTTPException:
+            - 400: If username is already taken or invalid.
+    """
     current_username = user.get("username")
     if modify_user_username(user.get("id"), new_username, db):
         return {"message": "Username successfully changed"}

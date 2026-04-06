@@ -20,6 +20,7 @@ dist/
 .pytest_cache/
 .pyre/
 .tox/
+.python-version
 
 # Virtual envs
 .venv/

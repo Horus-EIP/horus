@@ -430,6 +430,276 @@ class TestKnowledgeStoreClientExponentialBackoff:
         sleep_calls = [call[0][0] for call in mock_sleep.call_args_list]
         assert all(delay <= 10.0 for delay in sleep_calls), "All delays should be <= 10.0"
 
+class TestKnowledgeStoreClientSmartSearch:
+    """Test smart search scenarios"""
+
+    @pytest.mark.asyncio
+    @patch("ai_agents.knowledge_store_client.httpx.AsyncClient")
+    async def test_smart_search_no_filters(self, mock_client_class):
+        """Test smart search without filters"""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "query": "docker ethereum",
+            "filters": None,
+            "total": 2,
+            "results": {"documents": ["doc1", "doc2"]}
+        }
+        mock_response.raise_for_status.return_value = None
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        client = KnowledgeStoreClient(base_url="http://test:8080", timeout=5.0, max_retries=1)
+        result = await client.smart_search("docker ethereum")
+
+        assert result["query"] == "docker ethereum"
+        assert result["total"] == 2
+        assert result["data"] == "doc1\n\ndoc2"
+        call_args = mock_client.post.call_args
+        assert call_args[1]["json"]["query"] == "docker ethereum"
+        assert call_args[1]["json"]["n_results"] == 5
+
+    @pytest.mark.asyncio
+    @patch("ai_agents.knowledge_store_client.httpx.AsyncClient")
+    async def test_smart_search_with_filters(self, mock_client_class):
+        """Test smart search with category and confidence filters"""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "query": "contract",
+            "filters": {"auto_category": {"$eq": "legal"}},
+            "total": 1,
+            "results": {"documents": ["legal doc"]}
+        }
+        mock_response.raise_for_status.return_value = None
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        client = KnowledgeStoreClient(base_url="http://test:8080", timeout=5.0, max_retries=1)
+        result = await client.smart_search(
+            "contract",
+            categories=["legal"],
+            min_confidence=0.9
+        )
+
+        assert result["total"] == 1
+        call_json = mock_client.post.call_args[1]["json"]
+        assert call_json["categories"] == ["legal"]
+        assert call_json["min_confidence"] == 0.9
+
+    @pytest.mark.asyncio
+    @patch("ai_agents.knowledge_store_client.httpx.AsyncClient")
+    async def test_smart_search_404_returns_empty(self, mock_client_class):
+        """Test smart search 404 returns empty data"""
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_http_error = httpx.HTTPStatusError("Not Found", request=MagicMock(), response=mock_response)
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(side_effect=mock_http_error)
+        mock_client_class.return_value = mock_client
+
+        client = KnowledgeStoreClient(base_url="http://test:8080", timeout=5.0, max_retries=1)
+        result = await client.smart_search("xpto")
+
+        assert result["data"] == ""
+        assert result["total"] == 0
+
+    @pytest.mark.asyncio
+    @patch("ai_agents.knowledge_store_client.httpx.AsyncClient")
+    @patch("ai_agents.knowledge_store_client.asyncio.sleep")
+    async def test_smart_search_500_retries(self, mock_sleep, mock_client_class):
+        """Test smart search retries on 500 error"""
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_http_error = httpx.HTTPStatusError("Server Error", request=MagicMock(), response=mock_response)
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(side_effect=mock_http_error)
+        mock_client_class.return_value = mock_client
+
+        client = KnowledgeStoreClient(base_url="http://test:8080", timeout=5.0, max_retries=3, retry_delay=0.01)
+        result = await client.smart_search("contract")
+
+        assert "Error" in result["data"]
+        assert mock_client.post.call_count == 3
+
+
+class TestKnowledgeStoreClientSearchByEntity:
+    """Test search by entity scenarios"""
+
+    @pytest.mark.asyncio
+    @patch("ai_agents.knowledge_store_client.httpx.AsyncClient")
+    async def test_search_by_entity_success(self, mock_client_class):
+        """Test successful search by entity"""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "entity": "Alice",
+            "entity_type": "people",
+            "total": 1,
+            "results": {"documents": [["Contract between Alice and Bob"]]}
+        }
+        mock_response.raise_for_status.return_value = None
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        client = KnowledgeStoreClient(base_url="http://test:8080", timeout=5.0, max_retries=1)
+        result = await client.search_by_entity("Alice", "people")
+
+        assert result["entity"] == "Alice"
+        assert result["total"] == 1
+        assert "Alice" in result["data"]
+        call_params = mock_client.get.call_args[1]["params"]
+        assert call_params["entity"] == "Alice"
+        assert call_params["entity_type"] == "people"
+        assert call_params["n_results"] == 5
+
+    @pytest.mark.asyncio
+    @patch("ai_agents.knowledge_store_client.httpx.AsyncClient")
+    async def test_search_by_entity_404_returns_empty(self, mock_client_class):
+        """Test search by entity 404 returns empty"""
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_http_error = httpx.HTTPStatusError("Not Found", request=MagicMock(), response=mock_response)
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.get = AsyncMock(side_effect=mock_http_error)
+        mock_client_class.return_value = mock_client
+
+        client = KnowledgeStoreClient(base_url="http://test:8080", timeout=5.0, max_retries=1)
+        result = await client.search_by_entity("Unknown", "people")
+
+        assert result["data"] == ""
+        assert result["total"] == 0
+
+    @pytest.mark.asyncio
+    @patch("ai_agents.knowledge_store_client.httpx.AsyncClient")
+    async def test_search_by_entity_400_returns_empty(self, mock_client_class):
+        """Test search by entity 400 (invalid type) returns empty"""
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_http_error = httpx.HTTPStatusError("Bad Request", request=MagicMock(), response=mock_response)
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.get = AsyncMock(side_effect=mock_http_error)
+        mock_client_class.return_value = mock_client
+
+        client = KnowledgeStoreClient(base_url="http://test:8080", timeout=5.0, max_retries=1)
+        result = await client.search_by_entity("Alice", "invalid_type")
+
+        assert result["data"] == ""
+        assert result["total"] == 0
+
+    @pytest.mark.asyncio
+    @patch("ai_agents.knowledge_store_client.httpx.AsyncClient")
+    async def test_search_by_entity_custom_n_results(self, mock_client_class):
+        """Test search by entity with custom n_results"""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "entity": "Alice",
+            "entity_type": "people",
+            "total": 1,
+            "results": {"documents": [["doc1"]]}
+        }
+        mock_response.raise_for_status.return_value = None
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        client = KnowledgeStoreClient(base_url="http://test:8080", timeout=5.0, max_retries=1)
+        await client.search_by_entity("Alice", "people", n_results=10)
+
+        call_params = mock_client.get.call_args[1]["params"]
+        assert call_params["n_results"] == 10
+
+
+class TestKnowledgeStoreClientGetCategories:
+    """Test get categories scenarios"""
+
+    @pytest.mark.asyncio
+    @patch("ai_agents.knowledge_store_client.httpx.AsyncClient")
+    async def test_get_categories_success(self, mock_client_class):
+        """Test successful get categories"""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "total_documents": 3,
+            "categories": [
+                {"category": "technical", "count": 2},
+                {"category": "academic", "count": 1}
+            ]
+        }
+        mock_response.raise_for_status.return_value = None
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        client = KnowledgeStoreClient(base_url="http://test:8080", timeout=5.0, max_retries=1)
+        result = await client.get_categories()
+
+        assert result["total_documents"] == 3
+        assert result["categories"][0] == {"category": "technical", "count": 2}
+        assert result["categories"][1] == {"category": "academic", "count": 1}
+
+    @pytest.mark.asyncio
+    @patch("ai_agents.knowledge_store_client.httpx.AsyncClient")
+    async def test_get_categories_empty(self, mock_client_class):
+        """Test get categories with empty store"""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"total_documents": 0, "categories": []}
+        mock_response.raise_for_status.return_value = None
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        client = KnowledgeStoreClient(base_url="http://test:8080", timeout=5.0, max_retries=1)
+        result = await client.get_categories()
+
+        assert result["total_documents"] == 0
+        assert result["categories"] == []
+
+    @pytest.mark.asyncio
+    @patch("ai_agents.knowledge_store_client.httpx.AsyncClient")
+    @patch("ai_agents.knowledge_store_client.asyncio.sleep")
+    async def test_get_categories_error_returns_empty(self, mock_sleep, mock_client_class):
+        """Test get categories returns empty dict on failure"""
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
+        mock_client_class.return_value = mock_client
+
+        client = KnowledgeStoreClient(base_url="http://test:8080", timeout=5.0, max_retries=3, retry_delay=0.01)
+        result = await client.get_categories()
+
+        assert result == {"total_documents": 0, "categories": []}
+        assert mock_client.get.call_count == 3
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

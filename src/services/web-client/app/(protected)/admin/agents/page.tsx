@@ -8,11 +8,13 @@ import { Modal, Button, Group, Text, TextInput, Textarea, TagsInput } from '@man
 import { useDisclosure } from '@mantine/hooks';
 import { useNotification } from "@/contexts/notification-context";
 import { useAuth } from "@/components/auth/auth-provider";
+import { AgentTypeBadge, getRole } from "@/components/agents/agent-type-badge";
 
-const header = ["Name", "Skills", "Status", "Last Heartbeat", "Description"];
+const header = ["Name", "Role", "Description", "Status", "Last Heartbeat"];
 
 export default function AdminAgentsPage() {
-  const [agents, setAgents] = useState<Agent[]>([]);
+  // TMP: Mock data until we connect real data in Sprint 2
+  // const [agents, setAgents] = useState<Agent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   
@@ -50,9 +52,18 @@ export default function AdminAgentsPage() {
     }
   };
 
-  useEffect(() => {
-    loadAgents();
-  }, []);
+  // TMP: Load data on mount until we connect real data in Sprint 2
+  // useEffect(() => {
+  //   loadAgents();
+  // }, []);
+
+  // TMP: Mock data until we connect real data in Sprint 2
+  const [agents, setAgents] = useState<Agent[]>([
+    { id: '1', name: 'ResearchBot', skills: ['search', 'retrieval', 'fetch'], status: 'active', last_heartbeat: new Date().toISOString(), description: 'Searches and retrieves documents from external sources.', created_at: '2025-01-01T00:00:00Z' },
+    { id: '2', name: 'DataAnalyst', skills: ['nlp', 'summarization', 'data'], status: 'active', last_heartbeat: new Date(Date.now() - 3 * 60000).toISOString(), description: 'Analyses and summarises large volumes of text.', created_at: '2025-01-02T00:00:00Z' },
+    { id: '3', name: 'ContentWriter', skills: ['writing', 'draft', 'content'], status: 'idle', last_heartbeat: new Date(Date.now() - 120 * 60000).toISOString(), description: 'Generates structured written content from briefs.', created_at: '2025-01-03T00:00:00Z' },
+    { id: '4', name: 'GeneralBot', skills: [], status: 'idle', last_heartbeat: new Date(Date.now() - 120 * 60000).toISOString(), description: 'A general-purpose agent for handling various tasks.', created_at: '2025-01-04T00:00:00Z' },
+  ]);
 
   const formatDate = (dateString: string) => {
     if (!dateString) return "Never";
@@ -74,13 +85,16 @@ export default function AdminAgentsPage() {
     });
   }, [agents, searchTerm]);
 
-  const tableBody: (string | number)[][] = filteredAgents.map((a) => [
-    a.name,
-    Array.isArray(a.skills) ? a.skills.join(", ") : "-",
-    a.status === 'active' ? 'Online' : 'Offline',
-    formatDate(a.last_heartbeat),
-    a.description?.substring(0, 50) + (a.description?.length > 50 ? "..." : "") || "-",
-  ]);
+  const tableBody: (string | number | React.ReactNode)[][] = filteredAgents.map((a) => {
+    const role = getRole(a.skills ?? []);
+    return [
+      a.name,
+      <AgentTypeBadge role={role} />,
+      a.description || "-",
+      a.status === 'active' ? 'Online' : 'Offline',
+      formatDate(a.last_heartbeat),
+    ];
+  });
 
   const canManageAgents = () => {
     return user?.role === 'admin';

@@ -1,11 +1,13 @@
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 from starlette import status
-from unittest.mock import MagicMock, patch
 
-from auth.permissions import Permission, Role, check_permission, ROLE_PERMISSION
 from auth.auth_tool_functions import PermissionChecker
+from auth.permissions import (ROLE_PERMISSION, Permission, Role,
+                              check_permission)
+
 
 class TestPermissions:
     def test_role_permission_mapping(self):
@@ -14,7 +16,7 @@ class TestPermissions:
         assert Permission.USER_READ in ROLE_PERMISSION[Role.ADMIN]
         assert Permission.USER_READ in ROLE_PERMISSION[Role.MANAGER]
         assert Permission.TASK_READ in ROLE_PERMISSION[Role.USER]
-        
+
         # Check that USER role doesn't have ADMIN permissions
         assert Permission.USER_DELETE not in ROLE_PERMISSION[Role.USER]
 
@@ -35,12 +37,13 @@ class TestPermissions:
         assert check_permission("ADMIN", Permission.USER_DELETE) is True
         assert check_permission("Admin", Permission.USER_DELETE) is True
 
+
 class TestPermissionChecker:
     def test_permission_checker_success(self):
         """Test PermissionChecker allows access when user has permission."""
         checker = PermissionChecker(Permission.USER_READ)
         user = {"username": "test", "role": "admin"}
-        
+
         result = checker(user)
         assert result == user
 
@@ -48,10 +51,10 @@ class TestPermissionChecker:
         """Test PermissionChecker raises 403 when user lacks permission."""
         checker = PermissionChecker(Permission.USER_DELETE)
         user = {"username": "test", "role": "user"}
-        
+
         with pytest.raises(HTTPException) as exc_info:
             checker(user)
-        
+
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
         assert exc_info.value.detail == "Insufficient permissions"
 
@@ -59,8 +62,8 @@ class TestPermissionChecker:
         """Test PermissionChecker raises 403 for invalid role."""
         checker = PermissionChecker(Permission.USER_READ)
         user = {"username": "test", "role": "invalid_role"}
-        
+
         with pytest.raises(HTTPException) as exc_info:
             checker(user)
-            
+
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN

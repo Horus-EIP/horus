@@ -4,10 +4,10 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from auth.permissions import Role
 from core.logger import get_logger
 from db.database import SessionLocal, get_db
 from db.models import Users
-from auth.permissions import Role
 
 logger = get_logger("users_tool_functions")
 

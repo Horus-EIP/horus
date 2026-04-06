@@ -26,8 +26,12 @@ All models inherit from Pydantic BaseModel, providing:
 - JSON Schema generation for API documentation
 """
 
+from typing import Optional
+
 from pydantic import BaseModel
+
 from auth.permissions import Role
+from db.models import AgentTypes
 
 
 class RegistrationForm(BaseModel):
@@ -53,6 +57,7 @@ class RegistrationForm(BaseModel):
     name: str
     skills: list[str]
     description: str
+    type: Optional[AgentTypes] = None
 
 
 class TaskForm(BaseModel):
@@ -64,19 +69,19 @@ class TaskForm(BaseModel):
 
     Attributes:
         demand (str): The task description or user request
-        conversation_id (str): UUID of the conversation this task belongs to
+        conversation_id (int): UUID of the conversation this task belongs to
         skills_required (list[str]): Skills needed to complete this task
 
     Example:
         {
             "demand": "Summarize this document and extract key points",
-            "conversation_id": "123e4567-e89b-12d3-a456-426614174000",
+            "conversation_id": 123,
             "skills_required": ["nlp", "summarization"]
         }
     """
 
     demand: str
-    conversation_id: str
+    conversation_id: int
     skills_required: list[str]
 
 
@@ -185,6 +190,19 @@ class UserPasswordModification(BaseModel):
     old_password: str
     new_password: str
 
+
 class UpdateRole(BaseModel):
     user_id: str
     new_role: Role
+
+
+class SubTask(BaseModel):
+    id: str
+    agent_type: str
+    description: str
+    depends_on: list[str] = []
+    status: str
+
+
+class CollaborativeTask(BaseModel):
+    sub_tasks: list[SubTask]

@@ -40,9 +40,9 @@ class TestEnvLoading:
 
         # Pydantic should convert env vars to lowercase
         # Test that we can access lowercase attributes
-        assert hasattr(settings, 'postgres_user')
-        assert hasattr(settings, 'jwt_secret_key')
-        assert hasattr(settings, 'db_port')
+        assert hasattr(settings, "postgres_user")
+        assert hasattr(settings, "jwt_secret_key")
+        assert hasattr(settings, "db_port")
 
 
 class TestConfigVariables:

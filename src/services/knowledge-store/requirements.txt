@@ -1,6 +1,8 @@
+wasabi<1.2.0
+numpy<2.0.0
 fastapi[all]==0.128.0
 uvicorn==0.34.0
-chromadb==0.6.3
+chromadb==1.5.2
 sentence-transformers==3.4.1
 pdfplumber==0.11.9
 PyMuPDF==1.25.4
@@ -8,9 +10,23 @@ pdf2image==1.17.0
 pytesseract==0.3.13
 python-docx==1.1.2
 
+# LLM for ContentAnalyzer (classification & summary)
+transformers>=4.44.2
+torch>=2.0.0
+
+# NLP
+spacy
+en_core_web_trf @ https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.8.0/en_core_web_trf-3.8.0-py3-none-any.whl
+
 # Observability
 prometheus-client>=0.17.0
-
-# OpenTelemetry for distributed tracing (SigNoz auto-instrumentation)
 opentelemetry-distro
 opentelemetry-exporter-otlp
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-logging
+
+# Testing
+pytest
+pytest-cov
+pytest-asyncio
+httpx

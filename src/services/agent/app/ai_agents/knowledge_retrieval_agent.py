@@ -8,6 +8,7 @@ Supports async operations for non-blocking I/O.
 
 from typing import Dict, Any
 import logging
+import inspect
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +36,19 @@ class KnowledgeRetrievalAgent:
         Returns:
             A dictionary with the retrieved data.
         """
-        logger.debug(f"Fetching data for query: '{query}'")
-        # Check if store_interface is async (has __call__ that returns coroutine)
-        result = self.store_interface(query)
-        # If it's a coroutine, await it; otherwise return directly
-        if hasattr(result, '__await__'):
-            return await result
-        return result
+        logger.debug(f"KnowledgeRetrievalAgent: Fetching data for query='{query}'")
+        try:
+            # Check if store_interface is async (has __call__ that returns coroutine)
+            result = self.store_interface(query)
+
+            # If it's a coroutine, await it; otherwise return directly
+            if inspect.isawaitable(result):
+                data = await result
+            else:
+                data = result
+            
+            logger.info(f"KnowledgeRetrievalAgent result keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+            return data
+        except Exception as e:
+            logger.error(f"KnowledgeRetrievalAgent fetch failed: {e}", exc_info=True)
+            raise e

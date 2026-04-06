@@ -43,8 +43,9 @@ class TestUsersRoutesNewEndpoints:
 
     def test_users_list_unauthorized(self):
         # Override dependency to raise 401
-        from auth.auth_tool_functions import get_current_user
         from fastapi import HTTPException
+
+        from auth.auth_tool_functions import get_current_user
 
         def mock_401():
             raise HTTPException(status_code=401, detail="Authentication Failed")
@@ -115,8 +116,9 @@ class TestUsersRoutesNewEndpoints:
 
     def test_get_me_unauthorized(self):
         # Override dependency
-        from auth.auth_tool_functions import get_current_user
         from fastapi import HTTPException
+
+        from auth.auth_tool_functions import get_current_user
 
         def mock_401():
             raise HTTPException(status_code=401, detail="Authentication Failed")

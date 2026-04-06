@@ -42,3 +42,8 @@ KNOWLEDGE_STORE_RETRY_DELAY = get_float_env("KNOWLEDGE_STORE_RETRY_DELAY", 1.0)
 # Model Configuration
 MODEL_NAME = os.getenv("MODEL_NAME", "t5-small")
 MODEL_DEVICE = os.getenv("MODEL_DEVICE", "auto")  # "auto", "cpu", "cuda", "cuda:0", etc.
+
+AGENT_TYPE = os.getenv("AGENT_TYPE", "general")
+# Delegation Configuration
+DELEGATION_TIMEOUT = get_float_env("DELEGATION_TIMEOUT", 30.0)
+MAX_DELEGATION_DEPTH = get_int_env("MAX_DELEGATION_DEPTH", 5)
