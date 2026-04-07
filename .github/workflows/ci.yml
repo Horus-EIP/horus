@@ -4,7 +4,6 @@ on: [push, pull_request]
 
 jobs:
   test-unit:
-  test-unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -34,26 +33,26 @@ jobs:
           if [ -f src/infra/.env ]; then
             export $(grep -v '^#' src/infra/.env | sed 's/#.*//g' | xargs)
           fi
-          
+
           # Override for CI (localhost access)
           export DB_HOST=localhost
           export REDIS_HOST=localhost
           export RABBITMQ_HOST=localhost
           export LLM_AUTOINIT=0
-          
+
           # Move to service directory
           cd src/services/mas
           export PYTHONPATH=$PYTHONPATH:$(pwd)
 
           # Run migrations
           (cd db && alembic upgrade head)
-          
+
           # Init DB
           python -c "from db.init_setup import init_db; init_db()"
-          
+
           # Start Server
           nohup uvicorn main:app --host 0.0.0.0 --port 8000 > mas.log 2>&1 &
-          
+
           # Wait for Server to be ready
           echo "Waiting for MAS service to start..."
           timeout 30s bash -c 'until curl -s http://localhost:8000/docs > /dev/null; do sleep 1; done'
@@ -65,19 +64,16 @@ jobs:
           if [ -f src/infra/.env ]; then
             export $(grep -v '^#' src/infra/.env | sed 's/#.*//g' | xargs)
           fi
-          
+
           # Override for CI (localhost access)
           export DB_HOST=localhost
           export REDIS_HOST=localhost
           export RABBITMQ_HOST=localhost
           export LLM_AUTOINIT=0
-          
-          # Move to service directory
-          cd src/services/mas
-          export PYTHONPATH=$PYTHONPATH:$(pwd)
 
-          # Run tests
-          pytest tests/ --ignore=tests/test_integration.py
+          # Repository root; pytest.ini sets pythonpath to src/services/mas
+          pytest -c tests/mas/pytest.ini tests/mas \
+            --ignore=tests/mas/test_integration.py
 
   test-integration:
     runs-on: ubuntu-latest
@@ -111,24 +107,24 @@ jobs:
           if [ -f src/infra/.env ]; then
             export $(grep -v '^#' src/infra/.env | sed 's/#.*//g' | xargs)
           fi
-          
+
           # Override for CI
           export DB_HOST=localhost
           export REDIS_HOST=localhost
           export RABBITMQ_HOST=localhost
           export LLM_AUTOINIT=0
-          
+
           cd src/services/mas
-          
+
           # Run migrations
           (cd db && alembic upgrade head)
-          
+
           # Init DB
           python -c "from db.init_setup import init_db; init_db()"
-          
+
           # Start Server
           nohup uvicorn main:app --host 0.0.0.0 --port 8000 > mas.log 2>&1 &
-          
+
           # Wait for Server to be ready
           echo "Waiting for MAS service to start..."
           timeout 30s bash -c 'until curl -s http://localhost:8000/docs > /dev/null; do sleep 1; done'
@@ -139,5 +135,5 @@ jobs:
           TEST_BASE_URL: http://localhost:8000
           TEST_WS_BASE_URL: ws://localhost:8000
         run: |
-          pytest src/services/mas/tests/test_integration.py
+          pytest -c tests/mas/pytest.ini tests/mas/test_integration.py
           if [ $? -ne 0 ]; then cat src/services/mas/mas.log; exit 1; fi

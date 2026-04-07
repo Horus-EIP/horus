@@ -1,0 +1,43 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 80
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "N",
+    "UP",
+    "B",
+    "A",
+    "C4",
+    "SIM",
+    "ANN",
+    "D",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "core",
+    "db",
+    "auth",
+    "agents",
+    "tasks",
+    "chat",
+    "conversations",
+    "users",
+    "schemas",
+    "app",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "ANN", "S"]
+"**/tests/**" = ["D", "ANN", "S"]
+"**/client_tests/**" = ["D", "ANN", "S"]
+"**/test/**" = ["D", "ANN", "S"]
+"**/alembic/**" = ["D", "ANN"]

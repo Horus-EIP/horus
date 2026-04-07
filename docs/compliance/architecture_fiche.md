@@ -85,8 +85,8 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 │                     OBSERVABILITY LAYER                                  │
 ├─────────────────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐     ┌─────────────┐      ┌─────────────┐              │
-│  │ Prometheus  │     │   Grafana   │      │   Jaeger    │              │
-│  │  (Metrics)  │     │ (Dashboards)│      │  (Tracing)  │              │
+│  │ Prometheus  │     │   Grafana   │      │    Tempo    │              │
+│  │  (Metrics)  │     │ (UI/Traces) │      │  (Tracing)  │              │
 │  └─────────────┘     └─────────────┘      └─────────────┘              │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -95,16 +95,16 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 
 | Component | Purpose | Technology |
 |-----------|---------|------------|
-| **MAS** | API Gateway, Orchestration, RBAC | FastAPI, Python 3.11 |
+| **MAS** | API Gateway, Orchestration, RBAC | FastAPI, Python 3.13 |
 | **Agent** | AI Processing, RAG Pipeline | FastAPI, Transformers |
 | **Knowledge Store** | Document Storage, Vector Search | FastAPI, ChromaDB |
-| **Web Client** | User Interface | Next.js, React 18 |
+| **Web Client** | User Interface | Next.js 16, React 19 |
 | **PostgreSQL** | Relational Data | PostgreSQL 15+ |
 | **Redis** | Caching, Sessions | Redis 7+ |
 | **RabbitMQ** | Message Broker | RabbitMQ 3.12+ |
 | **Prometheus** | Metrics Collection | Prometheus 2.x |
 | **Grafana** | Dashboards | Grafana 10.x |
-| **Jaeger** | Distributed Tracing | Jaeger 1.x |
+| **Tempo** | Distributed tracing backend | Grafana Tempo |
 
 ---
 
@@ -154,15 +154,15 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 
 | Service | Language | Framework | Key Libraries |
 |---------|----------|-----------|---------------|
-| MAS | Python 3.11 | FastAPI | SQLAlchemy, Pydantic, Pika |
-| Agent | Python 3.11 | FastAPI | Transformers, Torch, HTTPX |
-| Knowledge Store | Python 3.11 | FastAPI | ChromaDB, Sentence-Transformers |
+| MAS | Python 3.13 | FastAPI | SQLAlchemy, Pydantic, Pika |
+| Agent | Python 3.13 | FastAPI | Transformers, Torch, HTTPX |
+| Knowledge Store | Python 3.13 | FastAPI | ChromaDB, Sentence-Transformers |
 
 ### 4.2 Frontend
 
 | Component | Framework | Key Libraries |
 |-----------|-----------|---------------|
-| Web Client | Next.js 14 | React 18, TailwindCSS, TypeScript |
+| Web Client | Next.js 16 | React 19, TypeScript |
 
 ### 4.3 Infrastructure
 
@@ -181,7 +181,7 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 |-----------|------------|---------|
 | Metrics | Prometheus | Collect and store metrics |
 | Dashboards | Grafana | Visualize metrics |
-| Tracing | Jaeger | Distributed tracing |
+| Tracing | Grafana Tempo | OTLP trace ingestion; viewed in Grafana |
 | Logging | Structured JSON | Application logs |
 
 ---
@@ -327,15 +327,15 @@ All services run on a single host with exposed ports for development.
 docker compose build
 docker compose up -d
 
-# Run migrations
-docker exec mas alembic upgrade head
+# Run migrations (from MAS db directory inside the image/workdir)
+docker exec mas sh -c "cd db && alembic upgrade head"
 ```
 
 ### 10.2 Backup
 
 ```bash
 # Database backup
-docker exec postgres pg_dump -U horus horus_db > backup.sql
+docker exec postgres pg_dump -U postgres mas_db > backup.sql
 
 # ChromaDB backup
 docker cp knowledge_store:/app/chroma_data ./chroma_backup
@@ -343,9 +343,9 @@ docker cp knowledge_store:/app/chroma_data ./chroma_backup
 
 ### 10.3 Monitoring
 
-- **Metrics:** http://localhost:9090 (Prometheus)
-- **Dashboards:** http://localhost:3001 (Grafana)
-- **Traces:** http://localhost:16686 (Jaeger)
+- **Grafana (metrics and traces UI):** http://localhost:3301 — Prometheus and Tempo datasources are provisioned in Compose.
+- **Prometheus:** scrape config at `src/infra/grafana/prometheus.yaml`; the default Compose file does not publish Prometheus on the host (use Grafana or add a port mapping).
+- **Tempo (OTLP):** applications send traces to `http://tempo:4317` inside the Docker network.
 
 ---
 

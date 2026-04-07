@@ -34,6 +34,9 @@ Thumbs.db
 .coverage
 htmlcov/
 
+# Generated documentation
+_docs_build/
+
 # Runtime files
 *.log
 *.pid

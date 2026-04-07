@@ -92,11 +92,11 @@ container_memory_usage_bytes{container="mas"} 536870912
 
 ### 3.3 What is NOT Collected
 
-- ❌ User identities in metrics
-- ❌ Message content
-- ❌ Document content
-- ❌ IP addresses
-- ❌ Query text
+- Do not include User identities in metrics
+- Do not include Message content
+- Do not include Document content
+- Do not include IP addresses
+- Do not include Query text
 
 ---
 
@@ -173,10 +173,10 @@ LOG_LEVEL = "INFO"       # Production default
 - Non-sensitive attributes
 
 **What is NOT included:**
-- ❌ Request/response bodies
-- ❌ User identifiers
-- ❌ Authentication tokens
-- ❌ Document content
+- Do not include Request/response bodies
+- Do not include User identifiers
+- Do not include Authentication tokens
+- Do not include Document content
 
 ### 5.2 Trace Example
 
@@ -218,9 +218,9 @@ SAMPLING_RATE = 0.1  # 10% of traces
 - Environment (dev/staging/prod)
 
 **Not Included:**
-- ❌ User data
-- ❌ Request payloads
-- ❌ Sensitive configuration
+- Do not include User data
+- Do not include Request payloads
+- Do not include Sensitive configuration
 
 ### 6.2 Example Error Report
 
@@ -254,10 +254,10 @@ If user analytics were enabled, it would collect:
 - Error frequency (no user correlation)
 
 **Would NOT collect:**
-- ❌ Individual user tracking
-- ❌ Query content
-- ❌ Browsing history
-- ❌ Third-party tracking
+- Do not include Individual user tracking
+- Do not include Query content
+- Do not include Browsing history
+- Do not include Third-party tracking
 
 ---
 
