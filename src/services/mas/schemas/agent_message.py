@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DelegationContextEntry(BaseModel):
@@ -68,8 +68,7 @@ class AgentMessage(BaseModel):
     parent_message_id: Optional[str] = None
     timeout_seconds: float = 30.0
 
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class DelegationRequest(BaseModel):

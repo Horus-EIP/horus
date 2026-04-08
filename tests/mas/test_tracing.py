@@ -1,4 +1,5 @@
-from unittest.mock import MagicMock, patch
+import os
+from unittest.mock import patch
 
 from fastapi import FastAPI
 
@@ -6,6 +7,7 @@ from core.tracing import init_tracing
 
 
 class TestTracing:
+    @patch.dict(os.environ, {"OTEL_ENABLED": "true"}, clear=False)
     @patch("core.tracing.FastAPIInstrumentor")
     @patch("core.tracing.trace")
     @patch("core.tracing.BatchSpanProcessor")
@@ -25,7 +27,7 @@ class TestTracing:
         app = FastAPI()
 
         # Execute
-        init_tracing(app)
+        assert init_tracing(app) is True
 
         # Verify
         mock_resource.create.assert_called_once()

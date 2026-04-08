@@ -35,6 +35,7 @@ Log File Output:
 """
 
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -182,29 +183,29 @@ class MASLogger:
         )
         root_logger.addHandler(console_handler)
 
-        # File Handler - JSON logging
-        log_file = self.log_dir / f"mas_{datetime.now().strftime('%Y%m%d')}.log"
-        file_handler = logging.FileHandler(log_file, encoding="utf-8")
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(
-            structlog.stdlib.ProcessorFormatter(
-                processor=structlog.processors.JSONRenderer(ensure_ascii=False)
+        # File handlers leak open FDs in short-lived pytest processes; skip in TEST_MODE.
+        if os.getenv("TEST_MODE") != "1":
+            log_file = self.log_dir / f"mas_{datetime.now().strftime('%Y%m%d')}.log"
+            file_handler = logging.FileHandler(log_file, encoding="utf-8")
+            file_handler.setLevel(logging.DEBUG)
+            file_handler.setFormatter(
+                structlog.stdlib.ProcessorFormatter(
+                    processor=structlog.processors.JSONRenderer(ensure_ascii=False)
+                )
             )
-        )
-        root_logger.addHandler(file_handler)
+            root_logger.addHandler(file_handler)
 
-        # Error File Handler - JSON logging
-        error_file = (
-            self.log_dir / f"mas_errors_{datetime.now().strftime('%Y%m%d')}.log"
-        )
-        error_handler = logging.FileHandler(error_file, encoding="utf-8")
-        error_handler.setLevel(logging.ERROR)
-        error_handler.setFormatter(
-            structlog.stdlib.ProcessorFormatter(
-                processor=structlog.processors.JSONRenderer(ensure_ascii=False)
+            error_file = (
+                self.log_dir / f"mas_errors_{datetime.now().strftime('%Y%m%d')}.log"
             )
-        )
-        root_logger.addHandler(error_handler)
+            error_handler = logging.FileHandler(error_file, encoding="utf-8")
+            error_handler.setLevel(logging.ERROR)
+            error_handler.setFormatter(
+                structlog.stdlib.ProcessorFormatter(
+                    processor=structlog.processors.JSONRenderer(ensure_ascii=False)
+                )
+            )
+            root_logger.addHandler(error_handler)
 
     def get_logger(self, name: str, level: Optional[int] = None) -> logging.Logger:
         """

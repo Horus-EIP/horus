@@ -41,3 +41,6 @@ _docs_build/
 *.log
 *.pid
 uvicorn.pid
+/documents
+/false
+/logs

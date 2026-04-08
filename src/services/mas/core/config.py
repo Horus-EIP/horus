@@ -103,7 +103,7 @@ class Settings(BaseSettings):
     # Application Configuration
     llm_autoinit: int = 0 # Force 0 for tests
 
-    otel_exporter_otlp_endpoint: str = "http://jaeger:4317"
+    otel_exporter_otlp_endpoint: str = "http://localhost:4317"
 
     task_timeout: int = 300  # in seconds
 

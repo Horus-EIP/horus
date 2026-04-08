@@ -1,6 +1,6 @@
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Dict, Optional
 
 from fastapi import Depends, Header, HTTPException, Request, Security, status
@@ -98,13 +98,14 @@ def create_access_token(
 
     encode = {"sub": username, "id": user_id, "role": user_role}
     nonce = uuid.uuid4()
-    expires = datetime.now() + expires_delta
+    now = datetime.now(timezone.utc)
+    exp = now + expires_delta
     encode.update(
         {
-            "exp": expires,
+            "exp": int(exp.timestamp()),
             "nonce": str(nonce),
-            "iat": int(time.time()),
-            "nbf": int(datetime.now().timestamp()),
+            "iat": int(now.timestamp()),
+            "nbf": int(now.timestamp()),
         }
     )
 
@@ -112,7 +113,7 @@ def create_access_token(
         encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
     )
     log_auth_operation("TOKEN", username, success=True)
-    logger.info(f"Token created successfully for user: {username}, expires: {expires}")
+    logger.info(f"Token created successfully for user: {username}, expires: {exp}")
 
     return token
 

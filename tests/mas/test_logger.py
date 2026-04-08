@@ -1,4 +1,5 @@
 import logging
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -33,7 +34,11 @@ class TestMASLogger:
             assert logger._initialized is True
             mock_path.return_value.mkdir.assert_called_with(exist_ok=True)
             mock_configure.assert_called_once()
-            assert mock_file_handler.call_count >= 1
+            # File handlers are skipped in TEST_MODE to avoid ResourceWarning in pytest.
+            if os.getenv("TEST_MODE") == "1":
+                assert mock_file_handler.call_count == 0
+            else:
+                assert mock_file_handler.call_count >= 1
 
     def test_get_logger_creates_new(self):
         mas_logger = MASLogger()

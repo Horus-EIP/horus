@@ -47,7 +47,7 @@ def test_task_form_schema() -> None:
     print("\n[Valid TaskForm]")
     valid_task = TaskForm(
         demand="Calculate the square root of 4",
-        conversation_id="conv_123",
+        conversation_id=123,
         skills_required=["math", "calculation"],
     )
 
@@ -73,7 +73,7 @@ def test_task_form_schema() -> None:
     try:
         invalid_task = TaskForm(
             demand="Calculate something",
-            # Missing conversation_id
+            # Missing conversation_id (required int)
             skills_required=["math"],
         )
         print(f"❌ Should have failed validation")
@@ -160,7 +160,7 @@ def test_complete_workflow() -> None:
     print("\n[Step 1] Creating task...")
     task = TaskForm(
         demand="Calculate the square root of 4 and translate it",
-        conversation_id="conv_workflow_test",
+        conversation_id=42,
         skills_required=["math", "translation"],
     )
     print(f"✅ Task created: {task.demand[:40]}...")
@@ -170,7 +170,7 @@ def test_complete_workflow() -> None:
     result = TaskResultForm(
         task_id="task_workflow_001",  # Must match task from database
         result="The square root of 4 is 2.",
-        conversation_id="conv_workflow_test",
+        conversation_id="42",
         agent_id="agent_math",
     )
     print(f"✅ Task result submitted for task: {result.task_id}")
@@ -182,7 +182,7 @@ def test_complete_workflow() -> None:
     subtask_result = TaskResultForm(
         task_id="task_workflow_002",  # New subtask ID
         result="La racine carrée de 4 est 2.",
-        conversation_id="conv_workflow_test",
+        conversation_id="42",
         agent_id="agent_translate",
     )
     print(f"✅ Subtask result submitted for task: {subtask_result.task_id}")

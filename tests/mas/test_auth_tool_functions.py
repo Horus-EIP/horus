@@ -3,7 +3,7 @@ Tests for auth tool functions
 """
 
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -163,21 +163,18 @@ class TestCreateAccessToken:
     def test_create_access_token_expiration(self):
         """Test token expiration time is correctly set."""
         expires_delta = timedelta(minutes=30)
-        before_creation = datetime.now()
+        before_creation = datetime.now(timezone.utc)
 
         token = create_access_token("testuser", 1, expires_delta, "user")
 
         payload = jwt.decode(
             token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
         )
-        token_exp = datetime.fromtimestamp(payload["exp"])
+        token_exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
         expected_exp = before_creation + expires_delta
 
-        # Allow for timezone differences and small time differences during test execution
-        # The create_access_token function uses datetime.now() which is local time
-        # but JWT timestamps are typically UTC, so we need to be more flexible
         time_diff = abs((token_exp - expected_exp).total_seconds())
-        assert time_diff < 7200  # Allow up to 2 hours for timezone differences
+        assert time_diff < 5  # same clock, UTC numeric dates
 
 
 class TestGetCurrentUser:

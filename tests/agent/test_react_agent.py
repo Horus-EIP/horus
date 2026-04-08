@@ -119,7 +119,7 @@ class TestPromptTemplates:
 
     def test_tool_descriptions_keys(self):
         """All required tools should have descriptions."""
-        expected = {"search_knowledge", "extract_data", "analyze_payments", "calc"}
+        expected = {"search_knowledge", "extract_data", "analyze_payments", "calc", "delegate"}
         assert set(TOOL_DESCRIPTIONS.keys()) == expected
 
     def test_system_prompt_renders(self):

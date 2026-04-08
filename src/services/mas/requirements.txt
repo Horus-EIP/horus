@@ -22,10 +22,9 @@ python-jose[cryptography]
 python-multipart
 SQLAlchemy>=2.0
 alembic>=1.12.0
-psycopg2-binary>=2.9.10
+psycopg2-binary==2.9.10
 
 # Cache
-psycopg2-binary==2.9.10
 passlib[bcrypt]==1.7.4
 bcrypt<4.0
 redis
@@ -41,8 +40,4 @@ opentelemetry-sdk
 opentelemetry-instrumentation-fastapi
 opentelemetry-exporter-otlp
 
-prometheus-fastapi-instrumentator
-structlog
-pytest
-pytest-cov
 graphlib

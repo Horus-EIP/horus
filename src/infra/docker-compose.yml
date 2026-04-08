@@ -32,17 +32,19 @@ services:
     env_file:
       - .env
     environment:
-      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      # Must be the Docker service name, not localhost (compose passes .env which may use localhost for host-side tools).
+      - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=${RABBITMQ_USER}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
-      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      # Internal AMQP port inside the stack (not the host mapping in RABBITMQ_PORT)
+      - RABBITMQ_PORT=5672
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
-      - DB_PORT=${DB_PORT}
       - DB_HOST=postgres
+      - DB_PORT=5432
       - REDIS_HOST=redis
-      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - SUPER_USER_USERNAME=${SUPER_USER_USERNAME}
       - SUPER_USER_PASSWORD=${SUPER_USER_PASSWORD}
@@ -61,11 +63,12 @@ services:
       - LOG_LEVEL=INFO
       - TASK_TIMEOUT_SECONDS=300
     healthcheck:
+      # HTTP is only accepted after lifespan completes (DB + RabbitMQ); this gates dependents.
       test: ["CMD", "curl", "-f", "-X", "POST", "http://localhost:8000/rabbitmq/heartbeat"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 10s
+      retries: 5
+      start_period: 120s
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -82,21 +85,21 @@ services:
     build:
       context: ../services/web-client
       dockerfile: Dockerfile
+      args:
+        ORCHESTRATOR_URL: http://mas:8000
+        NEXT_PUBLIC_KNOWLEDGE_STORE_URL: http://localhost:8080
     container_name: web_client
     depends_on:
-      - mas
+      mas:
+        condition: service_healthy
     ports:
       - "3000:3000"
     networks:
       - horus-net
-    volumes:
-      - ../services/web-client:/app
-      - /app/node_modules
     environment:
       - NEXT_TELEMETRY_DISABLED=1
+      - ORCHESTRATOR_URL=http://mas:8000
       - NEXT_PUBLIC_KNOWLEDGE_STORE_URL=http://localhost:8080
-      - CHOKIDAR_USEPOLLING=true
-      - WATCHPACK_POLLING=true
 
   agent:
     build:
@@ -105,9 +108,10 @@ services:
     container_name: agent
     environment:
       - ORCHESTRATOR_URL=http://mas:8000
-      - ORCHESTRATOR_USERNAME=admin
-      - ORCHESTRATOR_PASSWORD=secret
+      - ORCHESTRATOR_USERNAME=${SUPER_USER_USERNAME}
+      - ORCHESTRATOR_PASSWORD=${SUPER_USER_PASSWORD}
       - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
       - RABBITMQ_USER=${RABBITMQ_USER}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
       - KNOWLEDGE_STORE_URL=http://knowledge_store:8080
@@ -120,7 +124,7 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
     depends_on:
       mas:
-        condition: service_started
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       knowledge_store:
@@ -241,8 +245,9 @@ services:
   # =============================================================================
 
   # Tempo - Distributed tracing backend (receives OTLP traces)
+  # Pin to Tempo 2.x: `latest` (Tempo 3+) expects Kafka topics; this repo uses local disk only (see grafana/tempo.yaml).
   tempo:
-    image: grafana/tempo:latest
+    image: grafana/tempo:2.6.0
     container_name: tempo
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:

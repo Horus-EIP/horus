@@ -43,7 +43,7 @@ def print_separator(title: str = "") -> None:
         print("-" * 70)
 
 
-def test_task_model_creation(session: Session, conversation_id: int) -> str:
+def test_task_model_creation(session: Session, conversation_id: int) -> None:
     """
     Test Task model creation and storage.
 
@@ -57,8 +57,6 @@ def test_task_model_creation(session: Session, conversation_id: int) -> str:
         session (Session): SQLAlchemy session
         conversation_id (int): Conversation ID fixture
 
-    Returns:
-        str: Created task ID
     """
     print_separator("TEST 1: Task Model Creation")
 
@@ -87,10 +85,11 @@ def test_task_model_creation(session: Session, conversation_id: int) -> str:
     print(f"   Order: {task.order}")
     print(f"   Created At: {task.created_at}")
 
-    return task_id
+    assert task_id
+    assert session.query(Task).filter(Task.id == task_id).first() is not None
 
 
-def test_task_result_model_creation(session: Session, task_id: str) -> str:
+def test_task_result_model_creation(session: Session, task_id: str) -> None:
     """
     Test TaskResult model creation with complete data storage.
 
@@ -104,8 +103,6 @@ def test_task_result_model_creation(session: Session, task_id: str) -> str:
         session (Session): SQLAlchemy session
         task_id (str): Task ID to link to
 
-    Returns:
-        str: Created task result ID
     """
     print_separator("TEST 2: TaskResult Model Creation")
 
@@ -141,12 +138,16 @@ def test_task_result_model_creation(session: Session, task_id: str) -> str:
     print(f"   Future Actions: {task_result.future_actions}")
     print(f"   Created At: {task_result.created_at}")
 
-    return task_result_id
+    assert task_result_id
+    assert (
+        session.query(TaskResult).filter(TaskResult.id == task_result_id).first()
+        is not None
+    )
 
 
 def test_subtask_creation(
     session: Session, parent_task_id: str, conversation_id: int
-) -> str:
+) -> None:
     """
     Test Subtask creation with parent_task_id relationship.
 
@@ -160,8 +161,6 @@ def test_subtask_creation(
         parent_task_id (str): Parent task ID
         conversation_id (int): Conversation ID fixture
 
-    Returns:
-        str: Created subtask ID
     """
     print_separator("TEST 3: Subtask Creation (Parent-Child Relationship)")
 
@@ -188,7 +187,8 @@ def test_subtask_creation(
     print(f"   Query: {subtask.query}")
     print(f"   Order: {subtask.order}")
 
-    return subtask_id
+    assert subtask_id
+    assert session.query(Task).filter(Task.id == subtask_id).first() is not None
 
 
 def test_task_retrieval(session: Session, task_id: str) -> None:

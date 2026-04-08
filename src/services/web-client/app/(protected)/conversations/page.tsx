@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { chatApi, Conversation } from "@/lib/chat/api";
 import Info from "@/components/ui/info";
-import { MdDelete, MdChat } from "react-icons/md";
+import { IconMessage, IconTrash } from "@tabler/icons-react";
 import { Modal, Button, Group, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useNotification } from "@/contexts/notification-context";
@@ -119,12 +119,12 @@ export default function ConversationsPage() {
 
   const actions = [
     {
-      icon: <MdChat className="w-5 h-5" />,
+      icon: <IconMessage className="w-5 h-5" stroke={1.25} />,
       ariaLabel: "Open chat",
       onClick: handleOpenChat,
     },
     {
-      icon: <MdDelete className="w-5 h-5" />,
+      icon: <IconTrash className="w-5 h-5" stroke={1.25} />,
       ariaLabel: "Delete conversation",
       onClick: handleDeleteClick,
     },

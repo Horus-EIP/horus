@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { AgentTypeBadge, getRole } from './agent-type-badge';
 import { Agent } from '@/lib/agents/api';
-import { Loader2 } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 
 interface CollaborationViewProps {
   agents?: Agent[];
@@ -31,7 +31,9 @@ function AgentNode({ agent }: { agent: Agent }) {
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-[var(--text)] truncate pr-2">{agent.name}</span>
-          {isWorking && <Loader2 className="w-4 h-4 animate-spin text-[var(--textSoft)] flex-shrink-0" />}
+          {isWorking && (
+            <Spinner size="sm" className="text-[var(--textSoft)] flex-shrink-0" aria-label="Working" />
+          )}
         </div>
 
         {/* Badge */}
@@ -63,7 +65,7 @@ export function CollaborationView({
   if (isLoading) {
     return (
       <div className="rounded-2xl border border-white/10 bg-[var(--bgSoft)]/70 p-6 flex items-center justify-center gap-2 text-[var(--textSoft)]">
-        <Loader2 className="w-4 h-4 animate-spin" />
+        <Spinner size="sm" aria-label="Loading" />
         <span className="text-sm">Loading agents...</span>
       </div>
     );

@@ -4,6 +4,7 @@ Provides fixtures for database sessions and models.
 """
 
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -65,7 +66,9 @@ def conversation_id(session: Session, user_id: str) -> int:
     Provide a sample conversation ID by creating a conversation in the database.
     """
     conversation = Conversations(
-        owner_username=user_id, name="Test Conversation", modified_at="2024-01-01"
+        owner_username=user_id,
+        name="Test Conversation",
+        modified_at=datetime(2024, 1, 1),
     )
 
     session.add(conversation)

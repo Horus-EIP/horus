@@ -11,7 +11,11 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from core.config import settings
 
 
-def init_tracing(app):
+def init_tracing(app) -> bool:
+    """Configure OTLP export and FastAPI instrumentation when OTEL_ENABLED=true."""
+    if os.environ.get("OTEL_ENABLED", "").lower() != "true":
+        return False
+
     resource = Resource.create(
         attributes={"service.name": "mas-service", "service.version": "1.0.0"}
     )
@@ -27,3 +31,4 @@ def init_tracing(app):
     trace.set_tracer_provider(tracer_provider)
 
     FastAPIInstrumentor.instrument_app(app, tracer_provider=tracer_provider)
+    return True

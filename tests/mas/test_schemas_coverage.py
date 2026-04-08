@@ -431,7 +431,7 @@ class TestSchemaInheritance:
         assert hasattr(conversation, "model_dump")
         assert hasattr(conversation, "model_dump_json")
         assert hasattr(conversation, "model_validate")
-        assert hasattr(conversation, "model_fields")
+        assert hasattr(ConversationCreation, "model_fields")
 
 
 class TestSchemaJSONSerialization:

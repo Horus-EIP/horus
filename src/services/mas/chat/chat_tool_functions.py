@@ -31,7 +31,8 @@ async def send_messages_via_websockets(conversation_id: str, message: str):
     Returns:
         None
     """
-    conns = active_connections.get(conversation_id, [])
+    conv_key = str(conversation_id)
+    conns = active_connections.get(conv_key, [])
     if not conns:
         return
 
@@ -76,6 +77,7 @@ def save_new_client(
     Returns:
         str: Generated unique session ID (UUID4)
     """
+    conv_id = str(conv_id)
     conns = active_connections.setdefault(conv_id, [])
     if websocket not in conns:
         conns.append(websocket)
@@ -119,6 +121,7 @@ def delete_client(conv_id: str, websocket: WebSocket, session_id: str):
     Returns:
         None
     """
+    conv_id = str(conv_id)
     conns = active_connections.get(conv_id)
     if not conns:
         logger.debug(f"WebSocket disconnected (no list) for conversation: {conv_id}")
@@ -148,6 +151,7 @@ def get_active_sessions(conv_id: str) -> list[dict]:
     Returns:
         list[dict]: List of session data dictionaries for all active clients
     """
+    conv_id = str(conv_id)
     session_ids = redis_db.smembers(f"conversation_sessions:{conv_id}")
     sessions = []
 

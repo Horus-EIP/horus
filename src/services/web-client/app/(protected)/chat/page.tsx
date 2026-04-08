@@ -1,13 +1,19 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Bot } from 'lucide-react';
+import React, {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useCallback,
+} from 'react';
+import { IconRobot, IconSend } from '@tabler/icons-react';
 import { config } from "@/utils/config";
 import { chatApi } from "@/lib/chat/api";
 import { ErrorBoundary } from '@/components/error-boundary';
 import { useNotification } from "@/contexts/notification-context";
 import { useWebSocket } from "@/hooks/use-web-socket";
-import TextareaAutosize from 'react-textarea-autosize';
+import { Textarea } from '@mantine/core';
 import { MessageList, type Message } from "@/components/message-list";
 
 const MAX_MESSAGE_LENGTH = 1000;
@@ -32,8 +38,7 @@ export default function ChatPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [authToken, setAuthToken] = useState<string | null>(null);
 
-  // Get auth token on mount
-  useEffect(() => {
+  useLayoutEffect(() => {
     setAuthToken(getAuthToken());
   }, []);
 
@@ -138,7 +143,11 @@ export default function ChatPage() {
       if (isCancelled) return;
       
       if (!result.ok || !result.data) {
-        notifyError("Could not start the conversation. Please try again.");
+        const detail =
+          typeof result.error === "string" && result.error.trim()
+            ? result.error
+            : "Could not start the conversation. Please try again.";
+        notifyError(detail);
         setIsLoading(false);
         return;
       }
@@ -248,7 +257,7 @@ export default function ChatPage() {
         <div className="flex-none bg-[var(--bgSoft)] p-3 mt-3 md:mt-0 border-b border-gray-200 dark:border-gray-800 shadow-sm z-10">
           <div className="max-w-[100vw] md:max-w-[60vw] mx-auto">
             <h1 className="text-lg font-bold text-[var(--text)] flex items-center justify-center gap-2">
-              <Bot className="w-6 h-6 text-blue-500" />
+              <IconRobot className="w-6 h-6 text-blue-500" stroke={1.25} />
               Horus Agent Chat
               <span className="ml-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs bg-[var(--bg)] text-[var(--textSoft)] border border-gray-200 dark:border-gray-700">
                 <span
@@ -310,13 +319,16 @@ export default function ChatPage() {
             onSubmit={submit}
             className="max-w-[75vw] md:max-w-[60vw] mx-auto flex gap-2 items-end"
           >
-            <TextareaAutosize
+            <Textarea
               value={input}
               onChange={handleInputChange}
               placeholder="Type a message..."
-              className="flex-1 min-h-[44px] placeholder:text-[var(--textSoft)] resize-none overflow-y-auto input-scroll focus:outline-none focus:ring-0 focus:border-transparent border-0 bg-transparent"
+              className="flex-1 min-h-[44px] placeholder:text-[var(--textSoft)] input-scroll"
+              classNames={{ input: 'bg-transparent border-0 focus:ring-0 resize-none overflow-y-auto' }}
               maxLength={MAX_MESSAGE_LENGTH}
+              autosize
               maxRows={MAX_ROWS}
+              minRows={1}
               disabled={!conversationId}
             />
             <button
@@ -324,7 +336,7 @@ export default function ChatPage() {
               disabled={!input.trim() || isLoading || !conversationId}
               className="flex-none w-11 h-11 rounded-full bg-blue-500 text-white flex items-center justify-center transition-colors hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed shadow-md"
             >
-              <Send className="w-5 h-5 ml-0.5" />
+              <IconSend className="w-5 h-5 ml-0.5" stroke={1.25} />
             </button>
           </form>
         </div>

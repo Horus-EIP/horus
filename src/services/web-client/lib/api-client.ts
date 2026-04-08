@@ -1,5 +1,7 @@
+"use client";
+
 import { getCsrfHeaders } from "@/utils/csrf";
-import { config } from "@/utils/config";
+import { getBrowserOrchestratorApiBase } from "@/utils/orchestrator-browser-base";
 
 export interface ApiResponse<T = unknown> {
   ok: boolean;
@@ -9,10 +11,8 @@ export interface ApiResponse<T = unknown> {
 }
 
 class ApiClient {
-  private baseUrl: string;
-
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
+  private baseUrl(): string {
+    return getBrowserOrchestratorApiBase();
   }
 
   private getHeaders(): HeadersInit {
@@ -36,7 +36,7 @@ class ApiClient {
     init: RequestInit
   ): Promise<ApiResponse<T>> {
     try {
-      const result = await fetch(`${this.baseUrl}${endpoint}`, {
+      const result = await fetch(`${this.baseUrl()}${endpoint}`, {
         ...init,
         headers: {
           ...this.getHeaders(),
@@ -86,9 +86,13 @@ class ApiClient {
           (error as Error)?.message ?? error
         );
       }
+      const hint =
+        process.env.NODE_ENV !== "production"
+          ? ` (${(error as Error)?.message ?? String(error)}). Ensure the MAS API is running and reachable.`
+          : "";
       return {
         ok: false,
-        error: "Network error. Please check your connection.",
+        error: `Network error. Please check your connection.${hint}`,
       };
     }
   }
@@ -217,4 +221,4 @@ class ApiClient {
   }
 }
 
-export const apiClient = new ApiClient(config.orchestratorUrl);
+export const apiClient = new ApiClient();

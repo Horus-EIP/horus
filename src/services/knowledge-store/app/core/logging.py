@@ -10,7 +10,7 @@ import os
 import sys
 import uuid
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -41,7 +41,7 @@ class JSONFormatter(logging.Formatter):
     
     def format(self, record: logging.LogRecord) -> str:
         log_data: Dict[str, Any] = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -117,13 +117,15 @@ class KnowledgeStoreLogger:
             )
         
         root_logger.addHandler(console_handler)
-        
-        # JSON file handler
-        json_log_file = log_dir / f"knowledge_store_{datetime.now().strftime('%Y%m%d')}.json"
-        json_handler = logging.FileHandler(json_log_file, encoding="utf-8")
-        json_handler.setLevel(logging.DEBUG)
-        json_handler.setFormatter(JSONFormatter())
-        root_logger.addHandler(json_handler)
+
+        if os.getenv("TEST_MODE") != "1":
+            json_log_file = (
+                log_dir / f"knowledge_store_{datetime.now().strftime('%Y%m%d')}.json"
+            )
+            json_handler = logging.FileHandler(json_log_file, encoding="utf-8")
+            json_handler.setLevel(logging.DEBUG)
+            json_handler.setFormatter(JSONFormatter())
+            root_logger.addHandler(json_handler)
     
     def get_logger(self, name: str) -> logging.Logger:
         if name not in self._loggers:

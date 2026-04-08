@@ -21,6 +21,8 @@ def get_int_env(key: str, default: int) -> int:
 # When running in Docker, set ORCHESTRATOR_URL to http://mas:8000
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://localhost:8000")
 
+RABBITMQ_PORT = get_int_env("RABBITMQ_PORT", 5672)
+
 # Authentication used by the agent to talk to the MAS orchestrator
 # - ORCHESTRATOR_TOKEN: direct bearer token (takes precedence)
 # - ORCHESTRATOR_USERNAME / ORCHESTRATOR_PASSWORD: credentials to fetch a token via /auth/token

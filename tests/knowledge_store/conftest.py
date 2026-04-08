@@ -1,5 +1,7 @@
 import os
 import sys
+
+os.environ.setdefault("TEST_MODE", "1")
 import types
 from unittest.mock import MagicMock
 

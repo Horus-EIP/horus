@@ -138,8 +138,8 @@ def setup_app_overrides(app, mock_db, user_override):
 # ============================================================================
 
 
-class TestResultTracker:
-    """Track test results for each feature."""
+class BetaResultTracker:
+    """Track test results for each feature (not a pytest test class)."""
 
     def __init__(self):
         self.results: Dict[str, Dict[str, Any]] = {}
@@ -162,7 +162,7 @@ class TestResultTracker:
         return "\n".join(lines)
 
 
-tracker = TestResultTracker()
+tracker = BetaResultTracker()
 
 
 # ============================================================================

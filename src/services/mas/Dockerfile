@@ -1,15 +1,20 @@
 FROM python:3.13-slim
 
+ENV DEBIAN_FRONTEND=noninteractive
+
 WORKDIR /app
 
 COPY ./requirements.txt ./requirements.txt
 
-# Install build dependencies for grpcio and other packages
-RUN apt-get update && apt-get install -y \
-    curl \
-    build-essential \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
+# Install build dependencies for grpcio and other packages.
+# --no-install-recommends avoids manpages/man-db triggers that often yield apt exit 100 in slim images.
+RUN apt-get update -o Acquire::Retries=5 \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        build-essential \
+        g++ \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 RUN pip install --no-cache-dir --use-deprecated=legacy-resolver -r requirements.txt
 

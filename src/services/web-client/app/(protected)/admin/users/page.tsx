@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { userApi } from "@/lib/users/api";
 import type { User, UserRole } from "@/lib/types";
 import Info from "@/components/ui/info";
-import { MdDelete, MdEdit, MdAdd } from "react-icons/md";
+import { IconEdit, IconPlus, IconTrash } from "@tabler/icons-react";
 import { Modal, Button, Group, Text, Select, TextInput, PasswordInput } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
@@ -202,12 +202,12 @@ const AdminUsersPage = () => {
 
   const actions = [
     {
-      icon: <MdEdit className="w-5 h-5" />,
+      icon: <IconEdit className="w-5 h-5" stroke={1.25} />,
       ariaLabel: "Edit user role",
       onClick: handleEditClick,
     },
     {
-      icon: <MdDelete className="w-5 h-5" />,
+      icon: <IconTrash className="w-5 h-5" stroke={1.25} />,
       ariaLabel: "Delete user",
       onClick: handleDeleteRow,
     },
@@ -385,7 +385,7 @@ const AdminUsersPage = () => {
               onClick={openCreate}
               className="rounded-xl bg-green-600 px-3 py-2 text-sm text-white shadow hover:bg-green-700 cursor-pointer flex items-center gap-2"
             >
-              <MdAdd className="w-5 h-5" />
+              <IconPlus className="w-5 h-5" stroke={1.25} />
               Create User
             </button>
             <button

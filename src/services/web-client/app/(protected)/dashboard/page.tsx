@@ -8,7 +8,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { agentApi, Agent as AgentType } from "@/lib/agents/api";
 import { chatApi, TaskQueueStats } from "@/lib/chat/api";
 import { useNotification } from "@/contexts/notification-context";
-import { MdDelete } from "react-icons/md";
+import { IconTrash } from "@tabler/icons-react";
 import { Modal, Button, Group, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 
@@ -288,7 +288,7 @@ export default function DashboardPage() {
 
   const actions = canManageAgents() ? [
     {
-      icon: <MdDelete className="w-5 h-5" />,
+      icon: <IconTrash className="w-5 h-5" stroke={1.25} />,
       ariaLabel: "Delete agent",
       onClick: handleDeleteClick,
     },

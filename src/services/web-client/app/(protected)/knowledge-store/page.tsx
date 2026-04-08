@@ -7,7 +7,7 @@ import { FileUpload } from '@/components/ui/file-upload';
 import { useDisclosure } from '@mantine/hooks';
 import { Modal } from '@mantine/core';
 import { config } from '@/utils/config';
-import { MdDelete } from 'react-icons/md';
+import { IconTrash } from '@tabler/icons-react';
 import { userApi } from '@/lib/users/api';
 
 interface ToUpload {
@@ -118,7 +118,7 @@ export default function KnowledgeStorePage() {
 
   const actions = [
     {
-      icon: <MdDelete className="w-5 h-5" />,
+      icon: <IconTrash className="w-5 h-5" stroke={1.25} />,
       ariaLabel: "Delete file",
       onClick: deleteDocument,
     },
@@ -126,7 +126,7 @@ export default function KnowledgeStorePage() {
 
   const modalActions = [
     {
-      icon: <MdDelete className="w-5 h-5" />,
+      icon: <IconTrash className="w-5 h-5" stroke={1.25} />,
       ariaLabel: "Delete file",
       onClick: deleteLocalDocument,
     },

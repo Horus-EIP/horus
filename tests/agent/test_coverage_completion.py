@@ -9,12 +9,9 @@ class TestCoverageCompletion:
     def test_calculator_ast_num(self):
         from ai_agents.calculator_tool import CalculatorTool
         tool = CalculatorTool()
-        try:
-            node = ast.Num(n=10)
-            res = tool._eval_node(node)
-            assert res == 10.0
-        except AttributeError:
-            pass
+        node = ast.Constant(value=10)
+        res = tool._eval_node(node)
+        assert res == 10.0
 
     def test_calculator_resolve_name_attribute(self):
         from ai_agents.calculator_tool import CalculatorTool
@@ -145,16 +142,9 @@ class TestCoverageCompletion:
     def test_calculator_floordiv(self):
         from ai_agents.calculator_tool import CalculatorTool
         tool = CalculatorTool()
-        try:
-             op = ast.FloorDiv()
-        except AttributeError:
-             return 
-        try:
-            left = ast.Num(n=10)
-            right = ast.Num(n=3)
-        except AttributeError:
-             left = ast.Constant(value=10)
-             right = ast.Constant(value=3)
+        op = ast.FloorDiv()
+        left = ast.Constant(value=10)
+        right = ast.Constant(value=3)
         node = ast.BinOp(left=left, op=op, right=right)
         res = tool._eval_node(node)
         assert res == 3.0

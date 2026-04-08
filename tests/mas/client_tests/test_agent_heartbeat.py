@@ -11,9 +11,9 @@ Usage:
 """
 
 import asyncio
-import sys
 
 import httpx
+import pytest
 
 BASE_URL = "http://localhost:8000"
 USERNAME = "admin"
@@ -36,10 +36,10 @@ async def login() -> str:
             return r.json()["access_token"]
         except httpx.HTTPStatusError as e:
             print(f"❌ LOGIN failed: {e.response.status_code} {e.response.text}")
-            sys.exit(1)
+            pytest.skip(f"Live MAS not available at {BASE_URL}: HTTP {e.response.status_code}")
         except Exception as e:
             print(f"❌ LOGIN failed: {e}")
-            sys.exit(1)
+            pytest.skip(f"Live MAS not available at {BASE_URL}: {e}")
 
 
 async def test_agent_heartbeat_flow():

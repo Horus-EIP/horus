@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { agentApi, Agent, RegisterAgentPayload } from "@/lib/agents/api";
 import Info from "@/components/ui/info";
-import { MdDelete, MdAdd } from "react-icons/md";
+import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { Modal, Button, Group, Text, TextInput, Textarea, TagsInput } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useNotification } from "@/contexts/notification-context";
@@ -179,7 +179,7 @@ export default function AdminAgentsPage() {
 
   const actions = canManageAgents() ? [
     {
-      icon: <MdDelete className="w-5 h-5" />,
+      icon: <IconTrash className="w-5 h-5" stroke={1.25} />,
       ariaLabel: "Delete agent",
       onClick: handleDeleteClick,
     },
@@ -338,7 +338,7 @@ export default function AdminAgentsPage() {
               onClick={openRegister}
               className="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white shadow hover:bg-blue-700 cursor-pointer w-fit self-end flex items-center gap-2"
             >
-              <MdAdd className="w-5 h-5" />
+              <IconPlus className="w-5 h-5" stroke={1.25} />
               Register Agent
             </button>
           )}

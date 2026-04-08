@@ -8,6 +8,7 @@ When a task is received, it processes the task using the RAG pipeline and sends 
 back to the MAS via the /agents/result endpoint.
 """
 
+import asyncio
 import uuid
 import threading
 import time
@@ -18,12 +19,8 @@ import pika
 from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from prometheus_client import make_asgi_app
-from fastapi import FastAPI, Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from prometheus_client import make_asgi_app
 from pydantic import BaseModel
-from contextlib import contextmanager
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
 from ai_agents.decision_making_agent import DecisionMakingAgent
 from ai_agents.rag_pipeline import RAGPipeline
@@ -40,9 +37,10 @@ from config.settings import (
     AGENT_DESCRIPTION,
     MODEL_NAME,
     MODEL_DEVICE,
-    AGENT_TYPE
+    AGENT_TYPE,
     DELEGATION_TIMEOUT,
     MAX_DELEGATION_DEPTH,
+    RABBITMQ_PORT,
 )
 from core.logger import get_logger, set_correlation_id, get_correlation_id
 from core.metrics import (
@@ -60,15 +58,6 @@ from core.metrics import (
 )
 
 logger = get_logger("agent_server")
-
-app = FastAPI(title="Horus Agent Service", version="1.0.0")
-
-# OpenTelemetry auto-instrumentation is handled by opentelemetry-instrument wrapper
-# See Dockerfile CMD for details
-
-# Mount Prometheus metrics endpoint
-metrics_app = make_asgi_app()
-app.mount("/metrics", metrics_app)
 
 
 class CorrelationIDMiddleware(BaseHTTPMiddleware):
@@ -92,12 +81,10 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
         
         return response
 
-app.add_middleware(CorrelationIDMiddleware)
 
 # Agent details
 # Will be set after successful registration with MAS
 AGENT_ID = None
-AGENT_API_KEY = None  # Plain API key returned at registration, used for agent auth
 AGENT_API_KEY = None  # Plain API key returned at registration, used for agent auth
 AGENT_NAME = "HorusAgent"
 SKILLS = ["knowledge_retrieval", "decision_making", "rag_pipeline"]
@@ -122,10 +109,14 @@ elif AGENT_TYPE == "writer":
     active_agent = WriterAgent(decision_agent)
 else:
     active_agent = RAGPipeline(
-    retrieval_agent,
-    decision_agent,
-    tool_registry=tool_registry,
+        retrieval_agent,
+        decision_agent,
+        tool_registry=tool_registry,
     )
+
+rag_pipeline: RAGPipeline | None = (
+    active_agent if isinstance(active_agent, RAGPipeline) else None
+)
 
 class Task(BaseModel):
     """
@@ -133,16 +124,7 @@ class Task(BaseModel):
     """
     task_id: str = None  # Auto-generated if not provided.
     query: str | None = None
-    query: str | None = None
     conversation_id: str
-    operation: str | None = None
-    expression: str | None = None
-    file_url: str | None = None
-    file_content: str | None = None  # base64/utf-8 text; small files only
-    file_type: str | None = None
-    filename: str | None = None
-    text: str | None = None
-    max_sentences: int | None = None
     operation: str | None = None
     expression: str | None = None
     file_url: str | None = None
@@ -207,58 +189,11 @@ def _build_headers(include_api_key: bool = False) -> dict:
     return headers
 
 
-_AUTH_TOKEN = None  # cached bearer token for orchestrator requests
-
-
-def _get_orchestrator_token():
-    """Return a bearer token to talk to MAS (from env or by logging in)."""
-    global _AUTH_TOKEN
-    if _AUTH_TOKEN:
-        return _AUTH_TOKEN
-
-    if ORCHESTRATOR_TOKEN:
-        _AUTH_TOKEN = ORCHESTRATOR_TOKEN
-        return _AUTH_TOKEN
-
-    if ORCHESTRATOR_USERNAME and ORCHESTRATOR_PASSWORD:
-        try:
-            response = requests.post(
-                f"{ORCHESTRATOR_URL}/auth/token",
-                data={"username": ORCHESTRATOR_USERNAME, "password": ORCHESTRATOR_PASSWORD},
-                timeout=5,
-            )
-            if response.status_code == 200:
-                _AUTH_TOKEN = response.json().get("access_token")
-                return _AUTH_TOKEN
-            logger.warning(f"Failed to obtain MAS auth token: {response.status_code} - {response.text}")
-        except Exception as exc:  # network/login errors shouldn't crash the agent
-            logger.warning(f"Error fetching MAS auth token: {exc}")
-    return None
-
-
-def _build_headers(include_api_key: bool = False) -> dict:
-    """
-    Construct headers for MAS requests.
-
-    - Always tries to attach Authorization if available.
-    - Optionally attaches X-API-Key (agent_id:api_key) for agent-auth endpoints.
-    """
-    headers: dict = {}
-    token = _get_orchestrator_token()
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    if include_api_key and AGENT_ID and AGENT_API_KEY:
-        headers["X-API-Key"] = f"{AGENT_ID}:{AGENT_API_KEY}"
-        headers["Agent-ID"] = AGENT_ID
-    return headers
-
 def register_agent():
     """Register the agent with MAS. Keep retrying until successful.
 
     Uses a simple backoff to handle MAS not being ready at container start.
     """
-    global AGENT_ID, AGENT_API_KEY
     global AGENT_ID, AGENT_API_KEY
     url = f"{ORCHESTRATOR_URL}/agents/register"
     base_name = AGENT_NAME
@@ -283,24 +218,14 @@ def register_agent():
                 agent_registered.set(1)
                 if not AGENT_API_KEY:
                     logger.warning("MAS did not return api_key; agent auth will fail.")
-                AGENT_API_KEY = data.get("api_key")
-                logger.info(f"Agent registered successfully with id: {AGENT_ID}")
-                agent_registered.set(1)
-                if not AGENT_API_KEY:
-                    logger.warning("MAS did not return api_key; agent auth will fail.")
                 break
             if response.status_code == 409:
                 name_variant = f"{base_name}-{uuid.uuid4().hex[:6]}"
                 logger.warning(f"Agent name conflict. Retrying with name '{name_variant}'")
-                logger.warning(f"Agent name conflict. Retrying with name '{name_variant}'")
             else:
                 logger.error(f"Agent registration failed: {response.status_code} - {response.text}")
                 agent_errors_total.labels(error_type="registration").inc()
-                logger.error(f"Agent registration failed: {response.status_code} - {response.text}")
-                agent_errors_total.labels(error_type="registration").inc()
         except Exception as e:
-            logger.error(f"Error registering agent (will retry): {e}", exc_info=True)
-            agent_errors_total.labels(error_type="registration").inc()
             logger.error(f"Error registering agent (will retry): {e}", exc_info=True)
             agent_errors_total.labels(error_type="registration").inc()
         time.sleep(backoff_seconds)
@@ -315,23 +240,14 @@ def send_heartbeat():
     url = f"{ORCHESTRATOR_URL}/agents/heartbeat/{AGENT_ID}"
     try:
         response = requests.post(url, headers=_build_headers(include_api_key=True))
-        response = requests.post(url, headers=_build_headers(include_api_key=True))
         if response.status_code != 200:
-            logger.warning(f"Heartbeat failed: {response.status_code} - {response.text}")
-            agent_heartbeat_total.labels(status="error").inc()
-            agent_errors_total.labels(error_type="heartbeat").inc()
             logger.warning(f"Heartbeat failed: {response.status_code} - {response.text}")
             agent_heartbeat_total.labels(status="error").inc()
             agent_errors_total.labels(error_type="heartbeat").inc()
         else:
             logger.debug(f"Heartbeat sent successfully: {response.json()}")
             agent_heartbeat_total.labels(status="success").inc()
-            logger.debug(f"Heartbeat sent successfully: {response.json()}")
-            agent_heartbeat_total.labels(status="success").inc()
     except Exception as e:
-        logger.error(f"Error sending heartbeat: {e}", exc_info=True)
-        agent_heartbeat_total.labels(status="error").inc()
-        agent_errors_total.labels(error_type="heartbeat").inc()
         logger.error(f"Error sending heartbeat: {e}", exc_info=True)
         agent_heartbeat_total.labels(status="error").inc()
         agent_errors_total.labels(error_type="heartbeat").inc()
@@ -351,14 +267,10 @@ def _consume_messages():
     is expected to be a JSON string with at least 'demand' and 'conversation_id'.
     It is transformed into the internal task format and processed by the RAG pipeline.
     Uses asyncio to handle async pipeline processing.
-    Uses asyncio to handle async pipeline processing.
     """
     import asyncio
-    
-    import asyncio
-    
+
     if not AGENT_ID:
-        logger.error("Cannot start consumer: AGENT_ID not set")
         logger.error("Cannot start consumer: AGENT_ID not set")
         return
 
@@ -367,13 +279,10 @@ def _consume_messages():
         rabbit_user = os.getenv("RABBITMQ_USER", "guest")
         rabbit_pass = os.getenv("RABBITMQ_PASSWORD", "guest")
         credentials = pika.PlainCredentials(rabbit_user, rabbit_pass)
-        rabbit_user = os.getenv("RABBITMQ_USER", "guest")
-        rabbit_pass = os.getenv("RABBITMQ_PASSWORD", "guest")
-        credentials = pika.PlainCredentials(rabbit_user, rabbit_pass)
         connection = pika.BlockingConnection(
             pika.ConnectionParameters(
                 host=rabbit_host,
-                credentials=credentials,
+                port=RABBITMQ_PORT,
                 credentials=credentials,
                 heartbeat=600,
                 blocked_connection_timeout=300,
@@ -410,16 +319,6 @@ def _consume_messages():
                 f"Received task: task_id={task_id}, conversation_id={conversation_id}, "
                 f"demand_length={len(demand)}, correlation_id={get_correlation_id()}"
             )
-            
-            # Extract correlation ID from message properties if available
-            corr_id = properties.headers.get("X-Request-ID") if properties.headers else None
-            if corr_id:
-                set_correlation_id(corr_id)
-
-            logger.info(
-                f"Received task: task_id={task_id}, conversation_id={conversation_id}, "
-                f"demand_length={len(demand)}, correlation_id={get_correlation_id()}"
-            )
 
             # Adapt to pipeline expected schema; include optional utility fields
             task_dict = {
@@ -439,9 +338,8 @@ def _consume_messages():
             }
             
             # Process task asynchronously (pika is sync, but pipeline is async)
-            # Create new event loop for this thread if needed
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
@@ -458,15 +356,17 @@ def _consume_messages():
                         active_agent.process_request(
                             task_type=task_dict.get("operation"),
                             data=task_dict.get("query"),
-                            extra_parameters=task_dict
+                            extra_parameters=task_dict,
                         )
                     )
+                else:
+                    raise ValueError(f"Unsupported AGENT_TYPE: {AGENT_TYPE}")
 
                 processing_duration = time_module.time() - start_time
-                
+
                 task_processing_duration.observe(processing_duration)
                 task_processing_total.labels(status="success").inc()
-                
+
                 logger.info(
                     f"Task processed successfully: task_id={task_id}, "
                     f"duration={processing_duration:.2f}s, correlation_id={get_correlation_id()}"
@@ -517,6 +417,7 @@ def _consume_agent_messages():
         connection = pika.BlockingConnection(
             pika.ConnectionParameters(
                 host=rabbit_host,
+                port=RABBITMQ_PORT,
                 credentials=credentials,
                 heartbeat=600,
                 blocked_connection_timeout=300,
@@ -612,8 +513,15 @@ def _process_delegation_message(payload: dict):
         "mode": "react",
     }
 
+    if not rag_pipeline:
+        _send_delegation_result(
+            message_id,
+            "Delegation is only supported when AGENT_TYPE=general (RAG pipeline).",
+        )
+        return
+
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -658,15 +566,11 @@ def _send_delegation_result(delegation_id: str, result: str):
 
 
 def send_result(result: str, conversation_id: str, task_id: str):
-def send_result(result: str, conversation_id: str, task_id: str):
     """
-    Sends the processed task result to the MAS Orchestrator using the /tasks/task-result/ endpoint.
     Sends the processed task result to the MAS Orchestrator using the /tasks/task-result/ endpoint.
 
     Args:
         result: The result string generated by the RAG pipeline.
-        conversation_id: The conversation ID for this task.
-        task_id: The unique task ID.
         conversation_id: The conversation ID for this task.
         task_id: The unique task ID.
     """
@@ -675,7 +579,6 @@ def send_result(result: str, conversation_id: str, task_id: str):
         "agent_id": AGENT_ID,
         "result": result,
         "conversation_id": conversation_id,
-        "task_id": task_id,
         "task_id": task_id,
     }
     try:
@@ -688,42 +591,34 @@ def send_result(result: str, conversation_id: str, task_id: str):
             logger.debug(f"Result sent successfully: {response.json()}")
     except Exception as e:
         logger.error(f"Error sending result: {e}", exc_info=True)
-    try:
-        response = requests.post(
-            url, json=payload, headers=_build_headers(include_api_key=True)
-        )
-        if response.status_code != 200:
-            logger.warning(f"Failed to send result: {response.status_code} - {response.text}")
-        else:
-            logger.debug(f"Result sent successfully: {response.json()}")
-    except Exception as e:
-        logger.error(f"Error sending result: {e}", exc_info=True)
 
-@app.on_event("startup")
-async def startup_event():
-    """
-    On startup, register the agent with the MAS Orchestrator and start the heartbeat thread.
-    """
-    logger.info("Agent service starting up...")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup/shutdown (replaces deprecated on_event)."""
     logger.info("Agent service starting up...")
     register_agent()
-    # Start heartbeat if registration succeeded and we have an id
     heartbeat_thread = threading.Thread(target=heartbeat_task, daemon=True)
     heartbeat_thread.start()
     logger.info("Heartbeat thread started")
-    logger.info("Heartbeat thread started")
-
-    # Start RabbitMQ consumer in background
     consumer_thread = threading.Thread(target=_consume_messages, daemon=True)
     consumer_thread.start()
-    logger.info("Agent service startup complete")
-
-    # Start agent-to-agent message consumer
     agent_msg_thread = threading.Thread(target=_consume_agent_messages, daemon=True)
     agent_msg_thread.start()
     logger.info("Agent-to-agent message consumer started")
-
     logger.info("Agent service startup complete")
+    yield
+
+
+app = FastAPI(title="Horus Agent Service", version="1.0.0", lifespan=lifespan)
+
+# OpenTelemetry auto-instrumentation is handled by opentelemetry-instrument wrapper
+# See Dockerfile CMD for details
+
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
+
+app.add_middleware(CorrelationIDMiddleware)
 
 @app.get(
     "/capabilities",
@@ -775,31 +670,23 @@ async def receive_task(task: Task, request: Request):
         f"Received task via HTTP: task_id={task.task_id}, conversation_id={task.conversation_id}, "
         f"correlation_id={get_correlation_id()}"
     )
-    
-    # Extract correlation ID from request headers
-    corr_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
-    if corr_id:
-        set_correlation_id(corr_id)
-    
-    logger.info(
-        f"Received task via HTTP: task_id={task.task_id}, conversation_id={task.conversation_id}, "
-        f"correlation_id={get_correlation_id()}"
-    )
 
     # Process the task using the RAG pipeline (async) with metrics
     import time as time_module
     start_time = time_module.time()
     try:
-        task_dict = task.dict()
+        task_dict = task.model_dump()
         if AGENT_TYPE == "general":
             result_pipeline = await active_agent.process_task(task_dict)
             final_result_text = result_pipeline["response"]
         elif AGENT_TYPE in ["researcher", "analyst", "writer"]:
-             final_result_text = await active_agent.process_request(
+            final_result_text = await active_agent.process_request(
                 task_type=task_dict.get("operation"),
                 data=task_dict.get("query"),
-                extra_parameters=task_dict
+                extra_parameters=task_dict,
             )
+        else:
+            raise ValueError(f"Unsupported AGENT_TYPE: {AGENT_TYPE}")
 
         processing_duration = time_module.time() - start_time
         

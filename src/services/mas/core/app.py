@@ -155,9 +155,8 @@ def create_app_environment():
         app.include_router(router)
         logger.info(f"{name} router included")
 
-    init_tracing(app)
-
-    log_success("app", "OpenTelemetry tracing initialized")
+    if init_tracing(app):
+        log_success("app", "OpenTelemetry tracing initialized")
 
     global instrumentator
     instrumentator = Instrumentator().instrument(app)

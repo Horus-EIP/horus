@@ -32,6 +32,10 @@ _INFRA_ENV = _REPO_ROOT / "src" / "infra" / ".env"
 # Force test mode
 os.environ["TEST_MODE"] = "1"
 os.environ["llm_autoinit"] = "0"  # Force disable LLM loading during tests
+# Avoid OTLP export to jaeger/tempo hostnames (not resolvable); prevents grpc noise
+# and "I/O operation on closed file" when stdout is redirected.
+os.environ["OTEL_ENABLED"] = "false"
+os.environ.setdefault("OTEL_TRACES_EXPORTER", "none")
 
 
 def _is_port_open(host: str, port: int) -> bool:

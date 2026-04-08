@@ -1,11 +1,14 @@
 'use client';
 
 import React from "react";
-import { Bot, User } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from '@mantine/core';
+import {
+  IconExclamationCircle,
+  IconRobot,
+  IconUser,
+} from '@tabler/icons-react';
 import { Spinner } from "@/components/ui/spinner";
 import { formatTimestamp } from "@/utils/format";
-import { IconExclamationCircle } from "@tabler/icons-react";
 
 export interface Message {
   id: string;
@@ -51,10 +54,7 @@ const ChatHistorySkeleton = () => {
                 >
                   <div className="space-y-2">
                     {Array.from({ length: 6 }).map((_, idx) => (
-                      <Skeleton
-                        key={idx}
-                        className="h-3 w-40 md:w-70"
-                      />
+                      <Skeleton key={idx} height={12} width="70%" />
                     ))}
                   </div>
                 </div>
@@ -79,7 +79,7 @@ export const MessageList: React.FC<MessageListProps> = ({
 
       {!isHistoryLoading && messages.length === 0 && (
         <div className="text-center text-gray-500 mt-8 flex flex-col items-center justify-center h-full">
-          <Bot className="w-12 h-12 mb-4 text-[var(--textSoft)] opacity-50" />
+          <IconRobot className="w-12 h-12 mb-4 text-[var(--textSoft)] opacity-50" stroke={1.25} />
           <p className="text-lg font-medium text-[var(--textSoft)]">
             Start a conversation
           </p>
@@ -105,9 +105,9 @@ export const MessageList: React.FC<MessageListProps> = ({
           >
             <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--bgSoft)] text-[var(--text)] border border-gray-200 dark:border-gray-700">
               {message.sender === "user" ? (
-                <User className="w-5 h-5" />
+                <IconUser className="w-5 h-5" stroke={1.25} />
               ) : (
-                <Bot className="w-5 h-5 text-blue-500" />
+                <IconRobot className="w-5 h-5 text-blue-500" stroke={1.25} />
               )}
             </div>
 
@@ -143,13 +143,13 @@ export const MessageList: React.FC<MessageListProps> = ({
       ))}
 
       {isLoading && !isHistoryLoading && (
-        <div className="flex justify-start animate-in fade-in slide-in-from-bottom-2">
+        <div className="flex justify-start opacity-95 transition-opacity">
           <div className="flex gap-2">
             <div className="w-8 h-8 rounded-full flex items-center justify-center bg-[var(--bgSoft)] border border-gray-200 dark:border-gray-700">
-              <Bot className="w-5 h-5 text-blue-500" />
+              <IconRobot className="w-5 h-5 text-blue-500" stroke={1.25} />
             </div>
             <div className="bg-[var(--bgSoft)] border border-gray-200 dark:border-gray-700 rounded-2xl rounded-tl-none p-3 shadow-sm">
-              <Spinner size="sm" label="Agent is thinking..." />
+              <Spinner aria-label="Agent is thinking..." />
             </div>
           </div>
         </div>

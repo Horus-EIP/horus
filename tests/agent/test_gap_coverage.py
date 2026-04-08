@@ -120,16 +120,11 @@ class TestFileParserGap:
         assert kind == "pdf"
         
 class TestCalculatorGap:
-    def test_eval_ast_num_legacy(self):
+    def test_eval_ast_constant_numeric(self):
         tool = CalculatorTool()
-        # Manually create ast.Num node (deprecated but valid for test coverage)
-        try:
-           import ast
-           node = ast.Num(n=42)
-           val = tool._eval_node(node)
-           assert val == 42.0
-        except AttributeError:
-           pass
+        node = ast.Constant(value=42)
+        val = tool._eval_node(node)
+        assert val == 42.0
 
     def test_eval_ast_constant_non_numeric(self):
         tool = CalculatorTool()
