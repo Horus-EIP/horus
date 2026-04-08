@@ -6,7 +6,9 @@ import React, {
   useLayoutEffect,
   useRef,
   useCallback,
+  Suspense,
 } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { IconRobot, IconSend } from '@tabler/icons-react';
 import { config } from "@/utils/config";
 import { chatApi } from "@/lib/chat/api";
@@ -25,7 +27,10 @@ const getAuthToken = (): string | null => {
   return localStorage.getItem('auth_token');
 };
 
-export default function ChatPage() {
+function ChatPageContent() {
+  const searchParams = useSearchParams();
+  const conversationFromUrl = searchParams.get('conversation');
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -47,9 +52,11 @@ export default function ChatPage() {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   const { error: notifyError } = useNotification();
-  
-  // Guard against multiple conversation initializations
-  const initCalledRef = useRef(false);
+  const notifyErrorRef = useRef(notifyError);
+  notifyErrorRef.current = notifyError;
+
+  /** Bumps on each effect run so Strict Mode cleanup discards stale createConversation results. */
+  const conversationBootstrapIdRef = useRef(0);
 
   const loadHistory = useCallback(
     async (cursor?: string) => {
@@ -57,6 +64,9 @@ export default function ChatPage() {
         setIsLoadingMore(true);
       } else {
         setHistoryLoading(true);
+        setMessages([]);
+        setHistoryCursor(null);
+        setHasMoreHistory(false);
       }
 
       const result = await chatApi.getHistory(conversationId, cursor);
@@ -128,26 +138,30 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
-  // Initialisation de la conversation et connexion WebSocket
+  // Open existing conversation from /conversations (?conversation=id) or create a new one
   useEffect(() => {
-    // Guard against concurrent calls within the same mount
-    if (initCalledRef.current) return;
-    initCalledRef.current = true;
-    
+    const runId = ++conversationBootstrapIdRef.current;
     let isCancelled = false;
-    
+
+    const existing = conversationFromUrl?.trim() ?? '';
+    if (existing && /^\d+$/.test(existing)) {
+      setConversationId(existing);
+      return () => {
+        isCancelled = true;
+      };
+    }
+
     const initConversation = async () => {
       const result = await chatApi.createConversation();
-      
-      // Don't update state if unmounted
-      if (isCancelled) return;
-      
+
+      if (isCancelled || runId !== conversationBootstrapIdRef.current) return;
+
       if (!result.ok || !result.data) {
         const detail =
           typeof result.error === "string" && result.error.trim()
             ? result.error
             : "Could not start the conversation. Please try again.";
-        notifyError(detail);
+        notifyErrorRef.current(detail);
         setIsLoading(false);
         return;
       }
@@ -155,14 +169,12 @@ export default function ChatPage() {
       setConversationId(result.data);
     };
 
-    initConversation();
-    
+    void initConversation();
+
     return () => {
       isCancelled = true;
-      // Reset the ref on cleanup so Strict Mode remount can re-initialize
-      initCalledRef.current = false;
     };
-  }, [notifyError]);
+  }, [conversationFromUrl]);
 
   // Récupération de l'historique
   useEffect(() => {
@@ -252,7 +264,6 @@ export default function ChatPage() {
   };
 
   return (
-    <ErrorBoundary>
       <div className="bg-[var(--bg)] h-[85vh] flex flex-col overflow-hidden mx-auto rounded-lg max-w-[75vw] md:max-w-[60vw]">
         <div className="flex-none bg-[var(--bgSoft)] p-3 mt-3 md:mt-0 border-b border-gray-200 dark:border-gray-800 shadow-sm z-10">
           <div className="max-w-[100vw] md:max-w-[60vw] mx-auto">
@@ -341,6 +352,21 @@ export default function ChatPage() {
           </form>
         </div>
       </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <ErrorBoundary>
+      <Suspense
+        fallback={
+          <div className="bg-[var(--bg)] mx-auto flex h-[85vh] max-w-[75vw] items-center justify-center rounded-lg md:max-w-[60vw] text-[var(--textSoft)]">
+            Loading chat…
+          </div>
+        }
+      >
+        <ChatPageContent />
+      </Suspense>
     </ErrorBoundary>
   );
-};
+}

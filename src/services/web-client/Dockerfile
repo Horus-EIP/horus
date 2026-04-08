@@ -27,7 +27,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-# Runtime (rewrites are resolved at build; keep for any server code reading env).
+# Runtime: Route Handler proxy reads ORCHESTRATOR_URL per request.
 ARG ORCHESTRATOR_URL=http://mas:8000
 ENV ORCHESTRATOR_URL=${ORCHESTRATOR_URL}
 

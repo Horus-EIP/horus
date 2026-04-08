@@ -145,6 +145,12 @@ class Result(BaseModel):
 _AUTH_TOKEN = None  # cached bearer token for orchestrator requests
 
 
+def _invalidate_cached_mas_token():
+    """Drop cached JWT so the next call re-logins (password grant) or re-reads env token."""
+    global _AUTH_TOKEN
+    _AUTH_TOKEN = None
+
+
 def _get_orchestrator_token():
     """Return a bearer token to talk to MAS (from env or by logging in)."""
     global _AUTH_TOKEN
@@ -240,6 +246,10 @@ def send_heartbeat():
     url = f"{ORCHESTRATOR_URL}/agents/heartbeat/{AGENT_ID}"
     try:
         response = requests.post(url, headers=_build_headers(include_api_key=True))
+        # MAS JWTs expire (~20m). Cached token never refreshed → endless 401 without this.
+        if response.status_code == 401 and not ORCHESTRATOR_TOKEN:
+            _invalidate_cached_mas_token()
+            response = requests.post(url, headers=_build_headers(include_api_key=True))
         if response.status_code != 200:
             logger.warning(f"Heartbeat failed: {response.status_code} - {response.text}")
             agent_heartbeat_total.labels(status="error").inc()

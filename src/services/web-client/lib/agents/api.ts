@@ -30,7 +30,7 @@ export interface AgentResponse<T = void> {
 
 export const agentApi = {
   async getAgents(): Promise<AgentResponse<Agent[]>> {
-    const response = await apiClient.get<Agent[]>("/agents/details/", { retry: 1 });
+    const response = await apiClient.get<Agent[]>("/agents/details", { retry: 1 });
 
     if (!response.ok || !response.data) {
       return {

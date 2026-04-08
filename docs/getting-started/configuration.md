@@ -93,17 +93,18 @@ redis:
 ### Quick Start with Docker Compose
 
 ```bash
-# 1. Copy the environment template
-cp src/infra/.env.example src/infra/.env
+# Option A — from the repository root: ensure src/infra/.env (if missing), build, start stack
+chmod +x stack-up.sh && ./stack-up.sh -d
+# Foreground logs instead: ./stack-up.sh
 
-# 2. Update with your values (optional for development)
-nano src/infra/.env
-
-# 3. Start all services
+# Option B — manual steps (from src/infra)
 cd src/infra
-docker compose up --build
+bash init-env.sh   # skips if .env already exists
+# (Alternative: cp .env.example .env && set JWT_SECRET_KEY manually, e.g. openssl rand -hex 32)
+nano .env          # optional: tune values for local/production
+docker compose up --build -d
 
-# 4. Services are now available (host ports from docker-compose.yml):
+# Services are now available (host ports from docker-compose.yml):
 # - PostgreSQL: localhost:${DB_PORT:-5432}
 # - Redis: localhost:${REDIS_PORT:-6379}
 # - RabbitMQ: AMQP localhost:${RABBITMQ_PORT:-5672}, UI http://localhost:15672

@@ -73,6 +73,7 @@ router = APIRouter(prefix="/conversations", tags=["Conversations"])
 logger = get_logger("conversations")
 
 
+@router.post("/create-conversation", include_in_schema=False)
 @router.post(
     "/create-conversation/",
     summary="Create a new conversation",
@@ -668,6 +669,7 @@ async def remove_conversation(
     return {"message": "Conversation correctly deleted"}
 
 
+@router.get("/get-conversations", include_in_schema=False)
 @router.get(
     "/get-conversations/",
     summary="Get user's conversation list",

@@ -43,7 +43,7 @@ export const chatApi = {
   async createConversation(name?: string): Promise<ChatResponse<string>> {
     const conversationName = name || `Chat ${new Date().toLocaleString()}`;
     const response = await apiClient.post<CreateConversationResponse>(
-      "/conversations/create-conversation/",
+      "/conversations/create-conversation",
       { name: conversationName },
       { retry: 2 }
     );
@@ -108,7 +108,7 @@ export const chatApi = {
 
   async createTask(payload: NewTaskPayload): Promise<ChatResponse<void>> {
     const response = await apiClient.post<void>(
-      "/tasks/new_task/",
+      "/tasks/new_task",
       payload,
       { retry: 2 }
     );
@@ -124,12 +124,19 @@ export const chatApi = {
   },
 
   async getConversations(): Promise<ChatResponse<Conversation[]>> {
-    const response = await apiClient.get<Conversation[]>(
-      "/conversations/get-conversations/",
+    const response = await apiClient.get<unknown>(
+      "/conversations/get-conversations",
       { retry: 1 }
     );
 
-    if (!response.ok || !response.data) {
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: response.error || "Failed to fetch conversations",
+      };
+    }
+
+    if (!Array.isArray(response.data)) {
       return {
         ok: false,
         error: response.error || "Failed to fetch conversations",
@@ -138,7 +145,7 @@ export const chatApi = {
 
     return {
       ok: true,
-      data: response.data,
+      data: response.data as Conversation[],
     };
   },
 

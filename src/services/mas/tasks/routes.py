@@ -168,6 +168,7 @@ async def get_queue_stats(
     return stats
 
 
+@router.post("/new_task", include_in_schema=False)
 @router.post(
     "/new_task/",
     summary="Create and dispatch a new task",

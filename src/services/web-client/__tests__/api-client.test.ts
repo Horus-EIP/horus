@@ -6,12 +6,19 @@ function createMockResponse(options: {
   ok: boolean;
   status: number;
   json?: () => Promise<unknown>;
+  headerMap?: Record<string, string>;
 }): Response {
+  const headers = new Headers(options.headerMap ?? undefined);
+  const jsonFn = options.json ?? (() => Promise.resolve({}));
   return {
     ok: options.ok,
     status: options.status,
-    json: options.json ?? (() => Promise.resolve({})),
-    headers: new Headers(),
+    json: jsonFn,
+    text: async () => {
+      const v = await jsonFn();
+      return v === undefined || v === null ? "" : JSON.stringify(v);
+    },
+    headers,
     redirected: false,
     statusText: options.ok ? "OK" : "Error",
     type: "basic",
@@ -22,7 +29,6 @@ function createMockResponse(options: {
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
     blob: () => Promise.resolve(new Blob()),
     formData: () => Promise.resolve(new FormData()),
-    text: () => Promise.resolve(""),
     bytes: () => Promise.resolve(new Uint8Array()),
   } as Response;
 }
@@ -94,5 +100,42 @@ describe("apiClient", () => {
 
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/Network error/i);
+  });
+
+  it("rewrites 307 Location from Docker internal host to same-origin BFF URL", async () => {
+    vi.stubGlobal("location", {
+      ...window.location,
+      origin: "http://localhost:3000",
+    });
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        createMockResponse({
+          ok: false,
+          status: 307,
+          headerMap: {
+            Location: "http://mas:8000/conversations/create-conversation",
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        createMockResponse({
+          ok: true,
+          status: 200,
+          json: async () => ({ conversation_id: 42 }),
+        })
+      );
+
+    const res = await apiClient.post<{ conversation_id: number }>(
+      "/conversations/create-conversation",
+      { name: "Test" }
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(global.fetch).mock.calls[1]?.[0]).toBe(
+      "http://localhost:3000/api/orchestrator/conversations/create-conversation"
+    );
+    expect(res.ok).toBe(true);
+    expect(res.data?.conversation_id).toBe(42);
   });
 });

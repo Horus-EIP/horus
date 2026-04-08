@@ -106,7 +106,10 @@ services:
       context: ../services/agent
       dockerfile: Dockerfile
     container_name: agent
+    env_file:
+      - .env
     environment:
+      # Overrides host-oriented .env (localhost) with Docker network hosts.
       - ORCHESTRATOR_URL=http://mas:8000
       - ORCHESTRATOR_USERNAME=${SUPER_USER_USERNAME}
       - ORCHESTRATOR_PASSWORD=${SUPER_USER_PASSWORD}

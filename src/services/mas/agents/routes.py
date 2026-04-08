@@ -612,6 +612,7 @@ async def agent_details(
         raise HTTPException(status_code=404, detail=f"Agent {id} not found")
 
 
+@router.get("/details", include_in_schema=False)
 @router.get(
     "/details/",
     summary="List all agents",
