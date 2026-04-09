@@ -49,6 +49,7 @@ from agents.controller import check_agent_heartbeat
 from auth.routes import router as auth_router
 from core.logger import get_logger, log_error, log_startup, log_success
 from core.middleware import LoggingMiddleware
+from core.llm_setup import start_llm_preload_background_thread
 from core.rabbitmq_tool import rabbitmq_instance
 from core.tracing import init_tracing
 from db.database import engine
@@ -223,6 +224,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log_error("lifespan", f"Failed to connect to RabbitMQ: {str(e)}", exc_info=True)
         raise
+
+    start_llm_preload_background_thread()
+    log_success("lifespan", "LLM background preload started (if LLM_AUTOINIT=1)")
 
     yield
     logger.info("Shutting down application...")

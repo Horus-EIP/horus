@@ -1,3 +1,14 @@
+# Horus stack (single Compose file).
+#
+# GPU (NVIDIA): `mas`, `agent`, and `knowledge_store` request `gpus: all`. Install the
+# NVIDIA Container Toolkit so Docker exposes CUDA. If your host has no GPU (or Compose
+# errors on startup), comment out the `gpus: all` lines under those three services, or set
+# `LLM_FORCE_CPU=1` / `MODEL_DEVICE=cpu` in `.env` so workloads fall back to CPU inside the
+# containers where supported.
+#
+# Eager LLMs: the agent loads the decision model at startup (`AGENT_LAZY_DECISION_MODEL=0`),
+# so the first chat does not pay a one-time load cost (container start is slower instead).
+
 services:
   # =============================================================================
   # CORE APPLICATION SERVICES
@@ -26,9 +37,13 @@ services:
     build:
       context: ../services/mas
       dockerfile: Dockerfile
+      args:
+        # Set DOWNLOAD_LLM=0 for air-gapped builds and copy models into context instead (see docs).
+        DOWNLOAD_LLM: ${DOWNLOAD_LLM:-1}
     container_name: mas
-    mem_limit: 8g
-    memswap_limit: 10g
+    mem_limit: 14g
+    memswap_limit: 16g
+    gpus: all
     env_file:
       - .env
     environment:
@@ -50,25 +65,29 @@ services:
       - SUPER_USER_PASSWORD=${SUPER_USER_PASSWORD}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_ALGORITHM=${JWT_ALGORITHM}
-      - LLM_AUTOINIT=${LLM_AUTOINIT:-0}
-      - LLM_BACKEND=${LLM_BACKEND:-mock}
+      - LLM_AUTOINIT=${LLM_AUTOINIT:-1}
+      # 0 = use CUDA when the container sees a GPU (`gpus: all` above). 1 = CPU-only orchestrator LLM.
       - LLM_FORCE_CPU=${LLM_FORCE_CPU:-0}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
       # OpenTelemetry - Send to Tempo
       - OTEL_ENABLED=true
       - OTEL_SERVICE_NAME=mas
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
       - JSON_LOGGING=true
       - LOG_LEVEL=INFO
-      - TASK_TIMEOUT_SECONDS=300
+      # Wall-clock cap for RUNNING tasks (LLM + agent). TASK_TIMEOUT_SECONDS also accepted by MAS settings.
+      - TASK_TIMEOUT=${TASK_TIMEOUT:-1800}
+      # Offline by default after image build; set to 0 in .env to allow Hub at runtime.
+      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-1}
+      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-1}
     healthcheck:
       # HTTP is only accepted after lifespan completes (DB + RabbitMQ); this gates dependents.
-      test: ["CMD", "curl", "-f", "-X", "POST", "http://localhost:8000/rabbitmq/heartbeat"]
-      interval: 10s
-      timeout: 10s
+      # Use a generous timeout: a single Uvicorn worker can be busy with HF/LLM I/O; short
+      # timeouts falsely mark the service unhealthy while chat requests are still in flight.
+      test: ["CMD", "curl", "-f", "-m", "25", "-X", "POST", "http://localhost:8000/rabbitmq/heartbeat"]
+      interval: 15s
+      timeout: 30s
       retries: 5
-      start_period: 120s
+      start_period: 180s
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -105,7 +124,12 @@ services:
     build:
       context: ../services/agent
       dockerfile: Dockerfile
+      args:
+        DOWNLOAD_LLM: ${DOWNLOAD_LLM:-1}
     container_name: agent
+    # Agent inference (Qwen instruct decision LLM, spaCy tools, etc.): NVIDIA Container Toolkit on the host.
+    # No GPU? Remove the next line or run without requesting devices (Compose will error if unsupported).
+    gpus: all
     env_file:
       - .env
     environment:
@@ -121,10 +145,18 @@ services:
       - KNOWLEDGE_STORE_TIMEOUT=10.0
       - KNOWLEDGE_STORE_MAX_RETRIES=3
       - KNOWLEDGE_STORE_RETRY_DELAY=1.0
+      # auto = use CUDA inside the container when visible; set MODEL_DEVICE=cpu in .env to force CPU only.
+      - MODEL_DEVICE=${MODEL_DEVICE:-auto}
+      - MODEL_NAME=${MODEL_NAME:-Qwen/Qwen3-4B-Instruct-2507}
+      # 0 = load Qwen at agent startup (ready for first chat; slower container boot).
+      - AGENT_LAZY_DECISION_MODEL=${AGENT_LAZY_DECISION_MODEL:-0}
+      - AGENT_SPACY_PREFER_SM=1
       # OpenTelemetry instrumentation for Tempo
       - OTEL_ENABLED=true
       - OTEL_SERVICE_NAME=agent
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
+      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-1}
+      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-1}
     depends_on:
       mas:
         condition: service_healthy
@@ -144,11 +176,14 @@ services:
       context: ../services/knowledge-store
       dockerfile: Dockerfile
     container_name: knowledge_store
+    gpus: all
     environment:
       - CHROMA_TELEMETRY_ENABLED=0
       - POSTHOG_DISABLED=true
       - SENTENCE_TRANSFORMERS_NO_TELEMETRY=1
       - HF_HUB_DISABLE_TELEMETRY=1
+      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-1}
+      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-1}
       # OpenTelemetry instrumentation for Tempo
       - OTEL_ENABLED=true
       - OTEL_SERVICE_NAME=knowledge-store

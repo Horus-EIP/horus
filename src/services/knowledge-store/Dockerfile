@@ -41,6 +41,10 @@ RUN opentelemetry-bootstrap --action=install
 # Pre-download embedding model at build time to avoid latency on first request
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-base-en-v1.5')"
 
+# After build, default to no Hub access (embedding weights are in the image cache).
+ENV HF_HUB_OFFLINE=1
+ENV TRANSFORMERS_OFFLINE=1
+
 # Create document storage directories
 RUN mkdir -p documents/txt documents/pdf documents/docx documents/image
 

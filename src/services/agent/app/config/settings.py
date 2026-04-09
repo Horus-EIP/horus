@@ -40,9 +40,11 @@ KNOWLEDGE_STORE_URL = os.getenv("KNOWLEDGE_STORE_URL", "http://localhost:8080")
 KNOWLEDGE_STORE_TIMEOUT = get_float_env("KNOWLEDGE_STORE_TIMEOUT", 10.0)
 KNOWLEDGE_STORE_MAX_RETRIES = get_int_env("KNOWLEDGE_STORE_MAX_RETRIES", 3)
 KNOWLEDGE_STORE_RETRY_DELAY = get_float_env("KNOWLEDGE_STORE_RETRY_DELAY", 1.0)
+# Chunks merged into RAG context (default 8; was effectively 1 via client default and hurt recall).
+KNOWLEDGE_STORE_N_RESULTS = get_int_env("KNOWLEDGE_STORE_N_RESULTS", 8)
 
-# Model Configuration
-MODEL_NAME = os.getenv("MODEL_NAME", "t5-small")
+# Model Configuration (causal instruct LLM; same default hub id as MAS)
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen3-4B-Instruct-2507")
 MODEL_DEVICE = os.getenv("MODEL_DEVICE", "auto")  # "auto", "cpu", "cuda", "cuda:0", etc.
 
 AGENT_TYPE = os.getenv("AGENT_TYPE", "general")

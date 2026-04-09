@@ -16,7 +16,7 @@ The service is a **FastAPI** application (port 8001) with background threads for
 The default (`general`) agent type uses `RAGPipeline`, which chains:
 
 - **KnowledgeRetrievalAgent** -- Fetches context from the Knowledge Store service via HTTP.
-- **DecisionMakingAgent** -- Runs a HuggingFace transformer model (configurable, default `t5-small`) to generate a response given the retrieved context.
+- **DecisionMakingAgent** -- Runs a Hugging Face causal instruct model (default `Qwen/Qwen3-4B-Instruct-2507`, or `app/models/Qwen3_instruct_4B/` when complete) to answer from retrieved context.
 
 The pipeline also supports a **ReAct** reasoning mode (`ReactAgent`) that performs multi-step THOUGHT, ACTION, OBSERVATION loops for complex queries.
 
@@ -100,8 +100,9 @@ In practice, most tasks arrive through the RabbitMQ consumer rather than the HTT
 | `ORCHESTRATOR_PASSWORD`   | MAS login password                         | --                        |
 | `AGENT_TYPE`              | Agent specialization                       | `general`                 |
 | `AGENT_DESCRIPTION`       | Human-readable agent description           | `Autonomous MAS agent`    |
-| `MODEL_NAME`              | HuggingFace model for decision agent       | `t5-small`                |
+| `MODEL_NAME`              | Hugging Face model id (or local mirror) for decision agent | `Qwen/Qwen3-4B-Instruct-2507` |
 | `MODEL_DEVICE`            | PyTorch device (`auto`, `cpu`, `cuda`)     | `auto`                    |
+| `AGENT_LAZY_DECISION_MODEL` | `1`/`true` = load Qwen on first `decide()`; `0` = load at process start (Compose default `0`) | `0` |
 | `KNOWLEDGE_STORE_URL`     | Knowledge Store service URL                | `http://localhost:8080`   |
 | `KNOWLEDGE_STORE_TIMEOUT` | HTTP timeout for knowledge store requests  | `10.0`                    |
 | `KNOWLEDGE_STORE_MAX_RETRIES` | Max retries for knowledge store calls  | `3`                       |

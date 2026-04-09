@@ -11,26 +11,18 @@ from ai_agents.tool_registry import ToolRegistry
 # --- DecisionMakingAgent Tests ---
 
 class TestDecisionMakingAgent:
-    @patch("ai_agents.decision_making_agent.pipeline")
-    def test_initialization_auto_device(self, mock_pipeline):
-        # Should default to CPU on CI environments usually, or mocked
+    def test_initialization_auto_device(self):
+        # Causal stack is mocked in conftest (from_pretrained); no real download.
         agent = DecisionMakingAgent()
         assert agent.device in ["cpu", "cuda", "cuda:0"]
-        assert agent.decision_model is not None
-        mock_pipeline.assert_called()
+        assert agent.decision_model is None
+        assert agent._causal_model is not None
+        assert agent._causal_tokenizer is not None
 
-    @pytest.mark.asyncio
-    async def test_mock_fallback_usage(self):
-        # Force a failure in transformers to trigger fallback
+    def test_raises_when_transformers_unavailable(self):
         with patch("ai_agents.decision_making_agent._TRANSFORMERS_AVAILABLE", False):
-            agent = DecisionMakingAgent()
-            assert agent.decision_model == agent.mock_decision_model
-            
-            # Test mock logic
-            context = "Revenue growth was 25% in Q1 2025."
-            query = "What was the revenue growth?"
-            result = await agent.decide(query, context)
-            assert "Revenue growth was 25% in Q1 2025" in result
+            with pytest.raises(RuntimeError, match="transformers is required"):
+                DecisionMakingAgent()
 
     @pytest.mark.asyncio
     async def test_decide_flow(self):
@@ -38,7 +30,7 @@ class TestDecisionMakingAgent:
         mock_model.return_value = [{"generated_text": "Processed Answer"}]
         
         agent = DecisionMakingAgent(decision_model=mock_model)
-        result = await agent.decide("query", "context")
+        result = agent.decide("query", "context")
         
         assert result == "Processed Answer"
         mock_model.assert_called_once()
@@ -66,34 +58,6 @@ class TestDecisionMakingAgent:
             assert detect_device("cuda") == "cpu"
 
     @pytest.mark.asyncio
-    async def test_mock_heuristics_triggers(self):
-        with patch("ai_agents.decision_making_agent._TRANSFORMERS_AVAILABLE", False):
-            agent = DecisionMakingAgent()
-            
-            # Context
-            ctx = "Key regions such as Asia Pacific showed promise. North America leading a 20% increase. This contributed to a 15% rise in new customer acquisition. Revenue growth of 50% was seen."
-            
-            # Test 1: Key regions
-            res1 = await agent.decide("Which region showed promise?", ctx)
-            assert "Asia Pacific" in res1
-            
-            # Test 2: Leading increase
-            res2 = await agent.decide("Where is North America leading?", ctx)
-            assert "North America led with a 20% increase" in res2
-            
-            # Test 3: Acquisition
-            res3 = await agent.decide("What about new customer acquisition?", ctx)
-            assert "rose by 15%" in res3
-
-            # Test 4: Revenue Growth
-            res4 = await agent.decide("What was the revenue growth?", ctx)
-            assert "Revenue growth was 50%" in res4
-            
-            # Test 5: Generic overlap fallback
-            res5 = await agent.decide("promise?", ctx)
-            assert "Asia Pacific" in res5
-
-    @pytest.mark.asyncio
     async def test_decide_metrics_logging(self):
          # Mock core.metrics import
          mock_metrics = MagicMock()
@@ -105,7 +69,7 @@ class TestDecisionMakingAgent:
              mock_model = MagicMock(return_value=[{"generated_text": "A"}])
              agent = DecisionMakingAgent(decision_model=mock_model)
              
-             await agent.decide("Q", "C")
+             agent.decide("Q", "C")
              
              mock_metrics.model_inference_total.labels.return_value.inc.assert_called()
              mock_metrics.model_inference_duration.labels.return_value.observe.assert_called()
@@ -113,7 +77,7 @@ class TestDecisionMakingAgent:
              # Test Error Path
              mock_model.side_effect = Exception("Inference Error")
              with pytest.raises(Exception):
-                 await agent.decide("Q", "C")
+                 agent.decide("Q", "C")
              
              # Check error metric
              # call_args_list index 1 should be the error call (index 0 was success)
@@ -125,33 +89,24 @@ class TestDecisionMakingAgent:
 
 
     def test_initialization_gpu_failure_cpu_fallback(self):
-        # Simulate transformers available but GPU init failing, thus falling back to CPU
-        # We patch the module-level pipeline object in decision_making_agent
-         with patch("ai_agents.decision_making_agent.pipeline") as mock_pipeline:
-            # First call (GPU) raises Exception
-            # Second call (CPU) succeeds
+        with patch("ai_agents.decision_making_agent.AutoModelForCausalLM") as MockAM:
             cpu_model = MagicMock()
-            cpu_model.device = -1
-            mock_pipeline.side_effect = [Exception("GPU Runtime Error"), cpu_model]
-            
-            # Use 'cuda' to force GPU attempt first
+            cpu_model.eval.return_value = None
+            MockAM.from_pretrained.side_effect = [
+                Exception("GPU Runtime Error"),
+                cpu_model,
+            ]
             with patch("ai_agents.decision_making_agent._TRANSFORMERS_AVAILABLE", True):
                 agent = DecisionMakingAgent(device="cuda")
-            
-            # Check if it tried to fallback to CPU
             assert agent.device == "cpu"
-            assert mock_pipeline.call_count == 2
-            
-    def test_initialization_cpu_failure_mock_fallback(self):
-         # Simulate transformers available but GPU AND CPU init failing
-         with patch("ai_agents.decision_making_agent.pipeline") as mock_pipeline:
-            mock_pipeline.side_effect = Exception("General Failure")
-            
+            assert MockAM.from_pretrained.call_count == 2
+
+    def test_initialization_raises_when_model_load_fails_everywhere(self):
+        with patch("ai_agents.decision_making_agent.AutoModelForCausalLM") as MockAM:
+            MockAM.from_pretrained.side_effect = Exception("General Failure")
             with patch("ai_agents.decision_making_agent._TRANSFORMERS_AVAILABLE", True):
-                agent = DecisionMakingAgent(device="cuda")
-            
-            # Should fall back to mock model
-            assert agent.decision_model == agent.mock_decision_model
+                with pytest.raises(Exception, match="General Failure"):
+                    DecisionMakingAgent(device="cuda")
 
 
 

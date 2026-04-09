@@ -11,11 +11,11 @@ class WriterAgent:
 
     async def generate_report(self, data: str) -> str:
         prompt = f"Write a professional report based on the following data : {data}"
-        return await self.llm.decide(prompt)
-    
-    async def format_text(self, text:str, final_format: str) -> str:
+        return await asyncio.to_thread(self.llm.decide, prompt)
+
+    async def format_text(self, text: str, final_format: str) -> str:
         prompt = f"Format the following text as {final_format}: {text}"
-        return await self.llm.decide (prompt)
+        return await asyncio.to_thread(self.llm.decide, prompt)
     
     async def process_request(self, task_type: str, data: str, extra_parameters: dict = None):
         """

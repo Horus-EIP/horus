@@ -27,9 +27,9 @@ class TestImportCoverage:
             
             import ai_agents.decision_making_agent
             importlib.reload(ai_agents.decision_making_agent)
-            
-            agent = ai_agents.decision_making_agent.DecisionMakingAgent()
-            assert agent.decision_model == agent.mock_decision_model
+
+            with pytest.raises(RuntimeError, match="transformers is required"):
+                ai_agents.decision_making_agent.DecisionMakingAgent()
 
     def test_data_extractor_spacy_import_fail(self):
         # Now that data_extractor_tool handles optional spacy, this should pass naturally 
@@ -192,11 +192,11 @@ class TestKnowledgeStoreGap:
 
 class TestDecisionMakingGap:
     def test_import_failures_safe(self):
-         with patch("ai_agents.decision_making_agent._TRANSFORMERS_AVAILABLE", False):
-             with patch("ai_agents.decision_making_agent._TORCH_AVAILABLE", False):
-                 with patch("ai_agents.decision_making_agent.detect_device", return_value="cpu"):
-                    agent = DecisionMakingAgent()
-                    assert agent.decision_model == agent.mock_decision_model
+        with patch("ai_agents.decision_making_agent._TRANSFORMERS_AVAILABLE", False):
+            with patch("ai_agents.decision_making_agent._TORCH_AVAILABLE", False):
+                with patch("ai_agents.decision_making_agent.detect_device", return_value="cpu"):
+                    with pytest.raises(RuntimeError, match="transformers is required"):
+                        DecisionMakingAgent()
 
 class TestCalculatorAdditionalGap:
     def test_unary_ops(self):
@@ -281,6 +281,7 @@ class TestSummarizerAdditionalGap:
 
     def test_transformers_exception_fallback(self):
          tool = SummarizerTool()
+         tool._summarization_attempted = True
          # Mock pipe to exist but fail
          tool._pipe = MagicMock(side_effect=Exception("Model failed"))
          
@@ -363,7 +364,7 @@ class TestDecisionMakingComprehensive:
         mock_model.return_value = [{"generated_text": "Answer"}]
         agent = DecisionMakingAgent(decision_model=mock_model)
         
-        res = await agent.decide("Q", "C")
+        res = agent.decide("Q", "C")
         assert res == "Answer"
         mock_model.assert_called()
 
@@ -479,7 +480,7 @@ class TestDecisionMakingMetricsGap:
              agent = DecisionMakingAgent(decision_model=mock_model)
              
              with pytest.raises(Exception) as exc:
-                 await agent.decide("Q", "C")
+                 agent.decide("Q", "C")
              
              assert "GPU Burn" in str(exc.value)
              

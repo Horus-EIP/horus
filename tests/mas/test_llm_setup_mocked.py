@@ -33,11 +33,22 @@ def test_bnb4bit():
     assert config.bnb_4bit_quant_type == "nf4"
 
 
-def test_get_llm_mocked_no_gpu():
+def test_get_llm_mocked_cpu_path():
+    mock_tokenizer = MagicMock()
+    mock_model = MagicMock()
     with patch("torch.cuda.is_available", return_value=False):
-        tokenizer, model = get_llm()
-        assert tokenizer is None
-        assert model is None
+        with patch(
+            "core.llm_setup.AutoTokenizer.from_pretrained", return_value=mock_tokenizer
+        ):
+            with patch(
+                "core.llm_setup.AutoModelForCausalLM.from_pretrained",
+                return_value=mock_model,
+            ):
+                with patch("core.llm_setup.is_model_dir_exists", return_value=False):
+                    tokenizer, model = get_llm()
+                    assert tokenizer == mock_tokenizer
+                    assert model == mock_model
+                    mock_model.eval.assert_called_once()
 
 
 def test_get_llm_mocked_with_gpu():
@@ -64,7 +75,9 @@ def test_get_llm_mocked_with_gpu():
 def test_ask_llm_mocked():
     mock_tokenizer = MagicMock()
     mock_model = MagicMock()
-    mock_model.device = "cpu"
+    mock_param = MagicMock()
+    mock_param.device = torch.device("cpu")
+    mock_model.parameters = MagicMock(return_value=iter([mock_param]))
 
     # Mock tokenizer behavior
     mock_tokenizer.apply_chat_template.return_value = "prompt"

@@ -28,6 +28,14 @@ export interface NewTaskPayload {
   skills_required: string[];
 }
 
+/** POST /tasks/new_task success body (orchestrator may return an immediate `result` without an agent). */
+export interface NewTaskResponse {
+  message?: string;
+  conversation_id?: number | string;
+  task_id?: string;
+  result?: string;
+}
+
 export interface User {
   id: number;
   username: string;

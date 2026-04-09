@@ -1,248 +1,463 @@
 """
 decision_making_agent.py
 -------------------------
-This module defines the DecisionMakingAgent class, which processes retrieved data and generates insights using an AI model.
-It uses a transformer-based model (e.g., T5) via Hugging Face's pipeline or a placeholder function if no model is provided.
-Supports GPU acceleration with automatic CPU fallback.
+Loads a Hugging Face causal instruct model (default Qwen3-4B-Instruct) for RAG / ReAct answers
+and writer prompts. Same family as the MAS orchestrator LLM; uses chat template + generate.
+GPU uses 4-bit quantization when available unless forced to CPU; model can load lazily on first call.
 """
 
-from typing import Dict, Any, Optional
-import re
+from __future__ import annotations
+
+import os
+import threading
+import time
+from pathlib import Path
+from typing import Any, Callable, Optional
+
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Uncomment the following lines if you have transformers installed.
-# pip install transformers
-try:
-    from transformers import pipeline
-    _TRANSFORMERS_AVAILABLE = True
-except Exception:
-    pipeline = None  # type: ignore
-    _TRANSFORMERS_AVAILABLE = False
-
-# Try to import torch for GPU detection
 try:
     import torch
-    _TORCH_AVAILABLE = True
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+    _TRANSFORMERS_AVAILABLE = True
 except Exception:
     torch = None  # type: ignore
+    AutoModelForCausalLM = None  # type: ignore
+    AutoTokenizer = None  # type: ignore
+    BitsAndBytesConfig = None  # type: ignore
+    _TRANSFORMERS_AVAILABLE = False
+
+try:
+    import torch as _torch_check
+
+    _TORCH_AVAILABLE = _torch_check is not None
+except Exception:
     _TORCH_AVAILABLE = False
 
 
-def detect_device(device_preference: str = "auto") -> str:
-    """
-    Detect and return the appropriate device for model execution.
-    
-    Args:
-        device_preference: Device preference ("auto", "cpu", "cuda", "cuda:0", etc.)
-    
-    Returns:
-        Device string (e.g., "cpu", "cuda", "cuda:0")
-    """
-    if device_preference.lower() == "auto":
-        if _TORCH_AVAILABLE and torch.cuda.is_available():
-            device = "cuda"
-            logger.info(f"GPU detected: {torch.cuda.get_device_name(0)} (CUDA {torch.version.cuda})")
-            return device
-        else:
-            device = "cpu"
-            if not _TORCH_AVAILABLE:
-                logger.info("PyTorch not available, using CPU")
-            else:
-                logger.info("No GPU available, using CPU")
-            return device
+def _configure_agent_torch_threads() -> None:
+    if not _TORCH_AVAILABLE or torch is None:
+        return
+    raw = (
+        os.getenv("AGENT_TORCH_INTRAOP_THREADS", "").strip()
+        or os.getenv("LLM_TORCH_INTRAOP_THREADS", "").strip()
+    )
+    if raw:
+        try:
+            n = max(1, int(raw))
+        except ValueError:
+            n = max(1, min(8, (os.cpu_count() or 4)))
     else:
-        # Use specified device
-        if device_preference.startswith("cuda") and _TORCH_AVAILABLE:
-            if not torch.cuda.is_available():
-                logger.warning(f"CUDA requested but not available, falling back to CPU")
-                return "cpu"
-        return device_preference
+        n = max(1, min(8, (os.cpu_count() or 4)))
+    os.environ.setdefault("OMP_NUM_THREADS", str(n))
+    torch.set_num_threads(n)
+    logger.info("Agent decision LLM CPU thread budget: torch intra-op=%s", n)
+
+
+if _TRANSFORMERS_AVAILABLE:
+    _configure_agent_torch_threads()
+
+APP_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
+LOCAL_MODEL_DIR = APP_DIR / "models" / "Qwen3_instruct_4B"
+OFFLOAD_DIR = APP_DIR / "offload"
+REQUIRED_LOCAL_FILES = [
+    "config.json",
+    "generation_config.json",
+    "tokenizer.json",
+    "model.safetensors.index.json",
+]
+
+def _agent_accelerate_max_memory() -> Optional[dict]:
+    """
+    Unset caps → use all VRAM. Set AGENT_GPU_MEMORY_CAP or LLM_GPU_MEMORY_CAP to limit/split.
+    """
+    cap = os.getenv("AGENT_GPU_MEMORY_CAP", "").strip() or os.getenv(
+        "LLM_GPU_MEMORY_CAP", ""
+    ).strip()
+    if not cap:
+        return None
+    cpu = (
+        os.getenv("AGENT_CPU_OFFLOAD_CAP", "").strip()
+        or os.getenv("LLM_CPU_OFFLOAD_CAP", "8GiB").strip()
+        or "8GiB"
+    )
+    return {0: cap, "cpu": cpu}
+
+
+def _local_model_ready() -> bool:
+    if not LOCAL_MODEL_DIR.is_dir():
+        return False
+    missing = [f for f in REQUIRED_LOCAL_FILES if not (LOCAL_MODEL_DIR / f).exists()]
+    if missing:
+        logger.warning("Agent LLM: missing files in %s: %s", LOCAL_MODEL_DIR, missing)
+        return False
+    return True
+
+
+def detect_device(device_preference: str = "auto") -> str:
+    if device_preference.lower() == "auto":
+        if _TORCH_AVAILABLE and torch is not None and torch.cuda.is_available():
+            device = "cuda"
+            logger.info(
+                "GPU detected: %s (CUDA %s)",
+                torch.cuda.get_device_name(0),
+                torch.version.cuda,
+            )
+            return device
+        device = "cpu"
+        if not _TORCH_AVAILABLE:
+            logger.info("PyTorch not available, using CPU")
+        else:
+            logger.info("No GPU available, using CPU")
+        return device
+    if device_preference.startswith("cuda") and _TORCH_AVAILABLE and torch is not None:
+        if not torch.cuda.is_available():
+            logger.warning("CUDA requested but not available, falling back to CPU")
+            return "cpu"
+    return device_preference
+
+
+def _lazy_model_enabled() -> bool:
+    v = os.getenv("AGENT_LAZY_DECISION_MODEL", "0").strip().lower()
+    return v in ("1", "true", "yes")
+
+
+def _agent_force_cpu() -> bool:
+    return os.getenv("AGENT_FORCE_CPU", "").strip().lower() in ("1", "true", "yes")
+
+
+def _max_new_tokens() -> int:
+    raw = os.getenv("AGENT_MAX_NEW_TOKENS", "256").strip()
+    try:
+        return max(8, int(raw))
+    except ValueError:
+        return 256
+
+
+def _bnb4bit():
+    assert BitsAndBytesConfig is not None
+    assert torch is not None
+    return BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_compute_dtype=(
+            torch.bfloat16
+            if (torch.cuda.is_available() and torch.cuda.is_bf16_supported())
+            else torch.float16
+        ),
+    )
+
+
+def _model_device(model: Any) -> Any:
+    try:
+        return next(model.parameters()).device
+    except (StopIteration, AttributeError):
+        pass
+    dev = getattr(model, "device", None)
+    if dev is not None:
+        return dev if isinstance(dev, torch.device) else torch.device(str(dev))
+    assert torch is not None
+    return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 class DecisionMakingAgent:
-    """
-    Processes retrieved data and generates insights using an AI model.
-    Supports GPU acceleration with automatic CPU fallback.
-    """
-
     def __init__(
-        self, 
-        decision_model=None, 
-        model_name: str = "t5-small",
-        device: Optional[str] = None
+        self,
+        decision_model: Optional[Callable[..., Any]] = None,
+        model_name: Optional[str] = None,
+        device: Optional[str] = None,
     ):
-        """
-        Args:
-            decision_model: Optional pre-configured AI model. If None, a transformer-based model is used.
-            model_name: Name of the transformer model (default "t5-small").
-            device: Device to use ("auto", "cpu", "cuda", "cuda:0", etc.). Defaults to "auto" which auto-detects.
-        """
-        self.model_name = model_name
+        self.model_name = model_name or DEFAULT_MODEL_ID
         self.device = detect_device(device) if device else detect_device("auto")
-        
+        self.decision_model: Optional[Callable[..., Any]] = decision_model
+        self._lazy = decision_model is None and _lazy_model_enabled()
+        self._causal_tokenizer = None
+        self._causal_model = None
+        self._load_lock = threading.Lock()
+
         if decision_model is not None:
-            self.decision_model = decision_model
-            logger.info(f"DecisionMakingAgent initialized with provided model on device: {self.device}")
-        else:
-            # Use the transformer-based model from Hugging Face if available; otherwise fallback.
-            if _TRANSFORMERS_AVAILABLE:
-                try:
-                    self.decision_model = pipeline(
-                        "text2text-generation", 
-                        model=model_name,
-                        device=0 if self.device.startswith("cuda") else -1  # 0 for GPU, -1 for CPU
-                    )
-                    logger.info(
-                        f"DecisionMakingAgent initialized with model '{model_name}' "
-                        f"on device: {self.device}"
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to initialize model on {self.device}, falling back to CPU: {e}"
-                    )
-                    try:
-                        self.device = "cpu"
-                        self.decision_model = pipeline(
-                            "text2text-generation", 
-                            model=model_name,
-                            device=-1  # CPU
+            logger.info(
+                "DecisionMakingAgent initialized with injected model on device: %s",
+                self.device,
+            )
+            return
+
+        if not _TRANSFORMERS_AVAILABLE:
+            raise RuntimeError(
+                "transformers/torch are required for DecisionMakingAgent. "
+                "Install dependencies and rebuild the agent image."
+            )
+
+        OFFLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        os.environ.setdefault(
+            "PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True,max_split_size_mb:64"
+        )
+        os.environ.setdefault("OMP_NUM_THREADS", "1")
+        os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+        if torch is not None:
+            torch.set_num_threads(1)
+            torch.backends.cuda.matmul.allow_tf32 = True
+
+        if self._lazy:
+            logger.info(
+                "Decision model will load on first use (AGENT_LAZY_DECISION_MODEL=1)."
+            )
+            return
+
+        self._load_causal_model()
+
+    def _resolve_model_path(self) -> str:
+        if _local_model_ready():
+            return str(LOCAL_MODEL_DIR)
+        return self.model_name
+
+    def _use_gpu_for_load(self) -> bool:
+        if _agent_force_cpu():
+            return False
+        return bool(
+            self.device.startswith("cuda")
+            and torch is not None
+            and torch.cuda.is_available()
+        )
+
+    def _load_causal_model(self) -> None:
+        assert AutoTokenizer is not None and AutoModelForCausalLM is not None
+        with self._load_lock:
+            if self._causal_model is not None and self._causal_tokenizer is not None:
+                return
+
+            model_path = self._resolve_model_path()
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_path, use_fast=True, trust_remote_code=True
+            )
+
+            use_gpu = self._use_gpu_for_load()
+            try:
+                if use_gpu:
+                    max_memory = _agent_accelerate_max_memory()
+                    gpu_kw: dict = {
+                        "quantization_config": _bnb4bit(),
+                        "device_map": "auto",
+                        "low_cpu_mem_usage": True,
+                        "attn_implementation": "sdpa",
+                        "trust_remote_code": True,
+                    }
+                    if max_memory is not None:
+                        gpu_kw["max_memory"] = max_memory
+                        gpu_kw["offload_folder"] = str(OFFLOAD_DIR)
+                        logger.info(
+                            "Agent LLM load with max_memory=%s", max_memory
                         )
-                        logger.info(f"Model initialized on CPU fallback")
-                    except Exception as e2:
-                        logger.error(f"Failed to initialize model even on CPU: {e2}")
-                        self.decision_model = self.mock_decision_model
-                        logger.warning("Using mock decision model")
-            else:
-                self.decision_model = self.mock_decision_model
-                logger.warning("Transformers not available, using mock decision model")
+                    else:
+                        logger.info(
+                            "Agent LLM load without VRAM cap (full GPU when possible)."
+                        )
+                    model = AutoModelForCausalLM.from_pretrained(
+                        model_path,
+                        **gpu_kw,
+                    )
+                else:
+                    logger.info("Loading agent decision LLM on CPU.")
+                    model = AutoModelForCausalLM.from_pretrained(
+                        model_path,
+                        torch_dtype=torch.float16,
+                        device_map={"": "cpu"},
+                        low_cpu_mem_usage=True,
+                        attn_implementation="sdpa",
+                        trust_remote_code=True,
+                    )
+            except Exception as e:
+                if use_gpu:
+                    logger.warning(
+                        "Agent LLM GPU load failed (%s), retrying on CPU.", e
+                    )
+                    self.device = "cpu"
+                    model = AutoModelForCausalLM.from_pretrained(
+                        model_path,
+                        torch_dtype=torch.float16,
+                        device_map={"": "cpu"},
+                        low_cpu_mem_usage=True,
+                        attn_implementation="sdpa",
+                        trust_remote_code=True,
+                    )
+                else:
+                    logger.exception("Failed to load agent decision LLM on CPU")
+                    raise RuntimeError(
+                        "Could not load the Hugging Face decision model "
+                        "(check memory, disk, and network). "
+                        f"Original error: {e}"
+                    ) from e
 
-    def mock_decision_model(self, input_text: str):
+            model.eval()
+            self._causal_tokenizer = tokenizer
+            self._causal_model = model
+            p_dev = _model_device(model)
+            logger.info(
+                "DecisionMakingAgent model '%s' ready: param_device=%s preference=%s "
+                "torch.cuda.is_available()=%s",
+                model_path,
+                p_dev,
+                self.device,
+                torch.cuda.is_available() if torch is not None else False,
+            )
+
+    def _ensure_causal_loaded(self) -> None:
+        if self.decision_model is not None:
+            return
+        if self._causal_model is not None:
+            return
+        self._load_causal_model()
+
+    @staticmethod
+    def _coerce_callable_output(result: Any) -> str:
+        if (
+            isinstance(result, list)
+            and result
+            and isinstance(result[0], dict)
+            and "generated_text" in result[0]
+        ):
+            return str(result[0]["generated_text"]).strip()
+        return str(result).strip()
+
+    def _generate_causal(self, user_content: str, system_content: str) -> str:
+        assert self._causal_tokenizer is not None and self._causal_model is not None
+        tok = self._causal_tokenizer
+        model = self._causal_model
+
+        messages = [
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": user_content},
+        ]
+        prompt = tok.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+        enc = tok(
+            prompt,
+            return_tensors="pt",
+            truncation=True,
+            max_length=1024,
+            add_special_tokens=True,
+        )
+        device = _model_device(model)
+        input_ids = enc["input_ids"].to(device)
+        attn_mask = enc.get("attention_mask")
+        if attn_mask is not None:
+            attn_mask = attn_mask.to(device)
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        max_new = _max_new_tokens()
+        with torch.no_grad():
+            out = model.generate(
+                input_ids=input_ids,
+                attention_mask=attn_mask,
+                max_new_tokens=max_new,
+                do_sample=False,
+                return_dict_in_generate=True,
+                pad_token_id=tok.eos_token_id,
+                eos_token_id=tok.eos_token_id,
+            )
+
+        seq = out.sequences[0]
+        gen_only = seq[input_ids.size(1) :]
+        return tok.decode(
+            gen_only,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
+        ).strip()
+
+    def decide(self, query: str, context: Optional[str] = None) -> str:
         """
-        Lightweight heuristic QA for local/dev without transformers.
-        Extracts answer from the provided Context and Question in the prompt.
+        Run inference. If ``context`` is None, ``query`` is treated as the full user message
+        (used by WriterAgent). Otherwise the usual grounded QA instruction is applied.
         """
-        # Try to parse our QA-style prompt
-        context_match = re.search(r"Context:\n([\s\S]*?)\n\nQuestion:", input_text)
-        question_match = re.search(r"Question:\s*(.*)\nAnswer:\s*$", input_text)
+        self._ensure_causal_loaded()
 
-        context_text = context_match.group(1).strip() if context_match else ""
-        question_text = question_match.group(1).strip() if question_match else ""
-
-        answer = None
-
-        # Simple, targeted heuristics for common patterns in the mock context
-        if context_text:
-            # Key regions extraction
-            m = re.search(r"Key regions such as\s+([^\.;]+)", context_text, flags=re.IGNORECASE)
-            if m and re.search(r"region|area|market", question_text, flags=re.IGNORECASE):
-                answer = m.group(1).strip()
-
-            # Growth percentage
-            if answer is None and re.search(r"growth|increase|revenue", question_text, flags=re.IGNORECASE):
-                m2 = re.search(r"revenue growth of\s+(\d+%)[^\.]*", context_text, flags=re.IGNORECASE)
-                if m2:
-                    answer = f"Revenue growth was {m2.group(1)} in Q1 2025."
-
-            # Leading region increase
-            if answer is None and re.search(r"north america|which region|leading", question_text, flags=re.IGNORECASE):
-                m3 = re.search(r"North America leading a\s+(\d+%) increase", context_text, flags=re.IGNORECASE)
-                if m3:
-                    answer = f"North America led with a {m3.group(1)} increase in sales volume."
-
-            # New customers increase
-            if answer is None and re.search(r"new customer|acquisition", question_text, flags=re.IGNORECASE):
-                m4 = re.search(r"contributed to a\s+(\d+%) rise in new customer acquisition", context_text, flags=re.IGNORECASE)
-                if m4:
-                    answer = f"New customer acquisition rose by {m4.group(1)}."
-
-        if not answer:
-            # Fallback: first sentence that most overlaps with the question keywords
-            sentences = re.split(r"(?<=[.!?])\s+", context_text)
-            keywords = [w.lower() for w in re.findall(r"\w+", question_text)]
-            best = ""
-            best_score = 0
-            for s in sentences:
-                score = sum(1 for k in keywords if k and k in s.lower())
-                if score > best_score:
-                    best, best_score = s.strip(), score
-            answer = best or "I don't have that information yet."
-
-        return [{"generated_text": answer}]
-
-    async def decide(self, query: str, context: str) -> str:
-        """
-        Answer the user's query using the provided context.
-
-        Args:
-            query: The user's question.
-            context: Retrieved context text.
-
-        Returns:
-            A concise answer string.
-        """
-        import time
-        
-        # Import metrics if available
         try:
             from core.metrics import (
-                model_inference_total,
                 model_inference_duration,
+                model_inference_total,
             )
+
             _METRICS_AVAILABLE = True
         except ImportError:
             _METRICS_AVAILABLE = False
-        
-        prompt = (
-            "You are a helpful assistant. Answer the user's question as directly and concisely as possible "
-            "in 1-3 sentences using ONLY the provided context. If the answer is not present in the context, "
-            "say: 'I don't have that information yet.'\n\n"
-            f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"
+
+        if context is None:
+            user_content = query
+            system_content = (
+                "You are a helpful assistant. Follow the user's instructions concisely."
+            )
+        else:
+            user_content = (
+                "Answer the user's question as directly and concisely as possible "
+                "in 1-3 sentences using ONLY the provided context. If the answer is not "
+                "in the context, say: 'I don't have that information yet.'\n\n"
+                f"Context:\n{context}\n\nQuestion: {query}"
+            )
+            system_content = "You are a precise assistant that uses only the given context."
+
+        logger.debug(
+            "Decision inference model=%s device=%s", self.model_name, self.device
         )
-        
-        logger.debug(f"Processing decision with model '{self.model_name}' on device '{self.device}'")
         start_time = time.time()
-        
+
         try:
-            result = self.decision_model(prompt)
+            if self.decision_model is not None:
+                prompt = (
+                    f"{system_content}\n\n{user_content}"
+                    if context is None
+                    else (
+                        "You are a helpful assistant. Answer the user's question as directly "
+                        "and concisely as possible in 1-3 sentences using ONLY the provided "
+                        "context. If the answer is not present in the context, say: "
+                        "'I don't have that information yet.'\n\n"
+                        f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"
+                    )
+                )
+                result = self.decision_model(prompt)
+                text = self._coerce_callable_output(result)
+            else:
+                text = self._generate_causal(user_content, system_content)
+
             inference_duration = time.time() - start_time
-            
-            # Record metrics
             if _METRICS_AVAILABLE:
                 model_inference_duration.labels(
                     model_name=self.model_name,
-                    device=self.device
+                    device=self.device,
                 ).observe(inference_duration)
                 model_inference_total.labels(
                     model_name=self.model_name,
                     device=self.device,
-                    status="success"
+                    status="success",
                 ).inc()
-            
-            logger.debug(
-                f"Model inference completed: duration={inference_duration:.3f}s, "
-                f"device={self.device}, model={self.model_name}"
-            )
-            
-            if isinstance(result, list) and result and isinstance(result[0], dict) and 'generated_text' in result[0]:
-                return result[0]['generated_text'].strip()
-            return str(result).strip()
+            return text
         except Exception as e:
             inference_duration = time.time() - start_time
             if _METRICS_AVAILABLE:
                 model_inference_duration.labels(
                     model_name=self.model_name,
-                    device=self.device
+                    device=self.device,
                 ).observe(inference_duration)
                 model_inference_total.labels(
                     model_name=self.model_name,
                     device=self.device,
-                    status="error"
+                    status="error",
                 ).inc()
             logger.error(
-                f"Model inference failed: error={str(e)}, duration={inference_duration:.3f}s, "
-                f"device={self.device}, model={self.model_name}",
-                exc_info=True
+                "Model inference failed: error=%s duration=%.3fs device=%s model=%s",
+                str(e),
+                inference_duration,
+                self.device,
+                self.model_name,
+                exc_info=True,
             )
             raise

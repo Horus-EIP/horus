@@ -150,14 +150,12 @@ class TestSummarizerTool:
         mock_instance.return_value = [{"summary_text": "This is a summary"}]
         mock_pipeline.return_value = mock_instance
 
-        # Force re-instantiation to pickup mock
         tool = SummarizerTool()
-        # Verify pipeline init
-        assert tool._pipe is not None
-        
-        # Run
+        assert tool._pipe is None
+
         res = tool.run({"text": "Long text"})
         assert res == "This is a summary"
+        assert tool._pipe is not None
         mock_instance.assert_called_once()
 
     def test_protected_keywords_fallback(self):

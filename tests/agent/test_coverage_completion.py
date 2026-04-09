@@ -74,7 +74,8 @@ class TestCoverageCompletion:
              from ai_agents.summarizer_tool import SummarizerTool
              mock_pipe = MagicMock(return_value=[{"summary_text": "Summary result"}])
              tool = SummarizerTool()
-             tool._pipe = mock_pipe 
+             tool._summarization_attempted = True
+             tool._pipe = mock_pipe
              res = tool.run({"text": "Long text", "protect_keywords": []})
              assert res == "Summary result"
 
@@ -115,7 +116,7 @@ class TestCoverageCompletion:
              from ai_agents.decision_making_agent import DecisionMakingAgent
              mock_model = MagicMock(return_value=[{"generated_text": "Answer"}])
              agent = DecisionMakingAgent(decision_model=mock_model)
-             res = await agent.decide("Q", "C")
+             res = agent.decide("Q", "C")
              assert res == "Answer"
 
     def test_file_parser_extensions(self):
@@ -130,13 +131,13 @@ class TestCoverageCompletion:
         mock_model = MagicMock(return_value="Valid String Answer")
         agent = DecisionMakingAgent(decision_model=mock_model)
         with patch.dict("sys.modules", {"core.metrics": None}):
-            res = await agent.decide("Q", "C")
+            res = agent.decide("Q", "C")
         assert res == "Valid String Answer"
         
         mock_model2 = MagicMock(return_value=["Just a string in list"])
         agent2 = DecisionMakingAgent(decision_model=mock_model2)
         with patch.dict("sys.modules", {"core.metrics": None}):
-             res2 = await agent2.decide("Q", "C")
+             res2 = agent2.decide("Q", "C")
         assert "Just a string in list" in res2
 
     def test_calculator_floordiv(self):

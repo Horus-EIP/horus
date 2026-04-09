@@ -6,7 +6,7 @@ It handles HTTP requests with timeout, retry logic, and graceful error handling.
 Uses async/await for non-blocking I/O operations.
 """
 
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 import httpx
 import asyncio
 import time
@@ -29,6 +29,7 @@ from config.settings import (
     KNOWLEDGE_STORE_TIMEOUT,
     KNOWLEDGE_STORE_MAX_RETRIES,
     KNOWLEDGE_STORE_RETRY_DELAY,
+    KNOWLEDGE_STORE_N_RESULTS,
 )
 
 
@@ -67,23 +68,28 @@ class KnowledgeStoreClient:
             f"timeout={self.timeout}s, max_retries={self.max_retries}, retry_delay={self.retry_delay}s"
         )
 
-    async def query(self, query: str, n_results: int = 1) -> Dict[str, Any]:
+    async def query(self, query: str, n_results: Optional[int] = None) -> Dict[str, Any]:
         """
         Query the knowledge store with a query string (async).
 
         Args:
             query: The search query string.
-            n_results: The number of results to return. Defaults to 1.
+            n_results: Max chunks to retrieve. Defaults to KNOWLEDGE_STORE_N_RESULTS (env, default 8).
 
         Returns:
             A dictionary with the query results. On error, returns a dict with
             'query' and 'data' fields, where 'data' contains an error message
             or empty string.
         """
+        limit = (
+            n_results if n_results is not None else KNOWLEDGE_STORE_N_RESULTS
+        )
         url = f"{self.base_url}/api/knowledge-store/"
-        params = {"query": query, "n_results": n_results}
+        params = {"query": query, "n_results": limit}
 
-        logger.debug(f"Querying knowledge store: query='{query}', n_results={n_results}")
+        logger.debug(
+            f"Querying knowledge store: query='{query}', n_results={limit}"
+        )
 
         start_time = time.time()
         last_exception = None

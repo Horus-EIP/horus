@@ -24,7 +24,6 @@ from contextlib import asynccontextmanager
 from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
 from ai_agents.decision_making_agent import DecisionMakingAgent
 from ai_agents.rag_pipeline import RAGPipeline
-from ai_agents.tool_registry import ToolRegistry
 from ai_agents.knowledge_store_client import KnowledgeStoreClient
 from specialized.analyst_agent import AnalystAgent
 from specialized.researcher_agent import ResearcherAgent
@@ -99,7 +98,8 @@ AGENT_CAPABILITIES = {
 knowledge_store_client = KnowledgeStoreClient()
 retrieval_agent = KnowledgeRetrievalAgent(store_interface=knowledge_store_client)
 decision_agent = DecisionMakingAgent(model_name=MODEL_NAME, device=MODEL_DEVICE)
-tool_registry = ToolRegistry()  # default tools will be added by pipeline if empty
+# None → RAGPipeline builds the default registry (parse, calc, extract_data, etc.).
+# An empty ToolRegistry() breaks ReAct tools that call tool_registry.run("parse", ...).
 
 if AGENT_TYPE == "researcher":
     active_agent = ResearcherAgent(retrieval_agent)
@@ -111,7 +111,7 @@ else:
     active_agent = RAGPipeline(
         retrieval_agent,
         decision_agent,
-        tool_registry=tool_registry,
+        tool_registry=None,
     )
 
 rag_pipeline: RAGPipeline | None = (
@@ -319,7 +319,13 @@ def _consume_messages():
             demand = payload.get("demand", "")
             conversation_id = payload.get("conversation_id", "")
             task_id = payload.get("task_id") or ("task_" + uuid.uuid4().hex)
-            
+            if not (demand or payload.get("query")):
+                logger.warning(
+                    "RabbitMQ task message has no demand/query (task_id=%s). "
+                    "MAS must publish the task text in the message body.",
+                    task_id,
+                )
+
             # Extract correlation ID from message properties if available
             corr_id = properties.headers.get("X-Request-ID") if properties.headers else None
             if corr_id:
@@ -395,9 +401,18 @@ def _consume_messages():
                     f"correlation_id={get_correlation_id()}",
                     exc_info=True
                 )
-                raise
+                err_msg = f"Agent processing failed: {e}"
+                if conversation_id and task_id:
+                    try:
+                        send_result(err_msg, str(conversation_id), str(task_id))
+                    except Exception as send_exc:
+                        logger.error(f"Failed to send error result to MAS: {send_exc}")
+            else:
+                # Acknowledge only after successful processing
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+                return
 
-            # Acknowledge the message
+            # Failed path: ack so the message is not redelivered forever
             ch.basic_ack(delivery_tag=method.delivery_tag)
 
         channel.basic_qos(prefetch_count=1)

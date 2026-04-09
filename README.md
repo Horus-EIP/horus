@@ -102,12 +102,10 @@ cd scripts/load_tests && locust -f locustfile.py
 
 ## GPU Support
 
-For NVIDIA GPU acceleration (model inference):
+`docker-compose.yml` requests **`gpus: all`** for **`mas`** (orchestrator LLM), **`agent`** (decision / RAG model), and **`knowledge_store`** (embeddings) when the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) is installed (Docker Desktop on Windows: WSL2 + GPU drivers).
 
-```bash
-cd src/infra
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
-```
+- Keep **`LLM_FORCE_CPU=0`** (default) so MAS uses CUDA when visible.
+- If you have **no GPU** or Compose errors on startup, **comment out** the `gpus: all` lines under those three services in `src/infra/docker-compose.yml`, and set **`MODEL_DEVICE=cpu`** and **`LLM_FORCE_CPU=1`** in `src/infra/.env` as needed.
 
 ## Documentation
 

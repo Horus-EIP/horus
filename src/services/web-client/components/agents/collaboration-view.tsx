@@ -11,14 +11,6 @@ interface CollaborationViewProps {
   title?: string;
 }
 
-// TMP: Mock data until we connect real data in Sprint 2
-const MOCK_AGENTS: Agent[] = [
-  { id: '1', name: 'ResearchBot', skills: ['search', 'retrieval', 'fetch'], status: 'active', last_heartbeat: new Date().toISOString(), description: 'Searches and retrieves documents from external sources.', created_at: '2025-01-01T00:00:00Z' },
-  { id: '2', name: 'DataAnalyst', skills: ['nlp', 'summarization', 'data'], status: 'active', last_heartbeat: new Date(Date.now() - 3 * 60000).toISOString(), description: 'Analyses and summarises large volumes of text.', created_at: '2025-01-02T00:00:00Z' },
-  { id: '3', name: 'ContentWriter', skills: ['writing', 'draft', 'content'], status: 'idle', last_heartbeat: new Date(Date.now() - 120 * 60000).toISOString(), description: 'Generates structured written content from briefs.', created_at: '2025-01-03T00:00:00Z' },
-  { id: '4', name: 'GeneralBot', skills: [], status: 'idle', last_heartbeat: new Date(Date.now() - 120 * 60000).toISOString(), description: 'A general-purpose agent for handling various tasks.', created_at: '2025-01-04T00:00:00Z' },
-];
-
 function AgentNode({ agent }: { agent: Agent }) {
   const role = getRole(agent.skills);
   const isWorking = agent.status === 'active';
@@ -57,7 +49,7 @@ function AgentNode({ agent }: { agent: Agent }) {
 }
 
 export function CollaborationView({
-  agents = MOCK_AGENTS,
+  agents = [],
   isLoading = false,
   title = "Active Collaboration",
 }: CollaborationViewProps) {

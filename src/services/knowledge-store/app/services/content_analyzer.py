@@ -11,6 +11,7 @@ and LLM-powered summary generation when transformers models are available.
 
 from __future__ import annotations
 
+import os
 import re
 import logging
 from typing import Dict, Any, List, Optional, Tuple
@@ -184,6 +185,9 @@ class ContentAnalyzer:
 
     def _init_llm(self) -> None:
         """Lazily initialize LLM pipelines for classification and summarization."""
+        if os.getenv("HF_HUB_OFFLINE", "").strip().lower() in ("1", "true", "yes"):
+            logger.info("Skipping optional HF pipelines (HF_HUB_OFFLINE=1); keyword/spaCy paths only.")
+            return
         ok, pipeline_mod = _try_import_transformers()
         if not ok or pipeline_mod is None:
             return

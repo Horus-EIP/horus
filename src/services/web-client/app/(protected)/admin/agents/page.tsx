@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { agentApi, Agent, RegisterAgentPayload } from "@/lib/agents/api";
 import Info from "@/components/ui/info";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
@@ -13,8 +13,7 @@ import { AgentTypeBadge, getRole } from "@/components/agents/agent-type-badge";
 const header = ["Name", "Role", "Description", "Status", "Last Heartbeat"];
 
 export default function AdminAgentsPage() {
-  // TMP: Mock data until we connect real data in Sprint 2
-  // const [agents, setAgents] = useState<Agent[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   
@@ -36,7 +35,7 @@ export default function AdminAgentsPage() {
   const { error: notifyError, success: notifySuccess } = useNotification();
   const { user } = useAuth();
 
-  const loadAgents = async () => {
+  const loadAgents = useCallback(async () => {
     try {
       setIsLoading(true);
       const result = await agentApi.getAgents();
@@ -50,20 +49,11 @@ export default function AdminAgentsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [notifyError]);
 
-  // TMP: Load data on mount until we connect real data in Sprint 2
-  // useEffect(() => {
-  //   loadAgents();
-  // }, []);
-
-  // TMP: Mock data until we connect real data in Sprint 2
-  const [agents, setAgents] = useState<Agent[]>([
-    { id: '1', name: 'ResearchBot', skills: ['search', 'retrieval', 'fetch'], status: 'active', last_heartbeat: new Date().toISOString(), description: 'Searches and retrieves documents from external sources.', created_at: '2025-01-01T00:00:00Z' },
-    { id: '2', name: 'DataAnalyst', skills: ['nlp', 'summarization', 'data'], status: 'active', last_heartbeat: new Date(Date.now() - 3 * 60000).toISOString(), description: 'Analyses and summarises large volumes of text.', created_at: '2025-01-02T00:00:00Z' },
-    { id: '3', name: 'ContentWriter', skills: ['writing', 'draft', 'content'], status: 'idle', last_heartbeat: new Date(Date.now() - 120 * 60000).toISOString(), description: 'Generates structured written content from briefs.', created_at: '2025-01-03T00:00:00Z' },
-    { id: '4', name: 'GeneralBot', skills: [], status: 'idle', last_heartbeat: new Date(Date.now() - 120 * 60000).toISOString(), description: 'A general-purpose agent for handling various tasks.', created_at: '2025-01-04T00:00:00Z' },
-  ]);
+  useEffect(() => {
+    void loadAgents();
+  }, [loadAgents]);
 
   const formatDate = (dateString: string) => {
     if (!dateString) return "Never";

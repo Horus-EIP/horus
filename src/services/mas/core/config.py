@@ -65,6 +65,7 @@ Usage:
 from pathlib import Path
 from typing import Optional
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -101,11 +102,18 @@ class Settings(BaseSettings):
     rabbitmq_password: str = "guest"
 
     # Application Configuration
-    llm_autoinit: int = 0 # Force 0 for tests
+    llm_autoinit: int = 0  # Force 0 for tests
+    # When 1, load the orchestrator LLM on CPU even if a GPU is visible (Docker can still pass GPU to other services).
+    llm_force_cpu: int = 0
 
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
 
-    task_timeout: int = 300  # in seconds
+    # Max wall-clock time for a RUNNING task before MAS cancels it (LLM + agent work).
+    # Env: TASK_TIMEOUT or TASK_TIMEOUT_SECONDS (Compose). Default 30m; values like 120 are too low for 4B models.
+    task_timeout: int = Field(
+        default=1800,
+        validation_alias=AliasChoices("TASK_TIMEOUT", "TASK_TIMEOUT_SECONDS"),
+    )
 
     model_config = SettingsConfigDict(
         env_file=INFRA_DIR / ".env" if (INFRA_DIR / ".env").exists() else ".env",

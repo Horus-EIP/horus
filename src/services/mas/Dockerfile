@@ -1,4 +1,6 @@
-FROM python:3.13-slim
+# 3.11 matches the agent image and PyTorch cu124 wheels on the extra index; 3.13 often
+# resolved to a CPU-only torch wheel → cuda.is_available()=False → huge RAM, no GPU use.
+FROM python:3.11-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -22,6 +24,18 @@ RUN pip install --no-cache-dir --use-deprecated=legacy-resolver -r requirements.
 RUN opentelemetry-bootstrap --action=install
 
 COPY . .
+
+# Orchestrator LLM: download once at image build (needs network during `docker build` only).
+ARG DOWNLOAD_LLM=1
+ENV HF_HUB_DISABLE_TELEMETRY=1
+RUN if [ "$DOWNLOAD_LLM" = "1" ]; then \
+    mkdir -p models && \
+    python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='Qwen/Qwen3-4B-Instruct-2507', local_dir='models/Qwen3_instruct_4B', local_dir_use_symlinks=False)"; \
+    fi
+
+# Prefer local files; block accidental Hub access when running air-gapped (override in .env if needed).
+ENV HF_HUB_OFFLINE=1
+ENV TRANSFORMERS_OFFLINE=1
 
 ENV RABBITMQ_HOST=rabbitmq
 

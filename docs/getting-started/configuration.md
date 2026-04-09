@@ -24,8 +24,9 @@ The committed template for local and Compose deployments is **`src/infra/.env.ex
 - Authentication: `JWT_SECRET_KEY`, `JWT_ALGORITHM`
 - Message queue: `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`
 - Cache: `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`
-- Application: `LLM_AUTOINIT`, `LLM_BACKEND`, `SUPER_USER_USERNAME`, `SUPER_USER_PASSWORD`
-- OpenTelemetry (Compose): `OTEL_ENABLED`, `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`
+- Application: `TASK_TIMEOUT` (or `TASK_TIMEOUT_SECONDS`, seconds; default 1800 for long LLM runs), `LLM_AUTOINIT`, `LLM_FORCE_CPU` (default in Compose is GPU when available), optional `LLM_GPU_MEMORY_CAP` / `LLM_CPU_OFFLOAD_CAP`, `LLM_TORCH_INTRAOP_THREADS`, `SUPER_USER_USERNAME`, `SUPER_USER_PASSWORD`
+- **GPU+CPU hybrid (Transformers / Accelerate):** Setting `LLM_GPU_MEMORY_CAP` (and optionally `LLM_CPU_OFFLOAD_CAP`) makes the orchestrator put **some layers on GPU and the rest in CPU RAM** — useful when VRAM is smaller than the model, but **usually slower** than keeping the whole 4-bit model on GPU (CPU layers dominate latency). Same idea for the agent with `AGENT_GPU_MEMORY_CAP` / `AGENT_CPU_OFFLOAD_CAP`. This differs from **llama.cpp + GGUF** (`n_gpu_layers`), which is a separate inference stack (see project notes such as `share_cpu_gpu.md`).
+- OpenTelemetry (Compose): `OTEL_ENABLED`, `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT` (this repo targets **Tempo** at `http://tempo:4317`, not Jaeger)
 
 **Validation**: **`src/services/mas/core/config.py`** using Pydantic settings.
 
@@ -36,7 +37,7 @@ The committed template for local and Compose deployments is **`src/infra/.env.ex
 - MAS: `ORCHESTRATOR_URL` (e.g. `http://mas:8000` in Docker), optional `ORCHESTRATOR_TOKEN` or `ORCHESTRATOR_USERNAME` / `ORCHESTRATOR_PASSWORD` for token acquisition
 - Knowledge Store: `KNOWLEDGE_STORE_URL`, `KNOWLEDGE_STORE_TIMEOUT`, `KNOWLEDGE_STORE_MAX_RETRIES`, `KNOWLEDGE_STORE_RETRY_DELAY`
 - RabbitMQ: `RABBITMQ_HOST`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`
-- Model: `MODEL_NAME`, `MODEL_DEVICE`, `AGENT_TYPE`
+- Model: `MODEL_NAME` (default Qwen3 4B instruct), `MODEL_DEVICE`, optional `AGENT_GPU_MEMORY_CAP`, `AGENT_CPU_OFFLOAD_CAP`, `AGENT_TORCH_INTRAOP_THREADS`, `AGENT_FORCE_CPU`, `AGENT_MAX_NEW_TOKENS`, `AGENT_LAZY_DECISION_MODEL` (default `0` in Compose: load at startup), `AGENT_TYPE`
 - Delegation: `DELEGATION_TIMEOUT`, `MAX_DELEGATION_DEPTH`
 
 **Validation**: Environment is read in `settings.py` (no Pydantic `BaseSettings` class today).

@@ -2,6 +2,7 @@ import { apiClient } from "@/lib/api-client";
 import {
   CreateConversationResponse,
   NewTaskPayload,
+  NewTaskResponse,
   PaginatedHistory,
 } from "@/lib/types";
 
@@ -29,6 +30,13 @@ export interface TaskQueueStats {
   total: number;
 }
 
+export interface TaskSubtaskRow {
+  id: string;
+  title: string;
+  status: string;
+  assignedAgent: string;
+}
+
 export interface TaskDetails {
   task_id: string;
   status: string;
@@ -37,6 +45,9 @@ export interface TaskDetails {
   query: string;
   created_at: string;
   result?: string;
+  history?: unknown[];
+  future_actions?: unknown[];
+  subtasks?: TaskSubtaskRow[];
 }
 
 export const chatApi = {
@@ -106,8 +117,10 @@ export const chatApi = {
     };
   },
 
-  async createTask(payload: NewTaskPayload): Promise<ChatResponse<void>> {
-    const response = await apiClient.post<void>(
+  async createTask(
+    payload: NewTaskPayload
+  ): Promise<ChatResponse<NewTaskResponse | void>> {
+    const response = await apiClient.post<NewTaskResponse>(
       "/tasks/new_task",
       payload,
       { retry: 2 }
@@ -120,7 +133,7 @@ export const chatApi = {
       };
     }
 
-    return { ok: true };
+    return { ok: true, data: response.data ?? undefined };
   },
 
   async getConversations(): Promise<ChatResponse<Conversation[]>> {

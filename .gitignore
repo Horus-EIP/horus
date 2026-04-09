@@ -3,6 +3,7 @@ __pycache__/
 .vscode/
 .idea/
 .DS_Store
+Thumbs.db
 node_modules/
 dist/
 build/
@@ -24,15 +25,32 @@ docs/agent_architecture.md
 *~
 .vscode/settings.json
 
-# OS
-.DS_Store
-Thumbs.db
-
 # Build artifacts
 *.egg-info/
 .pytest_cache/
 .coverage
 htmlcov/
+.ruff_cache/
+.mypy_cache/
+
+# ML / experiment tooling
+wandb/
+mlruns/
+
+# Hugging Face / Transformers caches (never commit)
+**/.cache/huggingface/
+**/.cache/torch/
+
+# Local Hugging Face / LLM snapshots (Dockerfiles use huggingface_hub snapshot_download — do not commit)
+src/services/agent/app/models/
+src/services/mas/models/Qwen3_instruct_4B/
+
+# Local offline model drops (see share_cpu_gpu.md / deployment docs)
+offline_models/
+*.gguf
+
+# Docker Compose overrides (machine-specific)
+docker-compose.override.yml
 
 # Generated documentation
 _docs_build/

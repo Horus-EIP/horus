@@ -40,27 +40,49 @@ pytest_plugins = ('pytest_asyncio',)
 @pytest.fixture(autouse=True)
 def mock_transformers_pipeline(monkeypatch):
     """
-    Globally mock transformers.pipeline to prevent accidental model downloads.
+    Mock transformers.pipeline (summarizer, etc.) and causal LM loading for DecisionMakingAgent
+    to prevent accidental Hugging Face downloads in tests.
     """
     mock_pipe = MagicMock()
-    
-    # Patch the real source of the pipeline
-    # Be careful if transformers is not installed, but here we assume it might be.
-    # We use string path for sys.modules check or just try/except.
-    
-    # 1. Patch 'transformers.pipeline' directly if transformers is importable
+
     try:
-        import transformers
-        monkeypatch.setattr(transformers, "pipeline", mock_pipe)
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        inp = torch.tensor([[1, 2, 3]])
+        attn = torch.tensor([[1, 1, 1]])
+
+        mock_tok = MagicMock()
+        mock_tok.apply_chat_template.return_value = "formatted"
+        mock_tok.return_value = {"input_ids": inp, "attention_mask": attn}
+        mock_tok.eos_token_id = 0
+        mock_tok.decode.return_value = "stub answer"
+
+        out_seq = torch.cat([inp, torch.tensor([[9]])], dim=-1)
+        mock_gen_ret = MagicMock()
+        mock_gen_ret.sequences = [out_seq]
+
+        mock_mdl = MagicMock()
+        mock_mdl.generate.return_value = mock_gen_ret
+        mock_mdl.parameters.return_value = iter(
+            [torch.nn.Parameter(torch.tensor([1.0], dtype=torch.float32))]
+        )
+
+        monkeypatch.setattr(
+            AutoTokenizer, "from_pretrained", MagicMock(return_value=mock_tok)
+        )
+        monkeypatch.setattr(
+            AutoModelForCausalLM, "from_pretrained", MagicMock(return_value=mock_mdl)
+        )
     except (ImportError, AttributeError):
         pass
 
-    # 2. Patch any existing module-level imports that might have occurred
-    for module in ["ai_agents.decision_making_agent", "ai_agents.summarizer_tool"]:
-        try:
-            monkeypatch.setattr(f"{module}.pipeline", mock_pipe)
-        except (ImportError, AttributeError, KeyError):
-            pass
+    try:
+        import transformers
+
+        monkeypatch.setattr(transformers, "pipeline", mock_pipe)
+    except (ImportError, AttributeError):
+        pass
 
     return mock_pipe
 

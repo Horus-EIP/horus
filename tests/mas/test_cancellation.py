@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -106,6 +106,9 @@ async def test_check_task_timeout_logic():
     ) as mock_interrupt, patch(
         "tasks.controller.settings"
     ) as mock_settings, patch(
+        "tasks.controller.send_messages_via_websockets",
+        new_callable=AsyncMock,
+    ), patch(
         "asyncio.sleep", side_effect=InterruptedError("Stop loop")
     ):  # Raise exception to break loop
 
@@ -113,15 +116,15 @@ async def test_check_task_timeout_logic():
         mock_session_cls.return_value = mock_db
         mock_settings.task_timeout = 300
 
-        # Task that is old
         old_task = MagicMock()
         old_task.id = "old-task"
-        old_task.updated_at = datetime.now(timezone.utc) - timedelta(seconds=301)
+        old_task.conversation_id = 1
+        old_task.created_at = datetime.now(timezone.utc) - timedelta(seconds=301)
 
-        # Task that is new
         new_task = MagicMock()
         new_task.id = "new-task"
-        new_task.updated_at = datetime.now(timezone.utc) - timedelta(seconds=100)
+        new_task.conversation_id = 2
+        new_task.created_at = datetime.now(timezone.utc) - timedelta(seconds=100)
 
         mock_get_tasks.return_value = [old_task, new_task]
 
@@ -132,5 +135,6 @@ async def test_check_task_timeout_logic():
         except InterruptedError:
             pass
 
-        # Verify interrupt_task was called ONLY for old_task
-        mock_interrupt.assert_called_once_with("old-task", mock_db)
+        mock_interrupt.assert_called_once()
+        assert mock_interrupt.call_args[0][0] == "old-task"
+        assert mock_interrupt.call_args[0][1] is mock_db

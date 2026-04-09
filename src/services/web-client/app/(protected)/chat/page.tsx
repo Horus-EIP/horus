@@ -121,14 +121,25 @@ function ChatPageContent() {
     onMessage: (event) => {
       const message = JSON.parse(event.data);
       if (message.type === "agent") {
-        const agentMessage: Message = {
-          id: Date.now().toString(),
-          text: message.content,
-          sender: "agent",
-          timestamp: new Date(message.timestamp),
-          status: 'sent',
-        };
-        setMessages((prev) => [...prev, agentMessage]);
+        const text = String(message.content ?? "").trim();
+        if (!text) {
+          setIsLoading(false);
+          return;
+        }
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.sender === "agent" && last.text === text) {
+            return prev;
+          }
+          const agentMessage: Message = {
+            id: Date.now().toString(),
+            text: message.content,
+            sender: "agent",
+            timestamp: new Date(message.timestamp),
+            status: "sent",
+          };
+          return [...prev, agentMessage];
+        });
         setIsLoading(false);
       }
     },
@@ -261,6 +272,9 @@ function ChatPageContent() {
         msg.id === userMessageId ? { ...msg, status: 'sent' } : msg
       )
     );
+
+    // Assistant replies (including direct orchestrator answers) arrive only via WebSocket so we
+    // do not duplicate them with POST body `result` (that caused two bubbles + mismatched times).
   };
 
   return (

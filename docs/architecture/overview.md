@@ -28,7 +28,7 @@ Organizations that want to leverage AI face three recurring concerns:
 
 Horus AI addresses all three by providing:
 
-- A **local deployment model** using Docker Compose (with optional GPU override) where every component runs on-premise.
+- A **local deployment model** using Docker Compose (NVIDIA GPU when the toolkit is installed; CPU fallback via env) where every component runs on-premise.
 - A **multi-agent architecture** where specialized AI agents (researcher, analyst, writer) collaborate under a central orchestrator to answer user queries.
 - A **Retrieval-Augmented Generation (RAG) pipeline** that grounds every response in the organization's own documents stored in a private vector database.
 - A **real-time chat interface** for end users, backed by WebSocket communication and JWT-based authentication with four-tier role-based access control.
@@ -517,7 +517,7 @@ A complete example with all variables is available at `src/infra/.env.example`.
 
 | Technology | Purpose |
 |---|---|
-| Docker / Docker Compose | Containerization and orchestration (with GPU override) |
+| Docker / Docker Compose | Containerization and orchestration (`gpus: all` for LLM services when available) |
 | PostgreSQL | Primary relational database |
 | Redis | Caching, session storage |
 | RabbitMQ | Asynchronous message broker for task dispatch |

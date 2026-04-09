@@ -50,9 +50,10 @@ Error Codes:
 """
 
 import json
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -78,28 +79,30 @@ logger = get_logger("task_routes")
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
 
-def get_task_queue_stats():
-    """Retrieve current task queue statistics."""
-    # This is a placeholder that returns stats from metrics/queue system
-    # In a real implementation, this would query RabbitMQ or internal counters
-    try:
-        current_depth = (
-            TASK_QUEUE_DEPTH.ephemeral_val()
-            if hasattr(TASK_QUEUE_DEPTH, "ephemeral_val")
-            else 0
-        )
-    except:
-        current_depth = 0
-
-    return {
-        "pending": current_depth,
+def get_task_queue_stats(db: Session) -> dict[str, Any]:
+    """Aggregate task counts by status from the database."""
+    rows = db.query(Task.status, func.count(Task.id)).group_by(Task.status).all()
+    counts = {
+        "pending": 0,
         "running": 0,
         "completed": 0,
         "failed": 0,
         "cancelled": 0,
         "timeout": 0,
-        "total": current_depth,
     }
+    for status, n in rows:
+        sv = status.value if isinstance(status, TaskStatus) else str(status)
+        key = {
+            TaskStatus.PENDING.value: "pending",
+            TaskStatus.RUNNING.value: "running",
+            TaskStatus.COMPLETED.value: "completed",
+            TaskStatus.FAILED.value: "failed",
+            TaskStatus.CANCELED.value: "cancelled",
+        }.get(sv)
+        if key is not None:
+            counts[key] = int(n)
+    counts["total"] = sum(counts.values())
+    return counts
 
 
 def update_task_queue_depth(depth: int):
@@ -156,16 +159,74 @@ def list_tasks(db: Session = Depends(get_db)):
 )
 async def get_queue_stats(
     user: Annotated[dict, Depends(PermissionChecker(Permission.VIEW_ANALYTICS))],
+    db: Session = Depends(get_db),
 ):
     """
-    Retrieve real-time task statistics from the message queue.
+    Retrieve task statistics from persisted tasks.
 
     Returns:
-        dict: A dictionary of queue statistics (depth, processed count, error rate).
+        dict: Counts by status and total.
     """
-    stats = get_task_queue_stats()
+    stats = get_task_queue_stats(db)
     logger.info("Queue statistics retrieved", stats=stats)
     return stats
+
+
+def _task_status_value(status) -> str:
+    v = status.value if hasattr(status, "value") else str(status)
+    if v == "canceled":
+        return "cancelled"
+    return v
+
+
+@router.get(
+    "/{task_id}",
+    summary="Get task details",
+    description="Returns a task, optional result, and child subtasks. Requires TASK_READ.",
+    status_code=200,
+    dependencies=[Depends(PermissionChecker(Permission.TASK_READ))],
+)
+def get_task_detail(task_id: str, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    tr = db.query(TaskResult).filter(TaskResult.task_id == task_id).first()
+    children = (
+        db.query(Task)
+        .filter(Task.parent_task_id == task_id)
+        .order_by(Task.created_at.asc())
+        .all()
+    )
+
+    result_str = None
+    if tr and tr.result_data is not None:
+        if isinstance(tr.result_data, str):
+            result_str = tr.result_data
+        else:
+            result_str = json.dumps(tr.result_data)
+
+    subtasks_out = [
+        {
+            "id": c.id,
+            "title": (c.query[:200] + "…") if len(c.query) > 200 else c.query,
+            "status": _task_status_value(c.status),
+            "assignedAgent": c.agent_id,
+        }
+        for c in children
+    ]
+
+    return {
+        "task_id": task.id,
+        "status": _task_status_value(task.status),
+        "agent_id": task.agent_id,
+        "conversation_id": task.conversation_id,
+        "query": task.query,
+        "created_at": task.created_at.isoformat() if task.created_at else "",
+        "result": result_str,
+        "history": tr.history if tr else [],
+        "future_actions": tr.future_actions if tr else [],
+        "subtasks": subtasks_out,
+    }
 
 
 @router.post("/new_task", include_in_schema=False)
@@ -400,6 +461,8 @@ async def create_new_task(
     if direct_response:
         add_messages("user", task.demand, task.conversation_id, db)
         add_messages("assistant", direct_response, task.conversation_id, db)
+        # Push to chat WebSocket clients (same as agent task-result path); otherwise UI stays "loading".
+        await send_messages_via_websockets(str(task.conversation_id), direct_response)
         # We don't create a task, just return the answer
         return {
             "message": "Processing complete",
@@ -424,6 +487,8 @@ async def create_new_task(
             {
                 "conversation_id": task.conversation_id,
                 "task_id": task_id,
+                # Agent consumer expects "demand" (or "query"); omitting it left the worker idle / empty.
+                "demand": user_demand,
             }
         )
         rabbitmq_instance.publish(agent_id, message)
@@ -449,13 +514,10 @@ async def create_new_task(
     )
 
     if not first_action:
-        add_messages(
-            "assistant",
-            "No agent registered to assign a task",
-            task.conversation_id,
-            db,
-        )
-        return {"message": "No agent registered to assign a task"}
+        fallback = "No agent registered to assign a task"
+        add_messages("assistant", fallback, task.conversation_id, db)
+        await send_messages_via_websockets(str(task.conversation_id), fallback)
+        return {"message": fallback}
 
     agent_id, user_demand = first_action
 
@@ -468,6 +530,7 @@ async def create_new_task(
         {
             "conversation_id": task.conversation_id,
             "task_id": task_id,
+            "demand": user_demand,
         }
     )
     rabbitmq_instance.publish(agent_id, message)
@@ -777,6 +840,7 @@ async def sharing_agent_result(
                 {
                     "conversation_id": task.conversation_id,
                     "task_id": new_subtask_id,
+                    "demand": new_action_context,
                 }
             )
             rabbitmq_instance.publish(new_agent, message)
@@ -802,6 +866,15 @@ async def sharing_agent_result(
         )
 
 
+@router.patch(
+    "/{task_id}/cancel",
+    summary="Cancel a running task (alternate path)",
+    description="Same as /task-cancel/{task_id}; provided for API client compatibility.",
+    status_code=200,
+    tags=["Tasks"],
+    dependencies=[Depends(PermissionChecker(Permission.TASK_DELETE))],
+    include_in_schema=False,
+)
 @router.patch(
     "/task-cancel/{task_id}",
     summary="Cancel a running task",

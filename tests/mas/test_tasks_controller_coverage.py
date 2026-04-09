@@ -70,11 +70,11 @@ async def test_check_task_timeout_no_tasks(
 async def test_check_task_timeout_task_active(
     mock_session_local, mock_get_tasks_in_progress, mock_interrupt_task, mock_settings
 ):
-    # Setup: One task that is recently updated
+    # Runtime is measured from created_at (RUNNING tasks rarely get DB updates during LLM work).
     task = MagicMock()
     task.id = "task_1"
-    # updated_at is recent
-    task.updated_at = datetime.datetime.now(datetime.timezone.utc)
+    task.conversation_id = 1
+    task.created_at = datetime.datetime.now(datetime.timezone.utc)
 
     mock_get_tasks_in_progress.return_value = [task]
 
@@ -92,29 +92,32 @@ async def test_check_task_timeout_task_active(
 async def test_check_task_timeout_task_stale(
     mock_session_local, mock_get_tasks_in_progress, mock_interrupt_task, mock_settings
 ):
-    # Setup: One task that is old
     task = MagicMock()
     task.id = "task_stale"
-    # updated_at is old
-    task.updated_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+    task.conversation_id = 42
+    task.created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
         seconds=100
     )
 
-    # Settings timeot is 30s
     mock_settings.task_timeout = 30
 
     mock_get_tasks_in_progress.return_value = [task]
 
-    with patch("asyncio.sleep", side_effect=[None, StopLoopException("StopLoop")]):
+    with (
+        patch("asyncio.sleep", side_effect=[None, StopLoopException("StopLoop")]),
+        patch(
+            "tasks.controller.send_messages_via_websockets", new_callable=AsyncMock
+        ) as mock_ws,
+    ):
         try:
             await check_task_timeout(test_mode=True)
         except StopLoopException:
             pass
 
-    # Should HAVE interrupted
-    mock_interrupt_task.assert_called_with(
-        "task_stale", mock_session_local.return_value
-    )
+    mock_interrupt_task.assert_called_once()
+    assert mock_interrupt_task.call_args[0][0] == "task_stale"
+    assert mock_interrupt_task.call_args[0][2].startswith("Exceeded maximum runtime")
+    mock_ws.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -140,13 +143,13 @@ async def test_check_task_timeout_db_error(mock_session_local):
 
 
 @pytest.mark.asyncio
-async def test_check_task_timeout_task_no_updated_at(
+async def test_check_task_timeout_task_no_created_at(
     mock_session_local, mock_get_tasks_in_progress, mock_interrupt_task, mock_settings
 ):
-    # Setup: One task with no updated_at (None)
     task = MagicMock()
     task.id = "task_none"
-    task.updated_at = None
+    task.conversation_id = 7
+    task.created_at = None
 
     mock_get_tasks_in_progress.return_value = [task]
 
@@ -156,4 +159,4 @@ async def test_check_task_timeout_task_no_updated_at(
         except StopLoopException:
             pass
 
-    mock_interrupt_task.assert_called_with("task_none", mock_session_local.return_value)
+    mock_interrupt_task.assert_not_called()

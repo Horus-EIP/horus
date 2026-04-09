@@ -86,7 +86,7 @@ class TestAnalystAgent:
 class TestWriterAgent:
     def setup_method(self):
         self.mock_decision = MagicMock()
-        self.mock_decision.decide = AsyncMock(return_value="Generated Content")
+        self.mock_decision.decide = MagicMock(return_value="Generated Content")
         self.agent = WriterAgent(self.mock_decision)
 
     @pytest.mark.asyncio

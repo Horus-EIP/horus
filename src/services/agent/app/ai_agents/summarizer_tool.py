@@ -8,6 +8,7 @@ and a simple extractive fallback otherwise.
 from __future__ import annotations
 
 from typing import Dict, Any, List, Optional, Tuple
+import os
 import re
 import logging
 
@@ -18,12 +19,22 @@ class SummarizerTool:
 
     def __init__(self):
         self._pipe = None
-        # Lazy load transformers to prevent import-time hangs
+        self._summarization_attempted = False
+
+    def _ensure_summarization_pipeline(self) -> None:
+        if self._summarization_attempted:
+            return
+        self._summarization_attempted = True
+        if os.getenv("HF_HUB_OFFLINE", "").strip().lower() in ("1", "true", "yes"):
+            logger.debug("Skipping HF summarization pipeline (HF_HUB_OFFLINE=1); using extractive path.")
+            self._pipe = None
+            return
         try:
             from transformers import pipeline
+
             self._pipe = pipeline("summarization")
         except (ImportError, Exception) as e:
-            logger.debug(f"Transformers not available: {e}")
+            logger.debug(f"Transformers summarization pipeline not available: {e}")
             self._pipe = None
 
     def run(self, payload: Dict[str, Any]) -> str:
@@ -52,6 +63,8 @@ class SummarizerTool:
             elif isinstance(protect_keywords_raw, str):
                 parts = [p.strip() for p in re.split(r"[;,]", protect_keywords_raw) if p.strip()]
                 protect_keywords = [p.lower() for p in parts]
+
+        self._ensure_summarization_pipeline()
 
         # If protect/indices requested, use extractive for determinism and auditability
         if self._pipe is not None and not protect_keywords and not return_indices:

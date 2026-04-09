@@ -102,6 +102,26 @@ docker restart mas
 
 ---
 
+### Chat or `/tasks/new_task` is very slow (browser “pending”)
+
+**Expected with embedded images:** `docker compose build` should download **Qwen3 4B** into the **mas** and **agent** images (`DOWNLOAD_LLM=1` in `.env`). At runtime, Compose sets **`HF_HUB_OFFLINE=1`** so the stack does not call Hugging Face again. The first chat may still wait while **RAM load** and **CPU/GPU inference** run (much shorter than a full network download). Use `docker compose logs -f mas` to see preload / `ask_llm`.
+
+**If you still see Hugging Face URLs in logs at runtime:** Rebuild with a network: `docker compose build --no-cache mas agent`, and ensure `.env` has not set `HF_HUB_OFFLINE=0` unless you intend to allow Hub access.
+
+**Agent dev bind-mount:** Compose mounts `../services/agent/app` over `/app`. The image stores weights under `/opt/llm-bundle`; **`entrypoint.sh` copies them into `app/models/Qwen3_instruct_4B` once** if that folder is missing (so baked weights survive the mount).
+
+**What we changed:** With `LLM_AUTOINIT=1`, MAS starts a **background preload** after RabbitMQ connects so the HTTP server stays responsive. The `mas` healthcheck allows a longer timeout during heavy load.
+
+**Optional:** Add `HF_TOKEN` at **build** time for higher rate limits when downloading during `docker compose build`. Default Compose assigns GPUs to `mas`, `agent`, and `knowledge_store` when the NVIDIA toolkit is present; keep `LLM_FORCE_CPU=0` for orchestrator CUDA.
+
+### Chat spinner never stops (task cancelled in MAS logs)
+
+**Cause:** Background **TASK_TIMEOUT** cancels RUNNING tasks after a wall-clock limit. Values like **`TASK_TIMEOUT=120`** (2 minutes) are often too short for Qwen/agent work, so MAS interrupts the task. The UI only clears the spinner when it receives a WebSocket assistant message; timeout did not send one before.
+
+**Fix:** Set **`TASK_TIMEOUT=1800`** (30 minutes) or higher in `src/infra/.env` (Compose passes it into `mas`). Ensure you are not using a stale `TASK_TIMEOUT_SECONDS` without `TASK_TIMEOUT` unless your MAS build reads both (current code accepts `TASK_TIMEOUT` and `TASK_TIMEOUT_SECONDS`). After a timeout, MAS should push an explanatory line over the chat WebSocket.
+
+---
+
 ### 3. Authentication Failures
 
 **Symptoms:**
@@ -289,9 +309,11 @@ docker logs mas | grep "Slow Query"
 ```bash
 # Check if GPU is being used
 docker logs agent | grep "GPU\|CUDA\|device"
+docker logs mas | grep "GPU\|CUDA\|device"
 
-# Enable GPU in docker-compose.gpu.yml
-docker compose -f docker-compose.gpu.yml up -d
+# Default compose already sets gpus: all for mas, agent, and knowledge_store.
+# Install the NVIDIA Container Toolkit; if you have no GPU, comment out those gpus: lines in docker-compose.yml.
+cd src/infra && docker compose up -d
 ```
 
 ---
@@ -311,8 +333,8 @@ docker stats
 # Increase Docker memory limit
 # Docker Desktop → Settings → Resources → Memory
 
-# Reduce model size
-# In agent settings, use smaller model (t5-small vs t5-base)
+# Reduce model size / VRAM
+# Lower AGENT_MAX_NEW_TOKENS, set MODEL_DEVICE=cpu or AGENT_FORCE_CPU=1, or use a smaller hub model via MODEL_NAME.
 ```
 
 ---

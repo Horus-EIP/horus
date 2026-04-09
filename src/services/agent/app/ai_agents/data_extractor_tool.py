@@ -60,9 +60,18 @@ class DataExtractorTool(BaseTool):
             try:
                 if not _has_spacy or not spacy:
                     raise ImportError("Spacy missing")
-                logger.info("Loading spacy model en_core_web_trf...")
-                _nlp_model = spacy.load("en_core_web_trf")
-                logger.info("Spacy model loaded successfully")
+                prefer_sm = os.getenv("AGENT_SPACY_PREFER_SM", "").strip().lower() in (
+                    "1",
+                    "true",
+                    "yes",
+                )
+                if prefer_sm:
+                    logger.info("AGENT_SPACY_PREFER_SM: loading en_core_web_sm (lighter).")
+                    _nlp_model = spacy.load("en_core_web_sm")
+                else:
+                    logger.info("Loading spacy model en_core_web_trf...")
+                    _nlp_model = spacy.load("en_core_web_trf")
+                    logger.info("Spacy model loaded successfully")
             except (OSError, IOError, ImportError):
                 logger.warning("Spacy 'en_core_web_trf' not found. Trying 'en_core_web_sm'.")
                 try:

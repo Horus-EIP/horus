@@ -430,9 +430,6 @@ def decompose_task(user_input: str, db: Session = None):
 
 
 def select_agent_for_task(user_input: str, db: Session = None):
-    # FORCE DEBUG MOCK
-    # return None, None, f"Response for user : Debug Mock Response", []
-
     """
     Orchestrates the selection of an agent for a given user task.
 
@@ -606,8 +603,9 @@ def validating_task_results(task_id: str, task_result: str, db: Session):
         )
 
 
-def interrupt_task(task_id: str, db: Session):
+def interrupt_task(task_id: str, db: Session, reason: str | None = None):
     pretty_log(f"INTERRUPT SIGNAL RECEIVED FOR TASK {task_id}", "🛑")
+    cancel_reason = reason or "User requested cancellation"
     try:
         task = db.query(Task).filter(Task.id == task_id).first()
         if not task:
@@ -634,7 +632,7 @@ def interrupt_task(task_id: str, db: Session):
             "type": "cancel",
             "task_id": task_id,
             "conversation_id": task.conversation_id,
-            "reason": "User requested cancellation",
+            "reason": cancel_reason,
         }
     )
     rabbitmq_instance.publish(

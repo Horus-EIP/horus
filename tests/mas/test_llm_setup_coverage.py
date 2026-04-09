@@ -88,7 +88,9 @@ class TestLLMSetupCoverage:
         mock_out = MagicMock()
         mock_out.sequences = [MagicMock()]
         mock_model.generate.return_value = mock_out
-        mock_model.device = "cpu"
+        mock_param = MagicMock()
+        mock_param.device = torch.device("cpu")
+        mock_model.parameters = MagicMock(return_value=iter([mock_param]))
 
         mock_tokenizer.decode.return_value = "response"
 
@@ -119,7 +121,9 @@ class TestLLMSetupCoverage:
         mock_out = MagicMock()
         mock_out.sequences = [MagicMock()]
         mock_model.generate.return_value = mock_out
-        mock_model.device = "cpu"
+        mock_param = MagicMock()
+        mock_param.device = torch.device("cpu")
+        mock_model.parameters = MagicMock(return_value=iter([mock_param]))
 
         mock_tokenizer.decode.return_value = "response"
 
