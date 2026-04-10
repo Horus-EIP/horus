@@ -87,18 +87,35 @@ class RAGPipeline:
         Returns:
             A formatted response string with insights.
         """
+        import asyncio
+        import os
+
+        timeout = float(os.getenv("REACT_TIMEOUT_SECONDS", "120"))
+
         data = await self.retrieval_agent.fetch(query)
         context_text = data.get("data", "")
-        # Decision agent is CPU-bound, run in thread pool to not block event loop
-        import asyncio
-        insight = await asyncio.to_thread(
-            self.decision_agent.decide,
-            query=query,
-            context=context_text
-        )
-        response = insight
-        # Response generated successfully
-        return response
+
+        try:
+            insight = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.decision_agent.decide,
+                    query=query,
+                    context=context_text,
+                ),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Single-shot LLM inference timed out after %.0fs for query: %r",
+                timeout,
+                query[:120],
+            )
+            insight = (
+                "The model took too long to respond. "
+                "Try a shorter question or ask an administrator to increase REACT_TIMEOUT_SECONDS."
+            )
+
+        return insight
 
     async def generate_response_react(self, query: str) -> Dict[str, Any]:
         """

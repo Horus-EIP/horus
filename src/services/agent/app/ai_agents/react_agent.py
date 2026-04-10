@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 import time
 from dataclasses import dataclass, field
@@ -29,7 +30,9 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 MAX_REACT_STEPS = 5
-DEFAULT_TIMEOUT_SECONDS = 30.0
+# Configurable via REACT_TIMEOUT_SECONDS env var — default raised to 120s so
+# GPU inference of up to 1024 tokens has time to complete within one ReAct step.
+DEFAULT_TIMEOUT_SECONDS = float(os.getenv("REACT_TIMEOUT_SECONDS", "120"))
 
 # ---------------------------------------------------------------------------
 # ReAct prompt templates  (L5-T1)

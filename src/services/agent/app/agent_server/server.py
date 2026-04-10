@@ -226,8 +226,57 @@ def register_agent():
                     logger.warning("MAS did not return api_key; agent auth will fail.")
                 break
             if response.status_code == 409:
+                # A stale entry with this name is sitting in the DB from a previous
+                # container run. Try to find it, delete it, then re-register with
+                # the original name so ghost agents never accumulate.
+                logger.warning(
+                    f"Agent name '{name_variant}' already registered. "
+                    "Attempting to delete stale entry and re-register..."
+                )
+                try:
+                    list_resp = requests.get(
+                        f"{ORCHESTRATOR_URL}/agents/details/",
+                        headers=_build_headers(),
+                        timeout=5,
+                    )
+                    if list_resp.status_code == 200:
+                        agents = list_resp.json()
+                        stale = next(
+                            (
+                                a for a in agents
+                                if a.get("name") == name_variant
+                                and a.get("status") == "inactive"
+                            ),
+                            None,
+                        )
+                        if stale:
+                            del_resp = requests.delete(
+                                f"{ORCHESTRATOR_URL}/agents/unregister/{stale['id']}",
+                                headers=_build_headers(),
+                                timeout=5,
+                            )
+                            if del_resp.status_code == 200:
+                                logger.info(
+                                    f"Deleted stale agent '{name_variant}' "
+                                    f"({stale['id']}). Retrying registration."
+                                )
+                                continue  # retry immediately with same name
+                            else:
+                                logger.warning(
+                                    f"Could not delete stale agent {stale['id']}: "
+                                    f"{del_resp.status_code}"
+                                )
+                        else:
+                            logger.warning(
+                                f"No inactive agent named '{name_variant}' found "
+                                "to clean up (may be genuinely active). "
+                                "Falling back to unique name."
+                            )
+                except Exception as cleanup_err:
+                    logger.warning(f"Stale agent cleanup failed: {cleanup_err}")
+                # Fallback: unique suffix so we at least register successfully
                 name_variant = f"{base_name}-{uuid.uuid4().hex[:6]}"
-                logger.warning(f"Agent name conflict. Retrying with name '{name_variant}'")
+                logger.warning(f"Falling back to name '{name_variant}'")
             else:
                 logger.error(f"Agent registration failed: {response.status_code} - {response.text}")
                 agent_errors_total.labels(error_type="registration").inc()
