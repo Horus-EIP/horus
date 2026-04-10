@@ -27,9 +27,18 @@ function wsBaseUrl(): string {
   return explicit || "ws://localhost:8000";
 }
 
+function knowledgeStorePathPrefix(): string {
+  const raw = process.env.NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX?.trim() ?? "";
+  if (!raw) return "";
+  const noTrail = raw.replace(/\/+$/, "");
+  return noTrail.startsWith("/") ? noTrail : `/${noTrail}`;
+}
+
 export const config = {
   knowledgeStoreUrl:
     process.env.NEXT_PUBLIC_KNOWLEDGE_STORE_URL ?? "http://localhost:8080",
+  /** Path before store routes when using a gateway (default: "" = call :8080 directly). */
+  knowledgeStoreApiPrefix: knowledgeStorePathPrefix(),
   get wsUrl() {
     return wsBaseUrl();
   },

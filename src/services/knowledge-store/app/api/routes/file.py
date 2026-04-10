@@ -119,7 +119,16 @@ async def upload_file(files: List[UploadFile] = File(...)):
                 "application/json": {
                     "example": {
                         "documents": [
-                            {"id": "123", "title": "doc.pdf", "content": "Sample text", "date": "2023-01-01", "size": 1024}
+                            {
+                                "id": "123",
+                                "title": "doc.pdf",
+                                "date": "2023-01-01",
+                                "size": 1024,
+                                "summary": "Auto-generated summary of the document.",
+                                "excerpt": "First lines of extracted text...",
+                                "category": "general",
+                                "document_type": "unknown",
+                            }
                         ]
                     }
                 }
@@ -129,24 +138,51 @@ async def upload_file(files: List[UploadFile] = File(...)):
     },
 )
 async def get_all_files():
-    """Get all files in the knowledge store."""
+    """Get all files in the knowledge store (metadata + summary; not full body)."""
+    list_excerpt_max = 400
     try:
         stored_files = knowledge_collection.get(include=["documents", "metadatas"])
 
-        files = [
-            {
-                "id": doc_id,
-                "title": meta.get("title", "Untitled"),
-                "content": doc_content,
-                "date": meta.get("date", "Unknown"),
-                "size": meta.get("size", 0),
-            }
-            for doc_id, doc_content, meta in zip(
-                stored_files["ids"],
-                stored_files["documents"],
-                stored_files["metadatas"],
+        files = []
+        for doc_id, doc_content, meta in zip(
+            stored_files["ids"],
+            stored_files["documents"],
+            stored_files["metadatas"],
+        ):
+            meta = meta or {}
+            title = meta.get("title") or "Untitled"
+            date = meta.get("date") or "Unknown"
+            try:
+                size = int(meta.get("size", 0))
+            except (TypeError, ValueError):
+                size = 0
+            text = (doc_content or "") if isinstance(doc_content, str) else str(doc_content or "")
+            excerpt = text[:list_excerpt_max].strip()
+            if len(text) > list_excerpt_max:
+                excerpt = f"{excerpt}..."
+            auto_summary = (meta.get("auto_summary") or "").strip()
+            summary = auto_summary if auto_summary else (excerpt or "(no text extracted)")
+            category = (meta.get("auto_category") or "").strip() or "general"
+            document_type = (meta.get("auto_type") or "").strip() or "unknown"
+            conf = meta.get("confidence_score")
+            try:
+                confidence = float(conf) if conf is not None and conf != "" else None
+            except (TypeError, ValueError):
+                confidence = None
+
+            files.append(
+                {
+                    "id": doc_id,
+                    "title": title,
+                    "date": date,
+                    "size": size,
+                    "summary": summary,
+                    "excerpt": excerpt,
+                    "category": category,
+                    "document_type": document_type,
+                    **({"confidence_score": confidence} if confidence is not None else {}),
+                }
             )
-        ]
 
         return {"documents": files}
     except Exception as e:

@@ -77,7 +77,7 @@ First build takes 10-15 minutes. Subsequent starts are much faster.
 | MAS Swagger | http://localhost:8000/docs | Interactive API docs |
 | Agent | http://localhost:8001 | Agent service |
 | Knowledge Store | http://localhost:8080 | Document upload and search |
-| KS Swagger | http://localhost:8080/api/knowledge-store/docs | KS API docs |
+| KS Swagger | http://localhost:8080/docs | KS API docs (`root_path` is only for proxies) |
 | RabbitMQ UI | http://localhost:15672 | guest / guest |
 | PgAdmin | http://localhost:5433 | admin@admin.com / admin |
 | Grafana | http://localhost:3301 | admin / admin |

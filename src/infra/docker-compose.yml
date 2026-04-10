@@ -107,6 +107,8 @@ services:
       args:
         ORCHESTRATOR_URL: http://mas:8000
         NEXT_PUBLIC_KNOWLEDGE_STORE_URL: http://localhost:8080
+        # Browser calls KS on host port; leave empty unless a gateway adds a path prefix.
+        NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX: ${NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX:-}
     container_name: web_client
     depends_on:
       mas:
@@ -119,6 +121,7 @@ services:
       - NEXT_TELEMETRY_DISABLED=1
       - ORCHESTRATOR_URL=http://mas:8000
       - NEXT_PUBLIC_KNOWLEDGE_STORE_URL=http://localhost:8080
+      - NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX=${NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX:-}
 
   agent:
     build:
@@ -141,7 +144,9 @@ services:
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=${RABBITMQ_USER}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      # Store listens at / and /file on :8080 (no path prefix unless behind a gateway).
       - KNOWLEDGE_STORE_URL=http://knowledge_store:8080
+      - KNOWLEDGE_STORE_API_PREFIX=${KNOWLEDGE_STORE_API_PREFIX:-}
       - KNOWLEDGE_STORE_TIMEOUT=10.0
       - KNOWLEDGE_STORE_MAX_RETRIES=3
       - KNOWLEDGE_STORE_RETRY_DELAY=1.0

@@ -341,7 +341,7 @@ Returns a list of results, one per file. Failed files include an `error` field i
 
 ### GET /file
 
-List all files currently indexed in the knowledge store with their metadata.
+List all files currently indexed in the knowledge store. Returns **analysis metadata and short text only** (auto-summary from ingest, category, type, and a capped excerpt). Full document bodies are not included so large files do not blow up the UI or agents listing the store.
 
 **Auth:** None (internal service)
 
@@ -353,9 +353,13 @@ List all files currently indexed in the knowledge store with their metadata.
     {
       "id": "123",
       "title": "doc.pdf",
-      "content": "Full text content of the document...",
       "date": "2025-01-01",
-      "size": 1024
+      "size": 1024,
+      "summary": "Auto-generated summary from ContentAnalyzer (or excerpt if empty).",
+      "excerpt": "First ~400 characters of extracted text...",
+      "category": "general",
+      "document_type": "unknown",
+      "confidence_score": 0.85
     }
   ]
 }

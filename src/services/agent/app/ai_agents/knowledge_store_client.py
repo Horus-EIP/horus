@@ -26,6 +26,7 @@ except ImportError:
 
 from config.settings import (
     KNOWLEDGE_STORE_URL,
+    KNOWLEDGE_STORE_API_PREFIX,
     KNOWLEDGE_STORE_TIMEOUT,
     KNOWLEDGE_STORE_MAX_RETRIES,
     KNOWLEDGE_STORE_RETRY_DELAY,
@@ -45,6 +46,7 @@ class KnowledgeStoreClient:
         timeout: Optional[float] = None,
         max_retries: Optional[int] = None,
         retry_delay: Optional[float] = None,
+        api_prefix: Optional[str] = None,
     ):
         """
         Initialize the knowledge store client.
@@ -54,6 +56,7 @@ class KnowledgeStoreClient:
             timeout: Request timeout in seconds. Defaults to KNOWLEDGE_STORE_TIMEOUT from settings.
             max_retries: Maximum number of retry attempts. Defaults to KNOWLEDGE_STORE_MAX_RETRIES from settings.
             retry_delay: Initial delay between retries in seconds. Defaults to KNOWLEDGE_STORE_RETRY_DELAY from settings.
+            api_prefix: Path prefix before store routes (e.g. /api/knowledge-store). Empty when calling the container directly on :8080.
         """
         self.base_url = base_url or KNOWLEDGE_STORE_URL
         self.timeout = timeout if timeout is not None else KNOWLEDGE_STORE_TIMEOUT
@@ -62,11 +65,24 @@ class KnowledgeStoreClient:
         # Remove trailing slash if present
         if self.base_url.endswith("/"):
             self.base_url = self.base_url.rstrip("/")
-        
+        raw_prefix = (
+            (api_prefix if api_prefix is not None else KNOWLEDGE_STORE_API_PREFIX)
+            or ""
+        ).strip().rstrip("/")
+        if raw_prefix and not raw_prefix.startswith("/"):
+            raw_prefix = f"/{raw_prefix}"
+        self._api_prefix = raw_prefix
+
         logger.info(
-            f"Initialized KnowledgeStoreClient: base_url={self.base_url}, "
+            f"Initialized KnowledgeStoreClient: base_url={self.base_url}, api_prefix={self._api_prefix!r}, "
             f"timeout={self.timeout}s, max_retries={self.max_retries}, retry_delay={self.retry_delay}s"
         )
+
+    def _api_root(self) -> str:
+        """Base URL including optional gateway prefix (no trailing slash)."""
+        if not self._api_prefix:
+            return self.base_url
+        return f"{self.base_url}{self._api_prefix}"
 
     async def query(self, query: str, n_results: Optional[int] = None) -> Dict[str, Any]:
         """
@@ -84,7 +100,7 @@ class KnowledgeStoreClient:
         limit = (
             n_results if n_results is not None else KNOWLEDGE_STORE_N_RESULTS
         )
-        url = f"{self.base_url}/api/knowledge-store/"
+        url = f"{self._api_root()}/"
         params = {"query": query, "n_results": limit}
 
         logger.debug(
@@ -211,6 +227,86 @@ class KnowledgeStoreClient:
             "data": f"Error: {error_msg}",
         }
 
+    async def fetch_document_inventory(
+        self, content_preview_chars: int = 400
+    ) -> Dict[str, Any]:
+        """
+        List documents via GET /file (titles and short text previews).
+
+        Used when semantic search returns nothing or for broad \"what is stored\" questions.
+        """
+        url = f"{self._api_root()}/file"
+        logger.debug("Fetching knowledge store document inventory from %s", url)
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            for attempt in range(self.max_retries):
+                try:
+                    response = await client.get(url)
+                    response.raise_for_status()
+                    payload = response.json()
+                    docs = payload.get("documents") or []
+                    if not docs:
+                        return {"query": "__inventory__", "data": ""}
+
+                    lines: list[str] = []
+                    for d in docs:
+                        title = d.get("title") or "Untitled"
+                        doc_id = d.get("id", "")
+                        date = d.get("date", "")
+                        category = d.get("category") or "general"
+                        summary = (d.get("summary") or "").strip()
+                        excerpt = (d.get("excerpt") or "").strip()
+                        legacy = (d.get("content") or "").strip()
+                        snippet = summary or excerpt or legacy
+                        if len(snippet) > content_preview_chars:
+                            snippet = snippet[:content_preview_chars].rstrip() + "..."
+                        lines.append(
+                            f"- {title} (id={doc_id}, category={category}, date={date})\n"
+                            f"  Summary: {snippet}"
+                        )
+                    return {
+                        "query": "__inventory__",
+                        "data": "\n".join(lines),
+                    }
+                except httpx.HTTPStatusError as e:
+                    logger.warning(
+                        "Inventory GET failed: %s %s (attempt %s/%s)",
+                        e.response.status_code,
+                        url,
+                        attempt + 1,
+                        self.max_retries,
+                    )
+                except (httpx.TimeoutException, httpx.RequestError, Exception) as e:
+                    logger.warning(
+                        "Inventory request error: %s (attempt %s/%s)",
+                        e,
+                        attempt + 1,
+                        self.max_retries,
+                    )
+                if attempt < self.max_retries - 1:
+                    await asyncio.sleep(self.retry_delay)
+
+        return {"query": "__inventory__", "data": ""}
+
+    async def fetch_for_rag(
+        self, query: str, n_results: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Run semantic search; if no excerpts are returned, attach a document inventory.
+        """
+        result = await self.query(query, n_results=n_results)
+        if (result.get("data") or "").strip():
+            return result
+        inv = await self.fetch_document_inventory()
+        inv_text = (inv.get("data") or "").strip()
+        if inv_text:
+            result["data"] = (
+                "Semantic search did not return close excerpts for this question. "
+                "Documents currently in the knowledge store:\n\n"
+                + inv_text
+            )
+        return result
+
     async def __call__(self, query: str) -> Dict[str, Any]:
         """
         Make the client callable for use as a store interface (async).
@@ -221,7 +317,7 @@ class KnowledgeStoreClient:
         Returns:
             A dictionary with the query results.
         """
-        return await self.query(query)
+        return await self.fetch_for_rag(query)
 
     async def smart_search(self, query: str, n_results: int = 5, categories: Optional[list] = None, entities: Optional[list] = None, min_confidence: Optional[float] = None, entity_type: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -240,7 +336,7 @@ class KnowledgeStoreClient:
             'query' and 'data' fields, where 'data' contains an error message
             or empty string.
         """
-        url = f"{self.base_url}/api/knowledge-store/smart-search"
+        url = f"{self._api_root()}/smart-search"
         payload = {"query": query, "n_results": n_results}
 
         if categories:
@@ -310,7 +406,7 @@ class KnowledgeStoreClient:
             'entity' and 'data' fields, where 'data' contains an error message
             or empty string.
         """
-        url = f"{self.base_url}/api/knowledge-store/search-by-entity"
+        url = f"{self._api_root()}/search-by-entity"
         params = {"entity": entity, "entity_type": entity_type, "n_results": n_results}
 
         logger.debug(f"Searching by entity: entity='{entity}', entity_type='{entity_type}', n_results={n_results}")
@@ -357,7 +453,7 @@ class KnowledgeStoreClient:
             A dictionary with the categories and their counts. On error, returns a dict with
             'total_documents' set to 0 and 'categories' as an empty list.
         """
-        url = f"{self.base_url}/api/knowledge-store/categories"
+        url = f"{self._api_root()}/categories"
 
         logger.debug("Getting categories from knowledge store")
 

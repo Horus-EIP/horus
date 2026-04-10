@@ -35,6 +35,11 @@ AGENT_DESCRIPTION = os.getenv("AGENT_DESCRIPTION", "Autonomous MAS agent")
 
 # Knowledge Store URL - when running in Docker, set to http://knowledge_store:8080
 KNOWLEDGE_STORE_URL = os.getenv("KNOWLEDGE_STORE_URL", "http://localhost:8080")
+# Optional URL path prefix if the store is behind a gateway (default: none). Example: /api/knowledge-store
+_ks_prefix = os.getenv("KNOWLEDGE_STORE_API_PREFIX", "").strip().rstrip("/")
+KNOWLEDGE_STORE_API_PREFIX = (
+    _ks_prefix if not _ks_prefix else (_ks_prefix if _ks_prefix.startswith("/") else f"/{_ks_prefix}")
+)
 
 # Knowledge Store Client Configuration
 KNOWLEDGE_STORE_TIMEOUT = get_float_env("KNOWLEDGE_STORE_TIMEOUT", 10.0)
