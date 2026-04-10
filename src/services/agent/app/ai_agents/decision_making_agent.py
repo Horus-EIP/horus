@@ -342,7 +342,7 @@ class DecisionMakingAgent:
             prompt,
             return_tensors="pt",
             truncation=True,
-            max_length=1024,
+            max_length=4096,
             add_special_tokens=True,
         )
         device = _model_device(model)
@@ -398,12 +398,13 @@ class DecisionMakingAgent:
             )
         else:
             user_content = (
-                "Answer the user's question as directly and concisely as possible "
-                "in 1-3 sentences using ONLY the provided context. If the answer is not "
-                "in the context, say: 'I don't have that information yet.'\n\n"
-                f"Context:\n{context}\n\nQuestion: {query}"
+                "The following content was retrieved from the knowledge base for this task. "
+                "Use ONLY this retrieved content to complete the task. "
+                "If summarizing, be thorough. "
+                "If the retrieved content does not contain enough information, say so.\n\n"
+                f"Retrieved Content:\n{context}\n\nTask: {query}"
             )
-            system_content = "You are a precise assistant that uses only the given context."
+            system_content = "You are a helpful assistant. Use only the retrieved content to complete the task."
 
         logger.debug(
             "Decision inference model=%s device=%s", self.model_name, self.device

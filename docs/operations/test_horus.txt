@@ -1,0 +1,87 @@
+Project Horus - Internal Technical Report
+==========================================
+Date: April 2026
+Author: Loup Marquez
+Classification: Internal Use Only
+
+1. EXECUTIVE SUMMARY
+---------------------
+Project Horus is an on-premise multi-agent AI orchestration platform designed for enterprise use.
+The system allows companies to leverage advanced AI capabilities without exposing sensitive data
+to external cloud services such as ChatGPT or other third-party APIs. All processing happens
+locally on company hardware, ensuring full data sovereignty and compliance with GDPR regulations.
+
+2. SYSTEM ARCHITECTURE
+-----------------------
+Horus is built around four core services:
+
+- MAS (Multi-Agent System): The central orchestrator responsible for routing tasks to the
+  appropriate agents, managing task queues via RabbitMQ, and maintaining conversation history
+  in PostgreSQL. The MAS uses a local Qwen3-4B language model to intelligently select which
+  agent is best suited for each incoming request.
+
+- Agent Service: Executes AI tasks using a RAG (Retrieval-Augmented Generation) pipeline.
+  The agent retrieves relevant documents from the knowledge store, then uses the local LLM
+  to generate accurate, context-aware responses. It also supports multi-step reasoning via
+  the ReAct framework (Reasoning + Acting).
+
+- Knowledge Store: A document management system backed by ChromaDB for vector similarity
+  search. Supports PDF, TXT, and CSV file ingestion. Documents are automatically embedded
+  using SentenceTransformers and stored for fast semantic retrieval.
+
+- Web Client: A Next.js dashboard providing a chat interface, task monitoring, and knowledge
+  store management. Supports real-time updates via WebSocket.
+
+3. KEY FEATURES
+----------------
+- Fully on-premise: No data ever leaves the company network
+- Works offline: If internet connection is lost, the system continues to function
+- Multi-agent delegation: Agents can delegate subtasks to other specialized agents
+- Agentic RAG: The system retrieves relevant documents before generating responses
+- Role-based access control: Different users have different permission levels
+- Observability: Full tracing with Grafana, Tempo, and Prometheus
+
+4. PERFORMANCE METRICS (Beta Testing)
+---------------------------------------
+During beta testing conducted in March 2026, the following results were recorded:
+
+- Average response time (GPU): 8.3 seconds per query
+- Average response time (CPU only): 4.2 minutes per query
+- Knowledge store retrieval accuracy: 94%
+- System uptime during 7-day test period: 99.1%
+- Concurrent users supported: up to 12 without degradation
+- Document ingestion speed: 45 pages per minute (PDF)
+
+5. SECURITY MODEL
+------------------
+All communications between services are contained within a private Docker network (horus-net).
+No service is exposed to the public internet by default. Authentication is handled via JWT tokens
+signed with a secret key known only to the MAS. The PostgreSQL database and Redis cache are
+both password-protected. All LLM inference runs locally — no prompts or responses are sent
+to external APIs.
+
+6. KNOWN LIMITATIONS
+---------------------
+- The Qwen3-4B model has a context window of 32,768 tokens, limiting very long document analysis
+- GPU with at least 6GB VRAM is recommended for real-time performance
+- Initial container startup takes 3-5 minutes due to model loading
+- Agent-to-agent delegation is currently limited to a depth of 5 levels
+
+7. ROADMAP
+-----------
+Q3 2026:
+  - Support for larger models (Qwen3-14B) via multi-GPU setups
+  - Document versioning in the knowledge store
+  - Voice input/output interface
+
+Q4 2026:
+  - Fine-tuning pipeline for company-specific terminology
+  - Active Directory / LDAP integration for enterprise SSO
+  - Mobile companion app
+
+8. CONCLUSION
+--------------
+Project Horus successfully demonstrates that enterprise-grade AI assistants can be deployed
+entirely on-premise without sacrificing performance or usability. The combination of agentic
+RAG, multi-agent orchestration, and a clean web interface makes Horus a viable alternative
+to cloud-based AI solutions for security-conscious organizations.

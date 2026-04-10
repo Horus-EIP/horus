@@ -220,7 +220,7 @@ def ask_llm(messages: list, max_new_tokens: int = 256):
         prompt,
         return_tensors="pt",
         truncation=True,
-        max_length=1024,
+        max_length=4096,
         add_special_tokens=True,
     )
     device = _model_device(model)
@@ -241,6 +241,7 @@ def ask_llm(messages: list, max_new_tokens: int = 256):
             attention_mask=attn_mask,
             max_new_tokens=max_new_tokens,
             do_sample=False,
+            repetition_penalty=1.3,
             return_dict_in_generate=True,
             pad_token_id=tokenizer.eos_token_id,
             eos_token_id=tokenizer.eos_token_id,

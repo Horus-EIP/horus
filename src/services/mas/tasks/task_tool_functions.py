@@ -669,5 +669,5 @@ def get_tasks_in_progress(db: Session):
 
 def aggregate_results(history, result):
     prompt = get_prompt_final_answer_generation(history, result)
-    output = ask_llm(prompt, max_new_tokens=2048)
+    output = ask_llm(prompt, max_new_tokens=512)
     return output

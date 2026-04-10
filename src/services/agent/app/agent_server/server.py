@@ -652,7 +652,7 @@ def send_result(result: str, conversation_id: str, task_id: str):
     payload = {
         "agent_id": AGENT_ID,
         "result": result,
-        "conversation_id": conversation_id,
+        "conversation_id": str(conversation_id),
         "task_id": task_id,
     }
     try:
