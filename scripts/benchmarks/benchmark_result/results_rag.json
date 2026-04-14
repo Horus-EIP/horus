@@ -1,0 +1,42 @@
+{
+  "knowledge_store_url": "http://localhost:8080",
+  "timestamp": "2026-04-14T17:19:02Z",
+  "results": [
+    {
+      "name": "Health Check",
+      "iterations": 50,
+      "mean_ms": 2.5451539969071746,
+      "median_ms": 2.217400004155934,
+      "p95_ms": 3.147199982777238,
+      "p99_ms": 15.524599933996797,
+      "min_ms": 1.85779994353652,
+      "max_ms": 15.524599933996797,
+      "success_rate": 100.0,
+      "avg_results": 0
+    },
+    {
+      "name": "Document Add",
+      "iterations": 20,
+      "mean_ms": 213.50936500821263,
+      "median_ms": 184.6759000327438,
+      "p95_ms": 625.0642000231892,
+      "p99_ms": 625.0642000231892,
+      "min_ms": 168.52890001609921,
+      "max_ms": 625.0642000231892,
+      "success_rate": 100.0,
+      "avg_results": 1
+    },
+    {
+      "name": "Knowledge Store Query",
+      "iterations": 50,
+      "mean_ms": 16.336138006299734,
+      "median_ms": 14.54974990338087,
+      "p95_ms": 16.89040008932352,
+      "p99_ms": 97.49209997244179,
+      "min_ms": 12.85289996303618,
+      "max_ms": 97.49209997244179,
+      "success_rate": 100.0,
+      "avg_results": 5
+    }
+  ]
+}

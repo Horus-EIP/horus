@@ -18,6 +18,7 @@ Requirements:
 import argparse
 import asyncio
 import json
+import os
 import statistics
 import time
 from dataclasses import dataclass
@@ -56,17 +57,27 @@ class MASBenchmark:
         return headers
     
     async def authenticate(self, username: str, password: str) -> bool:
-        """Authenticate and get token."""
+        """Authenticate via OAuth2 password flow (application/x-www-form-urlencoded)."""
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(
                     f"{self.base_url}/auth/token",
-                    data={"username": username, "password": password},
-                    timeout=10.0
+                    data={
+                        "username": username,
+                        "password": password,
+                        "grant_type": "password",
+                    },
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                    },
+                    timeout=10.0,
                 )
                 if response.status_code == 200:
                     self.token = response.json().get("access_token")
-                    return True
+                    return bool(self.token)
+                print(
+                    f"Authentication failed: HTTP {response.status_code} — {response.text[:500]}"
+                )
             except Exception as e:
                 print(f"Authentication failed: {e}")
         return False
@@ -81,10 +92,10 @@ class MASBenchmark:
             for _ in range(iterations):
                 start = time.perf_counter()
                 try:
-                    response = await client.get(
+                    response = await client.post(
                         f"{self.base_url}/rabbitmq/heartbeat",
                         headers=self._get_headers(),
-                        timeout=5.0
+                        timeout=5.0,
                     )
                     if response.status_code == 200:
                         successes += 1
@@ -105,10 +116,10 @@ class MASBenchmark:
                 start = time.perf_counter()
                 try:
                     response = await client.post(
-                        f"{self.base_url}/conversations/create",
+                        f"{self.base_url}/conversations/create-conversation/",
                         headers=self._get_headers(),
                         json={"name": f"Benchmark Conversation {i}"},
-                        timeout=10.0
+                        timeout=10.0,
                     )
                     if response.status_code in [200, 201]:
                         successes += 1
@@ -129,9 +140,9 @@ class MASBenchmark:
                 start = time.perf_counter()
                 try:
                     response = await client.get(
-                        f"{self.base_url}/conversations/all",
+                        f"{self.base_url}/conversations/get-conversations/",
                         headers=self._get_headers(),
-                        timeout=10.0
+                        timeout=10.0,
                     )
                     if response.status_code == 200:
                         successes += 1
@@ -152,9 +163,9 @@ class MASBenchmark:
                 start = time.perf_counter()
                 try:
                     response = await client.get(
-                        f"{self.base_url}/agents/",
+                        f"{self.base_url}/agents/details/",
                         headers=self._get_headers(),
-                        timeout=10.0
+                        timeout=10.0,
                     )
                     if response.status_code == 200:
                         successes += 1
@@ -298,20 +309,30 @@ async def main():
     parser = argparse.ArgumentParser(description="MAS Performance Benchmark Suite")
     parser.add_argument("--url", default="http://localhost:8000", help="MAS API URL")
     parser.add_argument("--iterations", type=int, default=100, help="Number of iterations per benchmark")
-    parser.add_argument("--username", default="admin", help="Username for authentication")
-    parser.add_argument("--password", default="admin", help="Password for authentication")
+    parser.add_argument("--username", default=None, help="Username (default: SUPER_USER_USERNAME or admin)")
+    parser.add_argument("--password", default=None, help="Password (default: SUPER_USER_PASSWORD or secret)")
+    parser.add_argument(
+        "--token",
+        default=None,
+        help="Bearer JWT (skips /auth/token; use when you already have a token)",
+    )
     parser.add_argument("--output", default="benchmark_results.json", help="Output JSON file")
     
     args = parser.parse_args()
     
-    benchmark = MASBenchmark(args.url)
+    username = args.username or os.environ.get("SUPER_USER_USERNAME", "admin")
+    password = args.password or os.environ.get("SUPER_USER_PASSWORD", "secret")
     
-    # Authenticate
-    print(f"Authenticating as {args.username}...")
-    if await benchmark.authenticate(args.username, args.password):
-        print("Authentication successful")
+    benchmark = MASBenchmark(args.url, token=args.token)
+    
+    if args.token:
+        print("Using provided JWT (--token); skipping /auth/token")
     else:
-        print("Warning: Authentication failed, some benchmarks may fail")
+        print(f"Authenticating as {username}...")
+        if await benchmark.authenticate(username, password):
+            print("Authentication successful")
+        else:
+            print("Warning: Authentication failed, some benchmarks may fail")
     
     # Run benchmarks
     await benchmark.run_all_benchmarks(args.iterations)

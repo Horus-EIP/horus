@@ -2,10 +2,10 @@
 """
 RAG Pipeline Performance Benchmark
 
-Benchmarks the RAG (Retrieval-Augmented Generation) pipeline:
-- Knowledge Store query latency
-- Document retrieval performance
-- End-to-end query processing time
+Benchmarks the Knowledge Store HTTP API (RAG backing service):
+- GET /health
+- POST / — add text document (id, title, content, size)
+- GET /?query=&n_results= — vector query
 
 Usage:
     python benchmark_rag.py --url http://localhost:8080 --iterations 50
@@ -71,10 +71,11 @@ class RAGBenchmark:
                 query = queries[i % len(queries)]
                 start = time.perf_counter()
                 try:
-                    response = await client.post(
-                        f"{self.ks_url}/store/query",
-                        json={"query": query, "k": 5},
-                        timeout=30.0
+                    # Knowledge store: GET /?query=&n_results= (see knowledge-store app/api/routes/store.py)
+                    response = await client.get(
+                        f"{self.ks_url}/",
+                        params={"query": query, "n_results": 5},
+                        timeout=30.0,
                     )
                     elapsed = time.perf_counter() - start
                     times.append(elapsed)
@@ -82,7 +83,12 @@ class RAGBenchmark:
                     if response.status_code == 200:
                         successes += 1
                         data = response.json()
-                        results_counts.append(len(data.get("results", [])))
+                        docs = data.get("documents") or [[]]
+                        results_counts.append(len(docs[0]) if docs and docs[0] else 0)
+                    elif response.status_code == 404:
+                        # Valid response when the store has no matches
+                        successes += 1
+                        results_counts.append(0)
                     else:
                         results_counts.append(0)
                 except Exception as e:
@@ -108,18 +114,22 @@ class RAGBenchmark:
         
         async with httpx.AsyncClient() as client:
             for i in range(iterations):
+                content = (
+                    f"This is benchmark document {i} with some sample content for testing purposes. " * 10
+                )
                 doc = {
                     "id": f"benchmark_doc_{i}_{time.time()}",
                     "title": f"Benchmark Document {i}",
-                    "content": f"This is benchmark document {i} with some sample content for testing purposes. " * 10
+                    "content": content,
+                    "size": len(content),
                 }
                 
                 start = time.perf_counter()
                 try:
                     response = await client.post(
-                        f"{self.ks_url}/store/add",
+                        f"{self.ks_url}/",
                         json=doc,
-                        timeout=30.0
+                        timeout=30.0,
                     )
                     if response.status_code in [200, 201]:
                         successes += 1
