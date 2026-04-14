@@ -158,3 +158,10 @@ sequenceDiagram
     API->>WebSocket: Notify User of Completion
     WebSocket-->>User: Display Result
 ```
+
+## 5. Architecture Decision Records (ADR)
+
+To view the detailed reasoning behind our technology choices, please refer to the following records:
+- [ADR-001: RabbitMQ](architecture/ADR-001-rabbitmq.md)
+- [ADR-002: ChromaDB](architecture/ADR-002-chromadb.md)
+- [ADR-003: FastAPI](architecture/ADR-003-fastapi.md)
