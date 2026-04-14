@@ -1,0 +1,176 @@
+************* Module src/services/mas/app
+src/services/mas/app:1:0: F0001: No module named src/services/mas/app (fatal)
+************* Module app
+src/services/agent/app/__init__.py:1:0: F0010: error while code parsing: Unable to load file src/services/agent/app/__init__.py:
+[Errno 2] No such file or directory: 'src/services/agent/app/__init__.py' (parse-error)
+************* Module app.main
+src/services/knowledge-store/app/main.py:91:0: C0301: Line too long (131/100) (line-too-long)
+src/services/knowledge-store/app/main.py:93:0: C0301: Line too long (214/100) (line-too-long)
+src/services/knowledge-store/app/main.py:94:0: C0301: Line too long (110/100) (line-too-long)
+src/services/knowledge-store/app/main.py:95:0: C0301: Line too long (182/100) (line-too-long)
+src/services/knowledge-store/app/main.py:96:0: C0301: Line too long (178/100) (line-too-long)
+src/services/knowledge-store/app/main.py:97:0: C0301: Line too long (145/100) (line-too-long)
+src/services/knowledge-store/app/main.py:98:0: C0301: Line too long (327/100) (line-too-long)
+src/services/knowledge-store/app/main.py:135:0: C0304: Final newline missing (missing-final-newline)
+src/services/knowledge-store/app/main.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+src/services/knowledge-store/app/main.py:17:0: C0103: Constant name "description" doesn't conform to UPPER_CASE naming style (invalid-name)
+src/services/knowledge-store/app/main.py:118:0: C0116: Missing function or method docstring (missing-function-docstring)
+src/services/knowledge-store/app/main.py:10:0: W0611: Unused ContentAnalyzer imported from app.services.content_analyzer (unused-import)
+************* Module app.api
+src/services/knowledge-store/app/api/__init__.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+************* Module app.api.utils
+src/services/knowledge-store/app/api/utils.py:25:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/api/utils.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+src/services/knowledge-store/app/api/utils.py:2:0: C0411: standard import "shutil" should be placed before third party import "fastapi.UploadFile" (wrong-import-order)
+src/services/knowledge-store/app/api/utils.py:3:0: C0411: standard import "os" should be placed before third party import "fastapi.UploadFile" (wrong-import-order)
+************* Module app.api.routes.__init__
+src/services/knowledge-store/app/api/routes/__init__.py:7:0: C0304: Final newline missing (missing-final-newline)
+************* Module app.api.routes
+src/services/knowledge-store/app/api/routes/__init__.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+************* Module app.api.routes.file
+src/services/knowledge-store/app/api/routes/file.py:122:0: C0301: Line too long (123/100) (line-too-long)
+src/services/knowledge-store/app/api/routes/file.py:189:0: C0301: Line too long (117/100) (line-too-long)
+src/services/knowledge-store/app/api/routes/file.py:195:0: C0301: Line too long (110/100) (line-too-long)
+src/services/knowledge-store/app/api/routes/file.py:104:15: W0718: Catching too general exception Exception (broad-exception-caught)
+src/services/knowledge-store/app/api/routes/file.py:74:21: W1514: Using open without explicitly specifying an encoding (unspecified-encoding)
+src/services/knowledge-store/app/api/routes/file.py:153:8: W0707: Consider explicitly re-raising using 'raise HTTPException(status_code=404, detail=str(e)) from e' (raise-missing-from)
+src/services/knowledge-store/app/api/routes/file.py:177:4: R1705: Unnecessary "else" after "return", remove the "else" and de-indent the code inside it (no-else-return)
+src/services/knowledge-store/app/api/routes/file.py:172:14: W0612: Unused variable 'dirs' (unused-variable)
+src/services/knowledge-store/app/api/routes/file.py:202:30: W0622: Redefining built-in 'type' (redefined-builtin)
+************* Module app.api.routes.store
+src/services/knowledge-store/app/api/routes/store.py:72:0: C0301: Line too long (101/100) (line-too-long)
+src/services/knowledge-store/app/api/routes/store.py:257:0: C0301: Line too long (112/100) (line-too-long)
+src/services/knowledge-store/app/api/routes/store.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+src/services/knowledge-store/app/api/routes/store.py:108:12: W0707: Consider explicitly re-raising using 'except Exception as exc' and 'raise HTTPException(status_code=400, detail='Invalid filters format. Must be a valid JSON string.') from exc' (raise-missing-from)
+src/services/knowledge-store/app/api/routes/store.py:120:8: W0707: Consider explicitly re-raising using 'raise HTTPException(status_code=500, detail='Error querying knowledge store: ' + str(e)) from e' (raise-missing-from)
+src/services/knowledge-store/app/api/routes/store.py:143:32: W0622: Redefining built-in 'id' (redefined-builtin)
+src/services/knowledge-store/app/api/routes/store.py:151:8: W0707: Consider explicitly re-raising using 'raise HTTPException(status_code=404, detail=str(e)) from e' (raise-missing-from)
+src/services/knowledge-store/app/api/routes/store.py:169:8: W0707: Consider explicitly re-raising using 'raise HTTPException(status_code=500, detail='Error performing smart search: ' + str(e)) from e' (raise-missing-from)
+src/services/knowledge-store/app/api/routes/store.py:199:4: C0103: Variable name "VALID_ENTITY_TYPES" doesn't conform to snake_case naming style (invalid-name)
+src/services/knowledge-store/app/api/routes/store.py:211:8: W0707: Consider explicitly re-raising using 'raise HTTPException(status_code=500, detail='Error searching by entity: ' + str(e)) from e' (raise-missing-from)
+src/services/knowledge-store/app/api/routes/store.py:251:8: W0707: Consider explicitly re-raising using 'raise HTTPException(status_code=500, detail='Error retrieving categories: ' + str(e)) from e' (raise-missing-from)
+src/services/knowledge-store/app/api/routes/store.py:287:17: W1514: Using open without explicitly specifying an encoding (unspecified-encoding)
+src/services/knowledge-store/app/api/routes/store.py:296:8: W0707: Consider explicitly re-raising using 'raise HTTPException(status_code=400, detail=f'Processing error: {e}') from e' (raise-missing-from)
+src/services/knowledge-store/app/api/routes/store.py:2:0: W0611: Unused import os (unused-import)
+************* Module app.chroma_db.__init__
+src/services/knowledge-store/app/chroma_db/__init__.py:1:0: C0301: Line too long (106/100) (line-too-long)
+src/services/knowledge-store/app/chroma_db/__init__.py:3:0: C0301: Line too long (119/100) (line-too-long)
+************* Module app.chroma_db
+src/services/knowledge-store/app/chroma_db/__init__.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+************* Module app.chroma_db.setup
+src/services/knowledge-store/app/chroma_db/setup.py:54:0: C0304: Final newline missing (missing-final-newline)
+src/services/knowledge-store/app/chroma_db/setup.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+src/services/knowledge-store/app/chroma_db/setup.py:6:0: C0413: Import "from sentence_transformers import SentenceTransformer" should be placed at the top of the module (wrong-import-position)
+src/services/knowledge-store/app/chroma_db/setup.py:7:0: C0413: Import "from pathlib import Path" should be placed at the top of the module (wrong-import-position)
+src/services/knowledge-store/app/chroma_db/setup.py:8:0: C0413: Import "import chromadb" should be placed at the top of the module (wrong-import-position)
+src/services/knowledge-store/app/chroma_db/setup.py:9:0: C0413: Import "from chromadb.config import Settings" should be placed at the top of the module (wrong-import-position)
+src/services/knowledge-store/app/chroma_db/setup.py:27:7: W0718: Catching too general exception Exception (broad-exception-caught)
+src/services/knowledge-store/app/chroma_db/setup.py:23:23: W0718: Catching too general exception Exception (broad-exception-caught)
+src/services/knowledge-store/app/chroma_db/setup.py:30:16: E1101: Module 'chromadb' has no 'PersistentClient' member (no-member)
+src/services/knowledge-store/app/chroma_db/setup.py:41:0: C0116: Missing function or method docstring (missing-function-docstring)
+src/services/knowledge-store/app/chroma_db/setup.py:50:7: W0718: Catching too general exception Exception (broad-exception-caught)
+src/services/knowledge-store/app/chroma_db/setup.py:7:0: C0411: standard import "pathlib.Path" should be placed before third party import "sentence_transformers.SentenceTransformer" (wrong-import-order)
+************* Module app.chroma_db.models.__init__
+src/services/knowledge-store/app/chroma_db/models/__init__.py:7:0: C0304: Final newline missing (missing-final-newline)
+************* Module app.chroma_db.models
+src/services/knowledge-store/app/chroma_db/models/__init__.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+************* Module app.chroma_db.models.document
+src/services/knowledge-store/app/chroma_db/models/document.py:27:0: C0304: Final newline missing (missing-final-newline)
+src/services/knowledge-store/app/chroma_db/models/document.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+src/services/knowledge-store/app/chroma_db/models/document.py:4:0: C0115: Missing class docstring (missing-class-docstring)
+src/services/knowledge-store/app/chroma_db/models/document.py:10:0: C0115: Missing class docstring (missing-class-docstring)
+************* Module app.chroma_db.models.search
+src/services/knowledge-store/app/chroma_db/models/search.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+src/services/knowledge-store/app/chroma_db/models/search.py:4:0: C0115: Missing class docstring (missing-class-docstring)
+src/services/knowledge-store/app/chroma_db/models/search.py:2:0: C0411: standard import "typing.Optional" should be placed before third party import "pydantic.BaseModel" (wrong-import-order)
+************* Module app.chroma_db.services.__init__
+src/services/knowledge-store/app/chroma_db/services/__init__.py:1:0: C0301: Line too long (110/100) (line-too-long)
+************* Module app.chroma_db.services
+src/services/knowledge-store/app/chroma_db/services/__init__.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+************* Module app.chroma_db.services.file_service
+src/services/knowledge-store/app/chroma_db/services/file_service.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+src/services/knowledge-store/app/chroma_db/services/file_service.py:95:26: W0622: Redefining built-in 'id' (redefined-builtin)
+src/services/knowledge-store/app/chroma_db/services/file_service.py:6:0: C0411: third party import "app.chroma_db.models.DocumentModel" should be placed before local import ".knowledge_collection" (wrong-import-order)
+************* Module app.core.logging
+src/services/knowledge-store/app/core/logging.py:41:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/logging.py:53:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/logging.py:57:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/logging.py:60:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/logging.py:75:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/logging.py:81:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/logging.py:85:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/logging.py:90:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/logging.py:95:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/logging.py:101:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/logging.py:105:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/logging.py:108:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/logging.py:118:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/logging.py:120:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/logging.py:127:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/logging.py:128:4: C0116: Missing function or method docstring (missing-function-docstring)
+************* Module app.core.middleware
+src/services/knowledge-store/app/core/middleware.py:30:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/middleware.py:32:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/middleware.py:36:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/middleware.py:43:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/middleware.py:45:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/middleware.py:47:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/middleware.py:50:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/middleware.py:52:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/middleware.py:55:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/middleware.py:67:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/middleware.py:69:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/core/middleware.py:28:0: R0903: Too few public methods (1/2) (too-few-public-methods)
+src/services/knowledge-store/app/core/middleware.py:17:0: W0611: Unused get_correlation_id imported from app.core.logging (unused-import)
+src/services/knowledge-store/app/core/middleware.py:23:0: W0611: Unused QUERY_LATENCY imported from app.core.metrics (unused-import)
+************* Module app.services
+src/services/knowledge-store/app/services/__init__.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+************* Module app.services.content_analyzer
+src/services/knowledge-store/app/services/content_analyzer.py:130:0: C0103: Constant name "_nlp_model" doesn't conform to UPPER_CASE naming style (invalid-name)
+src/services/knowledge-store/app/services/content_analyzer.py:138:11: W0718: Catching too general exception Exception (broad-exception-caught)
+src/services/knowledge-store/app/services/content_analyzer.py:136:8: C0415: Import outside toplevel (transformers.pipeline) (import-outside-toplevel)
+src/services/knowledge-store/app/services/content_analyzer.py:157:8: W0603: Using the global statement (global-statement)
+src/services/knowledge-store/app/services/content_analyzer.py:160:16: C0415: Import outside toplevel (spacy) (import-outside-toplevel)
+src/services/knowledge-store/app/services/content_analyzer.py:197:15: W0718: Catching too general exception Exception (broad-exception-caught)
+src/services/knowledge-store/app/services/content_analyzer.py:206:15: W0718: Catching too general exception Exception (broad-exception-caught)
+src/services/knowledge-store/app/services/content_analyzer.py:213:4: R0914: Too many local variables (16/15) (too-many-locals)
+src/services/knowledge-store/app/services/content_analyzer.py:335:15: W0718: Catching too general exception Exception (broad-exception-caught)
+src/services/knowledge-store/app/services/content_analyzer.py:460:15: W0718: Catching too general exception Exception (broad-exception-caught)
+src/services/knowledge-store/app/services/content_analyzer.py:143:0: R0903: Too few public methods (1/2) (too-few-public-methods)
+************* Module app.services.document_chunker
+src/services/knowledge-store/app/services/document_chunker.py:13:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/services/document_chunker.py:32:0: C0301: Line too long (129/100) (line-too-long)
+src/services/knowledge-store/app/services/document_chunker.py:55:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/services/document_chunker.py:75:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/services/document_chunker.py:80:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/services/document_chunker.py:108:0: C0303: Trailing whitespace (trailing-whitespace)
+src/services/knowledge-store/app/services/document_chunker.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+src/services/knowledge-store/app/services/document_chunker.py:6:0: C0103: Constant name "_nlp_model" doesn't conform to UPPER_CASE naming style (invalid-name)
+src/services/knowledge-store/app/services/document_chunker.py:25:8: W0603: Using the global statement (global-statement)
+src/services/knowledge-store/app/services/document_chunker.py:32:16: W0707: Consider explicitly re-raising using 'except (OSError, IOError) as exc' and 'raise RuntimeError("Spacy model not found. Please download it using 'python -m spacy download en_core_web_trf'.") from exc' (raise-missing-from)
+src/services/knowledge-store/app/services/document_chunker.py:70:12: R1723: Unnecessary "else" after "break", remove the "else" and de-indent the code inside it (no-else-break)
+src/services/knowledge-store/app/services/document_chunker.py:8:0: R0903: Too few public methods (1/2) (too-few-public-methods)
+src/services/knowledge-store/app/services/document_chunker.py:1:0: W0611: Unused Dict imported from typing (unused-import)
+src/services/knowledge-store/app/services/document_chunker.py:1:0: W0611: Unused Any imported from typing (unused-import)
+src/services/knowledge-store/app/services/document_chunker.py:1:0: R0801: Similar lines in 2 files
+==app.api.routes.file:[65:79]
+==app.api.routes.store:[278:292]
+        file_ext = file.filename.split(".")[-1].lower()
+        doc_path = await save_file(file, file_ext)
+
+        if file_ext == "pdf":
+            text = await pdf_to_text(doc_path)
+        elif file_ext == "docx":
+            text = await docx_to_text(doc_path)
+        elif file_ext == "txt":
+            with open(doc_path, "r") as f:
+                text = f.read()
+        else:
+            with open(doc_path, "r", encoding="utf-8", errors="ignore") as f:
+                text = f.read()
+ (duplicate-code)
+src/services/knowledge-store/app/services/document_chunker.py:1:0: R0401: Cyclic import (app.chroma_db -> app.chroma_db.services -> app.chroma_db.services.file_service) (cyclic-import)
+
+------------------------------------------------------------------
+Your code has been rated at 0.00/10 (previous run: 0.00/10, +0.00)
+
