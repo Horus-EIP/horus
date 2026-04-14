@@ -18,11 +18,7 @@ import pika
 from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from prometheus_client import make_asgi_app
-from fastapi import FastAPI, Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from prometheus_client import make_asgi_app
 from pydantic import BaseModel
-from contextlib import contextmanager
 from contextlib import contextmanager
 from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
 from ai_agents.decision_making_agent import DecisionMakingAgent
@@ -40,7 +36,7 @@ from config.settings import (
     AGENT_DESCRIPTION,
     MODEL_NAME,
     MODEL_DEVICE,
-    AGENT_TYPE
+    AGENT_TYPE,
     DELEGATION_TIMEOUT,
     MAX_DELEGATION_DEPTH,
 )
@@ -98,7 +94,6 @@ app.add_middleware(CorrelationIDMiddleware)
 # Will be set after successful registration with MAS
 AGENT_ID = None
 AGENT_API_KEY = None  # Plain API key returned at registration, used for agent auth
-AGENT_API_KEY = None  # Plain API key returned at registration, used for agent auth
 AGENT_NAME = "HorusAgent"
 SKILLS = ["knowledge_retrieval", "decision_making", "rag_pipeline"]
 AGENT_CAPABILITIES = {
@@ -133,16 +128,7 @@ class Task(BaseModel):
     """
     task_id: str = None  # Auto-generated if not provided.
     query: str | None = None
-    query: str | None = None
     conversation_id: str
-    operation: str | None = None
-    expression: str | None = None
-    file_url: str | None = None
-    file_content: str | None = None  # base64/utf-8 text; small files only
-    file_type: str | None = None
-    filename: str | None = None
-    text: str | None = None
-    max_sentences: int | None = None
     operation: str | None = None
     expression: str | None = None
     file_url: str | None = None
@@ -207,58 +193,11 @@ def _build_headers(include_api_key: bool = False) -> dict:
     return headers
 
 
-_AUTH_TOKEN = None  # cached bearer token for orchestrator requests
-
-
-def _get_orchestrator_token():
-    """Return a bearer token to talk to MAS (from env or by logging in)."""
-    global _AUTH_TOKEN
-    if _AUTH_TOKEN:
-        return _AUTH_TOKEN
-
-    if ORCHESTRATOR_TOKEN:
-        _AUTH_TOKEN = ORCHESTRATOR_TOKEN
-        return _AUTH_TOKEN
-
-    if ORCHESTRATOR_USERNAME and ORCHESTRATOR_PASSWORD:
-        try:
-            response = requests.post(
-                f"{ORCHESTRATOR_URL}/auth/token",
-                data={"username": ORCHESTRATOR_USERNAME, "password": ORCHESTRATOR_PASSWORD},
-                timeout=5,
-            )
-            if response.status_code == 200:
-                _AUTH_TOKEN = response.json().get("access_token")
-                return _AUTH_TOKEN
-            logger.warning(f"Failed to obtain MAS auth token: {response.status_code} - {response.text}")
-        except Exception as exc:  # network/login errors shouldn't crash the agent
-            logger.warning(f"Error fetching MAS auth token: {exc}")
-    return None
-
-
-def _build_headers(include_api_key: bool = False) -> dict:
-    """
-    Construct headers for MAS requests.
-
-    - Always tries to attach Authorization if available.
-    - Optionally attaches X-API-Key (agent_id:api_key) for agent-auth endpoints.
-    """
-    headers: dict = {}
-    token = _get_orchestrator_token()
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    if include_api_key and AGENT_ID and AGENT_API_KEY:
-        headers["X-API-Key"] = f"{AGENT_ID}:{AGENT_API_KEY}"
-        headers["Agent-ID"] = AGENT_ID
-    return headers
-
 def register_agent():
     """Register the agent with MAS. Keep retrying until successful.
 
     Uses a simple backoff to handle MAS not being ready at container start.
     """
-    global AGENT_ID, AGENT_API_KEY
     global AGENT_ID, AGENT_API_KEY
     url = f"{ORCHESTRATOR_URL}/agents/register"
     base_name = AGENT_NAME
@@ -283,24 +222,14 @@ def register_agent():
                 agent_registered.set(1)
                 if not AGENT_API_KEY:
                     logger.warning("MAS did not return api_key; agent auth will fail.")
-                AGENT_API_KEY = data.get("api_key")
-                logger.info(f"Agent registered successfully with id: {AGENT_ID}")
-                agent_registered.set(1)
-                if not AGENT_API_KEY:
-                    logger.warning("MAS did not return api_key; agent auth will fail.")
                 break
             if response.status_code == 409:
                 name_variant = f"{base_name}-{uuid.uuid4().hex[:6]}"
                 logger.warning(f"Agent name conflict. Retrying with name '{name_variant}'")
-                logger.warning(f"Agent name conflict. Retrying with name '{name_variant}'")
             else:
                 logger.error(f"Agent registration failed: {response.status_code} - {response.text}")
                 agent_errors_total.labels(error_type="registration").inc()
-                logger.error(f"Agent registration failed: {response.status_code} - {response.text}")
-                agent_errors_total.labels(error_type="registration").inc()
         except Exception as e:
-            logger.error(f"Error registering agent (will retry): {e}", exc_info=True)
-            agent_errors_total.labels(error_type="registration").inc()
             logger.error(f"Error registering agent (will retry): {e}", exc_info=True)
             agent_errors_total.labels(error_type="registration").inc()
         time.sleep(backoff_seconds)
@@ -315,23 +244,14 @@ def send_heartbeat():
     url = f"{ORCHESTRATOR_URL}/agents/heartbeat/{AGENT_ID}"
     try:
         response = requests.post(url, headers=_build_headers(include_api_key=True))
-        response = requests.post(url, headers=_build_headers(include_api_key=True))
         if response.status_code != 200:
-            logger.warning(f"Heartbeat failed: {response.status_code} - {response.text}")
-            agent_heartbeat_total.labels(status="error").inc()
-            agent_errors_total.labels(error_type="heartbeat").inc()
             logger.warning(f"Heartbeat failed: {response.status_code} - {response.text}")
             agent_heartbeat_total.labels(status="error").inc()
             agent_errors_total.labels(error_type="heartbeat").inc()
         else:
             logger.debug(f"Heartbeat sent successfully: {response.json()}")
             agent_heartbeat_total.labels(status="success").inc()
-            logger.debug(f"Heartbeat sent successfully: {response.json()}")
-            agent_heartbeat_total.labels(status="success").inc()
     except Exception as e:
-        logger.error(f"Error sending heartbeat: {e}", exc_info=True)
-        agent_heartbeat_total.labels(status="error").inc()
-        agent_errors_total.labels(error_type="heartbeat").inc()
         logger.error(f"Error sending heartbeat: {e}", exc_info=True)
         agent_heartbeat_total.labels(status="error").inc()
         agent_errors_total.labels(error_type="heartbeat").inc()
@@ -355,10 +275,7 @@ def _consume_messages():
     """
     import asyncio
     
-    import asyncio
-    
     if not AGENT_ID:
-        logger.error("Cannot start consumer: AGENT_ID not set")
         logger.error("Cannot start consumer: AGENT_ID not set")
         return
 
@@ -367,13 +284,9 @@ def _consume_messages():
         rabbit_user = os.getenv("RABBITMQ_USER", "guest")
         rabbit_pass = os.getenv("RABBITMQ_PASSWORD", "guest")
         credentials = pika.PlainCredentials(rabbit_user, rabbit_pass)
-        rabbit_user = os.getenv("RABBITMQ_USER", "guest")
-        rabbit_pass = os.getenv("RABBITMQ_PASSWORD", "guest")
-        credentials = pika.PlainCredentials(rabbit_user, rabbit_pass)
         connection = pika.BlockingConnection(
             pika.ConnectionParameters(
                 host=rabbit_host,
-                credentials=credentials,
                 credentials=credentials,
                 heartbeat=600,
                 blocked_connection_timeout=300,
@@ -400,16 +313,6 @@ def _consume_messages():
             demand = payload.get("demand", "")
             conversation_id = payload.get("conversation_id", "")
             task_id = payload.get("task_id") or ("task_" + uuid.uuid4().hex)
-            
-            # Extract correlation ID from message properties if available
-            corr_id = properties.headers.get("X-Request-ID") if properties.headers else None
-            if corr_id:
-                set_correlation_id(corr_id)
-
-            logger.info(
-                f"Received task: task_id={task_id}, conversation_id={conversation_id}, "
-                f"demand_length={len(demand)}, correlation_id={get_correlation_id()}"
-            )
             
             # Extract correlation ID from message properties if available
             corr_id = properties.headers.get("X-Request-ID") if properties.headers else None
@@ -618,19 +521,19 @@ def _process_delegation_message(payload: dict):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-    if hasattr(rag_pipeline, "react_agent") and rag_pipeline.react_agent:
-        rag_pipeline.react_agent._incoming_delegation_context = delegation_context
+    if AGENT_TYPE == "general" and hasattr(active_agent, "react_agent") and active_agent.react_agent:
+        active_agent.react_agent._incoming_delegation_context = delegation_context
 
     try:
-        result_dict = loop.run_until_complete(rag_pipeline.process_task(task_dict))
+        result_dict = loop.run_until_complete(active_agent.process_task(task_dict))
         result_text = result_dict.get("response", "")
         logger.info(f"Delegation {message_id} completed successfully")
     except Exception as e:
         result_text = f"Delegation processing failed: {e}"
         logger.error(f"Delegation {message_id} failed: {e}", exc_info=True)
     finally:
-        if hasattr(rag_pipeline, "react_agent") and rag_pipeline.react_agent:
-            rag_pipeline.react_agent._incoming_delegation_context = None
+        if AGENT_TYPE == "general" and hasattr(active_agent, "react_agent") and active_agent.react_agent:
+            active_agent.react_agent._incoming_delegation_context = None
 
     _send_delegation_result(message_id, result_text)
 
@@ -658,15 +561,10 @@ def _send_delegation_result(delegation_id: str, result: str):
 
 
 def send_result(result: str, conversation_id: str, task_id: str):
-def send_result(result: str, conversation_id: str, task_id: str):
     """
     Sends the processed task result to the MAS Orchestrator using the /tasks/task-result/ endpoint.
-    Sends the processed task result to the MAS Orchestrator using the /tasks/task-result/ endpoint.
-
     Args:
         result: The result string generated by the RAG pipeline.
-        conversation_id: The conversation ID for this task.
-        task_id: The unique task ID.
         conversation_id: The conversation ID for this task.
         task_id: The unique task ID.
     """
@@ -676,18 +574,7 @@ def send_result(result: str, conversation_id: str, task_id: str):
         "result": result,
         "conversation_id": conversation_id,
         "task_id": task_id,
-        "task_id": task_id,
     }
-    try:
-        response = requests.post(
-            url, json=payload, headers=_build_headers(include_api_key=True)
-        )
-        if response.status_code != 200:
-            logger.warning(f"Failed to send result: {response.status_code} - {response.text}")
-        else:
-            logger.debug(f"Result sent successfully: {response.json()}")
-    except Exception as e:
-        logger.error(f"Error sending result: {e}", exc_info=True)
     try:
         response = requests.post(
             url, json=payload, headers=_build_headers(include_api_key=True)
@@ -705,12 +592,10 @@ async def startup_event():
     On startup, register the agent with the MAS Orchestrator and start the heartbeat thread.
     """
     logger.info("Agent service starting up...")
-    logger.info("Agent service starting up...")
     register_agent()
     # Start heartbeat if registration succeeded and we have an id
     heartbeat_thread = threading.Thread(target=heartbeat_task, daemon=True)
     heartbeat_thread.start()
-    logger.info("Heartbeat thread started")
     logger.info("Heartbeat thread started")
 
     # Start RabbitMQ consumer in background
@@ -722,8 +607,6 @@ async def startup_event():
     agent_msg_thread = threading.Thread(target=_consume_agent_messages, daemon=True)
     agent_msg_thread.start()
     logger.info("Agent-to-agent message consumer started")
-
-    logger.info("Agent service startup complete")
 
 @app.get(
     "/capabilities",
