@@ -1,16 +1,8 @@
-"""
-react_agent.py
---------------
-Implements a ReAct (Reasoning + Acting) agent that performs multi-step
-reasoning in a THOUGHT → ACTION → OBSERVATION loop.
+"""ReAct (Reasoning + Acting) agent with a THOUGHT → ACTION → OBSERVATION loop.
 
-The agent can use the following tools:
-    - search_knowledge : retrieve context from the knowledge store
-    - extract_data     : parse files (PDF / CSV / TXT)
-    - analyze_payments : domain-specific payment analytics
-    - calc             : safe arithmetic calculator
-
-Each response includes source citations so the user can verify the information.
+Calls registered tools (``search_knowledge``, ``extract_data``,
+``analyze_payments``, ``calc``, ``delegate``) and cites sources in every answer.
+See ``docs/architecture/agent_service.md`` for the walkthrough.
 """
 
 from __future__ import annotations
@@ -26,17 +18,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
+# --- Constants ---
 MAX_REACT_STEPS = 5
 # Configurable via REACT_TIMEOUT_SECONDS env var — default raised to 120s so
 # GPU inference of up to 1024 tokens has time to complete within one ReAct step.
 DEFAULT_TIMEOUT_SECONDS = float(os.getenv("REACT_TIMEOUT_SECONDS", "120"))
 
-# ---------------------------------------------------------------------------
-# ReAct prompt templates  (L5-T1)
-# ---------------------------------------------------------------------------
+# --- ReAct prompt templates  (L5-T1) ---
 
 SYSTEM_PROMPT = (
     "You are an advanced reasoning agent. You solve problems step-by-step "
@@ -88,9 +76,7 @@ TOOL_DESCRIPTIONS = {
     ),
 }
 
-# ---------------------------------------------------------------------------
-# Data structures  (L5-T6 – execution history tracking)
-# ---------------------------------------------------------------------------
+# --- Data structures  (L5-T6 – execution history tracking) ---
 
 
 class StepType(str, Enum):
@@ -150,9 +136,7 @@ class ExecutionHistory:
         }
 
 
-# ---------------------------------------------------------------------------
-# ReactAgent  (L5-T2)
-# ---------------------------------------------------------------------------
+# --- ReactAgent  (L5-T2) ---
 
 
 class ReactAgent:
@@ -195,9 +179,7 @@ class ReactAgent:
         # Map of tool names → callables used inside the ReAct loop
         self._tool_handlers = self._build_tool_handlers()
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+    # --- Public API ---
 
     async def run(self, query: str) -> Dict[str, Any]:
         """
@@ -238,9 +220,7 @@ class ReactAgent:
             "history": history.to_dict(),
         }
 
-    # ------------------------------------------------------------------
-    # Core ReAct loop
-    # ------------------------------------------------------------------
+    # --- Core ReAct loop ---
 
     async def _react_loop(
         self, query: str, history: ExecutionHistory
@@ -313,9 +293,7 @@ class ReactAgent:
         # Exhausted max steps – synthesize the best answer we can
         return self._build_exhausted_answer(query, context_parts, history)
 
-    # ------------------------------------------------------------------
-    # L5-T3 – Thought generation
-    # ------------------------------------------------------------------
+    # --- L5-T3 – Thought generation ---
 
     async def _generate_thought(
         self,
@@ -366,9 +344,7 @@ class ReactAgent:
 
         return raw.strip(), False, ""
 
-    # ------------------------------------------------------------------
-    # L5-T4 – Action selection & response parsing
-    # ------------------------------------------------------------------
+    # --- L5-T4 – Action selection & response parsing ---
 
     def _parse_action(self, thought_text: str) -> Tuple[Optional[str], List[str]]:
         """
@@ -413,9 +389,7 @@ class ReactAgent:
                 parts.append(cleaned)
         return parts
 
-    # ------------------------------------------------------------------
-    # L5-T5 – Observation processing (action execution)
-    # ------------------------------------------------------------------
+    # --- L5-T5 – Observation processing (action execution) ---
 
     async def _execute_action(
         self, tool_name: str, tool_args: List[str]
@@ -448,9 +422,7 @@ class ReactAgent:
             )
             return f"[Error] Tool '{tool_name}' failed: {exc}", None
 
-    # ------------------------------------------------------------------
-    # Tool handler wrappers
-    # ------------------------------------------------------------------
+    # --- Tool handler wrappers ---
 
     def _build_tool_handlers(self) -> Dict[str, Any]:
         """Build a mapping of tool-name → async handler callable."""
@@ -565,9 +537,7 @@ class ReactAgent:
         error = result.get("error", "Delegation failed")
         return f"[Delegation failed] {error}", source
 
-    # ------------------------------------------------------------------
-    # L5-T8 – Source citations
-    # ------------------------------------------------------------------
+    # --- L5-T8 – Source citations ---
 
     def _attach_citations(self, answer: str, sources: List[str]) -> str:
         """Append source citations to the final answer if not already present."""
@@ -583,9 +553,7 @@ class ReactAgent:
         )
         return answer.rstrip() + citations
 
-    # ------------------------------------------------------------------
-    # L5-T10 – Fallback / error answers
-    # ------------------------------------------------------------------
+    # --- L5-T10 – Fallback / error answers ---
 
     def _build_timeout_answer(self, history: ExecutionHistory) -> str:
         """Build an answer when the reasoning loop times out."""

@@ -1,12 +1,8 @@
-"""
-content_analyzer.py
--------------------
-ContentAnalyzer service that automatically analyzes uploaded documents to extract
-categories, entities, topics, and summaries.
+"""Classify uploaded documents and extract entities, topics, and summaries.
 
-Combines spaCy NER with regex-based extraction and keyword-based classification.
-Optionally uses LLM fallback for classification when keyword confidence is low,
-and LLM-powered summary generation when transformers models are available.
+Combines spaCy NER, regex extraction, and keyword classification, with an
+optional LLM fallback for low-confidence cases and transformers-based
+summarization when available.
 """
 
 from __future__ import annotations
@@ -179,9 +175,7 @@ class ContentAnalyzer:
         if init_llm:
             self._init_llm()
 
-    # ------------------------------------------------------------------
-    # LLM initialisation (Phase 2b)
-    # ------------------------------------------------------------------
+    # --- LLM initialisation (Phase 2b) ---
 
     def _init_llm(self) -> None:
         """Lazily initialize LLM pipelines for classification and summarization."""
@@ -210,9 +204,7 @@ class ContentAnalyzer:
         except Exception as e:
             logger.warning("Could not init summarization pipeline: %s", e)
 
-    # ------------------------------------------------------------------
-    # Main analysis entry point
-    # ------------------------------------------------------------------
+    # --- Main analysis entry point ---
 
     def analyze(self, text: str, title: str = "") -> Dict[str, Any]:
         """
@@ -292,9 +284,7 @@ class ContentAnalyzer:
             "confidence_score": 0.0,
         }
 
-    # ------------------------------------------------------------------
-    # Category classification
-    # ------------------------------------------------------------------
+    # --- Category classification ---
 
     def _classify_category(self, text: str) -> Tuple[str, float]:
         """Classify using keyword matching. Returns (category, confidence)."""
@@ -340,9 +330,7 @@ class ContentAnalyzer:
             logger.warning("LLM classification failed: %s", e)
         return None
 
-    # ------------------------------------------------------------------
-    # Entity extraction
-    # ------------------------------------------------------------------
+    # --- Entity extraction ---
 
     def _extract_entities_regex(self, text: str) -> Dict[str, List[str]]:
         """Extract amounts and dates using regex."""
@@ -394,9 +382,7 @@ class ContentAnalyzer:
             "dates": list(set(dates)),
         }
 
-    # ------------------------------------------------------------------
-    # Topic extraction
-    # ------------------------------------------------------------------
+    # --- Topic extraction ---
 
     def _extract_topics_spacy(self, doc, max_topics: int = 10) -> List[str]:
         """Extract topics from spaCy noun chunks."""
@@ -428,9 +414,7 @@ class ContentAnalyzer:
                 freq[w] = freq.get(w, 0) + 1
         return [w for w, _ in sorted(freq.items(), key=lambda x: -x[1])[:max_topics]]
 
-    # ------------------------------------------------------------------
-    # Document type detection
-    # ------------------------------------------------------------------
+    # --- Document type detection ---
 
     def _detect_document_type(self, text: str, title: str = "") -> str:
         """Detect document type from content and title using keyword matching."""
@@ -446,9 +430,7 @@ class ContentAnalyzer:
             return "standard"
         return max(scores, key=scores.get)
 
-    # ------------------------------------------------------------------
-    # Summary generation
-    # ------------------------------------------------------------------
+    # --- Summary generation ---
 
     def _generate_summary_with_llm(self, text: str, max_length: int = 150) -> Optional[str]:
         """Generate summary using LLM. Returns None on failure (graceful fallback)."""

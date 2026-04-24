@@ -1,8 +1,4 @@
-"""
-Structured Logging Module for Knowledge Store.
-
-Provides JSON-formatted logging with correlation ID support for request tracing.
-"""
+"""JSON-formatted structured logging with correlation ID support for request tracing."""
 
 import json
 import logging

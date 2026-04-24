@@ -1,11 +1,4 @@
-"""
-Middleware for Knowledge Store observability.
-
-Provides:
-- Correlation ID tracking
-- Request metrics collection
-- Structured logging
-"""
+"""Observability middleware: correlation IDs, request metrics, structured logging."""
 
 import time
 import uuid

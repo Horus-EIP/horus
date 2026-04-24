@@ -1,14 +1,7 @@
-"""
-File Management Routes - File Storage API
+"""File management routes — upload, list, delete, and type-aware conversion.
 
-Provides endpoints for handling file uploads, deletions, and retrieval.
-Supports PDF, DOCX, TXT, and image-based PDFs.
-
-Endpoints:
-    POST   /file/           - Upload multiple files
-    GET    /file/           - List all stored files and metadata
-    DELETE /file/{filename} - Delete a specific file
-    POST   /file/{type}     - Upload and convert a single file by type
+Handles PDF, DOCX, TXT, and image-based PDFs. OpenAPI descriptions per
+endpoint live alongside the route decorators.
 """
 
 import os

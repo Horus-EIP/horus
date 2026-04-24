@@ -1,8 +1,17 @@
-from typing import List, Optional, Dict, Any, ClassVar
-from langchain.tools import BaseTool
+"""LangChain tool that extracts structured data (payments, tables, key-value
+pairs) from unstructured document text using regex and spaCy NER.
+
+See ``docs/architecture/data_extraction.md`` for entity types and rules.
+"""
+
+import json
 import logging
 import re
-import json
+from collections import Counter
+from typing import Any, ClassVar, Dict, List, Optional
+
+from langchain.tools import BaseTool
+
 try:
     import spacy
     from spacy.lang.en.stop_words import STOP_WORDS
@@ -11,19 +20,13 @@ except ImportError:
     spacy = None
     STOP_WORDS = set()
     _has_spacy = False
-from collections import Counter
 
 _nlp_model = None
 
 logger = logging.getLogger(__name__)
 
 class DataExtractorTool(BaseTool):
-    """
-    A LangChain tool for extracting structured data from unstructured document text.
-    
-    This tool leverages both regular expressions and spaCy NER models to identify
-    entities such as payments, dates, tables, and key-value pairs.
-    """
+    """Extract payments, dates, tables, and key-value pairs from raw text."""
     
     name: str = "document_data_extractor"
     description: str = (

@@ -1,9 +1,7 @@
-"""
-knowledge_store_client.py
---------------------------
-This module provides a client for interacting with the knowledge-store HTTP API.
-It handles HTTP requests with timeout, retry logic, and graceful error handling.
-Uses async/await for non-blocking I/O operations.
+"""Async HTTP client for the Knowledge Store service.
+
+Wraps retrieval, ingestion, and metadata calls with timeouts, bounded retries,
+and Prometheus metrics. See ``docs/architecture/knowledge_store_client.md``.
 """
 
 from typing import Any, Dict, Optional
