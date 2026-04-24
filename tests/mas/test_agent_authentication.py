@@ -102,6 +102,7 @@ class TestAgentAuthentication:
 
         # Mock DB queries for task update
         mock_task = MagicMock()
+        mock_task.agent_id = agent_id
         mock_task.result = MagicMock()
         mock_task.result.future_actions = []
 
@@ -123,12 +124,19 @@ class TestAgentAuthentication:
 
         assert response.status_code == 200
 
-    def test_task_result_agent_mismatch(self):
-        """Test task result where authenticated agent differs from payload agent_id"""
+    @patch("tasks.routes.agent_may_submit_task_result", return_value=False)
+    def test_task_result_agent_mismatch(self, _mock_may):
+        """Pool peer cannot submit if not same assignee and not same specialization."""
         auth_agent_id = "agent-real"
         payload_agent_id = "agent-fake"
 
         app.dependency_overrides[verify_agent_api_key] = lambda: (auth_agent_id, "key")
+
+        mock_task = MagicMock()
+        mock_task.agent_id = payload_agent_id
+        self.mock_session.query.return_value.filter.return_value.first.return_value = (
+            mock_task
+        )
 
         response = client.post(
             "/tasks/task-result/",
@@ -141,4 +149,4 @@ class TestAgentAuthentication:
         )
 
         assert response.status_code == 403
-        assert "Agent ID mismatch" in response.json()["detail"]
+        assert "not allowed to complete this task" in response.json()["detail"]

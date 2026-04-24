@@ -1,6 +1,6 @@
 # Agent Service
 
-The Agent service is an autonomous AI worker that registers with the MAS orchestrator, consumes tasks from a RabbitMQ queue, processes them through a RAG (Retrieval-Augmented Generation) pipeline, and returns results back to MAS. Multiple agent instances can run concurrently, each potentially specializing in a different capability.
+The Agent service is an autonomous AI worker that registers with the MAS orchestrator, consumes tasks from a **shared RabbitMQ work queue per specialization** (e.g. `horus.work.general`), processes them through a RAG (Retrieval-Augmented Generation) pipeline, and returns results back to MAS. Multiple instances of the same `AGENT_TYPE` form a pool; MAS still records a concrete assignee on each `Task`, and workers submit results using that assignee id in the JSON body while authenticating with their own API key.
 
 ## Architecture
 
@@ -8,7 +8,7 @@ The service is a **FastAPI** application (port 8001) with background threads for
 
 1. **Registration** -- On startup the agent registers itself with MAS via `POST /agents/register` and receives an `agent_id` and `api_key`.
 2. **Heartbeat** -- A daemon thread sends a heartbeat to MAS every 30 seconds.
-3. **RabbitMQ consumer** -- A blocking consumer listens on the agent's dedicated queue for task messages dispatched by MAS. Each message is processed by the active pipeline and the result is sent back via `POST /tasks/task-result/`.
+3. **RabbitMQ consumer** -- A blocking consumer listens on `{HORUS_WORK_QUEUE_PREFIX}.{AGENT_TYPE}` (default `horus.work.general`, etc.). Task messages include `assigned_agent_id` so `/tasks/task-result/` matches the orchestrator’s `Task.agent_id`.
 4. **Inter-agent messaging** -- A second consumer handles delegation requests from other agents routed through MAS.
 
 ### RAG Pipeline
@@ -29,7 +29,7 @@ The pipeline also supports a **ReAct** reasoning mode (`ReactAgent`) that perfor
 | `analyst`    | `AnalystAgent`     | Specialized in data analysis                             |
 | `writer`     | `WriterAgent`      | Specialized in text generation using the decision model  |
 
-Set the agent type with the `AGENT_TYPE` environment variable.
+Set the agent type with the `AGENT_TYPE` environment variable. Keep `HORUS_WORK_QUEUE_PREFIX` in sync with MAS `agent_work_queue_prefix` (default `horus.work`).
 
 ## Tool Registry
 

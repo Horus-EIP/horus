@@ -24,9 +24,8 @@ class TestAgentsRoutesCoverage:
     @patch("agents.routes.get_db")
     @patch("agents.routes.get_agent_id")
     @patch("agents.routes.create_agent")
-    @patch("agents.routes.rabbitmq_instance")
     def test_handle_agent_creation_success(
-        self, mock_rabbitmq, mock_create_agent, mock_get_agent_id, mock_get_db
+        self, mock_create_agent, mock_get_agent_id, mock_get_db
     ):
         # Allow access
         app.dependency_overrides[PermissionChecker(Permission.AGENT_CREATE)] = lambda: {
@@ -52,7 +51,6 @@ class TestAgentsRoutesCoverage:
             "agent_id": "agent-uuid",
             "api_key": "test-api-key",
         }
-        mock_rabbitmq.create_queue.assert_called_once_with("agent-uuid")
 
     @patch("agents.routes.get_db")
     def test_handle_agent_creation_no_user(self, mock_get_db):
@@ -116,38 +114,9 @@ class TestAgentsRoutesCoverage:
         assert response.json()["detail"] == "Failed to create agent"
 
     @patch("agents.routes.get_db")
-    @patch("agents.routes.get_agent_id")
-    @patch("agents.routes.create_agent")
-    @patch("agents.routes.rabbitmq_instance")
-    def test_handle_agent_creation_rabbitmq_failure(
-        self, mock_rabbitmq, mock_create_agent, mock_get_agent_id, mock_get_db
-    ):
-        app.dependency_overrides[PermissionChecker(Permission.AGENT_CREATE)] = lambda: {
-            "username": "admin",
-            "role": "admin",
-        }
-
-        mock_get_agent_id.return_value = None
-        mock_create_agent.return_value = ("agent-uuid", "test-api-key")
-        mock_rabbitmq.create_queue.side_effect = Exception("RabbitMQ Error")
-
-        response = client.post(
-            "/agents/register",
-            json={
-                "name": "NewAgent",
-                "skills": ["skill1"],
-                "description": "A new agent",
-            },
-        )
-
-        assert response.status_code == 500
-        assert "Failed to create RabbitMQ queue" in response.json()["detail"]
-
-    @patch("agents.routes.get_db")
     @patch("agents.routes.delete_agent")
-    @patch("agents.routes.rabbitmq_instance")
     def test_unregister_agent_success(
-        self, mock_rabbitmq, mock_delete_agent, mock_get_db
+        self, mock_delete_agent, mock_get_db
     ):
         app.dependency_overrides[PermissionChecker(Permission.AGENT_DELETE)] = lambda: {
             "username": "admin",
@@ -162,25 +131,6 @@ class TestAgentsRoutesCoverage:
         assert response.json() == {
             "message": "Agent agent-uuid successfully unregistered"
         }
-        mock_rabbitmq.delete_queue.assert_called_once_with("agent-uuid")
-
-    @patch("agents.routes.get_db")
-    @patch("agents.routes.delete_agent")
-    @patch("agents.routes.rabbitmq_instance")
-    def test_unregister_agent_queue_fail(
-        self, mock_rabbitmq, mock_delete_agent, mock_get_db
-    ):
-        app.dependency_overrides[PermissionChecker(Permission.AGENT_DELETE)] = lambda: {
-            "username": "admin",
-            "role": "admin",
-        }
-
-        mock_delete_agent.return_value = True
-        mock_rabbitmq.delete_queue.side_effect = Exception("QueueFail")
-
-        response = client.delete("/agents/unregister/agent-uuid")
-
-        assert response.status_code == 200  # Should survive queue error
 
     @patch("agents.routes.get_db")
     @patch("agents.routes.delete_agent")

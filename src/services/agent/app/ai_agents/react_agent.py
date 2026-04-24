@@ -42,6 +42,9 @@ SYSTEM_PROMPT = (
     "- Always start with a THOUGHT.\n"
     "- Only call ONE action per step.\n"
     "- You MUST cite sources in your FINAL_ANSWER using [Source: <origin>] notation.\n"
+    "- Write FINAL_ANSWER in Markdown for readability: use a short ## title, "
+    "**bold** for key terms, bullet lists for multiple points, and short paragraphs. "
+    "Avoid a single dense wall of text.\n"
     "- Maximum {max_steps} reasoning steps.\n"
 )
 
@@ -54,7 +57,9 @@ STEP_PROMPT = (
 TOOL_DESCRIPTIONS = {
     "search_knowledge": (
         "search_knowledge(query) – Search the knowledge store for relevant "
-        "information. Returns contextual text."
+        "information. If the user names a file (e.g. report.pdf, notes.txt), include "
+        "that exact filename in the query so the store can resolve it by name. "
+        "Returns contextual text."
     ),
     "extract_data": (
         "extract_data(file_url_or_content, file_type) – Parse and extract data "

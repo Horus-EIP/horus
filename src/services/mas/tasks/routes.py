@@ -21,6 +21,8 @@ from conversations.conversation_tool_functions import add_messages
 from core.logger import get_logger, log_agent_operation, log_error
 from core.metrics import TASK_ERRORS, TASK_QUEUE_DEPTH
 from core.rabbitmq_tool import rabbitmq_instance
+from core.work_queues import (agent_may_submit_task_result,
+                              resolve_work_queue_for_agent_id)
 from db.database import get_db
 from db.models import Task, TaskResult
 from schemas.schemas import TaskForm, TaskResultForm
@@ -36,6 +38,20 @@ from tasks.task_tool_functions import (aggregate_results, decompose_task,
 logger = get_logger("task_routes")
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
+
+
+def _publish_task_to_work_queue(
+    db: Session, assigned_agent_id: str, payload: dict
+) -> None:
+    """Publish a task JSON payload to the shared work queue for the assignee's type."""
+    queue = resolve_work_queue_for_agent_id(db, assigned_agent_id)
+    if not queue:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not resolve RabbitMQ work queue for assigned agent",
+        )
+    payload.setdefault("assigned_agent_id", assigned_agent_id)
+    rabbitmq_instance.publish(queue, json.dumps(payload))
 
 
 def get_task_queue_stats(db: Session) -> dict[str, Any]:
@@ -226,15 +242,15 @@ async def create_new_task(
         if not task_id:
             raise HTTPException(status_code=500, detail="Failed to create task")
 
-        message = json.dumps(
+        _publish_task_to_work_queue(
+            db,
+            agent_id,
             {
                 "conversation_id": task.conversation_id,
                 "task_id": task_id,
-                # Agent consumer expects "demand" (or "query"); omitting it left the worker idle / empty.
                 "demand": user_demand,
-            }
+            },
         )
-        rabbitmq_instance.publish(agent_id, message)
         TASK_QUEUE_DEPTH.inc()
         log_agent_operation(
             agent_id, "TASK", f"Assigned task {task_id}: {task.demand[:50]}..."
@@ -269,14 +285,15 @@ async def create_new_task(
     task_id = insert_new_task(
         task.conversation_id, agent_id, user_demand, history, actions_list, db
     )
-    message = json.dumps(
+    _publish_task_to_work_queue(
+        db,
+        agent_id,
         {
             "conversation_id": task.conversation_id,
             "task_id": task_id,
             "demand": user_demand,
-        }
+        },
     )
-    rabbitmq_instance.publish(agent_id, message)
 
     TASK_QUEUE_DEPTH.inc()
     log_agent_operation(
@@ -321,10 +338,21 @@ async def sharing_agent_result(
             internal failure (e.g. recursion guard).
     """
     verified_agent_id, _ = verified_agent
-    if verified_agent_id != task_result.agent_id:
+
+    task = db.query(Task).filter(Task.id == task_result.task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task_result.agent_id != task.agent_id:
         raise HTTPException(
             status_code=403,
-            detail="Agent ID mismatch: You cannot submit results for another agent",
+            detail="agent_id in body must match the task's assigned agent",
+        )
+
+    if not agent_may_submit_task_result(verified_agent_id, task.agent_id, db):
+        raise HTTPException(
+            status_code=403,
+            detail="Authenticated agent is not allowed to complete this task",
         )
 
     try:
@@ -375,14 +403,15 @@ async def sharing_agent_result(
             subtask.order = task.order + 1
             db.commit()
 
-            message = json.dumps(
+            _publish_task_to_work_queue(
+                db,
+                new_agent,
                 {
                     "conversation_id": task.conversation_id,
                     "task_id": new_subtask_id,
                     "demand": new_action_context,
-                }
+                },
             )
-            rabbitmq_instance.publish(new_agent, message)
             TASK_QUEUE_DEPTH.inc()
             logger.info(
                 f"Chained to next task: {new_subtask_id} assigned to agent {new_agent}"

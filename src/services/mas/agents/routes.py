@@ -24,7 +24,6 @@ from auth.auth_tool_functions import (PermissionChecker, get_current_user,
 from auth.permissions import Permission
 from core.logger import log_agent_operation, log_error
 from core.metrics import AGENT_COUNT
-from core.rabbitmq_tool import rabbitmq_instance
 from db.database import get_db
 from db.models import AgentTypes
 from schemas.schemas import RegistrationForm
@@ -35,7 +34,7 @@ router = APIRouter(prefix="/agents", tags=["Agents"])
 @router.post(
     "/register",
     summary="Register a new agent",
-    description="Register a new agent with specified skills and capabilities. Agent name must be unique. Creates a dedicated RabbitMQ queue for task assignment.",
+    description="Register a new agent with specified skills and capabilities. Agent name must be unique. Ensures the shared RabbitMQ work queue for this agent type exists for pooled workers.",
     status_code=200,
     dependencies=[Depends(PermissionChecker(Permission.AGENT_CREATE))],
     tags=["Agents"],
@@ -49,9 +48,30 @@ async def handle_agent_creation(
 ):
     """Register a new agent and provision its RabbitMQ queue.
 
+<<<<<<< Updated upstream
     Returns ``{message, agent_id, api_key}``. The plaintext API key is
     returned exactly once. Raises 409 on duplicate name, 500 on DB or
     RabbitMQ failure.
+=======
+    This function:
+    1. Checks if an agent with the same name already exists.
+    2. Creates a new agent record in the database with an API key.
+    3. Ensures the shared RabbitMQ work queue for the agent's type exists.
+    4. Logs the registration event.
+
+    Args:
+        agent (RegistrationForm): The agent registration details (name, skills, description).
+        user (dict): The authenticated user performing the registration.
+        db (Session): Database session.
+
+    Returns:
+        dict: detailed response containing the new agent ID and API Key.
+
+    Raises:
+        HTTPException:
+            - 409: If agent name already exists.
+            - 500: If database or message queue provisioning fails.
+>>>>>>> Stashed changes
     """
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
@@ -75,16 +95,6 @@ async def handle_agent_creation(
         log_error("AGENT", f"Failed to create agent {agent.name}")
         raise HTTPException(status_code=500, detail="Failed to create agent")
 
-    try:
-        rabbitmq_instance.create_queue(agent_id)
-    except Exception as e:
-        log_error(
-            "AGENT", f"Failed to create RabbitMQ queue for {agent.name}: {str(e)}"
-        )
-        raise HTTPException(
-            status_code=500, detail=f"Failed to create RabbitMQ queue: {str(e)}"
-        )
-
     log_agent_operation(
         agent.name, "REGISTER", f"ID: {agent_id}, Skills: {agent.skills}"
     )
@@ -101,7 +111,7 @@ async def handle_agent_creation(
 @router.delete(
     "/unregister/{agent_id}",
     summary="Unregister an agent",
-    description="Remove an agent from the system and delete its associated RabbitMQ queue. This operation cannot be undone. Only admin users can perform this operation.",
+    description="Remove an agent from the registry. Shared type work queues (e.g. horus.work.general) are not deleted because other pool workers may still use them. Only admin users can perform this operation.",
     status_code=200,
     dependencies=[Depends(PermissionChecker(Permission.AGENT_DELETE))],
     tags=["Agents"],
@@ -112,16 +122,32 @@ async def unregister_agent(
     user: Annotated[dict, Depends(PermissionChecker(Permission.AGENT_DELETE))],
     db: Session = Depends(get_db),
 ):
+<<<<<<< Updated upstream
     """Delete an agent and its queue. Raises 404 if the agent is unknown."""
+=======
+    """
+    Unregister an agent and clean up its resources.
+
+    1. Removes the agent record from the database.
+    2. Does not remove shared type work queues used by other pool members.
+    3. Logs the deletion event.
+
+    Args:
+        agent_id (str): The UUID of the agent to unregister.
+        user (dict): The authenticated user performing the deletion.
+        db (Session): Database session.
+
+    Returns:
+        dict: Confirmation message.
+
+    Raises:
+        HTTPException:
+            - 404: If the agent is not found.
+    """
+>>>>>>> Stashed changes
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
     if delete_agent(agent_id, db):
-        try:
-            rabbitmq_instance.delete_queue(agent_id)
-        except Exception as e:
-            log_error("AGENT", f"Failed to delete queue for {agent_id}: {str(e)}")
-            pass  # Log but don't fail if queue deletion fails
-
         log_agent_operation(agent_id, "UNREGISTER", "Agent deleted")
         AGENT_COUNT.labels(status="active").dec()
         return {"message": f"Agent {agent_id} successfully unregistered"}

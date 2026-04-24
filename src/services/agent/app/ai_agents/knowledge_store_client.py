@@ -9,8 +9,43 @@ import httpx
 import asyncio
 import time
 import logging
+import re
 
 logger = logging.getLogger(__name__)
+
+# Filename-like tokens the agent can resolve to full store text (not only semantic search).
+_FILENAME_EXT_RE = re.compile(
+    r"\b[\w\-. ]+\.(?:txt|pdf|docx|md|csv)\b",
+    re.IGNORECASE,
+)
+
+
+def extract_probable_filename_from_query(query: str) -> Optional[str]:
+    """
+    If the user message names a file (quoted path, ``file foo.txt``, or bare ``name.ext``),
+    return that name for knowledge-store resolution.
+    """
+    if not (query or "").strip():
+        return None
+    text = query.strip()
+    m = re.search(
+        r'["\']([^"\']+\.(?:txt|pdf|docx|md|csv))["\']',
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        return m.group(1).strip()
+    m = re.search(
+        r"\bfile\s+["\']?([\w\-. ]+\.(?:txt|pdf|docx|md|csv))["\']?",
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        return m.group(1).strip()
+    matches = _FILENAME_EXT_RE.findall(text)
+    if matches:
+        return matches[-1].strip()
+    return None
 
 # Import metrics if available (avoid circular imports)
 try:
@@ -286,12 +321,74 @@ class KnowledgeStoreClient:
 
         return {"query": "__inventory__", "data": ""}
 
+    async def resolve_by_filename(self, name: str) -> Dict[str, Any]:
+        """
+        Resolve a stored document by filename or basename (GET /file/resolve).
+
+        Returns the same shape as ``query`` so the retrieval agent can use it as context.
+        """
+        url = f"{self._api_root()}/file/resolve"
+        logger.debug("Resolving knowledge store document by name=%r via %s", name, url)
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            for attempt in range(self.max_retries):
+                try:
+                    response = await client.get(url, params={"name": name})
+                    if response.status_code == 404:
+                        return {"query": f"__file__:{name}", "data": ""}
+                    response.raise_for_status()
+                    payload = response.json()
+                    text = (payload.get("text") or "").strip()
+                    titles = payload.get("matched_titles") or []
+                    doc_ids = payload.get("doc_ids") or []
+                    if not text:
+                        return {"query": f"__file__:{name}", "data": ""}
+                    header = (
+                        f"[Indexed file(s) matching {name!r}: "
+                        f"{', '.join(str(t) for t in titles)} | ids: {', '.join(str(i) for i in doc_ids)}]\n\n"
+                    )
+                    return {
+                        "query": f"__file__:{name}",
+                        "data": header + text,
+                    }
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 404:
+                        return {"query": f"__file__:{name}", "data": ""}
+                    logger.warning(
+                        "resolve_by_filename HTTP error %s (attempt %s/%s)",
+                        e.response.status_code,
+                        attempt + 1,
+                        self.max_retries,
+                    )
+                except (httpx.TimeoutException, httpx.RequestError, Exception) as e:
+                    logger.warning(
+                        "resolve_by_filename request error: %s (attempt %s/%s)",
+                        e,
+                        attempt + 1,
+                        self.max_retries,
+                    )
+                if attempt < self.max_retries - 1:
+                    await asyncio.sleep(self.retry_delay)
+
+        return {"query": f"__file__:{name}", "data": ""}
+
     async def fetch_for_rag(
         self, query: str, n_results: Optional[int] = None
     ) -> Dict[str, Any]:
         """
-        Run semantic search; if no excerpts are returned, attach a document inventory.
+        Prefer exact file resolution when the query names a stored filename, then semantic
+        search; if no excerpts are returned, attach a document inventory.
         """
+        filename = extract_probable_filename_from_query(query)
+        if filename:
+            resolved = await self.resolve_by_filename(filename)
+            if (resolved.get("data") or "").strip():
+                logger.info(
+                    "fetch_for_rag: using resolved file %r instead of semantic-only search",
+                    filename,
+                )
+                return resolved
+
         result = await self.query(query, n_results=n_results)
         if (result.get("data") or "").strip():
             return result

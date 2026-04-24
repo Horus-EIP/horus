@@ -400,11 +400,16 @@ class DecisionMakingAgent:
             user_content = (
                 "The following content was retrieved from the knowledge base for this task. "
                 "Use ONLY this retrieved content to complete the task. "
-                "If summarizing, be thorough. "
+                "If summarizing, be thorough but structured. "
                 "If the retrieved content does not contain enough information, say so.\n\n"
                 f"Retrieved Content:\n{context}\n\nTask: {query}"
             )
-            system_content = "You are a helpful assistant. Use only the retrieved content to complete the task."
+            system_content = (
+                "You are a helpful assistant. Use only the retrieved content to complete the task. "
+                "Format every answer in Markdown: start with a brief ## heading when the answer "
+                "has multiple parts, use **bold** for important labels, use bullet lists for "
+                "enumerations, and keep paragraphs short so the reply is easy to scan."
+            )
 
         logger.debug(
             "Decision inference model=%s device=%s", self.model_name, self.device
@@ -416,13 +421,15 @@ class DecisionMakingAgent:
                 prompt = (
                     f"{system_content}\n\n{user_content}"
                     if context is None
-                    else (
-                        "You are a helpful assistant. Answer the user's question as directly "
-                        "and concisely as possible in 1-3 sentences using ONLY the provided "
-                        "context. If the answer is not present in the context, say: "
-                        "'I don't have that information yet.'\n\n"
-                        f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"
-                    )
+                else (
+                    "You are a helpful assistant. Answer using ONLY the provided context. "
+                    "Format the answer in Markdown (## heading when helpful, **bold** labels, "
+                    "bullet lists for multiple items, short paragraphs). "
+                    "If the user asked for a summary, cover the main points without inventing facts. "
+                    "If the answer is not present in the context, say: "
+                    "'I don't have that information yet.'\n\n"
+                    f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"
+                )
                 )
                 result = self.decision_model(prompt)
                 text = self._coerce_callable_output(result)

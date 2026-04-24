@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from core.logger import get_logger
 from core.rabbitmq_tool import rabbitmq_instance
+from core.work_queues import work_queue_name_for_agent_type
 from db.database import SessionLocal, get_db
 from db.models import Agents, AgentTypes
 
@@ -148,8 +149,8 @@ def create_agent(
         db.refresh(new_agent)
         logger.info(f"Agent created successfully: {agent_id} ({name})")
 
-        # Strategic placement: Ensure queue exists immediately upon agent creation
-        rabbitmq_instance.create_queue(agent_id)
+        # Shared pool queue for this specialization (all workers of this type consume it).
+        rabbitmq_instance.create_queue(work_queue_name_for_agent_type(Agent_type))
 
         return agent_id, api_key
     except Exception as e:

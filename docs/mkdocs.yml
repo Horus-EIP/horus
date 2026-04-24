@@ -52,6 +52,7 @@ nav:
   - Architecture:
       - Overview: architecture/overview.md
       - Data Model: architecture/data-model.md
+      - Ephemeral conversation agents: architecture/ephemeral-conversation-agents.md
   - API Reference:
       - MAS API: api/mas-api.md
       - Knowledge Store API: api/knowledge-store-api.md

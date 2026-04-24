@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     rabbitmq_user: str = "guest"
     rabbitmq_password: str = "guest"
 
+    # Shared task queue prefix: workers consume ``{prefix}.{agent_type}`` (e.g. horus.work.general).
+    agent_work_queue_prefix: str = "horus.work"
+
     # Application Configuration
     llm_autoinit: int = 0  # Force 0 for tests
     # When 1, load the orchestrator LLM on CPU even if a GPU is visible (Docker can still pass GPU to other services).

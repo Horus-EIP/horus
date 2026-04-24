@@ -9,7 +9,7 @@ import uuid
 import asyncio
 from typing import List
 
-from fastapi import APIRouter, HTTPException, File, UploadFile
+from fastapi import APIRouter, HTTPException, File, UploadFile, Query
 
 from app.api.utils import pdf_to_text, save_file, image_pdf_to_text, docx_to_text
 from app.chroma_db import store_file, DocumentModel, knowledge_collection
@@ -20,6 +20,96 @@ router = APIRouter(tags=["File"])
 logger = get_logger("FileRouter")
 
 _content_analyzer = ContentAnalyzer()
+
+
+def _match_stored_title(requested: str, stored_title: str) -> bool:
+    """
+    True if the user-supplied name refers to this stored document title.
+
+    Matches full title, basename, or same stem (e.g. ``report`` vs ``report.pdf``).
+    """
+    r = (requested or "").strip().lower()
+    s = (stored_title or "").strip().lower()
+    if not r or not s:
+        return False
+    s_base = os.path.basename(s)
+    r_base = os.path.basename(r)
+    if s == r or s_base == r_base:
+        return True
+    s_stem = os.path.splitext(s_base)[0]
+    r_stem = os.path.splitext(r_base)[0]
+    return bool(s_stem and r_stem and s_stem == r_stem)
+
+
+@router.get(
+    "/resolve",
+    summary="Resolve document by filename",
+    description=(
+        "Return full indexed text for stored document(s) whose title matches the given "
+        "filename or basename (case-insensitive). Used by agents when the user names a file."
+    ),
+    responses={
+        200: {
+            "description": "Matched document(s)",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "name": "notes.txt",
+                        "matched_titles": ["notes.txt"],
+                        "doc_ids": ["abc123"],
+                        "text": "Full document body...",
+                    }
+                }
+            },
+        },
+        404: {"description": "No document matched that name"},
+    },
+)
+async def resolve_document_by_name(
+    name: str = Query(
+        ...,
+        min_length=1,
+        description="Filename or basename as stored in the knowledge store (e.g. report.pdf)",
+    ),
+):
+    """Return full text for stored document(s) matching ``name``."""
+    try:
+        stored = knowledge_collection.get(include=["documents", "metadatas", "ids"])
+    except Exception as e:
+        logger.error("resolve_document_by_name: get failed: %s", e)
+        raise HTTPException(status_code=404, detail=str(e))
+
+    ids = stored.get("ids") or []
+    documents = stored.get("documents") or []
+    metadatas = stored.get("metadatas") or []
+
+    matched_ids: List[str] = []
+    matched_titles: List[str] = []
+    parts: List[str] = []
+
+    for doc_id, doc_content, meta in zip(ids, documents, metadatas):
+        meta = meta or {}
+        title = meta.get("title") or "Untitled"
+        if not _match_stored_title(name, title):
+            continue
+        matched_ids.append(str(doc_id))
+        matched_titles.append(title)
+        text = (doc_content or "") if isinstance(doc_content, str) else str(doc_content or "")
+        parts.append(text)
+
+    if not parts:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No indexed document matched name={name!r}",
+        )
+
+    combined = "\n\n---\n\n".join(parts)
+    return {
+        "name": name.strip(),
+        "matched_titles": matched_titles,
+        "doc_ids": matched_ids,
+        "text": combined,
+    }
 
 
 @router.post(

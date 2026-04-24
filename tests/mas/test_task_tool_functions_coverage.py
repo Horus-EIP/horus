@@ -120,15 +120,23 @@ def test_build_action_list(
 
     # Case: db is None (Use SessionLocal)
     actions = [{"agent": "Agent 1", "input": "Do X"}]
-    res = build_action_list(actions, agents_avail, db=None)
+    with patch(
+        "tasks.task_tool_functions.resolve_work_queue_for_agent_id",
+        return_value="horus.work.researcher",
+    ):
+        res = build_action_list(actions, agents_avail, db=None)
     assert len(res) == 1
     mock_session_local.assert_called()
 
     # Case: Normal (db provided)
-    res = build_action_list(actions, agents_avail, mock_db_session)
+    with patch(
+        "tasks.task_tool_functions.resolve_work_queue_for_agent_id",
+        return_value="horus.work.researcher",
+    ):
+        res = build_action_list(actions, agents_avail, mock_db_session)
     assert len(res) == 1
     mock_get_agent_id.assert_called_with("Agent 1", mock_db_session)
-    mock_rabbitmq.create_queue.assert_called_with("id_1")
+    mock_rabbitmq.create_queue.assert_called_with("horus.work.researcher")
 
     # Error cases
     with pytest.raises(ValueError, match="must not be empty"):
@@ -404,7 +412,11 @@ def test_interrupt_task(mock_db_session, mock_rabbitmq):
     )
 
     # Success
-    res = interrupt_task("tid", mock_db_session)
+    with patch(
+        "tasks.task_tool_functions.resolve_work_queue_for_agent_id",
+        return_value="horus.work.general",
+    ):
+        res = interrupt_task("tid", mock_db_session)
     assert res is True
     assert mock_task.status == TaskStatus.CANCELED
     mock_rabbitmq.publish.assert_called()
@@ -430,7 +442,11 @@ def test_interrupt_task(mock_db_session, mock_rabbitmq):
     # We assume 'commit' raises the exception
     mock_db_session.commit.side_effect = Exception("DB Error")
     with pytest.raises(HTTPException) as exc:
-        interrupt_task("tid", mock_db_session)
+        with patch(
+            "tasks.task_tool_functions.resolve_work_queue_for_agent_id",
+            return_value="horus.work.general",
+        ):
+            interrupt_task("tid", mock_db_session)
     assert exc.value.status_code == 500
     mock_db_session.rollback.assert_called()
 

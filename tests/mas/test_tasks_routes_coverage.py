@@ -52,12 +52,13 @@ class TestTasksRoutesCoverage:
             assert response.status_code == 200, response.text
             assert response.json()["pending"] == 0
 
+    @patch("tasks.routes.resolve_work_queue_for_agent_id", return_value="horus.work.general")
     @patch("tasks.routes.select_agent_for_task")
     @patch("tasks.routes.insert_new_task")
     @patch("tasks.routes.rabbitmq_instance")
     @patch("tasks.routes.add_messages")
     def test_create_new_task_success(
-        self, mock_add_messages, mock_rabbitmq, mock_insert, mock_select
+        self, mock_add_messages, mock_rabbitmq, mock_insert, mock_select, _mock_wq
     ):
         app.dependency_overrides[PermissionChecker(Permission.TASK_CREATE)] = lambda: {
             "username": "user",
@@ -107,12 +108,13 @@ class TestTasksRoutesCoverage:
         assert "No agent registered" in response.json()["message"]
         mock_add_messages.assert_called()
 
+    @patch("tasks.routes.resolve_work_queue_for_agent_id", return_value="horus.work.general")
     @patch("tasks.routes.select_agent_for_task")
     @patch("tasks.routes.decompose_task")
     @patch("tasks.routes.insert_new_task")
     @patch("tasks.routes.rabbitmq_instance")
     def test_create_new_task_decompose_success(
-        self, mock_rabbitmq, mock_insert, mock_decompose, mock_select
+        self, mock_rabbitmq, mock_insert, mock_decompose, mock_select, _mock_wq
     ):
         app.dependency_overrides[PermissionChecker(Permission.TASK_CREATE)] = lambda: {
             "username": "user",
@@ -177,6 +179,9 @@ class TestTasksRoutesCoverage:
         }
         app.dependency_overrides[verify_agent_api_key] = lambda: ("agent_1", "key")
         mock_db = MagicMock()
+        mock_task = MagicMock()
+        mock_task.agent_id = "agent_1"
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_task
         app.dependency_overrides[get_db] = lambda: mock_db
 
         payload = {
@@ -188,7 +193,7 @@ class TestTasksRoutesCoverage:
         response = client.post("/tasks/task-result/", json=payload)
 
         assert response.status_code == 403
-        assert "Agent ID mismatch" in response.json()["detail"]
+        assert "must match the task's assigned agent" in response.json()["detail"]
 
     @patch("tasks.routes.validating_task_results")
     def test_task_result_task_not_found(self, mock_validate):
@@ -223,6 +228,7 @@ class TestTasksRoutesCoverage:
 
         mock_db = MagicMock()
         mock_task = MagicMock()
+        mock_task.agent_id = "agent_1"
         mock_task.result = None
         mock_db.query.return_value.filter.return_value.first.return_value = mock_task
         app.dependency_overrides[get_db] = lambda: mock_db
@@ -252,6 +258,7 @@ class TestTasksRoutesCoverage:
 
         mock_db = MagicMock()
         mock_task = MagicMock()
+        mock_task.agent_id = "agent_1"
         mock_task_res = MagicMock()
         mock_task_res.future_actions = []
         mock_task_res.history = []
@@ -272,13 +279,20 @@ class TestTasksRoutesCoverage:
         assert response.status_code == 200, response.text
         mock_send_ws.assert_called()
 
+    @patch("tasks.routes.resolve_work_queue_for_agent_id", return_value="horus.work.general")
     @patch("tasks.routes.validating_task_results")
     @patch("tasks.routes.insert_new_task")
     @patch("tasks.routes.rabbitmq_instance")
     @patch("tasks.routes.log_agent_operation")
     @patch("tasks.routes.TASK_QUEUE_DEPTH")
     def test_task_result_success_with_actions(
-        self, mock_queue_depth, mock_log, mock_rabbitmq, mock_insert, mock_validate
+        self,
+        mock_queue_depth,
+        mock_log,
+        mock_rabbitmq,
+        mock_insert,
+        mock_validate,
+        _mock_wq,
     ):
         app.dependency_overrides[PermissionChecker(Permission.TASK_EXECUTE)] = lambda: {
             "username": "agent",
@@ -289,6 +303,7 @@ class TestTasksRoutesCoverage:
         mock_db = MagicMock()
         mock_task = MagicMock()
         mock_task.id = "task_1"
+        mock_task.agent_id = "agent_1"
         mock_task.order = 1
         mock_task.conversation_id = 1
         mock_task_res = MagicMock()
@@ -301,7 +316,13 @@ class TestTasksRoutesCoverage:
 
         mock_query = mock_db.query.return_value
         mock_filter = mock_query.filter.return_value
-        mock_filter.first.side_effect = [mock_task, mock_subtask]
+        # Task lookup (auth), validating_task_results, re-fetch task, then subtask row
+        mock_filter.first.side_effect = [
+            mock_task,
+            mock_task,
+            mock_task,
+            mock_subtask,
+        ]
 
         app.dependency_overrides[get_db] = lambda: mock_db
         mock_insert.return_value = "sub_task_id"
@@ -336,6 +357,9 @@ class TestTasksRoutesCoverage:
             "agent_id": "agent_1",
         }
         mock_db = MagicMock()
+        mock_task = MagicMock()
+        mock_task.agent_id = "agent_1"
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_task
         app.dependency_overrides[get_db] = lambda: mock_db
 
         with patch("tasks.routes.TASK_ERRORS") as mock_metric:

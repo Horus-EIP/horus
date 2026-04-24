@@ -11,7 +11,8 @@ This document describes the monitoring stack shipped with **`src/infra/docker-co
 | Data stores | PostgreSQL, Redis, RabbitMQ, ChromaDB (Knowledge Store volume) |
 | Metrics | Prometheus scrapes MAS, Agent, and Knowledge Store `/metrics` endpoints |
 | Traces | Grafana Tempo receives OTLP from application containers |
-| Visualization | Grafana (Prometheus + Tempo datasources provisioned from **`src/infra/grafana/datasources.yaml`**) |
+| Logs | Grafana Loki ingests stdout/stderr from **all Docker Compose services** via Promtail (Docker service discovery); explore in Grafana or open the **Stack logs (Loki)** dashboard |
+| Visualization | Grafana (Prometheus + Tempo + Loki datasources provisioned from **`src/infra/grafana/datasources.yaml`**) |
 | Admin UIs | PgAdmin, RedisInsight, RabbitMQ management plugin |
 
 The default Compose file does **not** include SigNoz, a standalone OpenTelemetry Collector service, PostgreSQL Exporter, or Metabase. If you add those services, extend this document accordingly.
@@ -38,10 +39,21 @@ Primary UI for metrics and traces in local development.
 
 Default credentials in Compose: `admin` / `admin`. Anonymous viewers are enabled for local use; tighten `GF_AUTH_*` for production.
 
+### Provisioned dashboards
+
+Compose mounts **`src/infra/grafana/provisioning/dashboards/`** (provider YAML) and **`src/infra/grafana/dashboards/`** (JSON dashboards, e.g. `mas_dashboard.json`) into the Grafana container. After `docker compose up -d`, open **Dashboards** in Grafana; if you changed mounts, restart Grafana: `docker compose up -d grafana`.
+
 ### Provisioned datasources
 
 - **Prometheus** at `http://prometheus:9090` (Docker network; used by Grafana panels and Explore).
 - **Tempo** at `http://tempo:3200` for trace queries; trace-to-metrics links use the Prometheus datasource.
+- **Loki** at `http://loki:3100` for log queries (labels include `compose_service`, `compose_project`, `container`).
+
+### Log retention and integrity (Loki)
+
+In **`src/infra/grafana/loki.yaml`**, the compactor has **`retention_enabled: false`** (no automatic expiry of old logs) and **`limits_config.allow_deletes: false`** (the log-deletion API is off). Loki’s ingest path is append-only: existing lines are not updated in place through the query API.
+
+That is **not** cryptographic immutability: anyone who can remove the Docker volume or files on disk can still destroy data. For strict write-once retention (for example compliance), use object storage with **Object Lock** (or an enterprise log archive) and restrict who can change buckets or Compose volumes.
 
 ### Optional manual steps
 

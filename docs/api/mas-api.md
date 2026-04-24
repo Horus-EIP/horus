@@ -160,7 +160,7 @@ Invalidate the current JWT token by adding it to a Redis blacklist. The token st
 
 ### POST /agents/register
 
-Register a new agent with specified skills and capabilities. Creates a dedicated RabbitMQ queue for the agent.
+Register a new agent with specified skills and capabilities. Ensures the **shared** RabbitMQ work queue for that agent’s `type` exists (e.g. `horus.work.general`), so multiple pool workers can consume the same queue.
 
 **Auth:** JWT Bearer (requires `agent:create` permission -- admin only)
 
@@ -196,7 +196,7 @@ Register a new agent with specified skills and capabilities. Creates a dedicated
 
 ### DELETE /agents/unregister/{agent_id}
 
-Remove an agent from the system and delete its RabbitMQ queue. Irreversible.
+Remove an agent from the registry. Does **not** delete the shared type work queue (other pool members may still use it). Irreversible for the registry row.
 
 **Auth:** JWT Bearer (requires `agent:delete` permission -- admin only)
 
@@ -469,7 +469,7 @@ Submit a completed task result from an agent. Updates the task status to COMPLET
 | task_id | string | Yes | ID of the completed task. |
 | result | string | Yes | The result / output text. |
 | conversation_id | string | Yes | Conversation this task belongs to. |
-| agent_id | string | Yes | ID of the agent submitting the result. |
+| agent_id | string | Yes | **Task assignee** UUID (must match `Task.agent_id`). Pooled workers authenticate with their own `X-API-Key` / `Agent-ID` but set this field to the orchestrator-chosen assignee (see task message `assigned_agent_id`). |
 
 **Response 200:**
 
@@ -483,7 +483,7 @@ Submit a completed task result from an agent. Updates the task status to COMPLET
 
 | Code | Detail |
 |------|--------|
-| `403` | `Agent ID mismatch: You cannot submit results for another agent` |
+| `403` | Body `agent_id` must match the task assignee; authenticated worker must be the assignee or share the same `AgentTypes` pool. |
 | `404` | `Task not found` or `TaskResult not found` |
 | `422` | Request body validation error. |
 | `500` | Processing error (database, WebSocket, or internal). |

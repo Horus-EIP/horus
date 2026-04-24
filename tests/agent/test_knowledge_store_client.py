@@ -7,7 +7,62 @@ Supports async testing.
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 import httpx
-from ai_agents.knowledge_store_client import KnowledgeStoreClient
+from ai_agents.knowledge_store_client import (
+    KnowledgeStoreClient,
+    extract_probable_filename_from_query,
+)
+
+
+class TestExtractProbableFilename:
+    """Filename hints in user queries (knowledge store resolve-by-name)."""
+
+    def test_bare_filename_with_extension(self):
+        assert (
+            extract_probable_filename_from_query("summarize the file test_horus.txt")
+            == "test_horus.txt"
+        )
+
+    def test_quoted_filename(self):
+        assert extract_probable_filename_from_query('read "notes v2.pdf" please') == "notes v2.pdf"
+
+    def test_file_keyword_prefix(self):
+        assert extract_probable_filename_from_query("open file report.docx") == "report.docx"
+
+    def test_no_filename_returns_none(self):
+        assert extract_probable_filename_from_query("what is Project Horus?") is None
+
+
+class TestKnowledgeStoreClientFetchForRagFileResolve:
+    """fetch_for_rag prefers /file/resolve when the query names a file."""
+
+    @pytest.mark.asyncio
+    @patch("ai_agents.knowledge_store_client.httpx.AsyncClient")
+    async def test_resolve_short_circuits_semantic_search(self, mock_client_class):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {
+            "matched_titles": ["test_horus.txt"],
+            "doc_ids": ["abc"],
+            "text": "FULL TEXT CONTENT",
+        }
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        client = KnowledgeStoreClient(base_url="http://test:8080", timeout=5.0, max_retries=1)
+        result = await client.fetch_for_rag("Summarize test_horus.txt")
+
+        assert result["query"] == "__file__:test_horus.txt"
+        assert "FULL TEXT CONTENT" in result["data"]
+        assert "test_horus.txt" in result["data"]
+        mock_client.get.assert_called_once()
+        call_args = mock_client.get.call_args
+        assert call_args[0][0].endswith("/file/resolve")
+        assert call_args[1]["params"]["name"] == "test_horus.txt"
 
 
 class TestKnowledgeStoreClientSuccess:

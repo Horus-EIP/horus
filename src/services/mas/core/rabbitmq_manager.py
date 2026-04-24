@@ -237,8 +237,6 @@ class RabbitMQ:
             logger.info(f"Sent message to queue {queue_name}: {message}")
 
         self._execute_with_retry(_action)
-    def delete_queue(self, queue_name):
-        self.channel.queue_delete(queue_name)
 
     # ------------------------------------------------------------------
     # Agent-to-agent communication helpers
