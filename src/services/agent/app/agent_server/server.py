@@ -20,14 +20,18 @@ continue to work.
 """
 
 import asyncio
+import json
+import os
 import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
 
+import pika
 import requests
 from fastapi import FastAPI, Request
 from prometheus_client import make_asgi_app
+from pydantic import BaseModel
 
 from agent_server.consumers import _consume_agent_messages, _consume_messages
 from agent_server.delegation_bridge import (_format_delegation_context,
@@ -42,7 +46,8 @@ from ai_agents.rag_pipeline import RAGPipeline
 from config.settings import (AGENT_DESCRIPTION, AGENT_TYPE, DELEGATION_TIMEOUT,
                              MAX_DELEGATION_DEPTH, MODEL_DEVICE, MODEL_NAME,
                              ORCHESTRATOR_PASSWORD, ORCHESTRATOR_TOKEN,
-                             ORCHESTRATOR_URL, ORCHESTRATOR_USERNAME)
+                             ORCHESTRATOR_URL, ORCHESTRATOR_USERNAME,
+                             RABBITMQ_PORT)
 from core.logger import get_correlation_id, get_logger, set_correlation_id
 from core.metrics import (agent_errors_total, agent_heartbeat_total,
                           agent_registered, task_processing_duration,
@@ -91,8 +96,6 @@ rag_pipeline: RAGPipeline | None = (
     active_agent if isinstance(active_agent, RAGPipeline) else None
 )
 
-<<<<<<< Updated upstream
-=======
 # Shared RabbitMQ queue for this specialization (aligned with MAS ``agent_work_queue_prefix``).
 _wq_prefix = os.getenv("HORUS_WORK_QUEUE_PREFIX", "horus.work").strip().rstrip(".")
 _at = str(AGENT_TYPE).lower()
@@ -126,7 +129,6 @@ class Result(BaseModel):
     result: str
 
 
->>>>>>> Stashed changes
 _AUTH_TOKEN = None  # cached bearer token for orchestrator requests
 
 
@@ -298,10 +300,6 @@ def heartbeat_task():
         time.sleep(30)  # Adjust the interval as needed.
 
 
-<<<<<<< Updated upstream
-def send_result(result: str, conversation_id: str, task_id: str):
-    """POST the task result to MAS ``/tasks/task-result/``."""
-=======
 def _consume_messages():
     """
     Connect to RabbitMQ and consume tasks sent to this agent's queue. Each message
@@ -660,7 +658,6 @@ def send_result(
         assigned_agent_id: Task assignee UUID (orchestrator); required for pooled workers so MAS
             matches Task.agent_id while headers authenticate the executing instance.
     """
->>>>>>> Stashed changes
     url = f"{ORCHESTRATOR_URL}/tasks/task-result/"
     body_agent_id = assigned_agent_id or AGENT_ID
     payload = {

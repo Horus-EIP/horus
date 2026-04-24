@@ -48,11 +48,6 @@ async def handle_agent_creation(
 ):
     """Register a new agent and provision its RabbitMQ queue.
 
-<<<<<<< Updated upstream
-    Returns ``{message, agent_id, api_key}``. The plaintext API key is
-    returned exactly once. Raises 409 on duplicate name, 500 on DB or
-    RabbitMQ failure.
-=======
     This function:
     1. Checks if an agent with the same name already exists.
     2. Creates a new agent record in the database with an API key.
@@ -71,7 +66,6 @@ async def handle_agent_creation(
         HTTPException:
             - 409: If agent name already exists.
             - 500: If database or message queue provisioning fails.
->>>>>>> Stashed changes
     """
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
@@ -122,9 +116,6 @@ async def unregister_agent(
     user: Annotated[dict, Depends(PermissionChecker(Permission.AGENT_DELETE))],
     db: Session = Depends(get_db),
 ):
-<<<<<<< Updated upstream
-    """Delete an agent and its queue. Raises 404 if the agent is unknown."""
-=======
     """
     Unregister an agent and clean up its resources.
 
@@ -144,7 +135,6 @@ async def unregister_agent(
         HTTPException:
             - 404: If the agent is not found.
     """
->>>>>>> Stashed changes
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
     if delete_agent(agent_id, db):

@@ -36,7 +36,7 @@ def extract_probable_filename_from_query(query: str) -> Optional[str]:
     if m:
         return m.group(1).strip()
     m = re.search(
-        r"\bfile\s+["\']?([\w\-. ]+\.(?:txt|pdf|docx|md|csv))["\']?",
+        r'\bfile\s+["\']?([\w\-. ]+\.(?:txt|pdf|docx|md|csv))["\']?',
         text,
         re.IGNORECASE,
     )

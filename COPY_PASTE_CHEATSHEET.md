@@ -120,7 +120,7 @@ Paste these one per task, all with skill `financial_analysis`:
 | Service | URL | Credentials |
 |---------|-----|-------------|
 | Web client | http://localhost:3000 | alice.chen / FinCorp2026! |
-| Grafana | http://localhost:3001 | admin / admin |
+| Grafana | http://localhost:3301 | admin / admin |
 | Jaeger | http://localhost:16686 | — |
 | Prometheus | http://localhost:9090 | — |
 | RabbitMQ | http://localhost:15672 | guest / guest |

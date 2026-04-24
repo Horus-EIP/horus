@@ -10,7 +10,7 @@
 4. Open these browser tabs, in order:
    - Terminal (visible, large font)
    - http://localhost:3000 (web client — not yet up)
-   - http://localhost:3001 (Grafana)
+   - http://localhost:3301 (Grafana)
    - http://localhost:16686 (Jaeger, optional)
 5. Open `COPY_PASTE_CHEATSHEET.md` on a second monitor / phone.
 6. Have the `demo_assets/` folder open in a file explorer, ready to drag documents.
@@ -182,7 +182,7 @@ Expected: multi-step reasoning, cites both documents, identifies approver (Sarah
 > "Running in production means knowing what's happening. Horus ships with full observability."
 
 **What you do:**
-1. Switch to the Grafana tab (http://localhost:3001 — login `admin` / `admin`).
+1. Switch to the Grafana tab (http://localhost:3301 — login `admin` / `admin`).
 2. Open the **Horus Overview** dashboard.
 3. Point out the panels:
    - Active agents
