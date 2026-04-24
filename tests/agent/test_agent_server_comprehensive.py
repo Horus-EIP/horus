@@ -63,7 +63,7 @@ class TestAgentServerComprehensive:
             token = _get_orchestrator_token()
             assert token is None
 
-    @patch("agent_server.server.pika")
+    @patch("agent_server.consumers.pika")
     @patch("agent_server.server.active_agent")
     def test_consume_messages_success_flow(self, mock_active_agent, mock_pika):
         """Test the RabbitMQ consumer loop logic with a simulated message"""
@@ -118,23 +118,23 @@ class TestAgentServerComprehensive:
             mock_send_result.assert_called_with("mock result", "conv-1", "task-1")
             mock_channel.basic_ack.assert_called_with(delivery_tag=1)
 
-    @patch("agent_server.server.pika")
+    @patch("agent_server.consumers.pika")
     def test_consume_messages_no_agent_id(self, mock_pika):
         server_module.AGENT_ID = None # Ensure unset
         _consume_messages()
         mock_pika.BlockingConnection.assert_not_called()
 
-    @patch("agent_server.server.pika")
+    @patch("agent_server.consumers.pika")
     def test_consume_messages_connection_error(self, mock_pika):
         server_module.AGENT_ID = "agent-1"
         mock_pika.BlockingConnection.side_effect = Exception("Connection Failed")
-        
+
         # Should catch exception and log error, not crash
-        with patch("agent_server.server.logger") as mock_logger:
+        with patch("agent_server.consumers.logger") as mock_logger:
             _consume_messages()
             mock_logger.error.assert_called()
 
-    @patch("agent_server.server.pika")
+    @patch("agent_server.consumers.pika")
     @patch("agent_server.server.active_agent")
     def test_consume_messages_bad_payload(self, mock_active_agent, mock_pika):
         server_module.AGENT_ID = "test-agent-id"
