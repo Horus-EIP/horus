@@ -16,7 +16,7 @@ from tasks.task_tool_functions import (aggregate_results, build_subtask_list,
 # MOCK RabbitMQ before other tests run to avoid connection errors
 @pytest.fixture(autouse=True)
 def mock_rabbitmq():
-    with patch("tasks.task_tool_functions.rabbitmq_instance") as mock_rmq:
+    with patch("tasks.decomposition.rabbitmq_instance") as mock_rmq:
         mock_rmq.create_queue.return_value = None
         mock_rmq.publish.return_value = None
         yield mock_rmq

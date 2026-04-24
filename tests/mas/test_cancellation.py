@@ -19,7 +19,7 @@ def mock_db():
 
 @pytest.fixture
 def mock_rabbitmq():
-    with patch("tasks.task_tool_functions.rabbitmq_instance") as mock:
+    with patch("tasks.task_crud.rabbitmq_instance") as mock:
         yield mock
 
 

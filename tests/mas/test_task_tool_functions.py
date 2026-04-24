@@ -47,7 +47,7 @@ def db_session():
 @pytest.fixture(scope="function")
 def mock_ask_llm():
     """Mock the ask_llm function imported in tasks.task_tool_functions."""
-    with patch("tasks.task_tool_functions.ask_llm") as mock:
+    with patch("tasks.decomposition.ask_llm") as mock:
         yield mock
 
 
@@ -171,7 +171,7 @@ def test_build_action_list_success_maps_names_to_ids(db_session: Session):
         {"agent": "A2", "input": "question-2"},
     ]
 
-    with patch("tasks.task_tool_functions.rabbitmq_instance.create_queue"):
+    with patch("tasks.decomposition.rabbitmq_instance.create_queue"):
         action_list = build_action_list(actions_dict, [], db_session)
 
     assert isinstance(action_list, list)
@@ -216,7 +216,7 @@ def test_build_action_list_raises_on_empty_input(db_session: Session):
 def test_select_agent_for_task_no_agents_returns_nones(db_session: Session):
     """Test that select_agent_for_task returns None values when no agents."""
     # Mock get_available_agents to return empty list even if DB has agents
-    with patch("tasks.task_tool_functions.get_available_agents", return_value=[]):
+    with patch("tasks.decomposition.get_available_agents", return_value=[]):
         first_agent, first_action, final_answer, remaining = select_agent_for_task(
             "Hello", db_session
         )
@@ -259,7 +259,7 @@ def test_select_agent_for_task_run_single_agent(mock_ask_llm, db_session: Sessio
         }
     )
 
-    with patch("tasks.task_tool_functions.rabbitmq_instance.create_queue"):
+    with patch("tasks.decomposition.rabbitmq_instance.create_queue"):
         first_agent, first_action, final_answer, remaining = select_agent_for_task(
             "Do something", db_session
         )
@@ -293,7 +293,7 @@ def test_select_agent_for_task_run_multiple_agents(mock_ask_llm, db_session: Ses
         }
     )
 
-    with patch("tasks.task_tool_functions.rabbitmq_instance.create_queue"):
+    with patch("tasks.decomposition.rabbitmq_instance.create_queue"):
         first_agent, first_action, final_answer, remaining = select_agent_for_task(
             "Do multiple tasks", db_session
         )

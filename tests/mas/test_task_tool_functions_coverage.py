@@ -32,22 +32,23 @@ def mock_db_session():
 
 @pytest.fixture
 def mock_rabbitmq():
-    """Mocks the global rabbitmq_instance."""
-    with patch("tasks.task_tool_functions.rabbitmq_instance") as mock:
-        yield mock
+    """Mock the global rabbitmq_instance wherever it is imported."""
+    with patch("tasks.decomposition.rabbitmq_instance") as mock:
+        with patch("tasks.task_crud.rabbitmq_instance", new=mock):
+            yield mock
 
 
 @pytest.fixture
 def mock_ask_llm():
     """Mocks the ask_llm function."""
-    with patch("tasks.task_tool_functions.ask_llm") as mock:
+    with patch("tasks.decomposition.ask_llm") as mock:
         yield mock
 
 
 @pytest.fixture
 def mock_get_available_agents():
     """Mocks get_available_agents to return a fixed list."""
-    with patch("tasks.task_tool_functions.get_available_agents") as mock:
+    with patch("tasks.decomposition.get_available_agents") as mock:
         mock.return_value = [
             ("id_1", "Agent 1", "Desc 1", "researcher"),
             ("id_2", "Agent 2", "Desc 2", "analyst"),
@@ -57,7 +58,7 @@ def mock_get_available_agents():
 
 @pytest.fixture
 def mock_get_agent_id():
-    with patch("tasks.task_tool_functions.get_agent_id") as mock:
+    with patch("tasks.decomposition.get_agent_id") as mock:
         mock.side_effect = lambda name, db: (
             "id_1" if "Agent 1" in name else ("id_2" if "Agent 2" in name else None)
         )
@@ -66,7 +67,7 @@ def mock_get_agent_id():
 
 @pytest.fixture
 def mock_get_agent_by_type():
-    with patch("tasks.task_tool_functions.get_agent_by_type") as mock:
+    with patch("tasks.decomposition.get_agent_by_type") as mock:
         mock.side_effect = lambda type, db: (
             "id_1" if type == "researcher" else ("id_2" if type == "analyst" else None)
         )
@@ -81,7 +82,7 @@ def mock_session_local():
 
     # Patch both the original definition (for local imports) and the module-level import
     with patch("db.database.SessionLocal", mock_factory), patch(
-        "tasks.task_tool_functions.SessionLocal", mock_factory
+        "tasks.decomposition.SessionLocal", mock_factory
     ):
         yield mock_factory
 
@@ -232,7 +233,7 @@ def test_decompose_task(
     mock_rabbitmq,
 ):
     # Case: db is None
-    with patch("tasks.task_tool_functions.get_available_agents") as mock_get_avail:
+    with patch("tasks.decomposition.get_available_agents") as mock_get_avail:
         mock_get_avail.return_value = []
         res = decompose_task("input", db=None)
         assert res == (None, [])
@@ -311,7 +312,7 @@ def test_select_agent_for_task(
     mock_rabbitmq,
 ):
     # Case: db is None
-    with patch("tasks.task_tool_functions.get_available_agents", return_value=[]):
+    with patch("tasks.decomposition.get_available_agents", return_value=[]):
         res = select_agent_for_task("input", db=None)
         assert res == (None, None, None, [])
         mock_session_local.assert_called()
