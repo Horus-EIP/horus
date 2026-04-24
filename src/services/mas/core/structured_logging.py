@@ -1,18 +1,7 @@
-"""
-Structured Logging Module - JSON-based logging with correlation ID support.
+"""JSON logger with correlation-ID context and dual console/file output.
 
-This module provides structured JSON logging for the MAS application with:
-- JSON formatted log output for log aggregation systems
-- Correlation ID tracking across requests
-- Context variable support for request tracing
-- Both console (colored) and JSON file output
-
-Usage:
-    from core.structured_logging import get_structured_logger, set_correlation_id
-    
-    set_correlation_id("request-123")
-    logger = get_structured_logger("my_module")
-    logger.info("Processing request", extra={"user_id": 42, "action": "login"})
+Prefer ``core.logger`` for standard use; this module is kept for callers
+that need raw structured records.
 """
 
 import json

@@ -1,33 +1,8 @@
-"""
-MAS - Multi-Agent System Entry Point
+"""MAS service ASGI entry point.
 
-This module serves as the main entry point for the Multi-Agent System (MAS) application.
-It initializes the FastAPI application, sets up database connections, creates database
-tables, and configures the authentication system.
-
-Key Features:
-- FastAPI application initialization with comprehensive middleware setup
-- Database models creation and initialization
-- Initial admin user setup
-- Logging configuration and startup monitoring
-- Health check endpoint for system status
-
-The application follows a modular architecture with separate components for:
-- Authentication and authorization
-- Agent registry and management
-- Task orchestration and execution
-- Real-time communication via WebSockets
-- Conversation management and persistence
-
-Environment Variables Required:
-- Database configuration (POSTGRES_*)
-- JWT configuration (JWT_SECRET_KEY, JWT_ALGORITHM)
-- Redis configuration (REDIS_*)
-- Initial admin user (SUPER_USER_USERNAME, SUPER_USER_PASSWORD)
-
-Usage:
-    Run with: uvicorn main:app --host 0.0.0.0 --port 8000
-    Or use Docker: docker-compose up
+Wires ``core.app.create_app_environment()`` and exposes a single
+authenticated ``/`` health endpoint. Run with
+``uvicorn main:app --host 0.0.0.0 --port 8000`` (or Docker Compose).
 """
 
 from typing import Annotated
@@ -51,17 +26,7 @@ user_dependency = Annotated[dict, Depends(get_current_user)]
     "/",
     status_code=status.HTTP_200_OK,
     summary="Health check and authentication test endpoint",
-    description="""
-    Root endpoint that serves as both a health check and authentication test.
-    
-    This endpoint:
-    - Verifies that the application is running and responsive
-    - Tests JWT token authentication
-    - Returns authenticated user information
-    - Logs authentication attempts for security monitoring
-    
-    Requires valid JWT authentication token in Authorization header.
-    """,
+    description="Authenticated ping: returns the decoded JWT claims on success.",
     tags=["Health"],
     responses={
         200: {

@@ -1,39 +1,7 @@
-"""
-Agent Registry Management Functions
+"""Agent registry CRUD and heartbeat helpers.
 
-This module provides core functionality for managing the agent registry in the
-Multi-Agent System. It handles agent lifecycle operations including registration,
-deregistration, status tracking, and heartbeat monitoring.
-
-Key Features:
-- In-memory agent registry for fast access
-- UUID-based agent identification
-- Skill-based agent categorization
-- Health monitoring via heartbeat system
-- Agent status tracking (active/inactive)
-- Automatic status updates based on heartbeat timeouts
-
-The agent registry is a central component that:
-- Stores agent metadata and capabilities
-- Tracks agent availability and health status
-- Enables intelligent task routing based on agent skills
-- Provides real-time status information for monitoring
-
-Data Structure:
-    agent_registry = {
-        "agent_id": {
-            "name": "Agent Name",
-            "description": "Agent description",
-            "skills": ["skill1", "skill2"],
-            "status": "active" | "inactive",
-            "last_heartbeat": datetime object
-        }
-    }
-
-Security Considerations:
-- Agent IDs are UUIDs to prevent enumeration attacks
-- Registry operations are atomic to prevent race conditions
-- Status updates are timestamped for audit trails
+Functions prefixed with ``_`` take an explicit ``Session`` and are safe to
+call from background tasks. Public variants are used by FastAPI routes.
 """
 
 import secrets
@@ -62,15 +30,7 @@ bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def _get_all_agents_internal(db: Session) -> list:
-    """
-    Internal: Retrieve all agents from the database.
-
-    Args:
-        db (Session): Database session (explicit)
-
-    Returns:
-        list: List of all Agents objects
-    """
+    """Return all ``Agents`` rows; empty list if the table is missing."""
     try:
         agents = db.query(Agents).all()
 
@@ -92,16 +52,7 @@ def _get_all_agents_internal(db: Session) -> list:
 
 
 def _update_alive_agent_status_internal(agent_id: str, db: Session) -> bool:
-    """
-    Internal function to update an agent's status to 'active' and refresh heartbeat.
-
-    Args:
-        agent_id (str): UUID of the agent
-        db (Session): Database session (explicit)
-
-    Returns:
-        bool: True if update successful, False otherwise
-    """
+    """Mark agent ``active`` and bump ``last_heartbeat``."""
     try:
         agent = db.query(Agents).filter(Agents.id == agent_id).first()
         if agent is None:
@@ -122,16 +73,7 @@ def _update_alive_agent_status_internal(agent_id: str, db: Session) -> bool:
 
 
 def _update_dead_agent_status_internal(agent_id: str, db: Session) -> bool:
-    """
-    Internal: Update agent status to 'inactive'.
-
-    Args:
-        agent_id (str): UUID of the agent
-        db (Session): Database session (explicit)
-
-    Returns:
-        bool: True if update successful, False otherwise
-    """
+    """Mark agent ``dead`` (heartbeat timeout)."""
     try:
         agent = db.query(Agents).filter(Agents.id == agent_id).first()
         if agent is None:
@@ -155,16 +97,7 @@ def _update_dead_agent_status_internal(agent_id: str, db: Session) -> bool:
 
 
 def _batch_update_agent_status_internal(agent_statuses: dict, db: Session) -> bool:
-    """
-    Internal: Update multiple agents' status in a single transaction.
-
-    Args:
-        agent_statuses (dict): {agent_id: status}
-        db (Session): Database session (explicit)
-
-    Returns:
-        bool: True if all updates successful
-    """
+    """Apply ``{agent_id: status}`` in a single commit."""
     try:
         for agent_id, status in agent_statuses.items():
             agent = db.query(Agents).filter(Agents.id == agent_id).first()
@@ -190,27 +123,10 @@ def _batch_update_agent_status_internal(agent_statuses: dict, db: Session) -> bo
 def create_agent(
     name: str, skills: list, description: str, db: Session, Agent_type: AgentTypes
 ) -> tuple[str, str]:
-    """
-    Register a new agent in the system.
+    """Register a new agent and return ``(agent_id, plaintext_api_key)``.
 
-    Creates a new agent entry in the registry with a unique UUID identifier.
-    The agent is initially marked as 'active' with current timestamp.
-
-    Args:
-        name (str): Human-readable name for the agent
-        skills (list): List of capabilities/skills the agent possesses
-        description (str): Detailed description of the agent's purpose
-        db (Session): Database session (injected)
-
-    Returns:
-        tuple[str, str]: (agent_id, api_key) - Unique UUID and the plain text API key
-
-    Example:
-        agent_id, api_key = create_agent(
-            name="Summarizer Bot",
-            skills=["nlp", "summarization"],
-            description="Specialized in text summarization"
-        )
+    The API key is bcrypt-hashed before storage; the plaintext is shown to
+    the caller exactly once. Also creates the agent's RabbitMQ queue.
     """
     agent_id = str(uuid.uuid4())
     api_key = secrets.token_urlsafe(32)
@@ -243,23 +159,7 @@ def create_agent(
 
 
 def delete_agent(agent_id: str, db: Session) -> bool:
-    """
-    Remove an agent from the registry.
-
-    Permanently removes the agent and cleans up all associated data.
-    This operation is irreversible.
-
-    Args:
-        agent_id (str): UUID of the agent to remove
-        db (Session): Database session (injected)
-
-    Returns:
-        bool: True if agent was found and deleted, False otherwise
-
-    Note:
-        This function also clears the agent's data dictionary before deletion
-        for security reasons.
-    """
+    """Permanently delete an agent. Returns ``False`` if not found."""
     try:
         agent = db.get(Agents, agent_id)
         if agent is None:
@@ -274,16 +174,9 @@ def delete_agent(agent_id: str, db: Session) -> bool:
 
 
 def get_agent_details(agent_id: str, db: Session):
-    """
-    Retrieve detailed information about a specific agent.
+    """Return ``(id, name, skills, status, last_heartbeat, description, created_at)``.
 
-    Args:
-        agent_id (str): UUID of the agent
-        db (Session): Database session (injected)
-
-    Returns:
-        tuple: (id, name, skills, status, last_heartbeat, description, created_at)
-               or (None, None, None, None, None, None, None) if not found
+    All elements are ``None`` if the agent does not exist.
     """
     try:
         agent = db.query(Agents).filter(Agents.id == agent_id).first()
@@ -311,29 +204,12 @@ def get_agent_details(agent_id: str, db: Session):
 
 
 def get_all_agents(db: Session) -> list:
-    """
-    Retrieve all agents from the database.
-
-    Args:
-        db (Session): Database session (injected by FastAPI)
-
-    Returns:
-        list: List of all Agents objects
-    """
+    """Return all ``Agents`` rows (route-friendly wrapper)."""
     return _get_all_agents_internal(db)
 
 
 def update_alive_agent_status(agent_id: str, db: Session) -> bool:
-    """
-    Update agent status to 'active' and set current heartbeat timestamp.
-
-    Args:
-        agent_id (str): UUID of the agent
-        db (Session): Database session (injected)
-
-    Returns:
-        bool: True if update successful, False otherwise
-    """
+    """Mark agent ``active`` and refresh heartbeat."""
     try:
         agent = db.query(Agents).filter(Agents.id == agent_id).first()
         if agent is None:
@@ -350,16 +226,7 @@ def update_alive_agent_status(agent_id: str, db: Session) -> bool:
 
 
 def update_dead_agent_status(agent_id: str, db: Session) -> bool:
-    """
-    Update agent status to 'inactive'.
-
-    Args:
-        agent_id (str): UUID of the agent
-        db (Session): Database session (injected)
-
-    Returns:
-        bool: True if update successful, False otherwise
-    """
+    """Mark agent ``inactive``."""
     try:
         agent = db.query(Agents).filter(Agents.id == agent_id).first()
         if agent is None:
@@ -379,16 +246,7 @@ def update_dead_agent_status(agent_id: str, db: Session) -> bool:
 
 
 def update_active_status(agent_id: str, db: Session) -> bool:
-    """
-    Update agent status to 'active'.
-
-    Args:
-        agent_id (str): UUID of the agent
-        db (Session): Database session (injected)
-
-    Returns:
-        bool: True if update successful, False otherwise
-    """
+    """Mark agent ``active`` and refresh heartbeat (route wrapper)."""
     try:
         agent = db.query(Agents).filter(Agents.id == agent_id).first()
         if agent is None:
@@ -405,16 +263,7 @@ def update_active_status(agent_id: str, db: Session) -> bool:
 
 
 def get_agent_id(agent_name: str, db: Session) -> str:
-    """
-    Get agent ID by name.
-
-    Args:
-        agent_name (str): Agent name
-        db (Session): Database session (injected)
-
-    Returns:
-        str: Agent ID or None if not found
-    """
+    """Return the agent's ID by name, or ``None``."""
     try:
         agent = db.query(Agents).filter(Agents.name == agent_name).first()
         if agent is None:
@@ -476,15 +325,7 @@ def _is_agent_recently_alive(agent_info, max_age_seconds: int = 90) -> bool:
 
 
 def get_available_agents(db: Session) -> list:
-    """
-    Get list of currently available agents (recently alive).
-
-    Args:
-        db (Session): Database session (injected)
-
-    Returns:
-        list: List of tuples (agent_id, agent_name, agent_description)
-    """
+    """Return agents with a recent heartbeat as ``(id, name, desc, type)`` tuples."""
     available_agents = []
 
     try:

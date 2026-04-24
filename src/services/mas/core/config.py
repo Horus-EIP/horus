@@ -1,65 +1,8 @@
-"""
-Configuration Management Module
+"""Runtime configuration loader for the MAS service.
 
-This module handles all configuration settings for the MAS application,
-loading environment variables and providing centralized configuration access.
-
-Key Configuration Areas:
-- Database connection settings (PostgreSQL)
-- JWT authentication configuration
-- Redis cache configuration
-- Initial admin user setup
-- Application security settings
-
-Environment Variables:
-The application expects the following environment variables:
-
-Database Configuration:
-- POSTGRES_USER: PostgreSQL username (required)
-- POSTGRES_PASSWORD: PostgreSQL password (required)
-- POSTGRES_DB: Database name (required)
-- DB_PORT: Database port (must be numeric, required)
-
-Authentication Configuration:
-- JWT_SECRET_KEY: Secret key for JWT token signing (required)
-- JWT_ALGORITHM: JWT signing algorithm (e.g., HS256, required)
-
-Initial Setup Configuration:
-- SUPER_USER_USERNAME: Initial admin user username (required)
-- SUPER_USER_PASSWORD: Initial admin user password (required)
-
-Cache Configuration:
-- REDIS_PASSWORD: Redis authentication password (required)
-
-Message Queue Configuration:
-- RABBITMQ_HOST: RabbitMQ host address (default: localhost)
-
-Application Configuration:
-- LLM_AUTOINIT: Flag to auto-initialize LLM (default: 0)
-
-Security Notes:
-- All sensitive configuration values should be stored in environment variables
-- The .env file should never be committed to version control
-- JWT_SECRET_KEY should be a strong, randomly generated secret
-- Default passwords should be changed in production environments
-
-Loading Priority:
-1. /infra/.env (Docker Compose setup)
-2. /services/mas/.env (Standalone MAS execution)
-3. /src/.env (Project root for local development)
-The first existing .env file found will be loaded.
-Environment variables always override .env file values.
-
-Usage:
-    Import the settings object from this module:
-
-    from core.config import settings
-
-    Access configuration values via:
-    - settings.jwt_secret_key
-    - settings.db_port
-    - settings.postgres_user
-    - etc.
+Reads environment variables (optionally from ``.env``) into a typed
+``settings`` object. Variable list and search order live in
+``docs/architecture/mas_service.md``.
 """
 
 from pathlib import Path

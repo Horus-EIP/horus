@@ -59,24 +59,7 @@ def save_new_client(
     username: str = None,
     role: str = None,
 ):
-    """
-    Register a new WebSocket client and create a session record.
-
-    Adds the WebSocket connection to the in-memory active_connections registry
-    and persists session metadata in Redis. This enables tracking of active
-    users per conversation and validates session existence.
-
-    Args:
-        conv_id (str): Conversation ID
-        websocket (WebSocket): The active WebSocket connection object
-        user_id (str): User ID associated with the connection
-        token (str): JWT token used for authentication
-        username (str, optional): Username for display/logging
-        role (str, optional): User role (e.g., 'admin', 'user')
-
-    Returns:
-        str: Generated unique session ID (UUID4)
-    """
+    """Track a new WS client and persist its session in Redis. Returns session UUID."""
     conv_id = str(conv_id)
     conns = active_connections.setdefault(conv_id, [])
     if websocket not in conns:

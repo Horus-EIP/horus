@@ -1,19 +1,7 @@
-"""
-Correlation ID Middleware for FastAPI.
+"""FastAPI middleware that propagates a correlation ID per request.
 
-This middleware extracts or generates correlation IDs for request tracing
-across services. The correlation ID is:
-- Extracted from X-Request-ID or X-Correlation-ID headers if present
-- Generated as a new UUID if not present
-- Stored in context variable for access throughout the request lifecycle
-- Added to response headers for downstream tracing
-
-Usage:
-    from fastapi import FastAPI
-    from core.correlation_middleware import CorrelationIDMiddleware
-    
-    app = FastAPI()
-    app.add_middleware(CorrelationIDMiddleware)
+Reads ``X-Request-ID``/``X-Correlation-ID`` (or mints one), binds it to a
+contextvar, and echoes it on the response.
 """
 
 import time
