@@ -30,6 +30,7 @@
     "react-dom": "^19.2.0",
     "react-dropzone": "^14.3.8",
     "react-hot-toast": "^2.6.0",
+    "react-markdown": "^10.1.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {

@@ -1,6 +1,7 @@
 'use client';
 
 import React from "react";
+import ReactMarkdown from "react-markdown";
 import { Skeleton } from '@mantine/core';
 import {
   IconExclamationCircle,
@@ -23,7 +24,47 @@ interface MessageListProps {
   isHistoryLoading: boolean;
   isLoading: boolean;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  /** When set, overrides the default empty-state copy (no messages, not loading). */
+  emptyStateTitle?: string;
+  emptyStateSubtitle?: string;
 }
+
+const mdComponents = {
+  h1: ({ children }: { children?: React.ReactNode }) => (
+    <h1 className="text-xl font-semibold mt-2 mb-1 first:mt-0">{children}</h1>
+  ),
+  h2: ({ children }: { children?: React.ReactNode }) => (
+    <h2 className="text-lg font-semibold mt-2 mb-1 first:mt-0">{children}</h2>
+  ),
+  h3: ({ children }: { children?: React.ReactNode }) => (
+    <h3 className="text-base font-semibold mt-1.5 mb-0.5">{children}</h3>
+  ),
+  p: ({ children }: { children?: React.ReactNode }) => (
+    <p className="my-1.5 first:mt-0 last:mb-0 leading-relaxed">{children}</p>
+  ),
+  ul: ({ children }: { children?: React.ReactNode }) => (
+    <ul className="list-disc pl-5 my-1.5 space-y-0.5">{children}</ul>
+  ),
+  ol: ({ children }: { children?: React.ReactNode }) => (
+    <ol className="list-decimal pl-5 my-1.5 space-y-0.5">{children}</ol>
+  ),
+  li: ({ children }: { children?: React.ReactNode }) => (
+    <li className="leading-relaxed">{children}</li>
+  ),
+  strong: ({ children }: { children?: React.ReactNode }) => (
+    <strong className="font-semibold text-[var(--text)]">{children}</strong>
+  ),
+  code: ({ children }: { children?: React.ReactNode }) => (
+    <code className="rounded bg-black/10 dark:bg-white/10 px-1 py-0.5 text-[0.9em] font-mono">
+      {children}
+    </code>
+  ),
+  pre: ({ children }: { children?: React.ReactNode }) => (
+    <pre className="overflow-x-auto rounded-lg bg-black/10 dark:bg-white/10 p-2 my-2 text-sm">
+      {children}
+    </pre>
+  ),
+};
 
 const ChatHistorySkeleton = () => {
   return (
@@ -72,6 +113,8 @@ export const MessageList: React.FC<MessageListProps> = ({
   isHistoryLoading,
   isLoading,
   messagesEndRef,
+  emptyStateTitle = 'Start a conversation',
+  emptyStateSubtitle = 'How can we help you?',
 }) => {
   return (
     <div className="mx-auto max-w-[75vw] md:max-w-[60vw] space-y-4">
@@ -81,10 +124,10 @@ export const MessageList: React.FC<MessageListProps> = ({
         <div className="text-center text-gray-500 mt-8 flex flex-col items-center justify-center h-full">
           <IconRobot className="w-12 h-12 mb-4 text-[var(--textSoft)] opacity-50" stroke={1.25} />
           <p className="text-lg font-medium text-[var(--textSoft)]">
-            Start a conversation
+            {emptyStateTitle}
           </p>
           <p className="text-sm text-[var(--textSoft)]">
-            How can we help you?
+            {emptyStateSubtitle}
           </p>
         </div>
       )}
@@ -117,7 +160,15 @@ export const MessageList: React.FC<MessageListProps> = ({
                 : "bg-[var(--bgSoft)] mr-auto rounded-tl-none border border-gray-200 dark:border-gray-700"
                 }`}
             >
-              <p>{message.text}</p>
+              {message.sender === "agent" ? (
+                <div className="agent-message-md max-w-none">
+                  <ReactMarkdown components={mdComponents}>
+                    {message.text}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <p className="whitespace-pre-wrap break-words">{message.text}</p>
+              )}
 
               <div className="mt-1 flex items-center justify-between gap-2">
                 <span className="text-[10px] opacity-70">

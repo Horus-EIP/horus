@@ -2,9 +2,7 @@
 
 import {
   IconDeviceDesktopAnalytics,
-  IconRobot,
   IconMessages,
-  IconMessageCircle,
   IconChecklist,
   IconFiles,
   IconLogout,
@@ -51,7 +49,6 @@ function NavbarLink({ icon: Icon, label, active, onClick, status }: NavbarLinkPr
 const mockdata = [
   { icon: IconDeviceDesktopAnalytics, label: 'Dashboard', status: 'active' },
   { icon: IconMessages, label: 'Chat', status: 'active' },
-  { icon: IconMessageCircle, label: 'Conversations', status: 'active' },
   { icon: IconChecklist, label: 'Tasks', status: 'active' },
   { icon: IconFiles, label: 'Knowledge-Store', status: 'active' },
 ];

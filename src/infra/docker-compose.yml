@@ -283,9 +283,34 @@ services:
       - horus-net
 
   # =============================================================================
-  # OBSERVABILITY - Grafana + Tempo + Prometheus (Simple & Reliable)
-  # Single UI at http://localhost:3301 for traces and metrics
+  # OBSERVABILITY - Grafana + Tempo + Prometheus + Loki/Promtail
+  # Single UI at http://localhost:3301 for traces, metrics, and container logs
   # =============================================================================
+
+  loki:
+    image: grafana/loki:3.4.2
+    container_name: loki
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./grafana/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki_data:/loki
+    networks:
+      - horus-net
+    restart: unless-stopped
+
+  # Reads the Docker API to tail logs from Compose services (requires the socket; treat as privileged).
+  promtail:
+    image: grafana/promtail:3.4.2
+    container_name: promtail
+    command: ["-config.file=/etc/promtail/promtail.yaml"]
+    volumes:
+      - ./grafana/promtail.yaml:/etc/promtail/promtail.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+    networks:
+      - horus-net
+    restart: unless-stopped
 
   # Tempo - Distributed tracing backend (receives OTLP traces)
   # Pin to Tempo 2.x: `latest` (Tempo 3+) expects Kafka topics; this repo uses local disk only (see grafana/tempo.yaml).
@@ -318,7 +343,7 @@ services:
       - horus-net
     restart: unless-stopped
 
-  # Grafana - Single UI for traces and metrics
+  # Grafana - Single UI for traces, metrics, and logs
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
@@ -330,12 +355,15 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
     volumes:
       - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     ports:
       - "3301:3000"
     depends_on:
       - tempo
       - prometheus
+      - loki
     networks:
       - horus-net
     restart: unless-stopped
@@ -356,3 +384,4 @@ volumes:
   tempo_data:
   prometheus_data:
   grafana_data:
+  loki_data:
