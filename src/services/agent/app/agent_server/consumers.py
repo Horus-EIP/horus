@@ -1,17 +1,21 @@
 """RabbitMQ consumer loops for this agent.
 
-Two long-running consumers read from per-agent queues:
+Two long-running consumers read from RabbitMQ:
 
-- :func:`_consume_messages` — task queue (``{AGENT_ID}``) → run pipeline + POST
-  result back to MAS.
+- :func:`_consume_messages` — pooled task queue (``server.WORK_QUEUE_NAME``)
+  shared by every instance of this ``AGENT_TYPE``; each message → run pipeline
+  + POST result back to MAS. Honours ``type=cancel`` control messages and
+  forwards ``assigned_agent_id`` from the payload so MAS can match the
+  database row regardless of which pooled worker actually ran the task.
 - :func:`_consume_agent_messages` — inter-agent comms (``agent_comm_{AGENT_ID}``)
   → dispatch to :mod:`agent_server.delegation_bridge`.
 
 Functions deliberately do a lazy ``from agent_server import server`` inside
-the body to read current module-level state (``AGENT_ID``, ``active_agent``,
-``AGENT_TYPE``, ``send_result``). This keeps ``patch("agent_server.server.X")``
-working from the tests and matches the semantics of the original, pre-split
-implementation where these names lived next to the consumer.
+the body to read current module-level state (``AGENT_ID``, ``WORK_QUEUE_NAME``,
+``active_agent``, ``AGENT_TYPE``, ``send_result``). This keeps
+``patch("agent_server.server.X")`` working from the tests and matches the
+semantics of the original, pre-split implementation where these names lived
+next to the consumer.
 """
 
 import asyncio
@@ -59,7 +63,7 @@ def _consume_messages():
         channel = connection.channel()
         # Declare a durable queue to avoid RabbitMQ 'transient_nonexcl_queues' deprecation
         channel.queue_declare(
-            queue=server.AGENT_ID,
+            queue=server.WORK_QUEUE_NAME,
             passive=False,
             durable=True,
             exclusive=False,
@@ -74,6 +78,16 @@ def _consume_messages():
                 # Fallback: treat body as plain text demand
                 payload = {"demand": body.decode("utf-8")}
 
+            # Cancel control messages are routed through the same queue. They have no
+            # demand/conversation_id; just ack and move on so RabbitMQ doesn't redeliver.
+            if payload.get("type") == "cancel":
+                logger.info(
+                    "Received cancel control message on work queue (task_id=%s)",
+                    payload.get("task_id"),
+                )
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+                return
+
             demand = payload.get("demand", "")
             conversation_id = payload.get("conversation_id", "")
             task_id = payload.get("task_id") or ("task_" + uuid.uuid4().hex)
@@ -83,6 +97,8 @@ def _consume_messages():
                     "MAS must publish the task text in the message body.",
                     task_id,
                 )
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+                return
 
             # Extract correlation ID from message properties if available
             corr_id = properties.headers.get("X-Request-ID") if properties.headers else None
@@ -147,9 +163,16 @@ def _consume_messages():
                     f"duration={processing_duration:.2f}s, correlation_id={get_correlation_id()}"
                 )
 
-                # Send result back to MAS (requires conversation_id and task_id)
+                # Send result back to MAS (requires conversation_id and task_id).
+                # ``assigned_agent_id`` is forwarded so MAS can match Task.agent_id
+                # even when this pooled worker isn't the originally-assigned instance.
                 if conversation_id and task_id:
-                    server.send_result(final_result_text, conversation_id, task_id)
+                    server.send_result(
+                        final_result_text,
+                        conversation_id,
+                        task_id,
+                        assigned_agent_id=payload.get("assigned_agent_id"),
+                    )
             except Exception as e:
                 processing_duration = time_module.time() - start_time
                 task_processing_duration.observe(processing_duration)
@@ -163,7 +186,12 @@ def _consume_messages():
                 err_msg = f"Agent processing failed: {e}"
                 if conversation_id and task_id:
                     try:
-                        server.send_result(err_msg, str(conversation_id), str(task_id))
+                        server.send_result(
+                            err_msg,
+                            str(conversation_id),
+                            str(task_id),
+                            assigned_agent_id=payload.get("assigned_agent_id"),
+                        )
                     except Exception as send_exc:
                         logger.error(f"Failed to send error result to MAS: {send_exc}")
             else:
