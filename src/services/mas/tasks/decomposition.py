@@ -12,6 +12,7 @@ from graphlib import TopologicalSorter
 from sqlalchemy.orm import Session
 
 from agents.registry_tool_functions import (
+    _is_agent_recently_alive,
     get_agent_by_type,
     get_agent_id,
     get_available_agents,
@@ -20,6 +21,7 @@ from core.llm_setup import ask_llm
 from core.logger import get_logger
 from core.rabbitmq_tool import rabbitmq_instance
 from db.database import SessionLocal
+from db.models import Agents
 from tasks.collaborative_task import CollaborativeTask
 from tasks.demo_log import pretty_log
 from tasks.prompts import (
@@ -272,6 +274,83 @@ def select_agent_for_task(user_input: str, db: Session = None):
     logger.warning(
         f"Unknown classification '{classification}'. Falling back to decomposition."
     )
+    return None, None, None, []
+
+
+def select_agent_by_mode(
+    demand: str,
+    skills_required: list,
+    mode: str | None,
+    agent_id: str | None,
+    db: Session,
+):
+    """Pick an agent according to the explicit dispatch mode.
+
+    Returns the same 4-tuple shape as :func:`select_agent_for_task` so the
+    route can fall through to the existing decomposition flow when the mode
+    fails to resolve.
+
+    Modes:
+        - ``specific_agent``: ``agent_id`` is required and must match a row in
+          the agents table. Returns it as-is so RabbitMQ can queue-on-busy
+          when the worker is offline.
+        - ``any_with_skill``: returns the first agent whose ``skills`` JSON
+          contains ``skills_required[0]``. Live agents preferred; seeded
+          (inactive) ones used as a fallback so the demo can dispatch even
+          before a real worker has registered.
+        - any other value (or ``auto``/``None``): returns ``(None, None, None, [])``
+          and the caller should fall back to :func:`select_agent_for_task`.
+    """
+    if mode == "specific_agent":
+        if not agent_id:
+            logger.warning(
+                "specific_agent mode requested but agent_id missing; falling back to auto."
+            )
+            return None, None, None, []
+        agent = db.query(Agents).filter(Agents.id == agent_id).first()
+        if not agent:
+            logger.warning(
+                f"specific_agent mode: agent_id={agent_id} not found; falling back to auto."
+            )
+            return None, None, None, []
+        pretty_log(f"DISPATCH: SPECIFIC AGENT -> {agent.name} ({agent_id})", "🎯")
+        return agent_id, demand, None, []
+
+    if mode == "any_with_skill":
+        if not skills_required:
+            logger.warning(
+                "any_with_skill mode requested but skills_required is empty; falling back to auto."
+            )
+            return None, None, None, []
+        target_skill = skills_required[0]
+        agents = db.query(Agents).all()
+        # Live agents first; seeded (inactive) only if nothing else matches —
+        # keeps the demo working even before a real worker container boots.
+        live_match = None
+        seeded_match = None
+        for agent in agents:
+            skills = agent.skills or []
+            if target_skill not in skills:
+                continue
+            if _is_agent_recently_alive(agent):
+                live_match = agent
+                break
+            if seeded_match is None:
+                seeded_match = agent
+
+        chosen = live_match or seeded_match
+        if not chosen:
+            logger.warning(
+                f"any_with_skill mode: no agent advertises '{target_skill}'; falling back to auto."
+            )
+            return None, None, None, []
+        pretty_log(
+            f"DISPATCH: ANY_WITH_SKILL[{target_skill}] -> {chosen.name} ({chosen.id})",
+            "🎯",
+        )
+        return chosen.id, demand, None, []
+
+    # auto / None / unknown → caller falls back to LLM router
     return None, None, None, []
 
 

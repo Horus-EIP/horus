@@ -6,7 +6,7 @@ import Info from "@/components/ui/info";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/components/auth/auth-provider";
 import { agentApi, Agent as AgentType } from "@/lib/agents/api";
-import { chatApi, TaskQueueStats } from "@/lib/chat/api";
+import { chatApi, TaskQueueStats, AnalyticsOverview } from "@/lib/chat/api";
 import { useNotification } from "@/contexts/notification-context";
 import { IconTrash } from "@tabler/icons-react";
 import { Modal, Button, Group, Text } from '@mantine/core';
@@ -35,6 +35,9 @@ export default function DashboardPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [rawAgents, setRawAgents] = useState<AgentType[]>([]);
   const [taskStats, setTaskStats] = useState<TaskQueueStats | null>(null);
+  const [agentSnapshot, setAgentSnapshot] = useState<
+    AnalyticsOverview['agents'] | null
+  >(null);
   const [metrics, setMetrics] = useState<SystemMetric[]>([]);
   
   // Delete modal
@@ -89,9 +92,18 @@ export default function DashboardPage() {
   }, [timeAgo]);
 
   const getTaskStats = useCallback(async () => {
-    const result = await chatApi.getTaskQueueStats();
-    if (result.ok && result.data) {
-      setTaskStats(result.data);
+    // One round-trip for both task stats and agent counts. Falls back to the
+    // legacy queue-only endpoint if the consolidated route is unavailable
+    // (older orchestrator deployments).
+    const overview = await chatApi.getAnalyticsOverview();
+    if (overview.ok && overview.data) {
+      setTaskStats(overview.data.tasks);
+      setAgentSnapshot(overview.data.agents);
+      return;
+    }
+    const fallback = await chatApi.getTaskQueueStats();
+    if (fallback.ok && fallback.data) {
+      setTaskStats(fallback.data);
     }
   }, []);
 
@@ -360,7 +372,11 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-5 px-3 w-full justify-items-center md:justify-items-stretch">
           <Card
             title="Active Agents"
-            number={agents.filter((agent) => agent.status === 'Online').length}
+            number={
+              agentSnapshot
+                ? agentSnapshot.active
+                : agents.filter((agent) => agent.status === 'Online').length
+            }
           />
           <Card
             title="Running Tasks"

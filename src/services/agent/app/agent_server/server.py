@@ -275,6 +275,7 @@ def send_result(
     conversation_id: str,
     task_id: str,
     assigned_agent_id: str | None = None,
+    skill_used: str | None = None,
 ):
     """
     Sends the processed task result to the MAS Orchestrator using the /tasks/task-result/ endpoint.
@@ -285,11 +286,19 @@ def send_result(
         task_id: The unique task ID.
         assigned_agent_id: Task assignee UUID (orchestrator); required for pooled workers so MAS
             matches Task.agent_id while headers authenticate the executing instance.
+        skill_used: Optional skill the worker exercised for this task (e.g. ``financial_analysis``).
+            Forwarded to MAS so the chat UI can show an attribution chip.
     """
     url = f"{ORCHESTRATOR_URL}/tasks/task-result/"
     body_agent_id = assigned_agent_id or AGENT_ID
+    # Default ``skill_used`` to the worker's primary skill when the caller doesn't
+    # know which one was exercised — gives the UI something useful to show even
+    # for generic RAG calls.
+    effective_skill = skill_used or (SKILLS[0] if SKILLS else None)
     payload = {
         "agent_id": body_agent_id,
+        "agent_name": AGENT_NAME,
+        "skill_used": effective_skill,
         "result": result,
         "conversation_id": str(conversation_id),
         "task_id": task_id,
@@ -411,6 +420,7 @@ async def receive_task(task: Task, request: Request):
             task.conversation_id,
             task.task_id,
             assigned_agent_id=task_dict.get("assigned_agent_id"),
+            skill_used=task_dict.get("skill_used") or task_dict.get("operation"),
         )
 
         # Return the result in the format expected by the response_model

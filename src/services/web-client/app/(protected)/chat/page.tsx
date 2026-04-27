@@ -165,7 +165,9 @@ function ChatPageContent() {
     backoffBaseMs: 1000,
     onMessage: (event) => {
       const message = JSON.parse(event.data);
-      if (message.type === 'agent') {
+      // 'agent' = legacy bare-text broadcast (direct-answer / pre-attribution path)
+      // 'task_complete' = answer with agent attribution metadata for the chip
+      if (message.type === 'agent' || message.type === 'task_complete') {
         const text = String(message.content ?? '').trim();
         if (!text) {
           setIsLoading(false);
@@ -182,6 +184,16 @@ function ChatPageContent() {
             sender: 'agent',
             timestamp: new Date(message.timestamp),
             status: 'sent',
+            agentId:
+              typeof message.agent_id === 'string' ? message.agent_id : undefined,
+            agentName:
+              typeof message.agent_name === 'string'
+                ? message.agent_name
+                : undefined,
+            skillUsed:
+              typeof message.skill_used === 'string'
+                ? message.skill_used
+                : undefined,
           };
           return [...prev, agentMessage];
         });

@@ -30,6 +30,18 @@ export interface TaskQueueStats {
   total: number;
 }
 
+export interface AnalyticsAgentSnapshot {
+  total: number;
+  active: number;
+  inactive: number;
+}
+
+export interface AnalyticsOverview {
+  generated_at: string;
+  agents: AnalyticsAgentSnapshot;
+  tasks: TaskQueueStats;
+}
+
 export interface TaskSubtaskRow {
   id: string;
   title: string;
@@ -188,6 +200,25 @@ export const chatApi = {
       return {
         ok: false,
         error: response.error || "Failed to fetch task queue stats",
+      };
+    }
+
+    return {
+      ok: true,
+      data: response.data,
+    };
+  },
+
+  async getAnalyticsOverview(): Promise<ChatResponse<AnalyticsOverview>> {
+    const response = await apiClient.get<AnalyticsOverview>(
+      "/analytics/overview",
+      { retry: 1 }
+    );
+
+    if (!response.ok || !response.data) {
+      return {
+        ok: false,
+        error: response.error || "Failed to fetch analytics overview",
       };
     }
 

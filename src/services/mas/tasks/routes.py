@@ -24,7 +24,7 @@ from core.rabbitmq_tool import rabbitmq_instance
 from core.work_queues import (agent_may_submit_task_result,
                               resolve_work_queue_for_agent_id)
 from db.database import get_db
-from db.models import Task, TaskResult
+from db.models import Agents, Task, TaskResult
 from schemas.schemas import TaskForm, TaskResultForm
 from tasks.openapi_docs import (CANCEL_TASK_RESPONSES, CREATE_TASK_OPENAPI_EXTRA,
                                 CREATE_TASK_RESPONSES, QUEUE_STATS_RESPONSES,
@@ -32,6 +32,7 @@ from tasks.openapi_docs import (CANCEL_TASK_RESPONSES, CREATE_TASK_OPENAPI_EXTRA
 from tasks.status import TaskStatus
 from tasks.task_tool_functions import (aggregate_results, decompose_task,
                                        insert_new_task, interrupt_task,
+                                       select_agent_by_mode,
                                        select_agent_for_task,
                                        validating_task_results)
 
@@ -209,12 +210,21 @@ async def create_new_task(
         "Starting agent selection process for new task",
         demand=task.demand[:50],
         conversation_id=task.conversation_id,
+        mode=task.mode or "auto",
+        explicit_agent_id=task.agent_id,
     )
 
     # 1. Selection Phase
-    agent_id, user_demand, direct_response, future_actions = select_agent_for_task(
-        task.demand, db
+    # Try the explicit-mode dispatcher first; if it returns no agent (e.g. mode=auto
+    # or unresolvable) fall through to the LLM router. This keeps the legacy chat
+    # path (no mode field) working untouched.
+    agent_id, user_demand, direct_response, future_actions = select_agent_by_mode(
+        task.demand, task.skills_required, task.mode, task.agent_id, db
     )
+    if not agent_id and not direct_response:
+        agent_id, user_demand, direct_response, future_actions = (
+            select_agent_for_task(task.demand, db)
+        )
 
     # 2. Direct Answer Handling
     if direct_response:
@@ -249,6 +259,9 @@ async def create_new_task(
                 "conversation_id": task.conversation_id,
                 "task_id": task_id,
                 "demand": user_demand,
+                "skill_used": (
+                    task.skills_required[0] if task.skills_required else None
+                ),
             },
         )
         TASK_QUEUE_DEPTH.inc()
@@ -292,6 +305,9 @@ async def create_new_task(
             "conversation_id": task.conversation_id,
             "task_id": task_id,
             "demand": user_demand,
+            "skill_used": (
+                task.skills_required[0] if task.skills_required else None
+            ),
         },
     )
 
@@ -420,7 +436,23 @@ async def sharing_agent_result(
 
         final_answer = aggregate_results(history, task_result.result)
         add_messages("assistant", final_answer, task_result.conversation_id, db)
-        await send_messages_via_websockets(task_result.conversation_id, final_answer)
+
+        # Look up agent_name from the directory if the agent didn't send one
+        # (older worker images, or HTTP /task path without metadata).
+        attribution_name = task_result.agent_name
+        if not attribution_name:
+            agent_row = (
+                db.query(Agents).filter(Agents.id == task.agent_id).first()
+            )
+            attribution_name = agent_row.name if agent_row else None
+
+        await send_messages_via_websockets(
+            task_result.conversation_id,
+            final_answer,
+            agent_id=task.agent_id,
+            agent_name=attribution_name,
+            skill_used=task_result.skill_used,
+        )
         return {"message": f"Result received from agent {task_result.agent_id}"}
     except HTTPException:
         raise

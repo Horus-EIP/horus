@@ -5,13 +5,15 @@ import { chatApi, TaskQueueStats } from "@/lib/chat/api";
 import Card from "@/components/ui/card";
 import { useNotification } from "@/contexts/notification-context";
 import { useAuth } from "@/components/auth/auth-provider";
-import { 
-  IconClock, 
-  IconPlayerPlay, 
-  IconCheck, 
-  IconX, 
+import Link from 'next/link';
+import {
+  IconClock,
+  IconPlayerPlay,
+  IconCheck,
+  IconX,
   IconBan,
   IconAlertTriangle,
+  IconPlus,
   IconRefresh
 } from '@tabler/icons-react';
 
@@ -99,14 +101,23 @@ export default function TasksPage() {
             </p>
           )}
         </div>
-        <button
-          onClick={loadStats}
-          disabled={isLoading}
-          className="rounded-xl bg-white/5 px-4 py-2 text-sm text-white shadow hover:bg-white/10 cursor-pointer flex items-center gap-2 disabled:opacity-50"
-        >
-          <IconRefresh className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/tasks/new"
+            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm text-white shadow hover:bg-blue-700"
+          >
+            <IconPlus className="h-4 w-4" />
+            New task
+          </Link>
+          <button
+            onClick={loadStats}
+            disabled={isLoading}
+            className="rounded-xl bg-white/5 px-4 py-2 text-sm text-white shadow hover:bg-white/10 cursor-pointer flex items-center gap-2 disabled:opacity-50"
+          >
+            <IconRefresh className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {isLoading && !stats ? (

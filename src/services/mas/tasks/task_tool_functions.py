@@ -16,6 +16,7 @@ from tasks.decomposition import (
     build_action_list,
     build_subtask_list,
     decompose_task,
+    select_agent_by_mode,
     select_agent_for_task,
     sort_subtasks_by_dependency,
 )
@@ -47,6 +48,7 @@ __all__ = [
     "insert_new_task",
     "interrupt_task",
     "pretty_log",
+    "select_agent_by_mode",
     "select_agent_for_task",
     "sort_subtasks_by_dependency",
     "validating_task_results",

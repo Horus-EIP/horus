@@ -14,6 +14,7 @@ from prometheus_client import make_asgi_app
 from prometheus_fastapi_instrumentator import Instrumentator
 
 import agents.routes
+import analytics.routes
 import chat.routes
 import conversations.routes
 import core.rabbitmq_tool
@@ -102,6 +103,7 @@ def create_app_environment():
 
     routers = [
         (agents.routes.router, "Agents"),
+        (analytics.routes.router, "Analytics"),
         (chat.routes.router, "Chat"),
         (conversations.routes.router, "Conversations"),
         (tasks.routes.router, "Tasks"),

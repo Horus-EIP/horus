@@ -17,6 +17,12 @@ export interface Message {
   sender: "user" | "agent";
   timestamp: Date;
   status?: "sending" | "sent" | "error";
+  /** Originating agent UUID (set when delivered via task_complete event). */
+  agentId?: string;
+  /** Human-readable agent name for the attribution chip. */
+  agentName?: string;
+  /** Skill the agent exercised for this message. */
+  skillUsed?: string;
 }
 
 interface MessageListProps {
@@ -169,6 +175,30 @@ export const MessageList: React.FC<MessageListProps> = ({
               ) : (
                 <p className="whitespace-pre-wrap break-words">{message.text}</p>
               )}
+
+              {message.sender === "agent" &&
+                (message.agentName || message.skillUsed) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1">
+                    {message.agentName && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-300"
+                        title={
+                          message.agentId
+                            ? `Agent ID: ${message.agentId}`
+                            : undefined
+                        }
+                      >
+                        <IconRobot className="h-3 w-3" stroke={1.5} />
+                        {message.agentName}
+                      </span>
+                    )}
+                    {message.skillUsed && (
+                      <span className="inline-flex items-center rounded-full border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                        {message.skillUsed}
+                      </span>
+                    )}
+                  </div>
+                )}
 
               <div className="mt-1 flex items-center justify-between gap-2">
                 <span className="text-[10px] opacity-70">

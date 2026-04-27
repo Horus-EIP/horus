@@ -5,7 +5,7 @@ OpenAPI docs. See ``docs/architecture/mas_service.md`` for the high-level
 API contract.
 """
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
@@ -22,21 +22,45 @@ class RegistrationForm(BaseModel):
     type: Optional[AgentTypes] = None
 
 
+TaskMode = Literal["auto", "specific_agent", "any_with_skill"]
+
+
 class TaskForm(BaseModel):
-    """Task creation payload (demand, conversation_id, skills_required)."""
+    """Task creation payload.
+
+    The dispatcher honours ``mode``:
+
+    - ``auto`` (default) — LLM router picks the agent; ``agent_id`` is ignored.
+    - ``specific_agent`` — required ``agent_id`` is used verbatim; the dispatch
+      will queue-on-busy if the worker is currently offline.
+    - ``any_with_skill`` — first registered agent whose skills include
+      ``skills_required[0]`` is selected (live agents preferred, seeded ones
+      fall back).
+
+    ``agent_id`` and ``mode`` are optional so older clients keep working.
+    """
 
     demand: str
     conversation_id: int
     skills_required: list[str]
+    agent_id: Optional[str] = None
+    mode: Optional[TaskMode] = None
 
 
 class TaskResultForm(BaseModel):
-    """Agent-submitted task result (result, conversation_id, agent_id, task_id)."""
+    """Agent-submitted task result.
+
+    ``agent_name`` and ``skill_used`` are optional metadata used by the chat UI
+    to render an attribution chip (which agent answered, which skill ran).
+    Older agents that don't send them still work.
+    """
 
     result: str
     conversation_id: str
     agent_id: str
     task_id: str
+    agent_name: Optional[str] = None
+    skill_used: Optional[str] = None
 
 
 class CreateUserRequest(BaseModel):

@@ -22,10 +22,16 @@ export interface HistoryItem {
   timestamp?: string;
 }
 
+export type TaskMode = "auto" | "specific_agent" | "any_with_skill";
+
 export interface NewTaskPayload {
   demand: string;
   conversation_id: string;
   skills_required: string[];
+  /** Required when mode === "specific_agent". */
+  agent_id?: string;
+  /** Defaults to "auto" server-side when omitted. */
+  mode?: TaskMode;
 }
 
 /** POST /tasks/new_task success body (orchestrator may return an immediate `result` without an agent). */

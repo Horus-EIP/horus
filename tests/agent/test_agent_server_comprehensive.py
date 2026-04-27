@@ -116,7 +116,11 @@ class TestAgentServerComprehensive:
             assert call_args["query"] == "Do something"
             
             mock_send_result.assert_called_with(
-                "mock result", "conv-1", "task-1", assigned_agent_id=None
+                "mock result",
+                "conv-1",
+                "task-1",
+                assigned_agent_id=None,
+                skill_used=None,
             )
             mock_channel.basic_ack.assert_called_with(delivery_tag=1)
 

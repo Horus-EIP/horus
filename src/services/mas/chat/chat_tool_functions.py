@@ -16,34 +16,48 @@ logger = get_logger("chat")
 active_connections: dict[str, list[WebSocket]] = {}
 
 
-async def send_messages_via_websockets(conversation_id: str, message: str):
-    """
-    Broadcast a message to all active WebSocket connections for a given conversation.
+async def send_messages_via_websockets(
+    conversation_id: str,
+    message: str,
+    *,
+    agent_id: Optional[str] = None,
+    agent_name: Optional[str] = None,
+    skill_used: Optional[str] = None,
+):
+    """Broadcast a message to all WebSocket clients on this conversation.
 
-    Sends a formatted JSON message with type 'agent' to all connected clients
-    listening to the specified conversation ID. Handles disconnected clients
-    gracefully by removing them from the active list.
+    When agent metadata is provided, emits ``type=task_complete`` so the chat
+    UI can render an attribution chip; otherwise falls back to the legacy
+    ``type=agent`` shape used by direct-answer / pre-attribution paths.
 
     Args:
-        conversation_id (str): The ID of the target conversation
-        message (str): The text content to broadcast
-
-    Returns:
-        None
+        conversation_id: Target conversation.
+        message: Text content to broadcast.
+        agent_id: Originating agent's UUID (optional).
+        agent_name: Human-readable agent name for the chip (optional).
+        skill_used: Skill that produced the answer (optional).
     """
     conv_key = str(conversation_id)
     conns = active_connections.get(conv_key, [])
     if not conns:
         return
 
+    has_attribution = bool(agent_id or agent_name or skill_used)
+    msg_type = "task_complete" if has_attribution else "agent"
+
+    payload: dict = {
+        "type": msg_type,
+        "content": message,
+        "timestamp": datetime.datetime.now().isoformat(),
+    }
+    if has_attribution:
+        payload["agent_id"] = agent_id
+        payload["agent_name"] = agent_name
+        payload["skill_used"] = skill_used
+
     for ws in list(conns):
         try:
-            formatted = {
-                "type": "agent",
-                "content": message,
-                "timestamp": datetime.datetime.now().isoformat(),
-            }
-            await ws.send_json(formatted)
+            await ws.send_json(payload)
         except Exception:
             try:
                 conns.remove(ws)
