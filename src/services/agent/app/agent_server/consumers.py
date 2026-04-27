@@ -166,12 +166,16 @@ def _consume_messages():
                 # Send result back to MAS (requires conversation_id and task_id).
                 # ``assigned_agent_id`` is forwarded so MAS can match Task.agent_id
                 # even when this pooled worker isn't the originally-assigned instance.
+                # ``skill_used`` is the dispatcher's hint (operation/skill) so the UI
+                # can render an attribution chip without MAS guessing.
                 if conversation_id and task_id:
                     server.send_result(
                         final_result_text,
                         conversation_id,
                         task_id,
                         assigned_agent_id=payload.get("assigned_agent_id"),
+                        skill_used=payload.get("skill_used")
+                        or payload.get("operation"),
                     )
             except Exception as e:
                 processing_duration = time_module.time() - start_time
@@ -191,6 +195,8 @@ def _consume_messages():
                             str(conversation_id),
                             str(task_id),
                             assigned_agent_id=payload.get("assigned_agent_id"),
+                            skill_used=payload.get("skill_used")
+                            or payload.get("operation"),
                         )
                     except Exception as send_exc:
                         logger.error(f"Failed to send error result to MAS: {send_exc}")
