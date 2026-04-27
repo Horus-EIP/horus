@@ -10,6 +10,7 @@ from db.database import Base, SessionLocal, engine
 from db.migrate_critical_logs import create_critical_logs_table
 from db.models import (Agents, Conversations, CriticalLogs, Messages, Task,
                        TaskResult, Users)
+from db.seed_agents import seed_default_agents
 
 logger = get_logger("init_db")
 
@@ -112,6 +113,17 @@ def init_db():
             )
         else:
             logger.info(f"Admin user already exists: {admin_user.username}")
+
+        # Seed the default agent directory so the UI/dispatcher has something to
+        # show on a fresh boot (idempotent — skips entries that already exist).
+        try:
+            seed_default_agents(db)
+        except Exception as seed_exc:
+            log_error(
+                "init_db",
+                f"Default agent seeding failed (non-fatal): {seed_exc}",
+                exc_info=True,
+            )
 
         log_success("init_db", "Database initialization completed successfully")
 

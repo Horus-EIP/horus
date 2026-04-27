@@ -203,8 +203,8 @@ def _consume_messages():
             ch.basic_ack(delivery_tag=method.delivery_tag)
 
         channel.basic_qos(prefetch_count=1)
-        channel.basic_consume(queue=server.AGENT_ID, on_message_callback=_on_message)
-        logger.info(f"RabbitMQ consumer started, listening on queue '{server.AGENT_ID}'")
+        channel.basic_consume(queue=server.WORK_QUEUE_NAME, on_message_callback=_on_message)
+        logger.info(f"RabbitMQ consumer started, listening on queue '{server.WORK_QUEUE_NAME}'")
         channel.start_consuming()
     except Exception as e:
         logger.error(f"Error in RabbitMQ consumer: {e}", exc_info=True)

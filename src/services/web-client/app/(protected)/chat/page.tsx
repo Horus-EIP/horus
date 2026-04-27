@@ -11,7 +11,7 @@ import React, {
 } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { IconRobot, IconSend } from '@tabler/icons-react';
-import { Modal, Button, Group, Text, Textarea } from '@mantine/core';
+import { Modal, Button, Group, Text, Textarea, TextInput } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { config } from '@/utils/config';
 import { chatApi, type Conversation, type TaskDetails } from '@/lib/chat/api';
@@ -55,6 +55,12 @@ function ChatPageContent() {
   const [opened, { open, close }] = useDisclosure(false);
   const [deletingConversation, setDeletingConversation] = useState<Conversation | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const [
+    newChatModalOpened,
+    { open: openNewChatModal, close: closeNewChatModal },
+  ] = useDisclosure(false);
+  const [newConversationName, setNewConversationName] = useState('');
 
   const [agentsById, setAgentsById] = useState<Map<string, Agent>>(new Map());
   const [workingTaskId, setWorkingTaskId] = useState<string | null>(null);
@@ -295,10 +301,22 @@ function ChatPageContent() {
     router.replace(`/chat?conversation=${id}`);
   };
 
-  const startNewConversation = useCallback(async () => {
+  const requestNewConversation = useCallback(() => {
+    // Pre-fill with a sensible default; user can edit before confirming.
+    setNewConversationName(`Chat ${new Date().toLocaleString()}`);
+    openNewChatModal();
+  }, [openNewChatModal]);
+
+  const confirmNewConversation = useCallback(async () => {
+    const name = newConversationName.trim();
+    if (!name) {
+      notifyError('Please give the conversation a name.');
+      return;
+    }
+
     setIsCreatingChat(true);
     try {
-      const result = await chatApi.createConversation();
+      const result = await chatApi.createConversation(name);
       if (!result.ok || !result.data) {
         const detail =
           typeof result.error === 'string' && result.error.trim()
@@ -307,12 +325,19 @@ function ChatPageContent() {
         notifyError(detail);
         return;
       }
+      closeNewChatModal();
       router.replace(`/chat?conversation=${result.data}`);
       void loadConversations();
     } finally {
       setIsCreatingChat(false);
     }
-  }, [notifyError, router, loadConversations]);
+  }, [
+    newConversationName,
+    notifyError,
+    router,
+    loadConversations,
+    closeNewChatModal,
+  ]);
 
   const mobileOptions = useMemo(() => {
     const q = searchTerm.toLowerCase();
@@ -387,6 +412,65 @@ function ChatPageContent() {
   return (
     <>
       <Modal
+        opened={newChatModalOpened}
+        onClose={closeNewChatModal}
+        title={
+          <span className="text-lg font-semibold text-[var(--text)]">New Conversation</span>
+        }
+        centered
+        styles={{
+          content: {
+            backgroundColor: 'var(--bgSoft)',
+            border: '1px solid rgba(255,255,255,0.1)',
+          },
+          header: { backgroundColor: 'var(--bgSoft)' },
+          body: { backgroundColor: 'var(--bgSoft)' },
+        }}
+        overlayProps={{ backgroundOpacity: 0.55, blur: 3 }}
+      >
+        <div className="flex flex-col gap-4">
+          <Text size="sm" className="text-[var(--textSoft)]">
+            Give this conversation a name so you can find it later.
+          </Text>
+          <TextInput
+            value={newConversationName}
+            onChange={(e) => setNewConversationName(e.currentTarget.value)}
+            placeholder="e.g. Q4 financial review"
+            data-autofocus
+            maxLength={120}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && newConversationName.trim() && !isCreatingChat) {
+                e.preventDefault();
+                void confirmNewConversation();
+              }
+            }}
+            classNames={{
+              input:
+                'bg-[var(--bg)] border-white/10 text-[var(--text)] placeholder:text-[var(--textSoft)]',
+            }}
+          />
+          <Group justify="flex-end" mt="sm">
+            <Button
+              variant="default"
+              onClick={closeNewChatModal}
+              disabled={isCreatingChat}
+              className="border-white/10 bg-white/5 text-[var(--text)] hover:bg-white/10"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmNewConversation}
+              loading={isCreatingChat}
+              disabled={!newConversationName.trim()}
+              className="bg-blue-600 text-white hover:bg-blue-700"
+            >
+              Create
+            </Button>
+          </Group>
+        </div>
+      </Modal>
+
+      <Modal
         opened={opened}
         onClose={close}
         title={
@@ -443,7 +527,7 @@ function ChatPageContent() {
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}
             onSelect={handleSelectConversation}
-            onNewChat={startNewConversation}
+            onNewChat={requestNewConversation}
             onDelete={handleDeleteClick}
             canDelete={canDelete}
             isLoading={conversationsLoading}
@@ -456,7 +540,7 @@ function ChatPageContent() {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => void startNewConversation()}
+              onClick={requestNewConversation}
               disabled={isCreatingChat}
               className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
             >

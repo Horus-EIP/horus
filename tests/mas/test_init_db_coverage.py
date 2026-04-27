@@ -16,11 +16,17 @@ def test_init_db_create_admin():
             with patch(
                 "db.init_setup.bcrypt_context.hash", return_value="hashed_password"
             ):
-                init_db()
+                with patch(
+                    "db.init_setup.seed_default_agents", return_value=0
+                ) as mock_seed:
+                    init_db()
 
-                mock_db.add.assert_called_once()
-                mock_db.commit.assert_called_once()
-                mock_db.refresh.assert_called_once()
+                    # Admin row added; agent seeding stubbed to keep this test
+                    # focused on the admin path.
+                    mock_db.add.assert_called_once()
+                    mock_db.commit.assert_called_once()
+                    mock_db.refresh.assert_called_once()
+                    mock_seed.assert_called_once_with(mock_db)
 
 
 def test_init_db_admin_exists():
@@ -32,9 +38,10 @@ def test_init_db_admin_exists():
 
     with patch("db.init_setup.SessionLocal", return_value=mock_db):
         with patch("db.init_setup.create_critical_logs_table", return_value=True):
-            init_db()
+            with patch("db.init_setup.seed_default_agents", return_value=0):
+                init_db()
 
-            mock_db.add.assert_not_called()
+                mock_db.add.assert_not_called()
 
 
 def test_init_db_exception():
