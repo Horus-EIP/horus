@@ -271,7 +271,22 @@ def test_select_agent_for_task_run_single_agent(mock_ask_llm, db_session: Sessio
 
 
 def test_select_agent_for_task_run_multiple_agents(mock_ask_llm, db_session: Session):
-    """Test when LLM decides to run multiple agents."""
+    """COMPLEX_TASK must produce a real multi-agent plan, not push the work elsewhere.
+
+    Previously this test asserted ``(None, None, None, [])`` — codifying a
+    broken design where ``select_agent_for_task`` washed its hands on COMPLEX
+    requests and left downstream callers to "fall back to decomposition",
+    except the call chain in :mod:`tasks.routes` always grabbed the request
+    via single-agent paths (skill-match → auto-create → catch-all) before
+    decomposition could fire. That made multi-agent dispatch structurally
+    unreachable on a platform whose entire pitch is multi-agent collaboration.
+
+    Corrected contract: when the router classifies as COMPLEX_TASK, the
+    function runs the planner inline and surfaces ``(first_agent_id,
+    first_demand, None, remaining_actions)``. The caller dispatches the
+    first action immediately and chains the rest via the existing
+    task-result subtask flow — no special-case branching required.
+    """
     unique_name1 = f"Agent1_{uuid.uuid4().hex[:8]}"
     unique_name2 = f"Agent2_{uuid.uuid4().hex[:8]}"
     agent_id1, _ = create_agent(
@@ -281,28 +296,71 @@ def test_select_agent_for_task_run_multiple_agents(mock_ask_llm, db_session: Ses
         unique_name2, ["test"], "Second agent", db_session, AgentTypes.GENERAL
     )
 
-    mock_ask_llm.return_value = json.dumps(
-        {
-            "classification": "COMPLEX_TASK",
-            "next_action": "run_agents",
-            "actions": [
-                {"agent": unique_name1, "input": "Task 1"},
-                {"agent": unique_name2, "input": "Task 2"},
-            ],
-            "final_answer": "",
-        }
-    )
+    # Two ask_llm calls happen on the COMPLEX_TASK path:
+    # 1. intent router  → returns the COMPLEX_TASK classification
+    # 2. planner        → returns the dependency plan
+    mock_ask_llm.side_effect = [
+        json.dumps({"classification": "COMPLEX_TASK"}),
+        json.dumps(
+            {
+                "sub_tasks": [
+                    {
+                        "id": "1",
+                        "agent_type": "general",
+                        "description": "Task 1",
+                        "depends_on": [],
+                        "status": "pending",
+                    },
+                    {
+                        "id": "2",
+                        "agent_type": "general",
+                        "description": "Task 2",
+                        "depends_on": ["1"],
+                        "status": "pending",
+                    },
+                ]
+            }
+        ),
+    ]
 
     with patch("tasks.decomposition.rabbitmq_instance.create_queue"):
         first_agent, first_action, final_answer, remaining = select_agent_for_task(
             "Do multiple tasks", db_session
         )
 
-    # Complex task execution is delegated to decompose_task, so select_agent_for_task returns None
-    assert first_agent is None
-    assert first_action is None
+    # First subtask must be returned ready-to-dispatch and remaining actions
+    # must be queued for the existing chain mechanism. ``final_answer`` must
+    # stay None because we are NOT short-circuiting to a direct response.
+    assert first_agent in (agent_id1, agent_id2)
+    assert first_action == "Task 1"
     assert final_answer is None
-    assert remaining == []
+    assert len(remaining) == 1
+    assert remaining[0][1] == "Task 2"
+
+
+def test_select_agent_for_task_complex_with_unparseable_plan_falls_back(
+    mock_ask_llm, db_session: Session
+):
+    """Planner failure on a COMPLEX_TASK must surface ``(None, None, None, [])``.
+
+    Lets downstream callers reach their remaining fallback paths (skill-match,
+    catch-all general agent) so we always answer the user with *something*
+    rather than silently dropping the task.
+    """
+    create_agent(
+        f"FallbackAgent_{uuid.uuid4().hex[:8]}",
+        ["test"],
+        "Some agent",
+        db_session,
+        AgentTypes.GENERAL,
+    )
+    mock_ask_llm.side_effect = [
+        json.dumps({"classification": "COMPLEX_TASK"}),
+        "this is not valid json",
+    ]
+    with patch("tasks.decomposition.rabbitmq_instance.create_queue"):
+        result = select_agent_for_task("Do something complex", db_session)
+    assert result == (None, None, None, [])
 
 
 # ---------- Tests: insert_new_task ----------

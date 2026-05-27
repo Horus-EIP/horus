@@ -19,6 +19,25 @@ from core.work_queues import work_queue_name_for_agent_type
 from db.database import SessionLocal, get_db
 from db.models import Agents, AgentTypes
 
+
+def _skill_cache_upsert(agent_id: str, name: str, skills: list, description: str) -> None:
+    """Best-effort skill-cache update; never let it crash the registry path."""
+    try:
+        from core.skill_cache import upsert_agent
+
+        upsert_agent(agent_id, name, list(skills or []), description or "")
+    except Exception:
+        logger.exception("Skill cache upsert failed for agent %s", agent_id)
+
+
+def _skill_cache_evict(agent_id: str) -> None:
+    try:
+        from core.skill_cache import evict_agent
+
+        evict_agent(agent_id)
+    except Exception:
+        logger.exception("Skill cache evict failed for agent %s", agent_id)
+
 logger = get_logger("registry_tool_functions")
 
 bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -152,6 +171,7 @@ def create_agent(
         # Shared pool queue for this specialization (all workers of this type consume it).
         rabbitmq_instance.create_queue(work_queue_name_for_agent_type(Agent_type))
 
+        _skill_cache_upsert(agent_id, name, skills, description)
         return agent_id, api_key
     except Exception as e:
         db.rollback()
@@ -167,6 +187,7 @@ def delete_agent(agent_id: str, db: Session) -> bool:
             return False
         db.delete(agent)
         db.commit()
+        _skill_cache_evict(agent_id)
         return True
     except Exception as e:
         db.rollback()
@@ -326,7 +347,15 @@ def _is_agent_recently_alive(agent_info, max_age_seconds: int = 90) -> bool:
 
 
 def get_available_agents(db: Session) -> list:
-    """Return agents with a recent heartbeat as ``(id, name, desc, type)`` tuples."""
+    """Return agents with a recent heartbeat as ``(id, name, desc, type)`` tuples.
+
+    The Manager agent is intentionally excluded — it orchestrates work but
+    never executes it itself, so neither the LLM router nor the planner
+    should see it as an option for SINGLE_AGENT routing or for subtask
+    assignment. The Manager's presence in those prompts caused the planner
+    to occasionally assign subtasks to "manager", which then has no worker
+    consumer on its queue and stalls the chain.
+    """
     available_agents = []
 
     try:
@@ -337,13 +366,16 @@ def get_available_agents(db: Session) -> list:
             return available_agents
 
         for agent in agents:
+            # Skip Manager (orchestrator, not a worker).
+            if agent.name == "Manager":
+                continue
             if _is_agent_recently_alive(agent):
                 available_agents.append(
                     (agent.id, agent.name, agent.description or "", agent.type)
                 )
 
         logger.info(
-            f"Agent availability check - Available: {len(available_agents)}/{len(agents)}"
+            f"Agent availability check - Available: {len(available_agents)}/{len(agents)} (Manager excluded)"
         )
         return available_agents
     except ProgrammingError as e:

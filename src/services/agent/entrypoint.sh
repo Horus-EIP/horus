@@ -1,12 +1,8 @@
 #!/bin/sh
 set -eu
-# Dev compose bind-mounts host ./app over /app, which hides models baked in the image.
-# Keep a copy under /opt/llm-bundle (populated at docker build) and seed the writable tree once.
-BUNDLE="/opt/llm-bundle/Qwen3_instruct_4B"
-TARGET="/app/models/Qwen3_instruct_4B"
-if [ -d "$BUNDLE" ] && [ ! -f "$TARGET/config.json" ]; then
-  echo "Seeding decision LLM from image bundle into $TARGET ..."
-  mkdir -p /app/models
-  cp -a "$BUNDLE" "$TARGET"
-fi
+# Download the decision LLM if missing. No-op when the named-volume cache is
+# warm; fails loudly if HF_HUB_OFFLINE=1 and the model isn't present.
+echo "Bootstrapping agent decision LLM (if missing)..."
+python /app/bootstrap_llm.py || { echo "LLM bootstrap failed"; exit 1; }
+
 exec "$@"

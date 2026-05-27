@@ -19,7 +19,7 @@ class Task(Base):
     conversation_id = Column(
         Integer,
         ForeignKey("conversations.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     parent_task_id = Column(String, ForeignKey("tasks.id"), nullable=True)

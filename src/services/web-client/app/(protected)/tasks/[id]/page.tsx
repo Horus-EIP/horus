@@ -42,7 +42,7 @@ function historyToMessages(history: unknown[] | undefined): AgentMessage[] {
   });
 }
 
-function buildTaskDetail(data: TaskDetails): TaskDetail {
+function buildTaskDetail(data: TaskDetails): TaskDetail & { result?: string; query: string } {
   const subtasks: Subtask[] = (data.subtasks ?? []).map((st) => ({
     id: st.id,
     title: st.title,
@@ -77,6 +77,9 @@ function buildTaskDetail(data: TaskDetails): TaskDetail {
     subtasks,
     messages,
     delegationChain,
+    // Keep these so the page can render the final answer + original query.
+    result: data.result,
+    query: data.query,
   };
 }
 
@@ -94,26 +97,47 @@ export default function TaskDetailPage() {
       return;
     }
     let cancelled = false;
-    (async () => {
-      setLoading(true);
+    let pollId: number | null = null;
+
+    const fetchOnce = async (isInitial: boolean) => {
+      if (isInitial) setLoading(true);
       const [taskRes, agentsRes] = await Promise.all([
         chatApi.getTask(taskId),
         agentApi.getAgents(),
       ]);
       if (cancelled) return;
       if (!taskRes.ok || !taskRes.data) {
-        notifyError(taskRes.error || 'Failed to load task');
-        setTask(null);
+        if (isInitial) {
+          notifyError(taskRes.error || 'Failed to load task');
+          setTask(null);
+        }
       } else {
         setTask(buildTaskDetail(taskRes.data));
+        // Stop polling once the task reaches a terminal state.
+        const status = normalizeStatus(taskRes.data.status);
+        if (
+          (status === 'completed' || status === 'failed' || status === 'cancelled') &&
+          pollId !== null
+        ) {
+          window.clearInterval(pollId);
+          pollId = null;
+        }
       }
       if (agentsRes.ok && agentsRes.data) {
         setAgents(agentsRes.data);
       }
-      setLoading(false);
-    })();
+      if (isInitial) setLoading(false);
+    };
+
+    void fetchOnce(true);
+    // Poll every 3 s while the task is still active — the worker posts
+    // results asynchronously, so the page would otherwise sit on "running"
+    // forever without manual refresh.
+    pollId = window.setInterval(() => void fetchOnce(false), 3000);
+
     return () => {
       cancelled = true;
+      if (pollId !== null) window.clearInterval(pollId);
     };
   }, [taskId, notifyError]);
 
@@ -143,6 +167,10 @@ export default function TaskDetailPage() {
 
   const statusClass = STATUS_COLORS[task.status] ?? STATUS_COLORS.pending;
 
+  const taskWithExtras = task as TaskDetail & { result?: string; query?: string };
+  const finalAnswer = taskWithExtras.result ?? '';
+  const originalQuery = taskWithExtras.query ?? task.title;
+
   return (
     <div className="space-y-6 p-4 md:p-6">
       <div className="flex flex-col gap-1">
@@ -154,6 +182,48 @@ export default function TaskDetailPage() {
         </div>
         <span className="text-xs text-[var(--textSoft)]">Task ID: {task.id}</span>
       </div>
+
+      {/* Original request */}
+      <div className="rounded-2xl border border-white/10 bg-[var(--bgSoft)]/70 p-4">
+        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--textSoft)]">
+          Request
+        </p>
+        <p className="whitespace-pre-wrap text-sm text-[var(--text)]">
+          {originalQuery}
+        </p>
+      </div>
+
+      {/* Final answer — only when completed. */}
+      {task.status === 'completed' && (
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-emerald-300">
+            Result
+          </p>
+          {finalAnswer ? (
+            <pre className="whitespace-pre-wrap font-sans text-sm text-[var(--text)]">
+              {finalAnswer}
+            </pre>
+          ) : (
+            <p className="text-sm text-[var(--textSoft)]">
+              Task is marked completed but no result body was returned by the
+              agent. Check the message history below or the agent logs.
+            </p>
+          )}
+        </div>
+      )}
+
+      {(task.status === 'running' || task.status === 'pending') && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-200">
+          Task is still {task.status}. The page auto-refreshes every few
+          seconds — the result will appear here once the agent finishes.
+        </div>
+      )}
+
+      {task.status === 'failed' && (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-200">
+          Task failed. See the agent logs for details.
+        </div>
+      )}
 
       <CollaborationView title="Collaborating agents" agents={collaborating} isLoading={false} />
 

@@ -24,6 +24,7 @@ import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 import requests
 from fastapi import FastAPI, Request
@@ -35,12 +36,14 @@ from agent_server.delegation_bridge import (_format_delegation_context,
                                             _send_delegation_result)
 from agent_server.middleware import CorrelationIDMiddleware
 from agent_server.models import Result, Task
+from agent_server.profiles import (PROFILES, get_primary_profile,
+                                   get_profile_by_agent_id,
+                                   unique_agent_types)
 from ai_agents.decision_making_agent import DecisionMakingAgent
 from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
 from ai_agents.knowledge_store_client import KnowledgeStoreClient
 from ai_agents.rag_pipeline import RAGPipeline
-from config.settings import (AGENT_DESCRIPTION, AGENT_TYPE,
-                             MAX_DELEGATION_DEPTH, MODEL_DEVICE, MODEL_NAME,
+from config.settings import (MAX_DELEGATION_DEPTH, MODEL_DEVICE, MODEL_NAME,
                              ORCHESTRATOR_PASSWORD, ORCHESTRATOR_TOKEN,
                              ORCHESTRATOR_URL, ORCHESTRATOR_USERNAME)
 from core.logger import get_correlation_id, get_logger, set_correlation_id
@@ -54,12 +57,16 @@ from specialized.writer_agent import WriterAgent
 logger = get_logger("agent_server")
 
 
-# Agent details
-# Will be set after successful registration with MAS
-AGENT_ID = None
-AGENT_API_KEY = None  # Plain API key returned at registration, used for agent auth
-AGENT_NAME = "HorusAgent"
-SKILLS = ["knowledge_retrieval", "decision_making", "rag_pipeline"]
+# Multi-identity worker: a single container registers under N profiles (see
+# agent_server.profiles). The module-level ``AGENT_ID`` / ``AGENT_API_KEY`` /
+# ``AGENT_NAME`` / ``SKILLS`` aliases below point at the primary (first)
+# profile for backward compatibility — older callers and tests that imported
+# them keep working. Multi-profile-aware code paths read from
+# :mod:`agent_server.profiles` directly.
+AGENT_ID: str | None = None
+AGENT_API_KEY: str | None = None
+AGENT_NAME: str = get_primary_profile().name
+SKILLS: list[str] = list(get_primary_profile().skills)
 AGENT_CAPABILITIES = {
     "knowledge_retrieval": "Search and retrieve information from knowledge stores",
     "decision_making": "Analyze data and make informed decisions",
@@ -74,29 +81,47 @@ decision_agent = DecisionMakingAgent(model_name=MODEL_NAME, device=MODEL_DEVICE)
 # None → RAGPipeline builds the default registry (parse, calc, extract_data, etc.).
 # An empty ToolRegistry() breaks ReAct tools that call tool_registry.run("parse", ...).
 
-if AGENT_TYPE == "researcher":
-    active_agent = ResearcherAgent(retrieval_agent)
-elif AGENT_TYPE == "analyst":
-    active_agent = AnalystAgent()
-elif AGENT_TYPE == "writer":
-    active_agent = WriterAgent(decision_agent)
-else:
-    active_agent = RAGPipeline(
-        retrieval_agent,
-        decision_agent,
-        tool_registry=None,
-    )
+# Build one pipeline per agent type up front so the multi-queue consumer can
+# dispatch the right one for each incoming task. All pipelines share the same
+# ``decision_agent`` (and therefore the same Qwen instance) — only the wrapper
+# class differs. This is what lets a single container act as 5 named agents
+# without loading 5 LLMs.
+pipelines: dict[str, object] = {
+    "general": RAGPipeline(retrieval_agent, decision_agent, tool_registry=None),
+    "researcher": ResearcherAgent(retrieval_agent),
+    "analyst": AnalystAgent(),
+    "writer": WriterAgent(decision_agent),
+}
 
+# Legacy single-pipeline aliases — kept so older callers that imported
+# ``active_agent`` keep working. Points at whatever the primary profile is.
+active_agent = pipelines.get(get_primary_profile().type, pipelines["general"])
 rag_pipeline: RAGPipeline | None = (
     active_agent if isinstance(active_agent, RAGPipeline) else None
 )
 
-# Shared RabbitMQ queue for this specialization (aligned with MAS ``agent_work_queue_prefix``).
+
+def get_pipeline_for_type(agent_type: str):
+    """Return the pipeline instance to run for a given type (general by default)."""
+    return pipelines.get((agent_type or "general").lower(), pipelines["general"])
+
+# Shared RabbitMQ work-queue prefix (aligned with MAS ``agent_work_queue_prefix``).
+# The consumer subscribes to ``{prefix}.{type}`` for every unique type across
+# registered profiles, so one process can serve general + analyst + writer +
+# researcher tasks concurrently. The single-type ``WORK_QUEUE_NAME`` alias is
+# preserved for legacy callers that imported it; resolves to the primary
+# profile's queue.
 _wq_prefix = os.getenv("HORUS_WORK_QUEUE_PREFIX", "horus.work").strip().rstrip(".")
-_at = str(AGENT_TYPE).lower()
-if "." in _at:
-    _at = _at.split(".")[-1]
-WORK_QUEUE_NAME = f"{_wq_prefix}.{_at}"
+
+
+def work_queue_name_for_type(agent_type: str) -> str:
+    at = (agent_type or "general").lower()
+    if "." in at:
+        at = at.split(".")[-1]
+    return f"{_wq_prefix}.{at}"
+
+
+WORK_QUEUE_NAME = work_queue_name_for_type(get_primary_profile().type)
 
 
 _AUTH_TOKEN = None  # cached bearer token for orchestrator requests
@@ -134,57 +159,77 @@ def _get_orchestrator_token():
     return None
 
 
-def _build_headers(include_api_key: bool = False) -> dict:
-    """Return MAS request headers; optionally adds ``X-API-Key``/``Agent-ID``."""
+def _build_headers(
+    include_api_key: bool = False,
+    *,
+    agent_id: str | None = None,
+    api_key: str | None = None,
+) -> dict:
+    """Return MAS request headers; optionally adds ``X-API-Key``/``Agent-ID``.
+
+    Callers can pass an explicit ``agent_id``/``api_key`` to authenticate as a
+    specific registered profile (so result POSTs for "Finance-Analyst" are
+    signed with that profile's credentials rather than the primary's).
+    """
     headers: dict = {}
     token = _get_orchestrator_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
-    if include_api_key and AGENT_ID and AGENT_API_KEY:
-        headers["X-API-Key"] = f"{AGENT_ID}:{AGENT_API_KEY}"
-        headers["Agent-ID"] = AGENT_ID
+    if include_api_key:
+        # Default to the primary profile's credentials when nothing is passed.
+        aid = agent_id or AGENT_ID
+        akey = api_key or AGENT_API_KEY
+        if aid and akey:
+            headers["X-API-Key"] = f"{aid}:{akey}"
+            headers["Agent-ID"] = aid
     return headers
 
 
-def register_agent():
-    """Register the agent with MAS. Keep retrying until successful.
+def _register_one_profile(profile) -> bool:
+    """Register a single profile with MAS. Returns True on success.
 
-    Uses a simple backoff to handle MAS not being ready at container start.
+    Handles the 409 case by cleaning up any inactive entry with the same name
+    (e.g. from a previous container run) and retrying.
     """
-    global AGENT_ID, AGENT_API_KEY
     url = f"{ORCHESTRATOR_URL}/agents/register"
-    base_name = AGENT_NAME
+    base_name = profile.name
     name_variant = base_name
-    backoff_seconds = 1
-    while not AGENT_ID:
+    while True:
         try:
             payload = {
                 "name": name_variant,
-                "skills": SKILLS,
-                "description": AGENT_DESCRIPTION,
-                "type": AGENT_TYPE
+                "skills": profile.skills,
+                "description": profile.description,
+                "type": profile.type,
             }
             response = requests.post(
                 url, json=payload, headers=_build_headers(), timeout=5
             )
             if response.status_code == 200:
                 data = response.json()
-                AGENT_ID = data.get("agent_id")
-                AGENT_API_KEY = data.get("api_key")
-                logger.info(f"Agent registered successfully with id: {AGENT_ID}")
-                agent_registered.set(1)
-                if not AGENT_API_KEY:
-                    logger.warning("MAS did not return api_key; agent auth will fail.")
-                break
-            if response.status_code == 409:
-                # A stale entry with this name is sitting in the DB from a previous
-                # container run. Try to find it, delete it, then re-register with
-                # the original name so ghost agents never accumulate.
-                logger.warning(
-                    f"Agent name '{name_variant}' already registered. "
-                    "Attempting to delete stale entry and re-register..."
+                profile.agent_id = data.get("agent_id")
+                profile.api_key = data.get("api_key")
+                logger.info(
+                    "Profile registered: name=%s id=%s type=%s",
+                    profile.name,
+                    profile.agent_id,
+                    profile.type,
                 )
+                return True
+            if response.status_code == 409:
+                # The worker is the canonical owner of its default profile
+                # names — any row in MAS with this name is from a previous
+                # container run and must be evicted, regardless of whether
+                # MAS still thinks it's active (a heartbeat 25s ago wins
+                # against MAS's 30s staleness check on a quick redeploy).
+                # Delete all rows matching the name, then retry with the same
+                # label so the UI never accumulates ``Foo-abc123`` ghosts.
+                logger.warning(
+                    "Profile '%s' already registered; reclaiming the name",
+                    name_variant,
+                )
+                deleted_any = False
                 try:
                     list_resp = requests.get(
                         f"{ORCHESTRATOR_URL}/agents/details/",
@@ -192,82 +237,130 @@ def register_agent():
                         timeout=5,
                     )
                     if list_resp.status_code == 200:
-                        agents = list_resp.json()
-                        stale = next(
-                            (
-                                a for a in agents
-                                if a.get("name") == name_variant
-                                and a.get("status") == "inactive"
-                            ),
-                            None,
-                        )
-                        if stale:
+                        ghosts = [
+                            a for a in list_resp.json()
+                            if a.get("name") == name_variant
+                        ]
+                        for ghost in ghosts:
                             del_resp = requests.delete(
-                                f"{ORCHESTRATOR_URL}/agents/unregister/{stale['id']}",
+                                f"{ORCHESTRATOR_URL}/agents/unregister/{ghost['id']}",
                                 headers=_build_headers(),
                                 timeout=5,
                             )
                             if del_resp.status_code == 200:
                                 logger.info(
-                                    f"Deleted stale agent '{name_variant}' "
-                                    f"({stale['id']}). Retrying registration."
+                                    "Evicted stale row name=%s id=%s",
+                                    name_variant,
+                                    ghost.get("id"),
                                 )
-                                continue  # retry immediately with same name
+                                deleted_any = True
                             else:
                                 logger.warning(
-                                    f"Could not delete stale agent {stale['id']}: "
-                                    f"{del_resp.status_code}"
+                                    "Could not delete %s: %s - %s",
+                                    ghost.get("id"),
+                                    del_resp.status_code,
+                                    del_resp.text,
                                 )
-                        else:
-                            logger.warning(
-                                f"No inactive agent named '{name_variant}' found "
-                                "to clean up (may be genuinely active). "
-                                "Falling back to unique name."
-                            )
                 except Exception as cleanup_err:
-                    logger.warning(f"Stale agent cleanup failed: {cleanup_err}")
-                # Fallback: unique suffix so we at least register successfully
+                    logger.warning("Stale cleanup failed: %s", cleanup_err)
+                if deleted_any:
+                    continue  # retry with the same name
+                # Cleanup couldn't free the name (permissions, race) — fall
+                # back to a unique suffix so registration at least succeeds.
                 name_variant = f"{base_name}-{uuid.uuid4().hex[:6]}"
-                logger.warning(f"Falling back to name '{name_variant}'")
-            else:
-                logger.error(f"Agent registration failed: {response.status_code} - {response.text}")
-                agent_errors_total.labels(error_type="registration").inc()
-        except Exception as e:
-            logger.error(f"Error registering agent (will retry): {e}", exc_info=True)
+                continue
+            logger.error(
+                "Registration failed for %s: %s - %s",
+                profile.name,
+                response.status_code,
+                response.text,
+            )
             agent_errors_total.labels(error_type="registration").inc()
-        time.sleep(backoff_seconds)
-        backoff_seconds = min(backoff_seconds * 2, 30)
+            return False
+        except Exception as exc:
+            logger.error(
+                "Error registering %s (will retry): %s", profile.name, exc, exc_info=True
+            )
+            agent_errors_total.labels(error_type="registration").inc()
+            return False
+
+
+def register_profiles():
+    """Register every profile with MAS; keeps retrying until at least one succeeds.
+
+    Backward-compat: ``AGENT_ID`` / ``AGENT_API_KEY`` module globals are aliased
+    to the first successfully registered profile so older imports keep working.
+    """
+    global AGENT_ID, AGENT_API_KEY
+    backoff_seconds = 1
+    while True:
+        any_success = False
+        for profile in PROFILES:
+            if profile.agent_id:
+                continue
+            if _register_one_profile(profile):
+                any_success = True
+        if any(p.agent_id for p in PROFILES):
+            primary = get_primary_profile()
+            AGENT_ID = primary.agent_id
+            AGENT_API_KEY = primary.api_key
+            agent_registered.set(1)
+            registered = [p.name for p in PROFILES if p.agent_id]
+            logger.info("Registered %d profile(s): %s", len(registered), ", ".join(registered))
+            return
+        if not any_success:
+            time.sleep(backoff_seconds)
+            backoff_seconds = min(backoff_seconds * 2, 30)
+
+
+# Legacy alias for any caller still importing ``register_agent``.
+register_agent = register_profiles
+
+
+def _heartbeat_for_profile(profile) -> None:
+    if not profile.agent_id or not profile.api_key:
+        return
+    url = f"{ORCHESTRATOR_URL}/agents/heartbeat/{profile.agent_id}"
+    try:
+        headers = _build_headers(
+            include_api_key=True, agent_id=profile.agent_id, api_key=profile.api_key
+        )
+        response = requests.post(url, headers=headers)
+        if response.status_code == 401 and not ORCHESTRATOR_TOKEN:
+            # JWT expired — drop the cache and retry once with a fresh token.
+            _invalidate_cached_mas_token()
+            headers = _build_headers(
+                include_api_key=True,
+                agent_id=profile.agent_id,
+                api_key=profile.api_key,
+            )
+            response = requests.post(url, headers=headers)
+        if response.status_code != 200:
+            logger.warning(
+                "Heartbeat for %s failed: %s - %s",
+                profile.name,
+                response.status_code,
+                response.text,
+            )
+            agent_heartbeat_total.labels(status="error").inc()
+        else:
+            agent_heartbeat_total.labels(status="success").inc()
+    except Exception as exc:
+        logger.error("Heartbeat error for %s: %s", profile.name, exc, exc_info=True)
+        agent_heartbeat_total.labels(status="error").inc()
 
 
 def send_heartbeat():
-    """POST ``/agents/heartbeat/{id}`` and refresh the cached token on 401."""
-    if not AGENT_ID:
-        return
-    url = f"{ORCHESTRATOR_URL}/agents/heartbeat/{AGENT_ID}"
-    try:
-        response = requests.post(url, headers=_build_headers(include_api_key=True))
-        # MAS JWTs expire (~20m). Cached token never refreshed → endless 401 without this.
-        if response.status_code == 401 and not ORCHESTRATOR_TOKEN:
-            _invalidate_cached_mas_token()
-            response = requests.post(url, headers=_build_headers(include_api_key=True))
-        if response.status_code != 200:
-            logger.warning(f"Heartbeat failed: {response.status_code} - {response.text}")
-            agent_heartbeat_total.labels(status="error").inc()
-            agent_errors_total.labels(error_type="heartbeat").inc()
-        else:
-            logger.debug(f"Heartbeat sent successfully: {response.json()}")
-            agent_heartbeat_total.labels(status="success").inc()
-    except Exception as e:
-        logger.error(f"Error sending heartbeat: {e}", exc_info=True)
-        agent_heartbeat_total.labels(status="error").inc()
-        agent_errors_total.labels(error_type="heartbeat").inc()
+    """Send a heartbeat for every registered profile."""
+    for profile in PROFILES:
+        _heartbeat_for_profile(profile)
 
 
 def heartbeat_task():
-    """Background loop: send a heartbeat every 30 seconds."""
+    """Background loop: heartbeat every 30 seconds."""
     while True:
         send_heartbeat()
-        time.sleep(30)  # Adjust the interval as needed.
+        time.sleep(30)
 
 
 def send_result(
@@ -284,20 +377,24 @@ def send_result(
         result: The result string generated by the RAG pipeline.
         conversation_id: The conversation ID for this task.
         task_id: The unique task ID.
-        assigned_agent_id: Task assignee UUID (orchestrator); required for pooled workers so MAS
-            matches Task.agent_id while headers authenticate the executing instance.
-        skill_used: Optional skill the worker exercised for this task (e.g. ``financial_analysis``).
-            Forwarded to MAS so the chat UI can show an attribution chip.
+        assigned_agent_id: Task assignee UUID. The matching registered profile
+            authenticates the POST so MAS sees the result coming from the
+            expected identity and the chat UI shows the right attribution.
+        skill_used: Optional skill the worker exercised for this task (e.g.
+            ``financial_analysis``).
     """
     url = f"{ORCHESTRATOR_URL}/tasks/task-result/"
-    body_agent_id = assigned_agent_id or AGENT_ID
-    # Default ``skill_used`` to the worker's primary skill when the caller doesn't
-    # know which one was exercised — gives the UI something useful to show even
-    # for generic RAG calls.
-    effective_skill = skill_used or (SKILLS[0] if SKILLS else None)
+
+    # Pick the profile that matches the assigned agent so the X-API-Key header
+    # and ``agent_name`` both belong to the identity MAS expects. Falls back
+    # to the primary profile (legacy single-agent flow).
+    profile = get_profile_by_agent_id(assigned_agent_id) or get_primary_profile()
+    body_agent_id = assigned_agent_id or profile.agent_id
+    effective_skill = skill_used or (profile.skills[0] if profile.skills else None)
+
     payload = {
         "agent_id": body_agent_id,
-        "agent_name": AGENT_NAME,
+        "agent_name": profile.name,
         "skill_used": effective_skill,
         "result": result,
         "conversation_id": str(conversation_id),
@@ -305,14 +402,76 @@ def send_result(
     }
     try:
         response = requests.post(
-            url, json=payload, headers=_build_headers(include_api_key=True)
+            url,
+            json=payload,
+            headers=_build_headers(
+                include_api_key=True,
+                agent_id=profile.agent_id,
+                api_key=profile.api_key,
+            ),
         )
         if response.status_code != 200:
-            logger.warning(f"Failed to send result: {response.status_code} - {response.text}")
+            logger.warning(
+                "Failed to send result (as %s): %s - %s",
+                profile.name,
+                response.status_code,
+                response.text,
+            )
         else:
-            logger.debug(f"Result sent successfully: {response.json()}")
+            logger.debug("Result sent successfully as %s", profile.name)
     except Exception as e:
         logger.error(f"Error sending result: {e}", exc_info=True)
+
+
+def send_step(
+    step: dict,
+    conversation_id: str,
+    task_id: str,
+    assigned_agent_id: str | None = None,
+) -> None:
+    """Fire-and-forget POST of a thought-process step to MAS.
+
+    Steps are best-effort: if MAS is slow or down the call short-circuits and
+    the task continues. Authenticated as the profile that owns the task so
+    MAS sees a step coming from the same identity as the eventual result.
+    """
+    url = f"{ORCHESTRATOR_URL}/tasks/task-step/"
+    profile = get_profile_by_agent_id(assigned_agent_id) or get_primary_profile()
+    body_agent_id = assigned_agent_id or profile.agent_id
+    ts = step.get("timestamp") or datetime.now(timezone.utc).isoformat()
+    payload = {
+        "task_id": task_id,
+        "conversation_id": str(conversation_id) if conversation_id else None,
+        "agent_id": body_agent_id,
+        "agent_name": profile.name,
+        "step_type": step.get("step_type"),
+        "title": step.get("title"),
+        "detail": step.get("detail"),
+        "timestamp": ts,
+        "metadata": step.get("metadata") or {},
+    }
+    try:
+        response = requests.post(
+            url,
+            json=payload,
+            headers=_build_headers(
+                include_api_key=True,
+                agent_id=profile.agent_id,
+                api_key=profile.api_key,
+            ),
+            timeout=3,
+        )
+        if response.status_code >= 400:
+            # 404 / 405 here means MAS doesn't expose the endpoint yet — that's
+            # fine, the result path still works. Log quietly.
+            logger.debug(
+                "Step POST returned %s (%s): %s",
+                response.status_code,
+                step.get("step_type"),
+                response.text[:200],
+            )
+    except Exception as e:
+        logger.debug("Step POST failed (%s): %s", step.get("step_type"), e)
 
 
 @asynccontextmanager
@@ -387,22 +546,26 @@ async def receive_task(task: Task, request: Request):
         f"correlation_id={get_correlation_id()}"
     )
 
-    # Process the task using the RAG pipeline (async) with metrics
+    # Process the task using the RAG pipeline (async) with metrics. The HTTP
+    # path always runs the primary profile's pipeline; the RabbitMQ consumer
+    # path is multi-queue-aware and dispatches per task type.
     import time as time_module
     start_time = time_module.time()
     try:
         task_dict = task.model_dump()
-        if AGENT_TYPE == "general":
-            result_pipeline = await active_agent.process_task(task_dict)
+        primary_type = get_primary_profile().type
+        primary_pipeline = get_pipeline_for_type(primary_type)
+        if primary_type == "general":
+            result_pipeline = await primary_pipeline.process_task(task_dict)
             final_result_text = result_pipeline["response"]
-        elif AGENT_TYPE in ["researcher", "analyst", "writer"]:
-            final_result_text = await active_agent.process_request(
+        elif primary_type in ("researcher", "analyst", "writer"):
+            final_result_text = await primary_pipeline.process_request(
                 task_type=task_dict.get("operation"),
                 data=task_dict.get("query"),
                 extra_parameters=task_dict,
             )
         else:
-            raise ValueError(f"Unsupported AGENT_TYPE: {AGENT_TYPE}")
+            raise ValueError(f"Unsupported primary type: {primary_type}")
 
         processing_duration = time_module.time() - start_time
 

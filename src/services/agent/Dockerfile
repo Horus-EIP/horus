@@ -9,13 +9,10 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # Install OpenTelemetry auto-instrumentation
 RUN opentelemetry-bootstrap --action=install
 
-# Network only during docker build: snapshot Qwen into /opt (survives dev bind-mount of /app).
-ARG DOWNLOAD_LLM=1
+# Decision LLM is downloaded on first container start by entrypoint.sh into a
+# mounted volume (see compose ``agent_model_cache``). Image stays slim and CI
+# rebuilds are fast.
 ENV HF_HUB_DISABLE_TELEMETRY=1
-RUN if [ "$DOWNLOAD_LLM" = "1" ]; then \
-    mkdir -p /opt/llm-bundle && \
-    python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='Qwen/Qwen3-4B-Instruct-2507', local_dir='/opt/llm-bundle/Qwen3_instruct_4B', local_dir_use_symlinks=False)"; \
-    fi
 
 # Copy the agent application as the working dir
 COPY ./app/ /app/
@@ -24,9 +21,10 @@ COPY entrypoint.sh /entrypoint.sh
 # Windows CRLF in build context breaks shebang + `set -eu` lines; strip before run.
 RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
-# Default: no Hub calls at runtime if the bundle or host app/models is populated.
-ENV HF_HUB_OFFLINE=1
-ENV TRANSFORMERS_OFFLINE=1
+# Default to ONLINE so bootstrap_llm.py can pull on first start. Operators can
+# flip both to 1 in their env once the cache volume is warm.
+ENV HF_HUB_OFFLINE=0
+ENV TRANSFORMERS_OFFLINE=0
 
 ENV ORCHESTRATOR_URL=http://mas:8000
 ENV RABBITMQ_HOST=rabbitmq

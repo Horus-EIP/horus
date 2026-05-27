@@ -1,23 +1,30 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  Badge,
   Button,
   Group,
   Loader,
+  MultiSelect,
   Radio,
   Select,
   Stack,
+  Switch,
   Text,
   Textarea,
   Tooltip,
 } from '@mantine/core';
-import { IconRobot, IconArrowLeft } from '@tabler/icons-react';
+import { IconRobot, IconArrowLeft, IconSparkles } from '@tabler/icons-react';
 import { agentApi, type Agent } from '@/lib/agents/api';
-import { chatApi, type Conversation } from '@/lib/chat/api';
+import { chatApi, type SuggestedSkill } from '@/lib/chat/api';
 import { useNotification } from '@/contexts/notification-context';
 import type { TaskMode } from '@/lib/types';
+import {
+  FileAttachments,
+  type FileAttachmentsValue,
+} from '@/components/tasks/file-attachments';
 
 type SkillOption = { value: string; label: string };
 
@@ -39,28 +46,36 @@ export default function NewTaskPage() {
   const { error: notifyError, success: notifySuccess } = useNotification();
 
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const MAX_SKILLS = 5;
+
   const [demand, setDemand] = useState('');
-  const [conversationId, setConversationId] = useState<string | null>(null);
   const [mode, setMode] = useState<TaskMode>('auto');
-  const [skill, setSkill] = useState<string | null>(null);
+  const [autoDetectSkills, setAutoDetectSkills] = useState(true);
+  const [skills, setSkills] = useState<string[]>([]);
   const [agentId, setAgentId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // First skill the user picked, used to filter agents in specific_agent mode.
+  const skill = skills[0] ?? null;
+
+  const [suggestions, setSuggestions] = useState<SuggestedSkill[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const suggestRequestId = useRef(0);
+
+  const [attachments, setAttachments] = useState<FileAttachmentsValue>({
+    attached: [],
+    inline: [],
+  });
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [a, c] = await Promise.all([
-        agentApi.getAgents(),
-        chatApi.getConversations(),
-      ]);
+      const a = await agentApi.getAgents();
       if (cancelled) return;
       if (a.ok && a.data) setAgents(a.data);
       else notifyError(a.error || 'Failed to load agents');
-      if (c.ok && c.data) setConversations(c.data);
-      else notifyError(c.error || 'Failed to load conversations');
       setLoading(false);
     })();
     return () => {
@@ -84,15 +99,6 @@ export default function NewTaskPage() {
     [filteredAgents]
   );
 
-  const conversationOptions = useMemo(
-    () =>
-      conversations.map((c) => ({
-        value: String(c.id),
-        label: c.name || `Conversation ${c.id}`,
-      })),
-    [conversations]
-  );
-
   // If the user changes the skill filter, drop a now-invalid agent selection.
   useEffect(() => {
     if (!agentId) return;
@@ -100,13 +106,36 @@ export default function NewTaskPage() {
     if (!stillValid) setAgentId(null);
   }, [skill, filteredAgents, agentId]);
 
+  // Debounced skill suggestions. Fires 400ms after the user stops typing,
+  // only once the demand is long enough to be meaningful. A request-id guard
+  // makes sure a stale response can't overwrite a fresher one.
+  useEffect(() => {
+    const trimmed = demand.trim();
+    if (trimmed.length < 12) {
+      setSuggestions([]);
+      setSuggestionsLoading(false);
+      return;
+    }
+    const myId = ++suggestRequestId.current;
+    setSuggestionsLoading(true);
+    const handle = window.setTimeout(async () => {
+      const result = await chatApi.suggestSkills(trimmed, 3);
+      if (myId !== suggestRequestId.current) return;
+      setSuggestionsLoading(false);
+      if (result.ok && result.data) setSuggestions(result.data);
+      else setSuggestions([]);
+    }, 400);
+    return () => window.clearTimeout(handle);
+  }, [demand]);
+
   const validate = (): string | null => {
     if (!demand.trim()) return 'Please describe the task.';
-    if (!conversationId) return 'Pick a conversation to attach the task to.';
     if (mode === 'specific_agent' && !agentId)
       return 'Specific-agent mode requires you to pick an agent.';
-    if (mode === 'any_with_skill' && !skill)
-      return 'Skill-based mode requires you to pick a skill.';
+    if (mode === 'any_with_skill' && !autoDetectSkills && skills.length === 0)
+      return 'Skill-based mode requires at least one skill (or enable auto-detect).';
+    if (skills.length > MAX_SKILLS)
+      return `Pick at most ${MAX_SKILLS} skills — more than that just noises up the router.`;
     return null;
   };
 
@@ -119,24 +148,46 @@ export default function NewTaskPage() {
 
     setSubmitting(true);
     try {
-      const skillsRequired = skill ? [skill] : [];
+      // Auto-detect → send no skills so the orchestrator's router picks. Otherwise
+      // forward every skill the user selected so routing has more to work with.
+      const skillsRequired = autoDetectSkills ? [] : skills;
       const result = await chatApi.createTask({
         demand: demand.trim(),
-        conversation_id: conversationId!,
         skills_required: skillsRequired,
         mode,
         agent_id: mode === 'specific_agent' ? agentId! : undefined,
+        attached_files: attachments.attached,
+        inline_files: attachments.inline,
       });
 
+      // Always leave the create-task form once the user dispatches. The
+      // destination depends on how the orchestrator handled the demand:
+      //   - dispatched to an agent → /tasks/[id] detail page (live status)
+      //   - direct answer / decomposition failed → /tasks list with a toast
+      //   - HTTP error → /tasks list with an error toast
       if (!result.ok) {
         notifyError(result.error || 'Failed to dispatch task');
+        router.push('/tasks');
         return;
       }
 
-      notifySuccess('Task dispatched.');
-      // Navigate the user to the chat for that conversation so they see the
-      // attribution chip + WS task_complete event live.
-      router.push(`/chat?conversation=${conversationId}`);
+      const taskId = result.data?.task_id;
+      const message = result.data?.message;
+      const directResult = result.data?.result;
+
+      if (taskId) {
+        notifySuccess('Task dispatched.');
+        router.push(`/tasks/${taskId}`);
+      } else if (directResult) {
+        // Orchestrator answered without dispatching to an agent.
+        notifySuccess(message || 'Orchestrator answered directly.');
+        router.push('/tasks');
+      } else {
+        // Decomposition gave up or no agent matched. Surface the backend's
+        // own message so the user knows what happened.
+        notifyError(message || 'No agent was assigned to this task.');
+        router.push('/tasks');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -180,17 +231,6 @@ export default function NewTaskPage() {
           required
         />
 
-        <Select
-          label="Conversation"
-          placeholder="Pick a conversation..."
-          data={conversationOptions}
-          value={conversationId}
-          onChange={setConversationId}
-          searchable
-          required
-          nothingFoundMessage="No conversations yet — create one from the chat page first."
-        />
-
         <Radio.Group
           label="Routing mode"
           value={mode}
@@ -210,30 +250,93 @@ export default function NewTaskPage() {
               value="specific_agent"
               label="Specific agent (queue-on-busy if offline)"
             />
+            <Radio
+              value="decompose"
+              label="Force decomposition — split across multiple specialists"
+            />
           </Stack>
         </Radio.Group>
 
-        <Tooltip
-          label="Skill is optional in Auto mode and required in Skill / Specific modes."
-          position="top-start"
-          openDelay={500}
-        >
-          <Select
-            label="Skill"
-            placeholder={skillOptions.length ? 'Pick a skill...' : 'No skills advertised yet'}
-            data={skillOptions}
-            value={skill}
-            onChange={setSkill}
-            searchable
-            clearable
-            disabled={!skillOptions.length}
-            description={
-              mode === 'auto'
-                ? 'Optional in Auto mode — passed as a hint to the router.'
-                : 'Required.'
-            }
+        <div>
+          <Switch
+            label="Auto-detect skills"
+            description="Let the orchestrator pick which skill(s) this task needs. Turn off to choose them yourself."
+            checked={autoDetectSkills}
+            onChange={(e) => {
+              setAutoDetectSkills(e.currentTarget.checked);
+              if (e.currentTarget.checked) setSkills([]);
+            }}
+            mb="xs"
           />
-        </Tooltip>
+          <Tooltip
+            label={`Pick 1–${MAX_SKILLS} skills. More tags don't help — the router just gets noisier.`}
+            position="top-start"
+            openDelay={500}
+          >
+            <MultiSelect
+              label="Skills"
+              placeholder={
+                autoDetectSkills
+                  ? 'Auto-detect is on — orchestrator picks'
+                  : skillOptions.length
+                    ? 'Pick up to 5 skills…'
+                    : 'No skills advertised yet'
+              }
+              data={skillOptions}
+              value={skills}
+              onChange={(next) =>
+                setSkills(next.slice(0, MAX_SKILLS))
+              }
+              searchable
+              clearable
+              disabled={autoDetectSkills || !skillOptions.length}
+              maxValues={MAX_SKILLS}
+              nothingFoundMessage="No matching skills"
+              description={
+                autoDetectSkills
+                  ? 'Auto-detect is on. Disable it above to pick skills manually.'
+                  : mode === 'auto'
+                    ? 'Optional in Auto mode — forwarded to the router as hints.'
+                    : 'Required for Skill / Specific-agent modes.'
+              }
+            />
+          </Tooltip>
+
+          {!autoDetectSkills && (suggestionsLoading || suggestions.length > 0) && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Group gap={4} align="center">
+                <IconSparkles className="h-3.5 w-3.5 text-violet-400" />
+                <Text size="xs" c="dimmed">
+                  {suggestionsLoading ? 'Suggesting…' : 'Suggested:'}
+                </Text>
+              </Group>
+              {suggestions.map((s) => {
+                const active = skills.includes(s.skill);
+                const onClick = () => {
+                  if (active) {
+                    setSkills(skills.filter((x) => x !== s.skill));
+                  } else if (skills.length < MAX_SKILLS) {
+                    setSkills([...skills, s.skill]);
+                  }
+                };
+                return (
+                  <Badge
+                    key={`${s.skill}-${s.agent_id}`}
+                    component="button"
+                    type="button"
+                    variant={active ? 'filled' : 'light'}
+                    color={active ? 'violet' : 'gray'}
+                    onClick={onClick}
+                    style={{ cursor: 'pointer' }}
+                    title={`Best match: ${s.agent_name} (score ${s.score.toFixed(2)})`}
+                  >
+                    {s.skill.replace(/_/g, ' ')}
+                  </Badge>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         <Select
           label="Agent"
@@ -253,6 +356,12 @@ export default function NewTaskPage() {
               ? `Filtered by skill: ${skill}`
               : 'Showing every registered agent.'
           }
+        />
+
+        <FileAttachments
+          value={attachments}
+          onChange={setAttachments}
+          onError={notifyError}
         />
 
         <Group justify="flex-end" mt="md">

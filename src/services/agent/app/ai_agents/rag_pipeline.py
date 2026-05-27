@@ -17,6 +17,7 @@ from ai_agents.tool_registry import ToolRegistry
 from ai_agents.calculator_tool import CalculatorTool
 from ai_agents.file_parser_tool import FileParserTool
 from ai_agents.summarizer_tool import SummarizerTool
+from ai_agents.step_emitter import emit_step
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +146,12 @@ class RAGPipeline:
         if operation and self.tool_registry.has(operation):
             # Tools are CPU-bound, run in thread pool
             import asyncio
+            emit_step(
+                "tool.invoke",
+                f"Running tool: {operation}",
+                f"Dispatching to the '{operation}' tool in the registry.",
+                tool=operation,
+            )
             response_text = await asyncio.to_thread(
                 self.tool_registry.run,
                 operation,
@@ -164,6 +171,12 @@ class RAGPipeline:
 
         if should_react:
             logger.info(f"Using ReAct reasoning for query: {query!r}")
+            emit_step(
+                "reasoning.start",
+                "Starting ReAct multi-step reasoning",
+                "Switching to the THOUGHT → ACTION → OBSERVATION loop.",
+                mode="react",
+            )
             result = await self.generate_response_react(query)
             return {
                 "task_id": task.get("task_id"),

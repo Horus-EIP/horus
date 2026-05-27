@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from "react";
-import { chatApi, TaskQueueStats } from "@/lib/chat/api";
+import { chatApi, TaskQueueStats, type TaskSummary } from "@/lib/chat/api";
 import Card from "@/components/ui/card";
 import { useNotification } from "@/contexts/notification-context";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -14,7 +14,8 @@ import {
   IconBan,
   IconAlertTriangle,
   IconPlus,
-  IconRefresh
+  IconRefresh,
+  IconChevronRight,
 } from '@tabler/icons-react';
 
 interface StatCardProps {
@@ -39,24 +40,59 @@ function StatCard({ title, value, icon, color, bgColor }: StatCardProps) {
   );
 }
 
+const STATUS_PILL: Record<string, string> = {
+  completed: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30',
+  running: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30',
+  pending: 'bg-white/10 text-[var(--textSoft)] ring-1 ring-white/10',
+  failed: 'bg-red-500/20 text-red-300 ring-1 ring-red-500/30',
+  cancelled: 'bg-gray-500/20 text-gray-300 ring-1 ring-gray-500/30',
+  canceled: 'bg-gray-500/20 text-gray-300 ring-1 ring-gray-500/30',
+};
+
+function formatRelative(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return iso;
+  const diff = Date.now() - then;
+  const seconds = Math.round(diff / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
+
 export default function TasksPage() {
   const [stats, setStats] = useState<TaskQueueStats | null>(null);
+  const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  
+
   const { error: notifyError } = useNotification();
   const { user } = useAuth();
 
-  const loadStats = useCallback(async () => {
+  const loadAll = useCallback(async () => {
     try {
       setIsLoading(true);
-      const result = await chatApi.getTaskQueueStats();
-      if (result.ok && result.data) {
-        setStats(result.data);
-        setLastUpdated(new Date());
+      const [statsRes, listRes] = await Promise.all([
+        chatApi.getTaskQueueStats(),
+        chatApi.listTasks(),
+      ]);
+      if (statsRes.ok && statsRes.data) {
+        setStats(statsRes.data);
       } else {
-        notifyError(result.error || "Failed to load task queue stats");
+        notifyError(statsRes.error || "Failed to load task queue stats");
       }
+      if (listRes.ok && listRes.data) {
+        // Newest first.
+        const sorted = [...listRes.data].sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        setTasks(sorted);
+      }
+      setLastUpdated(new Date());
     } catch (e) {
       notifyError("Failed to load task queue stats");
     } finally {
@@ -65,12 +101,11 @@ export default function TasksPage() {
   }, [notifyError]);
 
   useEffect(() => {
-    loadStats();
-    
-    // Auto-refresh every 10 seconds
-    const interval = setInterval(loadStats, 10000);
+    loadAll();
+    // Auto-refresh every 10 seconds.
+    const interval = setInterval(loadAll, 10000);
     return () => clearInterval(interval);
-  }, [loadStats]);
+  }, [loadAll]);
 
   const canViewTasks = () => {
     return user?.role === 'admin' || user?.role === 'manager';
@@ -110,7 +145,7 @@ export default function TasksPage() {
             New task
           </Link>
           <button
-            onClick={loadStats}
+            onClick={loadAll}
             disabled={isLoading}
             className="rounded-xl bg-white/5 px-4 py-2 text-sm text-white shadow hover:bg-white/10 cursor-pointer flex items-center gap-2 disabled:opacity-50"
           >
@@ -275,6 +310,58 @@ export default function TasksPage() {
           No task queue data available.
         </div>
       )}
+
+      {/* Recent tasks — click any row to jump to its detail page. */}
+      <div className="rounded-2xl border border-white/10 bg-[var(--bgSoft)]/70 p-4 md:p-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-[var(--text)]">Recent tasks</h2>
+          <span className="text-xs text-[var(--textSoft)]">
+            {tasks.length} total
+          </span>
+        </div>
+        {tasks.length === 0 ? (
+          <p className="text-sm text-[var(--textSoft)]">
+            No tasks yet. Dispatch one from{' '}
+            <Link href="/tasks/new" className="underline">
+              /tasks/new
+            </Link>
+            .
+          </p>
+        ) : (
+          <ul className="divide-y divide-white/5">
+            {tasks.slice(0, 50).map((t) => {
+              const pill = STATUS_PILL[t.status] ?? STATUS_PILL.pending;
+              const title =
+                t.query.length > 110
+                  ? `${t.query.slice(0, 110)}…`
+                  : t.query;
+              return (
+                <li key={t.id}>
+                  <Link
+                    href={`/tasks/${t.id}`}
+                    className="group flex items-center gap-3 py-2.5 hover:bg-white/5 rounded-lg px-2 -mx-2 transition"
+                  >
+                    <span
+                      className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-medium shrink-0 ${pill}`}
+                    >
+                      {t.status}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-[var(--text)] truncate">
+                        {title || '(empty demand)'}
+                      </p>
+                      <p className="text-xs text-[var(--textSoft)] mt-0.5">
+                        {formatRelative(t.created_at)} · agent {t.agent_id.slice(0, 8)}…
+                      </p>
+                    </div>
+                    <IconChevronRight className="h-4 w-4 text-[var(--textSoft)] group-hover:text-[var(--text)] shrink-0" />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

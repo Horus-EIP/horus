@@ -20,9 +20,14 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { useNotification } from '@/contexts/notification-context';
 import { useWebSocket } from '@/hooks/use-web-socket';
 import { MessageList, type Message } from '@/components/message-list';
+import type { TaskStepEvent } from '@/lib/types';
 import { ConversationSidebar } from '@/components/chat/conversation-sidebar';
 import { WorkingAgentsBar } from '@/components/chat/working-agents-bar';
 import { useAuth } from '@/components/auth/auth-provider';
+import {
+  FileAttachments,
+  type FileAttachmentsValue,
+} from '@/components/tasks/file-attachments';
 
 const MAX_MESSAGE_LENGTH = 1000;
 const MAX_ROWS = 6;
@@ -41,6 +46,10 @@ function ChatPageContent() {
   const [input, setInput] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [conversationId, setConversationId] = useState<string>('');
+  const [attachments, setAttachments] = useState<FileAttachmentsValue>({
+    attached: [],
+    inline: [],
+  });
   const [isHistoryLoading, setHistoryLoading] = useState<boolean>(false);
   const [hasShownLimitToast, setHasShownLimitToast] = useState(false);
 
@@ -65,6 +74,9 @@ function ChatPageContent() {
   const [agentsById, setAgentsById] = useState<Map<string, Agent>>(new Map());
   const [workingTaskId, setWorkingTaskId] = useState<string | null>(null);
   const [workingTaskDetail, setWorkingTaskDetail] = useState<TaskDetails | null>(null);
+  // Streamed "thought process" steps, keyed by task_id. Populated by the
+  // task_step WS frames the agent worker emits as it runs.
+  const [stepsByTaskId, setStepsByTaskId] = useState<Record<string, TaskStepEvent[]>>({});
 
   const { user } = useAuth();
   const { error: notifyError, success: notifySuccess } = useNotification();
@@ -139,6 +151,12 @@ function ChatPageContent() {
         sender: msg.role === 'user' ? 'user' : 'agent',
         timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
         status: 'sent',
+        // Carry attribution from persisted rows so reload restores Manager
+        // violet bubbles + per-specialist chips. User-role messages have
+        // no attribution and these come through as undefined cleanly.
+        agentId: msg.agentId,
+        agentName: msg.agentName,
+        skillUsed: msg.skillUsed,
       }));
 
       if (cursor) {
@@ -165,12 +183,58 @@ function ChatPageContent() {
     backoffBaseMs: 1000,
     onMessage: (event) => {
       const message = JSON.parse(event.data);
+      // 'task_step' = streaming "thought process" event from the agent worker.
+      // Appended to the per-task bucket so the ThoughtProcessCard renders it
+      // live under the user message that kicked off this task.
+      if (message.type === 'task_step') {
+        const taskId = typeof message.task_id === 'string' ? message.task_id : '';
+        if (!taskId) return;
+        const step: TaskStepEvent = {
+          taskId,
+          agentId:
+            typeof message.agent_id === 'string' ? message.agent_id : undefined,
+          agentName:
+            typeof message.agent_name === 'string'
+              ? message.agent_name
+              : undefined,
+          stepType: String(message.step_type ?? 'unknown'),
+          title: String(message.title ?? message.step_type ?? 'Step'),
+          detail:
+            typeof message.detail === 'string' && message.detail.length
+              ? message.detail
+              : undefined,
+          timestamp:
+            typeof message.timestamp === 'string'
+              ? message.timestamp
+              : new Date().toISOString(),
+          metadata:
+            message.metadata && typeof message.metadata === 'object'
+              ? (message.metadata as Record<string, unknown>)
+              : undefined,
+        };
+        setStepsByTaskId((prev) => {
+          const next = { ...prev };
+          next[taskId] = [...(next[taskId] ?? []), step];
+          return next;
+        });
+        return;
+      }
       // 'agent' = legacy bare-text broadcast (direct-answer / pre-attribution path)
       // 'task_complete' = answer with agent attribution metadata for the chip
       if (message.type === 'agent' || message.type === 'task_complete') {
         const text = String(message.content ?? '').trim();
+        // Manager messages are intermediate orchestration updates (plan
+        // announcement, per-step "routing to X" progress, review decisions).
+        // They should NOT clear the loading state — the chain is still
+        // running and the user expects to see the spinner until the actual
+        // final answer from the last specialist arrives.
+        const isManagerMessage =
+          typeof message.agent_name === 'string' &&
+          message.agent_name === 'Manager';
         if (!text) {
-          setIsLoading(false);
+          if (!isManagerMessage) {
+            setIsLoading(false);
+          }
           return;
         }
         setMessages((prev) => {
@@ -197,7 +261,11 @@ function ChatPageContent() {
           };
           return [...prev, agentMessage];
         });
-        setIsLoading(false);
+        if (!isManagerMessage) {
+          // Only a real specialist's terminal answer clears the spinner.
+          // The chain is still running while Manager messages flow.
+          setIsLoading(false);
+        }
       }
     },
   });
@@ -225,6 +293,42 @@ function ChatPageContent() {
     if (!conversationId) return;
     loadHistory();
   }, [conversationId, loadHistory]);
+
+  // Hydrate the in-progress chain state when the user navigates back to a
+  // conversation whose chain is still running on the backend. Without this,
+  // the chat looks idle ("nothing happening") even though the Manager and
+  // specialists are mid-execution — the WS reconnects but the working bar +
+  // spinner + thought-process card require local state we lost on unmount.
+  useEffect(() => {
+    if (!conversationId) return;
+    let cancelled = false;
+    (async () => {
+      const r = await chatApi.getRunningTasksForConversation(conversationId);
+      if (cancelled || !r.ok || !r.data || r.data.length === 0) return;
+      // Most recent running root task — the one the user is waiting on.
+      const running = r.data[0];
+      setWorkingTaskId(running.id);
+      setIsLoading(true);
+      // Attach the root task id to the most recent USER message so the
+      // thought-process card pinned to it can pick up incoming step events.
+      // Best-effort: the message exists because loadHistory ran first.
+      setMessages((prev) => {
+        // Walk from the end to find the latest user message without an
+        // attached taskId — that's the demand that kicked off this chain.
+        for (let i = prev.length - 1; i >= 0; i--) {
+          if (prev[i].sender === 'user' && !prev[i].taskId) {
+            const updated = [...prev];
+            updated[i] = { ...updated[i], taskId: running.id };
+            return updated;
+          }
+        }
+        return prev;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -397,10 +501,18 @@ function ChatPageContent() {
     setWorkingTaskId(null);
     setWorkingTaskDetail(null);
 
+    // Empty skills_required + no mode → orchestrator runs its LLM router on
+    // the demand and picks the best-matching specialist (e.g. Finance-Analyst
+    // for "summarise Q4 financial risk"). Falls back to General-Assistant via
+    // the catch-all path when nothing matches. Previously hardcoded to
+    // ``['knowledge_retrieval']``, which short-circuited routing onto the
+    // General-Assistant for every chat message and starved the specialists.
     const result = await chatApi.createTask({
       demand,
       conversation_id: String(conversationId),
-      skills_required: ['knowledge_retrieval'],
+      skills_required: [],
+      attached_files: attachments.attached,
+      inline_files: attachments.inline,
     });
 
     if (!result.ok) {
@@ -412,13 +524,47 @@ function ChatPageContent() {
       return;
     }
 
-    if (result.data?.task_id) {
-      setWorkingTaskId(result.data.task_id);
+    const newTaskId = result.data?.task_id;
+    const directAnswer = !newTaskId && Boolean(result.data?.result);
+    // Direct-answer path: MAS's orchestrator router decided no agent dispatch
+    // was needed (typical for arithmetic / greetings / DIRECT_ANSWER class).
+    // Synthesize a task_id and one step so the thought-process card still
+    // renders — that way the user sees *why* there's no agent attribution
+    // and which model actually answered (the small 1.5B router, not the 4B
+    // worker). The agent never runs in this path, so no real steps come.
+    const effectiveTaskId = newTaskId ?? (directAnswer ? `direct-${Date.now()}` : undefined);
+    if (newTaskId) {
+      setWorkingTaskId(newTaskId);
+    }
+    if (directAnswer && effectiveTaskId) {
+      setStepsByTaskId((prev) => ({
+        ...prev,
+        [effectiveTaskId]: [
+          {
+            taskId: effectiveTaskId,
+            stepType: 'reasoning.done',
+            title: 'Orchestrator answered directly',
+            detail:
+              "MAS's router classified this as a DIRECT_ANSWER and replied " +
+              'without dispatching to an agent worker. No retrieval ran, no ' +
+              'specialist persona was applied.',
+            timestamp: new Date().toISOString(),
+            metadata: { path: 'orchestrator_direct_answer' },
+          },
+        ],
+      }));
     }
 
     setMessages((prev) =>
-      prev.map((msg) => (msg.id === userMessageId ? { ...msg, status: 'sent' } : msg))
+      prev.map((msg) =>
+        msg.id === userMessageId
+          ? { ...msg, status: 'sent', taskId: effectiveTaskId ?? msg.taskId }
+          : msg
+      )
     );
+    // Attachments are scoped to a single message — clear them after dispatch
+    // so the next one starts clean unless the user picks again.
+    setAttachments({ attached: [], inline: [] });
   };
 
   return (
@@ -651,6 +797,8 @@ function ChatPageContent() {
               isHistoryLoading={isHistoryLoading}
               isLoading={isLoading}
               messagesEndRef={messagesEndRef}
+              stepsByTaskId={stepsByTaskId}
+              workingTaskId={workingTaskId}
               emptyStateTitle={
                 conversationId ? undefined : 'No conversation selected'
               }
@@ -677,6 +825,16 @@ function ChatPageContent() {
           )}
 
           <div className="safe-area-bottom mx-auto w-full flex-none rounded-3xl border border-[var(--textSoft)] bg-[var(--bgInputArea)] px-4 py-2 text-base text-[var(--text)] md:p-3">
+            {conversationId && (
+              <div className="mx-auto mb-2 max-w-[75vw] md:max-w-[60vw]">
+                <FileAttachments
+                  value={attachments}
+                  onChange={setAttachments}
+                  compact
+                  onError={notifyError}
+                />
+              </div>
+            )}
             <form
               onSubmit={submit}
               className="mx-auto flex max-w-[75vw] items-end gap-2 md:max-w-[60vw]"

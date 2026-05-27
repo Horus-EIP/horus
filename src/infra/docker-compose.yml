@@ -37,9 +37,6 @@ services:
     build:
       context: ../services/mas
       dockerfile: Dockerfile
-      args:
-        # Set DOWNLOAD_LLM=0 for air-gapped builds and copy models into context instead (see docs).
-        DOWNLOAD_LLM: ${DOWNLOAD_LLM:-1}
     container_name: mas
     mem_limit: 14g
     memswap_limit: 16g
@@ -68,17 +65,26 @@ services:
       - LLM_AUTOINIT=${LLM_AUTOINIT:-1}
       # 0 = use CUDA when the container sees a GPU (`gpus: all` above). 1 = CPU-only orchestrator LLM.
       - LLM_FORCE_CPU=${LLM_FORCE_CPU:-0}
-      # OpenTelemetry - Send to Tempo
-      - OTEL_ENABLED=true
+      # OpenTelemetry — disabled by default to silence retry-to-tempo spam
+      # when the observability profile isn't running. Enable by flipping both
+      # OTEL_SDK_DISABLED=false and OTEL_ENABLED=true in your .env.
+      - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-true}
+      - OTEL_ENABLED=${OTEL_ENABLED:-false}
       - OTEL_SERVICE_NAME=mas
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
       - JSON_LOGGING=true
       - LOG_LEVEL=INFO
       # Wall-clock cap for RUNNING tasks (LLM + agent). TASK_TIMEOUT_SECONDS also accepted by MAS settings.
       - TASK_TIMEOUT=${TASK_TIMEOUT:-1800}
-      # Offline by default after image build; set to 0 in .env to allow Hub at runtime.
-      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-1}
-      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-1}
+      # MAS is a thin router/decomposer — it doesn't need the full 4B model.
+      # Default: Qwen2.5-1.5B-Instruct (~3 GB). The agent service keeps the
+      # bigger Qwen3-4B for actual task execution. Set LLM_MODEL_ID to bump
+      # MAS to a heavier model if your decomposition prompts need it.
+      - LLM_MODEL_ID=${LLM_MODEL_ID:-Qwen/Qwen2.5-1.5B-Instruct}
+      - LLM_MODEL_DIR=/app/models/llm
+      # Default ONLINE so first-run can pull. Flip to 1 once the cache is warm.
+      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
+      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
     healthcheck:
       # HTTP is only accepted after lifespan completes (DB + RabbitMQ); this gates dependents.
       # Use a generous timeout: a single Uvicorn worker can be busy with HF/LLM I/O; short
@@ -99,6 +105,8 @@ services:
       - "8000:8000"
     networks:
       - horus-net
+    volumes:
+      - mas_model_cache:/app/models/llm
 
   web-client:
     build:
@@ -127,8 +135,6 @@ services:
     build:
       context: ../services/agent
       dockerfile: Dockerfile
-      args:
-        DOWNLOAD_LLM: ${DOWNLOAD_LLM:-1}
     container_name: agent
     # Agent inference (Qwen instruct decision LLM, spaCy tools, etc.): NVIDIA Container Toolkit on the host.
     # No GPU? Remove the next line or run without requesting devices (Compose will error if unsupported).
@@ -152,16 +158,31 @@ services:
       - KNOWLEDGE_STORE_RETRY_DELAY=1.0
       # auto = use CUDA inside the container when visible; set MODEL_DEVICE=cpu in .env to force CPU only.
       - MODEL_DEVICE=${MODEL_DEVICE:-auto}
+      # The agent runs RAG synthesis + answer generation, so it gets the
+      # bigger model (Qwen3-4B). MAS routes/decomposes with a 1.5B Qwen.
+      # Override MODEL_NAME to share a single model across both services.
       - MODEL_NAME=${MODEL_NAME:-Qwen/Qwen3-4B-Instruct-2507}
-      # 0 = load Qwen at agent startup (ready for first chat; slower container boot).
+      - MODEL_DIR=/app/models/llm
+      # The agent worker registers under multiple identities (General-Assistant,
+      # Finance-Analyst, Compliance-Officer, Document-Writer, Researcher) by
+      # default, all backed by the same Qwen instance. To run as a single
+      # specialised identity instead, set AGENT_NAME / AGENT_TYPE / AGENT_SKILLS
+      # in your .env. For a fully custom lineup, pass AGENT_PROFILES_JSON
+      # (a JSON array of {name, type, skills, description} objects).
+      # 0 = load the LLM at agent startup (ready for first chat; slower boot).
       - AGENT_LAZY_DECISION_MODEL=${AGENT_LAZY_DECISION_MODEL:-0}
       - AGENT_SPACY_PREFER_SM=1
-      # OpenTelemetry instrumentation for Tempo
-      - OTEL_ENABLED=true
+      # OpenTelemetry instrumentation. Disabled by default to avoid loud
+      # retry logs when the observability profile isn't running. To enable:
+      #   1. Set OTEL_SDK_DISABLED=false and OTEL_ENABLED=true in .env
+      #   2. Start the stack with --profile observability so Tempo is up
+      - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-true}
+      - OTEL_ENABLED=${OTEL_ENABLED:-false}
       - OTEL_SERVICE_NAME=agent
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
-      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-1}
-      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-1}
+      # Default ONLINE so first-run can pull. Flip to 1 once the cache is warm.
+      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
+      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
     depends_on:
       mas:
         condition: service_healthy
@@ -175,6 +196,7 @@ services:
       - horus-net
     volumes:
       - ../services/agent/app:/app
+      - agent_model_cache:/app/models/llm
 
   knowledge_store:
     build:
@@ -187,10 +209,11 @@ services:
       - POSTHOG_DISABLED=true
       - SENTENCE_TRANSFORMERS_NO_TELEMETRY=1
       - HF_HUB_DISABLE_TELEMETRY=1
-      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-1}
-      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-1}
-      # OpenTelemetry instrumentation for Tempo
-      - OTEL_ENABLED=true
+      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
+      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
+      # OpenTelemetry — off by default; see mas/agent env blocks above.
+      - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-true}
+      - OTEL_ENABLED=${OTEL_ENABLED:-false}
       - OTEL_SERVICE_NAME=knowledge-store
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
     ports:
@@ -255,6 +278,8 @@ services:
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
+    # Opt-in: `docker compose --profile admin up` to start.
+    profiles: ["admin"]
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     env_file:
@@ -272,6 +297,7 @@ services:
   redisinsight:
     image: redis/redisinsight:latest
     container_name: redisinsight
+    profiles: ["admin"]
     depends_on:
       - redis
     ports:
@@ -287,9 +313,12 @@ services:
   # Single UI at http://localhost:3301 for traces, metrics, and container logs
   # =============================================================================
 
+  # Opt-in: `docker compose --profile observability up` to start the whole
+  # logs/metrics/traces stack. Default `up` skips it to keep the dev loop light.
   loki:
     image: grafana/loki:3.4.2
     container_name: loki
+    profiles: ["observability"]
     command: ["-config.file=/etc/loki/loki.yaml"]
     volumes:
       - ./grafana/loki.yaml:/etc/loki/loki.yaml:ro
@@ -302,6 +331,7 @@ services:
   promtail:
     image: grafana/promtail:3.4.2
     container_name: promtail
+    profiles: ["observability"]
     command: ["-config.file=/etc/promtail/promtail.yaml"]
     volumes:
       - ./grafana/promtail.yaml:/etc/promtail/promtail.yaml:ro
@@ -317,6 +347,7 @@ services:
   tempo:
     image: grafana/tempo:2.6.0
     container_name: tempo
+    profiles: ["observability"]
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./grafana/tempo.yaml:/etc/tempo.yaml:ro
@@ -332,6 +363,7 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
+    profiles: ["observability"]
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -347,6 +379,7 @@ services:
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
+    profiles: ["observability"]
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
@@ -385,3 +418,7 @@ volumes:
   prometheus_data:
   grafana_data:
   loki_data:
+  # Per-service LLM caches: populated by bootstrap_llm.py on first container
+  # start, persist across rebuilds so model downloads happen exactly once.
+  mas_model_cache:
+  agent_model_cache:

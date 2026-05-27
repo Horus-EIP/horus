@@ -154,8 +154,8 @@ CREATE_TASK_OPENAPI_EXTRA = {
                             "minLength": 1,
                         },
                         "conversation_id": {
-                            "type": "string",
-                            "description": "ID of the conversation this task belongs to",
+                            "type": ["integer", "null"],
+                            "description": "Optional conversation this task belongs to. Omit (or null) for standalone tasks created from the Tasks page.",
                         },
                         "skills_required": {
                             "type": "array",
@@ -163,8 +163,39 @@ CREATE_TASK_OPENAPI_EXTRA = {
                             "description": "Array of skill tags for agent matching",
                             "minItems": 1,
                         },
+                        "attached_files": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "filename": {"type": "string"},
+                                },
+                                "required": ["filename"],
+                            },
+                            "description": (
+                                "Files already stored in the knowledge store, "
+                                "referenced by filename. The worker resolves "
+                                "their text on demand."
+                            ),
+                        },
+                        "inline_files": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "filename": {"type": "string"},
+                                    "mime": {"type": "string"},
+                                    "content_b64": {"type": "string"},
+                                },
+                                "required": ["filename", "content_b64"],
+                            },
+                            "description": (
+                                "One-shot files attached without persisting to "
+                                "the knowledge store. Capped at ~2 MB each."
+                            ),
+                        },
                     },
-                    "required": ["demand", "conversation_id", "skills_required"],
+                    "required": ["demand", "skills_required"],
                 },
                 "examples": {
                     "document_analysis": {
@@ -342,8 +373,8 @@ SHARE_RESULT_OPENAPI_EXTRA = {
                             "minLength": 1,
                         },
                         "conversation_id": {
-                            "type": "string",
-                            "description": "Conversation ID this task belongs to",
+                            "type": ["string", "null"],
+                            "description": "Conversation ID this task belongs to. Empty/omitted for standalone tasks.",
                         },
                         "agent_id": {
                             "type": "string",
@@ -361,7 +392,6 @@ SHARE_RESULT_OPENAPI_EXTRA = {
                     "required": [
                         "task_id",
                         "result",
-                        "conversation_id",
                         "agent_id",
                     ],
                 },

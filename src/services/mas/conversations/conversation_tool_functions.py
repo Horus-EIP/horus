@@ -58,13 +58,19 @@ def get_history(conv_id: int, db: Session = Depends(get_db)) -> List[Dict[str, A
                 f"Retrieved {len(messages)} messages - Conversation ID: {conv_id}"
             )
 
-        # Convert to dictionaries for consistency
+        # Convert to dictionaries for consistency. Attribution fields are
+        # included so the chat history endpoint returns enough metadata for
+        # the frontend to restore agent chips + Manager violet styling on a
+        # full page reload.
         return [
             {
                 "id": msg.id,
                 "role": msg.role,
                 "content": msg.content,
                 "created_at": msg.created_at.isoformat() if msg.created_at else None,
+                "agent_id": msg.agent_id,
+                "agent_name": msg.agent_name,
+                "skill_used": msg.skill_used,
             }
             for msg in messages
         ]
@@ -207,7 +213,14 @@ def get_all_conversations(db: Session = Depends(get_db)) -> List[Dict[str, Any]]
 
 
 def add_messages(
-    author: str, message: str, conversation_id: int, db: Session = Depends(get_db)
+    author: str,
+    message: str,
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    *,
+    agent_id: Optional[str] = None,
+    agent_name: Optional[str] = None,
+    skill_used: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Append one message to a conversation inside a savepoint.
 
@@ -216,6 +229,11 @@ def add_messages(
         message: Message body.
         conversation_id: Target conversation.
         db: Active session (DI or passed in).
+        agent_id: Originating agent UUID (kw-only). Persists alongside the
+            row so chat-history reload can restore attribution chips +
+            Manager violet styling. Pass ``None`` for user messages.
+        agent_name: Human-readable agent name (kw-only).
+        skill_used: Skill the agent exercised (kw-only).
 
     Returns:
         The created message dict, or ``None`` if the conversation is missing
@@ -244,8 +262,15 @@ def add_messages(
         # Create savepoint for nested transaction
         savepoint = db.begin_nested()
 
-        # Create and add message
-        msg = Messages(role=author, content=message, conversation_id=conversation_id)
+        # Create and add message (with optional attribution metadata).
+        msg = Messages(
+            role=author,
+            content=message,
+            conversation_id=conversation_id,
+            agent_id=agent_id,
+            agent_name=agent_name,
+            skill_used=skill_used,
+        )
         db.add(msg)
 
         # Commit nested transaction
@@ -265,6 +290,9 @@ def add_messages(
             "role": msg.role,
             "content": msg.content,
             "created_at": msg.created_at.isoformat() if msg.created_at else None,
+            "agent_id": msg.agent_id,
+            "agent_name": msg.agent_name,
+            "skill_used": msg.skill_used,
         }
 
     except SQLAlchemyError as e:

@@ -26,6 +26,27 @@ logger = get_logger("seed_agents")
 
 DEFAULT_AGENTS: list[dict] = [
     {
+        # Orchestrator agent. Lives only in MAS — no worker container runs as
+        # Manager. The row exists so chain dispatch + cyclic review can be
+        # attributed to a stable identity in the chat UI, and so the Manager
+        # has skills / description users can see in the agent directory.
+        "name": "Manager",
+        "type": AgentTypes.MANAGER,
+        "skills": [
+            "orchestration",
+            "planning",
+            "task_decomposition",
+            "review",
+            "delegation",
+        ],
+        "description": (
+            "Multi-agent orchestrator. Plans which specialists answer a "
+            "user demand, dispatches them in order, reviews each result, and "
+            "re-routes back to earlier specialists when an intermediate "
+            "answer is incomplete. Runs server-side, not on a worker."
+        ),
+    },
+    {
         "name": "General-Assistant",
         "type": AgentTypes.GENERAL,
         "skills": ["knowledge_retrieval", "decision_making", "rag_pipeline"],
@@ -80,14 +101,18 @@ def seed_default_agents(db: Session) -> int:
     for entry in DEFAULT_AGENTS:
         if entry["name"] in existing_names:
             continue
+        # Manager lives only in MAS (no worker process), so seed it active
+        # with a fresh heartbeat. Every other seeded row is a placeholder
+        # waiting for its real worker to register and override it.
+        is_manager = entry["type"] == AgentTypes.MANAGER
         try:
             agent = Agents(
                 id=str(uuid.uuid4()),
                 name=entry["name"],
                 skills=entry["skills"],
-                status="inactive",
+                status="active" if is_manager else "inactive",
                 description=entry["description"],
-                last_heartbeat=stale_at,
+                last_heartbeat=datetime.now(timezone.utc) if is_manager else stale_at,
                 type=entry["type"],
                 # Unguessable hash so the seeded row can't authenticate; a
                 # registering worker will replace this entry via the existing

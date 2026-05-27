@@ -137,6 +137,130 @@ def build_subtask_list(subtask_entity, agents_available, db: Session = None):
     return action_list
 
 
+def _heuristic_decompose(user_input: str, db: Session) -> tuple:
+    """Skill-embedding fallback when the LLM planner produces no usable plan.
+
+    Uses the in-memory ``skill_cache`` (MiniLM cosine similarity over every
+    registered agent's skills) to pick the top 2-4 unique specialists for the
+    demand, then builds a deterministic sequential chain — one subtask per
+    agent. Each subtask asks that agent to address the demand from their
+    domain angle; the chain transcript machinery from Gap 2 then makes sure
+    later agents see earlier outputs.
+
+    Two-pass agent selection so seeded-but-not-yet-heartbeated specialists
+    are still usable for demos:
+
+    1. Pass A — prefer agents with ``status='active'`` (worker has heartbeated
+       recently). Real production routing.
+    2. Pass B — if Pass A finds < 2 specialists, fall back to any non-Manager
+       agent in the directory. The RabbitMQ queues are type-keyed; a worker
+       running on that type's queue will pick the work up regardless of
+       whether MAS's heartbeat clock has caught up.
+
+    Returns ``(first_action, actions_list)`` in the same shape as
+    ``decompose_task``. Returns ``(None, [])`` only if the skill cache is
+    cold or the directory has zero non-Manager rows.
+    """
+    from db.models import Agents
+    from core.skill_cache import rank_skills
+
+    try:
+        # Wider net + lower floor than before so under-resourced demos
+        # (fewer agents seeded, looser embeddings) still produce a plan.
+        ranked = rank_skills(user_input, top_k=12, min_score=0.05)
+    except Exception as exc:
+        logger.warning("Heuristic decomposition: skill cache rank failed: %s", exc)
+        ranked = []
+
+    def _build(active_only: bool) -> list[dict]:
+        seen: set = set()
+        out: list[dict] = []
+        for r in ranked:
+            agent_id = r.get("agent_id")
+            if not agent_id or agent_id in seen:
+                continue
+            agent_row = db.query(Agents).filter(Agents.id == agent_id).first()
+            if agent_row is None:
+                continue
+            if agent_row.name == "Manager":
+                continue
+            if active_only and (agent_row.status or "").lower() != "active":
+                continue
+            seen.add(agent_id)
+            out.append(
+                {
+                    "agent_id": agent_id,
+                    "agent_name": agent_row.name,
+                    "agent_type": (
+                        agent_row.type.value if agent_row.type else "general"
+                    ),
+                    "skill": r.get("skill", ""),
+                    "score": r.get("score", 0.0),
+                }
+            )
+            if len(out) >= 4:
+                break
+        return out
+
+    chosen = _build(active_only=True)
+    if len(chosen) < 2:
+        logger.info(
+            "Heuristic decomposition: only %d active specialist(s) match; "
+            "widening to all directory rows.",
+            len(chosen),
+        )
+        chosen = _build(active_only=False)
+
+    if len(chosen) < 2:
+        # Last-ditch effort: ignore the skill ranker entirely and pick the
+        # first two non-Manager agents from the directory. Better than
+        # giving the user a flat 'no plan' error — even an under-matched
+        # chain demonstrates orchestration.
+        any_agents = (
+            db.query(Agents)
+            .filter(Agents.name != "Manager")
+            .order_by(Agents.last_heartbeat.desc())
+            .limit(4)
+            .all()
+        )
+        chosen = [
+            {
+                "agent_id": a.id,
+                "agent_name": a.name,
+                "agent_type": a.type.value if a.type else "general",
+                "skill": (a.skills[0] if a.skills else "knowledge_retrieval"),
+                "score": 0.0,
+            }
+            for a in any_agents
+        ]
+        if len(chosen) < 2:
+            logger.warning(
+                "Heuristic decomposition: directory has only %d non-Manager agent(s); "
+                "cannot build a multi-agent chain.",
+                len(chosen),
+            )
+            return None, []
+
+    action_list: list[tuple[str, str]] = []
+    for step in chosen:
+        skill_label = (step.get("skill") or "knowledge retrieval").replace("_", " ")
+        sub_demand = (
+            f"Focus on the {skill_label} aspects of this request: "
+            f"{user_input}"
+        )
+        action_list.append((step["agent_id"], sub_demand))
+
+    pretty_log(
+        f"HEURISTIC PLAN: {len(action_list)} step(s) — "
+        + " → ".join(c["agent_name"] for c in chosen),
+        "🧮",
+    )
+
+    first_action = action_list[0]
+    actions_list = action_list[1:]
+    return first_action, actions_list
+
+
 def decompose_task(user_input: str, db: Session = None):
     pretty_log(f"INITIATING TASK DECOMPOSITION FOR: '{user_input}'", "🔨")
 
@@ -159,21 +283,26 @@ def decompose_task(user_input: str, db: Session = None):
     try:
         json_output = json.loads(output)
         if not json_output.get("sub_tasks"):
-            pretty_log("NO SUB-TASKS GENERATED", "⚠️")
-            return None, []
+            pretty_log("NO SUB-TASKS GENERATED — TRYING HEURISTIC FALLBACK", "⚠️")
+            return _heuristic_decompose(user_input, db)
 
         pretty_log(f"GENERATED {len(json_output['sub_tasks'])} SUB-TASKS", "📋")
+        # Be lenient about the ``status`` field — the 1.5B planner often omits
+        # it or types it wrong. Default to "pending" so an otherwise-valid plan
+        # isn't thrown away over a missing key.
+        for st in json_output["sub_tasks"]:
+            if isinstance(st, dict) and "status" not in st:
+                st["status"] = "pending"
+            elif isinstance(st, dict) and st.get("status") != "pending":
+                st["status"] = "pending"
+            if isinstance(st, dict) and "depends_on" not in st:
+                st["depends_on"] = []
         for st in json_output["sub_tasks"]:
             pretty_log(
                 f"  [{st['id']}] {st['agent_type'].upper()}: {st['description']}", "🔹"
             )
 
         entity = CollaborativeTask(**json_output)
-
-        for element in json_output["sub_tasks"]:
-            if element["status"] != "pending":
-                logger.error(f"Failed to decode LLM decomposition output: {output}")
-                return None, []
 
         actions_list = build_subtask_list(entity, available_agents, db)
 
@@ -183,24 +312,167 @@ def decompose_task(user_input: str, db: Session = None):
             actions_list.pop(0)
             return first_action, actions_list
         else:
-            return None, []
+            pretty_log("PLANNER MAPPED TO NO ACTIONS — TRYING HEURISTIC FALLBACK", "⚠️")
+            return _heuristic_decompose(user_input, db)
 
     except json.JSONDecodeError:
         logger.error(f"Failed to decode LLM decomposition output: {output}")
-        pretty_log("FAILED TO PARSE PLAN JSON", "❌")
-        return None, []
+        pretty_log("FAILED TO PARSE PLAN JSON — TRYING HEURISTIC FALLBACK", "❌")
+        return _heuristic_decompose(user_input, db)
     except Exception as e:
         logger.error(f"Validation error in task decomposition: {e}")
-        pretty_log(f"VALIDATION ERROR: {e}", "❌")
-        return None, []
+        pretty_log(f"VALIDATION ERROR: {e} — TRYING HEURISTIC FALLBACK", "❌")
+        return _heuristic_decompose(user_input, db)
+
+
+def get_manager_agent(db: Session):
+    """Return the seeded ``Manager`` agent row, or ``None`` if missing.
+
+    Used by chat broadcasts so the Manager's plan announcement and per-step
+    review decisions are attributed to a real ``Agents`` row in the UI.
+    """
+    from db.models import Agents
+
+    return (
+        db.query(Agents)
+        .filter(Agents.name == "Manager")
+        .first()
+    )
+
+
+def _planned_steps_from_actions(action_list: list, db: Session) -> list[dict]:
+    """Re-derive a ``[{agent_type, description}]`` view from the planner's action list.
+
+    The planner internally returns ``[(agent_id, demand), ...]`` after mapping
+    agent types to concrete IDs in ``build_subtask_list``. For the Manager's
+    announcement prompt we need the human-readable type, so we look each agent
+    up in the directory once.
+    """
+    from db.models import Agents
+
+    out: list[dict] = []
+    if not action_list:
+        return out
+    agent_ids = list({a[0] for a in action_list if a and a[0]})
+    rows = db.query(Agents).filter(Agents.id.in_(agent_ids)).all() if agent_ids else []
+    by_id = {r.id: r for r in rows}
+    for agent_id, demand in action_list:
+        row = by_id.get(agent_id)
+        out.append(
+            {
+                "agent_type": (
+                    row.type.value if (row and row.type) else "general"
+                ),
+                "agent_name": row.name if row else "?",
+                "description": demand,
+            }
+        )
+    return out
+
+
+def manager_announce_plan(
+    user_demand: str, action_list: list, db: Session
+) -> str:
+    """Ask the Manager LLM to draft the chat message that announces a plan.
+
+    Returns plain text (no JSON, no code fences) — the message is fanned out
+    to chat clients as an attributed Manager turn before the first specialist
+    starts. Failures are non-fatal: returns a deterministic fallback string so
+    the user always sees *something* from the Manager.
+    """
+    from tasks.prompts import get_manager_announcement_prompt
+
+    steps = _planned_steps_from_actions(action_list, db)
+    if not steps:
+        return "I'm dispatching this work to a specialist now."
+
+    try:
+        prompt = get_manager_announcement_prompt(user_demand, steps)
+        text = ask_llm(prompt, max_new_tokens=256).strip()
+        # Strip markdown/code fences a small model sometimes adds despite
+        # being told plain text.
+        for fence in ("```text", "```markdown", "```"):
+            if text.startswith(fence):
+                text = text[len(fence):].lstrip()
+            if text.endswith("```"):
+                text = text[:-3].rstrip()
+        if not text:
+            raise ValueError("empty LLM response")
+        return text
+    except Exception as exc:
+        logger.warning("Manager announcement LLM call failed: %s", exc)
+        # Deterministic fallback that still demonstrates orchestration.
+        listing = "; ".join(
+            f"{s['agent_name']} ({s['description'][:80]})" for s in steps[:4]
+        )
+        return (
+            f"I'll handle this in {len(steps)} step(s). Dispatching: {listing}."
+        )
+
+
+def manager_review_step(
+    user_demand: str,
+    transcript: str,
+    remaining_actions: list,
+    available_agent_types: list[str],
+    db: Session,
+) -> dict:
+    """Ask the Manager LLM what to do after a subtask completes.
+
+    Returns a dict with ``decision`` ∈ {``CONTINUE``, ``INSERT``, ``DONE``}.
+    For ``INSERT`` decisions, ``next_agent_type`` and ``next_action`` are
+    populated and the caller should resolve ``next_agent_type`` to an agent ID
+    and prepend the new action to the chain. Failure (LLM parse error, etc.)
+    returns ``{"decision": "CONTINUE"}`` so the existing pipeline keeps moving.
+    """
+    from tasks.prompts import get_manager_review_prompt
+
+    remaining_view = _planned_steps_from_actions(remaining_actions, db)
+    try:
+        prompt = get_manager_review_prompt(
+            user_demand=user_demand,
+            transcript=transcript,
+            remaining_steps=remaining_view,
+            available_agent_types=available_agent_types,
+        )
+        raw = ask_llm(prompt, max_new_tokens=384)
+        cleaned = clean_json_output(raw)
+        parsed = json.loads(cleaned)
+    except Exception as exc:
+        logger.warning("Manager review LLM call failed: %s — defaulting to CONTINUE", exc)
+        return {"decision": "CONTINUE"}
+
+    decision = (parsed.get("decision") or "CONTINUE").upper()
+    if decision not in ("CONTINUE", "INSERT", "DONE"):
+        decision = "CONTINUE"
+    return {
+        "decision": decision,
+        "next_agent_type": (parsed.get("next_agent_type") or "").lower() or None,
+        "next_action": parsed.get("next_action") or None,
+        "reasoning": parsed.get("reasoning") or "",
+    }
 
 
 def select_agent_for_task(user_input: str, db: Session = None):
     """Route a user query to the right agent via the LLM intent router.
 
     Returns ``(first_agent_id, action_text, direct_response, remaining_actions)``.
-    Only one of ``first_agent_id`` or ``direct_response`` is set; all-None means
-    the caller should fall back to ``decompose_task``.
+
+    Three router classifications drive the return shape:
+
+    - ``SINGLE_AGENT`` → ``(agent_id, rewritten_input, None, [])`` — caller
+      dispatches to that one agent.
+    - ``DIRECT_ANSWER`` → ``(None, None, "Response for user : ...", [])`` —
+      caller returns the orchestrator's answer immediately.
+    - ``COMPLEX_TASK`` → runs the planner inline and returns
+      ``(first_agent_id, first_demand, None, remaining_actions)`` so the
+      existing single-agent dispatch + subtask-chaining path handles it.
+      Multi-agent collaboration fires automatically here without the caller
+      needing to know whether the request was single- or multi-agent.
+
+    All-None ``(None, None, None, [])`` means the router couldn't decide
+    (JSON parse failure, unknown classification, or the planner produced no
+    plan) and the caller should fall back to its skill-match / catch-all paths.
     """
     pretty_log(f"ANALYZING USER INPUT: '{user_input}'", "🔍")
 
@@ -242,8 +514,30 @@ def select_agent_for_task(user_input: str, db: Session = None):
     pretty_log(f"ROUTER CLASSIFICATION: {classification.upper()}", "🎯")
 
     if classification == "COMPLEX_TASK":
-        logger.info("LLM requested DECOMPOSITION. Returning control to pipeline.")
-        pretty_log("COMPLEX TASK DETECTED -> DELEGATING TO PLANNER", "🔨")
+        # Multi-agent collaboration is the headline feature of this platform —
+        # when the router flags a request as COMPLEX_TASK, hand it straight to
+        # the planner here so the caller doesn't fall back to single-agent
+        # paths (skill-match, auto-create-specialist, catch-all) that would
+        # capture the request before decomposition could ever fire. Returning
+        # the planner's output through the existing 4-tuple lets the regular
+        # subtask-chaining in routes.py + tasks-result/ kick in unchanged.
+        logger.info("LLM requested DECOMPOSITION. Inlining planner.")
+        pretty_log("COMPLEX TASK DETECTED -> RUNNING PLANNER INLINE", "🔨")
+        try:
+            first_action, actions_list = decompose_task(user_input, db)
+        except Exception as exc:
+            logger.exception("Inline decomposition raised: %s", exc)
+            return None, None, None, []
+        if first_action:
+            first_agent, first_demand = first_action
+            pretty_log(
+                f"PLAN READY: {len(actions_list) + 1} subtask(s), first -> {first_agent}",
+                "🗺️",
+            )
+            return first_agent, first_demand, None, actions_list
+        # Planner produced no plan — fall through to the legacy all-None
+        # return so the caller's downstream fallbacks (skill-match → auto-
+        # create → catch-all) still get a chance to dispatch something.
         return None, None, None, []
 
     if classification == "DIRECT_ANSWER":

@@ -8,6 +8,11 @@ import { useDisclosure } from '@mantine/hooks';
 import { Modal } from '@mantine/core';
 import { config } from '@/utils/config';
 import { IconTrash } from '@tabler/icons-react';
+import { UploadProgress } from '@/components/knowledge-store/upload-progress';
+import {
+  knowledgeStoreApi,
+  type UploadProgress as UploadProgressData,
+} from '@/lib/knowledge-store/api';
 
 interface ToUpload {
   file: File;
@@ -40,6 +45,12 @@ export default function KnowledgeStorePage() {
   const [uploadOpened, { open: openUpload, close: closeUpload }] = useDisclosure(false);
   const [detailDoc, setDetailDoc] = useState<Document | null>(null);
   const [detailOpened, { open: openDetail, close: closeDetail }] = useDisclosure(false);
+  const [uploadProgress, setUploadProgress] =
+    useState<UploadProgressData | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const isUploading =
+    uploadProgress?.phase === 'uploading' ||
+    uploadProgress?.phase === 'processing';
 
   const getDocuments = useCallback(async () => {
     const response = await fetch(ksUrl('/file'), { method: 'GET' });
@@ -95,22 +106,35 @@ export default function KnowledgeStorePage() {
   };
 
   const uploadDocuments = async () => {
-    const formData = new FormData();
-    toUpload.forEach((doc) => {
-      formData.append('files', doc[0].file);
+    const files = toUpload.map((doc) => doc[0].file);
+    if (!files.length) return;
+
+    setUploadError(null);
+    setUploadProgress({
+      phase: 'uploading',
+      loadedBytes: 0,
+      totalBytes: files.reduce((sum, f) => sum + f.size, 0),
+      bytesPerSecond: 0,
+      etaSeconds: null,
     });
 
-    const response = await fetch(ksUrl('/file'), {
-      method: 'POST',
-      body: formData,
-    });
+    const result = await knowledgeStoreApi.uploadDocumentsWithProgress(
+      files,
+      (snapshot) => setUploadProgress(snapshot)
+    );
 
-    if (response.ok) {
+    if (result.ok) {
       setToUpload([]);
-      closeUpload();
+      await getDocuments();
+      // Hold the "Uploaded and indexed" confirmation on screen for a beat so
+      // the user actually sees the success state before the modal closes.
+      window.setTimeout(() => {
+        setUploadProgress(null);
+        closeUpload();
+      }, 1200);
+    } else {
+      setUploadError(result.error || 'Upload failed');
     }
-    await response.json();
-    await getDocuments();
   };
 
   const deleteDocument = async (index: number) => {
@@ -186,12 +210,19 @@ export default function KnowledgeStorePage() {
         </div>
         <Modal
           opened={uploadOpened}
-          onClose={closeUpload}
+          onClose={() => {
+            if (isUploading) return; // don't let the user yank an in-flight upload
+            setUploadProgress(null);
+            closeUpload();
+          }}
           title="Upload Files"
           size="auto"
           overlayProps={{ backgroundOpacity: 0.55, blur: 3 }}
           style={{ color: 'white' }}
           centered
+          withCloseButton={!isUploading}
+          closeOnClickOutside={!isUploading}
+          closeOnEscape={!isUploading}
         >
           <FileUpload onFilesSelected={filesSelected} />
           <Info
@@ -202,10 +233,18 @@ export default function KnowledgeStorePage() {
               getFileExtension(doc[0].file.name),
               `${doc[0].file.size} bytes`,
             ])}
-            actions={modalActions}
-            button="Upload"
-            onButton={uploadDocuments}
+            actions={isUploading ? [] : modalActions}
+            button={isUploading ? undefined : 'Upload'}
+            onButton={isUploading ? undefined : uploadDocuments}
           />
+          {uploadProgress && (
+            <div className="mt-3">
+              <UploadProgress
+                progress={uploadProgress}
+                errorDetail={uploadError}
+              />
+            </div>
+          )}
         </Modal>
 
         <Modal

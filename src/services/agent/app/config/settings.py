@@ -48,7 +48,13 @@ KNOWLEDGE_STORE_RETRY_DELAY = get_float_env("KNOWLEDGE_STORE_RETRY_DELAY", 1.0)
 # Chunks merged into RAG context (default 8; was effectively 1 via client default and hurt recall).
 KNOWLEDGE_STORE_N_RESULTS = get_int_env("KNOWLEDGE_STORE_N_RESULTS", 8)
 
-# Model Configuration (causal instruct LLM; same default hub id as MAS)
+# Model Configuration (causal instruct LLM).
+#
+# Tiered defaults: the agent does the heavy lifting — RAG synthesis, final
+# answer generation, multi-step task work — so it gets the bigger model.
+# MAS only routes/classifies and uses a 1.5B (see services/mas/core/llm_setup).
+# Override MODEL_NAME in .env if you want to drop the agent down to the small
+# model too (matches the old "same model everywhere" behaviour).
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen3-4B-Instruct-2507")
 MODEL_DEVICE = os.getenv("MODEL_DEVICE", "auto")  # "auto", "cpu", "cuda", "cuda:0", etc.
 

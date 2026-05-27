@@ -65,6 +65,43 @@ async def send_messages_via_websockets(
                 pass
 
 
+async def send_task_step_via_websockets(
+    conversation_id: str,
+    step: dict,
+) -> None:
+    """Broadcast a ``task_step`` "thought process" event to the conversation.
+
+    Older chat clients ignore unknown WS message types, so this is safe to
+    fan out without coordination. Drops dead sockets the same way the
+    ``agent_message`` path does.
+    """
+    conv_key = str(conversation_id)
+    conns = active_connections.get(conv_key, [])
+    if not conns:
+        return
+
+    payload = {
+        "type": "task_step",
+        "task_id": step.get("task_id"),
+        "agent_id": step.get("agent_id"),
+        "agent_name": step.get("agent_name"),
+        "step_type": step.get("step_type"),
+        "title": step.get("title"),
+        "detail": step.get("detail"),
+        "timestamp": step.get("timestamp") or datetime.datetime.now().isoformat(),
+        "metadata": step.get("metadata") or {},
+    }
+
+    for ws in list(conns):
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            try:
+                conns.remove(ws)
+            except ValueError:
+                pass
+
+
 def save_new_client(
     conv_id: str,
     websocket: WebSocket,

@@ -31,6 +31,14 @@ class Messages(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
+    # Agent attribution captured at write time so chat history reloads keep
+    # the Manager's violet bubble + each specialist's name chip. Nullable
+    # because: (a) user-role messages have no attribution, and (b) older
+    # rows pre-dating these columns won't have values.
+    agent_id = Column(String, nullable=True)
+    agent_name = Column(String, nullable=True)
+    skill_used = Column(String, nullable=True)
+
     conversation_id = Column(
         Integer,
         ForeignKey("conversations.id", ondelete="CASCADE"),

@@ -16,7 +16,7 @@ logger = get_logger("task_tool_functions")
 
 
 def insert_new_task(
-    conversation_id: int,
+    conversation_id: int | None,
     agent_id: str,
     query: str,
     history: list,

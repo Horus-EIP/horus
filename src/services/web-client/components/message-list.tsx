@@ -5,11 +5,14 @@ import ReactMarkdown from "react-markdown";
 import { Skeleton } from '@mantine/core';
 import {
   IconExclamationCircle,
+  IconHierarchy,
   IconRobot,
   IconUser,
 } from '@tabler/icons-react';
 import { Spinner } from "@/components/ui/spinner";
 import { formatTimestamp } from "@/utils/format";
+import { ThoughtProcessCard } from "@/components/chat/thought-process-card";
+import type { TaskStepEvent } from "@/lib/types";
 
 export interface Message {
   id: string;
@@ -23,6 +26,8 @@ export interface Message {
   agentName?: string;
   /** Skill the agent exercised for this message. */
   skillUsed?: string;
+  /** Task ID the message dispatched, used to attach a thought-process card. */
+  taskId?: string;
 }
 
 interface MessageListProps {
@@ -33,6 +38,10 @@ interface MessageListProps {
   /** When set, overrides the default empty-state copy (no messages, not loading). */
   emptyStateTitle?: string;
   emptyStateSubtitle?: string;
+  /** Per-task list of "thought process" events streamed live via WebSocket. */
+  stepsByTaskId?: Record<string, TaskStepEvent[]>;
+  /** Task ID still in-flight; its card stays auto-expanded until it completes. */
+  workingTaskId?: string | null;
 }
 
 const mdComponents = {
@@ -121,6 +130,8 @@ export const MessageList: React.FC<MessageListProps> = ({
   messagesEndRef,
   emptyStateTitle = 'Start a conversation',
   emptyStateSubtitle = 'How can we help you?',
+  stepsByTaskId,
+  workingTaskId,
 }) => {
   return (
     <div className="mx-auto max-w-[75vw] md:max-w-[60vw] space-y-4">
@@ -138,9 +149,12 @@ export const MessageList: React.FC<MessageListProps> = ({
         </div>
       )}
 
-      {messages.map((message) => (
+      {messages.map((message) => {
+        const isManager =
+          message.sender === "agent" && message.agentName === "Manager";
+        return (
+        <React.Fragment key={message.id}>
         <div
-          key={message.id}
           className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"
             }`}
         >
@@ -152,19 +166,28 @@ export const MessageList: React.FC<MessageListProps> = ({
               }
             `}
           >
-            <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--bgSoft)] text-[var(--text)] border border-gray-200 dark:border-gray-700">
+            <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center border ${
+              isManager
+                ? "bg-violet-500/15 text-violet-600 dark:text-violet-300 border-violet-500/40"
+                : "bg-[var(--bgSoft)] text-[var(--text)] border-gray-200 dark:border-gray-700"
+            }`}>
               {message.sender === "user" ? (
                 <IconUser className="w-5 h-5" stroke={1.25} />
+              ) : isManager ? (
+                <IconHierarchy className="w-5 h-5" stroke={1.25} />
               ) : (
                 <IconRobot className="w-5 h-5 text-blue-500" stroke={1.25} />
               )}
             </div>
 
             <div
-              className={`rounded-2xl px-4 py-2 text-[var(--text)] text-base shadow-sm ${message.sender === "user"
-                ? "bg-blue-500 text-white rounded-tr-none"
-                : "bg-[var(--bgSoft)] mr-auto rounded-tl-none border border-gray-200 dark:border-gray-700"
-                }`}
+              className={`rounded-2xl px-4 py-2 text-[var(--text)] text-base shadow-sm ${
+                message.sender === "user"
+                  ? "bg-blue-500 text-white rounded-tr-none"
+                  : isManager
+                    ? "bg-violet-500/10 mr-auto rounded-tl-none border border-violet-500/30"
+                    : "bg-[var(--bgSoft)] mr-auto rounded-tl-none border border-gray-200 dark:border-gray-700"
+              }`}
             >
               {message.sender === "agent" ? (
                 <div className="agent-message-md max-w-none">
@@ -181,14 +204,22 @@ export const MessageList: React.FC<MessageListProps> = ({
                   <div className="mt-2 flex flex-wrap items-center gap-1">
                     {message.agentName && (
                       <span
-                        className="inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-300"
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          isManager
+                            ? "border border-violet-500/40 bg-violet-500/15 text-violet-700 dark:text-violet-300"
+                            : "border border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-300"
+                        }`}
                         title={
                           message.agentId
                             ? `Agent ID: ${message.agentId}`
                             : undefined
                         }
                       >
-                        <IconRobot className="h-3 w-3" stroke={1.5} />
+                        {isManager ? (
+                          <IconHierarchy className="h-3 w-3" stroke={1.5} />
+                        ) : (
+                          <IconRobot className="h-3 w-3" stroke={1.5} />
+                        )}
                         {message.agentName}
                       </span>
                     )}
@@ -221,7 +252,16 @@ export const MessageList: React.FC<MessageListProps> = ({
             </div>
           </div>
         </div>
-      ))}
+        {message.sender === "user" && message.taskId && (
+          <ThoughtProcessCard
+            taskId={message.taskId}
+            steps={(stepsByTaskId && stepsByTaskId[message.taskId]) || []}
+            isRunning={workingTaskId === message.taskId}
+          />
+        )}
+        </React.Fragment>
+        );
+      })}
 
       {isLoading && !isHistoryLoading && (
         <div className="flex justify-start opacity-95 transition-opacity">

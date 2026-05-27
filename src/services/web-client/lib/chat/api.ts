@@ -20,6 +20,13 @@ export interface Conversation {
   modified_at: string;
 }
 
+export interface SuggestedSkill {
+  skill: string;
+  score: number;
+  agent_id: string;
+  agent_name: string;
+}
+
 export interface TaskQueueStats {
   pending: number;
   running: number;
@@ -60,6 +67,18 @@ export interface TaskDetails {
   history?: unknown[];
   future_actions?: unknown[];
   subtasks?: TaskSubtaskRow[];
+}
+
+/** Row shape returned by GET /tasks/list. Mirrors the SQLAlchemy ``Task`` model. */
+export interface TaskSummary {
+  id: string;
+  status: string;
+  agent_id: string;
+  conversation_id: number | null;
+  query: string;
+  created_at: string;
+  updated_at?: string;
+  parent_task_id?: string | null;
 }
 
 export const chatApi = {
@@ -106,12 +125,17 @@ export const chatApi = {
     let paginatedData: PaginatedHistory;
 
     if (Array.isArray(data)) {
-      // Backend returns array directly - wrap it
+      // Backend returns array directly - wrap it. Carry the attribution
+      // metadata (agent_id / agent_name / skill_used) through so reloaded
+      // history can restore Manager violet styling + per-agent chips.
       paginatedData = {
         items: data.map((msg: any) => ({
           role: msg.role === 'user' ? 'user' : 'assistant',
           message: msg.content || msg.message || '',
           timestamp: msg.created_at || msg.timestamp,
+          agentId: typeof msg.agent_id === 'string' ? msg.agent_id : undefined,
+          agentName: typeof msg.agent_name === 'string' ? msg.agent_name : undefined,
+          skillUsed: typeof msg.skill_used === 'string' ? msg.skill_used : undefined,
         })),
         nextCursor: null,
       };
@@ -146,6 +170,26 @@ export const chatApi = {
     }
 
     return { ok: true, data: response.data ?? undefined };
+  },
+
+  async suggestSkills(
+    demand: string,
+    topK = 3
+  ): Promise<ChatResponse<SuggestedSkill[]>> {
+    const response = await apiClient.post<{ suggestions: SuggestedSkill[] }>(
+      "/tasks/suggest-skills",
+      { demand, top_k: topK },
+      { retry: 0 }
+    );
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: response.error || "Failed to suggest skills",
+      };
+    }
+
+    return { ok: true, data: response.data?.suggestions ?? [] };
   },
 
   async getConversations(): Promise<ChatResponse<Conversation[]>> {
@@ -226,6 +270,33 @@ export const chatApi = {
       ok: true,
       data: response.data,
     };
+  },
+
+  async listTasks(): Promise<ChatResponse<TaskSummary[]>> {
+    const response = await apiClient.get<TaskSummary[]>("/tasks/list", { retry: 1 });
+    if (!response.ok || !Array.isArray(response.data)) {
+      return {
+        ok: false,
+        error: response.error || "Failed to list tasks",
+      };
+    }
+    return { ok: true, data: response.data };
+  },
+
+  async getRunningTasksForConversation(
+    conversationId: string
+  ): Promise<ChatResponse<TaskSummary[]>> {
+    const response = await apiClient.get<TaskSummary[]>(
+      `/tasks/conversation/${conversationId}/running`,
+      { retry: 1 }
+    );
+    if (!response.ok || !Array.isArray(response.data)) {
+      return {
+        ok: false,
+        error: response.error || "Failed to fetch running tasks",
+      };
+    }
+    return { ok: true, data: response.data };
   },
 
   async getTask(taskId: string): Promise<ChatResponse<TaskDetails>> {

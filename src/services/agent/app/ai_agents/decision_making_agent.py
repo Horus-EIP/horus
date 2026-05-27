@@ -38,6 +38,52 @@ except Exception:
     _TORCH_AVAILABLE = False
 
 
+# Spiral / self-correction markers. The 4B worker LLM, when handed retrieved
+# context with multiple similar-looking numbers (e.g. "$265K" appearing in
+# both a table cell and a variance note), enters a "$265K — no — wait —
+# actually $263K — no" loop until it runs out of token budget. The pattern
+# is easy to detect by counting contradiction markers. When the density goes
+# over a threshold we replace the whole output with a clean fallback so the
+# user never sees the loop garbage; the raw output is still logged for debug.
+_SPIRAL_MARKERS = (
+    "→ no",
+    "→ wrong",
+    "→ not supported",
+    "→ not in text",
+    "we surrender",
+    "we give up",
+    "we settle",
+    "we now",
+    "wait —",
+    "wait,",
+    "actually,",
+    "but actually",
+    "no — wait",
+    "we conclude",
+    "we believe the actual",
+    "but the text says",
+    "but the table says",
+    "absurd",
+    "impossible",
+)
+
+
+def _is_degenerate_output(text: str) -> bool:
+    """Return True when ``text`` looks like a self-correcting spiral.
+
+    Counts how many ``_SPIRAL_MARKERS`` substrings appear in a lowercased
+    view of the text. > 4 across a single answer is essentially never a
+    well-formed response — those phrases only cluster when the model is
+    repeatedly contradicting itself. False positives are rare because a real
+    answer rarely contains more than one or two contradiction markers.
+    """
+    if not text or len(text) < 200:
+        return False
+    lowered = text.lower()
+    score = sum(lowered.count(m) for m in _SPIRAL_MARKERS)
+    return score >= 5
+
+
 def _configure_agent_torch_threads() -> None:
     if not _TORCH_AVAILABLE or torch is None:
         return
@@ -61,14 +107,29 @@ if _TRANSFORMERS_AVAILABLE:
     _configure_agent_torch_threads()
 
 APP_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
-LOCAL_MODEL_DIR = APP_DIR / "models" / "Qwen3_instruct_4B"
+# The agent runs the actual task work (RAG, synthesis, generation), so its
+# default is the full 4B Qwen. MAS uses the 1.5B variant for routing only —
+# see services/mas/core/llm_setup.py.
+DEFAULT_MODEL_ID = os.environ.get(
+    "MODEL_NAME", "Qwen/Qwen3-4B-Instruct-2507"
+).strip()
+
+
+def _resolve_local_model_dir() -> Path:
+    explicit = os.environ.get("MODEL_DIR", "").strip()
+    if explicit:
+        return Path(explicit)
+    leaf = DEFAULT_MODEL_ID.split("/")[-1] or "model"
+    return APP_DIR / "models" / leaf
+
+
+LOCAL_MODEL_DIR = _resolve_local_model_dir()
 OFFLOAD_DIR = APP_DIR / "offload"
+# Required files post-snapshot_download. A 1.5B model ships a single
+# ``model.safetensors`` (no shard index), so we only check for the basics.
 REQUIRED_LOCAL_FILES = [
     "config.json",
-    "generation_config.json",
     "tokenizer.json",
-    "model.safetensors.index.json",
 ]
 
 def _agent_accelerate_max_memory() -> Optional[dict]:
@@ -342,7 +403,10 @@ class DecisionMakingAgent:
             prompt,
             return_tensors="pt",
             truncation=True,
-            max_length=4096,
+            # Raised from 4096 → 8192 so the bracketed task instruction at the
+            # end of user_content isn't chopped when the retrieved context is
+            # long. Qwen3-4B supports far more than 8K natively.
+            max_length=8192,
             add_special_tokens=True,
         )
         device = _model_device(model)
@@ -355,12 +419,39 @@ class DecisionMakingAgent:
             torch.cuda.empty_cache()
 
         max_new = _max_new_tokens()
+        # Build a bad-words list to physically block the self-correcting loop
+        # pattern ("wait — no — $265K — actually $263K …") that the 4B model
+        # falls into when retrieved context has multiple similar figures. The
+        # tokens are encoded as bad_words_ids and the generator will avoid
+        # producing them. Lower-cased and prefixed variants cover both
+        # mid-sentence and start-of-sentence occurrences.
+        _antiloop_phrases = [
+            " wait", " Wait", " No —", " no —",
+            " Actually", " actually", " correction", " Correction",
+            " let me recheck", " Let me recheck", " let me re-check",
+            " No.", " no.", " No,", " no,",
+        ]
+        bad_words_ids: list[list[int]] = []
+        for phrase in _antiloop_phrases:
+            ids = tok(phrase, add_special_tokens=False).input_ids
+            if ids:
+                bad_words_ids.append(ids)
+
         with torch.no_grad():
             out = model.generate(
                 input_ids=input_ids,
                 attention_mask=attn_mask,
                 max_new_tokens=max_new,
+                # Greedy decoding on a 4B model with no penalties loops once it
+                # hits a repeatable phrase (the "(Duplicate)" failure mode).
+                # repetition_penalty discourages echoing tokens already seen;
+                # no_repeat_ngram_size hard-bans repeating any 4-gram.
+                # bad_words_ids physically prevents the self-correcting loop
+                # by blocking the tokens that start it.
                 do_sample=False,
+                repetition_penalty=1.2,
+                no_repeat_ngram_size=4,
+                bad_words_ids=bad_words_ids if bad_words_ids else None,
                 return_dict_in_generate=True,
                 pad_token_id=tok.eos_token_id,
                 eos_token_id=tok.eos_token_id,
@@ -378,6 +469,11 @@ class DecisionMakingAgent:
         """
         Run inference. If ``context`` is None, ``query`` is treated as the full user message
         (used by WriterAgent). Otherwise the usual grounded QA instruction is applied.
+
+        If a persona is bound on :data:`agent_server.profiles.current_persona`
+        (set per-task by the RabbitMQ consumer), it's prepended to the system
+        message so the specialist's domain instructions shape the response
+        without changing every helper's signature.
         """
         self._ensure_causal_loaded()
 
@@ -397,23 +493,96 @@ class DecisionMakingAgent:
                 "You are a helpful assistant. Follow the user's instructions concisely."
             )
         else:
+            # Cap retrieved context BEFORE building the prompt. Knowledge-store
+            # retrieval can return multiple full documents (e.g. IT Security
+            # Policy + 2026 Budget + Q4 Report) for an underspecified query;
+            # if we dump that verbatim into the prompt, tokenizer truncation
+            # cuts the ``Task: ...`` line off the end and the model ends up
+            # echoing/repeating retrieved chunks instead of answering. ~12k
+            # chars (~3k tokens) leaves room for the persona, instructions,
+            # and the bracketed task line under the 8192-token prompt budget.
+            _MAX_CTX_CHARS = 12000
+            ctx = context or ""
+            if len(ctx) > _MAX_CTX_CHARS:
+                ctx = ctx[:_MAX_CTX_CHARS] + "\n…[retrieved content truncated]"
+
+            # Bracket the task at both ends: even if the middle gets truncated,
+            # the instruction at the top and the question at the bottom both
+            # survive so the model always sees what it's being asked to do.
             user_content = (
-                "The following content was retrieved from the knowledge base for this task. "
-                "Use ONLY this retrieved content to complete the task. "
-                "If summarizing, be thorough but structured. "
-                "If the retrieved content does not contain enough information, say so.\n\n"
-                f"Retrieved Content:\n{context}\n\nTask: {query}"
+                f"Task: {query}\n\n"
+                "RULES (read before answering):\n"
+                "1. Use ONLY the retrieved content below. Do NOT invent facts.\n"
+                "2. Pick ONE answer and commit. If the retrieved content has "
+                "multiple similar-looking figures, pick the one that matches "
+                "the question's exact wording and move on. Do NOT write 'wait', "
+                "'no', 'actually', 'correction', 'let me recheck', or any "
+                "self-correcting phrase. Do NOT second-guess.\n"
+                "3. If the retrieved content genuinely lacks the answer, say "
+                "'The retrieved content does not contain this information.' in "
+                "ONE sentence and stop. Do NOT keep searching by re-quoting.\n"
+                "4. Never quote the retrieved text back to question it. State "
+                "facts confidently in your own words.\n"
+                "5. Keep the answer concise. Use short paragraphs and bullet "
+                "lists. Stop when the question is answered.\n\n"
+                f"Retrieved Content:\n{ctx}\n\n"
+                f"Now answer the task: {query}"
             )
             system_content = (
                 "You are a helpful assistant. Use only the retrieved content to complete the task. "
                 "Format every answer in Markdown: start with a brief ## heading when the answer "
                 "has multiple parts, use **bold** for important labels, use bullet lists for "
-                "enumerations, and keep paragraphs short so the reply is easy to scan."
+                "enumerations, and keep paragraphs short so the reply is easy to scan. "
+                "Never echo or duplicate the retrieved text — synthesise.\n\n"
+                "CRITICAL: Once you write a number, fact, or quote, COMMIT TO IT. "
+                "Do not revise or second-guess in the same answer. Self-correcting "
+                "loops ('wait — no — $265K — actually $263K') destroy the answer's "
+                "trustworthiness. Pick the single statement that best fits the "
+                "question and stop."
             )
+
+        # Per-task persona override. Set by the consumer thread based on which
+        # specialist agent owns this task. Prepended so the specialist's
+        # domain instructions take precedence over the generic system message.
+        try:
+            from agent_server.profiles import current_persona
+
+            persona = current_persona.get()
+        except Exception:
+            persona = None
+        if persona:
+            system_content = f"{persona}\n\n---\n\n{system_content}"
 
         logger.debug(
             "Decision inference model=%s device=%s", self.model_name, self.device
         )
+
+        # Coarse "thought process" boundary — the consumer binds an emitter
+        # per-task; nothing happens in unit tests calling decide() directly.
+        try:
+            from ai_agents.step_emitter import emit_step
+
+            _emit = emit_step
+        except Exception:
+            def _emit(*_a, **_kw):  # type: ignore[no-redef]
+                return None
+
+        query_preview = (query or "").strip()
+        if len(query_preview) > 200:
+            query_preview = query_preview[:200] + "…"
+        _emit(
+            "reasoning.start",
+            "Reasoning over retrieved content",
+            (
+                "Running the language model on the retrieved context."
+                if context is not None
+                else "Running the language model on the user's request."
+            ),
+            model=self.model_name,
+            device=self.device,
+            query=query_preview,
+        )
+
         start_time = time.time()
 
         try:
@@ -447,6 +616,38 @@ class DecisionMakingAgent:
                     device=self.device,
                     status="success",
                 ).inc()
+            _emit(
+                "reasoning.done",
+                "Reasoning complete",
+                f"Model returned a response in {inference_duration:.2f}s.",
+                duration_seconds=round(inference_duration, 3),
+                model=self.model_name,
+            )
+
+            # Final guard: if the model produced a self-correction spiral
+            # despite the anti-loop prompt + bad_words_ids, replace the
+            # output with a clean fallback. The raw text is logged so the
+            # task detail page still has it for debugging, but the user
+            # never sees pages of "→ no → wait → actually $265K — no" in
+            # chat. Detection is a simple density-of-contradiction-markers
+            # check; well-formed answers virtually never trip it.
+            if _is_degenerate_output(text):
+                logger.warning(
+                    "Degenerate self-correction loop detected in model output "
+                    "(length=%d); replacing with clean fallback. Raw output "
+                    "preview: %r",
+                    len(text),
+                    text[:400],
+                )
+                text = (
+                    "I couldn't extract a consistent answer from the retrieved "
+                    "content for this step. The chunks pulled from the knowledge "
+                    "store appear fragmented or contradictory, and the model "
+                    "spiraled trying to reconcile them. Please rephrase the demand "
+                    "to focus on one specific question, or check the task detail "
+                    "page for the raw retrieved context."
+                )
+
             return text
         except Exception as e:
             inference_duration = time.time() - start_time
@@ -467,5 +668,12 @@ class DecisionMakingAgent:
                 self.device,
                 self.model_name,
                 exc_info=True,
+            )
+            _emit(
+                "error",
+                "Reasoning failed",
+                str(e),
+                phase="reasoning",
+                model=self.model_name,
             )
             raise

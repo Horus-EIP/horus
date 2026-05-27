@@ -35,16 +35,35 @@ def _configure_llm_cpu_threads() -> None:
 _configure_llm_cpu_threads()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
-MODEL_DIR = BASE_DIR / "models/Qwen3_instruct_4B"
+# MAS is a thin router/classifier — it picks an agent, sometimes decomposes a
+# task into subtasks, and otherwise gets out of the way. That work doesn't
+# need a big model, so we default to Qwen2.5-1.5B-Instruct (~3 GB, Apache 2.0,
+# no Hub gating). The agent worker keeps the full 4B model for actual task
+# execution (RAG synthesis, answer generation). Override LLM_MODEL_ID if you
+# want a different MAS-side model (e.g. bump to 4B if decomposition quality
+# matters more than orchestrator latency).
+MODEL_ID = os.environ.get("LLM_MODEL_ID", "Qwen/Qwen2.5-1.5B-Instruct").strip()
+
+
+def _resolve_model_dir() -> Path:
+    explicit = os.environ.get("LLM_MODEL_DIR", "").strip()
+    if explicit:
+        return Path(explicit)
+    leaf = MODEL_ID.split("/")[-1] or "model"
+    return BASE_DIR / "models" / leaf
+
+
+MODEL_DIR = _resolve_model_dir()
 OFFLOAD_DIR = BASE_DIR / "offload"
 OFFLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+# Minimum files we expect after a successful snapshot_download. ``tokenizer.json``
+# is universal across HF causal-LM repos; ``config.json`` is required to load
+# the model. The old list expected sharded weights which only exist on >2 GB
+# checkpoints — 1.5B models ship a single ``model.safetensors`` instead.
 REQUIRED_FILES = [
     "config.json",
-    "generation_config.json",
     "tokenizer.json",
-    "model.safetensors.index.json",
 ]
 
 

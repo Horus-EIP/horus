@@ -25,17 +25,22 @@ RUN opentelemetry-bootstrap --action=install
 
 COPY . .
 
-# Orchestrator LLM: download once at image build (needs network during `docker build` only).
-ARG DOWNLOAD_LLM=1
-ENV HF_HUB_DISABLE_TELEMETRY=1
-RUN if [ "$DOWNLOAD_LLM" = "1" ]; then \
-    mkdir -p models && \
-    python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='Qwen/Qwen3-4B-Instruct-2507', local_dir='models/Qwen3_instruct_4B', local_dir_use_symlinks=False)"; \
-    fi
+# Orchestrator LLM is NOT baked into the image anymore. It downloads on first
+# container start into a mounted named volume (see entrypoint.sh + compose
+# ``mas_model_cache`` volume). Keeps the image at ~3 GB instead of ~11 GB and
+# makes rebuilds fast.
 
-# Prefer local files; block accidental Hub access when running air-gapped (override in .env if needed).
-ENV HF_HUB_OFFLINE=1
-ENV TRANSFORMERS_OFFLINE=1
+# Sentence-embedding model for skill suggestion. ~90 MB, CPU-only, used by
+# /tasks/suggest-skills. Small enough to bake in so the suggest endpoint works
+# the moment the container is up.
+ENV HF_HUB_DISABLE_TELEMETRY=1
+RUN mkdir -p models && \
+    python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='sentence-transformers/all-MiniLM-L6-v2', local_dir='models/all-MiniLM-L6-v2', local_dir_use_symlinks=False)"
+
+# Default to ONLINE for the first run so bootstrap_llm.py can pull the LLM.
+# Operators can flip both to 1 in their env once the cache volume is warm.
+ENV HF_HUB_OFFLINE=0
+ENV TRANSFORMERS_OFFLINE=0
 
 ENV RABBITMQ_HOST=rabbitmq
 

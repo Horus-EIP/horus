@@ -114,16 +114,10 @@ def init_db():
         else:
             logger.info(f"Admin user already exists: {admin_user.username}")
 
-        # Seed the default agent directory so the UI/dispatcher has something to
-        # show on a fresh boot (idempotent — skips entries that already exist).
-        try:
-            seed_default_agents(db)
-        except Exception as seed_exc:
-            log_error(
-                "init_db",
-                f"Default agent seeding failed (non-fatal): {seed_exc}",
-                exc_info=True,
-            )
+        # Default agents are no longer DB-seeded — the agent worker registers
+        # them itself at startup as real, heartbeating identities (see
+        # services/agent/app/agent_server/profiles.py). Keeping a seed here
+        # would just leave inactive placeholders cluttering the UI.
 
         log_success("init_db", "Database initialization completed successfully")
 
