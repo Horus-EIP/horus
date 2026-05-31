@@ -65,11 +65,10 @@ services:
       - LLM_AUTOINIT=${LLM_AUTOINIT:-1}
       # 0 = use CUDA when the container sees a GPU (`gpus: all` above). 1 = CPU-only orchestrator LLM.
       - LLM_FORCE_CPU=${LLM_FORCE_CPU:-0}
-      # OpenTelemetry — disabled by default to silence retry-to-tempo spam
-      # when the observability profile isn't running. Enable by flipping both
-      # OTEL_SDK_DISABLED=false and OTEL_ENABLED=true in your .env.
-      - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-true}
-      - OTEL_ENABLED=${OTEL_ENABLED:-false}
+      # OpenTelemetry — enabled by default; Tempo is always-on in this stack.
+      # Flip OTEL_SDK_DISABLED=true and OTEL_ENABLED=false in .env to opt out.
+      - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-false}
+      - OTEL_ENABLED=${OTEL_ENABLED:-true}
       - OTEL_SERVICE_NAME=mas
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
       - JSON_LOGGING=true
@@ -172,12 +171,10 @@ services:
       # 0 = load the LLM at agent startup (ready for first chat; slower boot).
       - AGENT_LAZY_DECISION_MODEL=${AGENT_LAZY_DECISION_MODEL:-0}
       - AGENT_SPACY_PREFER_SM=1
-      # OpenTelemetry instrumentation. Disabled by default to avoid loud
-      # retry logs when the observability profile isn't running. To enable:
-      #   1. Set OTEL_SDK_DISABLED=false and OTEL_ENABLED=true in .env
-      #   2. Start the stack with --profile observability so Tempo is up
-      - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-true}
-      - OTEL_ENABLED=${OTEL_ENABLED:-false}
+      # OpenTelemetry instrumentation — enabled by default; Tempo is always-on.
+      # Set OTEL_SDK_DISABLED=true and OTEL_ENABLED=false in .env to opt out.
+      - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-false}
+      - OTEL_ENABLED=${OTEL_ENABLED:-true}
       - OTEL_SERVICE_NAME=agent
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
       # Default ONLINE so first-run can pull. Flip to 1 once the cache is warm.
@@ -211,9 +208,9 @@ services:
       - HF_HUB_DISABLE_TELEMETRY=1
       - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
       - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
-      # OpenTelemetry — off by default; see mas/agent env blocks above.
-      - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-true}
-      - OTEL_ENABLED=${OTEL_ENABLED:-false}
+      # OpenTelemetry — enabled by default; Tempo is always-on.
+      - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-false}
+      - OTEL_ENABLED=${OTEL_ENABLED:-true}
       - OTEL_SERVICE_NAME=knowledge-store
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
     ports:
@@ -313,12 +310,11 @@ services:
   # Single UI at http://localhost:3301 for traces, metrics, and container logs
   # =============================================================================
 
-  # Opt-in: `docker compose --profile observability up` to start the whole
-  # logs/metrics/traces stack. Default `up` skips it to keep the dev loop light.
+  # Always-on observability stack (Loki + Promtail + Tempo + Prometheus + Grafana).
+  # All five start with a plain `docker compose up`. Single Grafana UI at :3301.
   loki:
     image: grafana/loki:3.4.2
     container_name: loki
-    profiles: ["observability"]
     command: ["-config.file=/etc/loki/loki.yaml"]
     volumes:
       - ./grafana/loki.yaml:/etc/loki/loki.yaml:ro
@@ -331,7 +327,6 @@ services:
   promtail:
     image: grafana/promtail:3.4.2
     container_name: promtail
-    profiles: ["observability"]
     command: ["-config.file=/etc/promtail/promtail.yaml"]
     volumes:
       - ./grafana/promtail.yaml:/etc/promtail/promtail.yaml:ro
@@ -347,7 +342,6 @@ services:
   tempo:
     image: grafana/tempo:2.6.0
     container_name: tempo
-    profiles: ["observability"]
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./grafana/tempo.yaml:/etc/tempo.yaml:ro
@@ -363,7 +357,6 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
-    profiles: ["observability"]
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -379,7 +372,6 @@ services:
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
-    profiles: ["observability"]
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
