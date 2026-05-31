@@ -116,7 +116,7 @@ In practice, most tasks arrive through the RabbitMQ consumer rather than the HTT
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.13+
 - Running MAS orchestrator, RabbitMQ, and Knowledge Store instances
 
 ### Setup
@@ -148,7 +148,7 @@ uvicorn agent_server.server:app --host 0.0.0.0 --port 8001
 
 ```bash
 # From repository root
-bash scripts/python/agent/test_code.sh
+bash scripts/test/run-agent.sh
 ```
 
 Or directly:

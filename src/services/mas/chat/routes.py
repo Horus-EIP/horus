@@ -1,7 +1,7 @@
 """Chat WebSocket routes.
 
 Real-time bidirectional channel between clients and the MAS orchestrator.
-See ``docs/architecture/mas_service.md`` for the wire protocol, error codes,
+See ``docs/architecture.md`` for the wire protocol, error codes,
 and client examples.
 """
 
@@ -36,7 +36,7 @@ async def chat_websocket(
     Validates the JWT (query param or ``Authorization`` header), registers the
     client in Redis, then loops on inbound messages until disconnect. Close
     code ``1008`` is used for auth failures. Protocol details in
-    ``docs/architecture/mas_service.md``.
+    ``docs/architecture.md``.
 
     Args:
         websocket: Inbound WebSocket connection.

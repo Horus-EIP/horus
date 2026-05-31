@@ -2,7 +2,7 @@
 
 Entities: :class:`Users`, :class:`Conversations`, :class:`Messages`,
 :class:`Agents`, :class:`Task`, :class:`TaskResult`, :class:`CriticalLogs`.
-See ``docs/architecture/mas_service.md`` for schema, relationships, and
+See ``docs/architecture.md`` for schema, relationships, and
 audit conventions.
 
 Each model lives in its own module alongside its SQLAlchemy event listeners.

@@ -1,7 +1,7 @@
 """Conversation persistence helpers.
 
 Read, list, and append conversation messages. See
-``docs/architecture/mas_service.md`` for the message-author convention and
+``docs/architecture.md`` for the message-author convention and
 session-management rules.
 """
 

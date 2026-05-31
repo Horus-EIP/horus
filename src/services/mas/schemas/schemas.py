@@ -1,7 +1,7 @@
 """Pydantic request/response schemas for the MAS service.
 
 Field-level details are available through FastAPI's auto-generated
-OpenAPI docs. See ``docs/architecture/mas_service.md`` for the high-level
+OpenAPI docs. See ``docs/architecture.md`` for the high-level
 API contract.
 """
 

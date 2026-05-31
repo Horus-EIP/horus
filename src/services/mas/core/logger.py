@@ -2,7 +2,7 @@
 
 Based on ``structlog`` with correlation-id propagation via contextvars and
 daily rotating files under ``logs/``. See
-``docs/architecture/mas_service.md`` for output paths and usage examples.
+``docs/architecture.md`` for output paths and usage examples.
 """
 
 import logging

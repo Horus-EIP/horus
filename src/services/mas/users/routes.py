@@ -1,7 +1,7 @@
 """HTTP routes for user admin and self-service profile operations.
 
 Admin operations are gated by ``PermissionChecker``. See
-``docs/architecture/mas_service.md`` for the full endpoint list and
+``docs/architecture.md`` for the full endpoint list and
 error codes.
 """
 

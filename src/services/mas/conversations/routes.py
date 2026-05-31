@@ -1,7 +1,7 @@
 """HTTP routes for conversation CRUD and history access.
 
 Endpoints are RBAC-gated; owner-only except for admin reads. See
-``docs/architecture/mas_service.md`` for payloads and error codes.
+``docs/architecture.md`` for payloads and error codes.
 """
 
 from typing import Annotated, Any, Dict, List

@@ -10,7 +10,7 @@ MAS is a **FastAPI** application backed by:
 - **Redis** for session caching and token management.
 - **RabbitMQ** for asynchronous task dispatch and inter-agent delegation messaging.
 - **Prometheus** metrics exposed at `/metrics` via `prometheus-fastapi-instrumentator`.
-- **OpenTelemetry** tracing exported over OTLP (Jaeger-compatible).
+- **OpenTelemetry** tracing exported over OTLP to Tempo (viewable in Grafana).
 
 On startup the application creates database tables, seeds an initial admin user, connects to RabbitMQ, and launches background tasks for agent heartbeat monitoring and task timeout checking.
 
@@ -72,7 +72,7 @@ mas/
     agent_message.py        # Delegation and agent message schemas
 ```
 
-Pytest suites and client scripts live under `tests/mas/` at the repository root (see `tests/mas/pytest.ini`). Local dev launcher: `scripts/dev/mas/run_local.sh`.
+Pytest suites and client scripts live under `tests/mas/` at the repository root (see `tests/mas/pytest.ini`). Local dev launcher: `scripts/dev/run-mas.sh`.
 
 ## API Endpoints
 
@@ -118,7 +118,7 @@ All configuration is loaded from environment variables. A reference file is loca
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.13+
 - Running PostgreSQL, Redis, and RabbitMQ instances (or use the Docker Compose stack in `src/infra/`)
 
 ### Setup
@@ -132,11 +132,11 @@ pip install -r requirements.txt
 
 ### Run
 
-The `scripts/dev/mas/run_local.sh` script loads environment variables from `src/infra/.env`, runs Alembic migrations, seeds the database, and starts the Uvicorn server on port 8000:
+The `scripts/dev/run-mas.sh` script loads environment variables from `src/infra/.env`, runs Alembic migrations, seeds the database, and starts the Uvicorn server on port 8000:
 
 ```bash
 # From repository root
-bash scripts/dev/mas/run_local.sh
+bash scripts/dev/run-mas.sh
 ```
 
 Or manually:
@@ -171,7 +171,7 @@ pytest -c tests/mas/pytest.ini tests/mas -vv
 Coverage helper:
 
 ```bash
-bash scripts/python/mas/test_code.sh
+bash scripts/test/run-mas.sh
 ```
 
 Tests live in `tests/mas/` and use `pytest-asyncio` for async support. `tests/mas/pytest.ini` sets `pythonpath` to this service directory.

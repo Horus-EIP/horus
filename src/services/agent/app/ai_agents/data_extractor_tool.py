@@ -1,7 +1,7 @@
 """LangChain tool that extracts structured data (payments, tables, key-value
 pairs) from unstructured document text using regex and spaCy NER.
 
-See ``docs/architecture/data_extraction.md`` for entity types and rules.
+See ``docs/architecture.md`` for entity types and rules.
 """
 
 import json

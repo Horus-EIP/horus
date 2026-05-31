@@ -1,55 +1,50 @@
 # Horus AI Documentation
 
-## Getting Started
+One file per topic. Use Ctrl+F inside any of them — they're long on purpose.
 
-- [Developer Onboarding](getting-started/onboarding.md)
-- [Configuration Reference](getting-started/configuration.md)
-- [Troubleshooting](getting-started/troubleshooting.md)
+## Engineering docs
 
-## Architecture
+| Topic | Read for |
+|-------|----------|
+| [Getting Started](getting-started.md) | Onboard a fresh clone, configure env vars, troubleshoot common issues. |
+| [Architecture](architecture.md) | System overview, per-service deep dives, data model, jury-facing fiche. |
+| [API Reference](api-reference.md) | MAS REST, Knowledge Store REST, and WebSocket events. |
+| [Operations](operations.md) | Deployment, monitoring, secrets, environment matrix. |
+| [Security & Compliance](security.md) | RBAC matrix, security audit, data protection, telemetry. |
+| [Contributing](contributing.md) | Workflow, code style, commit convention, testing policy, docs audit. |
+| [Demo](demo.md) | Live-demo script, copy-paste cheatsheet, post-demo action plan. |
+| [Changelog](../CHANGELOG.md) | Reverse-chronological log of every commit, grouped by month. |
 
-- [Architecture Overview](architecture/overview.md)
-- [Data Model](architecture/data-model.md)
+## EIP Tech 4 deliverables
 
-## API Reference
+Everything the jury looks at, grouped under [`eip/`](eip/):
 
-- [MAS API](api/mas-api.md)
-- [Knowledge Store API](api/knowledge-store-api.md)
-- [WebSocket API](api/websocket-api.md)
+| Document | Objective |
+|----------|-----------|
+| [EIP Index](eip/README.md) | Map of every objective → file |
+| [Objectives Audit](eip/objectives-audit.md) | Current scorecard against Points 1, 2, A, D |
+| [Performance](eip/performance.md) | KPIs, benchmarks, before/after results (**Point D**) |
+| [Tech Watch](eip/tech-watch.md) | Sources we monitor + tech evaluation log (**Point 1**) |
+| [Community Contributions](eip/community-contributions.md) | Two-way engagement with upstream projects (**Point 1**) |
+| [Protection Plan](eip/protection-plan.md) | What's protected, why, how (**Point A**) |
+| [Diffusion Strategy](eip/diffusion-strategy.md) | What we share publicly vs. NDA vs. internal (**Point A**) |
+| [Code-vs-Docs Audit](eip/code-vs-docs-audit.md) | Historical drift audit (archived, already acted upon) |
 
-## Operations
+## Reference + assets
 
-- [Deployment](operations/deployment.md)
-- [Monitoring and Observability](operations/monitoring.md)
-- [Secrets Management](operations/secrets-management.md)
-- [Environment Matrix](operations/environment-matrix.md)
+| | |
+|---|---|
+| [ADRs](adr/) | Individual architecture decision records (one per file). |
+| [Assets](assets/) | Presentation slides and internal research PDFs. |
 
-## Contributing
+Confidential material lives under `ip_protection/` and is excluded from the published site. Historical sprint notes are under `archive/` and are also excluded.
 
-- [Workflow](contributing/workflow.md)
-- [Commit Convention](contributing/commit-convention.md)
-- [Testing Policy](contributing/testing-policy.md)
-- [Known Issues](contributing/issues.md)
+## Building the site
 
-## Security
+```bash
+cd docs
+mkdocs serve   # live reload at http://localhost:8000
+mkdocs build   # static site under ../_docs_build/mkdocs
+```
 
-- [RBAC (Role-Based Access Control)](security/rbac.md)
-- [Security Audit](security/security-audit.md)
-
-## Compliance
-
-- [Architecture Fiche](compliance/architecture_fiche.md)
-- [Data Protection](compliance/data_protection.md)
-- [Telemetry](compliance/telemetry.md)
-
-## Archive
-
-Sprint plans and older documents are preserved under the `docs/archive/` directory (not included in the MkDocs navigation above).
-
----
-
-## Generating Documentation
-
-Run `scripts/generate_docs.sh` from the repo root to build browsable HTML
-documentation from all sources (Python docstrings, TypeScript TSDoc, and
-Markdown docs). See the script header for prerequisites.
+Or run `scripts/docs.sh` from the repo root to build the full documentation set (MkDocs + Python pdoc + TypeScript TypeDoc).

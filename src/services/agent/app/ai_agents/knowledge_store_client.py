@@ -1,7 +1,7 @@
 """Async HTTP client for the Knowledge Store service.
 
 Wraps retrieval, ingestion, and metadata calls with timeouts, bounded retries,
-and Prometheus metrics. See ``docs/architecture/knowledge_store_client.md``.
+and Prometheus metrics. See ``docs/architecture.md``.
 """
 
 from typing import Any, Dict, Optional

@@ -32,7 +32,7 @@ repos:
         description: >
           Flags module / class / function docstrings longer than 40 lines so
           long-form narrative lives in docs/architecture/ instead of inline.
-        entry: python scripts/ci/check_docstring_length.py --max-lines 40
+        entry: python scripts/ci/check-docstring-length.py --max-lines 40
         language: system
         types: [python]
         exclude: |

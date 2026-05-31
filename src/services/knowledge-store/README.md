@@ -78,7 +78,7 @@ knowledge-store/
       middleware.py         # Correlation ID middleware
 ```
 
-Pytest suites and client scripts: `tests/knowledge_store/` at the repository root. Dev launcher: `scripts/dev/knowledge-store/run_local.sh`.
+Pytest suites and client scripts: `tests/knowledge_store/` at the repository root. Dev launcher: `scripts/dev/run-knowledge-store.sh`.
 
 ## Environment Variables
 
@@ -94,7 +94,7 @@ The embedding model (`BAAI/bge-base-en-v1.5`) is configured in `app/chroma_db/se
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.13+
 - Tesseract OCR installed (for image/scanned-PDF support)
 
 ### Setup
@@ -111,7 +111,7 @@ python -m spacy download en_core_web_trf
 
 ```bash
 # From repository root
-bash scripts/dev/knowledge-store/run_local.sh
+bash scripts/dev/run-knowledge-store.sh
 ```
 
 Or manually:
@@ -124,7 +124,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 
 ```bash
 # From repository root
-bash scripts/python/knowledge-store/test_code.sh
+bash scripts/test/run-knowledge-store.sh
 ```
 
 Or directly:

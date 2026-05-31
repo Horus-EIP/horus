@@ -46,15 +46,28 @@ src/
     knowledge-store/      Document store + vector search (FastAPI + ChromaDB)
     web-client/           Dashboard (Next.js)
 tests/                    Python pytest suites (MAS, agent, knowledge-store)
-docs/                     Project documentation
 scripts/                  Benchmarks, load tests, resilience tests, demo
+demo_assets/              Mock corpus used during live demos
+docs/                     Project documentation (MkDocs site)
+  getting-started.md      Onboarding, configuration, troubleshooting
+  architecture.md         System design + per-service deep dives
+  api-reference.md        MAS, Knowledge Store, WebSocket APIs
+  operations.md           Deployment, monitoring, secrets, env matrix
+  security.md             RBAC, audit, data protection, telemetry
+  contributing.md         Workflow, style, commits, tests, docs audit
+  demo.md                 Live-demo script + cheatsheet + action plan
+  adr/                    Architecture decision records (one per file)
+  assets/                 Presentations + research PDFs
+  ip_protection/          Signed NDAs and IP deposit proof (NOT published)
+  archive/                Frozen historical docs (sprint notes, old plans)
+greenlight/               EIP greenlight deliverables (deck, reports, code-quality review)
 .github/workflows/        CI pipeline
 ```
 
 ## Prerequisites
 
 - **Docker** (v20.10+) and **Docker Compose** (v2+)
-- Optional: Python 3.11+ (local development without Docker)
+- Optional: Python 3.13+ (local development without Docker)
 - Optional: Node.js 20+ (web client development)
 
 ## Quickstart
@@ -91,13 +104,13 @@ pytest -c tests/mas/pytest.ini tests/mas --ignore=tests/mas/test_integration.py 
 pytest -c tests/mas/pytest.ini tests/mas/test_integration.py -vv   # needs MAS on :8000
 pytest -c tests/agent/pytest.ini tests/agent -vv
 pytest -c tests/knowledge_store/pytest.ini tests/knowledge_store -vv
-# Or run all three: ./scripts/ci/run_all_python_tests.sh
+# Or run all three: ./scripts/test/run-all.sh
 
 # Web Client tests
 cd src/services/web-client && npm test
 
 # Load tests (requires running services)
-cd scripts/load_tests && locust -f locustfile.py
+cd scripts/perf && locust -f load-locust.py
 ```
 
 ## GPU Support
@@ -109,17 +122,35 @@ cd scripts/load_tests && locust -f locustfile.py
 
 ## Documentation
 
+Full documentation lives under [`docs/`](docs/) and is published as a browsable site via MkDocs. One file per topic — use Ctrl+F inside.
+
+**Engineering docs**
+
 | Topic | Link |
 |-------|------|
-| Developer onboarding | [docs/onboarding.md](docs/onboarding.md) |
-| Architecture | [docs/architecture.md](docs/architecture.md) |
-| Configuration | [docs/configuration.md](docs/configuration.md) |
-| Deployment | [docs/deployment.md](docs/deployment.md) |
-| Monitoring | [docs/monitoring_manual.md](docs/monitoring_manual.md) |
-| RBAC and permissions | [docs/rbac.md](docs/rbac.md) |
-| Secrets management | [docs/secrets-management.md](docs/secrets-management.md) |
-| Testing policy | [docs/testing_policy.md](docs/testing_policy.md) |
-| Troubleshooting | [docs/troubleshooting.md](docs/troubleshooting.md) |
+| Getting Started (onboarding, config, troubleshooting) | [docs/getting-started.md](docs/getting-started.md) |
+| Architecture (overview, services, data model, fiche) | [docs/architecture.md](docs/architecture.md) |
+| API Reference (MAS, Knowledge Store, WebSocket) | [docs/api-reference.md](docs/api-reference.md) |
+| Operations (deployment, monitoring, secrets, env) | [docs/operations.md](docs/operations.md) |
+| Security & Compliance (RBAC, audit, data, telemetry) | [docs/security.md](docs/security.md) |
+| Contributing (workflow, style, commits, tests) | [docs/contributing.md](docs/contributing.md) |
+| Demo (script, cheatsheet, action plan) | [docs/demo.md](docs/demo.md) |
+| Changelog (commit log, monthly) | [CHANGELOG.md](CHANGELOG.md) |
+| Beta test plan | [beta_test_plan.md](beta_test_plan.md) |
+| ADRs (individual decision records) | [docs/adr/](docs/adr/) |
+| Research papers + slides | [docs/assets/](docs/assets/) |
+
+**EIP Tech 4 deliverables** — everything the jury looks at, grouped under [`docs/eip/`](docs/eip/):
+
+| Topic | Link |
+|-------|------|
+| **Index** (start here) | [docs/eip/README.md](docs/eip/README.md) |
+| Objectives audit (scorecard) | [docs/eip/objectives-audit.md](docs/eip/objectives-audit.md) |
+| Performance — KPIs, benchmarks, before/after (Point D) | [docs/eip/performance.md](docs/eip/performance.md) |
+| Tech Watch (Point 1) | [docs/eip/tech-watch.md](docs/eip/tech-watch.md) |
+| Community Contributions (Point 1) | [docs/eip/community-contributions.md](docs/eip/community-contributions.md) |
+| Protection Plan (Point A) | [docs/eip/protection-plan.md](docs/eip/protection-plan.md) |
+| Diffusion Strategy (Point A) | [docs/eip/diffusion-strategy.md](docs/eip/diffusion-strategy.md) |
 
 ## Generating Browsable Documentation
 
@@ -131,10 +162,10 @@ pip install mkdocs mkdocs-material mkdocs-mermaid2-plugin pdoc
 cd src/services/web-client && npm install --save-dev typedoc && cd -
 
 # Generate and open in browser
-./scripts/generate_docs.sh
+./scripts/docs.sh
 
 # Or start a live-reload server
-./scripts/generate_docs.sh --serve
+./scripts/docs.sh --serve
 ```
 
 This generates three layers of documentation:
@@ -144,7 +175,7 @@ This generates three layers of documentation:
 
 ## Contributing
 
-All work must start as a GitHub Issue. See [docs/contributing/contributing.md](docs/contributing/contributing.md) for branch naming, commit conventions, code style, and pull request guidelines.
+All work must start as a GitHub Issue. See [docs/contributing.md](docs/contributing.md) for branch naming, commit conventions, code style, and pull request guidelines.
 
 ## License
 

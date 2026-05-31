@@ -2,7 +2,7 @@
 
 Handlers dispatch incoming tasks to the active agent (general RAG
 pipeline or one of the specialized agents) and POST results back to the
-orchestrator. See ``docs/architecture/agent_service.md`` for the full
+orchestrator. See ``docs/architecture.md`` for the full
 lifecycle.
 
 The implementation is split across this package:

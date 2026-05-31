@@ -73,7 +73,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_RUN_LOCAL = _REPO_ROOT / "scripts" / "dev" / "knowledge-store" / "run_local.sh"
+_RUN_LOCAL = _REPO_ROOT / "scripts" / "dev" / "run-knowledge-store.sh"
 _INFRA_ENV = _REPO_ROOT / "src" / "infra" / ".env"
 
 # Define port for Knowledge Store
@@ -91,7 +91,7 @@ def ensure_server_running():
     """Ensure the local server is running for integration tests.
 
     If nothing listens on localhost:8080, this fixture will start
-    ``scripts/dev/knowledge-store/run_local.sh`` in a background process and
+    ``scripts/dev/run-knowledge-store.sh`` in a background process and
     wait for the port to be available. The process is terminated at the end of
     the test session.
     """
@@ -120,7 +120,7 @@ def ensure_server_running():
     run_script = str(_RUN_LOCAL)
     if not Path(run_script).exists():
         pytest.skip(
-            "scripts/dev/knowledge-store/run_local.sh not found; cannot start "
+            "scripts/dev/run-knowledge-store.sh not found; cannot start "
             "local server for integration tests"
         )
 

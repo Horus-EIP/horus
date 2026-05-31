@@ -1,7 +1,7 @@
 """HTTP routes for task orchestration.
 
 Task creation, status queries, cancellation, and result ingestion from
-agents. See ``docs/architecture/mas_service.md`` for the task lifecycle,
+agents. See ``docs/architecture.md`` for the task lifecycle,
 payload shapes, and error codes.
 """
 

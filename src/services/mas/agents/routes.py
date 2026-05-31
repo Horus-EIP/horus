@@ -2,7 +2,7 @@
 
 All endpoints are RBAC-gated; heartbeats additionally require the agent's
 ``X-API-Key`` + ``Agent-ID`` headers. See
-``docs/architecture/mas_service.md`` for full payloads and error codes.
+``docs/architecture.md`` for full payloads and error codes.
 """
 
 from typing import Annotated

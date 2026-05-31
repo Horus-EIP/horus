@@ -2,7 +2,7 @@
 
 Calls registered tools (``search_knowledge``, ``extract_data``,
 ``analyze_payments``, ``calc``, ``delegate``) and cites sources in every answer.
-See ``docs/architecture/agent_service.md`` for the walkthrough.
+See ``docs/architecture.md`` for the walkthrough.
 """
 
 from __future__ import annotations

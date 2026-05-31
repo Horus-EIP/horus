@@ -2,7 +2,7 @@
 
 Reads environment variables (optionally from ``.env``) into a typed
 ``settings`` object. Variable list and search order live in
-``docs/architecture/mas_service.md``.
+``docs/architecture.md``.
 """
 
 from pathlib import Path
