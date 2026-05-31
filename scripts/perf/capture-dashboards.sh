@@ -36,7 +36,7 @@ mkdir -p "$OUT_DIR"
 # UID path. Adjust to your Grafana dashboard URLs.
 DASHBOARDS=(
     "mas-overview:MAS Overview"
-    "stack-logs:Stack Logs"
+    "horus-stack-logs:Stack Logs"
 )
 
 # --- find chromium binary ---
@@ -68,7 +68,7 @@ echo ""
 for entry in "${DASHBOARDS[@]}"; do
     slug="${entry%%:*}"
     name="${entry#*:}"
-    url="$GRAFANA_URL/d/$slug?orgId=1&refresh=10s&kiosk"
+    url="$GRAFANA_URL/d/$slug?orgId=1&kiosk&from=now-${GRAFANA_WINDOW:-30m}&to=now"
     out="$OUT_DIR/${slug}-${STAMP}.png"
     echo "→ $name"
     echo "   URL: $url"
@@ -80,7 +80,7 @@ for entry in "${DASHBOARDS[@]}"; do
         --no-sandbox \
         --window-size="${WIDTH},${HEIGHT}" \
         --screenshot="$out" \
-        --virtual-time-budget=8000 \
+        --virtual-time-budget=25000 \
         "$url" >/dev/null 2>&1 || {
             echo "   FAILED (browser exited non-zero)"
             continue

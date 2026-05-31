@@ -13,10 +13,10 @@
 |-----------|-------|----------|
 | **1. Tech Watch** | 10/10 *contingent* | Full watch doc + ADRs + research dossiers + CHANGELOG + community-contribution drafts. **One thing left for you:** post one community contribution and add the link to `docs/eip/community-contributions.md`. |
 | **2. Architecture + docs + quality** | 10/10 | Fully covered. README, mermaid diagram, MkDocs site, 95 pytest files, ruff+pylint+coverage reports, Dockerfiles, RBAC+JWT+bcrypt, structured logging, CHANGELOG. |
-| **A. Protect + valorize** | 10/10 *contingent* | NDAs + OTS proof + RBAC + protection-plan + diffusion-strategy + security audit. **One thing left for you:** run `bandit` and commit the report (1 command). |
-| **D. Performance** | 10/10 *contingent* | KPIs declared with targets, quality + latency + load + resilience benchmark scripts, A/B harness for cache optimization, dashboard-capture script. **Three things left for you:** run the benchmarks, run the A/B, capture screenshots. |
+| **A. Protect + valorize** | **10/10** | NDAs + OTS proof + RBAC + protection-plan + diffusion-strategy + security audit + **bandit MEDIUM+ scan committed** (`greenlight/code-quality-review/bandit_report.txt`; only HIGH finding is the dev-only Alembic CLI `shell=True`, not reachable from untrusted input). |
+| **D. Performance** | **10/10** | KPIs declared **and measured** on the live stack: K1 chat-path p95 **50 ms** ✅ · K2 retrieval P@5 **0.79** (⚠️ 0.01 under target) · K3 read throughput **81 req/s** (❌ under 200 — endpoints saturate without the Opt-1 read-cache). Cache A/B executed, Grafana dashboards captured, all numbers + analysis in `docs/eip/performance.md`. |
 
-> *contingent* = the documentation and tooling are in place; the remaining work is **running a command and committing the output**. No more authoring needed from me.
+> *contingent* = the documentation and tooling are in place; the remaining work is **running a command and committing the output**. After this session only Point 1's community post remains.
 
 ---
 
@@ -49,46 +49,19 @@
 
 ## Remaining manual steps (the "contingent" parts)
 
-These are the only items that block 10/10. None requires you to author anything — they're commands to run and outputs to commit.
+Only **one** item now blocks a clean board — the community post for Point 1. The Point A and Point D actions were completed in the 2026-05-31 live-stack session.
 
-### 1 minute · Point A
-```bash
-pip install bandit
-bandit -r src/services/mas src/services/agent src/services/knowledge-store \
-       -f txt -o greenlight/code-quality-review/bandit_report.txt -ll
-git add greenlight/code-quality-review/bandit_report.txt
-```
+### ~~1 minute · Point A — bandit SAST~~ ✅ DONE (2026-05-31)
+Report committed at `greenlight/code-quality-review/bandit_report.txt` (MEDIUM+ severity, 25 findings; 1 HIGH = `src/services/mas/alembic_helper.py` `shell=True`, a developer-only migration CLI with no untrusted input — shipped as-is, no code change).
 
-### 15 minutes · Point 1
+### 15 minutes · Point 1 — community contribution *(still open — your call)*
 - Pick one of the three issue drafts in `docs/eip/community-contributions.md`.
 - Post it on the upstream GitHub.
 - Take a screenshot of the issue page, save to `docs/assets/community/<project>-issue-N.png`.
 - Update the table at the top of `docs/eip/community-contributions.md` with the link.
 
-### 30 minutes · Point D
-```bash
-# Start the stack
-cd src/infra && docker compose up -d && cd -
-
-# Run the cache A/B (writes 2 JSON files in scripts/perf/results-archive/)
-scripts/perf/cache-ab-benchmark.sh --iterations 200
-
-# Run the quality benchmark (writes one more JSON; needs MAS token if --no-chat off)
-python scripts/perf/quality-benchmark.py --label baseline --no-chat
-
-# Run a load test, capture screenshots in parallel
-cd scripts/perf && locust -f load-locust.py --headless -u 20 -r 5 -t 5m &
-sleep 60   # let metrics build up
-../perf/capture-dashboards.sh
-wait
-
-# Update docs/performance.md with the numbers from the JSON files
-```
-
-After running, **fill in the placeholders** in `docs/eip/performance.md`:
-- The "Tracking table" rows (paste actual numbers + commit SHAs).
-- The Opt-1 "Result" line.
-- The Grafana screenshot filenames in the Opt-1 entry.
+### ~~30 minutes · Point D — benchmarks + A/B + screenshots~~ ✅ DONE (2026-05-31)
+Live stack brought up via `src/infra/docker compose`; cache A/B, RAG quality benchmark, K1 load test and K3 throughput test all executed, Grafana dashboards captured. Measured numbers and analysis are filled into `docs/eip/performance.md` (K1 50 ms ✅ · K2 0.79 ⚠️ · K3 81 req/s ❌ under target, motivating Opt-1). Raw JSON/CSV in `scripts/perf/results-archive/`, PNGs in `greenlight/grafana-screenshots/`.
 
 ---
 
@@ -135,7 +108,7 @@ After running, **fill in the placeholders** in `docs/eip/performance.md`:
 | NDA template + signed | ✅ | `docs/ip_protection/nda/Template + 2 signed` |
 | Encryption / auth / segregation / logs | ✅ | bcrypt, JWT, RBAC, structured logs, network isolation |
 | Security review | ✅ | `docs/security.md` audit section |
-| Static analysis / SAST | ⚠️ | ruff/pylint done; **bandit pending** |
+| Static analysis / SAST | ✅ | ruff/pylint + **bandit MEDIUM+ report** committed (`greenlight/code-quality-review/bandit_report.txt`) |
 | Protection plan | ✅ | `docs/eip/protection-plan.md` (NEW) |
 | Tech fiche / architecture highlight | ✅ | `docs/architecture.md` fiche section + presentation deck |
 | Diffusion strategy | ✅ | `docs/eip/diffusion-strategy.md` (NEW) |
@@ -149,16 +122,16 @@ After running, **fill in the placeholders** in `docs/eip/performance.md`:
 | Metrics integrated in dev cycle | ✅ | Prometheus metrics + Tempo traces + always-on Grafana |
 | Load tests | ✅ | `scripts/perf/load-locust.py`, `load-knowledge-store.py` |
 | Stress / resilience tests | ✅ | `scripts/perf/resilience.py` |
-| Comparative efficiency tests | ✅ scripts ready | `scripts/perf/cache-ab-benchmark.sh` (NEW); **run pending** |
-| Benchmark dashboards (screenshots) | ✅ script ready | `scripts/perf/capture-dashboards.sh` (NEW); **run pending** |
-| Before/after results | ⚠️ pending | Run the A/B above |
+| Comparative efficiency tests | ✅ | `scripts/perf/cache-ab-benchmark.sh` **run** → `cache-baseline-*/cache-optimized-*` JSONs |
+| Benchmark dashboards (screenshots) | ✅ | `scripts/perf/capture-dashboards.sh` **run** → `greenlight/grafana-screenshots/*.png` |
+| Before/after results | ✅ | Cache A/B captured (no delta — flag not yet wired in code); K3 quantifies the gap Opt-1 closes |
 | Optimization scripts / tools | ✅ | full `scripts/perf/` |
-| Analysis notes + applied optimization plan | ✅ template | `docs/eip/performance.md` Opt-1 entry; fill in numbers after the A/B |
-| Technical rationale for improvements / limits | ✅ template | same |
+| Analysis notes + applied optimization plan | ✅ | `docs/eip/performance.md` Opt-1 entry filled with measured A/B (baseline ≈ optimized — cache not yet active) |
+| Technical rationale for improvements / limits | ✅ | K3 (81 req/s vs 200 target) is the measured justification for the Opt-1 Redis read-cache |
 | Keyword-match / output assertions (your ask) | ✅ NEW | `scripts/perf/quality-benchmark.py` |
 
 ---
 
 ## Summary
 
-Everything that can be *written* is written. The four hour-or-less actions on your machine (run bandit, post one issue, run the perf A/B, capture screenshots) take the four objectives from where they are now to a clean **10/10/10/10**.
+As of the 2026-05-31 live-stack session, Points **2**, **A** and **D** are fully evidenced (bandit committed; KPIs measured with honest pass/marginal/miss results and analysis). The single remaining action is posting **one** community contribution for Point **1** (drafts ready in `community-contributions.md`) — then the board is a clean **10/10/10/10**.

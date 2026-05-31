@@ -1,0 +1,116 @@
+{
+  "label": "baseline",
+  "timestamp": "2026-05-31T16:48:32.956905+00:00",
+  "ks_url": "http://localhost:8080",
+  "mas_url": "http://localhost:8000",
+  "top_k": 5,
+  "num_queries": 8,
+  "metrics": {
+    "keyword_match_precision_retrieval_mean": 0.7917,
+    "keyword_match_precision_answer_mean": 0.0,
+    "answer_predicate_pass_rate": null,
+    "retrieval_latency_ms_mean": 14.0587
+  },
+  "cases": [
+    {
+      "query": "What was Q4 2025 revenue?",
+      "expected_keywords": [
+        "revenue",
+        "Q4",
+        "2025"
+      ],
+      "answer_predicate": "answer_contains_number",
+      "retrieval_latency_ms": 16.95,
+      "keyword_match_precision_retrieval": 1.0,
+      "retrieval_ok": true,
+      "answer_ok": null
+    },
+    {
+      "query": "What is the expense reimbursement policy for travel?",
+      "expected_keywords": [
+        "expense",
+        "travel",
+        "reimbursement"
+      ],
+      "answer_predicate": "none",
+      "retrieval_latency_ms": 13.94,
+      "keyword_match_precision_retrieval": 1.0,
+      "retrieval_ok": true,
+      "answer_ok": null
+    },
+    {
+      "query": "How many vacation days does an employee get per year?",
+      "expected_keywords": [
+        "vacation",
+        "days",
+        "employee"
+      ],
+      "answer_predicate": "answer_contains_day_count",
+      "retrieval_latency_ms": 14.75,
+      "keyword_match_precision_retrieval": 1.0,
+      "retrieval_ok": true,
+      "answer_ok": null
+    },
+    {
+      "query": "What are the data retention requirements?",
+      "expected_keywords": [
+        "data",
+        "retention"
+      ],
+      "answer_predicate": "none",
+      "retrieval_latency_ms": 13.27,
+      "keyword_match_precision_retrieval": 0.5,
+      "retrieval_ok": true,
+      "answer_ok": null
+    },
+    {
+      "query": "Who is allowed to approve a wire transfer over $50,000?",
+      "expected_keywords": [
+        "approve",
+        "wire",
+        "transfer"
+      ],
+      "answer_predicate": "none",
+      "retrieval_latency_ms": 13.4,
+      "keyword_match_precision_retrieval": 0.3333,
+      "retrieval_ok": true,
+      "answer_ok": null
+    },
+    {
+      "query": "What security controls protect the production environment?",
+      "expected_keywords": [
+        "security",
+        "production"
+      ],
+      "answer_predicate": "none",
+      "retrieval_latency_ms": 13.52,
+      "keyword_match_precision_retrieval": 1.0,
+      "retrieval_ok": true,
+      "answer_ok": null
+    },
+    {
+      "query": "What is the password complexity requirement?",
+      "expected_keywords": [
+        "password",
+        "complexity"
+      ],
+      "answer_predicate": "answer_contains_char_count",
+      "retrieval_latency_ms": 13.51,
+      "keyword_match_precision_retrieval": 0.5,
+      "retrieval_ok": true,
+      "answer_ok": null
+    },
+    {
+      "query": "Which compliance frameworks apply to customer data?",
+      "expected_keywords": [
+        "compliance",
+        "data"
+      ],
+      "answer_predicate": "none",
+      "retrieval_latency_ms": 13.13,
+      "keyword_match_precision_retrieval": 1.0,
+      "retrieval_ok": true,
+      "answer_ok": null
+    }
+  ]
+}
