@@ -55,6 +55,7 @@ ROLE_PERMISSION: Dict[Role, Set[Permission]] = {
     },
     Role.MANAGER: {
         Permission.USER_READ,
+        Permission.TASK_READ,
         Permission.TASK_CREATE,
         Permission.TASK_APPROVE,
         Permission.TASK_DELETE,
