@@ -1,156 +1,90 @@
+"""Service-level fixtures for Knowledge Store tests.
+
+Hermetic — no real ChromaDB, no real spaCy model download, no live KS
+server. Heavy ML / NLP libraries are replaced with ``MagicMock``\\ s so the
+import graph stays light.
+
+The live-server launcher that used to live here (subprocess +
+run-knowledge-store.sh) moved to ``scripts/integration-checks/`` and only
+runs when you invoke pytest with ``-m requires_stack``.
+"""
+
+from __future__ import annotations
+
 import os
 import sys
-
-os.environ.setdefault("TEST_MODE", "1")
 import types
 from unittest.mock import MagicMock
 
-# GLOBAL ENVIRONMENT PATCHES
-# Patch spacy to avoid Python 3.14/Pydantic V1 issues
-# We must use a ModuleType with __spec__ to satisfy importlib/transformers checks
-spacy_mock = types.ModuleType("spacy")
-spacy_mock.__spec__ = types.SimpleNamespace(origin="mock", submodule_search_locations=[])
+os.environ.setdefault("TEST_MODE", "1")
 
-# Configure nlp mock to return a doc with sents for chunker
-doc_mock = MagicMock()
-sent_mock = MagicMock()
-sent_mock.text = "This is a sentence."
-doc_mock.sents = [sent_mock]
-doc_mock.ents = []
-doc_mock.noun_chunks = []
-nlp_mock = MagicMock(return_value=doc_mock)
+# --------------------------------------------------------------------------- #
+# spaCy — replace with a mock module that returns a doc with one sentence.
+# --------------------------------------------------------------------------- #
 
-spacy_mock.load = MagicMock(return_value=nlp_mock)
-sys.modules["spacy"] = spacy_mock
+_spacy = types.ModuleType("spacy")
+_spacy.__spec__ = types.SimpleNamespace(origin="mock", submodule_search_locations=[])
+
+_doc = MagicMock()
+_sentence = MagicMock()
+_sentence.text = "This is a sentence."
+_doc.sents = [_sentence]
+_doc.ents = []
+_doc.noun_chunks = []
+_nlp = MagicMock(return_value=_doc)
+
+_spacy.load = MagicMock(return_value=_nlp)
+sys.modules["spacy"] = _spacy
 sys.modules["spacy.cli"] = MagicMock()
+sys.modules["spacy.lang"] = types.ModuleType("spacy.lang")
+sys.modules["spacy.lang.en"] = types.ModuleType("spacy.lang.en")
 
-# Mock spacy.lang and submodules for content_analyzer
-spacy_lang = types.ModuleType("spacy.lang")
-sys.modules["spacy.lang"] = spacy_lang
+_stop_words = types.ModuleType("spacy.lang.en.stop_words")
+_stop_words.STOP_WORDS = {"a", "the", "is", "in"}
+sys.modules["spacy.lang.en.stop_words"] = _stop_words
 
-spacy_lang_en = types.ModuleType("spacy.lang.en")
-sys.modules["spacy.lang.en"] = spacy_lang_en
+# --------------------------------------------------------------------------- #
+# ChromaDB — replace PersistentClient with a configurable mock.
+# --------------------------------------------------------------------------- #
 
-spacy_lang_en_stop_words = types.ModuleType("spacy.lang.en.stop_words")
-spacy_lang_en_stop_words.STOP_WORDS = set(["a", "the", "is", "in"])
-sys.modules["spacy.lang.en.stop_words"] = spacy_lang_en_stop_words
+_chromadb = types.ModuleType("chromadb")
+_chromadb.__spec__ = types.SimpleNamespace(origin="mock", submodule_search_locations=[])
+_chromadb.PersistentClient = MagicMock()
 
-
-# Patch chromadb to avoid Pydantic V2/BaseSettings issues
-# We need to ensure it looks like a package if finding spec
-chromadb_mock = types.ModuleType("chromadb")
-chromadb_mock.__spec__ = types.SimpleNamespace(origin="mock", submodule_search_locations=[])
-chromadb_mock.PersistentClient = MagicMock()
-# Configure default query response
-chromadb_mock.PersistentClient.return_value.get_collection.return_value.query.return_value = {
+_query_result = {
     "ids": [["test_id"]],
     "documents": [["test content"]],
-    "metadatas": [[{"title": "test", "size": 100, "date": "2023-01-01"}]]
+    "metadatas": [[{"title": "test", "size": 100, "date": "2023-01-01"}]],
 }
-chromadb_mock.PersistentClient.return_value.create_collection.return_value.query.return_value = {
-    "ids": [["test_id"]],
-    "documents": [["test content"]],
-    "metadatas": [[{"title": "test", "size": 100, "date": "2023-01-01"}]]
-}
-sys.modules["chromadb"] = chromadb_mock
+_chromadb.PersistentClient.return_value.get_collection.return_value.query.return_value = _query_result
+_chromadb.PersistentClient.return_value.create_collection.return_value.query.return_value = _query_result
+sys.modules["chromadb"] = _chromadb
 
-chromadb_config_mock = types.ModuleType("chromadb.config")
-chromadb_config_mock.Settings = MagicMock()
-sys.modules["chromadb.config"] = chromadb_config_mock
+_chromadb_config = types.ModuleType("chromadb.config")
+_chromadb_config.Settings = MagicMock()
+sys.modules["chromadb.config"] = _chromadb_config
 
-# Mock sentence_transformers to avoid model download
-sentence_transformers_mock = types.ModuleType("sentence_transformers")
-sentence_transformers_mock.SentenceTransformer = MagicMock()
-sys.modules["sentence_transformers"] = sentence_transformers_mock
+# --------------------------------------------------------------------------- #
+# SentenceTransformers — replace so no model is downloaded at import time.
+# --------------------------------------------------------------------------- #
 
-import atexit
-import socket
-import subprocess
-import time
-from pathlib import Path
+_st = types.ModuleType("sentence_transformers")
+_st.SentenceTransformer = MagicMock()
+sys.modules["sentence_transformers"] = _st
 
-import pytest
-from httpx import ASGITransport, AsyncClient
+# --------------------------------------------------------------------------- #
+# Lightweight client fixture for ``api/`` tests.
+# --------------------------------------------------------------------------- #
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_RUN_LOCAL = _REPO_ROOT / "scripts" / "dev" / "run-knowledge-store.sh"
-_INFRA_ENV = _REPO_ROOT / "src" / "infra" / ".env"
+import pytest  # noqa: E402
 
-# Define port for Knowledge Store
-PORT = 8080
-
-def _is_port_open(host: str, port: int) -> bool:
-    try:
-        with socket.create_connection((host, port), timeout=1):
-            return True
-    except Exception:
-        return False
-
-@pytest.fixture(scope="session", autouse=False)
-def ensure_server_running():
-    """Ensure the local server is running for integration tests.
-
-    If nothing listens on localhost:8080, this fixture will start
-    ``scripts/dev/run-knowledge-store.sh`` in a background process and
-    wait for the port to be available. The process is terminated at the end of
-    the test session.
-    """
-    host = os.getenv("TEST_HOST", "localhost")
-    port = int(os.getenv("TEST_PORT", str(PORT)))
-
-    if _is_port_open(host, port):
-        # Server already running, nothing to do
-        yield
-        return
-
-    env = os.environ.copy()
-    if _INFRA_ENV.exists():
-        with open(_INFRA_ENV, "r") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if "=" in line:
-                    k, v = line.split("=", 1)
-                    env[k.strip()] = v.strip()
-
-    # Disable auto-init of heavy resources if applicable
-    env.setdefault("LLM_AUTOINIT", "0")
-
-    run_script = str(_RUN_LOCAL)
-    if not Path(run_script).exists():
-        pytest.skip(
-            "scripts/dev/run-knowledge-store.sh not found; cannot start "
-            "local server for integration tests"
-        )
-
-    proc = subprocess.Popen(["bash", run_script], cwd=str(_REPO_ROOT), env=env)
-
-    def _cleanup():
-        try:
-            proc.terminate()
-            proc.wait(timeout=5)
-        except Exception:
-            proc.kill()
-
-    atexit.register(_cleanup)
-
-    # Wait for server port to become available
-    for _ in range(60):
-        if _is_port_open(host, port):
-            break
-        time.sleep(1)
-    else:
-        _cleanup()
-        pytest.skip(f"Could not start server for integration tests (port {port} not open)")
-
-    yield
-
-    # Teardown: terminate process
-    _cleanup()
 
 @pytest.fixture
 async def async_client():
-    from app.main import app
+    """In-process httpx client over the KS ASGI app — no network, no server."""
+    from httpx import ASGITransport, AsyncClient  # noqa: PLC0415
+
+    from app.main import app  # noqa: PLC0415
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
