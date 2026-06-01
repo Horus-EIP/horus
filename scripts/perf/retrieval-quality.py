@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src/services/knowledge-store"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "src/services/knowledge-store/app"))
 
-from chroma_db.setup import model, knowledge_collection, BGE_QUERY_PREFIX
+from chroma_db.setup import BGE_QUERY_PREFIX, knowledge_collection, model
 
 TEST_QUERIES = [
     "how to setup docker for ethereum?",
@@ -33,7 +33,7 @@ for query in TEST_QUERIES:
 
     print(f"Query: {query}")
 
-    for doc, dist in zip(results["documents"][0], results["distances"][0]):
+    for doc, dist in zip(results["documents"][0], results["distances"][0], strict=False):
         score = 1 - dist
         print(f"\t(Score: {score:.4f}) {doc[:100]}...")
 

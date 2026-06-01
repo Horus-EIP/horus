@@ -6,9 +6,8 @@ call from background tasks. Public variants are used by FastAPI routes.
 
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from fastapi import Depends
 from passlib.context import CryptContext
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
@@ -16,7 +15,6 @@ from sqlalchemy.orm import Session
 from core.logger import get_logger
 from core.rabbitmq_tool import rabbitmq_instance
 from core.work_queues import work_queue_name_for_agent_type
-from db.database import SessionLocal, get_db
 from db.models import Agents, AgentTypes
 
 
@@ -82,7 +80,7 @@ def _update_alive_agent_status_internal(agent_id: str, db: Session) -> bool:
             return False
 
         agent.status = "active"
-        agent.last_heartbeat = datetime.now(timezone.utc)
+        agent.last_heartbeat = datetime.now(UTC)
         db.commit()
         logger.info(f"Agent heartbeat updated successfully - Agent ID: {agent_id}")
         return True
@@ -104,10 +102,10 @@ def _update_dead_agent_status_internal(agent_id: str, db: Session) -> bool:
         db.commit()
         last_heartbeat = agent.last_heartbeat
         if last_heartbeat.tzinfo is None:
-            last_heartbeat = last_heartbeat.replace(tzinfo=timezone.utc)
+            last_heartbeat = last_heartbeat.replace(tzinfo=UTC)
 
         logger.warning(
-            f"Agent marked as dead - Agent ID: {agent_id}, Last heartbeat was {(datetime.now(timezone.utc) - last_heartbeat).total_seconds():.1f}s ago"
+            f"Agent marked as dead - Agent ID: {agent_id}, Last heartbeat was {(datetime.now(UTC) - last_heartbeat).total_seconds():.1f}s ago"
         )
         return True
     except Exception as e:
@@ -158,7 +156,7 @@ def create_agent(
             skills=skills,
             description=description,
             status="active",
-            last_heartbeat=datetime.now(timezone.utc),
+            last_heartbeat=datetime.now(UTC),
             api_key=hash_api_key,
             type=Agent_type,
         )
@@ -238,7 +236,7 @@ def update_alive_agent_status(agent_id: str, db: Session) -> bool:
             return False
 
         agent.status = "active"
-        agent.last_heartbeat = datetime.now(timezone.utc)
+        agent.last_heartbeat = datetime.now(UTC)
         db.commit()
         return True
     except Exception as e:
@@ -275,7 +273,7 @@ def update_active_status(agent_id: str, db: Session) -> bool:
             return False
 
         agent.status = "active"
-        agent.last_heartbeat = datetime.now(timezone.utc)
+        agent.last_heartbeat = datetime.now(UTC)
         db.commit()
         return True
     except Exception as e:
@@ -337,9 +335,9 @@ def _is_agent_recently_alive(agent_info, max_age_seconds: int = 90) -> bool:
     if not last_heartbeat:
         return False
     try:
-        current_time = datetime.now(timezone.utc)
+        current_time = datetime.now(UTC)
         if last_heartbeat.tzinfo is None:
-            last_heartbeat = last_heartbeat.replace(tzinfo=timezone.utc)
+            last_heartbeat = last_heartbeat.replace(tzinfo=UTC)
         return (current_time - last_heartbeat) <= timedelta(seconds=max_age_seconds)
     except Exception as e:
         logger.error(f"Error checking agent liveness: {e}")

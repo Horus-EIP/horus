@@ -75,11 +75,11 @@ def test_task_model_creation(session: Session, conversation_id: int) -> None:
     session.add(task)
     session.commit()
 
-    print(f"✅ Task created successfully")
+    print("✅ Task created successfully")
     print(f"   Task ID: {task_id}")
     print(f"   Conversation ID: {conversation_id}")
-    print(f"   Agent ID: agent_001")
-    print(f"   Status: running")
+    print("   Agent ID: agent_001")
+    print("   Status: running")
     print(f"   Query: {task.query}")
     print(f"   Parent Task ID: {task.parent_task_id}")
     print(f"   Order: {task.order}")
@@ -130,7 +130,7 @@ def test_task_result_model_creation(session: Session, task_id: str) -> None:
     session.add(task_result)
     session.commit()
 
-    print(f"✅ TaskResult created successfully")
+    print("✅ TaskResult created successfully")
     print(f"   TaskResult ID: {task_result_id}")
     print(f"   Task ID: {task_id}")
     print(f"   Result Data: {task_result.result_data}")
@@ -179,11 +179,11 @@ def test_subtask_creation(
     session.add(subtask)
     session.commit()
 
-    print(f"✅ Subtask created successfully")
+    print("✅ Subtask created successfully")
     print(f"   Subtask ID: {subtask_id}")
     print(f"   Parent Task ID: {subtask.parent_task_id}")
-    print(f"   Agent ID: agent_002")
-    print(f"   Status: running")
+    print("   Agent ID: agent_002")
+    print("   Status: running")
     print(f"   Query: {subtask.query}")
     print(f"   Order: {subtask.order}")
 
@@ -213,7 +213,7 @@ def test_task_retrieval(session: Session, task_id: str) -> None:
         print(f"❌ Task not found: {task_id}")
         return
 
-    print(f"✅ Task retrieved successfully")
+    print("✅ Task retrieved successfully")
     print(f"   Task ID: {task.id}")
     print(f"   Agent ID: {task.agent_id}")
     print(f"   Status: {task.status}")
@@ -221,7 +221,7 @@ def test_task_retrieval(session: Session, task_id: str) -> None:
 
     # Test TaskResult relationship
     if task.result:
-        print(f"\n✅ TaskResult found via relationship:")
+        print("\n✅ TaskResult found via relationship:")
         print(f"   TaskResult ID: {task.result.id}")
         print(f"   Result Data: {task.result.result_data}")
         print(
@@ -231,11 +231,11 @@ def test_task_retrieval(session: Session, task_id: str) -> None:
             f"   Future actions: {len(task.result.future_actions) if task.result.future_actions else 0}"
         )
     else:
-        print(f"⚠️  No TaskResult associated with this task yet")
+        print("⚠️  No TaskResult associated with this task yet")
 
     # Test subtasks relationship
     if task.subtasks:
-        print(f"\n✅ Subtasks found via relationship:")
+        print("\n✅ Subtasks found via relationship:")
         for i, subtask in enumerate(task.subtasks):
             print(f"   Subtask {i+1}:")
             print(f"     - ID: {subtask.id}")
@@ -243,7 +243,7 @@ def test_task_retrieval(session: Session, task_id: str) -> None:
             print(f"     - Order: {subtask.order}")
             print(f"     - Status: {subtask.status}")
     else:
-        print(f"⚠️  No subtasks associated with this task yet")
+        print("⚠️  No subtasks associated with this task yet")
 
 
 def test_query_chains(session: Session) -> None:
@@ -268,7 +268,7 @@ def test_query_chains(session: Session) -> None:
         session.query(Task).filter(Task.conversation_id == conversation_id).all()
     )
 
-    print(f"✅ All tasks in conversation:")
+    print("✅ All tasks in conversation:")
     print(f"   Total tasks: {len(all_tasks)}")
 
     # Query 2: Main tasks only (parent_task_id IS NULL)
@@ -278,7 +278,7 @@ def test_query_chains(session: Session) -> None:
         .all()
     )
 
-    print(f"\n✅ Main tasks (no parent):")
+    print("\n✅ Main tasks (no parent):")
     print(f"   Count: {len(main_tasks)}")
     for task in main_tasks:
         print(f"   - {task.id}: {task.query[:50]}...")
@@ -292,7 +292,7 @@ def test_query_chains(session: Session) -> None:
         .all()
     )
 
-    print(f"\n✅ Subtasks (with parent):")
+    print("\n✅ Subtasks (with parent):")
     print(f"   Count: {len(subtasks)}")
     for task in subtasks:
         print(f"   - {task.id}: parent={task.parent_task_id}, order={task.order}")
@@ -304,7 +304,7 @@ def test_query_chains(session: Session) -> None:
         .all()
     )
 
-    print(f"\n✅ Running tasks:")
+    print("\n✅ Running tasks:")
     print(f"   Count: {len(running_tasks)}")
 
     # Query 5: Completed tasks with results
@@ -314,7 +314,7 @@ def test_query_chains(session: Session) -> None:
         .all()
     )
 
-    print(f"\n✅ Completed tasks:")
+    print("\n✅ Completed tasks:")
     print(f"   Count: {len(completed_tasks_with_results)}")
 
 
@@ -344,19 +344,19 @@ def test_data_persistence(session: Session, task_id: str) -> None:
     task = new_session.query(Task).filter(Task.id == task_id).first()
 
     if task:
-        print(f"✅ Task retrieved in new session successfully")
+        print("✅ Task retrieved in new session successfully")
         print(f"   Task ID: {task.id}")
         print(f"   Agent ID: {task.agent_id}")
         print(f"   Status: {task.status}")
 
         # Verify relationship
         if task.result:
-            print(f"✅ TaskResult accessible in new session")
+            print("✅ TaskResult accessible in new session")
             print(f"   Result Data: {task.result.result_data}")
         else:
-            print(f"⚠️  TaskResult not found in new session")
+            print("⚠️  TaskResult not found in new session")
     else:
-        print(f"❌ Task not found in new session")
+        print("❌ Task not found in new session")
 
     new_session.close()
 
@@ -396,12 +396,12 @@ def run_all_tests() -> None:
         print_separator()
         print("\n✅ ALL DATABASE TESTS PASSED SUCCESSFULLY!")
         print("\nTest Summary:")
-        print(f"  ✓ Task model works correctly")
-        print(f"  ✓ TaskResult model works correctly")
-        print(f"  ✓ Parent-child relationships work")
-        print(f"  ✓ Queries execute correctly")
-        print(f"  ✓ Data persists to database")
-        print(f"  ✓ Relationships accessible across sessions")
+        print("  ✓ Task model works correctly")
+        print("  ✓ TaskResult model works correctly")
+        print("  ✓ Parent-child relationships work")
+        print("  ✓ Queries execute correctly")
+        print("  ✓ Data persists to database")
+        print("  ✓ Relationships accessible across sessions")
 
     except Exception as e:
         print(f"\n❌ Test failed: {e}")

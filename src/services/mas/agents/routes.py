@@ -10,17 +10,23 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from agents.openapi_docs import (AGENT_DETAILS_RESPONSES, HEARTBEAT_RESPONSES,
-                                 LIST_AGENTS_RESPONSES,
-                                 REGISTER_AGENT_OPENAPI_EXTRA,
-                                 REGISTER_AGENT_RESPONSES,
-                                 UNREGISTER_AGENT_RESPONSES)
-from agents.registry_tool_functions import (create_agent, delete_agent,
-                                            get_agent_details, get_agent_id,
-                                            get_all_agents,
-                                            update_alive_agent_status)
-from auth.auth_tool_functions import (PermissionChecker, get_current_user,
-                                      verify_agent_api_key)
+from agents.openapi_docs import (
+    AGENT_DETAILS_RESPONSES,
+    HEARTBEAT_RESPONSES,
+    LIST_AGENTS_RESPONSES,
+    REGISTER_AGENT_OPENAPI_EXTRA,
+    REGISTER_AGENT_RESPONSES,
+    UNREGISTER_AGENT_RESPONSES,
+)
+from agents.registry_tool_functions import (
+    create_agent,
+    delete_agent,
+    get_agent_details,
+    get_agent_id,
+    get_all_agents,
+    update_alive_agent_status,
+)
+from auth.auth_tool_functions import PermissionChecker, verify_agent_api_key
 from auth.permissions import Permission
 from core.logger import log_agent_operation, log_error
 from core.metrics import AGENT_COUNT

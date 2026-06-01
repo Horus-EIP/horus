@@ -1,7 +1,6 @@
 import datetime
 import json
 import uuid
-from typing import Optional
 
 from fastapi import WebSocket, WebSocketException, status
 from fastapi.security.utils import get_authorization_scheme_param
@@ -20,9 +19,9 @@ async def send_messages_via_websockets(
     conversation_id: str,
     message: str,
     *,
-    agent_id: Optional[str] = None,
-    agent_name: Optional[str] = None,
-    skill_used: Optional[str] = None,
+    agent_id: str | None = None,
+    agent_name: str | None = None,
+    skill_used: str | None = None,
 ):
     """Broadcast a message to all WebSocket clients on this conversation.
 
@@ -197,7 +196,7 @@ def get_active_sessions(conv_id: str) -> list[dict]:
     return sessions
 
 
-def _extract_token_from_ws(websocket: WebSocket, token_qs: Optional[str]) -> str:
+def _extract_token_from_ws(websocket: WebSocket, token_qs: str | None) -> str:
     if token_qs:
         return token_qs
     auth = websocket.headers.get("Authorization")

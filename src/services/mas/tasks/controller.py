@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-from datetime import timezone
 
 from fastapi import HTTPException
 
@@ -19,7 +18,7 @@ def _task_runtime_seconds(task, now: datetime.datetime) -> float:
     if start is None:
         return 0.0
     if start.tzinfo is None:
-        start = start.replace(tzinfo=timezone.utc)
+        start = start.replace(tzinfo=datetime.UTC)
     return max(0.0, (now - start).total_seconds())
 
 
@@ -31,7 +30,7 @@ async def check_task_timeout(test_mode=False):
         try:
             db = SessionLocal()
             try:
-                current_time = datetime.datetime.now(timezone.utc)
+                current_time = datetime.datetime.now(datetime.UTC)
                 limit_s = settings.task_timeout
                 tasks_in_progress = get_tasks_in_progress(db)
 

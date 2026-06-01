@@ -5,8 +5,14 @@ Tests for Pydantic schemas
 import pytest
 from pydantic import ValidationError
 
-from schemas.schemas import (ConversationCreation, CreateUserRequest,
-                             RegistrationForm, TaskForm, TaskResultForm, Token)
+from schemas.schemas import (
+    ConversationCreation,
+    CreateUserRequest,
+    RegistrationForm,
+    TaskForm,
+    TaskResultForm,
+    Token,
+)
 
 
 class TestRegistrationForm:

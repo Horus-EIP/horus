@@ -6,7 +6,7 @@ trip instead of fanning out. Counts are computed from the same sources the
 existing per-domain endpoints already use, so behaviour is consistent.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -63,7 +63,7 @@ async def overview(
 ):
     """Return the merged analytics snapshot."""
     payload = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "agents": _agent_snapshot(db),
         "tasks": get_task_queue_stats(db),
     }

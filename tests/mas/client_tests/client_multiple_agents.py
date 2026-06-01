@@ -326,7 +326,7 @@ async def websocket_listener(
                     except json.JSONDecodeError:
                         msg = raw
                     print(f"📨 Received: {msg}")
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 print(f"⏱️  WebSocket timeout ({timeout}s) - no new messages")
     except Exception as e:
         print(f"❌ WebSocket error: {e}")
@@ -387,7 +387,7 @@ async def main():
         print("-" * 70)
         token = await login_and_get_token()
         headers_http = bearer_headers(token)
-        print(f"✅ Authentication successful")
+        print("✅ Authentication successful")
         print(f"   Token: {token[:30]}...")
 
         # Step 2: Setup agents and conversation
@@ -396,7 +396,7 @@ async def main():
         agent_ids, agent_keys, conv_id, task_id = await setup_agents_and_conversation(
             headers_http
         )
-        print(f"✅ Setup complete")
+        print("✅ Setup complete")
         print(f"   Agents: {list(agent_ids.keys())}")
         print(f"   Conversation ID: {conv_id}")
         print(f"   Initial Task ID: {task_id}")
@@ -430,9 +430,9 @@ async def main():
         print(f"  ✓ Registered 2 agents: {', '.join(agent_ids.keys())}")
         print(f"  ✓ Created conversation: {conv_id}")
         print(f"  ✓ Created initial task: {task_id}")
-        print(f"  ✓ Simulated multi-agent workflow")
-        print(f"  ✓ Received WebSocket updates")
-        print(f"  ✓ Cleaned up resources")
+        print("  ✓ Simulated multi-agent workflow")
+        print("  ✓ Received WebSocket updates")
+        print("  ✓ Cleaned up resources")
 
     except httpx.HTTPStatusError as e:
         resp = e.response

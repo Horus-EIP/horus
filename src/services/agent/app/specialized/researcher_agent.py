@@ -1,6 +1,6 @@
 import logging
-from ai_agents.summarizer_tool import SummarizerTool
 
+from ai_agents.summarizer_tool import SummarizerTool
 
 logger = logging.getLogger(__name__)
 
@@ -14,13 +14,13 @@ class ResearcherAgent:
         relevant_data = await self.knowledge_retriever.fetch(query)
 
         return relevant_data
-    
+
     def summarize(self, text: str):
         data = {"text": text}
         summary = self.summarizer.run(data)
 
         return summary
-    
+
     async def process_request(self, task_type: str, data: str, extra_parameters: dict = None):
         """
         Perform searches, summaries, or combined research tasks.
@@ -46,4 +46,4 @@ class ResearcherAgent:
             return final_result
         else:
             return "Task type not found"
-        
+

@@ -1,14 +1,15 @@
-import httpx
-import uuid
-import time
 import asyncio
 import os
+import time
+import uuid
+
+import httpx
 
 BASE_URL = "http://localhost:8080"
 
 async def test_knowledge_base_flow():
     print("--- Testing Knowledge Base Flow ---")
-    
+
     doc_id = str(uuid.uuid4())
     doc_data = {
         "title": "Client Test Doc",
@@ -16,7 +17,7 @@ async def test_knowledge_base_flow():
         "id": doc_id,
         "size": 100
     }
-    
+
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=60.0) as client:
         # 1. Add Document
         print(f"Adding document {doc_id}...")
@@ -25,7 +26,7 @@ async def test_knowledge_base_flow():
             print(f"Failed to add document: {resp.text}")
             return
         print("Document added.")
-        
+
         # Give DB some time to index if async (Chroma usually fast)
         # 2. Query Document
         print(f"Querying for content '{doc_data['content']}'...")
@@ -41,10 +42,10 @@ async def test_knowledge_base_flow():
                     found = True
                     break
             time.sleep(0.5)
-            
+
         if not found:
             print("Warning: Document not found in query results (consistency delay?)")
-            
+
         # 3. Delete Document
         print(f"Deleting document {doc_id}...")
         resp = await client.delete(f"/{doc_id}")
@@ -57,11 +58,11 @@ async def test_file_flow():
     print("\n--- Testing File Flow ---")
     filename = f"client_test_{uuid.uuid4()}.txt"
     content = b"This is a client test file."
-    
+
     # Create dummy file
     with open(filename, "wb") as f:
         f.write(content)
-        
+
     try:
         async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
             # 1. Upload File (Legacy /file route)
@@ -98,15 +99,15 @@ async def test_file_flow():
                 print("File deleted.")
             else:
                 print(f"Failed to delete file: {resp.text}")
-                
+
             # 4. Test Upload Route (/api/knowledge-store/upload)
-            # The app root is /api/knowledge-store if mounted? 
-            # In main.py: root_path="/api/knowledge-store". 
+            # The app root is /api/knowledge-store if mounted?
+            # In main.py: root_path="/api/knowledge-store".
             # But uvicorn runs app directly on / usually.
             # Localhost:8080/upload check store.py router @router.post("/upload")
             # store.py is mounted at ""
-            
-            print(f"Testing /upload endpoint...")
+
+            print("Testing /upload endpoint...")
             files = {"file": (f"n2t9_{filename}", content, "text/plain")}
             resp = await client.post("/upload", files=files)
             if resp.status_code == 200:

@@ -1,5 +1,4 @@
-from app.api.routes import store
-from app.api.routes import file
+from app.api.routes import file, store
 
 ROUTERS: dict = {
     "/file": file.router,

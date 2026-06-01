@@ -30,8 +30,7 @@ import pika
 
 from config.settings import RABBITMQ_PORT
 from core.logger import get_correlation_id, get_logger, set_correlation_id
-from core.metrics import (agent_errors_total, task_processing_duration,
-                          task_processing_total)
+from core.metrics import agent_errors_total, task_processing_duration, task_processing_total
 
 logger = get_logger("agent_server.consumers")
 

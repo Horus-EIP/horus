@@ -24,32 +24,41 @@ import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import requests
 from fastapi import FastAPI, Request
 from prometheus_client import make_asgi_app
 
 from agent_server.consumers import _consume_agent_messages, _consume_messages
-from agent_server.delegation_bridge import (_format_delegation_context,
-                                            _process_delegation_message,
-                                            _send_delegation_result)
 from agent_server.middleware import CorrelationIDMiddleware
 from agent_server.models import Result, Task
-from agent_server.profiles import (PROFILES, get_primary_profile,
-                                   get_profile_by_agent_id,
-                                   unique_agent_types)
+from agent_server.profiles import (
+    PROFILES,
+    get_primary_profile,
+    get_profile_by_agent_id,
+)
 from ai_agents.decision_making_agent import DecisionMakingAgent
 from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
 from ai_agents.knowledge_store_client import KnowledgeStoreClient
 from ai_agents.rag_pipeline import RAGPipeline
-from config.settings import (MAX_DELEGATION_DEPTH, MODEL_DEVICE, MODEL_NAME,
-                             ORCHESTRATOR_PASSWORD, ORCHESTRATOR_TOKEN,
-                             ORCHESTRATOR_URL, ORCHESTRATOR_USERNAME)
+from config.settings import (
+    MAX_DELEGATION_DEPTH,
+    MODEL_DEVICE,
+    MODEL_NAME,
+    ORCHESTRATOR_PASSWORD,
+    ORCHESTRATOR_TOKEN,
+    ORCHESTRATOR_URL,
+    ORCHESTRATOR_USERNAME,
+)
 from core.logger import get_correlation_id, get_logger, set_correlation_id
-from core.metrics import (agent_errors_total, agent_heartbeat_total,
-                          agent_registered, task_processing_duration,
-                          task_processing_total)
+from core.metrics import (
+    agent_errors_total,
+    agent_heartbeat_total,
+    agent_registered,
+    task_processing_duration,
+    task_processing_total,
+)
 from specialized.analyst_agent import AnalystAgent
 from specialized.researcher_agent import ResearcherAgent
 from specialized.writer_agent import WriterAgent
@@ -438,7 +447,7 @@ def send_step(
     url = f"{ORCHESTRATOR_URL}/tasks/task-step/"
     profile = get_profile_by_agent_id(assigned_agent_id) or get_primary_profile()
     body_agent_id = assigned_agent_id or profile.agent_id
-    ts = step.get("timestamp") or datetime.now(timezone.utc).isoformat()
+    ts = step.get("timestamp") or datetime.now(UTC).isoformat()
     payload = {
         "task_id": task_id,
         "conversation_id": str(conversation_id) if conversation_id else None,

@@ -9,8 +9,7 @@ from sqlalchemy.orm import Session
 from db.database import Base, SessionLocal, engine
 from db.models import Agents, AgentTypes
 from schemas.schemas import CollaborativeTask, SubTask
-from tasks.task_tool_functions import (aggregate_results, build_subtask_list,
-                                       decompose_task)
+from tasks.task_tool_functions import aggregate_results, build_subtask_list, decompose_task
 
 
 # MOCK RabbitMQ before other tests run to avoid connection errors

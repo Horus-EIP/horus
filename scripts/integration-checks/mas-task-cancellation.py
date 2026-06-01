@@ -127,7 +127,7 @@ async def test_cancellation_workflow():
                 print(f"❌ Cancellation failed: {r.status_code} {r.text}")
 
             # 3. Try to cancel again (should fail or handle gracefully)
-            print(f"\n3️⃣  Attempting duplicate cancellation...")
+            print("\n3️⃣  Attempting duplicate cancellation...")
             r = await client.patch(f"/tasks/task-cancel/{task_id}")
             print(f"ℹ️  Duplicate cancellation response: {r.status_code} {r.json()}")
 

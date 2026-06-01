@@ -3,7 +3,7 @@ Tests for auth tool functions
 """
 
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,11 +11,16 @@ from fastapi import HTTPException
 from jose import jwt
 from starlette import status
 
-from auth.auth_tool_functions import (authenticate_user, bcrypt_context,
-                                      create_access_token, get_current_user,
-                                      get_current_user_from_token,
-                                      hash_api_key, modify_user_password,
-                                      verify_agent_api_key)
+from auth.auth_tool_functions import (
+    authenticate_user,
+    bcrypt_context,
+    create_access_token,
+    get_current_user,
+    get_current_user_from_token,
+    hash_api_key,
+    modify_user_password,
+    verify_agent_api_key,
+)
 from core.config import settings
 from db.models import Agents
 
@@ -163,14 +168,14 @@ class TestCreateAccessToken:
     def test_create_access_token_expiration(self):
         """Test token expiration time is correctly set."""
         expires_delta = timedelta(minutes=30)
-        before_creation = datetime.now(timezone.utc)
+        before_creation = datetime.now(UTC)
 
         token = create_access_token("testuser", 1, expires_delta, "user")
 
         payload = jwt.decode(
             token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
         )
-        token_exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+        token_exp = datetime.fromtimestamp(payload["exp"], tz=UTC)
         expected_exp = before_creation + expires_delta
 
         time_diff = abs((token_exp - expected_exp).total_seconds())

@@ -53,7 +53,7 @@ def build_action_list(actions_dict, agents_available, db: Session = None):
             if key == "agent":
                 if value == "":
                     raise ValueError(
-                        f"Agent name to attribute agent tasks must not be empty"
+                        "Agent name to attribute agent tasks must not be empty"
                     )
                 agent_id = get_agent_id(value, db)
                 if agent_id is None:
@@ -63,7 +63,7 @@ def build_action_list(actions_dict, agents_available, db: Session = None):
 
             elif key == "input":
                 if value == "":
-                    raise ValueError(f"Input for the agents task must not be empty")
+                    raise ValueError("Input for the agents task must not be empty")
                 question = value
 
         action_list.append((agent_id, question))
@@ -112,7 +112,7 @@ def build_subtask_list(subtask_entity, agents_available, db: Session = None):
         question = ""
 
         if element.agent_type == "":
-            raise ValueError(f"Agent type to attribute agent tasks must not be empty")
+            raise ValueError("Agent type to attribute agent tasks must not be empty")
 
         logger.info("Building subtask", agent_type=element.agent_type)
         agent_id = get_agent_by_type(element.agent_type, db)
@@ -126,7 +126,7 @@ def build_subtask_list(subtask_entity, agents_available, db: Session = None):
             )
 
         if element.description == "":
-            raise ValueError(f"Input for the agents task must not be empty")
+            raise ValueError("Input for the agents task must not be empty")
 
         question = element.description
 
@@ -161,8 +161,8 @@ def _heuristic_decompose(user_input: str, db: Session) -> tuple:
     ``decompose_task``. Returns ``(None, [])`` only if the skill cache is
     cold or the directory has zero non-Manager rows.
     """
-    from db.models import Agents
     from core.skill_cache import rank_skills
+    from db.models import Agents
 
     try:
         # Wider net + lower floor than before so under-resourced demos
@@ -291,9 +291,7 @@ def decompose_task(user_input: str, db: Session = None):
         # it or types it wrong. Default to "pending" so an otherwise-valid plan
         # isn't thrown away over a missing key.
         for st in json_output["sub_tasks"]:
-            if isinstance(st, dict) and "status" not in st:
-                st["status"] = "pending"
-            elif isinstance(st, dict) and st.get("status") != "pending":
+            if isinstance(st, dict) and "status" not in st or isinstance(st, dict) and st.get("status") != "pending":
                 st["status"] = "pending"
             if isinstance(st, dict) and "depends_on" not in st:
                 st["depends_on"] = []

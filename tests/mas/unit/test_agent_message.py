@@ -4,16 +4,17 @@ test_agent_message.py
 Unit tests for the AgentMessage schema and related models.
 """
 
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 
 from schemas.agent_message import (
     AgentMessage,
     DelegationContextEntry,
     DelegationRequest,
     DelegationResponse,
-    MessageType,
     MessageStatus,
+    MessageType,
 )
 
 

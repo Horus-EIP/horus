@@ -4,8 +4,7 @@ Middleware pour logging automatique des requêtes FastAPI
 
 import time
 import uuid
-from contextvars import ContextVar
-from typing import Callable
+from collections.abc import Callable
 
 import structlog
 from fastapi import Request, Response

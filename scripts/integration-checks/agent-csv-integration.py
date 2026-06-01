@@ -1,7 +1,9 @@
 
 import json
-from ai_agents.file_parser_tool import FileParserTool
+
 from ai_agents.data_extractor_tool import DataExtractorTool
+from ai_agents.file_parser_tool import FileParserTool
+
 
 class TestReviewIntegration:
     """
@@ -37,10 +39,10 @@ class TestReviewIntegration:
         data_extractor = DataExtractorTool()
         # We assume the extracted text from CSV is fed into the data extractor
         # processing tables or raw text.
-        
+
         # The parser joins CSV rows with ", " and newlines.
         # "2023-01-15, Consulting Services, 1500.00, USD, Acme Corp"
-        
+
         extracted_json = data_extractor._run(parsed_text, extraction_type="payments")
         payments = json.loads(extracted_json)
 
@@ -51,15 +53,15 @@ class TestReviewIntegration:
         # Validate specific entries
         # Note: DataExtractor might normalize or extract slightly differently depending on implementation
         # We look for amounts and currencies primarily
-        
+
         # Check for 1500.00 USD
         found_acme = False
         for p in payments:
             if p.get("amount") == 1500.0 and p.get("currency") == "USD":
                 found_acme = True
-                # Bonus if it extracts content/payee if logic permits, 
+                # Bonus if it extracts content/payee if logic permits,
                 # but base extraction is often date/amount/currency
-        
+
         assert found_acme, "Did not find the 1500.00 USD payment from CSV data"
 
         # Check for 200.50 EUR
@@ -67,5 +69,5 @@ class TestReviewIntegration:
         for p in payments:
             if p.get("amount") == 200.5 and p.get("currency") == "EUR":
                 found_staples = True
-        
+
         assert found_staples, "Did not find the 200.50 EUR payment from CSV data"

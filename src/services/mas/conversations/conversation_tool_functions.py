@@ -5,7 +5,7 @@ Read, list, and append conversation messages. See
 session-management rules.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import Depends
 from sqlalchemy.exc import SQLAlchemyError
@@ -18,7 +18,7 @@ from db.models import Conversations, Messages
 logger = get_logger("conversations")
 
 
-def get_history(conv_id: int, db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
+def get_history(conv_id: int, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     """Return messages of a conversation in chronological order.
 
     Args:
@@ -91,7 +91,7 @@ def get_history(conv_id: int, db: Session = Depends(get_db)) -> List[Dict[str, A
             db.close()
 
 
-def get_full_history(conv_id: int, db: Session = None) -> List[Dict[str, Any]]:
+def get_full_history(conv_id: int, db: Session = None) -> list[dict[str, Any]]:
     """Return the full history of a conversation (no pagination).
 
     Convenience wrapper around :func:`get_history` for export or archive paths.
@@ -103,7 +103,7 @@ def get_full_history(conv_id: int, db: Session = None) -> List[Dict[str, Any]]:
 
 def get_conversations(
     user_name: str, db: Session = Depends(get_db)
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """List conversations owned by ``user_name``, most-recent first.
 
     Args:
@@ -162,7 +162,7 @@ def get_conversations(
             db.close()
 
 
-def get_all_conversations(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
+def get_all_conversations(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     """List every conversation (admin/audit use), most-recent first.
 
     Unlike :func:`get_conversations`, not filtered by owner. Intended for
@@ -218,10 +218,10 @@ def add_messages(
     conversation_id: int,
     db: Session = Depends(get_db),
     *,
-    agent_id: Optional[str] = None,
-    agent_name: Optional[str] = None,
-    skill_used: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+    agent_id: str | None = None,
+    agent_name: str | None = None,
+    skill_used: str | None = None,
+) -> dict[str, Any] | None:
     """Append one message to a conversation inside a savepoint.
 
     Args:

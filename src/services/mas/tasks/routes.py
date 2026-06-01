@@ -10,40 +10,44 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from pydantic import BaseModel, Field
-
-from auth.auth_tool_functions import (PermissionChecker, get_current_user,
-                                      verify_agent_api_key)
-from auth.permissions import Permission
-from chat.chat_tool_functions import (send_messages_via_websockets,
-                                       send_task_step_via_websockets)
-from conversations.conversation_tool_functions import add_messages
-from core.logger import get_logger, log_agent_operation, log_error
-from core.metrics import TASK_ERRORS, TASK_QUEUE_DEPTH
-from core.skill_cache import rank_skills
-from core.rabbitmq_tool import rabbitmq_instance
-from core.work_queues import (agent_may_submit_task_result,
-                              resolve_work_queue_for_agent_id)
 from agents.registry_tool_functions import create_agent
+from auth.auth_tool_functions import PermissionChecker, verify_agent_api_key
+from auth.permissions import Permission
+from chat.chat_tool_functions import send_messages_via_websockets, send_task_step_via_websockets
+from conversations.conversation_tool_functions import add_messages
+from core.logger import get_logger, log_agent_operation
+from core.metrics import TASK_ERRORS, TASK_QUEUE_DEPTH
+from core.rabbitmq_tool import rabbitmq_instance
+from core.skill_cache import rank_skills
+from core.work_queues import agent_may_submit_task_result, resolve_work_queue_for_agent_id
 from db.database import get_db
 from db.models import Agents, Task, TaskResult
 from db.models.agent_types import AgentTypes
 from schemas.schemas import TaskForm, TaskResultForm, TaskStepForm
-from tasks.openapi_docs import (CANCEL_TASK_RESPONSES, CREATE_TASK_OPENAPI_EXTRA,
-                                CREATE_TASK_RESPONSES, QUEUE_STATS_RESPONSES,
-                                SHARE_RESULT_OPENAPI_EXTRA, SHARE_RESULT_RESPONSES)
+from tasks.decomposition import get_manager_agent, manager_announce_plan, manager_review_step
+from tasks.openapi_docs import (
+    CANCEL_TASK_RESPONSES,
+    CREATE_TASK_OPENAPI_EXTRA,
+    CREATE_TASK_RESPONSES,
+    QUEUE_STATS_RESPONSES,
+    SHARE_RESULT_OPENAPI_EXTRA,
+    SHARE_RESULT_RESPONSES,
+)
 from tasks.status import TaskStatus
-from tasks.decomposition import (get_manager_agent, manager_announce_plan,
-                                  manager_review_step)
-from tasks.task_tool_functions import (aggregate_results, decompose_task,
-                                       insert_new_task, interrupt_task,
-                                       select_agent_by_mode,
-                                       select_agent_for_task,
-                                       validating_task_results)
+from tasks.task_tool_functions import (
+    aggregate_results,
+    decompose_task,
+    insert_new_task,
+    interrupt_task,
+    select_agent_by_mode,
+    select_agent_for_task,
+    validating_task_results,
+)
 
 logger = get_logger("task_routes")
 
@@ -166,7 +170,7 @@ def _build_chain_transcript(current_task: "Task", db: Session) -> tuple[str, str
     original_demand = root.query or current_task.query or ""
 
     # Sibling subtasks (everything under the same root, including current).
-    siblings: list["Task"] = (
+    siblings: list[Task] = (
         db.query(Task)
         .filter(Task.parent_task_id == root.id)
         .order_by(Task.order.asc())

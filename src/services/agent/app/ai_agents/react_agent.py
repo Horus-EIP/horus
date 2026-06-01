@@ -14,7 +14,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -99,10 +99,10 @@ class ReActStep:
     step_number: int
     step_type: StepType
     content: str
-    tool_name: Optional[str] = None
-    tool_args: Optional[List[str]] = None
-    duration_ms: Optional[float] = None
-    source: Optional[str] = None
+    tool_name: str | None = None
+    tool_args: list[str] | None = None
+    duration_ms: float | None = None
+    source: str | None = None
 
 
 @dataclass
@@ -110,17 +110,17 @@ class ExecutionHistory:
     """Complete execution history for a single query."""
 
     query: str
-    steps: List[ReActStep] = field(default_factory=list)
-    final_answer: Optional[str] = None
+    steps: list[ReActStep] = field(default_factory=list)
+    final_answer: str | None = None
     total_duration_ms: float = 0.0
-    sources: List[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
 
     def add_step(self, step: ReActStep) -> None:
         self.steps.append(step)
         if step.source and step.source not in self.sources:
             self.sources.append(step.source)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "query": self.query,
             "steps": [
@@ -179,14 +179,14 @@ class ReactAgent:
         self.delegation_handler = delegation_handler
 
         # Accumulated delegation context from upstream agents (set by caller)
-        self._incoming_delegation_context: Optional[List[Dict[str, Any]]] = None
+        self._incoming_delegation_context: list[dict[str, Any]] | None = None
 
         # Map of tool names → callables used inside the ReAct loop
         self._tool_handlers = self._build_tool_handlers()
 
     # --- Public API ---
 
-    async def run(self, query: str) -> Dict[str, Any]:
+    async def run(self, query: str) -> dict[str, Any]:
         """
         Execute the full ReAct loop for a user query.
 
@@ -201,7 +201,7 @@ class ReactAgent:
                 self._react_loop(query, history),
                 timeout=self.timeout_seconds,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
                 f"ReAct loop timed out after {self.timeout_seconds}s for query: {query!r}"
             )
@@ -233,8 +233,8 @@ class ReactAgent:
         """
         Execute the iterative THOUGHT → ACTION → OBSERVATION loop.
         """
-        context_parts: List[str] = []
-        reasoning_trace: List[str] = []
+        context_parts: list[str] = []
+        reasoning_trace: list[str] = []
 
         for step_num in range(1, self.max_steps + 1):
             # ---------- THOUGHT generation  (L5-T3) ----------
@@ -303,10 +303,10 @@ class ReactAgent:
     async def _generate_thought(
         self,
         query: str,
-        reasoning_trace: List[str],
-        context_parts: List[str],
+        reasoning_trace: list[str],
+        context_parts: list[str],
         step_number: int,
-    ) -> Tuple[str, bool, str]:
+    ) -> tuple[str, bool, str]:
         """
         Generate the next THOUGHT using the decision model.
 
@@ -351,7 +351,7 @@ class ReactAgent:
 
     # --- L5-T4 – Action selection & response parsing ---
 
-    def _parse_action(self, thought_text: str) -> Tuple[Optional[str], List[str]]:
+    def _parse_action(self, thought_text: str) -> tuple[str | None, list[str]]:
         """
         Parse an ACTION line from the model output.
 
@@ -383,7 +383,7 @@ class ReactAgent:
         return None, []
 
     @staticmethod
-    def _parse_args(raw: str) -> List[str]:
+    def _parse_args(raw: str) -> list[str]:
         """Split comma-separated args, stripping quotes and whitespace."""
         if not raw:
             return []
@@ -397,8 +397,8 @@ class ReactAgent:
     # --- L5-T5 – Observation processing (action execution) ---
 
     async def _execute_action(
-        self, tool_name: str, tool_args: List[str]
-    ) -> Tuple[str, Optional[str]]:
+        self, tool_name: str, tool_args: list[str]
+    ) -> tuple[str, str | None]:
         """
         Execute the selected tool and return (observation_text, source_label).
         """
@@ -429,7 +429,7 @@ class ReactAgent:
 
     # --- Tool handler wrappers ---
 
-    def _build_tool_handlers(self) -> Dict[str, Any]:
+    def _build_tool_handlers(self) -> dict[str, Any]:
         """Build a mapping of tool-name → async handler callable."""
         handlers = {
             "search_knowledge": self._handle_search_knowledge,
@@ -441,8 +441,8 @@ class ReactAgent:
         return handlers
 
     async def _handle_search_knowledge(
-        self, args: List[str]
-    ) -> Tuple[str, Optional[str]]:
+        self, args: list[str]
+    ) -> tuple[str, str | None]:
         """Search the knowledge store."""
         query = args[0] if args else ""
         if not query:
@@ -456,8 +456,8 @@ class ReactAgent:
         return text, source
 
     async def _handle_extract_data(
-        self, args: List[str]
-    ) -> Tuple[str, Optional[str]]:
+        self, args: list[str]
+    ) -> tuple[str, str | None]:
         """Extract data from a file via the file parser tool."""
         file_ref = args[0] if args else ""
         file_type = args[1] if len(args) > 1 else "txt"
@@ -476,8 +476,8 @@ class ReactAgent:
         return result, source
 
     async def _handle_analyze_payments(
-        self, args: List[str]
-    ) -> Tuple[str, Optional[str]]:
+        self, args: list[str]
+    ) -> tuple[str, str | None]:
         """Analyze payments by searching the knowledge store with a payments focus."""
         query = args[0] if args else "payment analysis"
         payment_query = f"payment analysis: {query}"
@@ -490,8 +490,8 @@ class ReactAgent:
         return text, source
 
     async def _handle_calc(
-        self, args: List[str]
-    ) -> Tuple[str, Optional[str]]:
+        self, args: list[str]
+    ) -> tuple[str, str | None]:
         """Evaluate a mathematical expression."""
         expression = args[0] if args else ""
         if not expression:
@@ -505,8 +505,8 @@ class ReactAgent:
         return f"Result: {result}", source
 
     async def _handle_delegate(
-        self, args: List[str]
-    ) -> Tuple[str, Optional[str]]:
+        self, args: list[str]
+    ) -> tuple[str, str | None]:
         """Delegate a sub-task to another agent type."""
         if not args:
             return "[Error] delegate requires at least (to_agent_type, request).", None
@@ -544,7 +544,7 @@ class ReactAgent:
 
     # --- L5-T8 – Source citations ---
 
-    def _attach_citations(self, answer: str, sources: List[str]) -> str:
+    def _attach_citations(self, answer: str, sources: list[str]) -> str:
         """Append source citations to the final answer if not already present."""
         if not sources:
             return answer
@@ -594,7 +594,7 @@ class ReactAgent:
     def _build_exhausted_answer(
         self,
         query: str,
-        context_parts: List[str],
+        context_parts: list[str],
         history: ExecutionHistory,
     ) -> str:
         """

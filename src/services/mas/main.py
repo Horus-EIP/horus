@@ -69,7 +69,7 @@ user_dependency = Annotated[dict, Depends(get_current_user)]
 async def user(user: user_dependency, db: db_dependency):
     # Handle None user case first
     if user is None:
-        logger.info(f"Home endpoint accessed by user: unknown")
+        logger.info("Home endpoint accessed by user: unknown")
         log_error("main", "Authentication failed for home endpoint access")
         raise HTTPException(status_code=401, detail="Not authenticated")
 

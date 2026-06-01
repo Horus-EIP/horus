@@ -6,9 +6,9 @@ It accepts a query and returns the corresponding data.
 Supports async operations for non-blocking I/O.
 """
 
-from typing import Dict, Any
-import logging
 import inspect
+import logging
+from typing import Any
 
 from ai_agents.step_emitter import emit_step
 
@@ -63,7 +63,7 @@ class KnowledgeRetrievalAgent:
         """
         self.store_interface = store_interface
 
-    async def fetch(self, query: str) -> Dict[str, Any]:
+    async def fetch(self, query: str) -> dict[str, Any]:
         """
         Retrieve data for a given query (async).
 

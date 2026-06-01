@@ -4,17 +4,16 @@ Handles PDF, DOCX, TXT, and image-based PDFs. OpenAPI descriptions per
 endpoint live alongside the route decorators.
 """
 
+import asyncio
 import os
 import uuid
-import asyncio
-from typing import List
 
-from fastapi import APIRouter, HTTPException, File, UploadFile, Query
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
-from app.api.utils import pdf_to_text, save_file, image_pdf_to_text, docx_to_text
-from app.chroma_db import store_file, DocumentModel, knowledge_collection
-from app.services.content_analyzer import ContentAnalyzer
+from app.api.utils import docx_to_text, image_pdf_to_text, pdf_to_text, save_file
+from app.chroma_db import DocumentModel, knowledge_collection, store_file
 from app.core.logging import get_logger
+from app.services.content_analyzer import ContentAnalyzer
 
 router = APIRouter(tags=["File"])
 logger = get_logger("FileRouter")
@@ -83,11 +82,11 @@ async def resolve_document_by_name(
     documents = stored.get("documents") or []
     metadatas = stored.get("metadatas") or []
 
-    matched_ids: List[str] = []
-    matched_titles: List[str] = []
-    parts: List[str] = []
+    matched_ids: list[str] = []
+    matched_titles: list[str] = []
+    parts: list[str] = []
 
-    for doc_id, doc_content, meta in zip(ids, documents, metadatas):
+    for doc_id, doc_content, meta in zip(ids, documents, metadatas, strict=False):
         meta = meta or {}
         title = meta.get("title") or "Untitled"
         if not _match_stored_title(name, title):
@@ -129,7 +128,7 @@ async def resolve_document_by_name(
         }
     },
 )
-async def upload_file(files: List[UploadFile] = File(...)):
+async def upload_file(files: list[UploadFile] = File(...)):
     """
     Upload multiple files to the documents folder, analyze, and index them.
 
@@ -154,10 +153,10 @@ async def upload_file(files: List[UploadFile] = File(...)):
             elif file_ext == "docx":
                 text = await docx_to_text(doc_path)
             elif file_ext == "txt":
-                with open(doc_path, "r") as f:
+                with open(doc_path) as f:
                     text = f.read()
             else:
-                with open(doc_path, "r", encoding="utf-8", errors="ignore") as f:
+                with open(doc_path, encoding="utf-8", errors="ignore") as f:
                     text = f.read()
 
             auto_analysis = await asyncio.to_thread(
@@ -231,6 +230,7 @@ async def get_all_files():
             stored_files["ids"],
             stored_files["documents"],
             stored_files["metadatas"],
+            strict=False,
         ):
             meta = meta or {}
             title = meta.get("title") or "Untitled"

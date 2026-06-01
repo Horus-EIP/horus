@@ -12,19 +12,19 @@ Covers:
 """
 
 import asyncio
-import pytest
-from unittest.mock import MagicMock, AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
-from ai_agents.react_agent import (
-    ReactAgent,
-    StepType,
-    TOOL_DESCRIPTIONS,
-)
+import pytest
+
+from ai_agents.calculator_tool import CalculatorTool
 from ai_agents.delegation_handler import DelegationHandler
 from ai_agents.rag_pipeline import RAGPipeline
+from ai_agents.react_agent import (
+    TOOL_DESCRIPTIONS,
+    ReactAgent,
+    StepType,
+)
 from ai_agents.tool_registry import ToolRegistry
-from ai_agents.calculator_tool import CalculatorTool
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

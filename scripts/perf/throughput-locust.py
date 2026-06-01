@@ -20,7 +20,7 @@ exercises the read path only.
 
 import os
 
-from locust import HttpUser, constant, task, events
+from locust import HttpUser, constant, events, task
 
 TOKEN = os.environ.get("MAS_TOKEN", "")
 

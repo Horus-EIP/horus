@@ -6,10 +6,16 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from core.hybrid_logging import (HybridLogger, LogCategory, LogLevel,
-                                 hybrid_logger, log_business_operation,
-                                 log_security_event, log_system_performance,
-                                 log_user_action)
+from core.hybrid_logging import (
+    HybridLogger,
+    LogCategory,
+    LogLevel,
+    hybrid_logger,
+    log_business_operation,
+    log_security_event,
+    log_system_performance,
+    log_user_action,
+)
 
 
 class TestLogEnums:
@@ -40,7 +46,7 @@ class TestHybridLogger:
             LogCategory.AUDIT,
             LogCategory.BUSINESS,
         }
-        assert logger.CRITICAL_CATEGORIES == expected_critical
+        assert expected_critical == logger.CRITICAL_CATEGORIES
 
     def test_file_categories_configuration(self):
         logger = HybridLogger()
@@ -48,7 +54,7 @@ class TestHybridLogger:
             LogCategory.SYSTEM,
             LogCategory.DEBUG,
         }
-        assert logger.FILE_CATEGORIES == expected_file
+        assert expected_file == logger.FILE_CATEGORIES
 
     @patch("core.hybrid_logging.SessionLocal")
     @patch("core.hybrid_logging.log_db_operation")

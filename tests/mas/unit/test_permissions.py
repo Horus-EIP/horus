@@ -5,8 +5,7 @@ from fastapi import HTTPException
 from starlette import status
 
 from auth.auth_tool_functions import PermissionChecker
-from auth.permissions import (ROLE_PERMISSION, Permission, Role,
-                              check_permission)
+from auth.permissions import ROLE_PERMISSION, Permission, Role, check_permission
 
 
 class TestPermissions:

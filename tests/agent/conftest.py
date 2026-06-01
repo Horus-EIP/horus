@@ -2,19 +2,20 @@
 Pytest configuration for async tests.
 """
 import sys
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 # --- Robust Environment Mocking ---
 # Prevent langchain imports from hanging or failing in restricted environments
 if "langchain" not in sys.modules:
     mock_lc = MagicMock()
     sys.modules["langchain"] = mock_lc
-    
+
     # Mock langchain.tools
     mock_tools = MagicMock()
     sys.modules["langchain.tools"] = mock_tools
-    
+
     class MockBaseTool:
         name: str = "mock_tool"
         description: str = "mock"
@@ -22,13 +23,13 @@ if "langchain" not in sys.modules:
         def _run(self, *args, **kwargs): return "Mock Result"
         def _arun(self, *args, **kwargs): raise NotImplementedError
         def run(self, *args, **kwargs):
-            # args[0] is usually the input. 
+            # args[0] is usually the input.
             # If input is dict and tool expects string, normally BaseTool handles it.
             # But for mock we just pass to _run
             if args and isinstance(args[0], dict) and not kwargs:
                 return self._run(**args[0])
             return self._run(*args, **kwargs)
-        
+
     # Assign BaseTool to the module
     mock_tools.BaseTool = MockBaseTool
     # Also ensure "from langchain.tools import BaseTool" works by setting attribute on the module mock
@@ -90,6 +91,7 @@ def mock_transformers_pipeline(monkeypatch):
 
 # Mock transformers to prevent model loading
 import sys
+
 if "transformers" not in sys.modules:
     mock_tf = MagicMock()
     sys.modules["transformers"] = mock_tf

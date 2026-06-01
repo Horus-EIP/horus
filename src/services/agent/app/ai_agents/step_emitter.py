@@ -11,7 +11,7 @@ existing call sites stay non-invasive.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ def emit_step(
         "step_type": step_type,
         "title": title,
         "detail": detail,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
     if metadata:
         event["metadata"] = metadata

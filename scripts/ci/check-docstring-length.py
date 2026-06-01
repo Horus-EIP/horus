@@ -20,7 +20,7 @@ import argparse
 import ast
 import pathlib
 import sys
-from typing import Iterable, List, Tuple
+from collections.abc import Iterable
 
 DEFAULT_MAX_LINES = 40
 EXCLUDE_DIRS = {
@@ -48,13 +48,13 @@ def _iter_py_files(paths: Iterable[str]) -> Iterable[pathlib.Path]:
 
 def _find_long_docstrings(
     src: str, max_lines: int
-) -> List[Tuple[int, int]]:
+) -> list[tuple[int, int]]:
     """Return (line_no, length) for every overlong triple-quoted string."""
     try:
         tree = ast.parse(src)
     except SyntaxError:
         return []
-    hits: List[Tuple[int, int]] = []
+    hits: list[tuple[int, int]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             # Only flag triple-quoted literals. ast doesn't expose the
@@ -66,7 +66,7 @@ def _find_long_docstrings(
     return hits
 
 
-def main(argv: List[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--max-lines",

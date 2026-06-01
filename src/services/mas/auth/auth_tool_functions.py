@@ -1,19 +1,17 @@
-import time
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Annotated, Any, Dict, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Any
 
-from fastapi import Depends, Header, HTTPException, Request, Security, status
+from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
-from starlette import status
 
 from auth.permissions import Permission, check_permission
 from core.config import settings
-from core.hybrid_logging import log_security_event, log_user_action
+from core.hybrid_logging import log_security_event
 from core.logger import get_logger, log_auth_operation, log_error, log_warning
 from db.dependency import get_db
 from db.models import Agents, Users
@@ -98,7 +96,7 @@ def create_access_token(
 
     encode = {"sub": username, "id": user_id, "role": user_role}
     nonce = uuid.uuid4()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     exp = now + expires_delta
     encode.update(
         {
@@ -168,7 +166,7 @@ def get_current_user(
         )
 
 
-def get_current_user_from_token(token: str) -> Dict[str, Any]:
+def get_current_user_from_token(token: str) -> dict[str, Any]:
     """Extract user info from token string"""
     try:
         payload = jwt.decode(

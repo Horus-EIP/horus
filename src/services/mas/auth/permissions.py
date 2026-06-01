@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import Dict, List, Set
 
 
 class Role(str, Enum):
@@ -33,7 +32,7 @@ class Permission(str, Enum):
     AGENT_READ = "agent:read"
 
 
-ROLE_PERMISSION: Dict[Role, Set[Permission]] = {
+ROLE_PERMISSION: dict[Role, set[Permission]] = {
     Role.ADMIN: {
         Permission.EXPORT_DATA,
         Permission.SYSTEM_CONFIG,

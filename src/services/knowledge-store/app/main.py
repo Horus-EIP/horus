@@ -1,14 +1,15 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
 
 from app.api.routes import ROUTERS
 from app.core.logging import get_logger
-from app.core.middleware import CorrelationIDMiddleware
 from app.core.metrics import set_system_info
+from app.core.middleware import CorrelationIDMiddleware
+
 logger = get_logger("main")
 
 
@@ -109,6 +110,6 @@ def handle_http_exception(_: Request, exc: HTTPException):
     )
 
 
-for prefix, router in zip(ROUTERS.keys(), ROUTERS.values()):
+for prefix, router in zip(ROUTERS.keys(), ROUTERS.values(), strict=False):
     app.include_router(router, prefix=prefix)
     logger.info(f"Router mounted at {prefix}")

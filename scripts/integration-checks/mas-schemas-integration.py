@@ -51,7 +51,7 @@ def test_task_form_schema() -> None:
         skills_required=["math", "calculation"],
     )
 
-    print(f"✅ TaskForm created successfully")
+    print("✅ TaskForm created successfully")
     print(f"   Demand: {valid_task.demand}")
     print(f"   Conversation ID: {valid_task.conversation_id}")
     print(f"   Skills Required: {valid_task.skills_required}")
@@ -59,13 +59,13 @@ def test_task_form_schema() -> None:
     # JSON serialization
     print("\n[JSON Serialization]")
     task_json = valid_task.model_dump_json()
-    print(f"✅ Serialized to JSON:")
+    print("✅ Serialized to JSON:")
     print(f"   {task_json}")
 
     # JSON deserialization
     print("\n[JSON Deserialization]")
     task_from_json = TaskForm.model_validate_json(task_json)
-    print(f"✅ Deserialized from JSON:")
+    print("✅ Deserialized from JSON:")
     print(f"   Demand: {task_from_json.demand}")
 
     # Invalid TaskForm (missing required field)
@@ -76,9 +76,9 @@ def test_task_form_schema() -> None:
             # Missing conversation_id (required int)
             skills_required=["math"],
         )
-        print(f"❌ Should have failed validation")
+        print("❌ Should have failed validation")
     except ValidationError as e:
-        print(f"✅ Correctly rejected invalid data:")
+        print("✅ Correctly rejected invalid data:")
         print(f"   Error: {e.error_count()} validation error(s)")
         for error in e.errors():
             print(f"   - Field: {error['loc'][0]}, Issue: {error['msg']}")
@@ -97,7 +97,7 @@ def test_task_result_form_schema() -> None:
         agent_id="agent_001",
     )
 
-    print(f"✅ TaskResultForm created successfully")
+    print("✅ TaskResultForm created successfully")
     print(f"   Task ID: {valid_result.task_id}")
     print(f"   Result: {valid_result.result}")
     print(f"   Conversation ID: {valid_result.conversation_id}")
@@ -106,7 +106,7 @@ def test_task_result_form_schema() -> None:
     # JSON serialization
     print("\n[JSON Serialization]")
     result_json = valid_result.model_dump_json()
-    print(f"✅ Serialized to JSON:")
+    print("✅ Serialized to JSON:")
     result_dict = json.loads(result_json)
     for key, value in result_dict.items():
         if isinstance(value, (list, dict)):
@@ -117,7 +117,7 @@ def test_task_result_form_schema() -> None:
     # JSON deserialization
     print("\n[JSON Deserialization]")
     result_from_json = TaskResultForm.model_validate_json(result_json)
-    print(f"✅ Deserialized from JSON:")
+    print("✅ Deserialized from JSON:")
     print(f"   Task ID: {result_from_json.task_id}")
     print(f"   Agent ID: {result_from_json.agent_id}")
 
@@ -130,9 +130,9 @@ def test_task_result_form_schema() -> None:
             conversation_id="conv_123",
             agent_id="agent_001",
         )
-        print(f"❌ Should have failed validation")
+        print("❌ Should have failed validation")
     except ValidationError as e:
-        print(f"✅ Correctly rejected - missing task_id:")
+        print("✅ Correctly rejected - missing task_id:")
         print(f"   Error: {e.error_count()} validation error(s)")
         for error in e.errors():
             print(f"   - Field: {error['loc'][0]}, Issue: {error['msg']}")
@@ -146,9 +146,9 @@ def test_task_result_form_schema() -> None:
             conversation_id="conv_123",
             agent_id="agent_001",
         )
-        print(f"❌ Should have failed validation")
+        print("❌ Should have failed validation")
     except ValidationError as e:
-        print(f"✅ Correctly rejected - missing result:")
+        print("✅ Correctly rejected - missing result:")
         print(f"   Error: {e.error_count()} validation error(s)")
 
 
@@ -187,7 +187,7 @@ def test_complete_workflow() -> None:
     )
     print(f"✅ Subtask result submitted for task: {subtask_result.task_id}")
     print(f"   Agent: {subtask_result.agent_id}")
-    print(f"   Workflow progressing with new task")
+    print("   Workflow progressing with new task")
 
 
 def run_all_tests() -> None:
@@ -204,12 +204,12 @@ def run_all_tests() -> None:
         print_separator()
         print("\n✅ ALL SCHEMA TESTS PASSED SUCCESSFULLY!")
         print("\nTest Summary:")
-        print(f"  ✓ TaskForm schema works correctly")
-        print(f"  ✓ TaskResultForm includes required task_id field")
-        print(f"  ✓ Optional fields work with default values")
-        print(f"  ✓ JSON serialization/deserialization works")
-        print(f"  ✓ Validation properly rejects invalid data")
-        print(f"  ✓ Complete workflow can be simulated")
+        print("  ✓ TaskForm schema works correctly")
+        print("  ✓ TaskResultForm includes required task_id field")
+        print("  ✓ Optional fields work with default values")
+        print("  ✓ JSON serialization/deserialization works")
+        print("  ✓ Validation properly rejects invalid data")
+        print("  ✓ Complete workflow can be simulated")
 
     except Exception as e:
         print(f"\n❌ Test failed: {e}")

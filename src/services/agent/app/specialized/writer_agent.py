@@ -1,6 +1,5 @@
-import logging
 import asyncio
-from typing import Optional
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +15,7 @@ class WriterAgent:
     async def format_text(self, text: str, final_format: str) -> str:
         prompt = f"Format the following text as {final_format}: {text}"
         return await asyncio.to_thread(self.llm.decide, prompt)
-    
+
     async def process_request(self, task_type: str, data: str, extra_parameters: dict = None):
         """
         Process a request based on task type.

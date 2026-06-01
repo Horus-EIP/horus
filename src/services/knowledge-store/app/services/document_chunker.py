@@ -1,6 +1,6 @@
-from typing import List, Dict, Any
-from app.core.logging import get_logger
 import spacy
+
+from app.core.logging import get_logger
 
 logger = get_logger("DocumentChunker")
 _nlp_model = None
@@ -10,7 +10,7 @@ class DocumentChunker:
     Service for splitting large text documents into smaller, overlapping chunks
     suitable for embedding and retrieval.
     """
-    
+
     def __init__(self, chunk_size=1000, overlap=200):
         """
         Initialize the DocumentChunker.
@@ -27,7 +27,7 @@ class DocumentChunker:
             try:
                 _nlp_model = spacy.load("en_core_web_trf")
                 logger.info("Spacy model loaded successfully")
-            except (OSError, IOError):
+            except OSError:
                 logger.info("Downloading Spacy model...")
                 raise RuntimeError("Spacy model not found. Please download it using 'python -m spacy download en_core_web_trf'.")
 
@@ -36,7 +36,7 @@ class DocumentChunker:
         self.chunk_size = chunk_size
         self.overlap = overlap
 
-    def chunk_document(self, text: str) -> List[str]:
+    def chunk_document(self, text: str) -> list[str]:
         """
         Split a document into chunks.
 
@@ -52,8 +52,8 @@ class DocumentChunker:
         logger.info(f"Document chunking completed. Generated {len(chunks)} chunks.")
 
         return chunks
-    
-    def _compute_overlap(self, sentences: List[str]) -> List[str]:
+
+    def _compute_overlap(self, sentences: list[str]) -> list[str]:
         """
         Calculate the overlapping sentences for the next chunk.
 
@@ -72,13 +72,13 @@ class DocumentChunker:
             else:
                 overlap_sentences.insert(0, sentence)
                 current_overlap += len(sentence)
-        
+
         if not overlap_sentences and sentences:
             overlap_sentences.append(sentences[-1])
 
         return overlap_sentences
-    
-    def _text_divider(self, doc) -> List[str]:
+
+    def _text_divider(self, doc) -> list[str]:
         """
         Divide the processed document into chunks based on sentence boundaries and size limits.
 
@@ -105,7 +105,7 @@ class DocumentChunker:
             else:
                 current_sentences.append(clean_sentence)
                 len_buffer += len(clean_sentence)
-        
+
         if current_sentences:
             chunk = " ".join(current_sentences)
             chunks.append(chunk)

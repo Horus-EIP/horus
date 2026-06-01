@@ -24,9 +24,8 @@ Credentials default to admin / SUPER_USER_PASSWORD (default "secret").
 
 import os
 import time
-from typing import Optional
 
-from locust import HttpUser, between, task, events
+from locust import HttpUser, between, events, task
 
 ADMIN_USER = os.environ.get("SUPER_USER_USERNAME", "admin")
 ADMIN_PASS = os.environ.get("SUPER_USER_PASSWORD", "secret")
@@ -36,7 +35,7 @@ class MASUser(HttpUser):
     """A typical authenticated MAS user: reads dominate, writes are rarer."""
 
     wait_time = between(1, 5)
-    token: Optional[str] = None
+    token: str | None = None
 
     def on_start(self):
         with self.client.post(

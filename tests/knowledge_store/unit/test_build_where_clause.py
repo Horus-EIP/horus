@@ -1,6 +1,7 @@
 from app.chroma_db.models import SmartSearchRequest
 from app.chroma_db.services import build_where_clause
 
+
 def test_build_where_clause_single_category():
     request = SmartSearchRequest(
         query="test query",

@@ -12,23 +12,23 @@ Covers:
 """
 
 import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 
 from core.agent_communication import (
-    AgentCommunicator,
-    MessageStore,
-    DelegationRegistry,
     MAX_DELEGATION_DEPTH,
+    AgentCommunicator,
+    DelegationRegistry,
+    MessageStore,
 )
 from schemas.agent_message import (
     AgentMessage,
     DelegationContextEntry,
     DelegationRequest,
-    MessageType,
     MessageStatus,
+    MessageType,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

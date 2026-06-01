@@ -1,14 +1,15 @@
-import pytest
+import ast
 import io
 import json
 import logging
-import ast
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, mock_open, patch
+
+import pytest
 
 from ai_agents.calculator_tool import CalculatorTool
-from ai_agents.tool_registry import ToolRegistry, Tool
-from ai_agents.summarizer_tool import SummarizerTool
 from ai_agents.file_parser_tool import FileParserTool
+from ai_agents.summarizer_tool import SummarizerTool
+from ai_agents.tool_registry import Tool, ToolRegistry
 
 # --- CalculatorTool Tests ---
 
@@ -28,7 +29,7 @@ class TestCalculatorTool:
         # Allow small float discrepancies
         res_sin = float(tool.run({"expression": "sin(0)"}))
         assert res_sin == 0.0
-        
+
         res_sqrt = float(tool.run({"expression": "sqrt(16)"}))
         assert res_sqrt == 4.0
 
@@ -39,14 +40,14 @@ class TestCalculatorTool:
     def test_security_restrictions(self, tool):
         with pytest.raises(ValueError):
             tool.run({"expression": "__import__('os').system('ls')"})
-        
+
         with pytest.raises(ValueError, match="is not allowed"):
             tool.run({"expression": "open('/etc/passwd')"})
 
     def test_manual_ast_nodes(self, tool):
         node = ast.Constant(value=42)
         assert tool._eval_node(node) == 42.0
-        
+
         node = ast.Constant(value="string")
         with pytest.raises(ValueError, match="Only numeric constants"):
             tool._eval_node(node)
@@ -88,7 +89,7 @@ class TestToolRegistry:
     @pytest.fixture
     def registry(self):
         return ToolRegistry()
-    
+
     class DummyTool:
         name = "dummy"
         def run(self, payload):
@@ -97,7 +98,7 @@ class TestToolRegistry:
     def test_register_and_resolve(self, registry):
         tool = self.DummyTool()
         registry.register(tool)
-        
+
         assert registry.has("dummy")
         assert registry.resolve("dummy") == tool
         assert registry.run("dummy", {"data": "test"}) == "Processed: test"
@@ -105,7 +106,7 @@ class TestToolRegistry:
     def test_alias_resolution(self, registry):
         tool = self.DummyTool()
         registry.register(tool, aliases=["dum", "d"])
-        
+
         assert registry.resolve("dum") == tool
         assert registry.resolve("d") == tool
         assert registry.run("dum", {"data": "alias"}) == "Processed: alias"
@@ -114,7 +115,7 @@ class TestToolRegistry:
         assert not registry.has("ghost")
         assert registry.resolve("ghost") is None
         assert registry.get("ghost") is None
-        
+
         with pytest.raises(KeyError):
             registry.run("ghost", {})
 
@@ -122,13 +123,13 @@ class TestToolRegistry:
         """Test the get method explicitly since it duplicates resolve logic but with logging."""
         tool = self.DummyTool()
         registry.register(tool, aliases=["alias"])
-        
+
         # Test direct name match
         assert registry.get("dummy") == tool
-        
+
         # Test alias match
         assert registry.get("alias") == tool
-        
+
         # Test missing
         assert registry.get("missing") is None
 
@@ -144,7 +145,7 @@ class TestSummarizerTool:
     def test_transformers_usage(self, mock_pipeline):
         # Mock successful pipeline existence
         from ai_agents.summarizer_tool import SummarizerTool
-        
+
         # Setup the pipeline mock instance
         mock_instance = MagicMock()
         mock_instance.return_value = [{"summary_text": "This is a summary"}]
@@ -170,7 +171,7 @@ class TestSummarizerTool:
             res = tool.run(payload)
             # The simple extractive logic splits by sentence and finds keyword
             assert "This is sentence two with keyword" in res
-            
+
             # Ensure pipeline was not called
             if tool._pipe:
                  tool._pipe.assert_not_called()
@@ -189,7 +190,7 @@ class TestSummarizerTool:
     def test_return_indices_json_fail(self):
         tool = SummarizerTool()
         payload = {"text": "A. B. C.", "return_indices": True}
-        
+
         with patch.object(SummarizerTool, '_extractive_summary', return_value=("A.", [0])):
              # Mock json.dumps to fail
              with patch("json.dumps", side_effect=Exception("JSON Error")):
@@ -246,7 +247,7 @@ class TestFileParserTool:
 
         payload = {"file_url": "http://example.com/file.txt"}
         res = tool.run(payload)
-        
+
         assert "downloaded content" in res
 
     def test_pdf_not_installed_fallback(self, tool):
@@ -261,12 +262,12 @@ class TestFileParserTool:
              # Setup mock page
             mock_page = MagicMock()
             mock_page.extract_text.return_value = "PDF Page Content"
-            
+
             # Setup mock reader
             instance = MagicMock()
             instance.pages = [mock_page]
             mock_pdf_reader.return_value = instance
-            
+
             payload = {"file_content": b"%PDF-1.4...", "file_type": "pdf"}
             text = tool.run(payload)
             assert "PDF Page Content" in text

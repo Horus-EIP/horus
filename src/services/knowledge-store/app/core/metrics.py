@@ -1,6 +1,6 @@
 """Prometheus metrics for document operations, query latency, embeddings, and collection stats."""
 
-from prometheus_client import Counter, Histogram, Gauge, Info
+from prometheus_client import Counter, Gauge, Histogram, Info
 
 # --- Document metrics ---
 DOCUMENT_OPERATIONS = Counter(

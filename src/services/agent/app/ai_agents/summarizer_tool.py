@@ -7,10 +7,10 @@ and a simple extractive fallback otherwise.
 
 from __future__ import annotations
 
-from typing import Dict, Any, List, Optional, Tuple
+import logging
 import os
 import re
-import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class SummarizerTool:
             logger.debug(f"Transformers summarization pipeline not available: {e}")
             self._pipe = None
 
-    def run(self, payload: Dict[str, Any]) -> str:
+    def run(self, payload: dict[str, Any]) -> str:
         """
         Run the summarization tool.
         
@@ -56,7 +56,7 @@ class SummarizerTool:
         protect_keywords_raw = payload.get("protect_keywords")
         return_indices = bool(payload.get("return_indices"))
 
-        protect_keywords: List[str] = []
+        protect_keywords: list[str] = []
         if protect_keywords_raw:
             if isinstance(protect_keywords_raw, list):
                 protect_keywords = [str(k).lower().strip() for k in protect_keywords_raw if str(k).strip()]
@@ -88,14 +88,14 @@ class SummarizerTool:
         return summary
 
     def _extractive_summary(
-        self, text: str, max_sentences: int, protect_keywords: Optional[List[str]] = None
-    ) -> Tuple[str, List[int]]:
+        self, text: str, max_sentences: int, protect_keywords: list[str] | None = None
+    ) -> tuple[str, list[int]]:
         sentences = re.split(r"(?<=[.!?])\s+", text)
         if len(sentences) <= max_sentences:
             return text, list(range(len(sentences)))
 
         words = re.findall(r"\w+", text.lower())
-        freq: Dict[str, int] = {}
+        freq: dict[str, int] = {}
         for w in words:
             if len(w) <= 2:
                 continue
@@ -105,7 +105,7 @@ class SummarizerTool:
             tokens = re.findall(r"\w+", sentence.lower())
             return sum(freq.get(t, 0) for t in tokens)
 
-        protected_indices: List[int] = []
+        protected_indices: list[int] = []
         if protect_keywords:
             kw_set = [k.lower() for k in protect_keywords]
             for i, s in enumerate(sentences):
@@ -114,7 +114,7 @@ class SummarizerTool:
                     protected_indices.append(i)
 
         protected_indices = sorted(set(protected_indices))
-        selected: List[int] = []
+        selected: list[int] = []
         # Take protected sentences first (in original order)
         for i in protected_indices:
             if len(selected) < max_sentences:

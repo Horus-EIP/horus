@@ -61,7 +61,7 @@ def _build_rows_for_agent(agent_id: str, agent_name: str, skills: list[str], des
     vecs = embed_texts(texts)
     return [
         _SkillRow(agent_id=agent_id, agent_name=agent_name, skill=s, vector=v)
-        for s, v in zip(skills, vecs)
+        for s, v in zip(skills, vecs, strict=False)
     ]
 
 

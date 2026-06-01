@@ -7,8 +7,7 @@ See ``docs/architecture.md`` for entity types and rules.
 import json
 import logging
 import re
-from collections import Counter
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any
 
 from langchain.tools import BaseTool
 
@@ -27,24 +26,24 @@ logger = logging.getLogger(__name__)
 
 class DataExtractorTool(BaseTool):
     """Extract payments, dates, tables, and key-value pairs from raw text."""
-    
+
     name: str = "document_data_extractor"
     description: str = (
         "Use this tool to extract structured data from document text. "
         "Supported extraction_types: 'payments', 'tables', 'key_values'."
     )
 
-    nlp: Any = None 
+    nlp: Any = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         global _nlp_model
-        
+
         # Check if we are in a testing environment
-        import sys
         import os
+        import sys
         is_test = "pytest" in sys.modules or "unittest" in sys.modules or os.environ.get("TEST_MODE") == "true"
-        
+
         if is_test:
              # Use a mock/dummy or explicitly 'sm' during tests to avoid heavy load
              logger.info("Test environment detected. Skipping 'trf' model load.")
@@ -58,7 +57,7 @@ class DataExtractorTool(BaseTool):
                 mock = MagicMock()
                 mock.ents = []
                 _nlp_model = lambda text: mock
-        
+
         if _nlp_model is None:
             try:
                 if not _has_spacy or not spacy:
@@ -75,11 +74,11 @@ class DataExtractorTool(BaseTool):
                     logger.info("Loading spacy model en_core_web_trf...")
                     _nlp_model = spacy.load("en_core_web_trf")
                     logger.info("Spacy model loaded successfully")
-            except (OSError, IOError, ImportError):
+            except (OSError, ImportError):
                 logger.warning("Spacy 'en_core_web_trf' not found. Trying 'en_core_web_sm'.")
                 try:
                     _nlp_model = spacy.load("en_core_web_sm")
-                except (OSError, IOError, ImportError):
+                except (OSError, ImportError):
                      logger.warning("No Spacy model found. Using dummy.")
                      from unittest.mock import MagicMock
                      mock = MagicMock()
@@ -102,10 +101,10 @@ class DataExtractorTool(BaseTool):
             str: JSON string containing the extracted data, or an error/status message.
         """
         logger.info(f"DataExtractorTool running with extraction_type='{extraction_type}'")
-        
+
         # Determine if Spacy doc is needed
         doc = self.nlp(text)
-        
+
         if extraction_type == "payments":
             res = self._extract_payments(text, doc)
             return res
@@ -118,12 +117,12 @@ class DataExtractorTool(BaseTool):
         else:
             logger.warning(f"Unsupported extraction type: {extraction_type}")
             raise ValueError(f"Unsupported extraction type: {extraction_type}")
-    
+
     def _arun(self, text: str, extraction_type: str) -> str:
         """Async execution is not supported."""
         raise NotImplementedError("Async extraction not implemented.")
-    
-    def extract_entities_regex(self, text: str) -> Dict[str, List[str]]:
+
+    def extract_entities_regex(self, text: str) -> dict[str, list[str]]:
         """
         Extract entities like amounts and dates using regular expressions.
 
@@ -144,17 +143,17 @@ class DataExtractorTool(BaseTool):
         patt_no_year = rf"\b(?:\d{{1,2}}(?:st|nd|rd|th)?\s+(?:{months})|(?:{months})\s+\d{{1,2}}(?:st|nd|rd|th)?)\b"
         patt_year = r"\b(?:19|20)\d{2}\b"
         full_date_pattern = f"{patt_num}|{patt_text}|{patt_month_year}|{patt_no_year}|{patt_year}"
-        
+
         matches_dates = re.findall(full_date_pattern, text, re.IGNORECASE)
         matches_dates = [d.strip() for d in matches_dates if d.strip()]
-        
+
         logger.debug(f"Regex extracted {len(matches_amounts)} amounts and {len(matches_dates)} dates.")
         return {
             "amounts": matches_amounts,
             "dates": matches_dates,
         }
-    
-    def extract_entities_spacy(self, doc) -> Dict[str, List[str]]:
+
+    def extract_entities_spacy(self, doc) -> dict[str, list[str]]:
         """
         Extract named entities using Spacy NER.
 
@@ -192,7 +191,7 @@ class DataExtractorTool(BaseTool):
             "amounts": money,
             "dates": dates,
         }
-    
+
     def _extract_payments(self, text: str, doc) -> str:
         """
         Extracts payment information including amounts, currencies, estimated dates, and payees.
@@ -208,7 +207,7 @@ class DataExtractorTool(BaseTool):
         logger.info("Extracting payments...")
 
         payment_data = []
-        
+
         # --- CSV Heuristic Scan ---
         try:
             lines = text.splitlines()
@@ -225,7 +224,7 @@ class DataExtractorTool(BaseTool):
                             found_currency = part.upper()
                             currency_idx = idx
                             break
-                    
+
                     if found_currency:
                         candidates = []
                         for idx, part in enumerate(parts):
@@ -236,7 +235,7 @@ class DataExtractorTool(BaseTool):
                                 candidates.append((val, idx))
                             except ValueError:
                                 pass
-                        
+
                         if candidates:
                             # Pick candidate closest to currency
                             best_candidate = candidates[0][0]
@@ -246,7 +245,7 @@ class DataExtractorTool(BaseTool):
                                 if dist < closest_dist:
                                     closest_dist = dist
                                     best_candidate = val
-                            
+
                             # Heuristics for Date and Payee
                             date_pattern = r"\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{2,4}"
                             possible_dates = []
@@ -255,18 +254,18 @@ class DataExtractorTool(BaseTool):
                                 if idx == currency_idx: continue
                                 try:
                                     if float(part.replace(" ", "")) == best_candidate: continue
-                                except: pass
-                                
+                                except Exception: pass
+
                                 if re.search(date_pattern, part):
                                     possible_dates.append(part)
                                     continue
-                                
+
                                 if len(part) > 3 and not re.match(r"^\d+$", part):
                                     possible_payees.append(part)
-                            
+
                             est_date = possible_dates[0] if possible_dates else None
                             est_payee = possible_payees[-1] if possible_payees else None
-                            
+
                             payment_data.append({
                                 "raw_value": str(best_candidate),
                                 "amount": best_candidate,
@@ -295,19 +294,19 @@ class DataExtractorTool(BaseTool):
                 currency = "EUR"
             if "$" in amount or "USD" in amount:
                 currency = "USD"
-            
+
             # 2. Clean amount to float
             cleaned = amount.replace("€", "")
             cleaned = cleaned.replace("$", "")
             cleaned = cleaned.replace("EUR", "")
             cleaned = cleaned.replace("USD", "")
-            
+
             # Normalize European number format (1.000,00 -> 1000.00) if likely
             if "," in cleaned and "." in cleaned:
                 if cleaned.find(",") < cleaned.find("."):
                     # US/UK format: 1,000.50 -> 1000.50
                     cleaned = cleaned.replace(",", "")
-                else: 
+                else:
                      # EU format: 1.000,50 -> 1000.50
                      cleaned = cleaned.replace(".", "").replace(",", ".")
             elif "," in cleaned:
@@ -331,7 +330,7 @@ class DataExtractorTool(BaseTool):
             position = text.find(amount)
             start_index = max(0, position - 50)
             end_index = min(len(text), position + 20)
-            
+
             context = text[start_index:end_index]
             context = context.replace("\n", "").strip()
 
@@ -351,7 +350,7 @@ class DataExtractorTool(BaseTool):
                     if distance_date_ref == -1 or dist < distance_date_ref:
                         estimated_date = date
                         distance_date_ref = dist
-            
+
             # Find closest payee
             for person in all_payees:
                 payee_pos = text.find(person)
@@ -361,7 +360,7 @@ class DataExtractorTool(BaseTool):
                     if distance_person_ref == -1 or dist < distance_person_ref:
                         estimated_person = person
                         distance_person_ref = dist
-            
+
             res = {
                 "raw_value": amount,
                 "amount": price,
@@ -376,8 +375,8 @@ class DataExtractorTool(BaseTool):
             return json.dumps(payment_data, indent=2)
         else:
             return "No payments found"
-        
-    def parse_table(self, current_table: List[str]) -> Dict:
+
+    def parse_table(self, current_table: list[str]) -> dict:
         """
         Parses a list of text lines into a structured table (header + rows).
 
@@ -389,12 +388,12 @@ class DataExtractorTool(BaseTool):
         """
         if not current_table:
             return {}
-        
+
         parsed_table = []
         for line in current_table:
             # Simple split by pipe
             cells = line.split("|")
-            
+
             # Clean cells
             clean_cells = []
             for cell in cells:
@@ -405,13 +404,13 @@ class DataExtractorTool(BaseTool):
                 # Skip divider lines entirely if the whole cell is dashes
                 if all(c in "-_" for c in cell):
                      continue
-                
+
                 clean_cells.append(cell)
-            
+
             # Only add if we found valid data content
             if clean_cells:
                 parsed_table.append(clean_cells)
-        
+
         if not parsed_table:
             return {}
 
@@ -439,19 +438,19 @@ class DataExtractorTool(BaseTool):
 
         # Simple pipe detection instead of complex regex
         # table_pattern = re.compile(r"\s{2,}|\t|\s*\|\s*") # Cause of ReDoS
-        
+
         for line in lines:
             stripped = line.strip()
             if not stripped:
                 continue
-            
+
             # Heuristic: Table rows usually have pipes
             if "|" in stripped:
                 # Basic split by pipe
                 clean_line = [c.strip() for c in stripped.split("|") if c.strip()]
                 if len(clean_line) >= 2:
                     current_table.append(line)
-                else: 
+                else:
                      # Not a valid table row
                      if current_table:
                         table = self.parse_table(current_table)
@@ -465,7 +464,7 @@ class DataExtractorTool(BaseTool):
                     if table:
                         tables.append(table)
                     current_table = []
-        
+
         # Flush last block if exists
         if current_table:
             table = self.parse_table(current_table)
@@ -503,13 +502,13 @@ class DataExtractorTool(BaseTool):
             line = line.strip()
             if not line:
                 continue
-            
+
             # Simple match per line first
             match = re.match(pattern, line)
             if match:
                 key = match.group(1).strip()
                 value = match.group(2).strip()
-                
+
                 # Heuristics
                 if len(key) < 50 and value and not key.lower().startswith("http"):
                     key_data[key] = value

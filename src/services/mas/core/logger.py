@@ -10,11 +10,10 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import colorama
 import structlog
-from colorama import Back, Fore, Style
+from colorama import Fore, Style
 
 colorama.init(autoreset=True)
 
@@ -77,7 +76,7 @@ class MASLogger:
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(MASLogger, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
@@ -145,7 +144,7 @@ class MASLogger:
             )
             root_logger.addHandler(error_handler)
 
-    def get_logger(self, name: str, level: Optional[int] = None) -> logging.Logger:
+    def get_logger(self, name: str, level: int | None = None) -> logging.Logger:
         """
         Get or create a structlog logger instance with the specified name.
         """

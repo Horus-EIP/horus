@@ -1,10 +1,10 @@
 import asyncio
 import datetime
-from datetime import timezone
 
 from agents.registry_tool_functions import (
-    _batch_update_agent_status_internal, _get_all_agents_internal,
-    _update_alive_agent_status_internal, _update_dead_agent_status_internal)
+    _batch_update_agent_status_internal,
+    _get_all_agents_internal,
+)
 from core.logger import get_logger, log_agent_operation
 from db.database import SessionLocal
 
@@ -39,7 +39,7 @@ async def check_agent_heartbeat(test_mode=False):
         try:
             db = SessionLocal()
             try:
-                current_time = datetime.datetime.now(timezone.utc)
+                current_time = datetime.datetime.now(datetime.UTC)
                 inactivity_period = 30
                 agents = _get_all_agents_internal(db)
 

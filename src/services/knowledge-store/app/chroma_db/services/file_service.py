@@ -1,12 +1,13 @@
-import json
 import datetime
-from typing import Optional, Dict, Any
+import json
+from typing import Any
 
-from .. import knowledge_collection, get_embedding
 from app.chroma_db.models import DocumentModel, SmartSearchRequest
 
+from .. import get_embedding, knowledge_collection
 
-async def store_file(doc: DocumentModel, auto_analysis: Optional[Dict[str, Any]] = None):
+
+async def store_file(doc: DocumentModel, auto_analysis: dict[str, Any] | None = None):
     """
     Store a document in the ChromaDB knowledge collection.
 
@@ -106,7 +107,7 @@ async def delete_document(id: str) -> dict:
     return {"status": "document deleted"}
 
 
-def build_where_clause(request: SmartSearchRequest) -> Optional[dict]:
+def build_where_clause(request: SmartSearchRequest) -> dict | None:
     """
     Build a ChromaDB metadata where-clause filter from a SmartSearchRequest.
 

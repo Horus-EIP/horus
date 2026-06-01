@@ -13,7 +13,6 @@ import time
 
 from locust import HttpUser, between, task
 
-
 # Sample queries for testing
 SAMPLE_QUERIES = [
     "What is the quarterly revenue?",
@@ -52,9 +51,9 @@ class KnowledgeStoreUser(HttpUser):
     - Document additions (less common)
     - Health checks
     """
-    
+
     wait_time = between(0.5, 3)
-    
+
     @task(10)
     def query_documents(self):
         """Query the knowledge store (high frequency)."""
@@ -71,13 +70,13 @@ class KnowledgeStoreUser(HttpUser):
                 response.success()
             else:
                 response.failure(f"Status: {response.status_code}")
-    
+
     @task(2)
     def add_document(self):
         """Add a document (medium frequency)."""
         doc = random.choice(SAMPLE_DOCS).copy()
         doc["id"] = f"load_test_{random.randint(10000, 99999)}_{time.time()}"
-        
+
         with self.client.post(
             "/store/add",
             json=doc,
@@ -87,7 +86,7 @@ class KnowledgeStoreUser(HttpUser):
                 response.success()
             else:
                 response.failure(f"Status: {response.status_code}")
-    
+
     @task(1)
     def health_check(self):
         """Health check (low frequency)."""
@@ -99,15 +98,15 @@ class QueryOnlyUser(HttpUser):
     User that only performs queries.
     Useful for testing query performance under load.
     """
-    
+
     wait_time = between(0.1, 1)  # Fast queries
-    
+
     @task
     def query(self):
         """Query with varying complexity."""
         query = random.choice(SAMPLE_QUERIES)
         k = random.choice([3, 5, 10])  # Vary number of results
-        
+
         self.client.post(
             "/store/query",
             json={"query": query, "k": k}
@@ -119,9 +118,9 @@ class BurstUser(HttpUser):
     User that creates burst traffic.
     Useful for testing system behavior under sudden load.
     """
-    
+
     wait_time = between(0.01, 0.1)  # Very fast bursts
-    
+
     @task
     def burst_query(self):
         """Rapid-fire queries."""

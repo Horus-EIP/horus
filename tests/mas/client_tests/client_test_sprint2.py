@@ -52,8 +52,8 @@ async def login() -> str:
 
 
 async def register_agent(
-    client: httpx.AsyncClient, name: str, skills: List[str], type: str
-) -> Dict:
+    client: httpx.AsyncClient, name: str, skills: list[str], type: str
+) -> dict:
     log(f"🤖 Registering specialized agent {name} ({type})...", Colors.HEADER)
 
     # Check if exists

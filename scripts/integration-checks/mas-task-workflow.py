@@ -353,7 +353,7 @@ async def simulate_agent_task_flow(
         history=history_1,
         future_actions=future_actions_1,
     )
-    print(f"✅ Agent 1 task result submitted:")
+    print("✅ Agent 1 task result submitted:")
     print(f"   Response: {result_1['message']}")
 
     # Wait a bit for task processing
@@ -389,7 +389,7 @@ async def simulate_agent_task_flow(
         history=history_2,
         future_actions=[],  # No more actions
     )
-    print(f"✅ Agent 2 task result submitted:")
+    print("✅ Agent 2 task result submitted:")
     print(f"   Response: {result_2['message']}")
 
 

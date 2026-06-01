@@ -5,7 +5,7 @@ OpenAPI docs. See ``docs/architecture.md`` for the high-level
 API contract.
 """
 
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -19,7 +19,7 @@ class RegistrationForm(BaseModel):
     name: str
     skills: list[str]
     description: str
-    type: Optional[AgentTypes] = None
+    type: AgentTypes | None = None
 
 
 TaskMode = Literal["auto", "specific_agent", "any_with_skill", "decompose"]
@@ -45,7 +45,7 @@ class InlineFile(BaseModel):
     """
 
     filename: str
-    mime: Optional[str] = None
+    mime: str | None = None
     content_b64: str
 
 
@@ -67,10 +67,10 @@ class TaskForm(BaseModel):
     """
 
     demand: str
-    conversation_id: Optional[int] = None
+    conversation_id: int | None = None
     skills_required: list[str]
-    agent_id: Optional[str] = None
-    mode: Optional[TaskMode] = None
+    agent_id: str | None = None
+    mode: TaskMode | None = None
     attached_files: list[KnowledgeStoreFileRef] = []
     inline_files: list[InlineFile] = []
 
@@ -90,11 +90,11 @@ class TaskStepForm(BaseModel):
     task_id: str
     agent_id: str
     step_type: str
-    title: Optional[str] = None
-    detail: Optional[str] = None
-    timestamp: Optional[str] = None
-    conversation_id: Optional[str] = None
-    agent_name: Optional[str] = None
+    title: str | None = None
+    detail: str | None = None
+    timestamp: str | None = None
+    conversation_id: str | None = None
+    agent_name: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -107,11 +107,11 @@ class TaskResultForm(BaseModel):
     """
 
     result: str
-    conversation_id: Optional[str] = None
+    conversation_id: str | None = None
     agent_id: str
     task_id: str
-    agent_name: Optional[str] = None
-    skill_used: Optional[str] = None
+    agent_name: str | None = None
+    skill_used: str | None = None
 
 
 class CreateUserRequest(BaseModel):

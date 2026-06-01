@@ -4,12 +4,13 @@ Wraps retrieval, ingestion, and metadata calls with timeouts, bounded retries,
 and Prometheus metrics. See ``docs/architecture.md``.
 """
 
-from typing import Any, Dict, Optional
-import httpx
 import asyncio
-import time
 import logging
 import re
+import time
+from typing import Any
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ _FILENAME_EXT_RE = re.compile(
 )
 
 
-def extract_probable_filename_from_query(query: str) -> Optional[str]:
+def extract_probable_filename_from_query(query: str) -> str | None:
     """
     If the user message names a file (quoted path, ``file foo.txt``, or bare ``name.ext``),
     return that name for knowledge-store resolution.
@@ -50,20 +51,20 @@ def extract_probable_filename_from_query(query: str) -> Optional[str]:
 # Import metrics if available (avoid circular imports)
 try:
     from core.metrics import (
-        knowledge_store_requests_total,
         knowledge_store_request_duration,
+        knowledge_store_requests_total,
     )
     _METRICS_AVAILABLE = True
 except ImportError:
     _METRICS_AVAILABLE = False
 
-from config.settings import (
-    KNOWLEDGE_STORE_URL,
+from config.settings import (  # noqa: E402
     KNOWLEDGE_STORE_API_PREFIX,
-    KNOWLEDGE_STORE_TIMEOUT,
     KNOWLEDGE_STORE_MAX_RETRIES,
-    KNOWLEDGE_STORE_RETRY_DELAY,
     KNOWLEDGE_STORE_N_RESULTS,
+    KNOWLEDGE_STORE_RETRY_DELAY,
+    KNOWLEDGE_STORE_TIMEOUT,
+    KNOWLEDGE_STORE_URL,
 )
 
 
@@ -75,11 +76,11 @@ class KnowledgeStoreClient:
 
     def __init__(
         self,
-        base_url: Optional[str] = None,
-        timeout: Optional[float] = None,
-        max_retries: Optional[int] = None,
-        retry_delay: Optional[float] = None,
-        api_prefix: Optional[str] = None,
+        base_url: str | None = None,
+        timeout: float | None = None,
+        max_retries: int | None = None,
+        retry_delay: float | None = None,
+        api_prefix: str | None = None,
     ):
         """
         Initialize the knowledge store client.
@@ -117,7 +118,7 @@ class KnowledgeStoreClient:
             return self.base_url
         return f"{self.base_url}{self._api_prefix}"
 
-    async def query(self, query: str, n_results: Optional[int] = None) -> Dict[str, Any]:
+    async def query(self, query: str, n_results: int | None = None) -> dict[str, Any]:
         """
         Query the knowledge store with a query string (async).
 
@@ -159,7 +160,7 @@ class KnowledgeStoreClient:
                     if _METRICS_AVAILABLE:
                         knowledge_store_request_duration.observe(duration)
                         knowledge_store_requests_total.labels(status="success").inc()
-                    
+
                     if documents and documents[0]:
                         # Combine all document texts
                         document_text = "\n\n".join(documents[0])
@@ -239,7 +240,7 @@ class KnowledgeStoreClient:
         error_msg = f"Failed to query knowledge store after {self.max_retries} attempts"
         if last_exception:
             error_msg += f": {str(last_exception)}"
-        
+
         # Record failed request
         duration = time.time() - start_time
         if _METRICS_AVAILABLE:
@@ -248,7 +249,7 @@ class KnowledgeStoreClient:
                 knowledge_store_requests_total.labels(status="timeout").inc()
             else:
                 knowledge_store_requests_total.labels(status="error").inc()
-        
+
         logger.error(
             f"{error_msg} (duration: {duration:.3f}s)",
             extra={"query": query, "max_retries": self.max_retries},
@@ -262,7 +263,7 @@ class KnowledgeStoreClient:
 
     async def fetch_document_inventory(
         self, content_preview_chars: int = 400
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         List documents via GET /file (titles and short text previews).
 
@@ -321,7 +322,7 @@ class KnowledgeStoreClient:
 
         return {"query": "__inventory__", "data": ""}
 
-    async def resolve_by_filename(self, name: str) -> Dict[str, Any]:
+    async def resolve_by_filename(self, name: str) -> dict[str, Any]:
         """
         Resolve a stored document by filename or basename (GET /file/resolve).
 
@@ -373,8 +374,8 @@ class KnowledgeStoreClient:
         return {"query": f"__file__:{name}", "data": ""}
 
     async def fetch_for_rag(
-        self, query: str, n_results: Optional[int] = None
-    ) -> Dict[str, Any]:
+        self, query: str, n_results: int | None = None
+    ) -> dict[str, Any]:
         """
         Prefer exact file resolution when the query names a stored filename, then semantic
         search; if no excerpts are returned, attach a document inventory.
@@ -402,7 +403,7 @@ class KnowledgeStoreClient:
             )
         return result
 
-    async def __call__(self, query: str) -> Dict[str, Any]:
+    async def __call__(self, query: str) -> dict[str, Any]:
         """
         Make the client callable for use as a store interface (async).
 
@@ -414,7 +415,7 @@ class KnowledgeStoreClient:
         """
         return await self.fetch_for_rag(query)
 
-    async def smart_search(self, query: str, n_results: int = 5, categories: Optional[list] = None, entities: Optional[list] = None, min_confidence: Optional[float] = None, entity_type: Optional[str] = None) -> Dict[str, Any]:
+    async def smart_search(self, query: str, n_results: int = 5, categories: list | None = None, entities: list | None = None, min_confidence: float | None = None, entity_type: str | None = None) -> dict[str, Any]:
         """
         Perform a smart search on the knowledge store with optional filters.
 
@@ -442,7 +443,7 @@ class KnowledgeStoreClient:
             payload["min_confidence"] = min_confidence
         if entity_type:
             payload["entity_type"] = entity_type
-        
+
         logger.debug(f"Smart search: query='{query}', filters={payload}")
 
         start_time = time.time()
@@ -459,7 +460,7 @@ class KnowledgeStoreClient:
                     if _METRICS_AVAILABLE:
                         knowledge_store_request_duration.observe(duration)
                         knowledge_store_requests_total.labels(status="success").inc()
-                    
+
                     documents = result.get("results", {}).get("documents", [[]])
                     document_text = "\n\n".join(documents) if documents and documents else ""
 
@@ -474,7 +475,7 @@ class KnowledgeStoreClient:
                     if e.response.status_code == 404:
                         logger.debug(f"No results found for smart search query: {query}")
                         return {"query": query, "data": "", "total": 0}
-                    
+
                     logger.warning(f"HTTP error {e.response.status_code} on smart search (attempt {attempt + 1}/{self.max_retries}): {e}")
                 except (httpx.TimeoutException, httpx.RequestError, Exception) as e:
                     logger.warning(f"Error on smart search (attempt {attempt + 1}/{self.max_retries}): {e}", exc_info=True)
@@ -488,7 +489,7 @@ class KnowledgeStoreClient:
             "total": 0,
         }
 
-    async def search_by_entity(self, entity: str, entity_type: str, n_results: int = 5) -> Dict[str, Any]:
+    async def search_by_entity(self, entity: str, entity_type: str, n_results: int = 5) -> dict[str, Any]:
         """
         Search for documents by entity.
 
@@ -526,21 +527,21 @@ class KnowledgeStoreClient:
                     if e.response.status_code in (400, 404):
                         logger.debug(f"No results for entity: {entity} ({entity_type}) (status {e.response.status_code})")
                         return {"entity": entity, "data": "", "total": 0}
-                    
+
                     logger.warning(f"HTTP error {e.response.status_code} on search by entity (attempt {attempt + 1}/{self.max_retries}): {e}")
                 except (httpx.TimeoutException, httpx.RequestError, Exception) as e:
                     logger.warning(f"Error on search by entity (attempt {attempt + 1}/{self.max_retries}): {e}")
 
                 if attempt < self.max_retries - 1:
                     await asyncio.sleep(self.retry_delay)
-        
+
         return {
             "entity": entity,
             "data": f"Error: search by entity failed after {self.max_retries} attempts",
             "total": 0,
         }
-    
-    async def get_categories(self) -> Dict[str, Any]:
+
+    async def get_categories(self) -> dict[str, Any]:
         """
         Get the list of categories available in the knowledge store and their counts.
 
@@ -562,7 +563,7 @@ class KnowledgeStoreClient:
                     logger.warning(f"HTTP error {e.response.status_code} on get categories: {e} (attempt {attempt + 1}/{self.max_retries})")
                 except (httpx.TimeoutException, httpx.RequestError, Exception) as e:
                     logger.warning(f"Error on get categories: {e} (attempt {attempt + 1}/{self.max_retries})")
-                
+
                 if attempt < self.max_retries - 1:
                     await asyncio.sleep(self.retry_delay)
 

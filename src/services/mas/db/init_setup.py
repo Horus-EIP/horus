@@ -8,9 +8,7 @@ from core.hybrid_logging import log_user_action
 from core.logger import get_logger, log_db_operation, log_error, log_success
 from db.database import Base, SessionLocal, engine
 from db.migrate_critical_logs import create_critical_logs_table
-from db.models import (Agents, Conversations, CriticalLogs, Messages, Task,
-                       TaskResult, Users)
-from db.seed_agents import seed_default_agents
+from db.models import Users
 
 logger = get_logger("init_db")
 

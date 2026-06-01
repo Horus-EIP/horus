@@ -13,7 +13,7 @@ left untouched so re-running ``init_db()`` is safe.
 
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -96,7 +96,7 @@ def seed_default_agents(db: Session) -> int:
     inserted = 0
     # Stagger heartbeat in the past so the UI's "stale" indicator visibly fires
     # — these are placeholders until a real worker registers and overrides them.
-    stale_at = datetime.now(timezone.utc) - timedelta(days=1)
+    stale_at = datetime.now(UTC) - timedelta(days=1)
 
     for entry in DEFAULT_AGENTS:
         if entry["name"] in existing_names:
@@ -112,7 +112,7 @@ def seed_default_agents(db: Session) -> int:
                 skills=entry["skills"],
                 status="active" if is_manager else "inactive",
                 description=entry["description"],
-                last_heartbeat=datetime.now(timezone.utc) if is_manager else stale_at,
+                last_heartbeat=datetime.now(UTC) if is_manager else stale_at,
                 type=entry["type"],
                 # Unguessable hash so the seeded row can't authenticate; a
                 # registering worker will replace this entry via the existing

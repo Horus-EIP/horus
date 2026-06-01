@@ -56,6 +56,7 @@ from auth.auth_tool_functions import get_current_user
 from auth.routes import router as auth_router
 from chat.routes import router as chat_router
 from conversations.routes import router as conversations_router
+
 # Import dependencies
 from db.dependency import get_db
 from tasks.routes import router as tasks_router

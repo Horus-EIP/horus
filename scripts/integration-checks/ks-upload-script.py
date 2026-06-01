@@ -1,14 +1,16 @@
-import httpx
 import asyncio
 import os
+
+import httpx
+
 
 async def main():
     url = "http://localhost:8080/upload"
     filepath = "client_test_file.txt"
-    
+
     with open(filepath, "w") as f:
         f.write("This is a client test document.")
-        
+
     try:
         async with httpx.AsyncClient() as client:
             files = {'file': (filepath, open(filepath, 'rb'), 'text/plain')}

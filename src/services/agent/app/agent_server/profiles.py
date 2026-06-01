@@ -20,9 +20,10 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any
 
 from core.logger import get_logger
 
@@ -30,10 +31,10 @@ from core.logger import get_logger
 # so :meth:`DecisionMakingAgent.decide` can read it and tailor the system
 # message without every intermediate function having to accept a new arg.
 # Defaults to ``None`` (vanilla helpful-assistant prompt).
-current_persona: ContextVar[Optional[str]] = ContextVar(
+current_persona: ContextVar[str | None] = ContextVar(
     "current_persona", default=None
 )
-current_agent_name: ContextVar[Optional[str]] = ContextVar(
+current_agent_name: ContextVar[str | None] = ContextVar(
     "current_agent_name", default=None
 )
 # Per-task "thought process" emitter. The consumer sets it to a closure that
@@ -41,7 +42,7 @@ current_agent_name: ContextVar[Optional[str]] = ContextVar(
 # ``ai_agents.step_emitter.emit_step`` so we don't have to thread an emitter
 # argument through every method. ``None`` (default) means no-op — keeps the
 # unit tests that exercise the pipeline directly happy.
-current_step_emitter: ContextVar[Optional[Callable[[dict[str, Any]], None]]] = ContextVar(
+current_step_emitter: ContextVar[Callable[[dict[str, Any]], None] | None] = ContextVar(
     "current_step_emitter", default=None
 )
 
@@ -57,10 +58,10 @@ class AgentProfile:
     # Optional persona injected into the LLM system prompt for this profile.
     # When None, the pipeline uses its built-in default. Specialists set it
     # to scope behaviour to their domain documents.
-    system_prompt: Optional[str] = field(default=None)
+    system_prompt: str | None = field(default=None)
     # Populated at registration time:
-    agent_id: Optional[str] = field(default=None)
-    api_key: Optional[str] = field(default=None)
+    agent_id: str | None = field(default=None)
+    api_key: str | None = field(default=None)
 
 
 DEFAULT_PROFILES: list[AgentProfile] = [
@@ -276,7 +277,7 @@ def unique_agent_types() -> list[str]:
     return seen
 
 
-def get_profile_by_agent_id(agent_id: Optional[str]) -> Optional[AgentProfile]:
+def get_profile_by_agent_id(agent_id: str | None) -> AgentProfile | None:
     if not agent_id:
         return None
     for p in PROFILES:

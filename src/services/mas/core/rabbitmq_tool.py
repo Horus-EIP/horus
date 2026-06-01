@@ -1,6 +1,6 @@
+
 from fastapi import APIRouter, Response, status
 from pydantic import BaseModel
-from typing import Optional
 
 from core.logger import get_logger
 from core.rabbitmq_manager import RabbitMQ
@@ -113,13 +113,13 @@ class DelegationResultBody(BaseModel):
     tags=["Agent Communication"],
 )
 async def delegate_to_agent(body: DelegationRequestBody):
-    from schemas.agent_message import DelegationRequest
     from agents.registry_tool_functions import _get_all_agents_internal
     from db.database import SessionLocal
+    from schemas.agent_message import DelegationRequest
 
     communicator = get_agent_communicator()
 
-    def select_agent(agent_type: str) -> Optional[str]:
+    def select_agent(agent_type: str) -> str | None:
         db = SessionLocal()
         try:
             agents = _get_all_agents_internal(db)

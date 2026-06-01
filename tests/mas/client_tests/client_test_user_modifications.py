@@ -28,7 +28,7 @@ def test_user_modifications():
     )
 
     # 2. Login to get token
-    print(f"[Setup] Logging in...")
+    print("[Setup] Logging in...")
     response = requests.post(
         f"{BASE_URL}/auth/token",
         data={"username": username, "password": password},

@@ -11,16 +11,16 @@ Covers:
     - History tracking
 """
 
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, Mock
 
 from ai_agents.delegation_handler import (
-    DelegationHandler,
-    DelegationChainTracker,
-    DelegationRecord,
     DEFAULT_MAX_DEPTH,
+    DelegationChainTracker,
+    DelegationHandler,
+    DelegationRecord,
 )
-
 
 # ---------------------------------------------------------------------------
 # DelegationChainTracker tests

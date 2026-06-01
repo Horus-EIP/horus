@@ -1,1 +1,7 @@
-from .file_service import store_file, query_knowledge, delete_document, query_with_filters, build_where_clause
+from .file_service import (
+    build_where_clause,
+    delete_document,
+    query_knowledge,
+    query_with_filters,
+    store_file,
+)

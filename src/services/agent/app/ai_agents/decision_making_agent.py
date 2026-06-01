@@ -8,13 +8,13 @@ GPU uses 4-bit quantization when available unless forced to CPU; model can load 
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Optional
-
-import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +132,7 @@ REQUIRED_LOCAL_FILES = [
     "tokenizer.json",
 ]
 
-def _agent_accelerate_max_memory() -> Optional[dict]:
+def _agent_accelerate_max_memory() -> dict | None:
     """
     Unset caps → use all VRAM. Set AGENT_GPU_MEMORY_CAP or LLM_GPU_MEMORY_CAP to limit/split.
     """
@@ -229,13 +229,13 @@ def _model_device(model: Any) -> Any:
 class DecisionMakingAgent:
     def __init__(
         self,
-        decision_model: Optional[Callable[..., Any]] = None,
-        model_name: Optional[str] = None,
-        device: Optional[str] = None,
+        decision_model: Callable[..., Any] | None = None,
+        model_name: str | None = None,
+        device: str | None = None,
     ):
         self.model_name = model_name or DEFAULT_MODEL_ID
         self.device = detect_device(device) if device else detect_device("auto")
-        self.decision_model: Optional[Callable[..., Any]] = decision_model
+        self.decision_model: Callable[..., Any] | None = decision_model
         self._lazy = decision_model is None and _lazy_model_enabled()
         self._causal_tokenizer = None
         self._causal_model = None
@@ -465,7 +465,7 @@ class DecisionMakingAgent:
             clean_up_tokenization_spaces=False,
         ).strip()
 
-    def decide(self, query: str, context: Optional[str] = None) -> str:
+    def decide(self, query: str, context: str | None = None) -> str:
         """
         Run inference. If ``context`` is None, ``query`` is treated as the full user message
         (used by WriterAgent). Otherwise the usual grounded QA instruction is applied.

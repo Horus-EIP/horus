@@ -4,22 +4,23 @@ Endpoints are RBAC-gated; owner-only except for admin reads. See
 ``docs/architecture.md`` for payloads and error codes.
 """
 
-from typing import Annotated, Any, Dict, List
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from auth.auth_tool_functions import PermissionChecker, get_current_user
+from auth.auth_tool_functions import PermissionChecker
 from auth.permissions import Permission, Role
 from chat.chat_tool_functions import active_connections
-from conversations.conversation_tool_functions import (get_conversations,
-                                                       get_history)
-from conversations.openapi_docs import (CREATE_CONVERSATION_OPENAPI_EXTRA,
-                                        CREATE_CONVERSATION_RESPONSES,
-                                        DELETE_CONVERSATION_RESPONSES,
-                                        GET_HISTORY_RESPONSES,
-                                        LIST_CONVERSATIONS_RESPONSES)
+from conversations.conversation_tool_functions import get_conversations, get_history
+from conversations.openapi_docs import (
+    CREATE_CONVERSATION_OPENAPI_EXTRA,
+    CREATE_CONVERSATION_RESPONSES,
+    DELETE_CONVERSATION_RESPONSES,
+    GET_HISTORY_RESPONSES,
+    LIST_CONVERSATIONS_RESPONSES,
+)
 from core.logger import get_logger
 from db.database import get_db
 from db.models import Conversations
@@ -44,7 +45,7 @@ async def create_new_conversation(
     conv_infos: ConversationCreation,
     user: Annotated[dict, Depends(PermissionChecker(Permission.TASK_CREATE))],
     db: Session = Depends(get_db),
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """Create a conversation owned by the caller. Returns ``{conversation_id}``.
 
     Raises 400 on integrity error, 500 on unexpected DB error.
@@ -93,7 +94,7 @@ async def get_conversation_history(
     chat_id: int,
     user: Annotated[dict, Depends(PermissionChecker(Permission.TASK_READ))],
     db: Session = Depends(get_db),
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Return all messages in ``chat_id`` (owner/admin only, TASK_READ)."""
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
@@ -134,7 +135,7 @@ async def remove_conversation(
     chat_id: int,
     user: Annotated[dict, Depends(PermissionChecker(Permission.TASK_DELETE))],
     db: Session = Depends(get_db),
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Delete a conversation (cascades messages/tasks, closes live WS).
 
     Owner/admin only, TASK_DELETE. 409 on FK conflict.
@@ -220,7 +221,7 @@ async def remove_conversation(
 async def get_conversation_list(
     user: Annotated[dict, Depends(PermissionChecker(Permission.USER_READ))],
     db: Session = Depends(get_db),
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """List the caller's conversations (newest first; USER_READ)."""
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")

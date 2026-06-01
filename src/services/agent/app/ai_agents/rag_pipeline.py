@@ -9,20 +9,21 @@ multi-step THOUGHT → ACTION → OBSERVATION loops for complex queries.
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Any
 
-from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
-from ai_agents.decision_making_agent import DecisionMakingAgent
-from ai_agents.tool_registry import ToolRegistry
 from ai_agents.calculator_tool import CalculatorTool
+from ai_agents.decision_making_agent import DecisionMakingAgent
 from ai_agents.file_parser_tool import FileParserTool
-from ai_agents.summarizer_tool import SummarizerTool
+from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
 from ai_agents.step_emitter import emit_step
+from ai_agents.summarizer_tool import SummarizerTool
+from ai_agents.tool_registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
-from ai_agents.data_extractor_tool import DataExtractorTool
-from ai_agents.payment_analyzer_tool import PaymentAnalyzerTool
+from ai_agents.data_extractor_tool import DataExtractorTool  # noqa: E402
+from ai_agents.payment_analyzer_tool import PaymentAnalyzerTool  # noqa: E402
+
 
 class RAGPipeline:
     """
@@ -38,7 +39,7 @@ class RAGPipeline:
         self,
         retrieval_agent: KnowledgeRetrievalAgent,
         decision_agent: DecisionMakingAgent,
-        tool_registry: Optional[ToolRegistry] = None,
+        tool_registry: ToolRegistry | None = None,
         *,
         use_react: bool = False,
     ):
@@ -105,7 +106,7 @@ class RAGPipeline:
                 ),
                 timeout=timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
                 "Single-shot LLM inference timed out after %.0fs for query: %r",
                 timeout,
@@ -118,7 +119,7 @@ class RAGPipeline:
 
         return insight
 
-    async def generate_response_react(self, query: str) -> Dict[str, Any]:
+    async def generate_response_react(self, query: str) -> dict[str, Any]:
         """
         Generate a response using the ReAct multi-step reasoning loop.
 
@@ -130,7 +131,7 @@ class RAGPipeline:
         """
         return await self.react_agent.run(query)
 
-    async def process_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
+    async def process_task(self, task: dict[str, Any]) -> dict[str, Any]:
         """
         Process a task from the MAS Orchestrator (async).
 

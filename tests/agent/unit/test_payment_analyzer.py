@@ -1,13 +1,16 @@
 import json
+
 import pytest
+
 from ai_agents.payment_analyzer_tool import PaymentAnalyzerTool
+
 
 class TestPaymentAnalyzerTool:
 
     @pytest.fixture
     def tool(self):
         return PaymentAnalyzerTool()
-    
+
     @pytest.fixture
     def sample_data(self):
         return [
@@ -15,7 +18,7 @@ class TestPaymentAnalyzerTool:
             {"amount": 200.0, "currency": "EUR", "payee": "Bob", "context": "Goods"},
             {"amount": 50.0, "currency": "USD", "payee": "Alice", "context": "Refund"}
         ]
-    
+
     @pytest.fixture
     def sample_data_json(self, sample_data):
         return json.dumps(sample_data)
@@ -51,7 +54,7 @@ class TestPaymentAnalyzerTool:
         data = [{"amount": 100}]
         # Currency falls back to UNKNOWN or skipped/logged?
         # In current implementation: if currency is empty, it assigns to OTHER or logs?
-        # Let's check impl: 
+        # Let's check impl:
         # currency = element.get("currency", "UNKNOWN")
         # if currency == "EUR" ... elif "USD" ... else: try to log but might not add to total message if > 0
         # The logic only adds to message if total_EUR > 0 or total_USD > 0.
@@ -82,12 +85,12 @@ class TestPaymentAnalyzerTool:
     def test_payee_breakdown(self, tool, sample_data):
         result = tool._get_payee_breakdown(sample_data)
         data = json.loads(result)
-        
+
         # Check Alice (EUR) -> Not present in sample, Alice is EUR and USD separately
         # Alice EUR: 100
         # Alice USD: 50
         # Bob EUR: 200
-        
+
         assert data.get("Alice (EUR)") == 100.0
         assert data.get("Alice (USD)") == 50.0
         assert data.get("Bob (EUR)") == 200.0
@@ -99,7 +102,7 @@ class TestPaymentAnalyzerTool:
         ]
         result = tool._get_payee_breakdown(data)
         json_res = json.loads(result)
-        
+
         assert json_res.get("Server Hosting (EUR)") == 100.0
         assert json_res.get("Unknown Payee (EUR)") == 50.0
 

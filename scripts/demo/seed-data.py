@@ -18,10 +18,7 @@ Requirements:
 
 import argparse
 import asyncio
-import json
 import sys
-import time
-from typing import Optional
 
 import httpx
 
@@ -162,14 +159,14 @@ DEMO_DOCUMENTS = [
 
 class DemoSeeder:
     """Seeds demo data into the Horus system."""
-    
+
     def __init__(self, mas_url: str, ks_url: str, admin_user: str, admin_pass: str):
         self.mas_url = mas_url.rstrip("/")
         self.ks_url = ks_url.rstrip("/")
         self.admin_user = admin_user
         self.admin_pass = admin_pass
-        self.token: Optional[str] = None
-    
+        self.token: str | None = None
+
     async def run(self):
         """Run the complete seeding process."""
         print("\n" + "="*60)
@@ -178,7 +175,7 @@ class DemoSeeder:
         print(f"MAS URL: {self.mas_url}")
         print(f"Knowledge Store URL: {self.ks_url}")
         print("="*60 + "\n")
-        
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             # Step 1: Authenticate
             print("1️⃣  Authenticating...")
@@ -186,29 +183,29 @@ class DemoSeeder:
                 print("   ❌ Authentication failed!")
                 return False
             print("   ✅ Authenticated as admin\n")
-            
+
             # Step 2: Check system health
             print("2️⃣  Checking system health...")
             if not await self._check_health(client):
                 print("   ⚠️  Some services may be unavailable\n")
             else:
                 print("   ✅ All services healthy\n")
-            
+
             # Step 3: Seed Knowledge Store documents
             print("3️⃣  Seeding Knowledge Store documents...")
             docs_created = await self._seed_documents(client)
             print(f"   ✅ Created {docs_created}/{len(DEMO_DOCUMENTS)} documents\n")
-            
+
             # Step 4: Create demo conversations
             print("4️⃣  Creating demo conversations...")
             convs_created = await self._seed_conversations(client)
             print(f"   ✅ Created {convs_created}/{len(DEMO_CONVERSATIONS)} conversations\n")
-            
+
             # Step 5: Verify agents
             print("5️⃣  Checking registered agents...")
             agents = await self._get_agents(client)
             print(f"   ✅ Found {agents} registered agent(s)\n")
-            
+
             # Summary
             print("="*60)
             print("✅ DEMO DATA SEEDING COMPLETE")
@@ -217,9 +214,9 @@ class DemoSeeder:
             print(f"   💬 Conversations: {convs_created}")
             print(f"   🤖 Agents: {agents}")
             print("="*60 + "\n")
-            
+
             return True
-    
+
     async def _authenticate(self, client: httpx.AsyncClient) -> bool:
         """Authenticate and get token."""
         try:
@@ -233,14 +230,14 @@ class DemoSeeder:
         except Exception as e:
             print(f"   Error: {e}")
         return False
-    
+
     def _headers(self):
         return {"Authorization": f"Bearer {self.token}"} if self.token else {}
-    
+
     async def _check_health(self, client: httpx.AsyncClient) -> bool:
         """Check system health."""
         healthy = True
-        
+
         # Check MAS
         try:
             response = await client.post(
@@ -253,7 +250,7 @@ class DemoSeeder:
         except Exception:
             print("   ⚠️  Cannot reach MAS")
             healthy = False
-        
+
         # Check Knowledge Store
         try:
             response = await client.get(f"{self.ks_url}/health")
@@ -263,9 +260,9 @@ class DemoSeeder:
         except Exception:
             print("   ⚠️  Cannot reach Knowledge Store")
             healthy = False
-        
+
         return healthy
-    
+
     async def _seed_documents(self, client: httpx.AsyncClient) -> int:
         """Seed documents into Knowledge Store."""
         created = 0
@@ -286,7 +283,7 @@ class DemoSeeder:
             except Exception as e:
                 print(f"   ❌ Error adding {doc['title']}: {e}")
         return created
-    
+
     async def _seed_conversations(self, client: httpx.AsyncClient) -> int:
         """Create demo conversations."""
         created = 0
@@ -305,7 +302,7 @@ class DemoSeeder:
             except Exception as e:
                 print(f"   ❌ Error: {e}")
         return created
-    
+
     async def _get_agents(self, client: httpx.AsyncClient) -> int:
         """Get number of registered agents."""
         try:
@@ -332,12 +329,12 @@ async def main():
     parser.add_argument("--ks-url", default="http://localhost:8080", help="Knowledge Store URL")
     parser.add_argument("--admin-user", default="admin", help="Admin username")
     parser.add_argument("--admin-pass", default="admin", help="Admin password")
-    
+
     args = parser.parse_args()
-    
+
     seeder = DemoSeeder(args.url, args.ks_url, args.admin_user, args.admin_pass)
     success = await seeder.run()
-    
+
     sys.exit(0 if success else 1)
 
 

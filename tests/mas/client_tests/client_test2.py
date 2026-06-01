@@ -37,7 +37,7 @@ async def login() -> str:
             print(f"❌ LOGIN failed: {r.status_code} {r.text}")
             sys.exit(1)
         data = r.json()
-        print(f"✅ LOGIN successful")
+        print("✅ LOGIN successful")
         return data["access_token"]
 
 
@@ -168,7 +168,7 @@ async def test_conversation_history_and_delete(token: str):
         # 4. Verify deletion (Get history should fail with 404)
         r = await client.get(f"/conversations/get_history/{chat_id}", headers=headers)
         if r.status_code == 404:
-            print(f"✅ Verified deletion (History returns 404)")
+            print("✅ Verified deletion (History returns 404)")
         else:
             print(f"❌ Deletion verification failed. Status: {r.status_code}")
 

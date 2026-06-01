@@ -10,7 +10,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from prometheus_client import make_asgi_app
 from prometheus_fastapi_instrumentator import Instrumentator
 
 import agents.routes
@@ -18,15 +17,14 @@ import analytics.routes
 import chat.routes
 import conversations.routes
 import core.rabbitmq_tool
-import db.models
 import tasks.routes
 import users.routes
 from agents.controller import check_agent_heartbeat
 from auth.routes import router as auth_router
-from core.logger import get_logger, log_error, log_startup, log_success
-from core.middleware import LoggingMiddleware
 from core.embedding_setup import start_embedding_preload_background_thread
 from core.llm_setup import start_llm_preload_background_thread
+from core.logger import get_logger, log_error, log_startup, log_success
+from core.middleware import LoggingMiddleware
 from core.rabbitmq_tool import rabbitmq_instance
 from core.tracing import init_tracing
 from db.database import engine

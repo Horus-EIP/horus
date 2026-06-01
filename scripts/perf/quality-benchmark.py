@@ -27,13 +27,13 @@ import os
 import re
 import sys
 import time
-from dataclasses import dataclass, asdict, field
-from datetime import datetime, timezone
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable, List, Dict, Any
+from typing import Any
 
 import httpx
-
 
 # --------------------------------------------------------------------------- #
 # Query set
@@ -45,7 +45,7 @@ class QueryCase:
     """One test case: a query + the assertions we run on the response."""
 
     query: str
-    expected_keywords: List[str]
+    expected_keywords: list[str]
     # Optional: free-form predicate on the final answer string.
     # Receives (answer:str) -> bool. Default = always True (skipped).
     answer_predicate: Callable[[str], bool] = field(default=lambda _a: True)
@@ -54,7 +54,7 @@ class QueryCase:
 
 # These mirror the mock corpus in ``demo_assets/``. Edit / extend as you add
 # canonical questions the team agrees Horus must answer well.
-DEFAULT_QUERIES: List[QueryCase] = [
+DEFAULT_QUERIES: list[QueryCase] = [
     QueryCase(
         query="What was Q4 2025 revenue?",
         expected_keywords=["revenue", "Q4", "2025"],
@@ -101,7 +101,7 @@ DEFAULT_QUERIES: List[QueryCase] = [
 # --------------------------------------------------------------------------- #
 
 
-def keyword_match_precision(text: str, keywords: List[str]) -> float:
+def keyword_match_precision(text: str, keywords: list[str]) -> float:
     """Fraction of expected keywords found in ``text`` (case-insensitive)."""
     if not keywords:
         return 1.0
@@ -121,7 +121,7 @@ def call_knowledge_store(
     query: str,
     top_k: int = 5,
     timeout: float = 30.0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Call the Knowledge Store search endpoint and return the parsed payload.
 
     The endpoint shape mirrors ``src/services/knowledge-store/app/api/routes/store.py``
@@ -146,7 +146,7 @@ def call_mas_chat(
     conversation_id: int,
     query: str,
     timeout: float = 60.0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Optionally call MAS to get the full agent answer.
 
     Skipped when ``--no-chat`` is passed; many benchmark runs only need to exercise
@@ -173,13 +173,13 @@ def call_mas_chat(
 # --------------------------------------------------------------------------- #
 
 
-def run(args: argparse.Namespace) -> Dict[str, Any]:
+def run(args: argparse.Namespace) -> dict[str, Any]:
     queries = DEFAULT_QUERIES
-    results: List[Dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
     client = httpx.Client()
 
     for qc in queries:
-        case: Dict[str, Any] = {
+        case: dict[str, Any] = {
             "query": qc.query,
             "expected_keywords": qc.expected_keywords,
             "answer_predicate": qc.answer_predicate_name,
@@ -226,7 +226,7 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
         results.append(case)
 
     # Aggregates
-    def mean(xs: List[float]) -> float:
+    def mean(xs: list[float]) -> float:
         xs = [x for x in xs if x is not None]
         return round(sum(xs) / len(xs), 4) if xs else 0.0
 
@@ -241,7 +241,7 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
 
     summary = {
         "label": args.label,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "ks_url": args.ks_url,
         "mas_url": args.mas_url,
         "top_k": args.top_k,
@@ -280,7 +280,7 @@ def main() -> int:
     summary = run(args)
 
     Path(args.out_dir).mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
+    stamp = datetime.now(UTC).strftime("%Y%m%d")
     out_path = Path(args.out_dir) / f"quality-{args.label}-{stamp}.json"
     out_path.write_text(json.dumps(summary, indent=2))
 

@@ -15,8 +15,10 @@ import pytest
 from sqlalchemy.orm import Session
 
 from agents.registry_tool_functions import (
-    _batch_update_agent_status_internal, _update_alive_agent_status_internal,
-    _update_dead_agent_status_internal)
+    _batch_update_agent_status_internal,
+    _update_alive_agent_status_internal,
+    _update_dead_agent_status_internal,
+)
 from db.models import Agents
 
 

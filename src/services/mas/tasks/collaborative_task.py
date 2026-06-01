@@ -1,6 +1,6 @@
 import uuid
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -18,18 +18,18 @@ class SubTask(BaseModel):
     description: str
     agent_type: str
     status: TaskStatus = TaskStatus.PENDING
-    depends_on: List[str] = []
-    result: Optional[str] = None
-    agent_id: Optional[str] = None
+    depends_on: list[str] = []
+    result: str | None = None
+    agent_id: str | None = None
 
 
 class CollaborativeTask(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    original_demand: Optional[str] = ""
-    sub_tasks: List[SubTask]
-    context: Dict[str, Any] = {}
+    original_demand: str | None = ""
+    sub_tasks: list[SubTask]
+    context: dict[str, Any] = {}
 
-    def get_ready_subtasks(self) -> List[SubTask]:
+    def get_ready_subtasks(self) -> list[SubTask]:
         """
         Returns a list of subtasks that are pending and have all their dependencies met.
         """
@@ -53,7 +53,7 @@ class CollaborativeTask(BaseModel):
         return ready
 
     def update_subtask_status(
-        self, subtask_id: str, status: TaskStatus, result: Optional[str] = None
+        self, subtask_id: str, status: TaskStatus, result: str | None = None
     ):
         """
         Updates the status and result of a specific subtask.

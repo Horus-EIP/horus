@@ -4,9 +4,18 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.logger import (MASLogger, get_logger, log_agent_operation,
-                         log_api_request, log_auth_operation, log_db_operation,
-                         log_error, log_startup, log_success, log_warning)
+from core.logger import (
+    MASLogger,
+    get_logger,
+    log_agent_operation,
+    log_api_request,
+    log_auth_operation,
+    log_db_operation,
+    log_error,
+    log_startup,
+    log_success,
+    log_warning,
+)
 
 
 class TestMASLogger:

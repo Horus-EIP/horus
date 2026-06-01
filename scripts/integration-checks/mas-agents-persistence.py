@@ -16,11 +16,21 @@ import pytest
 from sqlalchemy.orm import Session
 
 from agents.registry_tool_functions import (
-    _batch_update_agent_status_internal, _get_all_agents_internal,
-    _is_agent_recently_alive, _update_alive_agent_status_internal,
-    _update_dead_agent_status_internal, create_agent, delete_agent,
-    get_agent_details, get_agent_id, get_all_agents, get_available_agents,
-    update_active_status, update_alive_agent_status, update_dead_agent_status)
+    _batch_update_agent_status_internal,
+    _get_all_agents_internal,
+    _is_agent_recently_alive,
+    _update_alive_agent_status_internal,
+    _update_dead_agent_status_internal,
+    create_agent,
+    delete_agent,
+    get_agent_details,
+    get_agent_id,
+    get_all_agents,
+    get_available_agents,
+    update_active_status,
+    update_alive_agent_status,
+    update_dead_agent_status,
+)
 from db.database import Base, SessionLocal, engine
 from db.models import Agents, AgentTypes
 

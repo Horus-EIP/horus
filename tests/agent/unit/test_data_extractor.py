@@ -1,10 +1,13 @@
 import json
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from ai_agents.data_extractor_tool import DataExtractorTool
 
+
 class TestDataExtractorTool:
-    
+
     @pytest.fixture
     def tool(self):
         return DataExtractorTool()
@@ -39,7 +42,7 @@ class TestDataExtractorTool:
         | Header 1 | Header 2
         | Row 1 Col 1 | Row 1 Col 2 |
         """
-        # Should likely fail to extract a clean table if delimiters are missing, 
+        # Should likely fail to extract a clean table if delimiters are missing,
         # but let's see if the logic is robust enough to return something or nothing.
         # Based on regex r"\s{2,}|\t|\s*\|\s*", splitting by pipe might still work partially.
         result = tool._extract_tables(text)
@@ -102,7 +105,7 @@ class TestDataExtractorTool:
         # The ignored keys check is on the key itself.
         data = json.loads(result)
         assert data["Website"] == "http://example.com"
-        
+
         text2 = "http: //example.com"
         # key "http" should be ignored
         result2 = tool._extract_key_values(text2)
@@ -115,11 +118,11 @@ class TestDataExtractorTool:
 
     def test_extract_payments_regex_fallback_basic(self, tool):
         text = "Payment of 500 EUR to ALICE CORP regarding Invoice #999."
-        # We assume Spacy might fail or find nothing in this unit test env, 
+        # We assume Spacy might fail or find nothing in this unit test env,
         # but regex should find "500 EUR"
-        
+
         result = tool._extract_payments(text, tool.nlp(text))
-        
+
         if result != "No payments found":
             data = json.loads(result)
             assert isinstance(data, list)
@@ -140,12 +143,12 @@ class TestDataExtractorTool:
         doc = tool.nlp(text)
         result = tool._extract_payments(text, doc)
         data = json.loads(result)
-        
+
         amounts = [p["amount"] for p in data]
         assert 1000.5 in amounts
         assert 200.0 in amounts
         assert 50.0 in amounts
-        
+
         currencies = [p["currency"] for p in data]
         assert "USD" in currencies
         assert "EUR" in currencies
@@ -186,30 +189,30 @@ class TestDataExtractorTool:
     def test_extract_entities_spacy_mock(self, tool):
         """Mock Spacy doc to ensure all entity types are extracted."""
         mock_doc = MagicMock()
-        
+
         # Create mock entities
         ent_person = MagicMock()
         ent_person.label_ = "PERSON"
         ent_person.text = "John Doe"
-        
+
         ent_org = MagicMock()
         ent_org.label_ = "ORG"
         ent_org.text = "Acme Corp"
-        
+
         ent_money = MagicMock()
         ent_money.label_ = "MONEY"
         ent_money.text = "100 USD"
-        
+
         ent_date = MagicMock()
         ent_date.label_ = "DATE"
         ent_date.text = "2023-01-01"
-        
+
         # Assign to doc
         mock_doc.ents = [ent_person, ent_org, ent_money, ent_date]
-        
+
         # Run extraction
         res = tool.extract_entities_spacy(mock_doc)
-        
+
         assert "John Doe" in res["people"]
         assert "Acme Corp" in res["companies"]
         assert "100 USD" in res["amounts"]
@@ -221,13 +224,13 @@ class TestDataExtractorTool:
         # Text: "Paid 100 EUR to Bob on 2023-01-01."
         # Distance logic: amount at index 5. "Bob" at index 16 (dist 11). "2023..." at index 23 (dist 18).
         # We'll use the mocking approach for precision.
-        
+
         text = "Paid 100 EUR to Bob on 2023-01-01."
-        
+
         # Mocking extract_entities_regex and extract_entities_spacy to control inputs to logic
         with patch.object(DataExtractorTool, 'extract_entities_regex') as mock_regex:
             with patch.object(DataExtractorTool, 'extract_entities_spacy') as mock_spacy:
-                
+
                 mock_regex.return_value = {
                     "amounts": ["100 EUR"],
                     "dates": ["2023-01-01"] # Regex finds date
@@ -238,11 +241,11 @@ class TestDataExtractorTool:
                     "amounts": [],
                     "dates": []
                 }
-                
+
                 # We need to ensure the text.find() works, so inputs must match text content.
                 res_str = tool._extract_payments(text, MagicMock())
                 data = json.loads(res_str)
-                
+
                 payment = data[0]
                 assert payment["amount"] == 100.0
                 assert payment["currency"] == "EUR"
@@ -273,7 +276,7 @@ class TestDataExtractorTool:
          import ai_agents.data_extractor_tool as det
          original_model = det._nlp_model
          det._nlp_model = None
-         
+
          try:
              # Patch spacy.load to fail for both 'en_core_web_trf' and 'en_core_web_sm'
              # Note: We patch where it is imported or used. It is used as `spacy.load`.
@@ -309,7 +312,7 @@ class TestDataExtractorTool:
         res_eu = tool._extract_payments(text_eu, tool.nlp(text_eu))
         data_eu = json.loads(res_eu)
         assert data_eu[0]["amount"] == 1000.50
-        
+
         # Mixed: 10,50 (comma decimal)
         text_mix = "€10,50"
         res_mix = tool._extract_payments(text_mix, tool.nlp(text_mix))

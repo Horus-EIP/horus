@@ -1,10 +1,12 @@
-from fastapi import UploadFile
-import shutil
 import os
+import shutil
+
 import pdfplumber
 import pytesseract
-from pdf2image import convert_from_path
 from docx import Document
+from fastapi import UploadFile
+from pdf2image import convert_from_path
+
 
 async def docx_to_text(filepath: str) -> str:
     """
@@ -22,7 +24,7 @@ async def docx_to_text(filepath: str) -> str:
     text = []
     for paragraph in doc.paragraphs:
         text.append(paragraph.text)
-    
+
     for table in doc.tables:
         for row in table.rows:
             row_text = [cell.text for cell in row.cells]

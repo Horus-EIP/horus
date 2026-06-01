@@ -1,12 +1,14 @@
 import os
+
 os.environ.setdefault("POSTHOG_DISABLED", "true")
 os.environ.setdefault("CHROMA_TELEMETRY_ENABLED", "0")
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 
-from sentence_transformers import SentenceTransformer
 from pathlib import Path
+
 import chromadb
 from chromadb.config import Settings
+from sentence_transformers import SentenceTransformer
 
 try:
     import posthog  # type: ignore

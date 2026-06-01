@@ -7,11 +7,11 @@ summarization when available.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
-import logging
-from typing import Dict, Any, List, Optional, Tuple
 from collections import Counter
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ CONFIDENCE_THRESHOLD = 0.6
 _nlp_model = None
 
 
-def _try_import_transformers() -> Tuple[bool, Any]:
+def _try_import_transformers() -> tuple[bool, Any]:
     """Try to import transformers pipeline. Returns (success, pipeline_module)."""
     try:
         from transformers import pipeline
@@ -157,7 +157,7 @@ class ContentAnalyzer:
                 import spacy
                 _nlp_model = spacy.load("en_core_web_trf")
                 logger.info("spaCy model en_core_web_trf loaded successfully")
-            except (OSError, IOError, ImportError):
+            except (OSError, ImportError):
                 logger.warning(
                     "spaCy model en_core_web_trf not available; "
                     "entity extraction will use regex fallback"
@@ -206,7 +206,7 @@ class ContentAnalyzer:
 
     # --- Main analysis entry point ---
 
-    def analyze(self, text: str, title: str = "") -> Dict[str, Any]:
+    def analyze(self, text: str, title: str = "") -> dict[str, Any]:
         """
         Perform a comprehensive analysis of the provided text.
 
@@ -274,7 +274,7 @@ class ContentAnalyzer:
             "confidence_score": round(confidence, 2),
         }
 
-    def _empty_analysis(self) -> Dict[str, Any]:
+    def _empty_analysis(self) -> dict[str, Any]:
         return {
             "auto_category": "general",
             "auto_type": "unknown",
@@ -286,10 +286,10 @@ class ContentAnalyzer:
 
     # --- Category classification ---
 
-    def _classify_category(self, text: str) -> Tuple[str, float]:
+    def _classify_category(self, text: str) -> tuple[str, float]:
         """Classify using keyword matching. Returns (category, confidence)."""
         text_lower = text.lower()
-        scores: Dict[str, int] = {}
+        scores: dict[str, int] = {}
 
         for cat, keywords in self.category_keywords.items():
             count = sum(1 for kw in keywords if kw in text_lower)
@@ -305,7 +305,7 @@ class ContentAnalyzer:
         confidence = min(0.95, 0.5 + (best_count / max(total_keywords * 0.2, 1)) * 0.5)
         return best_cat, confidence
 
-    def _classify_with_llm(self, text: str) -> Optional[str]:
+    def _classify_with_llm(self, text: str) -> str | None:
         """LLM classification fallback when keyword confidence < threshold."""
         if self._classify_pipe is None:
             return None
@@ -332,7 +332,7 @@ class ContentAnalyzer:
 
     # --- Entity extraction ---
 
-    def _extract_entities_regex(self, text: str) -> Dict[str, List[str]]:
+    def _extract_entities_regex(self, text: str) -> dict[str, list[str]]:
         """Extract amounts and dates using regex."""
         regex_amounts = (
             r"(?:\$|€|USD|EUR)\s?\d+(?:[.,]\d+)*"
@@ -361,7 +361,7 @@ class ContentAnalyzer:
 
         return {"amounts": amounts, "dates": dates}
 
-    def _extract_entities_spacy(self, doc) -> Dict[str, List[str]]:
+    def _extract_entities_spacy(self, doc) -> dict[str, list[str]]:
         """Extract named entities using spaCy NER."""
         people, companies, money, dates = [], [], [], []
 
@@ -384,7 +384,7 @@ class ContentAnalyzer:
 
     # --- Topic extraction ---
 
-    def _extract_topics_spacy(self, doc, max_topics: int = 10) -> List[str]:
+    def _extract_topics_spacy(self, doc, max_topics: int = 10) -> list[str]:
         """Extract topics from spaCy noun chunks."""
         chunks = []
         for chunk in doc.noun_chunks:
@@ -400,7 +400,7 @@ class ContentAnalyzer:
         counts = Counter(chunks)
         return [term for term, _ in counts.most_common(max_topics)]
 
-    def _extract_topics_simple(self, text: str, max_topics: int = 5) -> List[str]:
+    def _extract_topics_simple(self, text: str, max_topics: int = 5) -> list[str]:
         """Fallback topic extraction using word frequency."""
         words = re.findall(r"\b[a-zA-Z]{4,}\b", text.lower())
         stop = {
@@ -408,7 +408,7 @@ class ContentAnalyzer:
             "which", "their", "there", "would", "could", "about",
             "these", "other", "some", "also", "more", "when",
         }
-        freq: Dict[str, int] = {}
+        freq: dict[str, int] = {}
         for w in words:
             if w not in stop:
                 freq[w] = freq.get(w, 0) + 1
@@ -419,7 +419,7 @@ class ContentAnalyzer:
     def _detect_document_type(self, text: str, title: str = "") -> str:
         """Detect document type from content and title using keyword matching."""
         combined = f"{title} {text}".lower()
-        scores: Dict[str, int] = {}
+        scores: dict[str, int] = {}
 
         for doc_type, keywords in self.doc_type_keywords.items():
             count = sum(1 for kw in keywords if kw in combined)
@@ -432,7 +432,7 @@ class ContentAnalyzer:
 
     # --- Summary generation ---
 
-    def _generate_summary_with_llm(self, text: str, max_length: int = 150) -> Optional[str]:
+    def _generate_summary_with_llm(self, text: str, max_length: int = 150) -> str | None:
         """Generate summary using LLM. Returns None on failure (graceful fallback)."""
         if self._summarize_pipe is None:
             return None

@@ -2,13 +2,14 @@
 Unit tests for ContentAnalyzer - Phase 2a Core + Phase 2b LLM Integration.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from app.services.content_analyzer import (
-    ContentAnalyzer,
     CATEGORY_KEYWORDS,
     CONFIDENCE_THRESHOLD,
+    ContentAnalyzer,
 )
 
 

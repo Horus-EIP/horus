@@ -6,15 +6,14 @@ Usage:
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent / "src/services/knowledge-store/app"))
 
-from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.config import Settings
+from sentence_transformers import SentenceTransformer
 
 OLD_MODEL_NAME = "paraphrase-MiniLM-L6-v2"
 NEW_MODEL_NAME = "BAAI/bge-base-en-v1.5"
