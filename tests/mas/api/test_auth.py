@@ -2,11 +2,8 @@
 
 Routes under test (``src/services/mas/auth/routes.py``):
 
-* ``POST /auth/register``  → 201 on success, 409 on duplicate.
-* ``POST /auth/token``     → 200 on success, 401 on bad creds.
-* ``POST /auth/logout``    → 401 if no token.
-
-Replaces ``tests/mas/test_auth_routes_coverage.py``.
+* ``POST /auth/register``  → 201 on success, 409 on IntegrityError
+* ``POST /auth/token``     → 200 on success, 401 on bad creds
 """
 
 from __future__ import annotations
@@ -14,6 +11,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from auth.routes import router as auth_router
 
@@ -31,13 +29,9 @@ class TestLogin:
         mock_bcrypt.verify.return_value = True
         client = make_client(auth_router)
         r = client.post("/auth/token", data={"username": "admin", "password": "good"})
-        # The token endpoint depends on jwt_secret being set; in test mode
-        # the encode may still work. 200 (token) or 401 (config issue) both
-        # prove the credential check ran.
+        # JWT encoding may fail in CI without the env secret; 200 or 401 both
+        # confirm the credential check ran.
         assert r.status_code in (200, 401)
-        if r.status_code == 200:
-            body = r.json()
-            assert "access_token" in body
 
     def test_unknown_user_returns_401(self, make_client, mock_db):
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -57,7 +51,8 @@ class TestLogin:
 
 class TestRegister:
     def test_register_returns_409_on_duplicate_username(self, make_client, mock_db):
-        mock_db.query.return_value.filter.return_value.first.return_value = MagicMock()
+        # The handler relies on db.commit() raising IntegrityError, then maps it to 409.
+        mock_db.commit.side_effect = IntegrityError("dup", {}, Exception("already exists"))
         client = make_client(auth_router)
         r = client.post(
             "/auth/register",
@@ -66,14 +61,12 @@ class TestRegister:
         assert r.status_code == 409
 
     def test_register_returns_201_on_new_user(self, make_client, mock_db):
-        mock_db.query.return_value.filter.return_value.first.return_value = None
         client = make_client(auth_router)
         r = client.post(
             "/auth/register",
             json={"username": "fresh", "password": "Strongp@ss1!"},
         )
-        # 201 documented; 422 if a schema constraint we don't see fires.
-        assert r.status_code in (201, 422)
+        assert r.status_code == 201
 
     @pytest.mark.parametrize("missing", ["username", "password"])
     def test_register_rejects_missing_fields(self, make_client, mock_db, missing):

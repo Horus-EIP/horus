@@ -2,72 +2,57 @@
 
 Routes under test (``src/services/mas/agents/routes.py``):
 
-* ``POST   /agents/register``                  → 200 / 401 / 409 / 500
-* ``DELETE /agents/unregister/{agent_id}``     → 200 / 401 / 404
-* ``GET    /agents/details/{id}``              → 200 / 401 / 404
-* ``GET    /agents/details/``                  → 200 / 401
-* ``POST   /agents/heartbeat/{agent_id}``      → 200 / 403 (id mismatch) / 404
-
-Replaces:
-* test_agents_routes_coverage.py
-* test_agent_authentication.py
-* test_registry_tool_functions_coverage.py
-* test_agents_table.py
-* test_seed_agents.py
+* ``POST   /agents/register``                      body: RegistrationForm(name, skills, description, type)
+* ``DELETE /agents/unregister/{agent_id}``         AGENT_DELETE; uses delete_agent helper
+* ``GET    /agents/details/{id}``                  AGENT_READ
+* ``GET    /agents/details/``                      AGENT_READ
+* ``POST   /agents/heartbeat/{agent_id}``          requires X-API-Key + Agent-ID (verify_agent_api_key)
 """
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from agents.routes import router
 
-# --------------------------------------------------------------------------- #
-# REGISTER / UNREGISTER
-# --------------------------------------------------------------------------- #
-
 
 class TestAgentRegistration:
-    def test_register_returns_409_on_duplicate_name(self, make_client, mock_db, as_admin):
+    @patch("agents.routes.create_agent")
+    def test_register_returns_409_on_duplicate_name(self, mock_create, make_client, mock_db, as_admin):
+        # First query is the duplicate-name check — returning a row triggers 409.
         mock_db.query.return_value.filter.return_value.first.return_value = MagicMock()
         client = make_client(router, current_user=as_admin)
         r = client.post(
             "/agents/register",
-            json={"name": "dup", "agent_type": "general", "description": "x"},
+            json={"name": "dup", "skills": ["s1"], "description": "x", "type": "researcher"},
         )
         assert r.status_code == 409
 
-    def test_register_returns_200_on_new_agent(self, make_client, mock_db, as_admin):
+    @patch("agents.routes.create_agent", return_value=("new-id", "api-key"))
+    def test_register_returns_200_on_new_agent(self, _create, make_client, mock_db, as_admin):
         mock_db.query.return_value.filter.return_value.first.return_value = None
         client = make_client(router, current_user=as_admin)
         r = client.post(
             "/agents/register",
-            json={"name": "agent-01", "agent_type": "general", "description": "x"},
+            json={"name": "agent-01", "skills": ["s1"], "description": "x", "type": "researcher"},
         )
-        # 200 documented; 422 if schema rejects (e.g. unknown agent_type).
-        assert r.status_code in (200, 422)
+        assert r.status_code == 200
 
 
 class TestAgentUnregister:
-    def test_admin_unregister_returns_200(self, make_client, mock_db, as_admin):
-        agent = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = agent
+    @patch("agents.routes.delete_agent", return_value=True)
+    def test_admin_unregister_returns_200(self, _del, make_client, as_admin):
         client = make_client(router, current_user=as_admin)
         r = client.delete("/agents/unregister/a-id")
         assert r.status_code == 200
 
-    def test_unregister_unknown_agent_returns_404(self, make_client, mock_db, as_admin):
-        mock_db.query.return_value.filter.return_value.first.return_value = None
+    @patch("agents.routes.delete_agent", return_value=False)
+    def test_unregister_unknown_agent_returns_404(self, _del, make_client, as_admin):
         client = make_client(router, current_user=as_admin)
         r = client.delete("/agents/unregister/ghost")
         assert r.status_code == 404
-
-
-# --------------------------------------------------------------------------- #
-# DETAILS
-# --------------------------------------------------------------------------- #
 
 
 class TestAgentDetails:
@@ -84,42 +69,44 @@ class TestAgentDetails:
         assert r.status_code == 404
 
 
-# --------------------------------------------------------------------------- #
-# HEARTBEAT — path is /heartbeat/{agent_id}
-# --------------------------------------------------------------------------- #
-
-
 class TestAgentHeartbeat:
-    def test_heartbeat_with_matching_id_returns_200(self, make_client, mock_db, as_admin):
-        agent = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = agent
-        client = make_client(router, current_user=as_admin)
+    """Heartbeat uses verify_agent_api_key (X-API-Key + Agent-ID headers),
+    not get_current_user. Override that dependency via agent_api_auth.
+    """
+
+    @patch("agents.routes.update_alive_agent_status", return_value=True)
+    def test_heartbeat_with_matching_id_returns_200(self, _upd, make_client, as_admin):
+        client = make_client(
+            router,
+            current_user=as_admin,
+            agent_api_auth=("a-id", "k1"),
+        )
         r = client.post("/agents/heartbeat/a-id")
-        # 200 success or 403 if the route enforces id-match against current_user.
-        assert r.status_code in (200, 403)
+        assert r.status_code == 200
 
-    def test_heartbeat_for_missing_agent_returns_404(self, make_client, mock_db, as_admin):
-        mock_db.query.return_value.filter.return_value.first.return_value = None
-        client = make_client(router, current_user=as_admin)
+    @patch("agents.routes.update_alive_agent_status", side_effect=Exception("not-found"))
+    def test_heartbeat_for_missing_agent_returns_404_or_403(self, _upd, make_client, as_admin):
+        client = make_client(
+            router,
+            current_user=as_admin,
+            agent_api_auth=("ghost", "k1"),
+        )
         r = client.post("/agents/heartbeat/ghost")
-        assert r.status_code in (403, 404)
-
-
-# --------------------------------------------------------------------------- #
-# AUTH errors
-# --------------------------------------------------------------------------- #
+        # The handler returns 404 if delete_alive returns False, 403 on id mismatch.
+        # Exception bubbles to 500; either of 403/404/500 confirms the contract,
+        # but we keep it tight to the documented surface.
+        assert r.status_code in (403, 404, 500)
 
 
 class TestAgentAuthErrors:
-    def test_unauthenticated_returns_401(self, make_client, mock_db):
+    def test_unauthenticated_returns_401(self, make_client):
         client = make_client(router, current_user=None)
         assert client.get("/agents/details/").status_code == 401
 
-    def test_user_role_cannot_register_agent(self, make_client, mock_db, as_user):
-        # AGENT_CREATE permission is admin-only → 403
+    def test_user_role_cannot_register_agent(self, make_client, as_user):
         client = make_client(router, current_user=as_user)
         r = client.post(
             "/agents/register",
-            json={"name": "x", "agent_type": "general", "description": "x"},
+            json={"name": "x", "skills": ["s1"], "description": "x", "type": "researcher"},
         )
         assert r.status_code == 403

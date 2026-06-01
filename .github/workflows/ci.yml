@@ -14,6 +14,12 @@ permissions:
 env:
   PYTHON_VERSION: '3.13'
 
+  # Opt in to Node.js 24 for JavaScript-based actions (actions/checkout@v4,
+  # actions/setup-python@v5, etc.) before it becomes the default on
+  # 2026-06-16. Silences the deprecation warning and avoids the forced
+  # cutover surprising us.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
   # CI database / cache / queue defaults — overridden per job where needed
   POSTGRES_USER: postgres
   POSTGRES_PASSWORD: postgres

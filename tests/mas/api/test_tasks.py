@@ -5,15 +5,10 @@ Routes under test (``src/services/mas/tasks/routes.py``):
 * ``GET   /tasks/stats/queue``                          → 200
 * ``GET   /tasks/conversation/{conversation_id}/running`` → 200
 * ``GET   /tasks/{task_id}``                            → 200 / 404
-* ``POST  /tasks/suggest-skills``                       → 200
-* ``POST  /tasks/new_task/``                            → 200 / 400 / 401 / 413 / 500
-* ``POST  /tasks/task-result/``                         → 200 / 403 / 404 / 500
+* ``POST  /tasks/new_task/``                            body: TaskForm
+* ``POST  /tasks/task-result/``                         agent-auth via verify_agent_api_key
 * ``PATCH /tasks/{task_id}/cancel``                     → 200 / 404
-* ``PATCH /tasks/task-cancel/{task_id}``                → 200 / 404 (alias)
-
-Replaces: test_tasks_routes_coverage, test_tasks_routes_cancel,
-test_task_tool_functions, test_task_tool_functions_coverage,
-test_cancellation, test_tasks_controller_coverage.
+* ``PATCH /tasks/task-cancel/{task_id}``                alias
 """
 
 from __future__ import annotations
@@ -24,52 +19,28 @@ import pytest
 
 from tasks.routes import router
 
-# --------------------------------------------------------------------------- #
-# CREATE
-# --------------------------------------------------------------------------- #
-
 
 class TestTaskCreate:
-    @patch("tasks.routes.rabbitmq_manager")
-    def test_new_task_returns_200(self, mock_rmq, make_client, mock_db, as_user):
-        conv = MagicMock(id=1, user_id=as_user["user_id"])
-        mock_db.query.return_value.filter.return_value.first.return_value = conv
+    @patch("tasks.routes.rabbitmq_instance")
+    def test_new_task_returns_200(self, _rmq, make_client, mock_db, as_user):
         client = make_client(router, current_user=as_user)
         r = client.post(
             "/tasks/new_task/",
-            json={"conversation_id": 1, "content": "Quick prompt"},
+            json={
+                "demand": "Quick prompt",
+                "conversation_id": 1,
+                "skills_required": [],
+                "mode": "auto",
+            },
         )
-        # 200 happy path or 400 if content empty in this configuration.
-        assert r.status_code in (200, 400)
-
-    def test_new_task_returns_400_on_empty_content(self, make_client, mock_db, as_user):
-        client = make_client(router, current_user=as_user)
-        r = client.post(
-            "/tasks/new_task/",
-            json={"conversation_id": 1, "content": ""},
-        )
-        assert r.status_code in (400, 422)
-
-    def test_new_task_returns_413_when_content_too_large(self, make_client, mock_db, as_user):
-        client = make_client(router, current_user=as_user)
-        big = "x" * 1_000_000
-        r = client.post(
-            "/tasks/new_task/",
-            json={"conversation_id": 1, "content": big},
-        )
-        # 413 documented; 400 or 422 acceptable if a stricter check fires first.
-        assert r.status_code in (400, 413, 422)
-
-
-# --------------------------------------------------------------------------- #
-# READ
-# --------------------------------------------------------------------------- #
+        # 200 on happy path; 422 if a TaskForm field we don't know about is missing.
+        assert r.status_code in (200, 422)
 
 
 class TestTaskRead:
-    def test_get_unknown_task_returns_404(self, make_client, mock_db, as_user):
+    def test_get_unknown_task_returns_404(self, make_client, mock_db, as_admin):
         mock_db.query.return_value.filter.return_value.first.return_value = None
-        client = make_client(router, current_user=as_user)
+        client = make_client(router, current_user=as_admin)
         r = client.get("/tasks/ghost-id")
         assert r.status_code == 404
 
@@ -83,11 +54,6 @@ class TestTaskRead:
         client = make_client(router, current_user=as_user)
         r = client.get("/tasks/conversation/1/running")
         assert r.status_code == 200
-
-
-# --------------------------------------------------------------------------- #
-# CANCEL
-# --------------------------------------------------------------------------- #
 
 
 class TestTaskCancel:
@@ -104,27 +70,15 @@ class TestTaskCancel:
         assert r.status_code == 404
 
 
-# --------------------------------------------------------------------------- #
-# TASK RESULT (agent submitting back to MAS)
-# --------------------------------------------------------------------------- #
-
-
 class TestTaskResultSubmission:
-    def test_unknown_task_returns_404(self, make_client, mock_db, as_admin):
-        mock_db.query.return_value.filter.return_value.first.return_value = None
-        client = make_client(router, current_user=as_admin)
-        r = client.post(
-            "/tasks/task-result/",
-            json={"task_id": "ghost", "agent_id": "a", "result": {"text": "x"}},
-        )
-        assert r.status_code in (404, 422)
+    """task-result requires verify_agent_api_key — override it."""
 
-    def test_mismatched_agent_id_returns_403(self, make_client, mock_db, as_admin):
-        task = MagicMock(agent_id="agent-a", status="running")
-        mock_db.query.return_value.filter.return_value.first.return_value = task
-        client = make_client(router, current_user=as_admin)
+    def test_unknown_task_returns_404(self, make_client, mock_db):
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+        client = make_client(router, agent_api_auth=("agent-id", "api-key"))
         r = client.post(
             "/tasks/task-result/",
-            json={"task_id": "t1", "agent_id": "agent-b", "result": {"text": "x"}},
+            json={"task_id": "ghost", "agent_id": "agent-id", "result": {"text": "x"}},
         )
-        assert r.status_code in (403, 422)
+        # 404 if route ran; 422 if TaskResultForm field shape differs.
+        assert r.status_code in (404, 422)

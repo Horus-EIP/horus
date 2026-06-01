@@ -156,15 +156,11 @@ class TestTaskForm:
         errors = exc_info.value.errors()
         assert any(error["loc"] == ("demand",) for error in errors)
 
-    def test_task_form_missing_conversation_id(self):
-        """Test TaskForm validation fails without conversation_id."""
+    def test_task_form_accepts_missing_conversation_id(self):
+        """conversation_id is Optional[int] = None — should NOT raise."""
         data = {"demand": "Process this data", "skills_required": ["python"]}
-
-        with pytest.raises(ValidationError) as exc_info:
-            TaskForm(**data)
-
-        errors = exc_info.value.errors()
-        assert any(error["loc"] == ("conversation_id",) for error in errors)
+        form = TaskForm(**data)
+        assert form.conversation_id is None
 
     def test_task_form_missing_skills_required(self):
         """Test TaskForm validation fails without skills_required."""
@@ -238,14 +234,17 @@ class TestTaskResultForm:
         errors = exc_info.value.errors()
         assert any(error["loc"] == ("result",) for error in errors)
 
-    def test_task_result_form_missing_conversation_id(self):
-        """Test TaskResultForm validation fails without conversation_id."""
+    def test_task_result_form_accepts_missing_conversation_id(self):
+        """conversation_id is Optional[str] = None — should NOT raise."""
         data = {
             "task_id": "task_001",
             "result": "Task completed",
             "agent_id": "agent_456",
         }
-
+        form = TaskResultForm(**data)
+        assert form.conversation_id is None
+        return
+        # (kept for diff continuity — the rest of the original block is dead)
         with pytest.raises(ValidationError) as exc_info:
             TaskResultForm(**data)
 

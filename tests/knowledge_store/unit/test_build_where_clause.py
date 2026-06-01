@@ -1,4 +1,4 @@
-from app.chroma_db.models import SmartSearchRequest
+from chroma_db.models.search import SmartSearchRequest
 from app.chroma_db.services import build_where_clause
 
 
