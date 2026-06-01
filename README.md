@@ -1,5 +1,11 @@
 # Horus AI
 
+[![CI](https://github.com/EpitechPromo2027/G-EIP-600-BAR-6-1-eip-loup.marquez/actions/workflows/ci.yml/badge.svg?branch=pre-release-fix)](https://github.com/EpitechPromo2027/G-EIP-600-BAR-6-1-eip-loup.marquez/actions/workflows/ci.yml)
+[![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
+[![License: Proprietary](https://img.shields.io/badge/license-proprietary-red.svg)](LICENSE)
+
+> **Coverage:** every CI run posts a per-service coverage table to its [Workflow Summary](https://github.com/EpitechPromo2027/G-EIP-600-BAR-6-1-eip-loup.marquez/actions/workflows/ci.yml) page and uploads the full clickable HTML report as a downloadable artifact (`coverage-mas`, `coverage-agent`, `coverage-knowledge-store`). Open the latest successful run → Summary tab → coverage table at the top, or scroll to Artifacts to download.
+
 A self-hosted multi-agent orchestration platform that enables secure, private, and scalable AI deployments. Multiple specialized AI agents collaborate in real time, grounding their responses in your company's own documents through Retrieval-Augmented Generation (RAG).
 
 ## Architecture
