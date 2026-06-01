@@ -19,12 +19,18 @@ from conversations.routes import router
 
 class TestConversationCreate:
     def test_user_can_create_conversation(self, make_client, mock_db, as_user):
+        # db.refresh(conv) is expected to populate conv.id from the database.
+        # Simulate that so the response model (conversation_id: int) validates.
+        def _refresh(conv):
+            conv.id = 42
+        mock_db.refresh.side_effect = _refresh
         client = make_client(router, current_user=as_user)
         r = client.post(
             "/conversations/create-conversation/",
             json={"name": "My chat"},
         )
         assert r.status_code == 200
+        assert r.json() == {"conversation_id": 42}
 
     def test_create_requires_authentication(self, make_client, mock_db):
         client = make_client(router, current_user=None)

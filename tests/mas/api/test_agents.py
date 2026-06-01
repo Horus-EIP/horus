@@ -84,18 +84,17 @@ class TestAgentHeartbeat:
         r = client.post("/agents/heartbeat/a-id")
         assert r.status_code == 200
 
-    @patch("agents.routes.update_alive_agent_status", side_effect=Exception("not-found"))
-    def test_heartbeat_for_missing_agent_returns_404_or_403(self, _upd, make_client, as_admin):
+    @patch("agents.routes.update_alive_agent_status", return_value=False)
+    def test_heartbeat_for_missing_agent_returns_404(self, _upd, make_client, as_admin):
+        # Source: agents/routes.py — returns 404 when the update helper
+        # reports the agent was not found (no row updated).
         client = make_client(
             router,
             current_user=as_admin,
             agent_api_auth=("ghost", "k1"),
         )
         r = client.post("/agents/heartbeat/ghost")
-        # The handler returns 404 if delete_alive returns False, 403 on id mismatch.
-        # Exception bubbles to 500; either of 403/404/500 confirms the contract,
-        # but we keep it tight to the documented surface.
-        assert r.status_code in (403, 404, 500)
+        assert r.status_code in (403, 404)
 
 
 class TestAgentAuthErrors:

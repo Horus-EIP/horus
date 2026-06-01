@@ -16,7 +16,6 @@ from fastapi.testclient import TestClient
 from auth.auth_tool_functions import get_current_user, verify_agent_api_key
 from db.database import get_db
 
-
 # --------------------------------------------------------------------------- #
 # Database
 # --------------------------------------------------------------------------- #

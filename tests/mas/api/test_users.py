@@ -68,7 +68,7 @@ class TestUserUpdateRole:
 
 
 class TestUserSelfService:
-    @patch("users.routes.modify_password", return_value={"message": "ok"})
+    @patch("users.routes.modify_user_password", return_value=True)
     def test_password_change_with_valid_payload(self, _mod, make_client, as_user):
         client = make_client(router, current_user=as_user)
         r = client.post(
@@ -83,7 +83,7 @@ class TestUserSelfService:
         r = client.post("/users/me/password_modification", json=body)
         assert r.status_code == 422  # Pydantic rejects missing fields
 
-    @patch("users.routes.modify_username", return_value={"message": "ok"})
+    @patch("users.routes.modify_user_username", return_value=True)
     def test_username_change_returns_200_on_success(self, _mod, make_client, as_user):
         client = make_client(router, current_user=as_user)
         r = client.post("/users/me/username_modification/newname")
