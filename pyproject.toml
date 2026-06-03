@@ -1,3 +1,26 @@
+[tool.coverage.run]
+# Branch coverage is turned on per-run via --cov-branch in CI. These settings
+# centralize what counts as measurable code across all three services so the
+# reported percentage reflects real, reachable logic.
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/alembic/*",
+    "*/migrations/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+# Only genuinely-unreachable / not-meaningfully-testable lines belong here.
+# Never used to hide real gaps — every entry is code a unit test cannot drive.
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+]
+
 [tool.ruff]
 target-version = "py313"
 line-length = 100

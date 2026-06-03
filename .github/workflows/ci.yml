@@ -93,6 +93,8 @@ jobs:
             -m "not requires_stack" \
             --ignore=tests/mas/test_integration.py \
             --cov=src/services/mas \
+            --cov-branch \
+            --cov-fail-under=35 \
             --cov-report=xml:coverage-mas.xml \
             --cov-report=term-missing \
             --cov-report=html:htmlcov-mas \
@@ -134,6 +136,8 @@ jobs:
         run: |
           pytest -c tests/agent/pytest.ini tests/agent \
             --cov=src/services/agent \
+            --cov-branch \
+            --cov-fail-under=40 \
             --cov-report=xml:coverage-agent.xml \
             --cov-report=term-missing \
             --cov-report=html:htmlcov-agent \
@@ -175,6 +179,8 @@ jobs:
         run: |
           pytest -c tests/knowledge_store/pytest.ini tests/knowledge_store \
             --cov=src/services/knowledge-store \
+            --cov-branch \
+            --cov-fail-under=85 \
             --cov-report=xml:coverage-ks.xml \
             --cov-report=term-missing \
             --cov-report=html:htmlcov-ks \
