@@ -94,7 +94,7 @@ jobs:
             --ignore=tests/mas/test_integration.py \
             --cov=src/services/mas \
             --cov-branch \
-            --cov-fail-under=35 \
+            --cov-fail-under=85 \
             --cov-report=xml:coverage-mas.xml \
             --cov-report=term-missing \
             --cov-report=html:htmlcov-mas \
@@ -137,7 +137,7 @@ jobs:
           pytest -c tests/agent/pytest.ini tests/agent \
             --cov=src/services/agent \
             --cov-branch \
-            --cov-fail-under=40 \
+            --cov-fail-under=90 \
             --cov-report=xml:coverage-agent.xml \
             --cov-report=term-missing \
             --cov-report=html:htmlcov-agent \
