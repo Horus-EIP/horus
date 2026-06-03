@@ -4,7 +4,7 @@ from typing import Any
 
 from app.chroma_db.models import DocumentModel, SmartSearchRequest
 
-from .. import get_embedding, knowledge_collection
+from app.chroma_db.setup import get_embedding, knowledge_collection
 
 
 async def store_file(doc: DocumentModel, auto_analysis: dict[str, Any] | None = None):
