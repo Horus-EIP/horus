@@ -56,6 +56,7 @@ class TestFileDelete:
 
 class TestFileResolve:
     def test_resolve_by_filename_returns_200_or_404(self, client):
-        # ChromaDB.get() is mocked at conftest level
-        r = client.get("/file/resolve", params={"filename": "doc.txt"})
+        # ChromaDB.get() is mocked at conftest level.
+        # The endpoint's query param is `name` (see resolve_document_by_name).
+        r = client.get("/file/resolve", params={"name": "doc.txt"})
         assert r.status_code in (200, 404)

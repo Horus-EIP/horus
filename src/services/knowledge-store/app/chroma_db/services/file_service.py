@@ -3,7 +3,6 @@ import json
 from typing import Any
 
 from app.chroma_db.models import DocumentModel, SmartSearchRequest
-
 from app.chroma_db.setup import get_embedding, knowledge_collection
 
 
