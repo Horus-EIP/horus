@@ -52,10 +52,10 @@ node --version      # optional
 
 ```
 ├── src/
-│   ├── infra/                 # Docker Compose, Grafana/Tempo/Prometheus config
+│   ├── infra/                 # Docker Compose, Loki/Tempo/Prometheus config
 │   │   ├── docker-compose.yml
 │   │   ├── .env.example
-│   │   └── grafana/
+│   │   └── observability/
 │   └── services/
 │       ├── mas/               # Orchestrator (FastAPI)
 │       ├── agent/             # Agent worker (FastAPI)
@@ -94,7 +94,7 @@ cd src/infra
 docker compose up --build
 ```
 
-First run builds images and can take several minutes. The stack includes PostgreSQL, Redis, RabbitMQ, MAS, Agent, Knowledge Store, Web Client, PgAdmin, RedisInsight, Prometheus (internal), Grafana, and Tempo. See **`src/infra/docker-compose.yml`** for the authoritative list.
+First run builds images and can take several minutes. The stack includes PostgreSQL, Redis, RabbitMQ, MAS, Agent, Knowledge Store, Web Client, PgAdmin, RedisInsight, and the observability backends Prometheus, Loki, and Tempo (all internal). Logs, metrics, and traces are viewed from the admin-only observability pages in the web client (`/admin/logs`, `/admin/metrics`, `/admin/traces`). See **`src/infra/docker-compose.yml`** for the authoritative list.
 
 #### Step 4: Verify containers
 
@@ -125,12 +125,14 @@ docker compose exec redis redis-cli -a "$REDIS_PASSWORD" ping
 |---------|-----|--------|
 | RabbitMQ management | http://localhost:15672 | User/password from `RABBITMQ_USER` / `RABBITMQ_PASSWORD` |
 | PgAdmin | http://localhost:5433 | `PGADMIN_DEFAULT_EMAIL` / `PGADMIN_DEFAULT_PASSWORD` |
-| Grafana | http://localhost:3301 | Default `admin` / `admin` in Compose; metrics and Tempo traces |
 | RedisInsight | http://localhost:5540 | Configure connection to host `redis` from inside Docker |
 | MAS API docs | http://localhost:8000/docs | When `mas` is running |
 | Web client | http://localhost:3000 | When `web-client` is running |
+| Logs | http://localhost:3000/admin/logs | Admin-only (requires `admin` role); backed by Loki |
+| Metrics | http://localhost:3000/admin/metrics | Admin-only; backed by Prometheus (Task Queue Depth, Task Errors Rate, Active Agents) |
+| Traces | http://localhost:3000/admin/traces | Admin-only; backed by Tempo (trace search + span waterfall) |
 
-**Prometheus** is not published on the host in the default Compose file. Use Grafana’s Prometheus datasource or see [Monitoring](../operations/monitoring.md).
+**Prometheus** is not published on the host in the default Compose file. View metrics from the admin **Metrics** page (http://localhost:3000/admin/metrics) or see [Monitoring](../operations/monitoring.md).
 
 There is **no** Metabase or PostgreSQL Exporter service in the default `docker-compose.yml`.
 
@@ -377,9 +379,9 @@ docker compose up --build -d
 ## - Redis: localhost:${REDIS_PORT:-6379}
 ## - RabbitMQ: AMQP localhost:${RABBITMQ_PORT:-5672}, UI http://localhost:15672
 ## - PgAdmin: http://localhost:5433
-## - Grafana (metrics + traces UI): http://localhost:3301
 ## - RedisInsight: http://localhost:5540
-## - Prometheus: no host port by default; use Grafana’s Prometheus datasource or add a port mapping (see docs/operations.md)
+## - Web client: http://localhost:3000 (observability lives here: /admin/logs, /admin/metrics, /admin/traces — admin role required)
+## - Prometheus, Loki, Tempo: no host ports by default (internal-only backends); view logs/metrics/traces from the admin pages above or add a port mapping (see docs/operations.md)
 ```
 
 #### Verify configuration is loaded

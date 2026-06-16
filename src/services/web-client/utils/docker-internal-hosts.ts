@@ -10,8 +10,8 @@ export const DOCKER_INTERNAL_API_HOSTS = new Set(
     "web_client",
     "web-client",
     "tempo",
-    "grafana",
     "prometheus",
+    "loki",
   ].map((h) => h.toLowerCase())
 );
 

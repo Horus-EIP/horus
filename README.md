@@ -23,8 +23,9 @@ graph TB
     MAS -.->|OTLP| Tempo[Tempo]
     Agent -.->|OTLP| Tempo
     KS -.->|OTLP| Tempo
-    Tempo --- Grafana[Grafana :3301]
-    Prometheus[Prometheus] --- Grafana
+    Tempo --- Admin[Web client<br/>/admin observability]
+    Prometheus[Prometheus] --- Admin
+    Loki[Loki] --- Admin
 ```
 
 ## Technology Stack
@@ -36,7 +37,7 @@ graph TB
 | AI / ML | LangChain, ChromaDB, SentenceTransformers, Hugging Face Transformers |
 | Messaging | RabbitMQ (pika) |
 | Data | PostgreSQL, Redis |
-| Observability | Prometheus, Grafana, OpenTelemetry, Tempo |
+| Observability | Prometheus, Loki, Tempo, OpenTelemetry (viewed in the web client's `/admin` pages) |
 | Auth | JWT + bcrypt, OAuth2 password flow, four-tier RBAC |
 | Testing | pytest, Vitest, Playwright, Locust |
 | CI/CD | GitHub Actions |
@@ -99,7 +100,7 @@ First build takes 10-15 minutes. Subsequent starts are much faster.
 | KS Swagger | http://localhost:8080/docs | KS API docs (`root_path` is only for proxies) |
 | RabbitMQ UI | http://localhost:15672 | guest / guest |
 | PgAdmin | http://localhost:5433 | admin@admin.com / admin |
-| Grafana | http://localhost:3301 | admin / admin |
+| Observability | http://localhost:3000/admin/logs · /admin/metrics · /admin/traces | admin role (in-app); replaces Grafana |
 | RedisInsight | http://localhost:5540 | |
 
 ## Running Tests

@@ -17,8 +17,16 @@ Major tech integrations and milestones across the project life cycle:
 - **2026-02 → 2026-03**: Knowledge Store hardening — file management, smart-search, OCR, hybrid search, chunking, embedding tuning.
 - **2026-04**: Observability stack consolidation — Loki + Promtail + Tempo + Prometheus + Grafana, shared RabbitMQ work queues, demo guide & cheatsheet, ADRs for RabbitMQ / ChromaDB / FastAPI, code-quality review for greenlight.
 - **2026-05**: Pre-release fixes — environment + Docker tuning, agent seeding, consumer queue routing.
+- **2026-06**: Grafana removed — logs, metrics, and traces now viewed in the web client's admin pages (Loki, Prometheus, Tempo backends, admin-only); `src/infra/grafana` renamed to `src/infra/observability`.
 
 ---
+
+## June 2026
+
+### Changed
+
+- Remove Grafana; view logs, metrics, and traces in the web client's admin pages (`/admin/logs`, `/admin/metrics`, `/admin/traces`) backed by Loki, Prometheus, and Tempo — the in-app routes enforce the `admin` role; rename backend config dir `src/infra/grafana` → `src/infra/observability` (`4582fed`)
+
 
 ## May 2026
 

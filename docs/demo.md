@@ -16,7 +16,7 @@ Everything for a 20-minute live demo: the script, copy-paste commands for the li
 4. Open these browser tabs, in order:
    - Terminal (visible, large font)
    - http://localhost:3000 (web client — not yet up)
-   - http://localhost:3301 (Grafana — traces tab uses Tempo as the datasource)
+   - http://localhost:3000/admin/traces (in-app traces page — backed by Tempo; same login as the web client, admin role)
 5. Open `copy-paste-cheatsheet.md` (same folder) on a second monitor / phone.
 6. Have the `demo_assets/` folder open in a file explorer, ready to drag documents.
 7. Have the backup pre-recorded video queued up, just in case.
@@ -44,7 +44,7 @@ docker compose ps
 - MAS orchestrator (FastAPI)
 - Agent service (RAG pipeline)
 - PostgreSQL, Redis, RabbitMQ, ChromaDB
-- Prometheus + Grafana + Tempo for observability
+- Prometheus + Loki + Tempo for observability (surfaced through the web client's in-app admin pages)
 - Next.js web client
 
 > "Eight services, one network, fully self-hosted. In 90 seconds, Alice has her private AI platform running on her own infrastructure."
@@ -187,17 +187,15 @@ Expected: multi-step reasoning, cites both documents, identifies approver (Sarah
 > "Running in production means knowing what's happening. Horus ships with full observability."
 
 **What you do:**
-1. Switch to the Grafana tab (http://localhost:3301 — login `admin` / `admin`).
-2. Open the **Horus Overview** dashboard.
-3. Point out the panels:
-   - Active agents
-   - Running / pending / completed tasks
-   - Request latency (p50, p95, p99)
-   - RabbitMQ queue depth
-   - Per-agent response time
-4. In Grafana, open the **Traces** view (Tempo datasource) and show one distributed trace end-to-end: Web Client → MAS → RabbitMQ → Agent → Response.
+1. As Alice (admin role, already logged in), open the **Metrics** page at http://localhost:3000/admin/metrics — no separate login.
+2. Point out the panels (the in-app "MAS Overview"):
+   - Task Queue Depth
+   - Task Errors Rate
+   - Active Agents
+3. Open the **Logs** page at http://localhost:3000/admin/logs — live tail across services, backed by Loki.
+4. Open the **Traces** page at http://localhost:3000/admin/traces — search for a trace, then show one distributed trace end-to-end in the span waterfall: Web Client → MAS → RabbitMQ → Agent → Response.
 
-> "Every request is traced. Any failure, we see it. Any slow agent, we see it."
+> "Every request is traced. Any failure, we see it. Any slow agent, we see it — all inside the app, no second tool to log into."
 
 ---
 
@@ -214,7 +212,7 @@ bash demo_assets/stress_test.sh
 ```
 
 2. Flip to **Tasks** page — show queue: 10 pending → running → completed.
-3. Flip back to Grafana — the `Running Tasks` line spikes, then drains.
+3. Flip to the **Metrics** page (/admin/metrics) — the `Task Queue Depth` panel spikes, then drains.
 4. Show WebSocket notifications firing on the dashboard as tasks complete.
 5. Cancel one pending task live (F20) to prove cancellation works.
 
@@ -226,13 +224,13 @@ bash demo_assets/stress_test.sh
 
 - **Docker slow to start:** "While the containers finish initializing, let me walk you through the architecture..." — then show the architecture diagram.
 - **Upload fails:** retry once; if it still fails, say "I'll switch to the pre-recorded version of this segment" and cut to backup video.
-- **Agent doesn't respond:** check RabbitMQ queue in Grafana — the visible queue depth actually *demonstrates* the messaging layer works, use it.
+- **Agent doesn't respond:** check the queue depth on the in-app **Metrics** page (/admin/metrics) — the visible `Task Queue Depth` actually *demonstrates* the messaging layer works, use it.
 - **Anything catastrophic:** "Demos are demos — let me switch to the pre-recorded walkthrough" and play backup video.
 
 ### AFTER THE DEMO
 
 Be ready for these questions:
-- **"How does this compare to ChatGPT Enterprise?"** — Self-hosted, no data leaves; multi-agent with skill routing; audit trail via OpenTelemetry traces in Grafana/Tempo.
+- **"How does this compare to ChatGPT Enterprise?"** — Self-hosted, no data leaves; multi-agent with skill routing; audit trail via OpenTelemetry traces (Tempo backend), viewable in-app at /admin/traces.
 - **"Can I plug in my own LLM?"** — Yes, the Agent Service is model-agnostic.
 - **"What about scaling?"** — Horizontal scale the Agent Service; RabbitMQ handles backpressure.
 - **"Pricing?"** — Deflect: "Happy to follow up with commercial terms separately."
@@ -361,9 +359,12 @@ Paste these one per task, all with skill `financial_analysis`:
 | Service | URL | Credentials |
 |---------|-----|-------------|
 | Web client | http://localhost:3000 | alice.chen / FinCorp2026! |
-| Grafana | http://localhost:3301 | admin / admin |
-| Prometheus | http://localhost:9090 | — |
+| Metrics (in-app) | http://localhost:3000/admin/metrics | alice.chen / FinCorp2026! (admin role) |
+| Logs (in-app) | http://localhost:3000/admin/logs | alice.chen / FinCorp2026! (admin role) |
+| Traces (in-app) | http://localhost:3000/admin/traces | alice.chen / FinCorp2026! (admin role) |
 | RabbitMQ | http://localhost:15672 | guest / guest |
+
+> Prometheus, Loki, and Tempo run as internal-only backends inside the Docker network (not published to the host) — view them through the in-app admin pages above.
 
 ---
 
@@ -503,8 +504,6 @@ Legend: ✅ works end-to-end · 🟡 backend OK, UI missing or incomplete · ❌
 (These came out of the 2026-04-24 session, worth keeping in a single punch list.)
 
 - [ ] **`src/services/agent/app/agent_server/server.py` — architectural cleanup.** File currently has duplicated definitions of `Task`, `Result`, `_consume_messages`, `_consume_agent_messages`, `_format_delegation_context`, `_process_delegation_message`, `_send_delegation_result`. The imports at the top pull from submodules, but local redefinitions lower down shadow them. Functionally it works; remove lines ~94-124 and ~298-637 so only the imports + `send_result` + lifespan + routes remain.
-- [ ] **Grafana datasource error on startup.** Mitigation today: `docker compose down -v` before bring-up. Root cause: stale state in the `grafana_data` volume referencing a datasource UID that no longer matches provisioning. Investigate whether we should remove the named volume from compose, or add a provisioning reset script.
-- [ ] **Port consistency.** Grafana is exposed on **3301**, not 3001. Update any docs, READMEs, and demo scripts accordingly.
 - [ ] **`stress_test.sh` credentials.** Script uses a hard-coded JWT; move to env-only and document how to generate one.
 - [ ] **Git hygiene.** Run `git diff --check` at the tip of every branch to catch stray merge-conflict markers in non-Python files (YAML, JSON, docs) before CI.
 
@@ -516,7 +515,7 @@ Two-week plan assuming one full-time developer, priorities from most blocking to
 
 **Week 1 — unblocks the beta demo**
 
-1. Day 1: Post-demo bug fixes — finish §4 punch list (server.py cleanup, Grafana volume reset).
+1. Day 1: Post-demo bug fixes — finish §4 punch list (server.py cleanup, stress_test.sh credentials).
 2. Day 2: §3.4 Default agent seeding. Without this, a judge who runs `docker compose up` fresh sees an empty system.
 3. Day 3-4: §3.2 Task creation flow — backend.
 4. Day 5: §3.2 Task creation flow — frontend.

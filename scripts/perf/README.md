@@ -195,16 +195,24 @@ When using `--csv=results/prefix`, Locust generates:
 
 While running load tests, monitor:
 
-1. **Prometheus/Grafana**: http://localhost:3301
-   - Request latency
-   - Error rates
-   - Resource usage
+1. **Metrics** (Prometheus): http://localhost:3000/admin/metrics
+   - Task Queue Depth
+   - Task Errors Rate
+   - Active Agents
 
-2. **Grafana Traces (Tempo)**: http://localhost:3301/explore
+2. **Logs** (Loki): http://localhost:3000/admin/logs
+   - Request errors
+   - Service log streams
+
+3. **Traces** (Tempo): http://localhost:3000/admin/traces
    - Trace slow requests
    - Find bottlenecks
 
-3. **Docker Stats**:
+   > Observability (logs/metrics/traces) is now viewed live in the web client's
+   > `/admin` pages (admin role required). Prometheus, Loki, and Tempo still run
+   > as backends inside the Docker network but are no longer exposed via Grafana.
+
+4. **Docker Stats**:
    ```bash
    docker stats mas agent knowledge_store postgres redis
    ```

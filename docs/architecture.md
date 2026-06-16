@@ -48,7 +48,7 @@ Horus AI addresses all three by providing:
 | RAG-Grounded Responses | Agents retrieve relevant document chunks from ChromaDB before generating answers, providing source citations. |
 | Real-Time Chat | WebSocket-based streaming delivers responses to users as they are produced. |
 | Role-Based Access Control | Four roles (Admin, Manager, User, System) with granular permissions govern every API endpoint. |
-| Observability | Prometheus metrics, Grafana dashboards, distributed tracing via OpenTelemetry/Tempo, and structured JSON logging with correlation IDs. |
+| Observability | Prometheus metrics, native admin observability pages in the web client (`/admin/metrics`, `/admin/logs`, `/admin/traces`), distributed tracing via OpenTelemetry/Tempo, and structured JSON logging with correlation IDs. |
 
 ---
 
@@ -69,8 +69,10 @@ graph TB
     MAS -.->|OTLP| Tempo[Tempo]
     Agent -.->|OTLP| Tempo
     KS -.->|OTLP| Tempo
-    Tempo --- Grafana[Grafana :3301]
-    Prometheus[Prometheus] --- Grafana
+    Web --> Admin[Admin Pages<br/>/admin/logs · /admin/metrics · /admin/traces]
+    Tempo --- Admin
+    Prometheus[Prometheus] --- Admin
+    Loki[Loki] --- Admin
 ```
 
 #### Communication Protocols
@@ -528,9 +530,10 @@ A complete example with all variables is available at `src/infra/.env.example`.
 | Redis | Caching, session storage |
 | RabbitMQ | Asynchronous message broker for task dispatch |
 | Prometheus | Metrics collection |
-| Grafana | Dashboards and visualization |
+| Loki + Promtail | Log aggregation backend |
 | Tempo | Distributed trace backend |
 | OpenTelemetry | Instrumentation SDK for traces and metrics export |
+| Web client `/admin` pages | In-app observability UI (logs, metrics, traces) backed by Loki/Prometheus/Tempo |
 
 #### Testing
 
@@ -962,8 +965,8 @@ wired up.
 
 The Agent service propagates its current correlation ID
 (`X-Request-ID`) into every Knowledge Store call. The Knowledge Store
-logs the ID on its side, which lets Grafana + Tempo stitch the whole
-span chain end-to-end:
+logs the ID on its side, which lets Tempo (viewed at `/admin/traces`)
+stitch the whole span chain end-to-end:
 
 ```
 user → MAS → Agent → Knowledge Store
@@ -1535,10 +1538,17 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 ┌─────────────────────────────┼───────────────────────────────────────────┐
 │                     OBSERVABILITY LAYER                                  │
 ├─────────────────────────────────────────────────────────────────────────┤
+│  Backends (internal):                                                    │
 │  ┌─────────────┐     ┌─────────────┐      ┌─────────────┐              │
-│  │ Prometheus  │     │   Grafana   │      │    Tempo    │              │
-│  │  (Metrics)  │     │ (UI/Traces) │      │  (Tracing)  │              │
+│  │ Prometheus  │     │    Loki     │      │    Tempo    │              │
+│  │  (Metrics)  │     │   (Logs)    │      │  (Tracing)  │              │
 │  └─────────────┘     └─────────────┘      └─────────────┘              │
+│        │                   │                    │                       │
+│        └───────────────────┼────────────────────┘                       │
+│                            ▼                                            │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │   Web Client /admin pages — /admin/logs · /metrics · /traces      │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1554,8 +1564,9 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 | **Redis** | Caching, Sessions | Redis 7+ |
 | **RabbitMQ** | Message Broker | RabbitMQ 3.12+ |
 | **Prometheus** | Metrics Collection | Prometheus 2.x |
-| **Grafana** | Dashboards | Grafana 10.x |
+| **Loki** | Log aggregation backend | Grafana Loki |
 | **Tempo** | Distributed tracing backend | Grafana Tempo |
+| **Admin Observability Pages** | In-app logs/metrics/traces UI (`/admin/logs`, `/admin/metrics`, `/admin/traces`) | Next.js (web client) |
 
 ---
 
@@ -1630,9 +1641,10 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| Metrics | Prometheus | Collect and store metrics |
-| Dashboards | Grafana | Visualize metrics |
-| Tracing | Grafana Tempo | OTLP trace ingestion; viewed in Grafana |
+| Metrics | Prometheus | Collect and store metrics; viewed at `/admin/metrics` |
+| Logs | Grafana Loki | Log aggregation; viewed at `/admin/logs` |
+| Tracing | Grafana Tempo | OTLP trace ingestion; viewed at `/admin/traces` |
+| Dashboards | Web client `/admin` pages | In-app logs/metrics/traces UI (admin role) |
 | Logging | Structured JSON | Application logs |
 
 ---
@@ -1794,9 +1806,12 @@ docker cp knowledge_store:/app/chroma_data ./chroma_backup
 
 #### 10.3 Monitoring
 
-- **Grafana (metrics and traces UI):** http://localhost:3301 — Prometheus and Tempo datasources are provisioned in Compose.
-- **Prometheus:** scrape config at `src/infra/grafana/prometheus.yaml`; the default Compose file does not publish Prometheus on the host (use Grafana or add a port mapping).
-- **Tempo (OTLP):** applications send traces to `http://tempo:4317` inside the Docker network.
+- **Admin observability pages (web client, `admin` role required):**
+  - Logs: http://localhost:3000/admin/logs (backed by Loki)
+  - Metrics: http://localhost:3000/admin/metrics (backed by Prometheus; replicates the old "MAS Overview" dashboard: Task Queue Depth, Task Errors Rate, Active Agents)
+  - Traces: http://localhost:3000/admin/traces (backed by Tempo; trace search + span waterfall)
+- **Backends (internal only, not published to the host by default):** Prometheus (`:9090`), Loki (`:3100`), and Tempo (`:3200`) run inside the Docker network. Their config lives in `src/infra/observability/` (`prometheus.yaml`, `loki.yaml`, `promtail.yaml`, `tempo.yaml`).
+- **Tempo (OTLP):** applications send traces to `http://tempo:4317` inside the Docker network (OTLP ports `4317`/`4318` are the only observability ports published to the host).
 
 ---
 

@@ -84,8 +84,9 @@ After starting the demo:
 | MAS API | http://localhost:8000 |
 | API Docs | http://localhost:8000/docs |
 | Knowledge Store | http://localhost:8080 |
-| Grafana | http://localhost:3301 (admin/admin) |
-| Prometheus | http://localhost:9090 |
+| Logs | http://localhost:3000/admin/logs (admin role) |
+| Metrics | http://localhost:3000/admin/metrics (admin role) |
+| Traces | http://localhost:3000/admin/traces (admin role) |
 
 ## Troubleshooting
 

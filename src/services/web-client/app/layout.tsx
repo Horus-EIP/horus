@@ -9,6 +9,7 @@ import { NotificationProvider } from "@/contexts/notification-context";
 
 import "@/styles/globals.css";
 import "@mantine/core/styles.css";
+import "@mantine/charts/styles.css";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

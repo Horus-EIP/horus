@@ -400,6 +400,12 @@ const AdminUsersPage = () => {
             >
               Manage Roles
             </button>
+            <button
+              onClick={() => window.location.href = '/admin/logs'}
+              className="rounded-xl bg-white/5 px-3 py-2 text-sm text-white shadow hover:bg-white/10 cursor-pointer"
+            >
+              View Logs
+            </button>
           </div>
           <Info
             title="Users Management"

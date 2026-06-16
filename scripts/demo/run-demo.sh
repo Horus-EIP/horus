@@ -29,8 +29,6 @@ INFRA_DIR="$PROJECT_ROOT/src/infra"
 MAS_URL="http://localhost:8000"
 KNOWLEDGE_STORE_URL="http://localhost:8080"
 WEB_CLIENT_URL="http://localhost:3000"
-GRAFANA_URL="http://localhost:3001"
-JAEGER_URL="http://localhost:16686"
 PROMETHEUS_URL="http://localhost:9090"
 
 print_header() {
@@ -50,8 +48,7 @@ print_urls() {
     echo -e "${GREEN}║  MAS API:         ${NC}$MAS_URL"
     echo -e "${GREEN}║  API Docs:        ${NC}$MAS_URL/docs"
     echo -e "${GREEN}║  Knowledge Store: ${NC}$KNOWLEDGE_STORE_URL"
-    echo -e "${GREEN}║  Grafana:         ${NC}$GRAFANA_URL ${YELLOW}(admin/admin)${NC}"
-    echo -e "${GREEN}║  Jaeger:          ${NC}$JAEGER_URL"
+    echo -e "${GREEN}║  Observability:   ${NC}$WEB_CLIENT_URL/admin ${YELLOW}(logs / metrics / traces)${NC}"
     echo -e "${GREEN}║  Prometheus:      ${NC}$PROMETHEUS_URL"
     echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
     echo ""

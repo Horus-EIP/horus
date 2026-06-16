@@ -120,6 +120,12 @@ services:
     depends_on:
       mas:
         condition: service_healthy
+      loki:
+        condition: service_started
+      prometheus:
+        condition: service_started
+      tempo:
+        condition: service_started
     ports:
       - "3000:3000"
     networks:
@@ -127,6 +133,11 @@ services:
     environment:
       - NEXT_TELEMETRY_DISABLED=1
       - ORCHESTRATOR_URL=http://mas:8000
+      # Server-side only: the admin observability pages proxy to these via
+      # app/api/{logs,metrics,traces}. Internal Docker hosts — never expose to the browser.
+      - LOKI_URL=http://loki:3100
+      - PROMETHEUS_URL=http://prometheus:9090
+      - TEMPO_URL=http://tempo:3200
       - NEXT_PUBLIC_KNOWLEDGE_STORE_URL=http://localhost:8080
       - NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX=${NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX:-}
 
@@ -306,18 +317,20 @@ services:
       - horus-net
 
   # =============================================================================
-  # OBSERVABILITY - Grafana + Tempo + Prometheus + Loki/Promtail
-  # Single UI at http://localhost:3301 for traces, metrics, and container logs
+  # OBSERVABILITY - Tempo + Prometheus + Loki/Promtail
+  # Backends only. Logs, metrics, and traces are viewed in the web client's admin
+  # pages (/admin/logs, /admin/metrics, /admin/traces) via app/api/{logs,metrics,
+  # traces}; Grafana is no longer part of the stack.
   # =============================================================================
 
-  # Always-on observability stack (Loki + Promtail + Tempo + Prometheus + Grafana).
-  # All five start with a plain `docker compose up`. Single Grafana UI at :3301.
+  # Always-on observability backends (Loki + Promtail + Tempo + Prometheus).
+  # All four start with a plain `docker compose up` and feed the in-app admin pages.
   loki:
     image: grafana/loki:3.4.2
     container_name: loki
     command: ["-config.file=/etc/loki/loki.yaml"]
     volumes:
-      - ./grafana/loki.yaml:/etc/loki/loki.yaml:ro
+      - ./observability/loki.yaml:/etc/loki/loki.yaml:ro
       - loki_data:/loki
     networks:
       - horus-net
@@ -329,7 +342,7 @@ services:
     container_name: promtail
     command: ["-config.file=/etc/promtail/promtail.yaml"]
     volumes:
-      - ./grafana/promtail.yaml:/etc/promtail/promtail.yaml:ro
+      - ./observability/promtail.yaml:/etc/promtail/promtail.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - loki
@@ -338,13 +351,13 @@ services:
     restart: unless-stopped
 
   # Tempo - Distributed tracing backend (receives OTLP traces)
-  # Pin to Tempo 2.x: `latest` (Tempo 3+) expects Kafka topics; this repo uses local disk only (see grafana/tempo.yaml).
+  # Pin to Tempo 2.x: `latest` (Tempo 3+) expects Kafka topics; this repo uses local disk only (see observability/tempo.yaml).
   tempo:
     image: grafana/tempo:2.6.0
     container_name: tempo
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
-      - ./grafana/tempo.yaml:/etc/tempo.yaml:ro
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
       - tempo_data:/var/tempo
     ports:
       - "4317:4317"     # OTLP gRPC
@@ -362,33 +375,8 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--web.enable-lifecycle'
     volumes:
-      - ./grafana/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
-    networks:
-      - horus-net
-    restart: unless-stopped
-
-  # Grafana - Single UI for traces, metrics, and logs
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-    volumes:
-      - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
-      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - grafana_data:/var/lib/grafana
-    ports:
-      - "3301:3000"
-    depends_on:
-      - tempo
-      - prometheus
-      - loki
     networks:
       - horus-net
     restart: unless-stopped
@@ -408,7 +396,6 @@ volumes:
   redisinsight_data:
   tempo_data:
   prometheus_data:
-  grafana_data:
   loki_data:
   # Per-service LLM caches: populated by bootstrap_llm.py on first container
   # start, persist across rebuilds so model downloads happen exactly once.

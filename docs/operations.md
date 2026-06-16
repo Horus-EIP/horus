@@ -69,7 +69,7 @@ Kubernetes, Docker Swarm, or cloud-specific runtimes are outside this document; 
 
 ## Monitoring and observability
 
-This document describes the monitoring stack shipped with **`src/infra/docker-compose.yml`** (repository root): metrics (Prometheus), traces (Tempo, OTLP), dashboards (Grafana), plus admin UIs for data stores.
+This document describes the monitoring stack shipped with **`src/infra/docker-compose.yml`** (repository root): metrics (Prometheus), traces (Tempo, OTLP), and logs (Loki), all viewed in the web client's admin pages (`/admin/logs`, `/admin/metrics`, `/admin/traces`), plus admin UIs for data stores.
 
 ---
 
@@ -78,10 +78,10 @@ This document describes the monitoring stack shipped with **`src/infra/docker-co
 | Layer | Components |
 |-------|------------|
 | Data stores | PostgreSQL, Redis, RabbitMQ, ChromaDB (Knowledge Store volume) |
-| Metrics | Prometheus scrapes MAS, Agent, and Knowledge Store `/metrics` endpoints |
-| Traces | Grafana Tempo receives OTLP from application containers |
-| Logs | Grafana Loki ingests stdout/stderr from **all Docker Compose services** via Promtail (Docker service discovery); explore in Grafana or open the **Stack logs (Loki)** dashboard |
-| Visualization | Grafana (Prometheus + Tempo + Loki datasources provisioned from **`src/infra/grafana/datasources.yaml`**) |
+| Metrics | Prometheus scrapes MAS, Agent, and Knowledge Store `/metrics` endpoints; viewed at **`/admin/metrics`** in the web client |
+| Traces | Grafana Tempo receives OTLP from application containers; viewed at **`/admin/traces`** in the web client (trace search + span waterfall) |
+| Logs | Grafana Loki ingests stdout/stderr from **all Docker Compose services** via Promtail (Docker service discovery); viewed at **`/admin/logs`** in the web client |
+| Visualization | Web client admin pages (`/admin/logs`, `/admin/metrics`, `/admin/traces`), backed by Loki, Prometheus, and Tempo; require the `admin` role |
 | Admin UIs | PgAdmin, RedisInsight, RabbitMQ management plugin |
 
 The default Compose file does **not** include SigNoz, a standalone OpenTelemetry Collector service, PostgreSQL Exporter, or Metabase. If you add those services, extend this document accordingly.
@@ -97,37 +97,31 @@ PostgreSQL is started with `pg_stat_statements` preloading (see the `postgres` s
 
 ---
 
-### Grafana
+### Admin observability pages (web client)
 
-Primary UI for metrics and traces in local development.
+Logs, metrics, and traces are viewed in the Next.js web client's admin pages. These require the `admin` role.
 
-| Item | Value |
-|------|--------|
-| URL | http://localhost:3301 |
-| Map | Host port `3301` maps to Grafana’s internal port `3000` |
+| Page | URL | Backend |
+|------|-----|---------|
+| Logs | http://localhost:3000/admin/logs | Loki |
+| Metrics | http://localhost:3000/admin/metrics | Prometheus |
+| Traces | http://localhost:3000/admin/traces | Tempo |
 
-Default credentials in Compose: `admin` / `admin`. Anonymous viewers are enabled for local use; tighten `GF_AUTH_*` for production.
+The **Metrics** page replicates the former "MAS Overview" dashboard: Task Queue Depth, Task Errors Rate, and Active Agents. The **Traces** page offers trace search and a span waterfall.
 
-#### Provisioned dashboards
+#### Backend datasources
 
-Compose mounts **`src/infra/grafana/provisioning/dashboards/`** (provider YAML) and **`src/infra/grafana/dashboards/`** (JSON dashboards, e.g. `mas_dashboard.json`) into the Grafana container. After `docker compose up -d`, open **Dashboards** in Grafana; if you changed mounts, restart Grafana: `docker compose up -d grafana`.
+The backends run **inside** the Docker network and are **not** published to the host by default:
 
-#### Provisioned datasources
-
-- **Prometheus** at `http://prometheus:9090` (Docker network; used by Grafana panels and Explore).
-- **Tempo** at `http://tempo:3200` for trace queries; trace-to-metrics links use the Prometheus datasource.
-- **Loki** at `http://loki:3100` for log queries (labels include `compose_service`, `compose_project`, `container`).
+- **Prometheus** at `http://prometheus:9090` (internal-only).
+- **Tempo** at `http://tempo:3200` for trace queries (internal-only); only the Tempo OTLP ports `4317` / `4318` are published.
+- **Loki** at `http://loki:3100` for log queries (internal-only; labels include `compose_service`, `compose_project`, `container`).
 
 #### Log retention and integrity (Loki)
 
-In **`src/infra/grafana/loki.yaml`**, the compactor has **`retention_enabled: false`** (no automatic expiry of old logs) and **`limits_config.allow_deletes: false`** (the log-deletion API is off). Loki’s ingest path is append-only: existing lines are not updated in place through the query API.
+In **`src/infra/observability/loki.yaml`**, the compactor has **`retention_enabled: false`** (no automatic expiry of old logs) and **`limits_config.allow_deletes: false`** (the log-deletion API is off). Loki’s ingest path is append-only: existing lines are not updated in place through the query API.
 
 That is **not** cryptographic immutability: anyone who can remove the Docker volume or files on disk can still destroy data. For strict write-once retention (for example compliance), use object storage with **Object Lock** (or an enterprise log archive) and restrict who can change buckets or Compose volumes.
-
-#### Optional manual steps
-
-1. **Explore**: Open **Explore**, choose **Tempo** or **Prometheus**, and run queries or trace lookups.
-2. **Dashboards**: Import community dashboards if needed; Prometheus scrape jobs are defined in **`src/infra/grafana/prometheus.yaml`**.
 
 ---
 
@@ -135,12 +129,12 @@ That is **not** cryptographic immutability: anyone who can remove the Docker vol
 
 | Item | Value |
 |------|--------|
-| Scrape config (mounted in Compose) | **`src/infra/grafana/prometheus.yaml`** |
+| Scrape config (mounted in Compose) | **`src/infra/observability/prometheus.yaml`** |
 | Jobs | `prometheus` (self), `mas-api`, `agent-api`, `knowledge-store` |
 
 **Host access:** The `prometheus` service has **no** `ports:` mapping in the default Compose file. You cannot open `http://localhost:9090` on the host unless you add a port mapping. Use either:
 
-- **Grafana** (Explore or dashboards) against the Prometheus datasource, or  
+- The web client **`/admin/metrics`** page, which reads from the Prometheus backend, or  
 - **Docker**: `docker exec -it prometheus wget -qO- http://localhost:9090/api/v1/targets` (or add `9090:9090` under `prometheus` for local debugging only).
 
 #### Verification
@@ -156,7 +150,7 @@ Inside the Docker network, targets should include `mas:8000`, `agent:8001`, and 
 | OTLP gRPC (from apps) | `tempo:4317` inside the network; host ports `4317` / `4318` are published for optional external collectors |
 | App env | `OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317` (set per service in Compose) |
 
-View traces in Grafana (**Explore** → **Tempo**).
+View traces in the web client **`/admin/traces`** page (trace search + span waterfall), backed by Tempo.
 
 ---
 
@@ -275,7 +269,7 @@ with create_span("my_operation", {"key": "value"}) as span:
 
 ### Alerting
 
-Grafana can alert on Prometheus metrics (rules and contact points configured in Grafana, not in the minimal Compose defaults). Suggested thresholds for your own rules:
+Alerting on Prometheus metrics is not configured in the minimal Compose defaults; wire your own rules into the Prometheus backend (for example via Alertmanager) if you need them. Suggested thresholds for your own rules:
 
 | Signal | Warning | Critical |
 |--------|---------|----------|
@@ -315,17 +309,17 @@ Observability adds small per-request overhead (logging, metrics, tracing). To re
 
 ### Troubleshooting
 
-#### Grafana shows no Prometheus data
+#### `/admin/metrics` shows no Prometheus data
 
 - Confirm `prometheus`, `mas`, `agent`, and `knowledge_store` containers are running.  
-- In Grafana → Explore → Prometheus, run a simple query such as `up`.  
-- If Prometheus is unreachable from Grafana, check the Docker network and **`src/infra/grafana/datasources.yaml`**.
+- Check the Prometheus targets directly: `docker exec -it prometheus wget -qO- http://localhost:9090/api/v1/targets`.  
+- If Prometheus is unreachable from the web client, check the Docker network and **`src/infra/observability/prometheus.yaml`**.
 
 #### Cannot open Prometheus on the host
 
-- Expected with the default Compose file: add a host port for `prometheus` or use Grafana / `docker exec` as described above.
+- Expected with the default Compose file: add a host port for `prometheus` or use the `/admin/metrics` page / `docker exec` as described above.
 
-#### No traces in Grafana
+#### No traces at `/admin/traces`
 
 - Ensure `OTEL_ENABLED=true` and `OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317` for the service.  
 - Check `docker logs tempo` and that the app container can resolve `tempo`.
@@ -347,9 +341,9 @@ Observability adds small per-request overhead (logging, metrics, tracing). To re
 
 ### References
 
-- [Grafana documentation](https://grafana.com/docs/)  
 - [Prometheus documentation](https://prometheus.io/docs/)  
 - [Grafana Tempo documentation](https://grafana.com/docs/tempo/latest/)  
+- [Grafana Loki documentation](https://grafana.com/docs/loki/latest/)  
 - [OpenTelemetry Python](https://opentelemetry.io/docs/languages/python/)
 
 ---
