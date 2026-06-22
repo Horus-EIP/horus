@@ -55,6 +55,36 @@ class TestAgentUnregister:
         assert r.status_code == 404
 
 
+class TestAgentApiKeyRegeneration:
+    """POST /agents/regenerate-key/{agent_id} — AGENT_UPDATE (admin only).
+
+    Rotates the stored key and returns the new plaintext once; the registry
+    helper is patched so no real bcrypt/DB work runs here.
+    """
+
+    @patch("agents.routes.regenerate_agent_api_key", return_value="new-plaintext-key")
+    def test_admin_regenerate_returns_200_with_new_key(self, _regen, make_client, as_admin):
+        client = make_client(router, current_user=as_admin)
+        r = client.post("/agents/regenerate-key/a-id")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["api_key"] == "new-plaintext-key"
+        assert body["agent_id"] == "a-id"
+
+    @patch("agents.routes.regenerate_agent_api_key", return_value=None)
+    def test_regenerate_unknown_agent_returns_404(self, _regen, make_client, as_admin):
+        client = make_client(router, current_user=as_admin)
+        r = client.post("/agents/regenerate-key/ghost")
+        assert r.status_code == 404
+
+    def test_user_role_cannot_regenerate_key(self, make_client, as_user):
+        # 'user' role lacks AGENT_UPDATE, so the PermissionChecker rejects it
+        # before the handler runs (no need to patch the registry helper).
+        client = make_client(router, current_user=as_user)
+        r = client.post("/agents/regenerate-key/a-id")
+        assert r.status_code == 403
+
+
 class TestAgentDetails:
     def test_list_details_returns_200(self, make_client, mock_db, as_admin):
         mock_db.query.return_value.all.return_value = []

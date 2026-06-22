@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
 import { agentApi, Agent, RegisterAgentPayload } from "@/lib/agents/api";
 import Info from "@/components/ui/info";
-import { IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconPlus, IconTrash, IconKey } from "@tabler/icons-react";
 import { Modal, Button, Group, Text, TextInput, Textarea, TagsInput } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useNotification } from "@/contexts/notification-context";
@@ -31,7 +31,13 @@ export default function AdminAgentsPage() {
     description: "",
   });
   const [registeredApiKey, setRegisteredApiKey] = useState<string | null>(null);
-  
+
+  // Regenerate API key modal
+  const [regenOpened, { open: openRegen, close: closeRegen }] = useDisclosure(false);
+  const [regeneratingAgent, setRegeneratingAgent] = useState<Agent | null>(null);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regeneratedApiKey, setRegeneratedApiKey] = useState<string | null>(null);
+
   const { error: notifyError, success: notifySuccess } = useNotification();
   const { user } = useAuth();
 
@@ -163,11 +169,56 @@ export default function AdminAgentsPage() {
     closeRegister();
   };
 
+  const handleRegenerateClick = (rowIndex: number) => {
+    const agent = filteredAgents[rowIndex];
+    if (!agent) return;
+
+    if (!canManageAgents()) {
+      notifyError("Only admins can regenerate API keys");
+      return;
+    }
+
+    setRegeneratingAgent(agent);
+    setRegeneratedApiKey(null);
+    openRegen();
+  };
+
+  const handleConfirmRegenerate = async () => {
+    if (!regeneratingAgent) return;
+
+    try {
+      setIsRegenerating(true);
+      const result = await agentApi.regenerateApiKey(regeneratingAgent.id);
+
+      if (result.ok && result.data) {
+        setRegeneratedApiKey(result.data.api_key);
+        notifySuccess("API key regenerated successfully");
+      } else {
+        notifyError(result.error || "Failed to regenerate API key");
+      }
+    } catch (e) {
+      notifyError("Failed to regenerate API key");
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
+  const handleCloseRegen = () => {
+    setRegeneratingAgent(null);
+    setRegeneratedApiKey(null);
+    closeRegen();
+  };
+
   const handleRefresh = () => {
     loadAgents();
   };
 
   const actions = canManageAgents() ? [
+    {
+      icon: <IconKey className="w-5 h-5" stroke={1.25} />,
+      ariaLabel: "Regenerate API key",
+      onClick: handleRegenerateClick,
+    },
     {
       icon: <IconTrash className="w-5 h-5" stroke={1.25} />,
       ariaLabel: "Delete agent",
@@ -311,6 +362,73 @@ export default function AdminAgentsPage() {
                 className="bg-blue-600 hover:bg-blue-700 text-white"
               >
                 Register Agent
+              </Button>
+            </Group>
+          </div>
+        )}
+      </Modal>
+
+      {/* Regenerate API Key Modal */}
+      <Modal
+        opened={regenOpened}
+        onClose={handleCloseRegen}
+        title={<span className="font-semibold text-[var(--text)] text-lg">
+          {regeneratedApiKey ? "New API Key Generated" : "Regenerate API Key"}
+        </span>}
+        centered
+        size="lg"
+        styles={{
+          content: { backgroundColor: 'var(--bgSoft)', border: '1px solid rgba(255,255,255,0.1)' },
+          header: { backgroundColor: 'var(--bgSoft)' },
+          body: { backgroundColor: 'var(--bgSoft)' },
+        }}
+        overlayProps={{ backgroundOpacity: 0.55, blur: 3 }}
+      >
+        {regeneratedApiKey ? (
+          <div className="flex flex-col gap-4">
+            <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
+              <Text size="sm" className="text-green-400 font-medium mb-2">
+                New API key for "{regeneratingAgent?.name}". Save it now - it won't be shown again.
+              </Text>
+              <div className="bg-black/30 p-3 rounded-md">
+                <code className="text-xs text-[var(--text)] break-all">{regeneratedApiKey}</code>
+              </div>
+            </div>
+            <Text size="xs" className="text-[var(--textSoft)]">
+              The previous key no longer works. Update the agent with this key so it can keep sending heartbeats.
+            </Text>
+            <Button
+              onClick={handleCloseRegen}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              Close
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <Text size="md" className="text-[var(--textSoft)]">
+              Generate a new API key for{' '}
+              <span className="text-[var(--text)] font-bold">"{regeneratingAgent?.name}"</span>?
+            </Text>
+            <Text size="sm" className="text-[var(--textSoft)]">
+              The current key will <span className="text-red-500 underline">stop working immediately</span>. The agent must be reconfigured with the new key to keep sending heartbeats.
+            </Text>
+
+            <Group justify="flex-end" mt="md">
+              <Button
+                variant="default"
+                onClick={handleCloseRegen}
+                disabled={isRegenerating}
+                className="bg-white/5 hover:bg-white/10 border-white/10 text-[var(--text)]"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmRegenerate}
+                loading={isRegenerating}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Regenerate Key
               </Button>
             </Group>
           </div>

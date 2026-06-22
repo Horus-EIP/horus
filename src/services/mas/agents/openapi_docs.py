@@ -187,6 +187,70 @@ REGISTER_AGENT_OPENAPI_EXTRA = {
 }
 
 
+# --- POST /agents/regenerate-key/{agent_id} ------------------------------
+
+REGENERATE_KEY_RESPONSES = {
+    200: {
+        "description": "API key regenerated; the new key is returned once",
+        "content": {
+            "application/json": {
+                "examples": {
+                    "rotated": {
+                        "summary": "New API key issued",
+                        "value": {
+                            "message": "API key regenerated for agent 8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
+                            "agent_id": "8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
+                            "api_key": "new_generated_api_key_base64_encoded",
+                        },
+                    },
+                }
+            }
+        },
+    },
+    401: {
+        "description": "Authentication Failed",
+        "content": {
+            "application/json": {
+                "examples": {
+                    "auth_failed": {
+                        "summary": "Missing or invalid authentication",
+                        "value": {"detail": "Authentication Failed"},
+                    },
+                }
+            }
+        },
+    },
+    403: {
+        "description": "Insufficient permissions - Admin role required",
+        "content": {
+            "application/json": {
+                "examples": {
+                    "forbidden": {
+                        "summary": "User does not have admin permissions",
+                        "value": {"detail": "Insufficient permissions"},
+                    },
+                }
+            }
+        },
+    },
+    404: {
+        "description": "Agent not found",
+        "content": {
+            "application/json": {
+                "examples": {
+                    "not_found": {
+                        "summary": "Agent ID does not exist",
+                        "value": {
+                            "detail": "Agent 00000000-0000-0000-0000-000000000000 not found"
+                        },
+                    },
+                }
+            }
+        },
+    },
+}
+
+
 # --- DELETE /agents/unregister/{agent_id} --------------------------------
 
 UNREGISTER_AGENT_RESPONSES = {

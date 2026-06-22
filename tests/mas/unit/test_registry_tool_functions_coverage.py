@@ -301,6 +301,41 @@ class TestCreateAgent:
 
 
 # --------------------------------------------------------------------------- #
+# regenerate_agent_api_key
+# --------------------------------------------------------------------------- #
+
+
+class TestRegenerateAgentApiKey:
+    def test_success_returns_plaintext_and_stores_new_hash(self):
+        agent = _make_agent(api_key="$2b$12$oldhashvalueplaceholderxxxxxxxxxxxxxxxxxxx")
+        db = _db_first(agent)
+        old_hash = agent.api_key
+
+        api_key = rtf.regenerate_agent_api_key("agent-123", db)
+
+        # Plaintext key is returned (not the bcrypt hash) and is non-trivial.
+        assert isinstance(api_key, str) and len(api_key) >= 20
+        assert not api_key.startswith("$2b$")
+        db.commit.assert_called_once()
+        # The stored value is a fresh bcrypt hash of the new plaintext.
+        assert agent.api_key != old_hash
+        assert agent.api_key != api_key
+        assert rtf.bcrypt_context.verify(api_key, agent.api_key)
+
+    def test_unknown_agent_returns_none_without_commit(self):
+        db = _db_first(None)
+        assert rtf.regenerate_agent_api_key("ghost", db) is None
+        db.commit.assert_not_called()
+
+    def test_exception_rolls_back_and_returns_none(self):
+        agent = _make_agent()
+        db = _db_first(agent)
+        db.commit.side_effect = RuntimeError("db down")
+        assert rtf.regenerate_agent_api_key("agent-123", db) is None
+        db.rollback.assert_called_once()
+
+
+# --------------------------------------------------------------------------- #
 # delete_agent
 # --------------------------------------------------------------------------- #
 

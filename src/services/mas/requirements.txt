@@ -5,7 +5,7 @@ pytest-cov
 pytest-asyncio
 uvicorn
 pika
-fastapi
+fastapi<0.137
 httpx
 websockets
 wsproto

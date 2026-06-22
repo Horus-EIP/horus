@@ -14,6 +14,7 @@ from agents.openapi_docs import (
     AGENT_DETAILS_RESPONSES,
     HEARTBEAT_RESPONSES,
     LIST_AGENTS_RESPONSES,
+    REGENERATE_KEY_RESPONSES,
     REGISTER_AGENT_OPENAPI_EXTRA,
     REGISTER_AGENT_RESPONSES,
     UNREGISTER_AGENT_RESPONSES,
@@ -24,6 +25,7 @@ from agents.registry_tool_functions import (
     get_agent_details,
     get_agent_id,
     get_all_agents,
+    regenerate_agent_api_key,
     update_alive_agent_status,
 )
 from auth.auth_tool_functions import PermissionChecker, verify_agent_api_key
@@ -103,6 +105,48 @@ async def handle_agent_creation(
 
     return {
         "message": f"agent with name {agent.name} successfully created",
+        "agent_id": agent_id,
+        "api_key": api_key,
+    }
+
+
+@router.post(
+    "/regenerate-key/{agent_id}",
+    summary="Regenerate an agent's API key",
+    description=(
+        "Issue a fresh API key for an existing agent, invalidating the old one. "
+        "Use this when a key is lost: stored keys are hashed and can never be "
+        "retrieved, only replaced. The new key is returned exactly once and must "
+        "be saved immediately — the agent has to be reconfigured with it to keep "
+        "sending heartbeats. Requires AGENT_UPDATE permission (admin only)."
+    ),
+    status_code=200,
+    dependencies=[Depends(PermissionChecker(Permission.AGENT_UPDATE))],
+    tags=["Agents"],
+    responses=REGENERATE_KEY_RESPONSES,
+)
+async def regenerate_agent_key(
+    agent_id: str,
+    user: Annotated[dict, Depends(PermissionChecker(Permission.AGENT_UPDATE))],
+    db: Session = Depends(get_db),
+):
+    """Rotate an agent's API key and return the new plaintext once.
+
+    The previous key stops working immediately. Raises 401 if unauthenticated
+    and 404 if the agent does not exist.
+    """
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication Failed")
+
+    api_key = regenerate_agent_api_key(agent_id, db)
+
+    if api_key is None:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+
+    log_agent_operation(agent_id, "REGENERATE_KEY", "API key rotated")
+
+    return {
+        "message": f"API key regenerated for agent {agent_id}",
         "agent_id": agent_id,
         "api_key": api_key,
     }

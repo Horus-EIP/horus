@@ -177,6 +177,36 @@ def create_agent(
         return None, None
 
 
+def regenerate_agent_api_key(agent_id: str, db: Session) -> str | None:
+    """Rotate an agent's API key and return the new plaintext (shown once).
+
+    Stored keys are bcrypt-hashed and therefore unrecoverable, so a forgotten
+    key cannot be displayed again — it can only be replaced. This generates a
+    fresh token, hashes it for storage, and returns the plaintext so the caller
+    can surface it a single time. The previous key stops working immediately.
+
+    Returns ``None`` if the agent does not exist or the update fails (on
+    failure the old key is left untouched by the rollback).
+    """
+    try:
+        agent = db.query(Agents).filter(Agents.id == agent_id).first()
+        if agent is None:
+            logger.warning(f"Cannot regenerate API key - agent not found: {agent_id}")
+            return None
+
+        api_key = secrets.token_urlsafe(32)
+        agent.api_key = bcrypt_context.hash(api_key)
+        db.commit()
+        logger.info(f"API key regenerated successfully - Agent ID: {agent_id}")
+        return api_key
+    except Exception as e:
+        db.rollback()
+        logger.error(
+            f"Error regenerating API key - Agent ID: {agent_id}, Error: {str(e)}"
+        )
+        return None
+
+
 def delete_agent(agent_id: str, db: Session) -> bool:
     """Permanently delete an agent. Returns ``False`` if not found."""
     try:

@@ -41,6 +41,31 @@ async def _noop_coro():
     return None
 
 
+def _collect_route_paths(app):
+    """Return the set of mounted route paths, FastAPI-version agnostic.
+
+    FastAPI <0.137 flattened ``include_router`` children directly into
+    ``app.routes`` (each with a ``.path``).  FastAPI >=0.137 instead stores a
+    single ``_IncludedRouter`` placeholder per inclusion that resolves its
+    children lazily and has no ``.path`` of its own.  We handle both: take
+    ``.path`` when present, otherwise expand the placeholder via its
+    ``effective_candidates()`` (each yields the fully-prefixed child path).
+    """
+    paths = set()
+    for route in app.routes:
+        path = getattr(route, "path", None)
+        if path is not None:
+            paths.add(path)
+            continue
+        candidates = getattr(route, "effective_candidates", None)
+        if callable(candidates):
+            for candidate in candidates():
+                candidate_path = getattr(candidate, "path", None)
+                if candidate_path is not None:
+                    paths.add(candidate_path)
+    return paths
+
+
 @pytest.fixture
 def patched_lifespan_side_effects():
     """Patch every startup/shutdown side effect of ``core.app``.
@@ -93,7 +118,7 @@ class TestCreateAppEnvironment:
         """All routers and both custom middlewares are mounted, plus /metrics."""
         app = app_module.create_app_environment()
 
-        paths = {route.path for route in app.routes}
+        paths = _collect_route_paths(app)
         # Routers from each feature package are included.
         assert "/rabbitmq/heartbeat" in paths
         # Instrumentator.expose() adds the Prometheus scrape endpoint.
@@ -122,6 +147,36 @@ class TestCreateAppEnvironment:
         assert response.status_code == 200
         # Prometheus exposition format.
         assert "# HELP" in response.text or "# TYPE" in response.text
+
+    def test_included_route_flows_through_instrumentator_without_crash(
+        self, patched_lifespan_side_effects
+    ):
+        """Regression: a request to an *included-router* route must pass through
+        the Prometheus instrumentator middleware without raising.
+
+        The instrumentator iterates ``app.routes`` and reads ``route.path`` on
+        every request to label its metrics.  FastAPI 0.137 made
+        ``include_router()`` lazy — it leaves an ``_IncludedRouter`` placeholder
+        (which has no ``.path``) in ``app.routes`` — so 0.137+ makes the
+        instrumentator ``AttributeError`` and return 500 for *every* included
+        route (e.g. ``POST /rabbitmq/heartbeat``).  The other factory tests only
+        exercised ``/metrics`` (an excluded path), so this regression shipped
+        unnoticed; here we drive a real included route end-to-end so it can't
+        return silently.  ``raise_server_exceptions`` defaults to True, so an
+        ``AttributeError`` inside the middleware surfaces as a test failure.
+        """
+        import core.rabbitmq_tool as rmq_tool
+
+        app = app_module.create_app_environment()
+
+        # Keep the handler hermetic (no real broker dial); the behaviour under
+        # test is the middleware route-name lookup, not RabbitMQ connectivity.
+        with patch.object(rmq_tool, "check_rabbit_mq", return_value=True):
+            with TestClient(app) as client:
+                response = client.post("/rabbitmq/heartbeat")
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
 
 
 # --------------------------------------------------------------------------- #
@@ -464,7 +519,7 @@ class TestMainEntrypoint:
     def test_app_is_built_at_import(self, main_module):
         """Importing ``main`` exposes a wired FastAPI app and the '/' route."""
         assert isinstance(main_module.app, FastAPI)
-        paths = {route.path for route in main_module.app.routes}
+        paths = _collect_route_paths(main_module.app)
         assert "/" in paths
 
     def test_health_endpoint_authenticated(self, main_module):
