@@ -51,6 +51,43 @@ Benchmarks the Knowledge Store service on port **8080** (no `/store` path prefix
 python benchmark_rag.py --url http://localhost:8080 --iterations 50
 ```
 
+#### End-to-End LLM Pipeline Benchmark (`benchmark-pipeline.py`)
+
+The MAS/RAG benchmarks above exercise CRUD and the knowledge-store HTTP API but
+**not** the actual multi-agent LLM pipeline. `benchmark-pipeline.py` drives the
+real path — submit a query via `POST /tasks/new_task/` (`mode=specific_agent`,
+so it always lands on the heavy Qwen3-4B worker, not the 1.5B router's
+direct-answer short-circuit) and listen on the chat WebSocket
+`/chat/{conversation_id}/` for the agent's `task_step` / `task_complete` events.
+
+Because the agent brackets generation with `reasoning.start` / `reasoning.done`
+(and `reasoning.done` reports `duration_seconds`), it derives a **clean decode
+tok/s** without any code changes or streaming. Fixtures live in `bench_assets/`
+(`corpus.jsonl` ingested into the KS, `prompts.jsonl` fixed query set).
+
+```bash
+pip install httpx websockets          # tiktoken optional, for better token counts
+
+# quick sanity check against a live stack (1 task, verbose event dump)
+python benchmark-pipeline.py --scenario smoke
+
+# full baseline (idle + concurrency + contention), writes results-archive/pipeline-*.{json,md}
+python benchmark-pipeline.py --scenario all --label baseline
+```
+
+Scenarios: `idle` (sequential single-task), `concurrency` (N tasks at once →
+aggregate tok/s + p50/p95), `contention` (generation tok/s with vs. without a
+concurrent knowledge-store ingestion load — the idle→loaded decode drop is the
+ceiling the NPU embedder offload can recover). Captured per task: `submit_http_ms`,
+`first_step_s`, `ttft_proxy_s` (submit→reasoning.start), `decode_s` (reported
+inference time), `decode_tok_s`, `e2e_s`, plus nvidia-smi VRAM/util/power per
+scenario. Both LLMs decode greedily (`do_sample=False`) so runs are deterministic.
+
+> **Tuning note:** at high `AGENT_MAX_NEW_TOKENS` and the current GPU-memory cap
+> (`AGENT_GPU_MEMORY_CAP`, which offloads the 4B to CPU), a single generation can
+> take minutes. Trim with `--repeats`, `--concurrency 1,2`, `--gen-count`, and a
+> generous `--event-timeout` for a feasible baseline.
+
 ### Baseline Metrics
 
 Expected baseline performance targets:

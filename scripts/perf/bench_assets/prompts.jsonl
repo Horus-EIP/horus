@@ -1,0 +1,6 @@
+{"id": "q-revenue", "query": "What was Acme Corp's Q4 FY2025 revenue, and how did it compare to the prior quarter and the same quarter last year?", "skills_required": ["research"]}
+{"id": "q-sales", "query": "Summarize Acme Corp's sales performance across its three business segments in fiscal year 2025.", "skills_required": ["research"]}
+{"id": "q-metrics", "query": "What are the key operating metrics Acme Corp reported for fiscal year 2025, including ARR, net revenue retention, and the Rule of 40?", "skills_required": ["research"]}
+{"id": "q-growth", "query": "What full-year growth rate did Acme Corp report for fiscal year 2025 and which segment and region grew the fastest?", "skills_required": ["research"]}
+{"id": "q-regions", "query": "Explain Acme Corp's regional revenue breakdown for fiscal year 2025, with the dollar amounts and growth rates per region.", "skills_required": ["research"]}
+{"id": "q-risks", "query": "List the main risk factors Acme Corp disclosed in its fiscal year 2025 report and briefly explain each.", "skills_required": ["research"]}
