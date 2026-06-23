@@ -737,13 +737,17 @@ class DecisionMakingAgent:
         """
         import requests
 
+        messages = [
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": user_content},
+        ]
+        if _stream_tokens_enabled():
+            return self._generate_vllm_streaming(messages)
+
         url = _vllm_base_url().rstrip("/") + "/chat/completions"
         payload = {
             "model": _vllm_model_name(),
-            "messages": [
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": user_content},
-            ],
+            "messages": messages,
             "max_tokens": _max_new_tokens(),
             "temperature": 0.0,
             "stream": False,
@@ -756,6 +760,106 @@ class DecisionMakingAgent:
         self._last_gen_tokens = usage.get("completion_tokens")
         self._last_prompt_tokens = usage.get("prompt_tokens")
         return text
+
+    def _generate_vllm_streaming(self, messages: list) -> str:
+        """Stream a vLLM chat completion (SSE) and emit confirmed-clean tokens as
+        batched ``reasoning.delta`` steps — the Phase-1 streaming UX on the vLLM
+        backend. Same hold-a-beat guard as the transformers path: buffer
+        ``_STREAM_HOLD_CHARS``, run ``_is_degenerate_output``, suppress on a
+        spiral. Token counts come from the final usage chunk."""
+        import json as _json
+
+        import requests
+
+        try:
+            from ai_agents.step_emitter import emit_step as _emit
+        except Exception:  # pragma: no cover
+
+            def _emit(*_a: Any, **_kw: Any) -> None:  # type: ignore[misc]
+                return None
+
+        url = _vllm_base_url().rstrip("/") + "/chat/completions"
+        payload = {
+            "model": _vllm_model_name(),
+            "messages": messages,
+            "max_tokens": _max_new_tokens(),
+            "temperature": 0.0,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+
+        full: list[str] = []
+        held: list[str] = []
+        held_chars = 0
+        streaming = False
+        suppressed = False
+        pending: list[str] = []
+        idx = 0
+        last_flush = time.monotonic()
+
+        def _flush(force: bool = False) -> None:
+            nonlocal pending, last_flush, idx
+            if not pending:
+                return
+            if not force and (time.monotonic() - last_flush) < _STREAM_FLUSH_INTERVAL:
+                return
+            _emit("reasoning.delta", "", "", chunk="".join(pending), index=idx)
+            pending = []
+            idx += 1
+            last_flush = time.monotonic()
+
+        with requests.post(
+            url, json=payload, timeout=_vllm_timeout(), stream=True
+        ) as resp:
+            resp.raise_for_status()
+            for raw in resp.iter_lines():
+                if not raw:
+                    continue
+                line = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+                if not line.startswith("data:"):
+                    continue
+                data = line[len("data:") :].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    chunk = _json.loads(data)
+                except ValueError:
+                    continue
+                usage = chunk.get("usage")
+                if usage:
+                    self._last_gen_tokens = usage.get("completion_tokens")
+                    self._last_prompt_tokens = usage.get("prompt_tokens")
+                choices = chunk.get("choices") or []
+                if not choices:
+                    continue
+                piece = (choices[0].get("delta") or {}).get("content") or ""
+                if not piece:
+                    continue
+                full.append(piece)
+                if suppressed:
+                    continue
+                if streaming:
+                    pending.append(piece)
+                    _flush()
+                    continue
+                held.append(piece)
+                held_chars += len(piece)
+                if held_chars >= _STREAM_HOLD_CHARS:
+                    joined = "".join(held)
+                    held = []
+                    if _is_degenerate_output(joined):
+                        suppressed = True
+                    else:
+                        _emit("reasoning.delta", "", "", chunk=joined, index=idx)
+                        idx += 1
+                        streaming = True
+
+        if not streaming and not suppressed and held:
+            joined = "".join(held)
+            if not _is_degenerate_output(joined):
+                _emit("reasoning.delta", "", "", chunk=joined, index=idx)
+        _flush(force=True)
+        return "".join(full).strip()
 
     def decide(self, query: str, context: str | None = None) -> str:
         """

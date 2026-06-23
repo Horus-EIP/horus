@@ -1,0 +1,78 @@
+{
+  "label": "baseline",
+  "timestamp": "2026-06-23T19:02:03Z",
+  "git_commit": "2415eea",
+  "machine": {
+    "name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+    "driver": "610.62",
+    "memory_total": "8188 MiB"
+  },
+  "config": {
+    "mas_url": "http://localhost:8000",
+    "ks_url": "http://localhost:8080",
+    "scenario": "smoke",
+    "repeats": 2,
+    "concurrency_levels": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "gen_count": 4,
+    "ks_workers": 3,
+    "token_method": "approx:chars-over-4",
+    "agent_id": "16b09ee8-7760-498e-ab3e-0a8f8ad7e4ce",
+    "skill": "knowledge_retrieval",
+    "observed_model": "Qwen/Qwen3-4B-Instruct-2507",
+    "observed_device": "cuda",
+    "agent_max_new_tokens": "3072 (src/infra/.env)",
+    "knowledge_store_n_results": "4 (src/infra/.env)"
+  },
+  "scenarios": {
+    "smoke": {
+      "result": {
+        "prompt_id": "q-revenue",
+        "ok": true,
+        "direct": false,
+        "error": null,
+        "submit_http_ms": 36.09,
+        "first_step_s": 0.3764,
+        "ttft_proxy_s": 0.4125,
+        "decode_s": 1.875,
+        "decode_wall_s": 1.876,
+        "e2e_s": 2.315,
+        "output_chars": 319,
+        "output_tokens": 80,
+        "generated_tokens": 98,
+        "prompt_tokens": 1026,
+        "decode_tok_s": 52.267,
+        "decode_tok_s_basis": "generated",
+        "suspected_spiral": false,
+        "model": "Qwen/Qwen3-4B-Instruct-2507",
+        "device": "cuda",
+        "steps": [
+          {
+            "step_type": "retrieval.start",
+            "offset_s": 0.3764
+          },
+          {
+            "step_type": "retrieval.results",
+            "offset_s": 0.4004
+          },
+          {
+            "step_type": "reasoning.start",
+            "offset_s": 0.4125
+          },
+          {
+            "step_type": "reasoning.done",
+            "offset_s": 2.2885
+          },
+          {
+            "step_type": "reasoning.delta",
+            "offset_s": 2.2902
+          }
+        ]
+      }
+    }
+  }
+}
