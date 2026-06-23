@@ -20,7 +20,14 @@ logger = logging.getLogger(__name__)
 
 try:
     import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        BitsAndBytesConfig,
+        StoppingCriteria,
+        StoppingCriteriaList,
+        TextIteratorStreamer,
+    )
 
     _TRANSFORMERS_AVAILABLE = True
 except Exception:
@@ -28,6 +35,9 @@ except Exception:
     AutoModelForCausalLM = None  # type: ignore
     AutoTokenizer = None  # type: ignore
     BitsAndBytesConfig = None  # type: ignore
+    StoppingCriteria = None  # type: ignore
+    StoppingCriteriaList = None  # type: ignore
+    TextIteratorStreamer = None  # type: ignore
     _TRANSFORMERS_AVAILABLE = False
 
 try:
@@ -82,6 +92,122 @@ def _is_degenerate_output(text: str) -> bool:
     lowered = text.lower()
     score = sum(lowered.count(m) for m in _SPIRAL_MARKERS)
     return score >= 5
+
+
+def _early_stop_enabled() -> bool:
+    """Whether to halt generation early when a spiral is detected mid-stream.
+
+    Default ON. The greedy 4B worker, on certain (query, retrieved-context)
+    pairs, falls into a self-correction loop and generates tokens all the way to
+    AGENT_MAX_NEW_TOKENS (measured: a full 3072-token run ≈ 150s at ~20 tok/s)
+    before the post-hoc _is_degenerate_output guard replaces the garbage with a
+    clean fallback. The early-stop criterion fires the SAME heuristic during
+    generation, so the spiral is cut to a few hundred tokens / a few seconds with
+    byte-identical user-visible output. Set AGENT_EARLY_STOP=0 to disable (A/B).
+    """
+    return os.getenv("AGENT_EARLY_STOP", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+
+
+# Re-evaluate the spiral heuristic on the generated tail every
+# _EARLY_STOP_INTERVAL new tokens, starting once at least _EARLY_STOP_MIN_TOKENS
+# have been produced (so there is enough text for _is_degenerate_output's
+# 200-char / 5-marker gate to be meaningful and false positives stay rare).
+_EARLY_STOP_MIN_TOKENS = 128
+_EARLY_STOP_INTERVAL = 64
+
+
+def _stream_tokens_enabled() -> bool:
+    """Whether to stream generated tokens to the client as ``reasoning.delta``
+    steps over the existing step→WebSocket path (Phase 1). Default OFF so the
+    blocking path is untouched until streaming is enabled end-to-end.
+
+    "Hold a beat" UX: the streamer buffers ~_STREAM_HOLD_CHARS before emitting
+    anything and runs the SAME _is_degenerate_output guard on the buffer, so a
+    spiral is caught and suppressed before the user ever sees self-correction
+    garbage. Only confirmed-clean output is streamed; the post-hoc guard and the
+    final result envelope are unchanged.
+    """
+    return os.getenv("AGENT_STREAM_TOKENS", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+# Buffer this many characters (~125 tokens, aligned with the early-stop's first
+# check) before deciding whether the output is a spiral. Short answers under
+# this length are emitted in one delta at the end — fine, they are already fast.
+_STREAM_HOLD_CHARS = 500
+# Coalesce streamed tokens into at most one step every this many seconds so a
+# long answer produces ~tens of POSTs to MAS, not one-per-token.
+_STREAM_FLUSH_INTERVAL = 0.12
+
+
+def _llm_backend() -> str:
+    """Generation backend (Phase 4): 'transformers' (in-process, default) or
+    'vllm' (call an external vLLM OpenAI-compatible server). Under 'vllm' the
+    agent does NOT load the local 4B, freeing the 8GB GPU for the server, and
+    decode runs ~3x faster with continuous batching for concurrency."""
+    return os.getenv("LLM_BACKEND", "transformers").strip().lower()
+
+
+def _vllm_base_url() -> str:
+    return os.getenv("LLM_VLLM_URL", "http://host.docker.internal:18000/v1")
+
+
+def _vllm_model_name() -> str:
+    return os.getenv("LLM_VLLM_MODEL", "qwen3-4b")
+
+
+def _vllm_timeout() -> float:
+    try:
+        return float(os.getenv("LLM_VLLM_TIMEOUT", "120"))
+    except ValueError:
+        return 120.0
+
+
+if _TRANSFORMERS_AVAILABLE and StoppingCriteria is not None:
+
+    class _SpiralStoppingCriteria(StoppingCriteria):  # type: ignore[misc]
+        """Stop greedy generation as soon as the decoded tail looks degenerate.
+
+        Reuses the exact ``_is_degenerate_output`` definition (≥5 contradiction
+        markers over ≥200 chars), so it only ever stops outputs the downstream
+        guard would discard anyway — it never truncates a well-formed answer.
+        Decodes only the generated portion, and only every
+        ``_EARLY_STOP_INTERVAL`` tokens, so the cost is negligible vs. the
+        generation it short-circuits. Batch size 1 (the agent decodes one
+        sequence at a time).
+        """
+
+        def __init__(self, tokenizer: Any, prompt_len: int) -> None:
+            self._tok = tokenizer
+            self._prompt_len = int(prompt_len)
+            self.triggered = False
+
+        def __call__(self, input_ids: Any, scores: Any = None, **kwargs: Any) -> bool:
+            gen_len = int(input_ids.shape[1]) - self._prompt_len
+            if gen_len < _EARLY_STOP_MIN_TOKENS or gen_len % _EARLY_STOP_INTERVAL != 0:
+                return False
+            gen_ids = input_ids[0, self._prompt_len :]
+            text = self._tok.decode(
+                gen_ids,
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=False,
+            )
+            if _is_degenerate_output(text):
+                self.triggered = True
+                return True
+            return False
+
+else:  # transformers unavailable — generation path is never reached in this case
+    _SpiralStoppingCriteria = None  # type: ignore
 
 
 def _configure_agent_torch_threads() -> None:
@@ -239,6 +365,11 @@ class DecisionMakingAgent:
         self._lazy = decision_model is None and _lazy_model_enabled()
         self._causal_tokenizer = None
         self._causal_model = None
+        # Last generation's exact token counts, surfaced to the benchmark harness
+        # via the reasoning.done step (decode tok/s). Set by _generate_causal;
+        # left None on the decision_model callable path.
+        self._last_gen_tokens: int | None = None
+        self._last_prompt_tokens: int | None = None
         self._load_lock = threading.Lock()
 
         if decision_model is not None:
@@ -267,6 +398,15 @@ class DecisionMakingAgent:
         if self._lazy:
             logger.info(
                 "Decision model will load on first use (AGENT_LAZY_DECISION_MODEL=1)."
+            )
+            return
+
+        if _llm_backend() == "vllm":
+            logger.info(
+                "LLM_BACKEND=vllm: skipping in-process model load; generation is "
+                "served by %s (model=%s).",
+                _vllm_base_url(),
+                _vllm_model_name(),
             )
             return
 
@@ -437,33 +577,185 @@ class DecisionMakingAgent:
             if ids:
                 bad_words_ids.append(ids)
 
-        with torch.no_grad():
-            out = model.generate(
-                input_ids=input_ids,
-                attention_mask=attn_mask,
-                max_new_tokens=max_new,
-                # Greedy decoding on a 4B model with no penalties loops once it
-                # hits a repeatable phrase (the "(Duplicate)" failure mode).
-                # repetition_penalty discourages echoing tokens already seen;
-                # no_repeat_ngram_size hard-bans repeating any 4-gram.
-                # bad_words_ids physically prevents the self-correcting loop
-                # by blocking the tokens that start it.
-                do_sample=False,
-                repetition_penalty=1.2,
-                no_repeat_ngram_size=4,
-                bad_words_ids=bad_words_ids if bad_words_ids else None,
-                return_dict_in_generate=True,
-                pad_token_id=tok.eos_token_id,
-                eos_token_id=tok.eos_token_id,
-            )
+        # Halt the self-correction spiral the moment it is detectable instead of
+        # letting it run to max_new_tokens (see _early_stop_enabled / the
+        # measured 3072-token, ~150s worst case). No-op for well-formed answers.
+        spiral_criteria = None
+        stopping = None
+        if _early_stop_enabled() and _SpiralStoppingCriteria is not None:
+            spiral_criteria = _SpiralStoppingCriteria(tok, input_ids.size(1))
+            stopping = StoppingCriteriaList([spiral_criteria])
+
+        # Greedy decoding on a 4B model with no penalties loops once it hits a
+        # repeatable phrase (the "(Duplicate)" failure mode). repetition_penalty
+        # discourages echoing tokens already seen; no_repeat_ngram_size hard-bans
+        # repeating any 4-gram; bad_words_ids physically prevents the
+        # self-correcting loop by blocking the tokens that start it.
+        gen_kwargs: dict[str, Any] = dict(
+            input_ids=input_ids,
+            attention_mask=attn_mask,
+            max_new_tokens=max_new,
+            do_sample=False,
+            repetition_penalty=1.2,
+            no_repeat_ngram_size=4,
+            bad_words_ids=bad_words_ids if bad_words_ids else None,
+            stopping_criteria=stopping,
+            return_dict_in_generate=True,
+            pad_token_id=tok.eos_token_id,
+            eos_token_id=tok.eos_token_id,
+        )
+
+        if _stream_tokens_enabled() and TextIteratorStreamer is not None:
+            # Streams confirmed-clean tokens to the client as reasoning.delta
+            # steps; returns the same return_dict_in_generate output as below so
+            # token telemetry and the degeneracy guard are unchanged.
+            out = self._generate_streaming(model, tok, gen_kwargs)
+        else:
+            with torch.no_grad():
+                out = model.generate(**gen_kwargs)
 
         seq = out.sequences[0]
         gen_only = seq[input_ids.size(1) :]
+        # Exact token counts for benchmark telemetry. Captured raw — before any
+        # degeneracy-guard cleanup of the decoded text — so a spiral is measured
+        # as the ~max_new_tokens it actually produced, not the short fallback the
+        # guard substitutes downstream.
+        self._last_gen_tokens = int(gen_only.shape[0])
+        self._last_prompt_tokens = int(input_ids.size(1))
+        if spiral_criteria is not None and spiral_criteria.triggered:
+            logger.info(
+                "Early-stop: spiral detected; halted generation at %d new tokens "
+                "(cap %d) — clean fallback substituted downstream.",
+                self._last_gen_tokens,
+                max_new,
+            )
         return tok.decode(
             gen_only,
             skip_special_tokens=True,
             clean_up_tokenization_spaces=False,
         ).strip()
+
+    def _generate_streaming(self, model: Any, tok: Any, gen_kwargs: dict) -> Any:
+        """Run ``model.generate`` in a background thread with a
+        ``TextIteratorStreamer`` and emit confirmed-clean tokens to the client as
+        coalesced ``reasoning.delta`` steps.
+
+        Hold-a-beat: buffer the first ~``_STREAM_HOLD_CHARS`` characters and run
+        ``_is_degenerate_output`` on them. If the output is spiralling we suppress
+        streaming entirely (the early-stop criterion halts generation and the
+        post-hoc guard substitutes the clean fallback, so the user never sees
+        self-correction garbage). Otherwise we flush the held text and then stream
+        subsequent tokens, coalesced to at most one step per
+        ``_STREAM_FLUSH_INTERVAL``. Returns the same ``return_dict_in_generate``
+        object as the blocking path so the caller's telemetry/guard are unchanged.
+        """
+        try:
+            from ai_agents.step_emitter import emit_step as _emit
+        except Exception:  # pragma: no cover - emitter unbound (e.g. unit tests)
+            def _emit(*_a: Any, **_kw: Any) -> None:  # type: ignore[misc]
+                return None
+
+        streamer = TextIteratorStreamer(
+            tok, skip_prompt=True, skip_special_tokens=True
+        )
+        holder: dict[str, Any] = {}
+
+        def _run() -> None:
+            try:
+                with torch.no_grad():
+                    holder["out"] = model.generate(**gen_kwargs, streamer=streamer)
+            except Exception as exc:  # surfaced to the caller after join
+                holder["error"] = exc
+
+        worker = threading.Thread(target=_run, daemon=True)
+        worker.start()
+
+        held: list[str] = []
+        held_chars = 0
+        streaming = False  # have we confirmed clean and started emitting?
+        suppressed = False  # spiral detected → never stream
+        pending: list[str] = []
+        idx = 0
+        last_flush = time.monotonic()
+
+        def _flush(force: bool = False) -> None:
+            nonlocal pending, last_flush, idx
+            if not pending:
+                return
+            if not force and (time.monotonic() - last_flush) < _STREAM_FLUSH_INTERVAL:
+                return
+            _emit("reasoning.delta", "", "", chunk="".join(pending), index=idx)
+            pending = []
+            idx += 1
+            last_flush = time.monotonic()
+
+        try:
+            for piece in streamer:
+                if not piece or suppressed:
+                    continue
+                if streaming:
+                    pending.append(piece)
+                    _flush()
+                    continue
+                # hold-a-beat phase: accumulate until we can judge degeneracy
+                held.append(piece)
+                held_chars += len(piece)
+                if held_chars >= _STREAM_HOLD_CHARS:
+                    joined = "".join(held)
+                    held = []
+                    if _is_degenerate_output(joined):
+                        suppressed = True
+                    else:
+                        _emit("reasoning.delta", "", "", chunk=joined, index=idx)
+                        idx += 1
+                        streaming = True
+            # stream ended before crossing the hold threshold (short answer):
+            # emit the whole thing once, unless it looks degenerate.
+            if not streaming and not suppressed and held:
+                joined = "".join(held)
+                if not _is_degenerate_output(joined):
+                    _emit("reasoning.delta", "", "", chunk=joined, index=idx)
+            _flush(force=True)
+        except Exception:  # never let streaming break generation
+            logger.debug("Token streaming failed; generation continues", exc_info=True)
+
+        worker.join()
+        if "error" in holder:
+            raise holder["error"]
+        return holder["out"]
+
+    def _generate_vllm(self, user_content: str, system_content: str) -> str:
+        """Generate via the external vLLM OpenAI-compatible server (Phase 4).
+
+        Mirrors the local path's contract: returns the answer text and sets
+        ``self._last_gen_tokens`` / ``_last_prompt_tokens`` from the API's usage
+        block, so the reasoning.done telemetry and the post-hoc degeneracy guard
+        are unchanged. The transformers ``StoppingCriteria`` does not apply here
+        — spiral control is the prompt RULES + the post-hoc guard + ``max_tokens``.
+        (Token streaming is not yet wired for this backend; the answer arrives in
+        one block. The transformers backend keeps the Phase-1 reasoning.delta path.)
+        """
+        import requests
+
+        url = _vllm_base_url().rstrip("/") + "/chat/completions"
+        payload = {
+            "model": _vllm_model_name(),
+            "messages": [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": user_content},
+            ],
+            "max_tokens": _max_new_tokens(),
+            "temperature": 0.0,
+            "stream": False,
+        }
+        resp = requests.post(url, json=payload, timeout=_vllm_timeout())
+        resp.raise_for_status()
+        data = resp.json()
+        text = (data["choices"][0]["message"].get("content") or "").strip()
+        usage = data.get("usage") or {}
+        self._last_gen_tokens = usage.get("completion_tokens")
+        self._last_prompt_tokens = usage.get("prompt_tokens")
+        return text
 
     def decide(self, query: str, context: str | None = None) -> str:
         """
@@ -475,7 +767,8 @@ class DecisionMakingAgent:
         message so the specialist's domain instructions shape the response
         without changing every helper's signature.
         """
-        self._ensure_causal_loaded()
+        if _llm_backend() != "vllm":
+            self._ensure_causal_loaded()
 
         try:
             from core.metrics import (
@@ -584,6 +877,11 @@ class DecisionMakingAgent:
         )
 
         start_time = time.time()
+        # Reset per-call token telemetry; _generate_causal sets it on the causal
+        # path (the decision_model callable path leaves it None → harness falls
+        # back to counting the visible answer text).
+        self._last_gen_tokens = None
+        self._last_prompt_tokens = None
 
         try:
             if self.decision_model is not None:
@@ -602,6 +900,8 @@ class DecisionMakingAgent:
                 )
                 result = self.decision_model(prompt)
                 text = self._coerce_callable_output(result)
+            elif _llm_backend() == "vllm":
+                text = self._generate_vllm(user_content, system_content)
             else:
                 text = self._generate_causal(user_content, system_content)
 
@@ -621,6 +921,8 @@ class DecisionMakingAgent:
                 "Reasoning complete",
                 f"Model returned a response in {inference_duration:.2f}s.",
                 duration_seconds=round(inference_duration, 3),
+                generated_tokens=self._last_gen_tokens,
+                prompt_tokens=self._last_prompt_tokens,
                 model=self.model_name,
             )
 

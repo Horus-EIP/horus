@@ -42,6 +42,9 @@ interface MessageListProps {
   stepsByTaskId?: Record<string, TaskStepEvent[]>;
   /** Task ID still in-flight; its card stays auto-expanded until it completes. */
   workingTaskId?: string | null;
+  /** Live answer text streamed via reasoning.delta; shown as a typing preview
+   *  in the thinking slot until the authoritative task_complete answer commits. */
+  streamingText?: string;
 }
 
 const mdComponents = {
@@ -132,6 +135,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   emptyStateSubtitle = 'How can we help you?',
   stepsByTaskId,
   workingTaskId,
+  streamingText,
 }) => {
   return (
     <div className="mx-auto max-w-[75vw] md:max-w-[60vw] space-y-4">
@@ -265,12 +269,26 @@ export const MessageList: React.FC<MessageListProps> = ({
 
       {isLoading && !isHistoryLoading && (
         <div className="flex justify-start opacity-95 transition-opacity">
-          <div className="flex gap-2">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-[var(--bgSoft)] border border-gray-200 dark:border-gray-700">
+          <div className="flex gap-2 max-w-[85%] sm:max-w-[75%]">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--bgSoft)] border border-gray-200 dark:border-gray-700">
               <IconRobot className="w-5 h-5 text-blue-500" stroke={1.25} />
             </div>
             <div className="bg-[var(--bgSoft)] border border-gray-200 dark:border-gray-700 rounded-2xl rounded-tl-none p-3 shadow-sm">
-              <Spinner aria-label="Agent is thinking..." />
+              {streamingText ? (
+                // Live "typing" preview — confirmed-clean tokens streamed from
+                // the agent. Replaced by the committed message on task_complete.
+                <div className="agent-message-md max-w-none">
+                  <ReactMarkdown components={mdComponents}>
+                    {streamingText}
+                  </ReactMarkdown>
+                  <span
+                    className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse bg-[var(--text)] align-middle"
+                    aria-hidden
+                  />
+                </div>
+              ) : (
+                <Spinner aria-label="Agent is thinking..." />
+              )}
             </div>
           </div>
         </div>

@@ -97,6 +97,23 @@ class RAGPipeline:
         data = await self.retrieval_agent.fetch(query)
         context_text = data.get("data", "")
 
+        # Phase 3: exact-match response cache. Keyed on (query + retrieved
+        # context + generation params), so a hit is safe across users and
+        # document versions — different retrieval yields a different key — and
+        # skips the costly model generation. No-op unless AGENT_RESPONSE_CACHE.
+        from ai_agents.response_cache import get_cached, set_cached
+
+        cached = await get_cached(query, context_text)
+        if cached is not None:
+            emit_step(
+                "cache.hit",
+                "Answer served from cache",
+                "An identical query over identical retrieved content was already "
+                "answered; skipped model generation.",
+                source="response_cache",
+            )
+            return cached
+
         try:
             insight = await asyncio.wait_for(
                 asyncio.to_thread(
@@ -112,11 +129,13 @@ class RAGPipeline:
                 timeout,
                 query[:120],
             )
-            insight = (
+            # Do not cache the timeout fallback — it is not a real answer.
+            return (
                 "The model took too long to respond. "
                 "Try a shorter question or ask an administrator to increase REACT_TIMEOUT_SECONDS."
             )
 
+        await set_cached(query, context_text, insight)
         return insight
 
     async def generate_response_react(self, query: str) -> dict[str, Any]:

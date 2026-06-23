@@ -36,7 +36,27 @@ chroma_client = chromadb.PersistentClient(
 
 MODEL_NAME = "BAAI/bge-base-en-v1.5"
 
-model = SentenceTransformer(MODEL_NAME)
+# Device selection for the BGE embedder. Default "auto" keeps the historical
+# behaviour (SentenceTransformer picks CUDA when available). Set
+# KNOWLEDGE_STORE_EMBED_DEVICE=cpu to keep the embedder OFF the shared 8 GB GPU
+# so it stops competing with the agent's 4B model and paging it out under load
+# (see scripts/perf/benchmark-pipeline.py contention scenario).
+_EMBED_DEVICE = os.getenv("KNOWLEDGE_STORE_EMBED_DEVICE", "auto").strip().lower()
+if _EMBED_DEVICE in ("", "auto"):
+    model = SentenceTransformer(MODEL_NAME)
+else:
+    model = SentenceTransformer(MODEL_NAME, device=_EMBED_DEVICE)
+
+# Log the resolved device so a silent CPU/GPU fallback is visible at startup.
+try:
+    _resolved_device = str(next(model.parameters()).device)
+except Exception:
+    _resolved_device = "unknown"
+print(
+    f"[knowledge-store] BGE embedder '{MODEL_NAME}' loaded on device="
+    f"{_resolved_device} (KNOWLEDGE_STORE_EMBED_DEVICE={_EMBED_DEVICE})",
+    flush=True,
+)
 
 BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 

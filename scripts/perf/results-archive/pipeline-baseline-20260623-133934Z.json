@@ -1,0 +1,57 @@
+{
+  "label": "baseline",
+  "timestamp": "2026-06-23T13:39:34Z",
+  "git_commit": "76b0d94",
+  "machine": {
+    "name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+    "driver": "610.62",
+    "memory_total": "8188 MiB"
+  },
+  "config": {
+    "mas_url": "http://localhost:8000",
+    "ks_url": "http://localhost:8080",
+    "scenario": "smoke",
+    "repeats": 2,
+    "concurrency_levels": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "gen_count": 4,
+    "ks_workers": 3,
+    "token_method": "approx:chars-over-4",
+    "agent_id": "18fbdf1d-0f73-4e04-ab6f-8761f1ad39d9",
+    "skill": "compliance_check",
+    "observed_model": null,
+    "observed_device": null,
+    "agent_max_new_tokens": "3072 (src/infra/.env)",
+    "knowledge_store_n_results": "8 (agent settings default)"
+  },
+  "scenarios": {
+    "smoke": {
+      "result": {
+        "prompt_id": "q-revenue",
+        "ok": false,
+        "direct": false,
+        "error": "timeout waiting for task_complete",
+        "submit_http_ms": 196.63,
+        "first_step_s": null,
+        "ttft_proxy_s": null,
+        "decode_s": null,
+        "decode_wall_s": null,
+        "e2e_s": null,
+        "output_chars": null,
+        "output_tokens": null,
+        "generated_tokens": null,
+        "prompt_tokens": null,
+        "decode_tok_s": null,
+        "decode_tok_s_basis": null,
+        "suspected_spiral": false,
+        "model": null,
+        "device": null,
+        "steps": []
+      }
+    }
+  }
+}

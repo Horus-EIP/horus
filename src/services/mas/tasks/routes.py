@@ -1286,14 +1286,23 @@ async def sharing_agent_result(
 
             return {"message": f"Result received from agent {task_result.agent_id}"}
 
-        try:
-            final_answer = aggregate_results(history, task_result.result)
-        except Exception as exc:
-            logger.warning(
-                "aggregate_results raised (%s) — falling back to last subtask result.",
-                exc,
-            )
-            final_answer = None
+        # Single-agent / non-decomposed tasks (no Manager-owned chain root) have
+        # exactly ONE result — the worker's answer already IS the final answer.
+        # The ~10-40s aggregation LLM pass (a 1.5B router synthesis, brutal on
+        # CPU) only makes sense when fusing multiple specialists' outputs, so
+        # skip it here and use the raw result. This is the dominant e2e latency
+        # for the common single-agent path. See scripts/perf measurements.
+        if task.parent_task_id is None:
+            final_answer = (task_result.result or "").strip()
+        else:
+            try:
+                final_answer = aggregate_results(history, task_result.result)
+            except Exception as exc:
+                logger.warning(
+                    "aggregate_results raised (%s) — falling back to last subtask result.",
+                    exc,
+                )
+                final_answer = None
 
         # The small router LLM that powers ``aggregate_results`` sometimes
         # returns nothing meaningful (parse failure, empty output, model

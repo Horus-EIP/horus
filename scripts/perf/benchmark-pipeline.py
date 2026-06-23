@@ -78,6 +78,44 @@ HERE = Path(__file__).resolve().parent
 ASSETS = HERE / "bench_assets"
 RESULTS_DIR = HERE / "results-archive"
 
+# The agent CONTAINER loads its generation params from this compose env_file, not
+# from the benchmark process's own environment. Resolve the report's "server gen
+# params" from here so a baseline records the cap the model actually ran with
+# (e.g. AGENT_MAX_NEW_TOKENS=3072), instead of the misleading "256 (default)" the
+# benchmark process happens to see when the var isn't exported into its own env.
+INFRA_ENV = HERE.parents[1] / "src" / "infra" / ".env"
+
+
+def _read_dotenv(path: Path) -> dict:
+    out: dict[str, str] = {}
+    try:
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            out[k.strip()] = v.strip()
+    except OSError:
+        pass
+    return out
+
+
+def _server_param(key: str, code_default: str) -> str:
+    """Best-effort resolution of a server-side generation param for the report.
+
+    Precedence: an explicit override in the benchmark process's env > the compose
+    env_file the agent actually loads (src/infra/.env) > the agent's code default.
+    Each return is labelled with its source so the baseline is never silently
+    anchored to the wrong cap (the prior baseline mislabelled 3072 as "256").
+    """
+    v = os.environ.get(key)
+    if v:
+        return f"{v} (benchmark env)"
+    fv = _read_dotenv(INFRA_ENV).get(key)
+    if fv:
+        return f"{fv} (src/infra/.env)"
+    return code_default
+
 
 # --------------------------------------------------------------------------- #
 # small stats helpers
@@ -98,11 +136,41 @@ def summarize(vals: list[float | None]) -> dict:
         "n": len(clean),
         "mean": round(statistics.mean(clean), 4),
         "median": round(statistics.median(clean), 4),
+        "p25": round(_percentile(s, 0.25), 4),
+        "p75": round(_percentile(s, 0.75), 4),
         "p95": round(_percentile(s, 0.95), 4),
         "min": round(min(clean), 4),
         "max": round(max(clean), 4),
         "stdev": round(statistics.stdev(clean), 4) if len(clean) > 1 else 0.0,
     }
+
+
+def _spiral_split(metrics: list) -> tuple[list, dict]:
+    """Partition ok tasks into the spiral-free subset used for headline aggregates.
+
+    A ``suspected_spiral`` task has a contaminated decode_s / decode_tok_s / e2e /
+    output (the anti-loop guard fired, or the model produced far more than it
+    kept), so averaging it into the medians is exactly the failure this harness
+    exists to avoid. We aggregate over the clean subset but keep every per-task
+    row plus the counts, so a contaminated run is FLAGGED, not silently averaged.
+    Falls back to all-ok only if EVERY ok task spiraled (so a fully-degenerate run
+    still reports numbers, with the count making the contamination obvious).
+    """
+    ok = [m for m in metrics if m.ok]
+    clean = [m for m in ok if not m.suspected_spiral]
+    chosen = clean if clean else ok
+    return chosen, {
+        "ok": len(ok),
+        "clean": len(clean),
+        "suspected_spiral": len(ok) - len(clean),
+    }
+
+
+# The exact phrase the agent substitutes when its anti-loop guard fires
+# (decision_making_agent.py _is_degenerate_output). Its presence means the model
+# spiraled and the visible answer is a fallback, not a real decode — such tasks
+# are flagged ``suspected_spiral`` and excluded from the "clean" aggregates.
+GUARD_FALLBACK_MARKER = "couldn't extract a consistent answer from the retrieved"
 
 
 # --------------------------------------------------------------------------- #
@@ -244,8 +312,12 @@ class TaskMetrics:
     decode_wall_s: float | None = None   # reasoning.done - reasoning.start (cross-check)
     e2e_s: float | None = None
     output_chars: int | None = None
-    output_tokens: int | None = None
+    output_tokens: int | None = None       # tokens in the VISIBLE answer (post-guard)
+    generated_tokens: int | None = None    # tokens the model ACTUALLY produced (pre-guard) — exact, spiral-proof
+    prompt_tokens: int | None = None
     decode_tok_s: float | None = None
+    decode_tok_s_basis: str | None = None  # "generated" (exact) or "output" (approx fallback)
+    suspected_spiral: bool = False         # anti-loop guard fired / produced far more than it kept
     model: str | None = None
     device: str | None = None
     steps: list = field(default_factory=list)
@@ -455,6 +527,12 @@ class PipelineBench:
                             ds = meta.get("duration_seconds")
                             if isinstance(ds, (int, float)):
                                 m.decode_s = float(ds)
+                            gt = meta.get("generated_tokens")
+                            if isinstance(gt, int):
+                                m.generated_tokens = gt
+                            pt = meta.get("prompt_tokens")
+                            if isinstance(pt, int):
+                                m.prompt_tokens = pt
                             if reasoning_start is not None:
                                 m.decode_wall_s = round(now - reasoning_start, 4)
                             if terminal_at is not None:
@@ -470,13 +548,28 @@ class PipelineBench:
                         m.e2e_s = now
                         m.output_chars = len(content)
                         m.output_tokens = self.count(content)
+                        if GUARD_FALLBACK_MARKER in content:
+                            m.suspected_spiral = True
                         m.ok = True
                         terminal_at = time.perf_counter()
                         # don't break yet — drain up to `grace`s for a late reasoning.done
 
+                # decode tok/s from the EXACT generated-token count when the agent
+                # reports it (spiral-proof); otherwise fall back to counting the
+                # visible answer text. Also flag a spiral when the model produced
+                # far more than it kept (guard fired but marker text changed).
+                if (
+                    m.generated_tokens
+                    and m.output_tokens
+                    and m.generated_tokens > 2 * max(m.output_tokens, 32)
+                ):
+                    m.suspected_spiral = True
+                rate_tokens = m.generated_tokens or m.output_tokens
+                if rate_tokens:
+                    m.decode_tok_s_basis = "generated" if m.generated_tokens else "output"
                 dec = m.decode_s or m.decode_wall_s
-                if m.ok and m.output_tokens and dec and dec > 0:
-                    m.decode_tok_s = round(m.output_tokens / dec, 3)
+                if m.ok and rate_tokens and dec and dec > 0:
+                    m.decode_tok_s = round(rate_tokens / dec, 3)
         except Exception as e:  # noqa: BLE001
             m.error = f"{type(e).__name__}: {e}"
         return m
@@ -551,19 +644,21 @@ async def scenario_idle(bench: PipelineBench, prompts, agent_id, skill, repeats)
             results.append(m)
             _print_task_line(m)
     gpu = sampler.stop()
-    ok = [m for m in results if m.ok]
+    base, counts = _spiral_split(results)
     return {
         "results": [asdict(m) for m in results],
         "summary": {
-            "ok": len(ok),
+            "ok": counts["ok"],
             "total": len(results),
-            "submit_http_ms": summarize([m.submit_http_ms for m in ok]),
-            "first_step_s": summarize([m.first_step_s for m in ok]),
-            "ttft_proxy_s": summarize([m.ttft_proxy_s for m in ok]),
-            "decode_s": summarize([m.decode_s for m in ok]),
-            "decode_tok_s": summarize([m.decode_tok_s for m in ok]),
-            "e2e_s": summarize([m.e2e_s for m in ok]),
-            "output_tokens": summarize([m.output_tokens for m in ok]),
+            "clean": counts["clean"],
+            "suspected_spiral": counts["suspected_spiral"],
+            "submit_http_ms": summarize([m.submit_http_ms for m in base]),
+            "first_step_s": summarize([m.first_step_s for m in base]),
+            "ttft_proxy_s": summarize([m.ttft_proxy_s for m in base]),
+            "decode_s": summarize([m.decode_s for m in base]),
+            "decode_tok_s": summarize([m.decode_tok_s for m in base]),
+            "e2e_s": summarize([m.e2e_s for m in base]),
+            "output_tokens": summarize([m.output_tokens for m in base]),
         },
         "gpu": gpu,
     }
@@ -590,16 +685,22 @@ async def scenario_concurrency(bench: PipelineBench, prompts, agent_id, skill, l
         wall = time.perf_counter() - wall0
         gpu = sampler.stop()
         ok = [m for m in ms if m.ok]
+        base, counts = _spiral_split(ms)
         agg_tokens = sum(m.output_tokens or 0 for m in ok)
         out[str(n)] = {
             "concurrency": n,
             "ok": len(ok),
             "total": len(ms),
+            "clean": counts["clean"],
+            "suspected_spiral": counts["suspected_spiral"],
             "wall_s": round(wall, 3),
+            # aggregate throughput intentionally counts ALL completed work (incl.
+            # spirals) — it's a wall-clock load metric; the per-task decode_tok_s
+            # / e2e_s summaries below use the clean subset.
             "aggregate_output_tokens": agg_tokens,
             "aggregate_tok_s": round(agg_tokens / wall, 3) if wall > 0 else 0,
-            "e2e_s": summarize([m.e2e_s for m in ok]),
-            "decode_tok_s": summarize([m.decode_tok_s for m in ok]),
+            "e2e_s": summarize([m.e2e_s for m in base]),
+            "decode_tok_s": summarize([m.decode_tok_s for m in base]),
             "results": [asdict(m) for m in ms],
             "gpu": gpu,
         }
@@ -648,10 +749,12 @@ async def scenario_contention(bench, prompts, agent_id, skill, gen_count, ks_wor
     stop.set()
     docs_ingested = await load
 
-    base_tok = summarize([m.decode_tok_s for m in base if m.ok])
-    load_tok = summarize([m.decode_tok_s for m in loaded if m.ok])
-    base_e2e = summarize([m.e2e_s for m in base if m.ok])
-    load_e2e = summarize([m.e2e_s for m in loaded if m.ok])
+    base_c, base_counts = _spiral_split(base)
+    loaded_c, load_counts = _spiral_split(loaded)
+    base_tok = summarize([m.decode_tok_s for m in base_c])
+    load_tok = summarize([m.decode_tok_s for m in loaded_c])
+    base_e2e = summarize([m.e2e_s for m in base_c])
+    load_e2e = summarize([m.e2e_s for m in loaded_c])
     drop = None
     if base_tok.get("median") and load_tok.get("median"):
         drop = round((base_tok["median"] - load_tok["median"]) / base_tok["median"] * 100, 1)
@@ -667,12 +770,14 @@ async def scenario_contention(bench, prompts, agent_id, skill, gen_count, ks_wor
         "baseline": {
             "decode_tok_s": base_tok,
             "e2e_s": base_e2e,
+            "suspected_spiral": base_counts["suspected_spiral"],
             "results": [asdict(m) for m in base],
             "gpu": gpu_base,
         },
         "loaded": {
             "decode_tok_s": load_tok,
             "e2e_s": load_e2e,
+            "suspected_spiral": load_counts["suspected_spiral"],
             "results": [asdict(m) for m in loaded],
             "gpu": gpu_load,
         },
@@ -714,7 +819,7 @@ def build_markdown(report: dict) -> str:
         f"- **MAS:** {cfg['mas_url']}  ·  **KS:** {cfg['ks_url']}",
         f"- **Agent:** `{cfg.get('agent_id')}` · model `{cfg.get('observed_model')}` · device `{cfg.get('observed_device')}`",
         f"- **Token count method:** {cfg['token_method']}",
-        f"- **Server gen params (env / assumed default):** AGENT_MAX_NEW_TOKENS={cfg.get('agent_max_new_tokens')}, KNOWLEDGE_STORE_N_RESULTS={cfg.get('knowledge_store_n_results')}",
+        f"- **Server gen params (resolved):** AGENT_MAX_NEW_TOKENS={cfg.get('agent_max_new_tokens')}, KNOWLEDGE_STORE_N_RESULTS={cfg.get('knowledge_store_n_results')}",
         "",
         "> `decode_s` is the agent's own reported model inference time (reasoning.done.duration_seconds). "
         "`ttft_proxy_s` is submit→reasoning.start (routing+retrieval+prefill setup), not true TTFT yet. "
@@ -729,7 +834,12 @@ def build_markdown(report: dict) -> str:
         lines += [
             "## Idle (single task, sequential)",
             "",
-            f"Tasks OK: {s['ok']}/{s['total']}",
+            f"Tasks OK: {s['ok']}/{s['total']}"
+            + (
+                f" · {s['suspected_spiral']} suspected-spiral excluded from aggregates"
+                if s.get("suspected_spiral")
+                else ""
+            ),
             "",
             "| metric | median | mean | p95 | min | max |",
             "|---|---|---|---|---|---|",
@@ -914,8 +1024,8 @@ async def main() -> int:
             "skill": skill,
             "observed_model": observed_model,
             "observed_device": observed_device,
-            "agent_max_new_tokens": os.environ.get("AGENT_MAX_NEW_TOKENS", "256 (default, server-side)"),
-            "knowledge_store_n_results": os.environ.get("KNOWLEDGE_STORE_N_RESULTS", "8 (default, server-side)"),
+            "agent_max_new_tokens": _server_param("AGENT_MAX_NEW_TOKENS", "256 (agent code default)"),
+            "knowledge_store_n_results": _server_param("KNOWLEDGE_STORE_N_RESULTS", "8 (agent settings default)"),
         },
         "scenarios": scenarios,
     }

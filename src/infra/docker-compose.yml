@@ -41,6 +41,9 @@ services:
     mem_limit: 14g
     memswap_limit: 16g
     gpus: all
+    # Reach the vLLM server on the host/WSL for orchestration LLM calls (Lever #3).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - .env
     environment:
@@ -191,6 +194,11 @@ services:
       # Default ONLINE so first-run can pull. Flip to 1 once the cache is warm.
       - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
       - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
+      # Redis for the Phase 3 response cache. The .env REDIS_HOST is the host-side
+      # value (localhost); override to the compose service name for the container.
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     depends_on:
       mas:
         condition: service_healthy
@@ -198,10 +206,15 @@ services:
         condition: service_healthy
       knowledge_store:
         condition: service_started
+      redis:
+        condition: service_healthy
     ports:
       - "8001:8001"
     networks:
       - horus-net
+    # Reach the vLLM server running on the host/WSL (Phase 4, LLM_BACKEND=vllm).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ../services/agent/app:/app
       - agent_model_cache:/app/models/llm
@@ -219,6 +232,10 @@ services:
       - HF_HUB_DISABLE_TELEMETRY=1
       - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
       - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
+      # Embedder device: "auto" (GPU when available, historical default) or "cpu"
+      # to keep the BGE embedder off the shared 8 GB GPU so it doesn't evict the
+      # agent's 4B model under ingestion load (see scripts/perf).
+      - KNOWLEDGE_STORE_EMBED_DEVICE=${KNOWLEDGE_STORE_EMBED_DEVICE:-auto}
       # OpenTelemetry — enabled by default; Tempo is always-on.
       - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-false}
       - OTEL_ENABLED=${OTEL_ENABLED:-true}

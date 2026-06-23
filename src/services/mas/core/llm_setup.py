@@ -183,6 +183,9 @@ def _ensure_llm_loaded() -> None:
     global tokenizer, model
     if os.environ.get("TEST_MODE") == "1":
         return
+    if _llm_backend() == "vllm":
+        # No in-process router under vLLM — ask_llm routes to the server.
+        return
     if getattr(settings, "llm_autoinit", 0) != 1:
         return
     if tokenizer is not None and model is not None:
@@ -218,7 +221,57 @@ def start_llm_preload_background_thread() -> None:
     threading.Thread(target=_worker, name="mas-llm-preload", daemon=True).start()
 
 
+def _llm_backend() -> str:
+    """Orchestrator LLM backend (Phase 4 Lever #3): 'transformers' (in-process
+    1.5B router, default) or 'vllm' (call the external vLLM server). Under 'vllm'
+    MAS does NOT load a local model and every ask_llm goes to vLLM — fixing the
+    multi-agent aggregation latency (the CPU router was the e2e killer)."""
+    return os.getenv("LLM_BACKEND", "transformers").strip().lower()
+
+
+def _vllm_base_url() -> str:
+    return os.getenv("LLM_VLLM_URL", "http://host.docker.internal:18000/v1")
+
+
+def _vllm_model_name() -> str:
+    return os.getenv("LLM_VLLM_MODEL", "qwen3-4b")
+
+
+def _vllm_timeout() -> float:
+    try:
+        return float(os.getenv("LLM_VLLM_TIMEOUT", "120"))
+    except ValueError:
+        return 120.0
+
+
+def _ask_vllm(messages: list, max_new_tokens: int) -> str:
+    """Run an orchestration LLM call against the external vLLM server. Greedy to
+    match the in-process path; vLLM applies the chat template server-side. Uses
+    stdlib urllib so no new MAS dependency / image rebuild is needed for deps."""
+    import json
+    import urllib.request
+
+    url = _vllm_base_url().rstrip("/") + "/chat/completions"
+    body = json.dumps(
+        {
+            "model": _vllm_model_name(),
+            "messages": messages,
+            "max_tokens": max_new_tokens,
+            "temperature": 0.0,
+            "stream": False,
+        }
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        url, body, {"Content-Type": "application/json"}, method="POST"
+    )
+    with urllib.request.urlopen(req, timeout=_vllm_timeout()) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    return (data["choices"][0]["message"].get("content") or "").strip()
+
+
 def ask_llm(messages: list, max_new_tokens: int = 256):
+    if _llm_backend() == "vllm":
+        return _ask_vllm(messages, max_new_tokens)
     logger.info("Entering ask_llm, checking model...")
     _ensure_llm_loaded()
     if tokenizer is None or model is None:

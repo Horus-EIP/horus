@@ -1,0 +1,799 @@
+{
+  "label": "rebaseline-concurrency",
+  "timestamp": "2026-06-23T10:47:47Z",
+  "git_commit": "76b0d94",
+  "machine": {
+    "name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+    "driver": "610.62",
+    "memory_total": "8188 MiB"
+  },
+  "config": {
+    "mas_url": "http://localhost:8000",
+    "ks_url": "http://localhost:8080",
+    "scenario": "concurrency",
+    "repeats": 2,
+    "concurrency_levels": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "gen_count": 4,
+    "ks_workers": 3,
+    "token_method": "approx:chars-over-4",
+    "agent_id": "ca6eca16-0c5c-4caa-be8d-8d1be0b75043",
+    "skill": "knowledge_retrieval",
+    "observed_model": "Qwen/Qwen3-4B-Instruct-2507",
+    "observed_device": "cuda",
+    "agent_max_new_tokens": "3072 (src/infra/.env)",
+    "knowledge_store_n_results": "8 (agent settings default)"
+  },
+  "scenarios": {
+    "concurrency": {
+      "1": {
+        "concurrency": 1,
+        "ok": 1,
+        "total": 1,
+        "clean": 1,
+        "suspected_spiral": 0,
+        "wall_s": 8.97,
+        "aggregate_output_tokens": 66,
+        "aggregate_tok_s": 7.358,
+        "e2e_s": {
+          "n": 1,
+          "mean": 8.9152,
+          "median": 8.9152,
+          "p25": 8.9152,
+          "p75": 8.9152,
+          "p95": 8.9152,
+          "min": 8.9152,
+          "max": 8.9152,
+          "stdev": 0.0
+        },
+        "decode_tok_s": {
+          "n": 1,
+          "mean": 19.491,
+          "median": 19.491,
+          "p25": 19.491,
+          "p75": 19.491,
+          "p95": 19.491,
+          "min": 19.491,
+          "max": 19.491,
+          "stdev": 0.0
+        },
+        "results": [
+          {
+            "prompt_id": "q-revenue",
+            "ok": true,
+            "direct": false,
+            "error": null,
+            "submit_http_ms": 146.83,
+            "first_step_s": 0.6314,
+            "ttft_proxy_s": 0.6633,
+            "decode_s": 4.207,
+            "decode_wall_s": 8.253,
+            "e2e_s": 8.9152,
+            "output_chars": 266,
+            "output_tokens": 66,
+            "generated_tokens": 82,
+            "prompt_tokens": 1302,
+            "decode_tok_s": 19.491,
+            "decode_tok_s_basis": "generated",
+            "suspected_spiral": false,
+            "model": "Qwen/Qwen3-4B-Instruct-2507",
+            "device": "cuda",
+            "steps": [
+              {
+                "step_type": "retrieval.start",
+                "offset_s": 0.6314
+              },
+              {
+                "step_type": "retrieval.results",
+                "offset_s": 0.6573
+              },
+              {
+                "step_type": "reasoning.start",
+                "offset_s": 0.6633
+              },
+              {
+                "step_type": "reasoning.done",
+                "offset_s": 8.9163
+              }
+            ]
+          }
+        ],
+        "gpu": {
+          "available": true,
+          "samples": 16,
+          "vram_used_mib": {
+            "mean": 7570.2,
+            "peak": 7592.0
+          },
+          "gpu_util_pct": {
+            "mean": 53.6,
+            "peak": 100.0
+          },
+          "power_w": {
+            "mean": 48.9,
+            "peak": 61.8
+          }
+        }
+      },
+      "2": {
+        "concurrency": 2,
+        "ok": 2,
+        "total": 2,
+        "clean": 2,
+        "suspected_spiral": 0,
+        "wall_s": 23.107,
+        "aggregate_output_tokens": 210,
+        "aggregate_tok_s": 9.088,
+        "e2e_s": {
+          "n": 2,
+          "mean": 15.8145,
+          "median": 15.8145,
+          "p25": 8.8564,
+          "p75": 22.7725,
+          "p95": 22.7725,
+          "min": 8.8564,
+          "max": 22.7725,
+          "stdev": 9.8402
+        },
+        "decode_tok_s": {
+          "n": 2,
+          "mean": 20.6545,
+          "median": 20.6545,
+          "p25": 20.51,
+          "p75": 20.799,
+          "p95": 20.799,
+          "min": 20.51,
+          "max": 20.799,
+          "stdev": 0.2044
+        },
+        "results": [
+          {
+            "prompt_id": "q-revenue",
+            "ok": true,
+            "direct": false,
+            "error": null,
+            "submit_http_ms": 366.37,
+            "first_step_s": 0.8282,
+            "ttft_proxy_s": 0.8369,
+            "decode_s": 3.998,
+            "decode_wall_s": 4.0043,
+            "e2e_s": 8.8564,
+            "output_chars": 266,
+            "output_tokens": 66,
+            "generated_tokens": 82,
+            "prompt_tokens": 1302,
+            "decode_tok_s": 20.51,
+            "decode_tok_s_basis": "generated",
+            "suspected_spiral": false,
+            "model": "Qwen/Qwen3-4B-Instruct-2507",
+            "device": "cuda",
+            "steps": [
+              {
+                "step_type": "retrieval.start",
+                "offset_s": 0.8282
+              },
+              {
+                "step_type": "reasoning.start",
+                "offset_s": 0.8369
+              },
+              {
+                "step_type": "retrieval.results",
+                "offset_s": 0.8378
+              },
+              {
+                "step_type": "reasoning.done",
+                "offset_s": 4.8412
+              }
+            ]
+          },
+          {
+            "prompt_id": "q-sales",
+            "ok": true,
+            "direct": false,
+            "error": null,
+            "submit_http_ms": 57.98,
+            "first_step_s": 8.7358,
+            "ttft_proxy_s": 8.7691,
+            "decode_s": 7.26,
+            "decode_wall_s": 14.0051,
+            "e2e_s": 22.7725,
+            "output_chars": 574,
+            "output_tokens": 144,
+            "generated_tokens": 151,
+            "prompt_tokens": 1285,
+            "decode_tok_s": 20.799,
+            "decode_tok_s_basis": "generated",
+            "suspected_spiral": false,
+            "model": "Qwen/Qwen3-4B-Instruct-2507",
+            "device": "cuda",
+            "steps": [
+              {
+                "step_type": "retrieval.start",
+                "offset_s": 8.7358
+              },
+              {
+                "step_type": "retrieval.results",
+                "offset_s": 8.766
+              },
+              {
+                "step_type": "reasoning.start",
+                "offset_s": 8.7691
+              },
+              {
+                "step_type": "reasoning.done",
+                "offset_s": 22.7742
+              }
+            ]
+          }
+        ],
+        "gpu": {
+          "available": true,
+          "samples": 42,
+          "vram_used_mib": {
+            "mean": 7591.3,
+            "peak": 7615.0
+          },
+          "gpu_util_pct": {
+            "mean": 55.4,
+            "peak": 100.0
+          },
+          "power_w": {
+            "mean": 51.8,
+            "peak": 68.8
+          }
+        }
+      },
+      "4": {
+        "concurrency": 4,
+        "ok": 4,
+        "total": 4,
+        "clean": 3,
+        "suspected_spiral": 1,
+        "wall_s": 188.689,
+        "aggregate_output_tokens": 449,
+        "aggregate_tok_s": 2.38,
+        "e2e_s": {
+          "n": 3,
+          "mean": 22.1224,
+          "median": 22.5292,
+          "p25": 14.4971,
+          "p75": 29.3408,
+          "p95": 29.3408,
+          "min": 14.4971,
+          "max": 29.3408,
+          "stdev": 7.4302
+        },
+        "decode_tok_s": {
+          "n": 3,
+          "mean": 18.6817,
+          "median": 18.132,
+          "p25": 17.634,
+          "p75": 20.279,
+          "p95": 20.279,
+          "min": 17.634,
+          "max": 20.279,
+          "stdev": 1.4056
+        },
+        "results": [
+          {
+            "prompt_id": "q-revenue",
+            "ok": true,
+            "direct": false,
+            "error": null,
+            "submit_http_ms": 519.05,
+            "first_step_s": 14.4635,
+            "ttft_proxy_s": 14.497,
+            "decode_s": 4.65,
+            "decode_wall_s": 4.6421,
+            "e2e_s": 22.5292,
+            "output_chars": 266,
+            "output_tokens": 66,
+            "generated_tokens": 82,
+            "prompt_tokens": 1302,
+            "decode_tok_s": 17.634,
+            "decode_tok_s_basis": "generated",
+            "suspected_spiral": false,
+            "model": "Qwen/Qwen3-4B-Instruct-2507",
+            "device": "cuda",
+            "steps": [
+              {
+                "step_type": "retrieval.start",
+                "offset_s": 14.4635
+              },
+              {
+                "step_type": "retrieval.results",
+                "offset_s": 14.4895
+              },
+              {
+                "step_type": "reasoning.start",
+                "offset_s": 14.497
+              },
+              {
+                "step_type": "reasoning.done",
+                "offset_s": 19.1391
+              }
+            ]
+          },
+          {
+            "prompt_id": "q-sales",
+            "ok": true,
+            "direct": false,
+            "error": null,
+            "submit_http_ms": 724.7,
+            "first_step_s": 1.1345,
+            "ttft_proxy_s": 1.139,
+            "decode_s": 7.446,
+            "decode_wall_s": 7.3945,
+            "e2e_s": 14.4971,
+            "output_chars": 574,
+            "output_tokens": 144,
+            "generated_tokens": 151,
+            "prompt_tokens": 1285,
+            "decode_tok_s": 20.279,
+            "decode_tok_s_basis": "generated",
+            "suspected_spiral": false,
+            "model": "Qwen/Qwen3-4B-Instruct-2507",
+            "device": "cuda",
+            "steps": [
+              {
+                "step_type": "retrieval.start",
+                "offset_s": 1.1345
+              },
+              {
+                "step_type": "retrieval.results",
+                "offset_s": 1.1363
+              },
+              {
+                "step_type": "reasoning.start",
+                "offset_s": 1.139
+              },
+              {
+                "step_type": "reasoning.done",
+                "offset_s": 8.5335
+              }
+            ]
+          },
+          {
+            "prompt_id": "q-metrics",
+            "ok": true,
+            "direct": false,
+            "error": null,
+            "submit_http_ms": 326.91,
+            "first_step_s": 29.7409,
+            "ttft_proxy_s": 29.7746,
+            "decode_s": 152.06,
+            "decode_wall_s": 158.4722,
+            "e2e_s": 188.2458,
+            "output_chars": 717,
+            "output_tokens": 179,
+            "generated_tokens": 3072,
+            "prompt_tokens": 1309,
+            "decode_tok_s": 20.203,
+            "decode_tok_s_basis": "generated",
+            "suspected_spiral": true,
+            "model": "Qwen/Qwen3-4B-Instruct-2507",
+            "device": "cuda",
+            "steps": [
+              {
+                "step_type": "retrieval.start",
+                "offset_s": 29.7409
+              },
+              {
+                "step_type": "reasoning.start",
+                "offset_s": 29.7746
+              },
+              {
+                "step_type": "retrieval.results",
+                "offset_s": 29.7782
+              },
+              {
+                "step_type": "reasoning.done",
+                "offset_s": 188.2468
+              }
+            ]
+          },
+          {
+            "prompt_id": "q-growth",
+            "ok": true,
+            "direct": false,
+            "error": null,
+            "submit_http_ms": 93.5,
+            "first_step_s": 22.2745,
+            "ttft_proxy_s": 22.3114,
+            "decode_s": 3.64,
+            "decode_wall_s": 7.0303,
+            "e2e_s": 29.3408,
+            "output_chars": 241,
+            "output_tokens": 60,
+            "generated_tokens": 66,
+            "prompt_tokens": 1295,
+            "decode_tok_s": 18.132,
+            "decode_tok_s_basis": "generated",
+            "suspected_spiral": false,
+            "model": "Qwen/Qwen3-4B-Instruct-2507",
+            "device": "cuda",
+            "steps": [
+              {
+                "step_type": "retrieval.start",
+                "offset_s": 22.2745
+              },
+              {
+                "step_type": "reasoning.start",
+                "offset_s": 22.3114
+              },
+              {
+                "step_type": "retrieval.results",
+                "offset_s": 22.3172
+              },
+              {
+                "step_type": "reasoning.done",
+                "offset_s": 29.3417
+              }
+            ]
+          }
+        ],
+        "gpu": {
+          "available": true,
+          "samples": 335,
+          "vram_used_mib": {
+            "mean": 7628.9,
+            "peak": 7696.0
+          },
+          "gpu_util_pct": {
+            "mean": 59.4,
+            "peak": 100.0
+          },
+          "power_w": {
+            "mean": 56.9,
+            "peak": 80.9
+          }
+        }
+      },
+      "8": {
+        "concurrency": 8,
+        "ok": 6,
+        "total": 8,
+        "clean": 5,
+        "suspected_spiral": 1,
+        "wall_s": 243.256,
+        "aggregate_output_tokens": 947,
+        "aggregate_tok_s": 3.893,
+        "e2e_s": {
+          "n": 5,
+          "mean": 207.1561,
+          "median": 206.4097,
+          "p25": 197.4989,
+          "p75": 213.4231,
+          "p95": 238.8714,
+          "min": 179.5774,
+          "max": 238.8714,
+          "stdev": 21.7918
+        },
+        "decode_tok_s": {
+          "n": 5,
+          "mean": 17.662,
+          "median": 17.795,
+          "p25": 17.593,
+          "p75": 18.381,
+          "p95": 19.551,
+          "min": 14.99,
+          "max": 19.551,
+          "stdev": 1.6769
+        },
+        "results": [
+          {
+            "prompt_id": "q-revenue",
+            "ok": true,
+            "direct": false,
+            "error": null,
+            "submit_http_ms": 2690.28,
+            "first_step_s": 198.0543,
+            "ttft_proxy_s": 198.0807,
+            "decode_s": 4.608,
+            "decode_wall_s": 4.5928,
+            "e2e_s": 206.4097,
+            "output_chars": 266,
+            "output_tokens": 66,
+            "generated_tokens": 82,
+            "prompt_tokens": 1302,
+            "decode_tok_s": 17.795,
+            "decode_tok_s_basis": "generated",
+            "suspected_spiral": false,
+            "model": "Qwen/Qwen3-4B-Instruct-2507",
+            "device": "cuda",
+            "steps": [
+              {
+                "step_type": "retrieval.start",
+                "offset_s": 198.0543
+              },
+              {
+                "step_type": "retrieval.results",
+                "offset_s": 198.0783
+              },
+              {
+                "step_type": "reasoning.start",
+                "offset_s": 198.0807
+              },
+              {
+                "step_type": "reasoning.done",
+                "offset_s": 202.6735
+              }
+            ]
+          },
+          {
+            "prompt_id": "q-sales",
+            "ok": true,
+            "direct": false,
+            "error": null,
+            "submit_http_ms": 2231.61,
+            "first_step_s": 181.8598,
+            "ttft_proxy_s": 181.8909,
+            "decode_s": 8.583,
+            "decode_wall_s": 8.5678,
+            "e2e_s": 197.4989,
+            "output_chars": 574,
+            "output_tokens": 144,
+            "generated_tokens": 151,
+            "prompt_tokens": 1285,
+            "decode_tok_s": 17.593,
+            "decode_tok_s_basis": "generated",
+            "suspected_spiral": false,
+            "model": "Qwen/Qwen3-4B-Instruct-2507",
+            "device": "cuda",
+            "steps": [
+              {
+                "step_type": "retrieval.start",
+                "offset_s": 181.8598
+              },
+              {
+                "step_type": "reasoning.start",
+                "offset_s": 181.8909
+              },
+              {
+                "step_type": "retrieval.results",
+                "offset_s": 181.8917
+              },
+              {
+                "step_type": "reasoning.done",
+                "offset_s": 190.4587
+              }
+            ]
+          },
+          {
+            "prompt_id": "q-metrics",
+            "ok": true,
+            "direct": false,
+            "error": null,
+            "submit_http_ms": 1900.1,
+            "first_step_s": 2.559,
+            "ttft_proxy_s": 2.5607,
+            "decode_s": 157.129,
+            "decode_wall_s": 157.0951,
+            "e2e_s": 166.5194,
+            "output_chars": 717,
+            "output_tokens": 179,
+            "generated_tokens": 3072,
+            "prompt_tokens": 1309,
+            "decode_tok_s": 19.551,
+            "decode_tok_s_basis": "generated",
+            "suspected_spiral": true,
+            "model": "Qwen/Qwen3-4B-Instruct-2507",
+            "device": "cuda",
+            "steps": [
+              {
+                "step_type": "retrieval.start",
+                "offset_s": 2.559
+              },
+              {
+                "step_type": "reasoning.start",
+                "offset_s": 2.5607
+              },
+              {
+                "step_type": "retrieval.results",
+                "offset_s": 2.5664
+              },
+              {
+                "step_type": "reasoning.done",
+                "offset_s": 159.6558
+              }
+            ]
+          },
+          {
+            "prompt_id": "q-growth",
+            "ok": true,
+            "direct": false,
+            "error": null,
+            "submit_http_ms": 1694.25,
+            "first_step_s": 205.6064,
+            "ttft_proxy_s": 205.6365,
+            "decode_s": 4.403,
+            "decode_wall_s": 4.3899,
+            "e2e_s": 213.4231,
+            "output_chars": 241,
+            "output_tokens": 60,
+            "generated_tokens": 66,
+            "prompt_tokens": 1295,
+            "decode_tok_s": 14.99,
+            "decode_tok_s_basis": "generated",
+            "suspected_spiral": false,
+            "model": "Qwen/Qwen3-4B-Instruct-2507",
+            "device": "cuda",
+            "steps": [
+              {
+                "step_type": "retrieval.start",
+                "offset_s": 205.6064
+              },
+              {
+                "step_type": "retrieval.results",
+                "offset_s": 205.6349
+              },
+              {
+                "step_type": "reasoning.start",
+                "offset_s": 205.6365
+              },
+              {
+                "step_type": "reasoning.done",
+                "offset_s": 210.0264
+              }
+            ]
+          },
+          {
+            "prompt_id": "q-regions",
+            "ok": true,
+            "direct": false,
+            "error": null,
+            "submit_http_ms": 1314.02,
+            "first_step_s": 213.2803,
+            "ttft_proxy_s": 213.3086,
+            "decode_s": 9.309,
+            "decode_wall_s": 9.3139,
+            "e2e_s": 238.8714,
+            "output_chars": 1414,
+            "output_tokens": 354,
+            "generated_tokens": 182,
+            "prompt_tokens": 1295,
+            "decode_tok_s": 19.551,
+            "decode_tok_s_basis": "generated",
+            "suspected_spiral": false,
+            "model": "Qwen/Qwen3-4B-Instruct-2507",
+            "device": "cuda",
+            "steps": [
+              {
+                "step_type": "retrieval.start",
+                "offset_s": 213.2803
+              },
+              {
+                "step_type": "reasoning.start",
+                "offset_s": 213.3086
+              },
+              {
+                "step_type": "retrieval.results",
+                "offset_s": 213.3096
+              },
+              {
+                "step_type": "reasoning.done",
+                "offset_s": 222.6225
+              }
+            ]
+          },
+          {
+            "prompt_id": "q-risks",
+            "ok": false,
+            "direct": false,
+            "error": "timeout waiting for task_complete",
+            "submit_http_ms": 971.11,
+            "first_step_s": 238.7301,
+            "ttft_proxy_s": 238.7408,
+            "decode_s": null,
+            "decode_wall_s": null,
+            "e2e_s": null,
+            "output_chars": null,
+            "output_tokens": null,
+            "generated_tokens": null,
+            "prompt_tokens": null,
+            "decode_tok_s": null,
+            "decode_tok_s_basis": null,
+            "suspected_spiral": false,
+            "model": "Qwen/Qwen3-4B-Instruct-2507",
+            "device": "cuda",
+            "steps": [
+              {
+                "step_type": "retrieval.start",
+                "offset_s": 238.7301
+              },
+              {
+                "step_type": "reasoning.start",
+                "offset_s": 238.7408
+              },
+              {
+                "step_type": "retrieval.results",
+                "offset_s": 238.7486
+              }
+            ]
+          },
+          {
+            "prompt_id": "q-revenue",
+            "ok": false,
+            "direct": false,
+            "error": "timeout waiting for task_complete",
+            "submit_http_ms": 618.27,
+            "first_step_s": null,
+            "ttft_proxy_s": null,
+            "decode_s": null,
+            "decode_wall_s": null,
+            "e2e_s": null,
+            "output_chars": null,
+            "output_tokens": null,
+            "generated_tokens": null,
+            "prompt_tokens": null,
+            "decode_tok_s": null,
+            "decode_tok_s_basis": null,
+            "suspected_spiral": false,
+            "model": null,
+            "device": null,
+            "steps": []
+          },
+          {
+            "prompt_id": "q-sales",
+            "ok": true,
+            "direct": false,
+            "error": null,
+            "submit_http_ms": 133.83,
+            "first_step_s": 165.0199,
+            "ttft_proxy_s": 165.0354,
+            "decode_s": 8.215,
+            "decode_wall_s": 14.5435,
+            "e2e_s": 179.5774,
+            "output_chars": 574,
+            "output_tokens": 144,
+            "generated_tokens": 151,
+            "prompt_tokens": 1285,
+            "decode_tok_s": 18.381,
+            "decode_tok_s_basis": "generated",
+            "suspected_spiral": false,
+            "model": "Qwen/Qwen3-4B-Instruct-2507",
+            "device": "cuda",
+            "steps": [
+              {
+                "step_type": "retrieval.start",
+                "offset_s": 165.0199
+              },
+              {
+                "step_type": "retrieval.results",
+                "offset_s": 165.0342
+              },
+              {
+                "step_type": "reasoning.start",
+                "offset_s": 165.0354
+              },
+              {
+                "step_type": "reasoning.done",
+                "offset_s": 179.5789
+              }
+            ]
+          }
+        ],
+        "gpu": {
+          "available": true,
+          "samples": 431,
+          "vram_used_mib": {
+            "mean": 7571.8,
+            "peak": 7689.0
+          },
+          "gpu_util_pct": {
+            "mean": 57.1,
+            "peak": 100.0
+          },
+          "power_w": {
+            "mean": 57.9,
+            "peak": 68.1
+          }
+        }
+      }
+    }
+  }
+}

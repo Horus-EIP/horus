@@ -77,6 +77,10 @@ function ChatPageContent() {
   // Streamed "thought process" steps, keyed by task_id. Populated by the
   // task_step WS frames the agent worker emits as it runs.
   const [stepsByTaskId, setStepsByTaskId] = useState<Record<string, TaskStepEvent[]>>({});
+  // Live answer text accumulated from reasoning.delta frames (Phase 1 token
+  // streaming), keyed by the (root) task_id. Rendered as a "typing" preview in
+  // the thinking slot until the authoritative task_complete answer commits.
+  const [streamingByTaskId, setStreamingByTaskId] = useState<Record<string, string>>({});
 
   const { user } = useAuth();
   const { error: notifyError, success: notifySuccess } = useNotification();
@@ -183,6 +187,27 @@ function ChatPageContent() {
     backoffBaseMs: 1000,
     onMessage: (event) => {
       const message = JSON.parse(event.data);
+      // 'reasoning.delta' = a streamed chunk of the answer itself (Phase 1).
+      // Accumulated into the live preview, NOT the thought-process card.
+      if (
+        message.type === 'task_step' &&
+        message.step_type === 'reasoning.delta'
+      ) {
+        const taskId =
+          typeof message.task_id === 'string' ? message.task_id : '';
+        const meta =
+          message.metadata && typeof message.metadata === 'object'
+            ? (message.metadata as Record<string, unknown>)
+            : {};
+        const chunk = typeof meta.chunk === 'string' ? meta.chunk : '';
+        if (taskId && chunk) {
+          setStreamingByTaskId((prev) => ({
+            ...prev,
+            [taskId]: (prev[taskId] ?? '') + chunk,
+          }));
+        }
+        return;
+      }
       // 'task_step' = streaming "thought process" event from the agent worker.
       // Appended to the per-task bucket so the ThoughtProcessCard renders it
       // live under the user message that kicked off this task.
@@ -265,6 +290,8 @@ function ChatPageContent() {
           // Only a real specialist's terminal answer clears the spinner.
           // The chain is still running while Manager messages flow.
           setIsLoading(false);
+          // The committed message now owns the text; drop the live preview.
+          setStreamingByTaskId({});
         }
       }
     },
@@ -799,6 +826,9 @@ function ChatPageContent() {
               messagesEndRef={messagesEndRef}
               stepsByTaskId={stepsByTaskId}
               workingTaskId={workingTaskId}
+              streamingText={
+                workingTaskId ? streamingByTaskId[workingTaskId] ?? '' : ''
+              }
               emptyStateTitle={
                 conversationId ? undefined : 'No conversation selected'
               }
