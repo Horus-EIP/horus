@@ -29,7 +29,7 @@ import {
   type FileAttachmentsValue,
 } from '@/components/tasks/file-attachments';
 
-const MAX_MESSAGE_LENGTH = 1000;
+const MAX_MESSAGE_LENGTH = 4000;
 const MAX_ROWS = 6;
 
 const getAuthToken = (): string | null => {

@@ -128,7 +128,15 @@ def build_subtask_list(subtask_entity, agents_available, db: Session = None):
         if element.description == "":
             raise ValueError("Input for the agents task must not be empty")
 
-        question = element.description
+        # Scope each specialist to its own step so it doesn't answer the whole
+        # request (which would make the chain finish after one agent). The
+        # overall goal + prior results reach later steps via the chain transcript.
+        question = (
+            "You are ONE specialist in a multi-step team. Do ONLY the task "
+            "assigned to you below — other specialists handle the rest and the "
+            "results are combined at the end. Stay in your lane and be concise.\n\n"
+            f"=== Your assigned task ===\n{element.description}"
+        )
 
         action_list.append((agent_id, question))
 
@@ -245,7 +253,11 @@ def _heuristic_decompose(user_input: str, db: Session) -> tuple:
     for step in chosen:
         skill_label = (step.get("skill") or "knowledge retrieval").replace("_", " ")
         sub_demand = (
-            f"Focus on the {skill_label} aspects of this request: "
+            f"You are ONE specialist in a multi-step team. Handle ONLY the "
+            f"{skill_label} portion of the request below — do NOT answer the "
+            f"other parts; other specialists handle those and the results are "
+            f"combined at the end. Produce just your portion, concisely.\n\n"
+            f"=== Overall request (context only — do only your part) ===\n"
             f"{user_input}"
         )
         action_list.append((step["agent_id"], sub_demand))

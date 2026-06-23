@@ -354,6 +354,44 @@ def get_agent_by_type(agent_type: str, db: Session) -> str:
             if str(val).lower() == target:
                 return a.id
 
+        # Lenient resolution: the planner routes by SEMANTIC role ('compliance',
+        # 'finance', 'hr', 'communication') but only 4 enum types exist
+        # (researcher/analyst/writer/general). Without this, those plans fail
+        # validation and fall back to the heuristic — which can't slice the work,
+        # so one agent answers everything. Match the requested role against each
+        # agent's NAME and SKILLS (plus a few synonyms) so a multi-step plan
+        # routes to the right distinct specialists.
+        _syn = {
+            "finance": "analyst", "financial": "analyst", "budget": "analyst",
+            "accounting": "analyst", "analysis": "analyst",
+            "compliance": "compliance", "legal": "compliance", "policy": "compliance",
+            "audit": "compliance", "risk": "compliance", "security": "compliance",
+            "hr": "hr", "people": "hr", "human": "hr",
+            "communication": "writer", "writer": "writer", "write": "writer",
+            "draft": "writer", "messaging": "writer", "memo": "writer",
+        }
+        mapped = _syn.get(target)
+
+        def _role_matches(a) -> bool:
+            name = (a.name or "").lower()
+            sk = a.skills or []
+            skills = " ".join(sk).lower() if isinstance(sk, list) else str(sk).lower()
+            hay = f"{name} {skills}"
+            return target in hay or bool(mapped and mapped in hay)
+
+        for a in agents:  # prefer active
+            if _role_matches(a):
+                return a.id
+        for a in all_agents:
+            if _role_matches(a):
+                return a.id
+
+        # Last resort: any active non-Manager agent, so one unmappable role in an
+        # otherwise-good plan doesn't fail validation and collapse to the heuristic.
+        for a in agents:
+            if (a.name or "").lower() != "manager":
+                return a.id
+
         return None
     except Exception as e:
         logger.error(f"Error in get_agent_by_type: {e}")

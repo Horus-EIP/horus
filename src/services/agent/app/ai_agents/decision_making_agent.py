@@ -172,6 +172,43 @@ def _vllm_timeout() -> float:
         return 120.0
 
 
+def _vllm_max_model_len() -> int:
+    try:
+        return max(512, int(os.getenv("LLM_VLLM_MAX_MODEL_LEN", "8192")))
+    except ValueError:
+        return 8192
+
+
+def _fit_vllm_prompt(system_content: str, user_content: str) -> tuple[str, int]:
+    """Keep prompt + generation within the vLLM server's max_model_len.
+
+    vLLM rejects with 400 when ``prompt_tokens + max_tokens > max_model_len``.
+    A fixed ``max_tokens`` (e.g. 3072) overflows whenever a RAG / multi-agent
+    prompt is large, so instead we give the generation whatever room is LEFT.
+    The agent can't tokenize here, so estimate tokens from chars (~chars/3 — a
+    deliberate OVER-count vs the usual ~chars/4, for safety margin). If the
+    prompt alone is too long, truncate ``user_content`` head+tail so a minimum
+    generation still fits. Returns ``(maybe-truncated user_content, max_tokens)``.
+    """
+    max_len = _vllm_max_model_len()
+    margin = 256  # chat-template tokens + estimation slack
+    min_gen = 256  # always leave room to answer
+    sys_tok = len(system_content) // 3
+    max_user_tok = max(0, max_len - sys_tok - margin - min_gen)
+    user_tok = len(user_content) // 3
+    if user_tok > max_user_tok and max_user_tok > 0:
+        keep_chars = max_user_tok * 3
+        head = user_content[: (keep_chars * 2) // 3]
+        tail = user_content[-(keep_chars // 3) :]
+        user_content = (
+            head + "\n…[input truncated to fit the context window]…\n" + tail
+        )
+        user_tok = len(user_content) // 3
+    budget = max_len - sys_tok - user_tok - margin
+    max_tokens = max(min_gen, min(_max_new_tokens(), budget))
+    return user_content, max_tokens
+
+
 if _TRANSFORMERS_AVAILABLE and StoppingCriteria is not None:
 
     class _SpiralStoppingCriteria(StoppingCriteria):  # type: ignore[misc]
@@ -737,18 +774,21 @@ class DecisionMakingAgent:
         """
         import requests
 
+        # Give generation whatever room is left under max_model_len rather than a
+        # fixed max_tokens (which 400s when the prompt is large). See _fit_vllm_prompt.
+        user_content, max_tokens = _fit_vllm_prompt(system_content, user_content)
         messages = [
             {"role": "system", "content": system_content},
             {"role": "user", "content": user_content},
         ]
         if _stream_tokens_enabled():
-            return self._generate_vllm_streaming(messages)
+            return self._generate_vllm_streaming(messages, max_tokens)
 
         url = _vllm_base_url().rstrip("/") + "/chat/completions"
         payload = {
             "model": _vllm_model_name(),
             "messages": messages,
-            "max_tokens": _max_new_tokens(),
+            "max_tokens": max_tokens,
             "temperature": 0.0,
             "stream": False,
         }
@@ -761,12 +801,13 @@ class DecisionMakingAgent:
         self._last_prompt_tokens = usage.get("prompt_tokens")
         return text
 
-    def _generate_vllm_streaming(self, messages: list) -> str:
+    def _generate_vllm_streaming(self, messages: list, max_tokens: int) -> str:
         """Stream a vLLM chat completion (SSE) and emit confirmed-clean tokens as
         batched ``reasoning.delta`` steps — the Phase-1 streaming UX on the vLLM
         backend. Same hold-a-beat guard as the transformers path: buffer
         ``_STREAM_HOLD_CHARS``, run ``_is_degenerate_output``, suppress on a
-        spiral. Token counts come from the final usage chunk."""
+        spiral. ``max_tokens`` is the budgeted remaining room (see
+        _fit_vllm_prompt). Token counts come from the final usage chunk."""
         import json as _json
 
         import requests
@@ -782,7 +823,7 @@ class DecisionMakingAgent:
         payload = {
             "model": _vllm_model_name(),
             "messages": messages,
-            "max_tokens": _max_new_tokens(),
+            "max_tokens": max_tokens,
             "temperature": 0.0,
             "stream": True,
             "stream_options": {"include_usage": True},
@@ -898,7 +939,7 @@ class DecisionMakingAgent:
             # echoing/repeating retrieved chunks instead of answering. ~12k
             # chars (~3k tokens) leaves room for the persona, instructions,
             # and the bracketed task line under the 8192-token prompt budget.
-            _MAX_CTX_CHARS = 12000
+            _MAX_CTX_CHARS = 16000
             ctx = context or ""
             if len(ctx) > _MAX_CTX_CHARS:
                 ctx = ctx[:_MAX_CTX_CHARS] + "\n…[retrieved content truncated]"

@@ -219,6 +219,52 @@ services:
       - ../services/agent/app:/app
       - agent_model_cache:/app/models/llm
 
+  # vLLM serving the 4B worker (Phase 4 keystone). Runs as a managed Compose
+  # service so Docker keeps it alive across crashes/reboots (restart:
+  # unless-stopped) — replacing the fragile host WSL process. Agent + MAS reach
+  # it at http://vllm:8000/v1 on the internal network. Shares the 8GB GPU with
+  # BGE; --gpu-memory-utilization 0.62 + --enforce-eager leave room (see scripts/perf).
+  vllm:
+    image: vllm/vllm-openai:v0.23.0
+    container_name: vllm
+    gpus: all
+    shm_size: "4gb"
+    command:
+      - --model
+      - warshanks/Qwen3-4B-Instruct-2507-AWQ
+      - --served-model-name
+      - qwen3-4b
+      # 8192 so a RAG prompt (~12k-char context ≈ 3-4k tok) + max_tokens(3072)
+      # fits — at 6144 large multi-agent prompts hit vLLM 400s (context overflow).
+      - --max-model-len
+      - "8192"
+      # 0.70 gives ~1.8GB KV (one 8192 seq needs ~1.1GB) while leaving room for
+      # BGE on the shared 8GB GPU.
+      - --gpu-memory-utilization
+      - "0.70"
+      - --enforce-eager
+    environment:
+      # FlashAttention + native sampler avoid flashinfer's runtime JIT (no nvcc
+      # in the image); disable vLLM's usage telemetry for air-gap friendliness.
+      - VLLM_ATTENTION_BACKEND=FLASH_ATTN
+      - VLLM_USE_FLASHINFER_SAMPLER=0
+      - VLLM_NO_USAGE_STATS=1
+      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
+      - HF_HOME=/root/.cache/huggingface
+    volumes:
+      - vllm_hf_cache:/root/.cache/huggingface
+    ports:
+      - "18000:8000"
+    restart: unless-stopped
+    networks:
+      - horus-net
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 20s
+      timeout: 10s
+      retries: 40
+      start_period: 300s
+
   knowledge_store:
     build:
       context: ../services/knowledge-store
@@ -418,3 +464,5 @@ volumes:
   # start, persist across rebuilds so model downloads happen exactly once.
   mas_model_cache:
   agent_model_cache:
+  # vLLM's HuggingFace cache — holds the AWQ model so it downloads exactly once.
+  vllm_hf_cache:

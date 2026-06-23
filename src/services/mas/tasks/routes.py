@@ -1079,7 +1079,30 @@ async def sharing_agent_result(
             task_result.agent_id, "TASK", f"Completed task {task_result.task_id}"
         )
 
-        if len(action_list) > 0:
+        # Hard depth cap: the Manager can re-route cyclically (INSERT), but a step
+        # that fails every attempt (e.g. an LLM/backend error) would otherwise make
+        # it INSERT forever — observed runaway to 50+ steps. Once the chain has run
+        # MAX_CHAIN_STEPS, stop re-routing and wrap up with what we have.
+        MAX_CHAIN_STEPS = 8
+        if len(action_list) > 0 and (task.order or 0) >= MAX_CHAIN_STEPS:
+            logger.warning(
+                "Chain reached step %s (cap %s) — forcing DONE to stop runaway "
+                "re-routing (a step is likely failing every attempt).",
+                task.order,
+                MAX_CHAIN_STEPS,
+            )
+            if task.conversation_id is not None:
+                await _broadcast_manager_message(
+                    task.conversation_id,
+                    "Stopping here — this request hit its step limit without "
+                    "completing cleanly. Returning the best result so far.",
+                    db,
+                    skill_used="review",
+                )
+            action_list = []
+            current_task_result.future_actions = []
+            db.commit()
+        elif len(action_list) > 0:
             # Manager review: before automatically chaining to the next planned
             # step, ask the Manager LLM whether the chain has already answered
             # the user's demand (DONE), needs an unplanned extra step before
