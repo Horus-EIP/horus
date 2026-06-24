@@ -39,27 +39,73 @@ function isErrorStep(stepType: TaskStepType): boolean {
   return stepType === 'error';
 }
 
+/** Read a positive integer from a step's free-form metadata, else 0. */
+function metaNum(metadata: Record<string, unknown> | undefined, key: string): number {
+  if (!metadata) return 0;
+  const v = Number(metadata[key]);
+  return Number.isFinite(v) && v > 0 ? v : 0;
+}
+
 export const ThoughtProcessCard: React.FC<ThoughtProcessCardProps> = ({
   taskId,
   steps,
   isRunning,
 }) => {
   // Auto-collapse once the task stops running; the user can still toggle.
-  // The explicit override is tracked separately so a user expand/collapse
-  // doesn't get clobbered when isRunning flips.
   const [override, setOverride] = useState<boolean | null>(null);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   const open = override ?? isRunning;
 
+  // Token usage aggregated across steps. reasoning.done carries
+  // generated_tokens / prompt_tokens in its metadata (set by the agent).
+  const tokens = useMemo(() => {
+    let gen = 0;
+    let prompt = 0;
+    let seen = false;
+    for (const s of steps) {
+      const g = metaNum(s.metadata as Record<string, unknown> | undefined, 'generated_tokens');
+      const p = metaNum(s.metadata as Record<string, unknown> | undefined, 'prompt_tokens');
+      if (g || p) seen = true;
+      gen += g;
+      prompt += p;
+    }
+    return seen ? { gen, prompt, total: gen + prompt } : null;
+  }, [steps]);
+
+  // Distinct specialists that participated, in first-seen order.
+  const agents = useMemo(() => {
+    const out: string[] = [];
+    const set = new Set<string>();
+    for (const s of steps) {
+      const a = s.agentName;
+      if (a && !set.has(a)) {
+        set.add(a);
+        out.push(a);
+      }
+    }
+    return out;
+  }, [steps]);
+
+  // The agent currently working — the most recent step that has a name.
+  const activeAgent = useMemo(() => {
+    for (let i = steps.length - 1; i >= 0; i--) {
+      if (steps[i].agentName) return steps[i].agentName as string;
+    }
+    return null;
+  }, [steps]);
+
   const headerLabel = useMemo(() => {
     if (steps.length === 0) return isRunning ? 'Thinking…' : 'No thought process';
     const last = steps[steps.length - 1];
-    if (isRunning) return `Working: ${last.title}`;
+    if (isRunning) {
+      // Live "agent working" view: who is active and on what.
+      return activeAgent ? `${activeAgent} · ${last.title}` : last.title;
+    }
     const hasError = steps.some((s) => isErrorStep(s.stepType));
     if (hasError) return 'Thought process (failed)';
     return `Thought process (${steps.length} step${steps.length === 1 ? '' : 's'})`;
-  }, [steps, isRunning]);
+  }, [steps, isRunning, activeAgent]);
 
   if (steps.length === 0 && !isRunning) {
     // Nothing to show — older agent without step emission, or task already
@@ -84,8 +130,30 @@ export const ThoughtProcessCard: React.FC<ThoughtProcessCardProps> = ({
         ) : (
           <IconChevronRight className="h-4 w-4 shrink-0" stroke={1.5} />
         )}
-        <IconBrain className="h-4 w-4 shrink-0" stroke={1.5} />
-        <span className="truncate">{headerLabel}</span>
+        {isRunning ? (
+          <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-blue-500" aria-hidden />
+        ) : (
+          <IconBrain className="h-4 w-4 shrink-0" stroke={1.5} />
+        )}
+        <span className="min-w-0 truncate">{headerLabel}</span>
+        <span className="ml-auto flex shrink-0 items-center gap-1.5">
+          {agents.length > 0 && (
+            <span
+              className="rounded-full bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium"
+              title={agents.join(' → ')}
+            >
+              {agents.length === 1 ? agents[0] : `${agents.length} agents`}
+            </span>
+          )}
+          {tokens && (
+            <span
+              className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300"
+              title={`prompt ${tokens.prompt.toLocaleString()} + output ${tokens.gen.toLocaleString()} tokens`}
+            >
+              {tokens.total.toLocaleString()} tok
+            </span>
+          )}
+        </span>
       </button>
 
       {open && (
@@ -94,6 +162,10 @@ export const ThoughtProcessCard: React.FC<ThoughtProcessCardProps> = ({
             const Icon = iconFor(step.stepType);
             const isErr = isErrorStep(step.stepType);
             const isOpen = openIndex === idx;
+            const stepTokens = metaNum(
+              step.metadata as Record<string, unknown> | undefined,
+              'generated_tokens',
+            );
             const hasMore =
               Boolean(step.detail) || Boolean(step.metadata && Object.keys(step.metadata).length);
             return (
@@ -107,7 +179,17 @@ export const ThoughtProcessCard: React.FC<ThoughtProcessCardProps> = ({
                   } ${isErr ? 'text-red-600 dark:text-red-400' : 'text-[var(--text)]'}`}
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" stroke={1.5} />
-                  <span className="truncate font-medium">{step.title}</span>
+                  {step.agentName && (
+                    <span className="shrink-0 rounded bg-blue-500/15 px-1 py-px text-[9px] font-medium text-blue-700 dark:text-blue-300">
+                      {step.agentName}
+                    </span>
+                  )}
+                  <span className="min-w-0 truncate font-medium">{step.title}</span>
+                  {stepTokens > 0 && (
+                    <span className="shrink-0 text-[9px] text-emerald-600 dark:text-emerald-400">
+                      {stepTokens.toLocaleString()} tok
+                    </span>
+                  )}
                   <span className="ml-auto shrink-0 text-[10px] text-[var(--textSoft)]">
                     {formatTimestamp(new Date(step.timestamp))}
                   </span>

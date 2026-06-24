@@ -1147,6 +1147,17 @@ async def sharing_agent_result(
                 # of this task's `future_actions` reflects the Manager's decision.
                 current_task_result.future_actions = []
                 db.commit()
+            elif decision == "INSERT" and (task.order or 0) >= 3:
+                # Anti-loop: past a few steps the 4B Manager tends to INSERT the
+                # same "gather more info" step over and over (observed: 8x
+                # "routing back to Researcher" with identical reasoning, hitting
+                # the step cap and returning an incomplete answer). Suppress
+                # cyclic re-routing here and proceed with the planned steps so
+                # the chain finishes cleanly.
+                logger.info(
+                    "INSERT suppressed at step %s (anti-loop); proceeding with plan.",
+                    task.order,
+                )
             elif decision == "INSERT":
                 # Resolve the requested agent_type to a concrete active agent
                 # and PREPEND the inserted action to the planned list. The
@@ -1494,6 +1505,22 @@ async def ingest_task_step(
         # Standalone task with no chat — nothing to broadcast.
         return {"message": "no conversation"}
 
+    # Reliably resolve the owning agent's NAME. The worker only forwards an
+    # ``agent_id`` (and inconsistently a name), which is why the chat's
+    # "which agent is active" label flickers on/off. Look it up from the DB so
+    # every step is tagged with the specialist that produced it.
+    resolved_agent_name = step.agent_name
+    _lookup_id = step.agent_id
+    if not _lookup_id and step.task_id:
+        _t = db.query(Task).filter(Task.id == step.task_id).first()
+        _lookup_id = _t.agent_id if _t else None
+    if not resolved_agent_name and _lookup_id:
+        from db.models import Agents as _Ag
+
+        _a = db.query(_Ag).filter(_Ag.id == _lookup_id).first()
+        if _a:
+            resolved_agent_name = _a.name
+
     payload = {
         # Broadcast under the root task id so the UI groups all subtasks'
         # steps under the single thought-process card pinned to the user's
@@ -1502,7 +1529,7 @@ async def ingest_task_step(
         "task_id": broadcast_task_id,
         "subtask_id": step.task_id,
         "agent_id": step.agent_id,
-        "agent_name": step.agent_name,
+        "agent_name": resolved_agent_name,
         "step_type": step.step_type,
         "title": step.title,
         "detail": step.detail,

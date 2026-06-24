@@ -252,11 +252,20 @@ def _ask_vllm(messages: list, max_new_tokens: int) -> str:
     import urllib.request
 
     url = _vllm_base_url().rstrip("/") + "/chat/completions"
+    # Budget max_tokens to the room left under max_model_len so a big prompt
+    # (e.g. the aggregation step's full chain history) neither 400s nor silently
+    # truncates. Estimate prompt tokens from chars (~chars/3, conservative).
+    try:
+        max_model_len = max(512, int(os.getenv("LLM_VLLM_MAX_MODEL_LEN", "8192")))
+    except ValueError:
+        max_model_len = 8192
+    est_prompt = sum(len(str(m.get("content", ""))) for m in messages) // 3
+    safe_max = max(256, min(int(max_new_tokens), max_model_len - est_prompt - 256))
     body = json.dumps(
         {
             "model": _vllm_model_name(),
             "messages": messages,
-            "max_tokens": max_new_tokens,
+            "max_tokens": safe_max,
             "temperature": 0.0,
             "stream": False,
         }

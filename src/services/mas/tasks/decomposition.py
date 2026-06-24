@@ -661,5 +661,7 @@ def select_agent_by_mode(
 def aggregate_results(history, result):
     """Synthesize a final user-facing answer from sub-task history + output."""
     prompt = get_prompt_final_answer_generation(history, result)
-    output = ask_llm(prompt, max_new_tokens=512)
+    # The final synthesized briefing needs real room — 512 truncated multi-part
+    # answers mid-section. _ask_vllm budgets this down to fit max_model_len.
+    output = ask_llm(prompt, max_new_tokens=3072)
     return output

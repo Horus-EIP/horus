@@ -192,7 +192,9 @@ def _fit_vllm_prompt(system_content: str, user_content: str) -> tuple[str, int]:
     """
     max_len = _vllm_max_model_len()
     margin = 256  # chat-template tokens + estimation slack
-    min_gen = 256  # always leave room to answer
+    # Always leave generous room so answers aren't cut off mid-section; truncate
+    # the prompt before the generation budget when context is large.
+    min_gen = 1024
     sys_tok = len(system_content) // 3
     max_user_tok = max(0, max_len - sys_tok - margin - min_gen)
     user_tok = len(user_content) // 3
@@ -939,7 +941,7 @@ class DecisionMakingAgent:
             # echoing/repeating retrieved chunks instead of answering. ~12k
             # chars (~3k tokens) leaves room for the persona, instructions,
             # and the bracketed task line under the 8192-token prompt budget.
-            _MAX_CTX_CHARS = 16000
+            _MAX_CTX_CHARS = 12000
             ctx = context or ""
             if len(ctx) > _MAX_CTX_CHARS:
                 ctx = ctx[:_MAX_CTX_CHARS] + "\n…[retrieved content truncated]"
