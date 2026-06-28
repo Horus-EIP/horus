@@ -197,6 +197,14 @@ def regenerate_agent_api_key(agent_id: str, db: Session) -> str | None:
         api_key = secrets.token_urlsafe(32)
         agent.api_key = bcrypt_context.hash(api_key)
         db.commit()
+        # Drop any cached verifications of the OLD key so it stops working
+        # immediately (otherwise the positive-cache TTL would keep honouring it).
+        try:
+            from auth.auth_tool_functions import invalidate_agent_api_key_cache
+
+            invalidate_agent_api_key_cache(agent_id)
+        except Exception:  # noqa: BLE001 - invalidation is best-effort
+            logger.debug("Auth cache invalidation skipped for %s", agent_id)
         logger.info(f"API key regenerated successfully - Agent ID: {agent_id}")
         return api_key
     except Exception as e:
@@ -216,6 +224,12 @@ def delete_agent(agent_id: str, db: Session) -> bool:
         db.delete(agent)
         db.commit()
         _skill_cache_evict(agent_id)
+        try:
+            from auth.auth_tool_functions import invalidate_agent_api_key_cache
+
+            invalidate_agent_api_key_cache(agent_id)
+        except Exception:  # noqa: BLE001 - invalidation is best-effort
+            logger.debug("Auth cache invalidation skipped for %s", agent_id)
         return True
     except Exception as e:
         db.rollback()

@@ -98,17 +98,23 @@ export default function TaskDetailPage() {
     }
     let cancelled = false;
     let pollId: number | null = null;
+    // One controller for the effect's lifetime: cleanup aborts every in-flight
+    // request (and the shared signal is OR'd with a per-request timeout in the
+    // api client) so navigating away can't leave doomed fetches hanging.
+    const ac = new AbortController();
 
     const fetchOnce = async (isInitial: boolean) => {
       if (isInitial) setLoading(true);
-      const [taskRes, agentsRes] = await Promise.all([
-        chatApi.getTask(taskId),
-        agentApi.getAgents(),
-      ]);
-      if (cancelled) return;
+
+      const taskRes = await chatApi.getTask(taskId, { signal: ac.signal });
+      if (cancelled || ac.signal.aborted) return;
       if (!taskRes.ok || !taskRes.data) {
         if (isInitial) {
-          notifyError(taskRes.error || 'Failed to load task');
+          notifyError(
+            taskRes.aborted
+              ? 'Timed out loading task. Retrying…'
+              : taskRes.error || 'Failed to load task'
+          );
           setTask(null);
         }
       } else {
@@ -123,10 +129,15 @@ export default function TaskDetailPage() {
           pollId = null;
         }
       }
+      // Drop the spinner as soon as the task itself is resolved — the agent
+      // list below fills in independently and shouldn't gate first paint.
+      if (isInitial) setLoading(false);
+
+      const agentsRes = await agentApi.getAgents({ signal: ac.signal });
+      if (cancelled || ac.signal.aborted) return;
       if (agentsRes.ok && agentsRes.data) {
         setAgents(agentsRes.data);
       }
-      if (isInitial) setLoading(false);
     };
 
     void fetchOnce(true);
@@ -137,6 +148,7 @@ export default function TaskDetailPage() {
 
     return () => {
       cancelled = true;
+      ac.abort();
       if (pollId !== null) window.clearInterval(pollId);
     };
   }, [taskId, notifyError]);

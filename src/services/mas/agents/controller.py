@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import os
 
 from agents.registry_tool_functions import (
     _batch_update_agent_status_internal,
@@ -9,6 +10,13 @@ from core.logger import get_logger, log_agent_operation
 from db.database import SessionLocal
 
 logger = get_logger("agent_controller")
+
+# An agent is marked inactive after this many seconds without a heartbeat. It
+# MUST be a multiple of the agent's heartbeat interval (30s) — when it equals
+# the interval, normal jitter trips it every cycle and agents flap
+# active<->inactive. 90s (3x) matches the liveness window already used by
+# _is_agent_recently_alive in the registry.
+_INACTIVITY_PERIOD_SECONDS = int(os.getenv("AGENT_INACTIVITY_TIMEOUT", "90"))
 
 
 def get_all_agents():
@@ -40,7 +48,7 @@ async def check_agent_heartbeat(test_mode=False):
             db = SessionLocal()
             try:
                 current_time = datetime.datetime.now(datetime.UTC)
-                inactivity_period = 30
+                inactivity_period = _INACTIVITY_PERIOD_SECONDS
                 agents = _get_all_agents_internal(db)
 
                 if not agents:

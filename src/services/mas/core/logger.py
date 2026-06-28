@@ -93,6 +93,10 @@ class MASLogger:
             processors=[
                 structlog.contextvars.merge_contextvars,
                 structlog.processors.add_log_level,
+                # Interpolate %s/%d-style positional args (e.g.
+                # logger.info("decision=%s", decision)); without this they are
+                # printed literally and the values land in ``positional_args``.
+                structlog.stdlib.PositionalArgumentsFormatter(),
                 structlog.processors.StackInfoRenderer(),
                 structlog.dev.set_exc_info,
                 structlog.processors.TimeStamper(fmt="iso", utc=False),
@@ -143,6 +147,14 @@ class MASLogger:
                 )
             )
             root_logger.addHandler(error_handler)
+
+        # Quiet verbose third-party loggers. pika is the worst offender: it logs
+        # the full AMQP connection lifecycle (connect → "Aborting transport" →
+        # "AMQP stack terminated, failed to connect, or aborted") at INFO on
+        # every /rabbitmq/heartbeat, which reads like a wall of errors. Lift
+        # these to WARNING so genuine problems aren't buried.
+        for noisy in ("pika", "httpx", "httpcore"):
+            logging.getLogger(noisy).setLevel(logging.WARNING)
 
     def get_logger(self, name: str, level: int | None = None) -> logging.Logger:
         """

@@ -61,12 +61,25 @@ async function proxy(request: NextRequest): Promise<Response> {
   const hasBody = !["GET", "HEAD"].includes(method);
   const body = hasBody ? await request.arrayBuffer() : undefined;
 
-  const upstream = await fetch(target, {
-    method,
-    headers: forwardHeaders,
-    body: body && body.byteLength > 0 ? body : undefined,
-    redirect: "follow",
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(target, {
+      method,
+      headers: forwardHeaders,
+      body: body && body.byteLength > 0 ? body : undefined,
+      redirect: "follow",
+      // Propagate the client's abort so a navigated-away request stops MAS work
+      // instead of running to completion and showing up as "context canceled".
+      signal: request.signal,
+    });
+  } catch (err) {
+    // Client aborted (navigation) — nothing is listening; return a benign 499
+    // rather than letting it surface as an unhandled rejection.
+    if ((err as Error)?.name === "AbortError") {
+      return new NextResponse(null, { status: 499 });
+    }
+    throw err;
+  }
 
   const responseHeaders = new Headers();
   upstream.headers.forEach((value, key) => {

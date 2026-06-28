@@ -112,10 +112,14 @@ def init_db():
         else:
             logger.info(f"Admin user already exists: {admin_user.username}")
 
-        # Default agents are no longer DB-seeded — the agent worker registers
-        # them itself at startup as real, heartbeating identities (see
-        # services/agent/app/agent_server/profiles.py). Keeping a seed here
-        # would just leave inactive placeholders cluttering the UI.
+        # The five specialist agents are no longer DB-seeded — the agent worker
+        # registers them itself at startup as real, heartbeating identities (see
+        # services/agent/app/agent_server/profiles.py). The Manager is the lone
+        # exception: it runs only inside MAS with no worker, so seed it here (or
+        # chain-root creation is skipped on every multi-agent task). Idempotent.
+        from db.seed_agents import seed_manager_agent
+
+        seed_manager_agent(db)
 
         log_success("init_db", "Database initialization completed successfully")
 

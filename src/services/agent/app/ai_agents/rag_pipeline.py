@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 from ai_agents.data_extractor_tool import DataExtractorTool  # noqa: E402
 from ai_agents.payment_analyzer_tool import PaymentAnalyzerTool  # noqa: E402
 
+# Cap the embedding/retrieval query. BGE-base truncates at 512 tokens (~2k
+# chars), so anything longer is silently dropped by the embedder anyway — and a
+# long chain transcript embeds mostly front-matter, not the actual task.
+_RETRIEVAL_QUERY_CHAR_CAP = 2000
+
 
 class RAGPipeline:
     """
@@ -79,12 +84,18 @@ class RAGPipeline:
     # Public API
     # ------------------------------------------------------------------
 
-    async def generate_response(self, query: str) -> str:
+    async def generate_response(
+        self, query: str, retrieval_query: str | None = None
+    ) -> str:
         """
         Generate a response by retrieving and processing data (async).
 
         Args:
-            query: The user query string.
+            query: The user query string (fed to the LLM in full).
+            retrieval_query: Optional focused query used ONLY for knowledge
+                retrieval. Defaults to ``query``. Lets a multi-agent chain pass
+                the bare assigned task for embedding while the LLM still sees the
+                full transcript for grounding.
 
         Returns:
             A formatted response string with insights.
@@ -94,7 +105,10 @@ class RAGPipeline:
 
         timeout = float(os.getenv("REACT_TIMEOUT_SECONDS", "120"))
 
-        data = await self.retrieval_agent.fetch(query)
+        rquery = retrieval_query or query
+        if len(rquery) > _RETRIEVAL_QUERY_CHAR_CAP:
+            rquery = rquery[:_RETRIEVAL_QUERY_CHAR_CAP]
+        data = await self.retrieval_agent.fetch(rquery)
         context_text = data.get("data", "")
 
         # Phase 3: exact-match response cache. Keyed on (query + retrieved
@@ -184,6 +198,9 @@ class RAGPipeline:
             }
 
         query = task.get("query", "")
+        # Focused retrieval query (bare assigned task in a chain); falls back to
+        # the full query for single-agent / first-step tasks.
+        retrieval_query = task.get("retrieval_query") or query
 
         # Determine whether to use ReAct mode
         task_mode = (task.get("mode") or "").lower().strip()
@@ -207,7 +224,9 @@ class RAGPipeline:
             }
 
         # Default single-shot mode
-        response_text = await self.generate_response(query)
+        response_text = await self.generate_response(
+            query, retrieval_query=retrieval_query
+        )
         return {
             "task_id": task.get("task_id"),
             "response": response_text,

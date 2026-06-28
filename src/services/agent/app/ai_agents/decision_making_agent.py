@@ -145,8 +145,11 @@ def _stream_tokens_enabled() -> bool:
 # this length are emitted in one delta at the end — fine, they are already fast.
 _STREAM_HOLD_CHARS = 500
 # Coalesce streamed tokens into at most one step every this many seconds so a
-# long answer produces ~tens of POSTs to MAS, not one-per-token.
-_STREAM_FLUSH_INTERVAL = 0.12
+# long answer produces ~tens of POSTs to MAS, not one-per-token. Each step is an
+# authenticated POST to /tasks/task-step/, so a tight window (0.12s) sustained
+# over a whole generation floods MAS with ~8 POSTs/s. 0.5s keeps the typing
+# preview smooth while cutting the per-answer POST count ~4x; tune via env.
+_STREAM_FLUSH_INTERVAL = float(os.getenv("AGENT_STREAM_FLUSH_INTERVAL", "0.5"))
 
 
 def _llm_backend() -> str:

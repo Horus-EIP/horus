@@ -1013,7 +1013,6 @@ async def create_new_task(
     description="Receive the result from an agent, add to conversation history, distribute via WebSocket. Handles subtasks and future actions if defined. Requires TASK_EXECUTE permission. Requires 'X-API-Key' and 'Agent-ID' headers for authentication.",
     status_code=200,
     tags=["Tasks"],
-    dependencies=[Depends(verify_agent_api_key)],
     responses=SHARE_RESULT_RESPONSES,
     openapi_extra=SHARE_RESULT_OPENAPI_EXTRA,
 )
@@ -1259,6 +1258,12 @@ async def sharing_agent_result(
                     "conversation_id": task.conversation_id,
                     "task_id": new_subtask_id,
                     "demand": new_action_context,
+                    # The full transcript above grounds the LLM, but it is a poor
+                    # *retrieval* query: BGE-base truncates at 512 tokens, so the
+                    # 16k-char transcript buries this specialist's actual task and
+                    # the embedding is dominated by front-matter. Ship the bare
+                    # assigned task so knowledge-store retrieval stays on-target.
+                    "retrieval_query": new_action,
                 },
             )
             TASK_QUEUE_DEPTH.inc()
@@ -1438,7 +1443,6 @@ async def sharing_agent_result(
     ),
     status_code=200,
     tags=["Tasks"],
-    dependencies=[Depends(verify_agent_api_key)],
 )
 async def ingest_task_step(
     step: TaskStepForm,

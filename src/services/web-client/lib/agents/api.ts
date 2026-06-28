@@ -32,16 +32,24 @@ export interface AgentResponse<T = void> {
   ok: boolean;
   data?: T;
   error?: string;
+  /** True when the underlying request was aborted (navigation or timeout). */
+  aborted?: boolean;
 }
 
 export const agentApi = {
-  async getAgents(): Promise<AgentResponse<Agent[]>> {
-    const response = await apiClient.get<Agent[]>("/agents/details", { retry: 1 });
+  async getAgents(
+    options?: { signal?: AbortSignal }
+  ): Promise<AgentResponse<Agent[]>> {
+    const response = await apiClient.get<Agent[]>("/agents/details", {
+      retry: 1,
+      signal: options?.signal,
+    });
 
     if (!response.ok || !response.data) {
       return {
         ok: false,
         error: response.error || "Failed to fetch agents",
+        aborted: response.aborted,
       };
     }
 

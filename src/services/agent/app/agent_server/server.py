@@ -286,6 +286,14 @@ def _register_one_profile(profile) -> bool:
             )
             agent_errors_total.labels(error_type="registration").inc()
             return False
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+            # Expected while MAS is still starting up; register_profiles() retries
+            # with backoff. Log without a traceback to avoid boot-time spam.
+            logger.warning(
+                "MAS not reachable yet for %s, will retry: %s", profile.name, exc
+            )
+            agent_errors_total.labels(error_type="registration").inc()
+            return False
         except Exception as exc:
             logger.error(
                 "Error registering %s (will retry): %s", profile.name, exc, exc_info=True
@@ -334,7 +342,7 @@ def _heartbeat_for_profile(profile) -> None:
         headers = _build_headers(
             include_api_key=True, agent_id=profile.agent_id, api_key=profile.api_key
         )
-        response = requests.post(url, headers=headers)
+        response = requests.post(url, headers=headers, timeout=5)
         if response.status_code == 401 and not ORCHESTRATOR_TOKEN:
             # JWT expired — drop the cache and retry once with a fresh token.
             _invalidate_cached_mas_token()
@@ -343,7 +351,7 @@ def _heartbeat_for_profile(profile) -> None:
                 agent_id=profile.agent_id,
                 api_key=profile.api_key,
             )
-            response = requests.post(url, headers=headers)
+            response = requests.post(url, headers=headers, timeout=5)
         if response.status_code != 200:
             logger.warning(
                 "Heartbeat for %s failed: %s - %s",
@@ -354,6 +362,12 @@ def _heartbeat_for_profile(profile) -> None:
             agent_heartbeat_total.labels(status="error").inc()
         else:
             agent_heartbeat_total.labels(status="success").inc()
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+        # MAS briefly unreachable (e.g. a restart); the loop retries next cycle.
+        logger.warning(
+            "Heartbeat for %s deferred (MAS unreachable): %s", profile.name, exc
+        )
+        agent_heartbeat_total.labels(status="error").inc()
     except Exception as exc:
         logger.error("Heartbeat error for %s: %s", profile.name, exc, exc_info=True)
         agent_heartbeat_total.labels(status="error").inc()

@@ -17,7 +17,9 @@ scrape_configs:
     scrape_interval: 15s
     static_configs:
       - targets: ['agent:8001']
-    metrics_path: '/metrics'
+    # Agent mounts metrics via Starlette Mount, which only matches the
+    # trailing-slash form; scraping bare /metrics returns a 307 redirect.
+    metrics_path: '/metrics/'
 
   - job_name: 'knowledge-store'
     scrape_interval: 30s

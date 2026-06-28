@@ -10,6 +10,8 @@ export interface ChatResponse<T = void> {
   ok: boolean;
   data?: T;
   error?: string;
+  /** True when the underlying request was aborted (navigation or timeout). */
+  aborted?: boolean;
 }
 
 export interface Conversation {
@@ -234,16 +236,19 @@ export const chatApi = {
     return { ok: true };
   },
 
-  async getTaskQueueStats(): Promise<ChatResponse<TaskQueueStats>> {
+  async getTaskQueueStats(
+    options?: { signal?: AbortSignal }
+  ): Promise<ChatResponse<TaskQueueStats>> {
     const response = await apiClient.get<TaskQueueStats>(
       "/tasks/stats/queue",
-      { retry: 1 }
+      { retry: 1, signal: options?.signal }
     );
 
     if (!response.ok || !response.data) {
       return {
         ok: false,
         error: response.error || "Failed to fetch task queue stats",
+        aborted: response.aborted,
       };
     }
 
@@ -272,12 +277,18 @@ export const chatApi = {
     };
   },
 
-  async listTasks(): Promise<ChatResponse<TaskSummary[]>> {
-    const response = await apiClient.get<TaskSummary[]>("/tasks/list", { retry: 1 });
+  async listTasks(
+    options?: { signal?: AbortSignal }
+  ): Promise<ChatResponse<TaskSummary[]>> {
+    const response = await apiClient.get<TaskSummary[]>("/tasks/list", {
+      retry: 1,
+      signal: options?.signal,
+    });
     if (!response.ok || !Array.isArray(response.data)) {
       return {
         ok: false,
         error: response.error || "Failed to list tasks",
+        aborted: response.aborted,
       };
     }
     return { ok: true, data: response.data };
@@ -299,16 +310,20 @@ export const chatApi = {
     return { ok: true, data: response.data };
   },
 
-  async getTask(taskId: string): Promise<ChatResponse<TaskDetails>> {
+  async getTask(
+    taskId: string,
+    options?: { signal?: AbortSignal }
+  ): Promise<ChatResponse<TaskDetails>> {
     const response = await apiClient.get<TaskDetails>(
       `/tasks/${taskId}`,
-      { retry: 1 }
+      { retry: 1, signal: options?.signal }
     );
 
     if (!response.ok || !response.data) {
       return {
         ok: false,
         error: response.error || "Failed to fetch task details",
+        aborted: response.aborted,
       };
     }
 

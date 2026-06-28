@@ -72,18 +72,21 @@ export default function TasksPage() {
   const { error: notifyError } = useNotification();
   const { user } = useAuth();
 
-  const loadAll = useCallback(async () => {
+  const loadAll = useCallback(async (signal?: AbortSignal) => {
     try {
       setIsLoading(true);
-      const [statsRes, listRes] = await Promise.all([
-        chatApi.getTaskQueueStats(),
-        chatApi.listTasks(),
-      ]);
+      // Sequential (not Promise.all) so the stats grid can paint as soon as
+      // stats resolve, without waiting on the (larger) task list.
+      const statsRes = await chatApi.getTaskQueueStats({ signal });
+      if (signal?.aborted) return;
       if (statsRes.ok && statsRes.data) {
         setStats(statsRes.data);
-      } else {
+      } else if (!statsRes.aborted) {
         notifyError(statsRes.error || "Failed to load task queue stats");
       }
+
+      const listRes = await chatApi.listTasks({ signal });
+      if (signal?.aborted) return;
       if (listRes.ok && listRes.data) {
         // Newest first.
         const sorted = [...listRes.data].sort(
@@ -96,15 +99,19 @@ export default function TasksPage() {
     } catch (e) {
       notifyError("Failed to load task queue stats");
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) setIsLoading(false);
     }
   }, [notifyError]);
 
   useEffect(() => {
-    loadAll();
+    const ac = new AbortController();
+    loadAll(ac.signal);
     // Auto-refresh every 10 seconds.
-    const interval = setInterval(loadAll, 10000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => loadAll(ac.signal), 10000);
+    return () => {
+      ac.abort();
+      clearInterval(interval);
+    };
   }, [loadAll]);
 
   const canViewTasks = () => {
@@ -145,7 +152,7 @@ export default function TasksPage() {
             New task
           </Link>
           <button
-            onClick={loadAll}
+            onClick={() => loadAll()}
             disabled={isLoading}
             className="rounded-xl bg-white/5 px-4 py-2 text-sm text-white shadow hover:bg-white/10 cursor-pointer flex items-center gap-2 disabled:opacity-50"
           >

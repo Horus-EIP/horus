@@ -1,3 +1,5 @@
+import hashlib
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
@@ -256,6 +258,82 @@ def modify_user_password(
         raise HTTPException(status_code=409, detail=message)
 
 
+# ---------------------------------------------------------------------------
+# Agent API-key verification cache
+# ---------------------------------------------------------------------------
+# Agent credentials are high-entropy machine tokens presented on every
+# authenticated agent request (heartbeats, and hundreds of /tasks/task-step/
+# POSTs per streamed answer). Each verify runs bcrypt at passlib's default
+# cost factor (~150 ms) — pure CPU on a CPU-bound MAS. Cache successful
+# (agent_id, api_key) verifications so bcrypt runs once per credential, not
+# once per request: a process-local L1 dict in front of Redis (shared across
+# workers). The cache is POSITIVE-ONLY (failures always re-verify) and is
+# invalidated on key rotation via ``invalidate_agent_api_key_cache``.
+_AGENT_AUTH_L1: dict[str, tuple[str, float]] = {}
+_AGENT_AUTH_L1_TTL = 30.0  # seconds (process-local; short to bound rotation lag)
+_AGENT_AUTH_REDIS_TTL = 300  # seconds (shared across workers)
+_AGENT_AUTH_REDIS_PREFIX = "agent_auth:"
+
+
+def _agent_auth_cache_key(agent_id: str, presented_key: str) -> str:
+    return hashlib.sha256(f"{agent_id}:{presented_key}".encode()).hexdigest()
+
+
+def _agent_auth_cache_get(agent_id: str, presented_key: str) -> bool:
+    """Return True iff this exact (agent_id, key) pair was recently verified.
+
+    Any Redis error is swallowed and treated as a miss so a cache outage
+    degrades to "always run bcrypt" rather than failing auth.
+    """
+    keyhash = _agent_auth_cache_key(agent_id, presented_key)
+    now = time.monotonic()
+    hit = _AGENT_AUTH_L1.get(keyhash)
+    if hit is not None:
+        cached_agent_id, expiry = hit
+        if expiry > now and cached_agent_id == agent_id:
+            return True
+        _AGENT_AUTH_L1.pop(keyhash, None)
+    try:
+        if redis_db.exists(f"{_AGENT_AUTH_REDIS_PREFIX}{agent_id}:{keyhash}"):
+            _AGENT_AUTH_L1[keyhash] = (agent_id, now + _AGENT_AUTH_L1_TTL)
+            return True
+    except Exception as exc:  # noqa: BLE001 - cache must never break auth
+        logger.debug(f"Agent auth cache lookup failed, will re-verify: {exc}")
+    return False
+
+
+def _agent_auth_cache_store(agent_id: str, presented_key: str) -> None:
+    keyhash = _agent_auth_cache_key(agent_id, presented_key)
+    _AGENT_AUTH_L1[keyhash] = (agent_id, time.monotonic() + _AGENT_AUTH_L1_TTL)
+    try:
+        redis_db.setex(
+            f"{_AGENT_AUTH_REDIS_PREFIX}{agent_id}:{keyhash}",
+            _AGENT_AUTH_REDIS_TTL,
+            "1",
+        )
+    except Exception as exc:  # noqa: BLE001 - cache must never break auth
+        logger.debug(f"Agent auth cache store failed: {exc}")
+
+
+def invalidate_agent_api_key_cache(agent_id: str) -> None:
+    """Drop all cached verifications for ``agent_id`` (call on key rotation).
+
+    Without this a rotated/revoked key would keep authenticating until the TTL
+    expires — a security regression. L1 entries in other worker processes
+    self-expire within ``_AGENT_AUTH_L1_TTL``.
+    """
+    stale = [k for k, v in _AGENT_AUTH_L1.items() if v[0] == agent_id]
+    for k in stale:
+        _AGENT_AUTH_L1.pop(k, None)
+    try:
+        for rk in redis_db.scan_iter(
+            match=f"{_AGENT_AUTH_REDIS_PREFIX}{agent_id}:*"
+        ):
+            redis_db.delete(rk)
+    except Exception as exc:  # noqa: BLE001 - invalidation is best-effort
+        logger.debug(f"Agent auth cache invalidation failed for {agent_id}: {exc}")
+
+
 def verify_agent_api_key(
     key: str = Security(api_key), db: Session = Depends(get_db)
 ) -> tuple[str, str]:
@@ -268,6 +346,11 @@ def verify_agent_api_key(
             raise ValueError("Invalid API key format")
 
         agent_id, api_key = key.split(":", 1)
+
+        # Fast path: a recently verified (agent_id, key) pair skips the
+        # expensive bcrypt verify (and the DB lookup). Positive-only.
+        if _agent_auth_cache_get(agent_id, api_key):
+            return agent_id, api_key
 
         agent = db.query(Agents).filter(Agents.id == agent_id).first()
 
@@ -293,6 +376,8 @@ def verify_agent_api_key(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid API key",
             )
+
+        _agent_auth_cache_store(agent_id, api_key)
     except Exception as e:
         log_error("auth", f"API key verification error: {str(e)}")
         raise HTTPException(
@@ -300,7 +385,7 @@ def verify_agent_api_key(
             detail="Invalid API key format",
         )
 
-    logger.info(f"API key verified successfully for agent: {agent.id}")
+    logger.debug(f"API key verified successfully for agent: {agent.id}")
     return agent_id, api_key
 
 

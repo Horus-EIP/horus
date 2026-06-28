@@ -90,6 +90,12 @@ class AgentLogger:
             file_handler.setFormatter(StructuredFormatter())
             root_logger.addHandler(file_handler)
 
+        # Quiet verbose third-party loggers: pika prints the entire AMQP
+        # connection lifecycle at INFO, and httpx logs a line per request with
+        # the full (very long) knowledge-store query URL on every retrieval.
+        for noisy in ("pika", "httpx", "httpcore"):
+            logging.getLogger(noisy).setLevel(logging.WARNING)
+
         cls._configured = True
 
     @classmethod

@@ -146,3 +146,43 @@ def seed_default_agents(db: Session) -> int:
         logger.info("Default agents already present; skipping seed.")
 
     return inserted
+
+
+def seed_manager_agent(db: Session) -> int:
+    """Insert the server-side ``Manager`` agent if missing. Returns rows added.
+
+    The five specialist agents register themselves from the worker container as
+    real, heartbeating identities, so they are intentionally NOT seeded at
+    startup. The Manager is the exception: it runs only inside MAS (no worker
+    process), so without this seed the orchestrator identity never exists and
+    ``_create_chain_root`` skips chain-root creation on every multi-agent task
+    (the recurring "Manager agent not found in directory" warning). Idempotent —
+    matched by name.
+    """
+    manager_entry = next(
+        (e for e in DEFAULT_AGENTS if e["type"] == AgentTypes.MANAGER), None
+    )
+    if manager_entry is None:
+        return 0
+    if db.query(Agents.id).filter(Agents.name == manager_entry["name"]).first():
+        return 0
+    try:
+        db.add(
+            Agents(
+                id=str(uuid.uuid4()),
+                name=manager_entry["name"],
+                skills=manager_entry["skills"],
+                status="active",
+                description=manager_entry["description"],
+                last_heartbeat=datetime.now(UTC),
+                type=manager_entry["type"],
+                api_key=bcrypt_context.hash(secrets.token_urlsafe(32)),
+            )
+        )
+        db.commit()
+        log_success("seed_agents", "Seeded server-side Manager agent")
+        return 1
+    except Exception as exc:
+        db.rollback()
+        logger.error(f"Failed to seed Manager agent: {exc}", exc_info=True)
+        return 0

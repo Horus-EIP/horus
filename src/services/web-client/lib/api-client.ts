@@ -7,6 +7,18 @@ import { getBrowserOrchestratorApiBase } from "@/utils/orchestrator-browser-base
 /** MAS HTTP paths (no /api/orchestrator prefix) — used to fix same-origin slash redirects from the BFF. */
 const MAS_ROOT_PATH = /^\/(auth|agents|conversations|tasks|users|chat|rabbitmq)(\/|$)/;
 
+/** Default ceiling for GET requests so a stalled MAS can't hang a page forever. */
+const DEFAULT_GET_TIMEOUT_MS = 15000;
+
+/** Per-request options shared by all verbs. */
+interface RequestOptions {
+  retry?: number;
+  /** Caller abort signal (e.g. an effect's AbortController) — aborts the request. */
+  signal?: AbortSignal;
+  /** Abort the request after this many ms (combined with ``signal``). 0 disables. */
+  timeoutMs?: number;
+}
+
 function stripBodyHeaders(headers: HeadersInit | undefined): HeadersInit {
   const h = new Headers(headers ?? undefined);
   h.delete("Content-Type");
@@ -62,6 +74,8 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
   status?: number;
+  /** True when the request was aborted (caller signal or timeout) — callers should not retry. */
+  aborted?: boolean;
 }
 
 class ApiClient {
@@ -170,6 +184,26 @@ class ApiClient {
     return headers;
   }
 
+  /**
+   * Combine an optional caller signal with an optional timeout into one signal.
+   * ``AbortSignal.any`` lets either a navigation-cleanup abort OR a timeout fire
+   * the request's ``AbortError`` — using a bare timeout would clobber the
+   * caller's own abort.
+   */
+  private buildSignal(
+    signal: AbortSignal | undefined,
+    timeoutMs: number | undefined
+  ): AbortSignal | undefined {
+    const signals: AbortSignal[] = [];
+    if (signal) signals.push(signal);
+    if (typeof timeoutMs === "number" && timeoutMs > 0) {
+      signals.push(AbortSignal.timeout(timeoutMs));
+    }
+    if (signals.length === 0) return undefined;
+    if (signals.length === 1) return signals[0];
+    return AbortSignal.any(signals);
+  }
+
   private async requestOnce<T>(
     endpoint: string,
     init: RequestInit
@@ -225,6 +259,12 @@ class ApiClient {
         data: body as T,
       };
     } catch (error) {
+      // A caller-aborted (navigation cleanup) or timed-out request is expected:
+      // don't surface a scary "network error" and don't let withRetry retry it.
+      const name = (error as Error)?.name;
+      if (name === "AbortError" || name === "TimeoutError") {
+        return { ok: false, aborted: true, error: "Request aborted" };
+      }
       if (process.env.NODE_ENV !== "production") {
         console.warn(
           "ApiClient request error:",
@@ -256,6 +296,12 @@ class ApiClient {
         return lastResult;
       }
 
+      // Aborted (navigation or timeout) — retrying would fire one more doomed
+      // request after the caller has moved on.
+      if (lastResult.aborted) {
+        return lastResult;
+      }
+
       if (attempt === retries) {
         return lastResult;
       }
@@ -267,15 +313,17 @@ class ApiClient {
     return lastResult;
   }
 
-  get<T>(
-    endpoint: string,
-    options?: { retry?: number }
-  ): Promise<ApiResponse<T>> {
+  get<T>(endpoint: string, options?: RequestOptions): Promise<ApiResponse<T>> {
     const retry = options?.retry ?? 0;
+    const signal = this.buildSignal(
+      options?.signal,
+      options?.timeoutMs ?? DEFAULT_GET_TIMEOUT_MS
+    );
     return this.withRetry(
       () =>
         this.requestOnce<T>(endpoint, {
           method: "GET",
+          signal,
         }),
       retry
     );
@@ -284,14 +332,16 @@ class ApiClient {
   post<T>(
     endpoint: string,
     body?: unknown,
-    options?: { retry?: number }
+    options?: RequestOptions
   ): Promise<ApiResponse<T>> {
     const retry = options?.retry ?? 0;
+    const signal = this.buildSignal(options?.signal, options?.timeoutMs);
     return this.withRetry(
       () =>
         this.requestOnce<T>(endpoint, {
           method: "POST",
           body: body ? JSON.stringify(body) : undefined,
+          signal,
         }),
       retry
     );
@@ -300,9 +350,10 @@ class ApiClient {
   postForm<T>(
     endpoint: string,
     body: Record<string, string>,
-    options?: { retry?: number }
+    options?: RequestOptions
   ): Promise<ApiResponse<T>> {
     const retry = options?.retry ?? 0;
+    const signal = this.buildSignal(options?.signal, options?.timeoutMs);
 
     const formBody = new URLSearchParams(body).toString();
 
@@ -314,6 +365,7 @@ class ApiClient {
             "Content-Type": "application/x-www-form-urlencoded",
           },
           body: formBody,
+          signal,
         }),
       retry
     );
@@ -322,28 +374,29 @@ class ApiClient {
   put<T>(
     endpoint: string,
     body?: unknown,
-    options?: { retry?: number }
+    options?: RequestOptions
   ): Promise<ApiResponse<T>> {
     const retry = options?.retry ?? 0;
+    const signal = this.buildSignal(options?.signal, options?.timeoutMs);
     return this.withRetry(
       () =>
         this.requestOnce<T>(endpoint, {
           method: "PUT",
           body: body ? JSON.stringify(body) : undefined,
+          signal,
         }),
       retry
     );
   }
 
-  delete<T>(
-    endpoint: string,
-    options?: { retry?: number }
-  ): Promise<ApiResponse<T>> {
+  delete<T>(endpoint: string, options?: RequestOptions): Promise<ApiResponse<T>> {
     const retry = options?.retry ?? 0;
+    const signal = this.buildSignal(options?.signal, options?.timeoutMs);
     return this.withRetry(
       () =>
         this.requestOnce<T>(endpoint, {
           method: "DELETE",
+          signal,
         }),
       retry
     );
@@ -352,14 +405,16 @@ class ApiClient {
   patch<T>(
     endpoint: string,
     body?: unknown,
-    options?: { retry?: number }
+    options?: RequestOptions
   ): Promise<ApiResponse<T>> {
     const retry = options?.retry ?? 0;
+    const signal = this.buildSignal(options?.signal, options?.timeoutMs);
     return this.withRetry(
       () =>
         this.requestOnce<T>(endpoint, {
           method: "PATCH",
           body: body ? JSON.stringify(body) : undefined,
+          signal,
         }),
       retry
     );

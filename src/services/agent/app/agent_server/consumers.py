@@ -293,6 +293,10 @@ def _consume_messages():
                 task_dict = {
                     "task_id": task_id,
                     "query": effective_demand or payload.get("query", ""),
+                    # Optional focused query for knowledge retrieval only; the LLM
+                    # still sees the full ``query``. Falls back to ``query`` when
+                    # MAS doesn't supply one (single-agent / first-step tasks).
+                    "retrieval_query": payload.get("retrieval_query"),
                     "operation": payload.get("operation"),
                     "expression": payload.get("expression"),
                     "file_url": payload.get("file_url"),
