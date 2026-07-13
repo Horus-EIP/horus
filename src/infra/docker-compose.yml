@@ -17,6 +17,7 @@ services:
   rabbitmq:
     image: rabbitmq:4.1.2-management
     container_name: rabbitmq
+    restart: unless-stopped
     ports:
       - "${RABBITMQ_PORT}:5672"
       - "15672:15672"
@@ -38,6 +39,7 @@ services:
       context: ../services/mas
       dockerfile: Dockerfile
     container_name: mas
+    restart: unless-stopped
     mem_limit: 14g
     memswap_limit: 16g
     gpus: all
@@ -120,6 +122,7 @@ services:
         # Browser calls KS on host port; leave empty unless a gateway adds a path prefix.
         NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX: ${NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX:-}
     container_name: web_client
+    restart: unless-stopped
     depends_on:
       mas:
         condition: service_healthy
@@ -149,6 +152,7 @@ services:
       context: ../services/agent
       dockerfile: Dockerfile
     container_name: agent
+    restart: unless-stopped
     # Agent inference (Qwen instruct decision LLM, spaCy tools, etc.): NVIDIA Container Toolkit on the host.
     # No GPU? Remove the next line or run without requesting devices (Compose will error if unsupported).
     gpus: all
@@ -251,6 +255,10 @@ services:
       - VLLM_NO_USAGE_STATS=1
       - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
       - HF_HOME=/root/.cache/huggingface
+      # Authenticate to the HF Hub for higher rate limits / faster, un-throttled
+      # model downloads. Set HF_TOKEN=hf_... in src/infra/.env (a Read-scoped
+      # token). Empty by default → anonymous (rate-limited) downloads.
+      - HF_TOKEN=${HF_TOKEN:-}
     volumes:
       - vllm_hf_cache:/root/.cache/huggingface
     ports:
@@ -270,6 +278,7 @@ services:
       context: ../services/knowledge-store
       dockerfile: Dockerfile
     container_name: knowledge_store
+    restart: unless-stopped
     gpus: all
     environment:
       - CHROMA_TELEMETRY_ENABLED=0
@@ -292,8 +301,15 @@ services:
     networks:
       - horus-net
     volumes:
-      - knowledge_store_documents:/documents
-      - knowledge_store_chroma:/chroma_data
+      # Mount the named volumes at the paths the app ACTUALLY writes to. The
+      # service runs with WORKDIR /app and persists Chroma to /app/chroma_data
+      # (app/chroma_db/setup.py: PersistentClient path = <workdir>/chroma_data)
+      # and uploaded files under /app/documents (Dockerfile `mkdir -p documents`
+      # + routes use the relative "documents" dir). Previously these mounted at
+      # /chroma_data and /documents, so the real data stayed in the image layer
+      # and every `--build` rebuilt (and wiped) it.
+      - knowledge_store_documents:/app/documents
+      - knowledge_store_chroma:/app/chroma_data
 
   # =============================================================================
   # DATA STORES
@@ -302,6 +318,7 @@ services:
   postgres:
     image: postgres:latest
     container_name: postgres
+    restart: unless-stopped
     volumes:
       - postgresql_data:/var/lib/postgresql
       - ./initdb.d:/docker-entrypoint-initdb.d:ro

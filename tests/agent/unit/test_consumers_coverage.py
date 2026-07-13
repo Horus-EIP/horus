@@ -245,7 +245,7 @@ class TestConsumeMessagesSetup:
         ):
             # No pika usage expected: bail out before connecting.
             with patch.object(consumers, "pika") as pk:
-                consumers._consume_messages()
+                consumers._consume_messages_session()
                 pk.BlockingConnection.assert_not_called()
 
     def test_declares_one_queue_per_type_and_starts_consuming(self, fake_pika):
@@ -256,7 +256,7 @@ class TestConsumeMessagesSetup:
             "agent_server.profiles.unique_agent_types",
             return_value=["general", "analyst"],
         ):
-            consumers._consume_messages()
+            consumers._consume_messages_session()
 
         # Two distinct types -> two queue_declare calls + two consumers + QoS.
         assert fake_pika.channel.queue_declare.call_count == 2
@@ -275,7 +275,7 @@ class TestConsumeMessagesSetup:
         with patch("agent_server.server", srv, create=True), patch(
             "agent_server.profiles.unique_agent_types", return_value=[]
         ):
-            consumers._consume_messages()
+            consumers._consume_messages_session()
         assert {q for q, _ in fake_pika.consumed} == {"work_general"}
 
     def test_connection_error_is_caught_and_counted(self, fake_pika):
@@ -287,9 +287,30 @@ class TestConsumeMessagesSetup:
             "agent_server.profiles.unique_agent_types", return_value=["general"]
         ), patch.object(consumers, "agent_errors_total") as errs:
             # Must not raise — the loop logs and increments the error counter.
-            consumers._consume_messages()
+            consumers._consume_messages_session()
             errs.labels.assert_called_with(error_type="rabbitmq")
             errs.labels.return_value.inc.assert_called()
+
+
+# --------------------------------------------------------------------------- #
+# _run_consumer_supervisor — reconnect loop
+# --------------------------------------------------------------------------- #
+class TestConsumerSupervisor:
+    def test_stops_when_session_returns_true(self):
+        # A permanent-stop session (True) runs exactly once, no reconnect.
+        session = MagicMock(return_value=True)
+        consumers._run_consumer_supervisor(session, "X")
+        session.assert_called_once()
+
+    def test_reconnects_until_session_stops(self):
+        # Dropped connection (False) then permanent stop (True): exactly one
+        # reconnect, with a backoff sleep in between. sleep is patched so the
+        # test doesn't actually wait.
+        session = MagicMock(side_effect=[False, True])
+        with patch.object(consumers.time_module, "sleep") as slp:
+            consumers._run_consumer_supervisor(session, "X")
+        assert session.call_count == 2
+        slp.assert_called_once()
 
 
 # --------------------------------------------------------------------------- #
@@ -306,7 +327,7 @@ def _start_consumer_and_get_callback(fake_pika, *, agent_id="agent-1", types=Non
     with patch("agent_server.server", srv, create=True), patch(
         "agent_server.profiles.unique_agent_types", return_value=types
     ):
-        consumers._consume_messages()
+        consumers._consume_messages_session()
     return srv, fake_pika.callback_for(f"work_{types[0]}")
 
 
@@ -754,7 +775,7 @@ def _start_agent_consumer(fake_pika, agent_id="agent-77"):
     with patch("agent_server.server", srv, create=True), patch(
         "agent_server.delegation_bridge._process_delegation_message"
     ) as proc:
-        consumers._consume_agent_messages()
+        consumers._consume_agent_messages_session()
     return srv, proc, fake_pika.callback_for(f"agent_comm_{agent_id}")
 
 
@@ -765,7 +786,7 @@ class TestConsumeAgentMessages:
         with patch("agent_server.server", srv, create=True), patch.object(
             consumers, "pika"
         ) as pk:
-            consumers._consume_agent_messages()
+            consumers._consume_agent_messages_session()
             pk.BlockingConnection.assert_not_called()
 
     def test_declares_queue_and_starts_consuming(self, fake_pika):
@@ -774,7 +795,7 @@ class TestConsumeAgentMessages:
         with patch("agent_server.server", srv, create=True), patch(
             "agent_server.delegation_bridge._process_delegation_message"
         ):
-            consumers._consume_agent_messages()
+            consumers._consume_agent_messages_session()
 
         fake_pika.channel.queue_declare.assert_called_once()
         assert (
@@ -791,7 +812,7 @@ class TestConsumeAgentMessages:
         with patch("agent_server.server", srv, create=True), patch(
             "agent_server.delegation_bridge._process_delegation_message"
         ):
-            consumers._consume_agent_messages()  # must not raise
+            consumers._consume_agent_messages_session()  # must not raise
 
     def test_delegation_message_dispatched(self, fake_pika):
         srv, proc, cb = _start_agent_consumer(fake_pika)

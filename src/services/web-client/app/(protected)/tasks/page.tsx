@@ -68,6 +68,7 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const { error: notifyError } = useNotification();
   const { user } = useAuth();
@@ -102,6 +103,18 @@ export default function TasksPage() {
       if (!signal?.aborted) setIsLoading(false);
     }
   }, [notifyError]);
+
+  const handleCancelRow = async (id: string) => {
+    if (cancellingId) return;
+    setCancellingId(id);
+    const res = await chatApi.cancelTask(id, 'Cancelled from task queue');
+    setCancellingId(null);
+    if (!res.ok) {
+      notifyError(res.error || 'Failed to cancel task');
+      return;
+    }
+    void loadAll();
+  };
 
   useEffect(() => {
     const ac = new AbortController();
@@ -361,6 +374,20 @@ export default function TasksPage() {
                         {formatRelative(t.created_at)} · agent {t.agent_id.slice(0, 8)}…
                       </p>
                     </div>
+                    {(t.status === 'running' || t.status === 'pending') && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          void handleCancelRow(t.id);
+                        }}
+                        disabled={cancellingId === t.id}
+                        className="shrink-0 text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-medium bg-red-500/20 text-red-300 ring-1 ring-red-500/30 hover:bg-red-500/30 disabled:opacity-50 cursor-pointer transition"
+                      >
+                        {cancellingId === t.id ? '…' : 'Cancel'}
+                      </button>
+                    )}
                     <IconChevronRight className="h-4 w-4 text-[var(--textSoft)] group-hover:text-[var(--text)] shrink-0" />
                   </Link>
                 </li>

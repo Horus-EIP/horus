@@ -45,6 +45,16 @@ def _required_files_present(model_dir: Path) -> bool:
 
 
 def main() -> int:
+    # Under the vLLM backend the orchestrator routes all generation to the
+    # external vLLM server (see core/llm_setup.py: _ensure_llm_loaded returns
+    # early, ask_llm -> _ask_vllm) and never loads a local model — so there is
+    # nothing to download. Skip the multi-GB snapshot; otherwise the entrypoint
+    # blocks container startup (and the Docker healthcheck) on a large HF
+    # download that isn't even used.
+    if os.environ.get("LLM_BACKEND", "").strip().lower() == "vllm":
+        print("[bootstrap_llm] LLM_BACKEND=vllm -> no local model needed; skipping download.")
+        return 0
+
     here = Path(__file__).resolve().parent
     model_id = os.environ.get("LLM_MODEL_ID", "Qwen/Qwen2.5-1.5B-Instruct").strip()
     explicit_dir = os.environ.get("LLM_MODEL_DIR", "").strip()

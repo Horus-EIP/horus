@@ -90,6 +90,7 @@ export default function TaskDetailPage() {
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     if (!taskId) {
@@ -159,6 +160,19 @@ export default function TaskDetailPage() {
     return agents.filter((a: Agent) => ids.has(a.id));
   }, [task, agents]);
 
+  const handleCancel = async () => {
+    if (!task || isCancelling) return;
+    setIsCancelling(true);
+    const res = await chatApi.cancelTask(task.id, 'Cancelled from task view');
+    setIsCancelling(false);
+    if (!res.ok) {
+      notifyError(res.error || 'Failed to cancel task');
+      return;
+    }
+    // Optimistic — the 3s poll confirms and stops itself on the terminal state.
+    setTask((prev) => (prev ? { ...prev, status: 'cancelled' } : prev));
+  };
+
   if (!taskId) {
     return (
       <div className="p-4 md:p-6 text-[var(--textSoft)] text-sm">Invalid task id.</div>
@@ -191,6 +205,16 @@ export default function TaskDetailPage() {
           <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusClass}`}>
             {task.status}
           </span>
+          {(task.status === 'running' || task.status === 'pending') && (
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={isCancelling}
+              className="text-xs px-2.5 py-1 rounded-full font-medium bg-red-500/20 text-red-300 ring-1 ring-red-500/30 hover:bg-red-500/30 disabled:opacity-50 cursor-pointer transition"
+            >
+              {isCancelling ? 'Cancelling…' : 'Cancel task'}
+            </button>
+          )}
         </div>
         <span className="text-xs text-[var(--textSoft)]">Task ID: {task.id}</span>
       </div>

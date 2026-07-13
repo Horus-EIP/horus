@@ -27,6 +27,7 @@ import time as time_module
 import uuid
 
 import pika
+from pika.exceptions import AMQPError
 
 from config.settings import RABBITMQ_PORT
 from core.logger import get_correlation_id, get_logger, set_correlation_id
@@ -118,18 +119,55 @@ def _prepend_files_to_demand(demand: str, resolved: list[dict]) -> str:
     return "\n".join(pieces) + "\n" + (demand or "")
 
 
+# Reconnect settings for the blocking consumers. A RabbitMQ restart or a
+# transient network blip force-closes the connection ("CONNECTION_FORCED ...
+# shutdown"); the supervisor below re-establishes it instead of letting the
+# consumer thread die (which silently stops the agent from processing tasks
+# until the container is manually restarted).
+_CONSUMER_RECONNECT_BASE_DELAY = 2.0
+_CONSUMER_RECONNECT_MAX_DELAY = 30.0
+_CONSUMER_STABLE_SESSION_SECONDS = 60.0
+
+
+def _run_consumer_supervisor(session, label: str) -> None:
+    """Run a blocking-consumer ``session`` forever, reconnecting on failure.
+
+    ``session`` runs one connect→consume cycle and returns ``True`` to stop
+    permanently (e.g. a misconfiguration that reconnecting can't fix) or
+    ``False`` when the connection dropped and it should be re-established.
+    Backoff escalates on rapid failures and resets after a session that stayed
+    up long enough to count as healthy.
+    """
+    delay = _CONSUMER_RECONNECT_BASE_DELAY
+    while True:
+        started = time_module.monotonic()
+        if session():
+            return
+        if time_module.monotonic() - started >= _CONSUMER_STABLE_SESSION_SECONDS:
+            delay = _CONSUMER_RECONNECT_BASE_DELAY
+        logger.warning("%s disconnected; reconnecting in %.0fs", label, delay)
+        time_module.sleep(delay)
+        delay = min(delay * 2, _CONSUMER_RECONNECT_MAX_DELAY)
+
+
 def _consume_messages():
+    """Supervise the task consumer, reconnecting across broker restarts."""
+    _run_consumer_supervisor(_consume_messages_session, "Task consumer")
+
+
+def _consume_messages_session() -> bool:
     """Consume tasks from this agent's RabbitMQ queue and run them through the pipeline.
 
     Each message is a JSON payload with at least ``demand`` and
-    ``conversation_id``. Result is POSTed back via ``send_result``.
+    ``conversation_id``. Result is POSTed back via ``send_result``. Returns
+    ``True`` to stop permanently, ``False`` if the connection dropped.
     """
     from agent_server import server  # lazy: state + send_result live there
     from agent_server.profiles import unique_agent_types
 
     if not server.AGENT_ID:
         logger.error("Cannot start consumer: AGENT_ID not set")
-        return
+        return True  # permanent — reconnecting can't set AGENT_ID
 
     # Which work queues to subscribe to depends on which profile types are
     # registered. ``unique_agent_types()`` is e.g. ["general", "analyst",
@@ -448,19 +486,34 @@ def _consume_messages():
             ", ".join(queue_to_type),
         )
         channel.start_consuming()
+        return True  # returned without error → graceful stop
+    except (AMQPError, OSError) as e:
+        # Broker restart / blip / socket drop — reconnect, don't kill the thread.
+        logger.warning("Task consumer connection lost (%s); will reconnect", e)
+        agent_errors_total.labels(error_type="rabbitmq").inc()
+        return False
     except Exception as e:
         logger.error(f"Error in RabbitMQ consumer: {e}", exc_info=True)
         agent_errors_total.labels(error_type="rabbitmq").inc()
+        return False
 
 
 def _consume_agent_messages():
-    """Consume inter-agent messages from ``agent_comm_{AGENT_ID}`` (delegation)."""
+    """Supervise the inter-agent message consumer, reconnecting across restarts."""
+    _run_consumer_supervisor(_consume_agent_messages_session, "Agent message consumer")
+
+
+def _consume_agent_messages_session() -> bool:
+    """Consume inter-agent messages from ``agent_comm_{AGENT_ID}`` (delegation).
+
+    Returns ``True`` to stop permanently, ``False`` if the connection dropped.
+    """
     from agent_server import server
     from agent_server.delegation_bridge import _process_delegation_message
 
     if not server.AGENT_ID:
         logger.error("Cannot start agent message consumer: AGENT_ID not set")
-        return
+        return True  # permanent — reconnecting can't set AGENT_ID
 
     try:
         rabbit_host = os.getenv("RABBITMQ_HOST", "localhost")
@@ -515,5 +568,13 @@ def _consume_agent_messages():
         channel.basic_consume(queue=queue_name, on_message_callback=_on_agent_message)
         logger.info(f"Agent message consumer started on queue '{queue_name}'")
         channel.start_consuming()
+        return True  # returned without error → graceful stop
+    except (AMQPError, OSError) as e:
+        # Broker restart / blip / socket drop — reconnect, don't kill the thread.
+        logger.warning("Agent message consumer connection lost (%s); will reconnect", e)
+        agent_errors_total.labels(error_type="rabbitmq").inc()
+        return False
     except Exception as e:
         logger.error(f"Error in agent message consumer: {e}", exc_info=True)
+        agent_errors_total.labels(error_type="rabbitmq").inc()
+        return False

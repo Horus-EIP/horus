@@ -4,7 +4,12 @@ WORKDIR /app
 
 COPY requirements.txt /app/requirements.txt
 
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Cache pip downloads across builds (BuildKit cache mount — kept out of the final
+# image) and be patient on slow/flaky networks so a large wheel (torch ~500MB)
+# doesn't abort on pip's default 15s read timeout, and a completed download is
+# reused on the next rebuild instead of re-fetched.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --timeout=120 --retries=10 -r /app/requirements.txt
 
 # Install OpenTelemetry auto-instrumentation
 RUN opentelemetry-bootstrap --action=install

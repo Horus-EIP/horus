@@ -18,7 +18,11 @@ RUN apt-get update -o Acquire::Retries=5 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-RUN pip install --no-cache-dir --use-deprecated=legacy-resolver -r requirements.txt
+# Cache pip downloads across builds (BuildKit) + patient timeouts/retries so large
+# ML wheels (torch ~500MB) don't abort on a slow/flaky network read timeout, and a
+# completed download is reused on the next rebuild instead of re-fetched.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --use-deprecated=legacy-resolver --timeout=120 --retries=10 -r requirements.txt
 
 # Install OpenTelemetry auto-instrumentation
 RUN opentelemetry-bootstrap --action=install

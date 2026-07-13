@@ -15,7 +15,11 @@ ENV PATH="/venv/bin:$PATH"
 RUN pip install --upgrade pip setuptools wheel
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Cache pip downloads across builds (BuildKit) + patient timeouts/retries so large
+# ML wheels don't abort on a slow/flaky network read timeout, and a completed
+# download is reused on the next rebuild instead of re-fetched.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --timeout=120 --retries=10 -r requirements.txt
 
 # Final image
 FROM python:3.11-slim

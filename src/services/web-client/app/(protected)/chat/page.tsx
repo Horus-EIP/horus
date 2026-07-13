@@ -10,7 +10,7 @@ import React, {
   useMemo,
 } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { IconRobot, IconSend } from '@tabler/icons-react';
+import { IconRobot, IconSend, IconPlayerStopFilled } from '@tabler/icons-react';
 import { Modal, Button, Group, Text, Textarea, TextInput } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { config } from '@/utils/config';
@@ -73,6 +73,7 @@ function ChatPageContent() {
 
   const [agentsById, setAgentsById] = useState<Map<string, Agent>>(new Map());
   const [workingTaskId, setWorkingTaskId] = useState<string | null>(null);
+  const [isCancelling, setIsCancelling] = useState<boolean>(false);
   const [workingTaskDetail, setWorkingTaskDetail] = useState<TaskDetails | null>(null);
   // Streamed "thought process" steps, keyed by task_id. Populated by the
   // task_step WS frames the agent worker emits as it runs.
@@ -594,6 +595,32 @@ function ChatPageContent() {
     setAttachments({ attached: [], inline: [] });
   };
 
+  // Stop the in-flight chat: cancel the running task on the backend (which
+  // interrupts the assigned agent) and immediately resolve the UI so the user
+  // isn't left staring at a spinner. Safe to call before the task id is known
+  // (direct-answer path or still dispatching) — it just resets local state.
+  const handleStop = async () => {
+    if (isCancelling) return;
+    const taskId = workingTaskId;
+    setIsCancelling(true);
+    try {
+      if (taskId && !taskId.startsWith('direct-')) {
+        const res = await chatApi.cancelTask(taskId, 'Stopped by user');
+        if (!res.ok) {
+          notifyError(res.error || 'Could not stop the task.');
+        } else {
+          notifySuccess('Generation stopped.');
+        }
+      }
+    } finally {
+      setIsCancelling(false);
+      setIsLoading(false);
+      setWorkingTaskId(null);
+      setWorkingTaskDetail(null);
+      setStreamingByTaskId({});
+    }
+  };
+
   return (
     <>
       <Modal
@@ -887,13 +914,27 @@ function ChatPageContent() {
                 minRows={1}
                 disabled={!conversationId}
               />
-              <button
-                type="submit"
-                disabled={!input.trim() || isLoading || !conversationId}
-                className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-blue-500 text-white shadow-md transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-300"
-              >
-                <IconSend className="ml-0.5 h-5 w-5" stroke={1.25} />
-              </button>
+              {isLoading ? (
+                <button
+                  type="button"
+                  onClick={handleStop}
+                  disabled={isCancelling}
+                  title="Stop generating"
+                  aria-label="Stop generating"
+                  className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-red-500 text-white shadow-md transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-gray-400"
+                >
+                  <IconPlayerStopFilled className="h-5 w-5" />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!input.trim() || !conversationId}
+                  aria-label="Send message"
+                  className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-blue-500 text-white shadow-md transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-gray-300"
+                >
+                  <IconSend className="ml-0.5 h-5 w-5" stroke={1.25} />
+                </button>
+              )}
             </form>
           </div>
         </div>
