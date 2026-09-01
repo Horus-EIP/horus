@@ -12,14 +12,23 @@ Everything for a 20-minute live demo: the script, copy-paste commands for the li
 
 1. Open a terminal in the project root.
 2. Make sure Docker Desktop is running.
-3. Pre-pull images: `docker compose pull` (saves 2-3 min on stage).
-4. Open these browser tabs, in order:
+3. Set the admin account you will demo with, **before the first `up`**. In
+   `src/infra/.env` set `SUPER_USER_USERNAME=alice.chen` and
+   `SUPER_USER_PASSWORD=FinCorp2026!`. MAS seeds this account at startup
+   (`src/services/mas/db/init_setup.py`) and only creates it when it does not
+   already exist, so setting it after the first `up` has no effect.
+4. Pre-pull images: `docker compose pull` (saves 2-3 min on stage).
+5. Warm the model caches: bring the stack up once and wait for `vllm` to report
+   healthy (`docker compose ps`). The AWQ weights download into the `vllm_hf_cache`
+   volume on first start — several GB, and the healthcheck allows 300 s for it. Skip
+   this and the "90 seconds" in Step 1 will not survive contact with the stage.
+6. Open these browser tabs, in order:
    - Terminal (visible, large font)
    - http://localhost:3000 (web client — not yet up)
    - http://localhost:3000/admin/traces (in-app traces page — backed by Tempo; same login as the web client, admin role)
-5. Open `copy-paste-cheatsheet.md` (same folder) on a second monitor / phone.
-6. Have the `demo_assets/` folder open in a file explorer, ready to drag documents.
-7. Have the backup pre-recorded video queued up, just in case.
+7. Open `copy-paste-cheatsheet.md` (same folder) on a second monitor / phone.
+8. Have the `demo_assets/` folder open in a file explorer, ready to drag documents.
+9. Have the backup pre-recorded video queued up, just in case.
 
 ---
 
@@ -43,31 +52,35 @@ docker compose ps
 **What to point out on screen:**
 - MAS orchestrator (FastAPI)
 - Agent service (RAG pipeline)
+- vLLM serving the 4B AWQ worker model
 - PostgreSQL, Redis, RabbitMQ, ChromaDB
 - Prometheus + Loki + Tempo for observability (surfaced through the web client's in-app admin pages)
 - Next.js web client
 
-> "Eight services, one network, fully self-hosted. In 90 seconds, Alice has her private AI platform running on her own infrastructure."
+> "Twelve services, one network, fully self-hosted. In 90 seconds, Alice has her private AI platform running on her own infrastructure."
 
 Open http://localhost:3000 — landing page appears.
 
 ---
 
-### 2:00 — 4:00 — STEP 2: CREATE ACCOUNT
+### 2:00 — 4:00 — STEP 2: SIGN IN AS ADMIN
 
 **What you say:**
-> "First thing Alice needs is her admin account. Because the first user registered is automatically the system administrator."
+> "First thing Alice needs is her admin account. Horus provisions that account at startup from the deployment's own environment file — there is no 'first user to register wins' shortcut, because that is a race anyone who can reach the box could win."
 
 **What you do:**
-1. Click **Sign Up**.
+1. Click **Sign in**.
 2. Use these credentials (copy from cheat sheet):
    - Username: `alice.chen`
    - Password: `FinCorp2026!`
-   - Email: `alice.chen@fincorp.com`
-3. Log in.
-4. Land on the dashboard — briefly show the analytics graph widget (empty for now).
+3. Land on the dashboard — briefly show the analytics graph widget (empty for now).
 
-> "She's in. The platform issued a JWT token — all API calls are authenticated from here on."
+> "She's in, with the `admin` role. The platform issued a JWT token — all API calls are authenticated from here on."
+
+**Presenter note:** these are the values you put in `SUPER_USER_USERNAME` /
+`SUPER_USER_PASSWORD` during the pre-demo checklist. Do **not** use **Sign up** here:
+registration always creates a plain `user` (the role column defaults to `user` and
+`POST /auth/register` never sets it), so the admin panel stays hidden and Step 3 fails.
 
 ---
 
@@ -257,11 +270,15 @@ Open afterwards: http://localhost:3000
 
 ### ADMIN ACCOUNT (Alice)
 
+Set these in `src/infra/.env` before the first `docker compose up` — MAS seeds the
+account on startup. The sign-up form takes a username and password only; there is no
+email field.
+
 | Field | Value |
 |-------|-------|
 | Username | `alice.chen` |
 | Password | `FinCorp2026!` |
-| Email | `alice.chen@fincorp.com` |
+| Seeded from | `SUPER_USER_USERNAME` / `SUPER_USER_PASSWORD` in `src/infra/.env` |
 
 ---
 

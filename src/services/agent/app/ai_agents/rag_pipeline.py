@@ -9,6 +9,7 @@ multi-step THOUGHT → ACTION → OBSERVATION loops for complex queries.
 """
 
 import logging
+import os
 from typing import Any
 
 from ai_agents.calculator_tool import CalculatorTool
@@ -28,6 +29,27 @@ from ai_agents.payment_analyzer_tool import PaymentAnalyzerTool  # noqa: E402
 # chars), so anything longer is silently dropped by the embedder anyway — and a
 # long chain transcript embeds mostly front-matter, not the actual task.
 _RETRIEVAL_QUERY_CHAR_CAP = 2000
+
+# Wall-clock budget for a single decide() call. This, not TASK_TIMEOUT, is what
+# actually bounds a chat answer, and on expiry the pipeline returns a canned
+# string as a *successful* task -- so too low a value reads as a bad answer
+# rather than as a timeout. The old flat 120s default was a GPU number: a
+# CPU-only worker cannot finish a 4B generation anywhere near it.
+# REACT_TIMEOUT_SECONDS still overrides both.
+_REACT_TIMEOUT_GPU_DEFAULT = 120.0
+_REACT_TIMEOUT_CPU_DEFAULT = 900.0
+
+
+def _react_timeout(device: object) -> float:
+    """Seconds to allow one decide() call, defaulting by device."""
+    raw = os.getenv("REACT_TIMEOUT_SECONDS", "").strip()
+    if raw:
+        try:
+            return float(raw)
+        except ValueError:
+            logger.warning("Ignoring non-numeric REACT_TIMEOUT_SECONDS=%r", raw)
+    on_cpu = str(device or "").lower().startswith("cpu")
+    return _REACT_TIMEOUT_CPU_DEFAULT if on_cpu else _REACT_TIMEOUT_GPU_DEFAULT
 
 
 class RAGPipeline:
@@ -101,9 +123,8 @@ class RAGPipeline:
             A formatted response string with insights.
         """
         import asyncio
-        import os
 
-        timeout = float(os.getenv("REACT_TIMEOUT_SECONDS", "120"))
+        timeout = _react_timeout(getattr(self.decision_agent, "device", None))
 
         rquery = retrieval_query or query
         if len(rquery) > _RETRIEVAL_QUERY_CHAR_CAP:
@@ -145,8 +166,11 @@ class RAGPipeline:
             )
             # Do not cache the timeout fallback — it is not a real answer.
             return (
-                "The model took too long to respond. "
-                "Try a shorter question or ask an administrator to increase REACT_TIMEOUT_SECONDS."
+                "The model took too long to respond (no answer within "
+                f"{timeout:.0f}s). Try a shorter question, or ask an "
+                "administrator to raise REACT_TIMEOUT_SECONDS. On a CPU-only "
+                "deployment this is expected for long questions: generation is "
+                "many times slower than on a GPU."
             )
 
         await set_cached(query, context_text, insight)

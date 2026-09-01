@@ -917,7 +917,7 @@ docker logs mas | grep "Slow Query"
 docker logs agent | grep "GPU\|CUDA\|device"
 docker logs mas | grep "GPU\|CUDA\|device"
 
-## Default compose already sets gpus: all for mas, agent, and knowledge_store.
+## Default compose already sets gpus: all for four services: mas, agent, vllm, and knowledge_store.
 ## Install the NVIDIA Container Toolkit; if you have no GPU, comment out those gpus: lines in docker-compose.yml.
 cd src/infra && docker compose up -d
 ```

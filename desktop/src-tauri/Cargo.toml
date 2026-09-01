@@ -1,0 +1,37 @@
+[package]
+name = "horus-desktop"
+version = "0.1.0"
+description = "Desktop shell for the Horus beta"
+authors = ["Horus team"]
+edition = "2021"
+# Tauri 2 needs 1.77.2; pinned here so a CI runner with an older toolchain fails
+# with that sentence instead of forty pages of trait errors.
+rust-version = "1.77.2"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+# DELIBERATELY MINIMAL.
+#
+# No Tauri plugins: no dialog, no shell, no opener, no fs. Every one of them
+# would add a capability file to get wrong and a version to drift, and the three
+# things they would have given us - open a file in the OS default application,
+# ask a yes/no question, run a child process - are twenty lines of std each.
+# Nobody on this team has a Rust toolchain, so the first compile of this crate
+# happens in CI: fewer moving parts is worth more here than convenience.
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Only for WebviewUrl::External. Declared rather than taken from tauri's
+# re-export so a rename upstream cannot silently break the build.
+url = "2"
+
+[profile.release]
+# The archive budget is 50 MB for all three platforms plus the source, so the
+# binary is optimised for size, not speed. It renders a status screen and shells
+# out to Python; there is nothing here to make fast.
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

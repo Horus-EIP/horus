@@ -1,0 +1,850 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import datetime
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import consent  # noqa: E402
+import hardware  # noqa: E402
+import preflight  # noqa: E402
+import profiles  # noqa: E402
+import smoke  # noqa: E402
+from common import (  # noqa: E402
+    EXIT_COMPOSE_UP_FAILED,
+    EXIT_ENV_WRITE_FAILED,
+    EXIT_HEALTH_TIMEOUT,
+    EXIT_INTERRUPTED,
+    EXIT_NOT_INSTALLED,
+    EXIT_OK,
+    EXIT_PROFILE_UNKNOWN,
+    EXIT_SMOKE_FAILED,
+    EXIT_UNINSTALL_FAILED,
+    VERSION,
+    BUNDLE_DIR,
+    Events,
+    InstallError,
+    Log,
+    bold,
+    dim,
+    elapsed,
+    find_repo,
+    green,
+    infra_dir,
+    red,
+    rule,
+    run,
+    yellow,
+)
+
+LOG_PATH = BUNDLE_DIR / "install-log.txt"
+PROFILE_JSON = BUNDLE_DIR / "horus-profile.json"
+
+WEB_URL = "http://localhost:3000"
+
+CORE_SERVICES = [
+    "postgres", "redis", "rabbitmq", "mas", "agent", "knowledge_store", "web-client",
+]
+
+def cpu_overlay_active(infra: Path) -> bool:
+    answer = False
+    try:
+        text = (infra / ".env").read_text(encoding="utf-8")
+    except OSError:
+        return False
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("COMPOSE_FILE="):
+            answer = profiles.CPU_OVERLAY in line.split("=", 1)[1]
+    return answer
+
+def expected_services(infra: Path) -> list[str]:
+    expect = list(CORE_SERVICES)
+    if not cpu_overlay_active(infra):
+        expect.append("vllm")
+    return expect
+
+_GIB = 1024 ** 3
+
+def _simulated(system: str, machine: str, cpu_model: str, physical: int,
+               logical: int, ram_gib: float, *, gpu_vendor: str | None = None,
+               gpu_name: str | None = None, vram_gib: float | None = None,
+               docker_gpu: bool = False, wsl: bool = False) -> dict:
+    has_gpu = gpu_name is not None
+    return {
+        "installer_version": VERSION,
+        "timestamp_utc": "simulated",
+        "simulated": True,
+        "os": {"system": system, "machine": machine, "release": "",
+               "platform": system.lower(), "is_wsl": wsl, "is_64bit": True},
+        "cpu": {"model": cpu_model, "physical_cores": physical,
+                "logical_cores": logical, "count_is_logical_fallback": False,
+                "source": "simulated"},
+        "memory": {"total_bytes": int(ram_gib * _GIB), "total_gib": float(ram_gib),
+                   "source": "simulated"},
+        "disk": {"path": "(simulated)", "free_bytes": 500 * _GIB,
+                 "total_bytes": 1000 * _GIB},
+        "gpu": {"vendor": gpu_vendor, "name": gpu_name,
+                "vram_bytes": int(vram_gib * _GIB) if vram_gib else None,
+                "count": 1 if has_gpu else 0, "source": "simulated"},
+        "docker_gpu_test": {"attempted": has_gpu, "usable": docker_gpu if has_gpu else None,
+                            "skipped_reason": "" if has_gpu else "no GPU detected",
+                            "detail": "simulated"},
+        "cuda_usable_in_docker": bool(docker_gpu),
+        "gpu_test_ran": has_gpu,
+        "notes": ["SIMULATED MACHINE - this is not real hardware"],
+    }
+
+SIMULATIONS = {
+    "nvidia-8gb": _simulated(
+        "Windows", "AMD64", "Intel Core i7-12700H", 14, 20, 32,
+        gpu_vendor="nvidia", gpu_name="NVIDIA GeForce RTX 4060 Laptop GPU",
+        vram_gib=8, docker_gpu=True, wsl=True),
+    "nvidia-16gb": _simulated(
+        "Linux", "x86_64", "AMD Ryzen 7 7800X3D", 8, 16, 32,
+        gpu_vendor="nvidia", gpu_name="NVIDIA GeForce RTX 4080",
+        vram_gib=16, docker_gpu=True),
+    "nvidia-24gb": _simulated(
+        "Linux", "x86_64", "AMD Ryzen 9 7950X", 16, 32, 64,
+        gpu_vendor="nvidia", gpu_name="NVIDIA GeForce RTX 4090",
+        vram_gib=24, docker_gpu=True),
+    "macos-arm": _simulated(
+        "Darwin", "arm64", "Apple M3 Pro", 11, 11, 18,
+        gpu_vendor="apple", gpu_name="Apple M3 Pro (integrated)",
+        vram_gib=None, docker_gpu=False),
+    "linux-cpu-8gb": _simulated(
+        "Linux", "x86_64", "Intel Core i5-8250U", 4, 8, 8),
+    "amd-gpu": _simulated(
+        "Linux", "x86_64", "AMD Ryzen 7 5800X", 8, 16, 32,
+        gpu_vendor="amd", gpu_name="AMD Radeon RX 7900 XTX",
+        vram_gib=24, docker_gpu=False),
+    "nvidia-no-toolkit": _simulated(
+        "Windows", "AMD64", "Intel Core i9-13900H", 14, 20, 32,
+        gpu_vendor="nvidia", gpu_name="NVIDIA GeForce RTX 4070 Laptop GPU",
+        vram_gib=8, docker_gpu=False, wsl=False),
+}
+
+def _parse_env(text: str) -> list[tuple[str | None, str]]:
+    out: list[tuple[str | None, str]] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            out.append((None, line))
+        else:
+            out.append((stripped.split("=", 1)[0].strip(), line))
+    return out
+
+def _bootstrap_env(log: Log, infra: Path, reset: bool) -> None:
+    env_path = infra / ".env"
+    if env_path.is_file() and not reset:
+        log.info(".env exists; layering profile settings onto it (use --reset-env to recreate)")
+        return
+
+    script = infra / "init-env.sh"
+    bash = shutil.which("bash")
+    if bash and script.is_file():
+        args = [bash, str(script), "--quiet"] + (["--force"] if env_path.is_file() else [])
+        res = run(args, log, timeout=60, cwd=infra)
+        if res.ok and env_path.is_file():
+            log.ok("Generated src/infra/.env via init-env.sh")
+            return
+        log.warn(f"init-env.sh did not complete ({res.first_line() or 'no output'}); "
+                 "falling back to the built-in equivalent")
+
+    import secrets
+
+    example = infra / ".env.example"
+    if not example.is_file():
+        raise InstallError(
+            EXIT_ENV_WRITE_FAILED,
+            "src/infra/.env.example is missing.",
+            f"Looked in {infra}.",
+            "Re-extract the ZIP; the source tree is incomplete.",
+        )
+    if env_path.is_file():
+        _backup_env(log, env_path)
+    try:
+        text = example.read_text(encoding="utf-8")
+        secret = secrets.token_hex(32)
+        lines = [
+            f"JWT_SECRET_KEY={secret}" if ln.startswith("JWT_SECRET_KEY=") else ln
+            for ln in text.splitlines()
+        ]
+        env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        _lock_down(env_path)
+        log.ok("Generated src/infra/.env (built-in equivalent of init-env.sh)")
+    except OSError as exc:
+        raise InstallError(
+            EXIT_ENV_WRITE_FAILED,
+            "Could not write src/infra/.env.",
+            str(exc),
+            "Check that the folder is writable and not open in another program.",
+        ) from exc
+
+def _backup_env(log: Log, env_path: Path) -> Path:
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup = env_path.with_name(f".env.bak.{stamp}")
+    shutil.copy2(env_path, backup)
+    _lock_down(backup)
+    log.info(f"Backed up existing .env to {backup.name}")
+    return backup
+
+def _lock_down(path: Path) -> None:
+    if os.name == "posix":
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
+
+UNSET_MARKER = "#[horus-installer-unset] "
+
+def _reactivate(line: str, wanted: set[str]) -> str:
+    if not line.startswith(UNSET_MARKER):
+        return line
+    body = line[len(UNSET_MARKER):]
+    key = body.split("=", 1)[0].strip() if "=" in body else ""
+    return body if key in wanted else line
+
+def apply_env(log: Log, infra: Path, updates: dict[str, str], reset: bool) -> Path:
+    _bootstrap_env(log, infra, reset)
+    env_path = infra / ".env"
+    if env_path.is_file() and not reset:
+        _backup_env(log, env_path)
+
+    try:
+        original = env_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise InstallError(
+            EXIT_ENV_WRITE_FAILED, "Could not read src/infra/.env.", str(exc),
+            "Check file permissions and try again.",
+        ) from exc
+
+    wanted = set(updates)
+    stale = set(profiles.MANAGED_KEYS) - wanted
+
+    restored = [_reactivate(ln, wanted) for ln in original.splitlines()]
+    pairs = _parse_env("\n".join(restored))
+
+    remaining = dict(updates)
+    out: list[str] = []
+    seen: set[str] = set()
+    deactivated: list[str] = []
+    for key, line in pairs:
+        if key is not None and key in remaining:
+            out.append(f"{key}={remaining[key]}")
+            seen.add(key)
+        elif key is not None and key in stale:
+            out.append(UNSET_MARKER + line.strip())
+            deactivated.append(key)
+        else:
+            out.append(line)
+    for key in seen:
+        remaining.pop(key, None)
+
+    if remaining:
+        out.append("")
+        out.append("# " + "=" * 74)
+        out.append("# Added by the Horus beta installer "
+                   f"({datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')})")
+        out.append("# Re-running the installer rewrites these in place.")
+        out.append("# " + "=" * 74)
+        for key, value in remaining.items():
+            out.append(f"{key}={value}")
+
+    try:
+        env_path.write_text("\n".join(out) + "\n", encoding="utf-8")
+        _lock_down(env_path)
+    except OSError as exc:
+        raise InstallError(
+            EXIT_ENV_WRITE_FAILED, "Could not write src/infra/.env.", str(exc),
+            "Check that the folder is writable.",
+        ) from exc
+
+    log.ok(f"Wrote {len(updates)} setting(s) to src/infra/.env: "
+           + ", ".join(sorted(updates)))
+    if deactivated:
+        log.info("Deactivated settings from a previous profile: "
+                 + ", ".join(sorted(set(deactivated))))
+    return env_path
+
+def corpus_scan_token(log: Log, infra: Path) -> str:
+    import secrets
+
+    env_path = infra / ".env"
+    if env_path.is_file():
+        try:
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("CORPUS_SCAN_TOKEN="):
+                    existing = line.split("=", 1)[1].strip()
+                    if existing:
+                        log.info("Reusing the existing CORPUS_SCAN_TOKEN")
+                        return existing
+        except OSError:
+            pass
+    log.info("Generated a new CORPUS_SCAN_TOKEN")
+    return secrets.token_urlsafe(32)
+
+def _stream(cmd: list[str], log: Log, cwd: Path, label: str,
+            heartbeat: int = 30) -> int:
+    log.debug(f"$ {' '.join(cmd)}   (cwd={cwd})")
+    start = time.monotonic()
+    last_beat = start
+    try:
+        proc = subprocess.Popen(
+            cmd, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding="utf-8", errors="replace", bufsize=1,
+        )
+    except OSError as exc:
+        log.fail(f"{label}: could not start docker ({exc})")
+        return 126
+
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        line = line.rstrip()
+        if line:
+            print("   " + dim(line[:200]))
+            log.debug(f"  {label}: {line}")
+        now = time.monotonic()
+        if now - last_beat >= heartbeat:
+            last_beat = now
+            msg = f"   ... still working, {elapsed(now - start)} elapsed"
+            print(bold(msg))
+            log.info(f"{label}: {elapsed(now - start)} elapsed")
+    code = proc.wait()
+    log.info(f"{label}: exit {code} after {elapsed(time.monotonic() - start)}")
+    return code
+
+def compose(args: list[str]) -> list[str]:
+    return ["docker", "compose"] + args
+
+def pull_and_build(log: Log, infra: Path, no_build: bool = False) -> None:
+    log.step("Downloading container images")
+    log.say("  This is the long part. On a first install expect roughly")
+    log.say("  10-15 minutes to build, then several more minutes while the")
+    log.say("  language models download in the background. It is not frozen.")
+    log.say("")
+
+    code = _stream(compose(["pull", "--ignore-buildable"]), log, infra, "pull")
+    if code != 0:
+        log.warn("`docker compose pull` reported errors; continuing to the build "
+                 "step, which will surface anything genuinely missing")
+
+    log.step("Building and starting the stack")
+    up = ["up", "-d"] + ([] if no_build else ["--build"])
+    code = _stream(compose(up), log, infra, "up")
+    if code != 0:
+        raise InstallError(
+            EXIT_COMPOSE_UP_FAILED,
+            "The stack did not start.",
+            f"`docker compose {' '.join(up)}` exited {code}. The lines above show what "
+            "Docker reported; the full output is in the log.",
+            "Common causes:\n"
+            "  - out of disk space part-way through   ->  docker system df\n"
+            "  - a port became busy after preflight   ->  docker ps\n"
+            "  - a transient registry error           ->  just run this again,\n"
+            "    it resumes from what was already downloaded\n"
+            f"Full log: {LOG_PATH}",
+        )
+
+def _ps(log: Log, infra: Path) -> list[dict]:
+    res = run(compose(["ps", "--format", "json", "--all"]), log, timeout=90, cwd=infra)
+    if not res.ok or not res.out.strip():
+        return []
+    rows: list[dict] = []
+    text = res.out.strip()
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, list) else [parsed]
+    except json.JSONDecodeError:
+        pass
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return rows
+
+def _state_of(row: dict) -> tuple[str, str]:
+    return (str(row.get("State", "") or ""), str(row.get("Health", "") or ""))
+
+def wait_for_health(log: Log, infra: Path, expect: list[str],
+                    timeout: int = 1800) -> dict:
+    log.step("Waiting for services to become healthy")
+    log.say(f"  Up to {timeout // 60} minutes. Models download on first start.")
+    start = time.monotonic()
+    last_report = 0.0
+    states: dict[str, tuple[str, str]] = {}
+
+    while time.monotonic() - start < timeout:
+        rows = _ps(log, infra)
+        states = {}
+        for row in rows:
+            name = str(row.get("Service") or row.get("Name") or "")
+            if name:
+                states[name] = _state_of(row)
+
+        pending = []
+        for svc in expect:
+            state, health = states.get(svc, ("missing", ""))
+            if state != "running":
+                pending.append(f"{svc}={state or 'missing'}")
+            elif health and health not in ("healthy", ""):
+                pending.append(f"{svc}={health}")
+
+        log.events.emit(
+            "services",
+            elapsed_seconds=round(time.monotonic() - start, 1),
+            expected=list(expect),
+            pending=list(pending),
+            services={
+                svc: {"state": states.get(svc, ("missing", ""))[0] or "missing",
+                      "health": states.get(svc, ("missing", ""))[1]}
+                for svc in expect
+            },
+        )
+
+        if not pending:
+            log.ok(f"all {len(expect)} services up after "
+                   f"{elapsed(time.monotonic() - start)}")
+            return states
+
+        now = time.monotonic()
+        if now - last_report >= 20:
+            last_report = now
+            log.say(f"   {elapsed(now - start)}  waiting on: " + ", ".join(pending[:6]))
+        time.sleep(5)
+
+    stuck = []
+    for svc in expect:
+        state, health = states.get(svc, ("missing", ""))
+        if state != "running" or (health and health not in ("healthy", "")):
+            stuck.append(f"{svc}: state={state or 'missing'} health={health or 'n/a'}")
+    raise InstallError(
+        EXIT_HEALTH_TIMEOUT,
+        f"{len(stuck)} service(s) never became healthy within {timeout // 60} minutes.",
+        "Still not ready:\n  " + "\n  ".join(stuck),
+        "Look at what that service is doing:\n"
+        f"  cd {infra}\n"
+        "  docker compose logs --tail 100 " + (stuck[0].split(":")[0] if stuck else "mas") + "\n"
+        "If it is still downloading model weights, re-running this installer is\n"
+        "safe and will pick up where it left off.\n"
+        f"Full log: {LOG_PATH}",
+    )
+
+def require_installed(infra: Path) -> None:
+    if (infra / ".env").is_file():
+        return
+    raise InstallError(
+        EXIT_NOT_INSTALLED,
+        "Horus has not been installed on this machine yet.",
+        f"There is no configuration file at:\n  {infra / '.env'}\n"
+        "The source tree is here, but the install never completed.",
+        "Run the full installer once first:\n"
+        "  Windows  double-click  START-HERE-Windows.bat\n"
+        "  macOS    RIGHT-CLICK   START-HERE-macOS.command  and choose Open\n"
+        "  Linux    run           ./START-HERE-Linux.sh",
+    )
+
+def _require_docker(log: Log) -> None:
+    preflight.check_docker(log)
+    preflight.check_compose(log)
+
+def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
+    require_installed(infra)
+    _require_docker(log)
+
+    expect = expected_services(infra)
+    log.step("Starting Horus")
+    log.say(f"  {len(expect)} services"
+            + ("" if "vllm" in expect else "  (CPU profile: vllm is not started)"))
+
+    up = ["up", "-d"] + (["--build"] if build else [])
+    code = _stream(compose(up), log, infra, "up")
+    if code != 0:
+        raise InstallError(
+            EXIT_COMPOSE_UP_FAILED,
+            "The stack did not start.",
+            f"`docker compose {' '.join(up)}` exited {code}.",
+            "Look at what Docker reported above, then try again. If a container\n"
+            "is missing or its image was removed, re-run the full installer -\n"
+            "it rebuilds what is missing and keeps your documents.\n"
+            f"Full log: {LOG_PATH}",
+        )
+
+    wait_for_health(log, infra, expect, timeout=timeout)
+    log.say("")
+    log.ok(f"Horus is ready at {WEB_URL}")
+    log.events.emit("ready", url=WEB_URL, services=expect)
+    return EXIT_OK
+
+def do_restart(log: Log, infra: Path, timeout: int) -> int:
+    require_installed(infra)
+    _require_docker(log)
+
+    log.step("Restarting Horus")
+    code = _stream(compose(["restart"]), log, infra, "restart")
+    if code != 0:
+        log.warn("`docker compose restart` reported errors; trying `up -d` instead")
+        code = _stream(compose(["up", "-d"]), log, infra, "up")
+        if code != 0:
+            raise InstallError(
+                EXIT_COMPOSE_UP_FAILED,
+                "The stack could not be restarted.",
+                f"Both `docker compose restart` and `up -d` failed (exit {code}).",
+                "Stop it and start it again:\n"
+                f"  cd {infra}\n"
+                "  docker compose stop && docker compose up -d\n"
+                f"Full log: {LOG_PATH}",
+            )
+
+    expect = expected_services(infra)
+    wait_for_health(log, infra, expect, timeout=timeout)
+    log.say("")
+    log.ok(f"Horus is ready at {WEB_URL}")
+    log.events.emit("ready", url=WEB_URL, services=expect)
+    return EXIT_OK
+
+def do_stop(log: Log, infra: Path) -> int:
+    log.step("Stopping Horus")
+    code = _stream(compose(["stop"]), log, infra, "stop")
+    if code != 0:
+        log.warn("`docker compose stop` reported errors; see the log")
+        return EXIT_COMPOSE_UP_FAILED
+    log.say("")
+    log.ok("Stopped. Your data is untouched.")
+    log.say("  Start it again with the START-HERE launcher, or:")
+    log.say(f"    cd {infra} && docker compose start")
+    return EXIT_OK
+
+def do_uninstall(log: Log, infra: Path, assume_yes: bool) -> int:
+    log.step("Uninstall Horus")
+    log.say("")
+    log.say(red("  This removes the containers, the downloaded images, AND the"))
+    log.say(red("  named volumes. That includes:"))
+    log.say(red("    - every document you uploaded or ingested"))
+    log.say(red("    - the vector index built from them"))
+    log.say(red("    - all accounts, conversations and task history"))
+    log.say(red("    - the downloaded model weights (many GB, re-downloaded next time)"))
+    log.say("")
+    log.say("  Your own files on disk are NOT touched: the corpus folder was")
+    log.say("  mounted read-only and is never written to.")
+    log.say("")
+
+    if not assume_yes:
+        if not sys.stdin or not sys.stdin.isatty():
+            log.fail("Refusing to uninstall without confirmation on a "
+                     "non-interactive terminal. Pass --yes if you really mean it.")
+            return EXIT_UNINSTALL_FAILED
+        try:
+            answer = input("  Type DELETE to confirm, anything else to cancel: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            answer = ""
+        if answer != "DELETE":
+            log.say("")
+            log.ok("Cancelled. Nothing was removed.")
+            return EXIT_OK
+
+    log.info("uninstall confirmed")
+    code = _stream(
+        compose(["down", "--volumes", "--rmi", "all", "--remove-orphans"]),
+        log, infra, "down",
+    )
+    if code != 0:
+        log.warn("Some resources could not be removed; see the log for detail")
+        log.say("  You can finish manually with:")
+        log.say(f"    cd {infra} && docker compose down -v --rmi all")
+        return EXIT_UNINSTALL_FAILED
+    log.say("")
+    log.ok("Horus removed.")
+    log.say("  The source folder and this installer are still here; delete them")
+    log.say("  by hand if you want the disk space back.")
+    return EXIT_OK
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="horus-install",
+        description="Install and run Horus locally. Everything stays on this machine.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Examples:\n"
+               "  horus_install.py                       normal install\n"
+               "  horus_install.py --dry-run             show what would happen\n"
+               "  horus_install.py --dry-run --simulate macos-arm\n"
+               "  horus_install.py --profile gpu-16g     override hardware detection\n"
+               "  horus_install.py --start               start an installed stack\n"
+               "  horus_install.py --restart             restart it in place\n"
+               "  horus_install.py --stop                stop the stack, keep data\n"
+               "  horus_install.py --uninstall           remove everything, DELETES DATA\n",
+    )
+    p.add_argument("--version", action="version", version=f"Horus beta installer {VERSION}")
+    p.add_argument("--repo", metavar="PATH", help="path to the Horus source tree")
+    p.add_argument("--profile", metavar="NAME",
+                   help="force a tuning profile: " + ", ".join(profiles.PROFILES))
+    p.add_argument("--dry-run", action="store_true",
+                   help="print the chosen profile and the config it would write, "
+                        "then exit without touching Docker or any file")
+    p.add_argument("--simulate", metavar="NAME",
+                   help="with --dry-run, pretend to be a different machine: "
+                        + ", ".join(SIMULATIONS))
+    p.add_argument("--consent", choices=["demo", "folders", "whole-device"],
+                   help="preselect the file-access mode. whole-device STILL requires "
+                        "the typed confirmation phrase; no flag can skip it.")
+    p.add_argument("--skip-gpu-test", action="store_true",
+                   help="skip the `docker run --gpus all` probe (saves a ~250 MB pull; "
+                        "host detection alone is then only a hint)")
+    p.add_argument("--reset-env", action="store_true",
+                   help="regenerate src/infra/.env from the template, rotating the JWT "
+                        "secret (signs everyone out). A backup is always kept.")
+    p.add_argument("--no-build", action="store_true",
+                   help="start without rebuilding images (faster re-run)")
+    p.add_argument("--skip-smoke", action="store_true", help="do not run the smoke test")
+    p.add_argument("--admin-profile", action="store_true",
+                   help="also start pgadmin and redisinsight (Compose profile 'admin')")
+    p.add_argument("--timeout", type=int, default=1800, metavar="SECONDS",
+                   help="how long to wait for services to become healthy (default 1800)")
+    p.add_argument("--non-interactive", action="store_true",
+                   help="never prompt; use the safe default for every question")
+    p.add_argument("--yes", action="store_true", help="skip the uninstall confirmation")
+    p.add_argument("--start", action="store_true",
+                   help="start an already-installed stack and wait for it to be "
+                        "healthy; no questions, no config changes. Fails with exit "
+                        f"{EXIT_NOT_INSTALLED} if the install never completed.")
+    p.add_argument("--restart", action="store_true",
+                   help="restart the running containers in place, then wait for health")
+    p.add_argument("--stop", action="store_true", help="stop the stack and exit")
+    p.add_argument("--uninstall", action="store_true",
+                   help="remove containers, images and volumes (DELETES INGESTED DOCUMENTS)")
+    p.add_argument("--json-events", action="store_true",
+                   help="also emit one JSON object per line on STDERR, prefixed "
+                        "'@@HORUS ', for a program driving this script. stdout is "
+                        "unchanged, so a human transcript reads the same either way.")
+    return p
+
+def banner(log: Log) -> None:
+    log.say("")
+    log.say(bold("  HORUS  " + dim("beta installer " + VERSION)))
+    log.say("  " + dim("Everything runs on this machine. Nothing is sent anywhere."))
+    log.say("")
+    log.say(rule())
+
+def do_dry_run(log: Log, args, repo: Path) -> int:
+    log.step("Dry run - nothing will be changed")
+
+    if args.simulate:
+        if args.simulate not in SIMULATIONS:
+            log.fail(f"Unknown --simulate target {args.simulate!r}")
+            log.say("  Available: " + ", ".join(SIMULATIONS))
+            return EXIT_PROFILE_UNKNOWN
+        probes = [(args.simulate, dict(SIMULATIONS[args.simulate]))]
+    elif args.profile:
+        probes = [("this machine", hardware.probe(log, allow_docker_gpu_test=False))]
+    else:
+        probes = [("this machine", hardware.probe(log, allow_docker_gpu_test=False))]
+        probes += [(name, dict(spec)) for name, spec in SIMULATIONS.items()]
+
+    for label, probe in probes:
+        if args.profile:
+            if args.profile not in profiles.PROFILES:
+                log.fail(f"Unknown profile {args.profile!r}")
+                log.say("  Available: " + ", ".join(profiles.PROFILES))
+                return EXIT_PROFILE_UNKNOWN
+            name, reasons = args.profile, ["forced with --profile"]
+        else:
+            name, reasons = profiles.select_profile(probe)
+
+        env = profiles.env_for(name, probe)
+        log.say("")
+        log.say(rule(label))
+        osi = probe.get("os") or {}
+        cpu = probe.get("cpu") or {}
+        mem = probe.get("memory") or {}
+        gpu = probe.get("gpu") or {}
+        cores = cpu.get("physical_cores")
+        ram = mem.get("total_bytes") or 0
+        log.say(f"  detected : {osi.get('system') or '?'} {osi.get('machine') or '?'}, "
+                f"{cores if cores is not None else '?'} cores, "
+                f"{ram / 1024**3:.0f} GB RAM")
+        vram = gpu.get("vram_bytes")
+        log.say(f"  gpu      : {gpu.get('name') or 'none detected'}"
+                + (f", {vram / 1024**3:.0f} GB VRAM" if vram else "")
+                + f", usable by Docker: "
+                + ("yes" if probe.get("cuda_usable_in_docker") else "no"))
+        log.say(f"  profile  : {bold(name)}")
+        for reason in reasons:
+            log.say(f"             - {reason}")
+        log.say("")
+        log.say("  would write to src/infra/.env:")
+        for key in sorted(env):
+            log.say(f"      {key}={env[key]}")
+
+    log.say("")
+    log.say(rule())
+    log.say("  Dry run complete. No files were written and Docker was not contacted.")
+    return EXIT_OK
+
+def _dispatch(log: Log, args) -> int:
+    repo = find_repo(args.repo)
+    infra = infra_dir(repo)
+    log.info(f"repo: {repo}")
+    log.events.emit("located", repo=str(repo), infra=str(infra),
+                    bundle=str(BUNDLE_DIR), log=str(LOG_PATH),
+                    profile_json=str(PROFILE_JSON), version=VERSION)
+
+    banner(log)
+
+    if args.start:
+        return do_start(log, infra, timeout=args.timeout, build=False)
+    if args.restart:
+        return do_restart(log, infra, timeout=args.timeout)
+    if args.stop:
+        return do_stop(log, infra)
+    if args.uninstall:
+        return do_uninstall(log, infra, args.yes)
+    if args.dry_run:
+        return do_dry_run(log, args, repo)
+
+    pre = preflight.run_all(log, infra, want_admin_profile=args.admin_profile)
+
+    choice = consent.choose(
+        log, repo,
+        non_interactive=args.non_interactive,
+        preselect=args.consent,
+    )
+
+    log.step("Checking your hardware")
+    probe = hardware.probe(log, allow_docker_gpu_test=not args.skip_gpu_test)
+    if args.profile:
+        if args.profile not in profiles.PROFILES:
+            raise InstallError(
+                EXIT_PROFILE_UNKNOWN,
+                f"Unknown profile {args.profile!r}.",
+                "Available: " + ", ".join(profiles.PROFILES),
+                "Re-run without --profile to let the installer choose.",
+            )
+        name, reasons = args.profile, [f"forced with --profile {args.profile}"]
+    else:
+        name, reasons = profiles.select_profile(probe)
+    log.ok(f"profile: {bold(name)}")
+    for reason in reasons:
+        log.say(f"           {reason}")
+
+    env = profiles.env_for(name, probe)
+    env["HORUS_CORPUS_DIR"] = choice["corpus_dir"]
+    env["CORPUS_SCAN_TOKEN"] = corpus_scan_token(log, infra)
+
+    hardware.write_profile_json(PROFILE_JSON, probe, name, env, reasons)
+    log.ok(f"wrote {PROFILE_JSON.name}")
+
+    log.step("Writing configuration")
+    apply_env(log, infra, env, reset=args.reset_env)
+
+    pull_and_build(log, infra, no_build=args.no_build)
+
+    expect = list(CORE_SERVICES)
+    if profiles.PROFILES[name].runs_vllm:
+        expect.append("vllm")
+    wait_for_health(log, infra, expect, timeout=args.timeout)
+
+    if args.skip_smoke:
+        log.warn("Smoke test skipped (--skip-smoke). Install is unverified.")
+        result = {"passed": True, "steps": [], "answer": None}
+    else:
+        result = smoke.run(log, repo, timeout=min(args.timeout, 1200))
+
+    if not result.get("passed"):
+        raise InstallError(
+            EXIT_SMOKE_FAILED,
+            "Horus started, but the smoke test did not pass.",
+            "The stack is running; something in the end-to-end path is wrong.\n"
+            "Step results are in the log.",
+            f"Send us {LOG_PATH.name} and {PROFILE_JSON.name} from:\n  {BUNDLE_DIR}",
+        )
+
+    _success(log, infra, name, choice)
+    return EXIT_OK
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    log = Log(LOG_PATH, events=Events(args.json_events))
+    log.info(f"argv: {' '.join(argv if argv is not None else sys.argv[1:])}")
+
+    code = EXIT_OK
+    try:
+        code = _dispatch(log, args)
+    except InstallError as exc:
+        exc.report(log)
+        code = exc.code
+    except KeyboardInterrupt:
+        log.say("")
+        log.warn("Interrupted. Nothing was left half-installed; re-run when ready.")
+        log.say("  If containers were already starting, stop them with:")
+        log.say("    START-HERE (your platform) --stop")
+        code = EXIT_INTERRUPTED
+    finally:
+        log.close(code)
+    return code
+
+def _success(log: Log, infra: Path, profile_name: str, choice: dict) -> None:
+    creds = _read_admin_credentials(infra)
+    log.say("")
+    log.say(green("=" * 72))
+    log.say(green("  Horus is running."))
+    log.say(green("=" * 72))
+    log.say("")
+    log.say(f"  Open        {bold(WEB_URL)}")
+    log.say(f"  Sign in as  {creds[0]} / {creds[1]}")
+    log.say("")
+    log.say(f"  Profile     {profile_name}")
+    log.say(f"  Documents   {consent.describe(choice)}")
+    log.say("")
+    app_dir = BUNDLE_DIR / "app"
+    if app_dir.is_dir():
+        log.say(f"  Or open the Horus app in  {app_dir}")
+        log.say("  It starts and stops Horus for you, so you do not need this")
+        log.say("  window again. Your computer will warn you the first time -")
+        log.say("  README-FIRST.txt has the exact clicks.")
+    else:
+        log.say("  This build has no desktop app in it; use the browser above.")
+    log.say("")
+    log.say(dim(f"  Log      {LOG_PATH}"))
+    log.say(dim(f"  Profile  {PROFILE_JSON}"))
+    log.say("")
+    log.say("  To stop:       START-HERE (your platform) --stop")
+    log.say("  To remove:     START-HERE (your platform) --uninstall")
+    log.say("")
+
+def _read_admin_credentials(infra: Path) -> tuple[str, str]:
+    user, password = "admin", "admin"
+    try:
+        for line in (infra / ".env").read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("SUPER_USER_USERNAME="):
+                user = line.split("=", 1)[1].strip() or user
+            elif line.startswith("SUPER_USER_PASSWORD="):
+                password = line.split("=", 1)[1].strip() or password
+    except OSError:
+        pass
+    return user, password
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except Exception:  # noqa: BLE001 - last resort; a traceback is better than silence
+        import traceback
+
+        traceback.print_exc()
+        print()
+        print(yellow(f"Unexpected error. Please send us {LOG_PATH}"))
+        sys.exit(1)

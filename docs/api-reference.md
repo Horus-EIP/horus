@@ -1265,7 +1265,7 @@ Returns an empty array `[]` if no messages exist for the agent.
 | `user:update` | x | | | |
 | `user:delete` | x | | | |
 | `task:create` | x | x | x | |
-| `task:read` | x | | x | x |
+| `task:read` | x | x | x | x |
 | `task:execute` | x | x | | x |
 | `task:delete` | x | x | x | |
 | `task:approve` | x | x | | |
@@ -1791,7 +1791,7 @@ ws://localhost:8000/chat/1/?token=eyJhbGciOiJIUzI1NiI...
 
 #### Required permission
 
-The connection handler checks `Permission.TASK_READ` (see `src/services/mas/auth/permissions.py` in the repository). In the current mapping, **`admin`**, **`user`**, and **`system`** roles include `TASK_READ`. The **`manager`** role does **not** include `TASK_READ`, so managers cannot open this WebSocket unless the permission map is changed in code.
+The connection handler checks `Permission.TASK_READ` (see `src/services/mas/auth/permissions.py` in the repository). In the current mapping **`admin`**, **`manager`**, **`user`**, and **`system`** all include `TASK_READ`, so every role can open this WebSocket. Access is still narrowed by the ownership check in step 5: a non-admin may only open conversations they own.
 
 ---
 

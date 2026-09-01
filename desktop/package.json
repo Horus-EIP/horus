@@ -1,0 +1,16 @@
+{
+  "name": "horus-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Build-time wrapper for the Horus desktop shell. There is no JavaScript build: tauri.conf.json points frontendDist straight at ui/, which is three static files. The only dependency is the Tauri CLI itself, which is a prebuilt binary download and needs no Rust to install.",
+  "scripts": {
+    "build": "tauri build -- --locked",
+    "build:windows": "tauri build --no-bundle -- --locked",
+    "build:macos": "tauri build --target universal-apple-darwin --bundles app -- --locked",
+    "build:linux": "tauri build --bundles deb -- --locked",
+    "dev": "tauri dev"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.2"
+  }
+}

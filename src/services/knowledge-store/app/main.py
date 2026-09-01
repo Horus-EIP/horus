@@ -75,9 +75,21 @@ logger.info("Prometheus metrics endpoint mounted at /metrics")
 app.add_middleware(CorrelationIDMiddleware)
 logger.info("Correlation ID middleware added")
 
+# The only browser that talks to this service is the Horus UI on port 3000;
+# every other caller is a service on horus-net, and those do not send Origin at
+# all, so an allowlist costs them nothing. It replaces allow_origins=["*"]:
+# combined with allow_credentials=True, "*" let ANY page the tester happened to
+# have open call these routes and read the response - including /corpus/status,
+# which lists their whole indexed folder. The allowlist also means the preflight
+# for a custom header (X-Corpus-Token) is refused for every other origin.
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

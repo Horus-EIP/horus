@@ -21,6 +21,30 @@ logger = get_logger("FileRouter")
 _content_analyzer = ContentAnalyzer()
 
 
+async def extract_text(path: str, ext: str) -> str:
+    """Turn a file on disk into plain text. The one extraction path in the service.
+
+    Lives here rather than in ``app.api.utils`` on purpose: it resolves
+    ``pdf_to_text`` / ``docx_to_text`` through *this* module's globals, which is
+    where the existing route tests patch them. The corpus scanner imports it from
+    here so an upload and a corpus ingest can never drift apart.
+
+    ``ext`` may carry a leading dot or not.
+
+    Anything that is not PDF or DOCX is read as UTF-8 with undecodable bytes
+    dropped. That was already the fallback branch's behaviour; the old dedicated
+    ``txt`` branch used the process default encoding, which raises on a perfectly
+    good UTF-8 file whenever the container locale is not UTF-8.
+    """
+    kind = (ext or "").lower().lstrip(".")
+    if kind == "pdf":
+        return await pdf_to_text(path)
+    if kind == "docx":
+        return await docx_to_text(path)
+    with open(path, encoding="utf-8", errors="ignore") as handle:
+        return handle.read()
+
+
 def _match_stored_title(requested: str, stored_title: str) -> bool:
     """
     True if the user-supplied name refers to this stored document title.
@@ -148,16 +172,7 @@ async def upload_file(files: list[UploadFile] = File(...)):
             file_ext = file.filename.split(".")[-1].lower()
             doc_path = await save_file(file, file_ext)
 
-            if file_ext == "pdf":
-                text = await pdf_to_text(doc_path)
-            elif file_ext == "docx":
-                text = await docx_to_text(doc_path)
-            elif file_ext == "txt":
-                with open(doc_path) as f:
-                    text = f.read()
-            else:
-                with open(doc_path, encoding="utf-8", errors="ignore") as f:
-                    text = f.read()
+            text = await extract_text(doc_path, file_ext)
 
             auto_analysis = await asyncio.to_thread(
                 _content_analyzer.analyze,

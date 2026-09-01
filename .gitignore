@@ -16,8 +16,28 @@ docs/agent_architecture.md
 .env.local
 .env.*.local
 .env.production
+# Timestamped backups written by init-env.sh --force and by the beta installer.
+# They are whole copies of .env, so they carry every secret it holds.
+.env.bak.*
 !.env.example
 !.env.*.example
+
+# Beta installer output (machine-specific; regenerated on every run)
+# The knowledge-store logger writes to a relative logs/ dir, so running its
+# tests from installer/ drops service logs there.
+installer/logs/
+install-log.txt
+horus-profile.json
+/dist/
+
+# Desktop shell build output. The icon set under src-tauri/icons IS committed:
+# it is generated from desktop/icon-source.png by `tauri icon`, and CI has no
+# image tooling to regenerate it with.
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+# Cargo.lock is deliberately NOT ignored - it belongs in version control for a
+# binary crate, and there IS one: 431 packages, resolved by the local build on
+# 2026-09-01. Keep committing it, so every CI build resolves the same tree.
 
 # IDE
 *.swp

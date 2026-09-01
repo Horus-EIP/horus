@@ -717,8 +717,11 @@ async def create_new_task(
         task.demand, task.skills_required, task.mode, task.agent_id, db
     )
     if not agent_id and not direct_response:
+        # The LLM router runs a full generation. On CPU that is minutes, and MAS
+        # serves from a single Uvicorn worker, so calling it inline blocks the
+        # event loop for every other request, including the Compose healthcheck.
         agent_id, user_demand, direct_response, future_actions = (
-            select_agent_for_task(task.demand, db)
+            await run_in_threadpool(select_agent_for_task, task.demand, db)
         )
 
     # Skill-based fallback. The LLM router can fail (bad JSON, picked an

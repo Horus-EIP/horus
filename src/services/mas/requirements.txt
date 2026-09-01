@@ -11,8 +11,8 @@ websockets
 wsproto
 protobuf>=5.26
 sentencepiece>=0.2.0
-transformers>=4.44.2
-huggingface_hub>=0.24
+transformers>=4.44.2,<5
+huggingface_hub>=0.34,<1
 tokenizers>=0.19,<=0.23.0
 sentence-transformers>=3.0
 accelerate>=0.33.0

@@ -274,6 +274,36 @@ def _configure_agent_torch_threads() -> None:
 if _TRANSFORMERS_AVAILABLE:
     _configure_agent_torch_threads()
 
+
+def _cpu_dtype():
+    """Weight dtype for a CPU load.
+
+    float16 is the wrong default on CPU: many PyTorch CPU kernels have no fp16
+    path, so generation is either pathologically slow or raises outright. Prefer
+    bfloat16 (same 2 bytes per weight, widely supported) and fall back to
+    float32, which always works but doubles resident memory. Override with
+    AGENT_CPU_DTYPE=bfloat16|float32|float16.
+    """
+    aliases = {
+        "bfloat16": torch.bfloat16,
+        "bf16": torch.bfloat16,
+        "float32": torch.float32,
+        "fp32": torch.float32,
+        "float16": torch.float16,
+        "fp16": torch.float16,
+    }
+    override = os.getenv("AGENT_CPU_DTYPE", "").strip().lower()
+    if override:
+        if override in aliases:
+            return aliases[override]
+        logger.warning("Ignoring unknown AGENT_CPU_DTYPE=%r", override)
+    try:
+        probe = torch.zeros(2, 2, dtype=torch.bfloat16)
+        _ = probe @ probe
+        return torch.bfloat16
+    except Exception:
+        return torch.float32
+
 APP_DIR = Path(__file__).resolve().parent.parent
 # The agent runs the actual task work (RAG, synthesis, generation), so its
 # default is the full 4B Qwen. MAS uses the 1.5B variant for routing only —
@@ -434,7 +464,13 @@ class DecisionMakingAgent:
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
         if torch is not None:
-            torch.set_num_threads(1)
+            # One intra-op thread is right for a GPU load, where the CPU only
+            # feeds the device. On a CPU-only worker it throws away every core
+            # but one, and _configure_agent_torch_threads() already picked a
+            # sensible budget at import, so leave that alone unless CUDA is
+            # actually in play.
+            if self.device != "cpu" and torch.cuda.is_available():
+                torch.set_num_threads(1)
             torch.backends.cuda.matmul.allow_tf32 = True
 
         if self._lazy:
@@ -505,10 +541,13 @@ class DecisionMakingAgent:
                         **gpu_kw,
                     )
                 else:
-                    logger.info("Loading agent decision LLM on CPU.")
+                    cpu_dtype = _cpu_dtype()
+                    logger.info(
+                        "Loading agent decision LLM on CPU, dtype=%s.", cpu_dtype
+                    )
                     model = AutoModelForCausalLM.from_pretrained(
                         model_path,
-                        torch_dtype=torch.float16,
+                        torch_dtype=cpu_dtype,
                         device_map={"": "cpu"},
                         low_cpu_mem_usage=True,
                         attn_implementation="sdpa",
@@ -522,7 +561,7 @@ class DecisionMakingAgent:
                     self.device = "cpu"
                     model = AutoModelForCausalLM.from_pretrained(
                         model_path,
-                        torch_dtype=torch.float16,
+                        torch_dtype=_cpu_dtype(),
                         device_map={"": "cpu"},
                         low_cpu_mem_usage=True,
                         attn_implementation="sdpa",

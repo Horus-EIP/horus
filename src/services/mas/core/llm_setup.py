@@ -34,6 +34,36 @@ def _configure_llm_cpu_threads() -> None:
 
 _configure_llm_cpu_threads()
 
+
+def _cpu_dtype() -> torch.dtype:
+    """Weight dtype for a CPU load.
+
+    float16 is the wrong default on CPU: many PyTorch CPU kernels have no fp16
+    path, so generation is either pathologically slow or raises outright. Prefer
+    bfloat16 (same 2 bytes per weight, widely supported) and fall back to
+    float32, which always works but doubles resident memory. Override with
+    LLM_CPU_DTYPE=bfloat16|float32|float16.
+    """
+    aliases = {
+        "bfloat16": torch.bfloat16,
+        "bf16": torch.bfloat16,
+        "float32": torch.float32,
+        "fp32": torch.float32,
+        "float16": torch.float16,
+        "fp16": torch.float16,
+    }
+    override = os.getenv("LLM_CPU_DTYPE", "").strip().lower()
+    if override:
+        if override in aliases:
+            return aliases[override]
+        logger.warning("Ignoring unknown LLM_CPU_DTYPE=%r", override)
+    try:
+        probe = torch.zeros(2, 2, dtype=torch.bfloat16)
+        _ = probe @ probe
+        return torch.bfloat16
+    except Exception:
+        return torch.float32
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 # MAS is a thin router/classifier — it picks an agent, sometimes decomposes a
 # task into subtasks, and otherwise gets out of the way. That work doesn't
@@ -151,10 +181,13 @@ def get_llm():
             logger.info("LLM load without VRAM cap (uses full GPU when possible).")
         model = AutoModelForCausalLM.from_pretrained(model_path, **gpu_kw)
     else:
-        logger.info("Loading LLM on CPU (no GPU or LLM_FORCE_CPU=1).")
+        cpu_dtype = _cpu_dtype()
+        logger.info(
+            "Loading LLM on CPU (no GPU or LLM_FORCE_CPU=1), dtype=%s.", cpu_dtype
+        )
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
-            torch_dtype=torch.float16,
+            torch_dtype=cpu_dtype,
             device_map={"": "cpu"},
             low_cpu_mem_usage=True,
             attn_implementation="sdpa",

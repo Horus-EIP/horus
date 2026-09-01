@@ -2,6 +2,8 @@
 
 import { z } from 'zod';
 
+// The trailing length rule in this regex is also enforced by `.min(10)` below, so a
+// too-short password reports the length error rather than the character-class one.
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{10,}$/;
 
 export const loginSchema = z.object({
@@ -19,7 +21,7 @@ export const baseRegisterSchema = z
       .min(1, 'Username is required'),
     password: z
       .string()
-      .min(8, 'Password must be at least 8 characters')
+      .min(10, 'Password must be at least 10 characters')
       .regex(
         passwordRegex,
         'Password must include uppercase, lowercase, number, and special character'

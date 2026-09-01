@@ -1,0 +1,14 @@
+services:
+  mas:
+    gpus: !reset null
+
+  agent:
+    gpus: !reset null
+
+  knowledge_store:
+    gpus: !reset null
+
+  vllm:
+    gpus: !reset null
+    deploy:
+      replicas: 0
