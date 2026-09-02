@@ -2,7 +2,7 @@ HORUS - BETA TEST BUILD
 =======================
 BEFORE YOU START you need Docker Desktop installed AND RUNNING
 (https://www.docker.com/products/docker-desktop/), Python 3.11+
-(https://www.python.org/downloads/), 40 GB free disk, and internet.
+(https://www.python.org/downloads/), 80 GB free disk, and internet.
 
 TO INSTALL
   Windows  double-click  START-HERE-Windows.bat

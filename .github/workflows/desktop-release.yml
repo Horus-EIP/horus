@@ -202,14 +202,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cat > notes.md <<'NOTES'
-          Horus beta build.
-
-          The apps in `app/` are **not code-signed**. Windows SmartScreen and
-          macOS Gatekeeper will both object; `README-FIRST.txt` inside the ZIP
-          has the exact click-path, and `http://localhost:3000` in any browser
-          remains a supported way to use Horus for anyone who would rather not
-          bypass their operating system's warning.
-          NOTES
           gh release create "$GITHUB_REF_NAME" dist/*.zip \
-            --draft --title "$GITHUB_REF_NAME" --notes-file notes.md
+            --draft \
+            --title "Horus Beta ${GITHUB_REF_NAME#v}" \
+            --notes-file packaging/RELEASE-NOTES.md
