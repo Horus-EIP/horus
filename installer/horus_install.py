@@ -348,7 +348,14 @@ def pull_and_build(log: Log, infra: Path, no_build: bool = False) -> None:
             "The stack did not start.",
             f"`docker compose {' '.join(up)}` exited {code}. The lines above show what "
             "Docker reported; the full output is in the log.",
-            "Common causes:\n"
+            "A container reported UNHEALTHY does not say why - the reason is in\n"
+            "that container's own log, and Docker will not show it to you.\n"
+            "Read it first:\n"
+            f"  cd {infra}\n"
+            "  docker compose logs --tail 50 mas\n"
+            "replacing mas with whichever container Docker named above.\n"
+            "\n"
+            "Other common causes:\n"
             "  - out of disk space part-way through   ->  docker system df\n"
             "  - a port became busy after preflight   ->  docker ps\n"
             "  - a transient registry error           ->  just run this again,\n"
@@ -478,9 +485,15 @@ def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
             EXIT_COMPOSE_UP_FAILED,
             "The stack did not start.",
             f"`docker compose {' '.join(up)}` exited {code}.",
-            "Look at what Docker reported above, then try again. If a container\n"
-            "is missing or its image was removed, re-run the full installer -\n"
-            "it rebuilds what is missing and keeps your documents.\n"
+            "A container reported UNHEALTHY does not say why - the reason is in\n"
+            "that container's own log, and Docker will not show it to you.\n"
+            "Read it first:\n"
+            f"  cd {infra}\n"
+            "  docker compose logs --tail 50 mas\n"
+            "replacing mas with whichever container Docker named above.\n"
+            "\n"
+            "If a container is missing or its image was removed, re-run the full\n"
+            "installer - it rebuilds what is missing and keeps your documents.\n"
             f"Full log: {LOG_PATH}",
         )
 
