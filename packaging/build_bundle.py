@@ -40,7 +40,7 @@ SOURCE_FILES = [
 PRUNE_DIRS = {
     ".git", ".github", ".venv", "venv", "env", "node_modules", "__pycache__",
     ".next", ".turbo", ".ruff_cache", ".pytest_cache", ".mypy_cache",
-    "htmlcov", ".idea", ".vscode", "offload",
+    "htmlcov", ".idea", ".vscode", "offload", "__tests__",
     "ks_chroma_backup", "ks_documents_backup",
     "grafana",
 }
@@ -55,6 +55,8 @@ PRUNE_PATHS = (
     "src/services/mas/logs/",
     "src/services/agent/logs/",
     "src/services/knowledge-store/logs/",
+    "installer/tests/",
+    "src/services/knowledge-store/tests/",
 )
 
 EXECUTABLE = {".sh", ".command"}
@@ -168,6 +170,26 @@ def add(zf: zipfile.ZipFile, src: Path, arcname: str, keep_mode: bool = False) -
     zf.writestr(info, data)
     return len(data)
 
+def unpack_for_review(archive: Path, dest: Path) -> int:
+    if dest.exists():
+        shutil.rmtree(dest)
+    written = 0
+    with zipfile.ZipFile(archive) as zf:
+        for info in zf.infolist():
+            target = dest / info.filename
+            target.parent.mkdir(parents=True, exist_ok=True)
+            mode = info.external_attr >> 16
+            payload = zf.read(info.filename)
+            if stat.S_ISLNK(mode):
+                os.symlink(payload.decode("utf-8"), target)
+            else:
+                target.write_bytes(payload)
+                if os.name == "posix":
+                    os.chmod(target, mode & 0o777)
+            written += 1
+    return written
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -175,6 +197,14 @@ def main() -> int:
     ap.add_argument("--app-dir", default=None,
                     help="directory holding the built desktop apps (Horus.exe, "
                          "Horus.app, horus_*.deb). Omitted = build a ZIP without them.")
+    ap.add_argument("--stage", nargs="?", const="Beta_Test_Installer", default=None,
+                    metavar="NAME",
+                    help="also unpack the archive into <out>/NAME so you can browse "
+                         "exactly what the tester receives (default name: "
+                         "Beta_Test_Installer). Generated output - never edit it, "
+                         "and on Windows send the .zip rather than re-zipping the "
+                         "folder, because NTFS cannot carry the executable bit that "
+                         "Horus.app needs.")
     ap.add_argument("--allow-oversize", action="store_true",
                     help="do not fail when the archive exceeds 50 MB")
     args = ap.parse_args()
@@ -285,6 +315,11 @@ def _fill(partial: Path, target: Path, args) -> int:
     partial.replace(target)
     print()
     print(f"  OK -> {target}")
+
+    if args.stage:
+        staged = target.parent / args.stage
+        count = unpack_for_review(target, staged)
+        print(f"  OK -> {staged}{os.sep}  ({count} files, generated - do not edit)")
     return 0
 
 if __name__ == "__main__":
