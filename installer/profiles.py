@@ -348,6 +348,10 @@ PROFILE_ORDER: tuple[str, ...] = (
     "cpu-lean", "cpu-standard", "gpu-8g", "gpu-16g", "gpu-24g", "gpu-large",
 )
 
+def is_cpu_profile(name: str) -> bool:
+    return str(name).startswith("cpu")
+
+
 CPU_OVERLAY = "docker-compose.cpu.yml"
 BASE_COMPOSE = "docker-compose.yml"
 

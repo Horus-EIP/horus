@@ -240,6 +240,78 @@ class LogRecordsTheRealExitCode(unittest.TestCase):
             self.assertIn(str(EXIT_NOT_INSTALLED), last)
             self.assertIn("EXIT_NOT_INSTALLED", last)
 
+class CpuProfileDoesNotFailTheInstall(unittest.TestCase):
+    """A CPU install must finish and report success.
+
+    63 of the 68 acceptance-test scenarios work on a CPU; only the three that
+    need the model do not. Exiting 50 made a working stack look like a failed
+    install, so answer quality is a warning there and a hard failure on GPU.
+    """
+
+    SPIRAL = ("I couldn't extract a consistent answer from the retrieved "
+              "content for this step.")
+
+    def make_steps(self):
+        import smoke
+        recorded = []
+        steps = smoke.Steps.__new__(smoke.Steps)
+        steps.entries = []
+        steps._t0 = 0.0
+        steps._current = None
+        steps.log = type("Quiet", (), {
+            "say": lambda self, msg="": None,
+            "ok": lambda self, msg: recorded.append(("ok", msg)),
+            "warn": lambda self, msg: recorded.append(("warn", msg)),
+            "fail": lambda self, msg: recorded.append(("fail", msg)),
+        })()
+        return steps, recorded
+
+    def test_cpu_profiles_are_recognised(self):
+        for name in profiles.PROFILES:
+            expected = name.startswith("cpu")
+            self.assertEqual(profiles.is_cpu_profile(name), expected, name)
+
+    def test_a_bad_answer_stops_a_gpu_install(self):
+        import smoke
+        steps, _ = self.make_steps()
+        with self.assertRaises(InstallError) as caught:
+            smoke.step_check_answer(steps, self.SPIRAL, True)
+        self.assertEqual(caught.exception.code, smoke.EXIT_SMOKE_FAILED)
+
+    def test_the_same_answer_only_warns_on_cpu(self):
+        import smoke
+        steps, recorded = self.make_steps()
+        smoke.step_check_answer(steps, self.SPIRAL, False)
+        self.assertEqual([kind for kind, _ in recorded], ["warn"])
+        self.assertTrue(steps.entries[-1].get("warning"))
+
+    def test_the_cpu_warning_says_it_is_not_a_failure(self):
+        import smoke
+        steps, recorded = self.make_steps()
+        smoke.step_check_answer(steps, self.SPIRAL, False)
+        message = recorded[0][1]
+        self.assertIn("EXPECTED on a CPU profile", message)
+        self.assertIn("not an install failure", message)
+        self.assertIn("F41", message)
+
+    def test_a_good_answer_passes_on_either_profile(self):
+        import smoke
+        for require in (True, False):
+            steps, recorded = self.make_steps()
+            smoke.step_check_answer(steps, "**$4.2M**", require)
+            self.assertEqual([kind for kind, _ in recorded], ["ok"])
+
+    def test_the_installer_warns_before_a_cpu_install(self):
+        lines = []
+        log = type("Cap", (), {"say": lambda self, msg="": lines.append(msg)})()
+        horus_install.warn_cpu_expectations(log)
+        joined = " ".join(lines)
+        self.assertIn("run on the CPU", joined)
+        self.assertIn("63 of the 68", joined)
+        self.assertIn("F41", joined)
+        self.assertIn("14 minutes", joined)
+
+
 class Parser(unittest.TestCase):
     def parse(self, argv):
         return horus_install.build_parser().parse_args(argv)

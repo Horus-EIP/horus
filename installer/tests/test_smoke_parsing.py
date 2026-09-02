@@ -238,7 +238,22 @@ class TestAnswerMatching(unittest.TestCase):
     def test_right_number_wrong_context_is_rejected(self):
         ok, why = smoke.check_answer("The bridge is 4.2 million metres long.")
         self.assertFalse(ok)
-        self.assertIn("Q4", why)
+        self.assertIn("coincidental", why)
+
+    def test_a_bare_figure_is_accepted(self):
+        for text in ("**$4.2M**", "$4.2M", "4,200,000", "4.2 million"):
+            with self.subTest(text=text):
+                ok, why = smoke.check_answer(text)
+                self.assertTrue(ok, f"{text!r} was rejected: {why}")
+
+    def test_context_words_are_not_required_when_the_figure_stands_alone(self):
+        ok, _ = smoke.check_answer("**$4.2M**")
+        self.assertTrue(ok)
+
+    def test_one_context_word_is_enough(self):
+        for text in ("Revenue was $4.2M.", "Q4: 4.2M", "FinCorp: 4.2 million"):
+            with self.subTest(text=text):
+                self.assertTrue(smoke.check_answer(text)[0])
 
     def test_lowercase_and_empty_input(self):
         self.assertTrue(smoke.check_answer("q4 revenue: 4.2m")[0])

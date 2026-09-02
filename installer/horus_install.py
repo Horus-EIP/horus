@@ -451,6 +451,29 @@ def wait_for_health(log: Log, infra: Path, expect: list[str],
         f"Full log: {LOG_PATH}",
     )
 
+def warn_cpu_expectations(log: Log) -> None:
+    log.say("")
+    log.say(yellow("=" * 72))
+    log.say(yellow("  No NVIDIA GPU was usable, so Horus will run on the CPU."))
+    log.say(yellow("=" * 72))
+    log.say("")
+    log.say("  Read this before you spend an hour on the install.")
+    log.say("")
+    log.say("  Everything except the AI answers works on the CPU: the whole stack")
+    log.say("  starts, and sign-in, permissions, users, agents, the knowledge")
+    log.say("  store, tasks, conversations and the admin pages all behave")
+    log.say("  normally. That is 63 of the 68 acceptance-test scenarios.")
+    log.say("")
+    log.say(yellow("  What does NOT work is the model itself."))
+    log.say("  Measured on a 12-core CPU: one question took 14 minutes and came")
+    log.say("  back wrong. The same question on a GPU answers in about 4 seconds.")
+    log.say("  Test scenarios F41, F42 and F43 need an NVIDIA GPU. Nothing else does.")
+    log.say("")
+    log.say("  The install will still finish and report success. Do not file the")
+    log.say("  slow or wrong answer as a bug - it is a known limitation.")
+    log.say("")
+
+
 def require_installed(infra: Path) -> None:
     if (infra / ".env").is_file():
         return
@@ -753,6 +776,9 @@ def _dispatch(log: Log, args) -> int:
     for reason in reasons:
         log.say(f"           {reason}")
 
+    if profiles.is_cpu_profile(name):
+        warn_cpu_expectations(log)
+
     env = profiles.env_for(name, probe)
     env["HORUS_CORPUS_DIR"] = choice["corpus_dir"]
     env["CORPUS_SCAN_TOKEN"] = corpus_scan_token(log, infra)
@@ -774,7 +800,11 @@ def _dispatch(log: Log, args) -> int:
         log.warn("Smoke test skipped (--skip-smoke). Install is unverified.")
         result = {"passed": True, "steps": [], "answer": None}
     else:
-        result = smoke.run(log, repo, timeout=min(args.timeout, 1200))
+        result = smoke.run(
+            log, repo,
+            timeout=min(args.timeout, 1200),
+            require_answer_quality=not profiles.is_cpu_profile(name),
+        )
 
     if not result.get("passed"):
         raise InstallError(
@@ -822,6 +852,12 @@ def _success(log: Log, infra: Path, profile_name: str, choice: dict) -> None:
     log.say(f"  Profile     {profile_name}")
     log.say(f"  Documents   {consent.describe(choice)}")
     log.say("")
+    if profiles.is_cpu_profile(profile_name):
+        log.say(yellow("  Running on the CPU, so the AI answers are not usable:"))
+        log.say(yellow("  expect about 15 minutes per question, and the answer may"))
+        log.say(yellow("  be wrong. Everything else works normally - 63 of the 68"))
+        log.say(yellow("  test scenarios. Only F41, F42 and F43 need an NVIDIA GPU."))
+        log.say("")
     app_dir = BUNDLE_DIR / "app"
     if app_dir.is_dir():
         log.say(f"  Or open the Horus app in  {app_dir}")
