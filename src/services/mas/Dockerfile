@@ -1,5 +1,3 @@
-# 3.11 matches the agent image and PyTorch cu124 wheels on the extra index; 3.13 often
-# resolved to a CPU-only torch wheel → cuda.is_available()=False → huge RAM, no GPU use.
 FROM python:3.11-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -39,7 +37,7 @@ COPY . .
 # the moment the container is up.
 ENV HF_HUB_DISABLE_TELEMETRY=1
 RUN mkdir -p models && \
-    python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='sentence-transformers/all-MiniLM-L6-v2', local_dir='models/all-MiniLM-L6-v2', local_dir_use_symlinks=False)"
+    python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='sentence-transformers/all-MiniLM-L6-v2', local_dir='models/all-MiniLM-L6-v2', local_dir_use_symlinks=False, allow_patterns=['*.json', '*.txt', 'model.safetensors', '*/*.json', '*/*.txt'])"
 
 # Default to ONLINE for the first run so bootstrap_llm.py can pull the LLM.
 # Operators can flip both to 1 in their env once the cache volume is warm.

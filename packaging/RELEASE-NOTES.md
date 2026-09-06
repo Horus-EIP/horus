@@ -8,7 +8,7 @@ leaves it.
 | **Docker Desktop** | installed **and running** |
 | **Python 3.11+** | only used to run the installer |
 | **NVIDIA GPU** | strongly recommended — see Known limitations |
-| **Free disk** | ~80 GB |
+| **Free disk** | 150 GB while installing (125 GB with an NVIDIA GPU), settling to 130 GB / 110 GB |
 | **Time** | 30–60 minutes for the first install |
 
 ## Install
@@ -45,7 +45,9 @@ Would rather not bypass an OS warning? Fair. Use the browser at
   took **14 minutes** and returned a wrong answer. With a GPU the same question
   answers in about 4 seconds. If you have no NVIDIA GPU, the stack will install
   and every part of it works except the model itself.
-- The first install downloads roughly 80 GB of container images.
+- The first install downloads about 25 GB (CPU) or 26.5 GB (GPU) of
+  container images and model weights, and needs 150 GB / 125 GB of free
+  disk while it builds, settling to 130 GB / 110 GB afterwards.
 - Your documents are mounted **read-only**. Horus cannot modify anything you own.
 
 ## If something goes wrong

@@ -18,7 +18,7 @@ def test_user_modifications():
 
     # 1. Register a new user for testing
     username = "mod_test_user"
-    password = "password123"
+    password = "Horus#Pass123"
 
     print(f"\n[Setup] Registering user '{username}'...")
     requests.post(
@@ -44,7 +44,7 @@ def test_user_modifications():
 
     # 3. Test Password Modification
     print("\n[Test 1] Change Password")
-    new_password = "newpassword456"
+    new_password = "New#Password456"
     payload = {"old_password": password, "new_password": new_password}
 
     resp = requests.post(

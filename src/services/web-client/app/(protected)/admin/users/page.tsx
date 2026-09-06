@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { userApi } from "@/lib/users/api";
+import { registerField } from "@/lib/auth/schemas";
 import type { User, UserRole } from "@/lib/types";
 import Info from "@/components/ui/info";
 import { IconEdit, IconPlus, IconTrash } from "@tabler/icons-react";
@@ -161,8 +162,9 @@ const AdminUsersPage = () => {
       notifyError("Username is required");
       return;
     }
-    if (!newPassword.trim() || newPassword.length < 6) {
-      notifyError("Password must be at least 6 characters");
+    const passwordCheck = registerField.password.safeParse(newPassword);
+    if (!passwordCheck.success) {
+      notifyError(passwordCheck.error.issues[0]?.message ?? "Invalid password");
       return;
     }
 
@@ -324,11 +326,11 @@ const AdminUsersPage = () => {
           
           <PasswordInput
             label="Password"
-            placeholder="Enter password (min 6 characters)"
+            placeholder="At least 10 characters: uppercase, lowercase, number, special character"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             required
-            minLength={6}
+            minLength={10}
             classNames={{
               input: "bg-[var(--bg)] text-[var(--text)] border-white/10",
               label: "text-[var(--text)]",

@@ -10,7 +10,7 @@
 # --force exists for the beta installer, which needs to (re)generate a .env it then layers
 # hardware-profile settings on top of. Without a flag the behaviour is exactly as before.
 #
-# One-shot stack: run ./stack-up.sh from the repository root (runs this, then docker compose up --build)
+# One-shot stack: run ./stack-up.sh from the top of this folder (runs this, then docker compose up --build)
 
 set -euo pipefail
 
@@ -91,4 +91,4 @@ fi
 chmod 600 "$TARGET" 2>/dev/null || true
 
 say "Created $TARGET with a generated JWT_SECRET_KEY (64 hex chars)."
-say "Next: docker compose up --build from this directory, or ./stack-up.sh from the repo root, then sign in in the web UI."
+say "Next: docker compose up --build from this directory, or ./stack-up.sh from the top of this folder, then sign in in the web UI."

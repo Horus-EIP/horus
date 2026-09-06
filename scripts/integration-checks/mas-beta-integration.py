@@ -191,7 +191,7 @@ async def test_f2_create_user(runner: TestRunner) -> TestResult:
             try:
                 response = await client.post(
                     "/auth/register",
-                    json={"username": username, "password": "testpassword123"},
+                    json={"username": username, "password": "Test#Password1"},
                 )
                 if response.status_code == 201:
                     data = response.json()
@@ -265,7 +265,7 @@ async def test_f4_assign_role(runner: TestRunner) -> TestResult:
         for i in range(iterations):
             username = f"roletest_{uuid.uuid4().hex[:8]}"
             resp = await client.post(
-                "/auth/register", json={"username": username, "password": "testpass123"}
+                "/auth/register", json={"username": username, "password": "Test#Password1"}
             )
             if resp.status_code == 201:
                 test_users.append(username)

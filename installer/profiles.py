@@ -202,7 +202,7 @@ _add(Profile(
     },
     notes=(
         "This is the shipping model pair; only the device changes.",
-        "MEASURED 2026-09-01, on a 14-core laptop CPU with 32 GB of RAM - the "
+        "MEASURED 2026-09-01, on a 12-core laptop CPU with 64 GB of RAM - the "
         "first time this profile has ever been run. One grounded question took "
         "14m 14s end to end, and the answer was WRONG: the agent's anti-spiral "
         "guard fired instead of an answer. Retrieval was fine (the right "
@@ -210,7 +210,7 @@ _add(Profile(
         "failed. Everything else passed - auth, RBAC, five agents registering, "
         "ingestion, the chat socket.",
         "So treat this profile as 'the stack comes up and is demonstrably "
-        "correct everywhere except the model'. On the same repo a GPU run "
+        "correct everywhere except the model'. On the same machine a GPU run "
         "answers in about 4 seconds.",
         "The timeouts are still DERIVED, not fitted - but the 1800s ReAct "
         "budget was at least shown to be generous rather than tight: the slow "

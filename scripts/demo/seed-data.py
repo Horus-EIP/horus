@@ -24,8 +24,8 @@ import httpx
 
 # Demo data configuration
 DEMO_USERS = [
-    {"username": "demo_user", "password": "demo123", "role": "user"},
-    {"username": "demo_manager", "password": "manager123", "role": "manager"},
+    {"username": "demo_user", "password": "Demo#Pass123", "role": "user"},
+    {"username": "demo_manager", "password": "Manager#Pass1", "role": "manager"},
 ]
 
 DEMO_CONVERSATIONS = [

@@ -11,7 +11,7 @@ PASSWORD_ADMIN = "secret"
 
 # Test user credentials
 TEST_USER = "test_mgmt_user"
-TEST_PASS = "password123"
+TEST_PASS = "Horus#Pass123"
 
 
 def bearer_headers(token: str) -> dict:

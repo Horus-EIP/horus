@@ -510,11 +510,17 @@ class TestGetAgentByType:
         db.query.return_value.all.return_value = [inactive]  # fallback
         assert rtf.get_agent_by_type("analyst", db) == "x1"
 
-    def test_no_match_returns_none(self):
+    def test_an_unknown_type_falls_back_to_an_active_agent(self):
         a = _make_agent(id="r1", type=AgentTypes.RESEARCHER)
         db = MagicMock()
         db.query.return_value.filter.return_value.all.return_value = [a]
         db.query.return_value.all.return_value = [a]
+        assert rtf.get_agent_by_type("nonexistent", db) == "r1"
+
+    def test_no_agents_at_all_returns_none(self):
+        db = MagicMock()
+        db.query.return_value.filter.return_value.all.return_value = []
+        db.query.return_value.all.return_value = []
         assert rtf.get_agent_by_type("nonexistent", db) is None
 
     def test_exception_returns_none(self):

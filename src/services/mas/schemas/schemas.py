@@ -5,13 +5,32 @@ OpenAPI docs. See ``docs/architecture.md`` for the high-level
 API contract.
 """
 
+import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from pydantic_core import PydanticCustomError
 
 from auth.permissions import Role
 from db.models import AgentTypes
 
+PASSWORD_POLICY = (
+    "Password must be at least 10 characters and include uppercase, "
+    "lowercase, number, and special character"
+)
+
+
+def check_password_policy(value: str) -> str:
+    strong = (
+        len(value) >= 10
+        and re.search("[a-z]", value)
+        and re.search("[A-Z]", value)
+        and re.search("[0-9]", value)
+        and re.search("[^a-zA-Z0-9]", value)
+    )
+    if not strong:
+        raise PydanticCustomError("password_policy", PASSWORD_POLICY)
+    return value
 
 class RegistrationForm(BaseModel):
     """Agent registration payload (name, skills, description, type)."""
@@ -120,6 +139,11 @@ class CreateUserRequest(BaseModel):
     username: str
     password: str
 
+    @field_validator("password")
+    @classmethod
+    def password_policy(cls, value: str) -> str:
+        return check_password_policy(value)
+
 
 class Token(BaseModel):
     """JWT access token response. Use as ``Authorization: Bearer <token>``."""
@@ -137,6 +161,11 @@ class ConversationCreation(BaseModel):
 class UserPasswordModification(BaseModel):
     old_password: str
     new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def password_policy(cls, value: str) -> str:
+        return check_password_policy(value)
 
 
 class UpdateRole(BaseModel):

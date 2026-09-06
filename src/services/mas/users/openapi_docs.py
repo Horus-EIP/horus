@@ -412,7 +412,7 @@ CHANGE_PASSWORD_OPENAPI_EXTRA = {
                         "summary": "Change password request",
                         "value": {
                             "old_password": "old_secure_password",
-                            "new_password": "new_secure_password",
+                            "new_password": "New#Secure2026",
                         },
                     }
                 },

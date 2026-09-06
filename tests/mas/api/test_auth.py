@@ -56,7 +56,7 @@ class TestRegister:
         client = make_client(auth_router)
         r = client.post(
             "/auth/register",
-            json={"username": "admin", "password": "Newp@ss1!"},
+            json={"username": "admin", "password": "Newp@ssw0rd1!"},
         )
         assert r.status_code == 409
 

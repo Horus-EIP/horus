@@ -6,6 +6,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -20,6 +21,7 @@ import preflight  # noqa: E402
 import profiles  # noqa: E402
 import smoke  # noqa: E402
 from common import (  # noqa: E402
+    BUNDLE_DIR,
     EXIT_COMPOSE_UP_FAILED,
     EXIT_ENV_WRITE_FAILED,
     EXIT_HEALTH_TIMEOUT,
@@ -30,7 +32,6 @@ from common import (  # noqa: E402
     EXIT_SMOKE_FAILED,
     EXIT_UNINSTALL_FAILED,
     VERSION,
-    BUNDLE_DIR,
     Events,
     InstallError,
     Log,
@@ -39,6 +40,7 @@ from common import (  # noqa: E402
     elapsed,
     find_repo,
     green,
+    human_bytes,
     infra_dir,
     red,
     rule,
@@ -295,7 +297,8 @@ def corpus_scan_token(log: Log, infra: Path) -> str:
     return secrets.token_urlsafe(32)
 
 def _stream(cmd: list[str], log: Log, cwd: Path, label: str,
-            heartbeat: int = 30) -> int:
+            heartbeat: int = 30, watch_for: tuple[str, ...] = (),
+            found: set[str] | None = None) -> int:
     log.debug(f"$ {' '.join(cmd)}   (cwd={cwd})")
     start = time.monotonic()
     last_beat = start
@@ -314,6 +317,10 @@ def _stream(cmd: list[str], log: Log, cwd: Path, label: str,
         if line:
             print("   " + dim(line[:200]))
             log.debug(f"  {label}: {line}")
+            if found is not None:
+                for phrase in watch_for:
+                    if phrase in line:
+                        found.add(phrase)
         now = time.monotonic()
         if now - last_beat >= heartbeat:
             last_beat = now
@@ -323,6 +330,8 @@ def _stream(cmd: list[str], log: Log, cwd: Path, label: str,
     code = proc.wait()
     log.info(f"{label}: exit {code} after {elapsed(time.monotonic() - start)}")
     return code
+
+DEPENDENCY_ABORT = "dependency failed to start"
 
 def compose(args: list[str]) -> list[str]:
     return ["docker", "compose"] + args
@@ -341,7 +350,23 @@ def pull_and_build(log: Log, infra: Path, no_build: bool = False) -> None:
 
     log.step("Building and starting the stack")
     up = ["up", "-d"] + ([] if no_build else ["--build"])
-    code = _stream(compose(up), log, infra, "up")
+    seen: set[str] = set()
+    code = _stream(compose(up), log, infra, "up",
+                   watch_for=(DEPENDENCY_ABORT,), found=seen)
+    if code != 0 and DEPENDENCY_ABORT in seen:
+        log.say("")
+        log.warn("Docker gave up on a service that was still starting.")
+        log.say("  On a first install this is almost always a model download:")
+        log.say("  the service takes longer than Docker waits, Docker marks it")
+        log.say("  unhealthy, and everything depending on it is cancelled. What")
+        log.say("  was downloaded is kept, so starting again picks up from there.")
+        log.say("  Trying once more.")
+        log.say("")
+        seen.clear()
+        code = _stream(compose(up), log, infra, "up (second attempt)",
+                       watch_for=(DEPENDENCY_ABORT,), found=seen)
+        if code == 0:
+            log.ok("Started on the second attempt.")
     if code != 0:
         raise InstallError(
             EXIT_COMPOSE_UP_FAILED,
@@ -360,6 +385,11 @@ def pull_and_build(log: Log, infra: Path, no_build: bool = False) -> None:
             "  - a port became busy after preflight   ->  docker ps\n"
             "  - a transient registry error           ->  just run this again,\n"
             "    it resumes from what was already downloaded\n"
+            "\n"
+            "This was already retried once. If Docker named a service that\n"
+            "was still downloading a model, the stack is probably fine and\n"
+            "only needs starting again, which waits instead of cancelling:\n"
+            "  START-HERE (your platform) --start\n"
             f"Full log: {LOG_PATH}",
         )
 
@@ -462,7 +492,7 @@ def warn_cpu_expectations(log: Log) -> None:
     log.say("  Everything except the AI answers works on the CPU: the whole stack")
     log.say("  starts, and sign-in, permissions, users, agents, the knowledge")
     log.say("  store, tasks, conversations and the admin pages all behave")
-    log.say("  normally. That is 63 of the 68 acceptance-test scenarios.")
+    log.say("  normally. That is 65 of the 68 acceptance-test scenarios.")
     log.say("")
     log.say(yellow("  What does NOT work is the model itself."))
     log.say("  Measured on a 12-core CPU: one question took 14 minutes and came")
@@ -637,6 +667,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--consent", choices=["demo", "folders", "whole-device"],
                    help="preselect the file-access mode. whole-device STILL requires "
                         "the typed confirmation phrase; no flag can skip it.")
+    p.add_argument("--skip-disk-check", action="store_true",
+                   help="install even if free disk is below the requirement "
+                        "(the GPU profile needs about 25 GB less than the CPU one)")
     p.add_argument("--skip-gpu-test", action="store_true",
                    help="skip the `docker run --gpus all` probe (saves a ~250 MB pull; "
                         "host detection alone is then only a hint)")
@@ -715,7 +748,7 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
         vram = gpu.get("vram_bytes")
         log.say(f"  gpu      : {gpu.get('name') or 'none detected'}"
                 + (f", {vram / 1024**3:.0f} GB VRAM" if vram else "")
-                + f", usable by Docker: "
+                + ", usable by Docker: "
                 + ("yes" if probe.get("cuda_usable_in_docker") else "no"))
         log.say(f"  profile  : {bold(name)}")
         for reason in reasons:
@@ -751,7 +784,8 @@ def _dispatch(log: Log, args) -> int:
     if args.dry_run:
         return do_dry_run(log, args, repo)
 
-    pre = preflight.run_all(log, infra, want_admin_profile=args.admin_profile)
+    preflight.run_all(log, infra, want_admin_profile=args.admin_profile,
+                      skip_disk_check=args.skip_disk_check)
 
     choice = consent.choose(
         log, repo,
@@ -815,7 +849,8 @@ def _dispatch(log: Log, args) -> int:
             f"Send us {LOG_PATH.name} and {PROFILE_JSON.name} from:\n  {BUNDLE_DIR}",
         )
 
-    _success(log, infra, name, choice)
+    _success(log, infra, name, choice,
+             non_interactive=args.non_interactive)
     return EXIT_OK
 
 def main(argv: list[str] | None = None) -> int:
@@ -839,7 +874,8 @@ def main(argv: list[str] | None = None) -> int:
         log.close(code)
     return code
 
-def _success(log: Log, infra: Path, profile_name: str, choice: dict) -> None:
+def _success(log: Log, infra: Path, profile_name: str, choice: dict,
+             non_interactive: bool = False) -> None:
     creds = _read_admin_credentials(infra)
     log.say("")
     log.say(green("=" * 72))
@@ -855,7 +891,7 @@ def _success(log: Log, infra: Path, profile_name: str, choice: dict) -> None:
     if profiles.is_cpu_profile(profile_name):
         log.say(yellow("  Running on the CPU, so the AI answers are not usable:"))
         log.say(yellow("  expect about 15 minutes per question, and the answer may"))
-        log.say(yellow("  be wrong. Everything else works normally - 63 of the 68"))
+        log.say(yellow("  be wrong. Everything else works normally - 65 of the 68"))
         log.say(yellow("  test scenarios. Only F41, F42 and F43 need an NVIDIA GPU."))
         log.say("")
     app_dir = BUNDLE_DIR / "app"
@@ -872,6 +908,58 @@ def _success(log: Log, infra: Path, profile_name: str, choice: dict) -> None:
     log.say("")
     log.say("  To stop:       START-HERE (your platform) --stop")
     log.say("  To remove:     START-HERE (your platform) --uninstall")
+    log.say("")
+    offer_to_reclaim(log, non_interactive=non_interactive)
+    log.say("")
+
+def reclaimable_build_cache(log: Log) -> int:
+    res = run(["docker", "system", "df", "--format", "{{json .}}"], log, timeout=60)
+    if not res.ok:
+        return 0
+    for line in res.out.splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if row.get("Type") != "Build Cache":
+            continue
+        match = re.match(r"([\d.]+)\s*([KMGT]?i?B)", str(row.get("Reclaimable") or ""))
+        if not match:
+            return 0
+        scale = {
+            "B": 1, "KB": 10**3, "KiB": 1024, "MB": 10**6, "MiB": 1024**2,
+            "GB": 10**9, "GiB": 1024**3, "TB": 10**12, "TiB": 1024**4,
+        }
+        return int(float(match.group(1)) * scale.get(match.group(2), 1))
+    return 0
+
+def offer_to_reclaim(log: Log, non_interactive: bool = False) -> None:
+    spare = reclaimable_build_cache(log)
+    if spare < 1024**3:
+        return
+    log.say(f"  The build left {human_bytes(spare)} of Docker build cache behind.")
+    log.say("  It only makes a future rebuild faster. Deleting it does not")
+    log.say("  touch Horus, its images or your data.")
+    if non_interactive:
+        log.say("  Reclaim it with:  docker builder prune -f")
+        log.say("")
+        return
+    try:
+        answer = input(f"  Delete it now and get {human_bytes(spare)} back? [y/N]: ")
+    except (EOFError, KeyboardInterrupt):
+        log.say("")
+        return
+    if answer.strip().lower() not in ("y", "yes"):
+        log.say("  Left alone. You can run  docker builder prune -f  at any time.")
+        log.say("")
+        return
+    res = run(["docker", "builder", "prune", "-f"], log, timeout=900)
+    if not res.ok:
+        log.warn("`docker builder prune -f` failed; the cache is still there.")
+        log.say("")
+        return
+    freed = max(0, spare - reclaimable_build_cache(log))
+    log.ok(f"Reclaimed {human_bytes(freed)} of build cache.")
     log.say("")
 
 def _read_admin_credentials(infra: Path) -> tuple[str, str]:

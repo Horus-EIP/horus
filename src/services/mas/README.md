@@ -1,5 +1,8 @@
 # MAS -- Multi-Agent System Orchestrator
 
+> For the development team. Paths such as `tests/` and `scripts/dev/` are
+> relative to the git checkout and are not part of the beta archive.
+
 The MAS service is the central orchestrator of the Horus AI platform. It manages agent registration and lifecycle, user authentication and authorization, conversations, real-time chat over WebSockets, task distribution to agents via RabbitMQ, and user administration.
 
 ## Architecture

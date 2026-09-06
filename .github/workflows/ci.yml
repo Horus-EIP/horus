@@ -58,10 +58,10 @@ jobs:
           cache: pip
 
       - name: Install ruff
-        run: pip install ruff
+        run: pip install ruff==0.16.6
 
       - name: Run ruff
-        run: ruff check src tests scripts
+        run: ruff check src tests scripts installer packaging
 
   # ----------------------------------------------------------------------- #
   # MAS unit tests with coverage
@@ -69,8 +69,13 @@ jobs:
   test-mas:
     name: Tests · MAS
     runs-on: ubuntu-latest
-    # No service containers — the MAS test suite is hermetic per
-    # tests/TESTING_PLAN.md (SQLite for Postgres, fakeredis, mocked RabbitMQ).
+    # No service containers. The suite is MOSTLY hermetic: SQLite stands in for
+    # Postgres, fakeredis for Redis, RabbitMQ is mocked. It is not fully hermetic
+    # yet: test_config, test_auth_helpers, test_rabbitmq_manager and test_auth read
+    # through core.config, which falls back to an all-None DummySettings when the
+    # required settings are absent, so they need the .env written by the step below.
+    # That step is a WORKAROUND; making the suite genuinely hermetic is tracked in
+    # docs/eip/post-beta.md.
     steps:
       - uses: actions/checkout@v4
 
@@ -85,6 +90,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r src/services/mas/requirements-cpu.txt
           pip install pytest-cov fakeredis
+
+      - name: Provide test configuration (workaround, see docs/eip/post-beta.md)
+        run: cp src/infra/.env.example src/infra/.env
 
       - name: Run MAS tests with coverage
         working-directory: ${{ github.workspace }}

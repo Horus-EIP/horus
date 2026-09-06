@@ -1,5 +1,8 @@
 # Agent Service
 
+> For the development team. Paths such as `tests/` and `scripts/dev/` are
+> relative to the git checkout and are not part of the beta archive.
+
 The Agent service is an autonomous AI worker that registers with the MAS orchestrator, consumes tasks from a **shared RabbitMQ work queue per specialization** (e.g. `horus.work.general`), processes them through a RAG (Retrieval-Augmented Generation) pipeline, and returns results back to MAS. Multiple instances of the same `AGENT_TYPE` form a pool; MAS still records a concrete assignee on each `Task`, and workers submit results using that assignee id in the JSON body while authenticating with their own API key.
 
 ## Architecture

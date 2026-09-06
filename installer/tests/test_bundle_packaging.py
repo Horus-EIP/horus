@@ -11,6 +11,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent.parent
 BUNDLER = REPO / "packaging" / "build_bundle.py"
+sys.path.insert(0, str(REPO / "packaging"))
+import build_bundle  # noqa: E402
 
 posix_only = unittest.skipUnless(
     os.name == "posix", "needs a POSIX kernel for modes and symlinks"
@@ -126,6 +128,47 @@ class AppBundleIntegrity(unittest.TestCase):
             self.assertEqual(through_links.read_text(encoding="utf-8"), "FRAMEWORK")
             binary = root / "app/Horus.app/Contents/MacOS/Horus"
             self.assertTrue(os.access(binary, os.X_OK))
+
+class LineEndingGuard(unittest.TestCase):
+
+    def setUp(self):
+        build_bundle.NORMALISED.clear()
+
+    def roundtrip(self, name: str, payload: bytes) -> bytes:
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / name
+            src.write_bytes(payload)
+            zip_path = Path(tmp) / "t.zip"
+            with zipfile.ZipFile(zip_path, "w") as zf:
+                build_bundle.add(zf, src, "horus/" + name)
+            with zipfile.ZipFile(zip_path) as zf:
+                return zf.read("horus/" + name)
+
+    def test_a_crlf_shell_script_is_stored_as_lf(self):
+        out = self.roundtrip("stack-up.sh", b"#!/bin/sh\r\necho hi\r\n")
+        self.assertEqual(out, b"#!/bin/sh\necho hi\n")
+        self.assertEqual(build_bundle.NORMALISED, ["horus/stack-up.sh  (CRLF -> LF)"])
+
+    def test_command_files_and_dockerfiles_are_stored_as_lf(self):
+        self.assertEqual(self.roundtrip("START-HERE-macOS.command", b"a\r\nb\r\n"), b"a\nb\n")
+        self.assertEqual(self.roundtrip("Dockerfile", b"FROM x\r\nRUN y \\\r\n  z\r\n"),
+                         b"FROM x\nRUN y \\\n  z\n")
+        self.assertEqual(len(build_bundle.NORMALISED), 2)
+
+    def test_an_lf_batch_file_is_stored_as_crlf(self):
+        out = self.roundtrip("START-HERE-Windows.bat", b"@echo off\ngoto :x\n:x\n")
+        self.assertEqual(out, b"@echo off\r\ngoto :x\r\n:x\r\n")
+        self.assertEqual(build_bundle.NORMALISED, ["horus/START-HERE-Windows.bat  (LF -> CRLF)"])
+
+    def test_already_correct_files_are_not_reported(self):
+        self.roundtrip("ok.sh", b"#!/bin/sh\n")
+        self.roundtrip("ok.bat", b"@echo off\r\n")
+        self.assertEqual(build_bundle.NORMALISED, [])
+
+    def test_other_files_are_left_byte_for_byte(self):
+        self.assertEqual(self.roundtrip("notes.py", b"a\r\nb\n"), b"a\r\nb\n")
+        self.assertEqual(self.roundtrip("README.md", b"a\r\n"), b"a\r\n")
+        self.assertEqual(build_bundle.NORMALISED, [])
 
 @posix_only
 class ExecutableBitGuard(unittest.TestCase):

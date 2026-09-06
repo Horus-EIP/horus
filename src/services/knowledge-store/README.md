@@ -1,5 +1,8 @@
 # Knowledge Store
 
+> For the development team. Paths such as `tests/` and `scripts/dev/` are
+> relative to the git checkout and are not part of the beta archive.
+
 The Knowledge Store is a document storage and vector search service that serves as the memory layer for Horus AI agents. It accepts documents in multiple formats, extracts and chunks their text, generates embeddings, and stores everything in ChromaDB for fast semantic retrieval.
 
 ## Architecture

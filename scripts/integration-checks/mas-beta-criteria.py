@@ -197,7 +197,7 @@ class TestF1Login:
 
         for i in range(self.ITERATIONS):
             response = client.post(
-                "/auth/token", data={"username": f"user_{i}", "password": "password123"}
+                "/auth/token", data={"username": f"user_{i}", "password": "Horus#Pass123"}
             )
             if response.status_code == 200:
                 data = response.json()
@@ -257,7 +257,7 @@ class TestF2CreateUser:
 
             response = client.post(
                 "/auth/register",
-                json={"username": f"newuser_{i}", "password": "password123"},
+                json={"username": f"newuser_{i}", "password": "Horus#Pass123"},
             )
 
             if response.status_code == 201:

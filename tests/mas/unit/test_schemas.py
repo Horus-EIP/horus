@@ -6,12 +6,14 @@ import pytest
 from pydantic import ValidationError
 
 from schemas.schemas import (
+    PASSWORD_POLICY,
     ConversationCreation,
     CreateUserRequest,
     RegistrationForm,
     TaskForm,
     TaskResultForm,
     Token,
+    UserPasswordModification,
 )
 
 
@@ -271,16 +273,16 @@ class TestCreateUserRequest:
 
     def test_create_user_request_valid_data(self):
         """Test CreateUserRequest with valid data."""
-        data = {"username": "testuser", "password": "securepassword123"}
+        data = {"username": "testuser", "password": "Secure#Pass123"}
 
         request = CreateUserRequest(**data)
 
         assert request.username == "testuser"
-        assert request.password == "securepassword123"
+        assert request.password == "Secure#Pass123"
 
     def test_create_user_request_missing_username(self):
         """Test CreateUserRequest validation fails without username."""
-        data = {"password": "securepassword123"}
+        data = {"password": "Secure#Pass123"}
 
         with pytest.raises(ValidationError) as exc_info:
             CreateUserRequest(**data)
@@ -300,19 +302,40 @@ class TestCreateUserRequest:
 
     def test_create_user_request_empty_username(self):
         """Test CreateUserRequest with empty username."""
-        data = {"username": "", "password": "securepassword123"}
+        data = {"username": "", "password": "Secure#Pass123"}
 
         # Empty string should still be valid (business logic can validate this)
         request = CreateUserRequest(**data)
         assert request.username == ""
 
     def test_create_user_request_empty_password(self):
-        """Test CreateUserRequest with empty password."""
+        """Test CreateUserRequest rejects an empty password."""
         data = {"username": "testuser", "password": ""}
 
-        # Empty string should still be valid (business logic can validate this)
-        request = CreateUserRequest(**data)
-        assert request.password == ""
+        with pytest.raises(ValidationError) as exc_info:
+            CreateUserRequest(**data)
+        assert any(error["loc"] == ("password",) for error in exc_info.value.errors())
+
+    def test_create_user_request_rejects_weak_passwords(self):
+        for weak in ("Short1!", "alllowercase1!", "ALLUPPERCASE1!", "NoDigitsHere!", "NoSpecial123x"):
+            with pytest.raises(ValidationError) as exc_info:
+                CreateUserRequest(username="testuser", password=weak)
+            assert any(error["loc"] == ("password",) for error in exc_info.value.errors())
+
+    def test_create_user_request_policy_message_is_readable(self):
+        with pytest.raises(ValidationError) as exc_info:
+            CreateUserRequest(username="testuser", password="short")
+        assert exc_info.value.errors()[0]["msg"] == PASSWORD_POLICY
+
+
+class TestUserPasswordModificationPolicy:
+    def test_new_password_must_meet_the_policy(self):
+        with pytest.raises(ValidationError):
+            UserPasswordModification(old_password="x", new_password="weak")
+
+    def test_old_password_is_not_policed(self):
+        m = UserPasswordModification(old_password="x", new_password="New#Secure2026")
+        assert m.old_password == "x"
 
 
 class TestToken:

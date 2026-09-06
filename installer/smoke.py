@@ -923,10 +923,13 @@ def ask(
             try:
                 message = client.recv_message(min(left, WS_RECV_SLICE))
             except WebSocketError as exc:
-                late = _poll_task(mas, token, task_id, 20.0)
-                if late:
-                    return late, "chat socket dropped; answer read from the task record"
-                return "", f"the chat socket failed: {exc}"
+                log.debug(f"chat socket dropped ({exc}); polling the task record instead")
+                while time.monotonic() < stop_at:
+                    late = _poll_task(mas, token, task_id, 20.0)
+                    if late:
+                        return late, "chat socket dropped; answer read from the task record"
+                    time.sleep(min(TASK_POLL_INTERVAL, max(0.0, stop_at - time.monotonic())))
+                return "", f"the chat socket failed ({exc}) and no answer within {elapsed(answer_budget)}"
 
             if message is not None:
                 _opcode, payload = message
@@ -982,7 +985,7 @@ def step_check_answer(steps: Steps, answer: str, require_quality: bool = True) -
             f"{why} - EXPECTED on a CPU profile, and not an install failure. "
             "Everything else works; the model is simply too slow on a CPU to "
             "finish a useful answer. ATP scenarios F41, F42 and F43 need an "
-            "NVIDIA GPU; the other 63 scenarios do not."
+            "NVIDIA GPU; the other 65 scenarios do not."
         )
         return
     if not ok:

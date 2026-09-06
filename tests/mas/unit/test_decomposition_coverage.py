@@ -389,7 +389,8 @@ class TestBuildSubtaskList:
         monkeypatch.setattr(D, "get_agent_by_type", lambda t, db: f"id-{t}")
         ent = _Entity([_Sub("1", "researcher", "find x")])
         result = D.build_subtask_list(ent, [], FakeDB())
-        assert result == [("id-researcher", "find x")]
+        assert [agent for agent, _ in result] == ["id-researcher"]
+        assert result[0][1].endswith("=== Your assigned task ===\nfind x")
         assert "id-researcher" in D.rabbitmq_instance.created
 
     def test_empty_agent_type_raises(self, monkeypatch):
@@ -420,13 +421,16 @@ class TestBuildSubtaskList:
         )
         ent = _Entity([_Sub("1", "researcher", "desc")])
         result = D.build_subtask_list(ent, [], FakeDB())
-        assert result == [("id-researcher", "desc")]
+        assert [agent for agent, _ in result] == ["id-researcher"]
+        assert result[0][1].endswith("=== Your assigned task ===\ndesc")
 
     def test_db_none_uses_sessionlocal(self, monkeypatch):
         monkeypatch.setattr(D, "get_agent_by_type", lambda t, db: "id-x")
         monkeypatch.setattr(D, "SessionLocal", lambda: FakeDB())
         ent = _Entity([_Sub("1", "researcher", "desc")])
-        assert D.build_subtask_list(ent, []) == [("id-x", "desc")]
+        result = D.build_subtask_list(ent, [])
+        assert [agent for agent, _ in result] == ["id-x"]
+        assert result[0][1].endswith("=== Your assigned task ===\ndesc")
 
 
 # ============================ decompose_task ============================== #
@@ -464,8 +468,10 @@ class TestDecomposeTask:
         _patch_llm(monkeypatch, json.dumps(GOOD_PLAN))
         first, rest = D.decompose_task("complex request", FakeDB())
         # Sorted 1->2; first action popped off, remainder returned.
-        assert first == ("id-researcher", "research it")
-        assert rest == [("id-writer", "write it")]
+        assert first[0] == "id-researcher"
+        assert first[1].endswith("=== Your assigned task ===\nresearch it")
+        assert [agent for agent, _ in rest] == ["id-writer"]
+        assert rest[0][1].endswith("=== Your assigned task ===\nwrite it")
 
     def test_status_and_depends_on_defaulted_when_missing(self, monkeypatch):
         # Planner omits status + depends_on; code should backfill and still
@@ -478,7 +484,8 @@ class TestDecomposeTask:
         monkeypatch.setattr(D, "get_agent_by_type", lambda t, db: "id-r")
         _patch_llm(monkeypatch, json.dumps(plan))
         first, rest = D.decompose_task("req", FakeDB())
-        assert first == ("id-r", "do it")
+        assert first[0] == "id-r"
+        assert first[1].endswith("=== Your assigned task ===\ndo it")
         assert rest == []
 
     def test_empty_subtasks_triggers_heuristic_fallback(self, monkeypatch):
@@ -1004,5 +1011,5 @@ class TestAggregateResults:
         out = D.aggregate_results("history text", "result text")
         assert out == "final synthesized answer"
         # Confirm it routed through the synthesis prompt builder.
-        assert captured["max"] == 512
+        assert captured["max"] == 3072
         assert any("history text" in m["content"] for m in captured["prompt"])

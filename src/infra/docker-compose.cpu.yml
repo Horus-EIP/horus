@@ -10,5 +10,6 @@ services:
 
   vllm:
     gpus: !reset null
+    profiles: ["gpu"]
     deploy:
       replicas: 0

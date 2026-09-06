@@ -89,14 +89,14 @@ REGISTER_OPENAPI_EXTRA = {
                         "summary": "Basic user registration",
                         "value": {
                             "username": "newuser123",
-                            "password": "securepassword123",
+                            "password": "Secure#Pass123",
                         },
                     },
                     "admin": {
                         "summary": "Admin user registration",
                         "value": {
                             "username": "adminuser",
-                            "password": "strongadminpassword",
+                            "password": "Strong#Admin2026",
                         },
                     },
                 },

@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -20,6 +21,7 @@ from common import (  # noqa: E402
     Log,
     exit_name,
 )
+
 
 def write_env(tmp: Path, body: str) -> Path:
     infra = tmp / "src" / "infra"
@@ -243,7 +245,7 @@ class LogRecordsTheRealExitCode(unittest.TestCase):
 class CpuProfileDoesNotFailTheInstall(unittest.TestCase):
     """A CPU install must finish and report success.
 
-    63 of the 68 acceptance-test scenarios work on a CPU; only the three that
+    65 of the 68 acceptance-test scenarios work on a CPU; only the three that
     need the model do not. Exiting 50 made a working stack look like a failed
     install, so answer quality is a warning there and a hard failure on GPU.
     """
@@ -307,7 +309,7 @@ class CpuProfileDoesNotFailTheInstall(unittest.TestCase):
         horus_install.warn_cpu_expectations(log)
         joined = " ".join(lines)
         self.assertIn("run on the CPU", joined)
-        self.assertIn("63 of the 68", joined)
+        self.assertIn("65 of the 68", joined)
         self.assertIn("F41", joined)
         self.assertIn("14 minutes", joined)
 
@@ -333,6 +335,139 @@ class Parser(unittest.TestCase):
         with self.assertRaises(SystemExit) as caught:
             self.parse(["--not-a-flag"])
         self.assertEqual(caught.exception.code, 2)
+
+class ComposeUpRetry(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        self.log = Log(self.tmp / "install-log.txt")
+        self.addCleanup(self.log.close, 0)
+        self._real_stream = horus_install._stream
+        self.addCleanup(setattr, horus_install, "_stream", self._real_stream)
+
+    def fake_stream(self, outcomes):
+        calls = []
+
+        def stream(cmd, log, cwd, label, heartbeat=30, watch_for=(), found=None):
+            code, line = outcomes[len(calls)]
+            calls.append(label)
+            if found is not None:
+                for phrase in watch_for:
+                    if phrase in line:
+                        found.add(phrase)
+            return code
+
+        horus_install._stream = stream
+        return calls
+
+    def run_it(self, outcomes):
+        calls = self.fake_stream(outcomes)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            try:
+                horus_install.pull_and_build(self.log, self.tmp, no_build=True)
+                raised = None
+            except InstallError as exc:
+                raised = exc
+        return calls, buf.getvalue(), raised
+
+    def test_a_dependency_abort_is_retried_once_and_can_succeed(self):
+        calls, out, raised = self.run_it([
+            (0, ""),
+            (1, "dependency failed to start: container mas is unhealthy"),
+            (0, ""),
+        ])
+        self.assertIsNone(raised)
+        self.assertEqual(len(calls), 3)
+        self.assertIn("second attempt", calls[2])
+        self.assertIn("still starting", out)
+
+    def test_the_retry_happens_at_most_once(self):
+        calls, _out, raised = self.run_it([
+            (1, "dependency failed to start: container mas is unhealthy"),
+            (1, "dependency failed to start: container mas is unhealthy"),
+            (1, "dependency failed to start: container mas is unhealthy"),
+        ])
+        self.assertIsNotNone(raised)
+        self.assertEqual(len(calls), 3)
+
+    def test_a_failure_that_is_not_a_dependency_abort_is_not_retried(self):
+        calls, _out, raised = self.run_it([(0, ""), (1, "no space left on device")])
+        self.assertIsNotNone(raised)
+        self.assertEqual(len(calls), 2)
+
+    def test_the_final_message_names_the_recovery_command(self):
+        _calls, _out, raised = self.run_it([
+            (0, ""),
+            (1, "dependency failed to start: container mas is unhealthy"),
+            (1, "dependency failed to start: container mas is unhealthy"),
+        ])
+        self.assertIsNotNone(raised)
+        self.assertIn("--start", raised.fix)
+        self.assertIn("retried once", raised.fix)
+
+
+class ReclaimBuildCache(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        self.log = Log(self.tmp / "install-log.txt")
+        self.addCleanup(self.log.close, 0)
+        self.addCleanup(setattr, horus_install, "run", horus_install.run)
+        self.addCleanup(setattr, horus_install, "reclaimable_build_cache",
+                        horus_install.reclaimable_build_cache)
+        self.commands = []
+
+    def stub(self, sizes, answer=None):
+        remaining = list(sizes)
+
+        def cache(_log):
+            return remaining.pop(0) if len(remaining) > 1 else remaining[0]
+
+        def run(cmd, _log, timeout=60, cwd=None, env=None):
+            self.commands.append(cmd)
+            return type("R", (), {"ok": True, "out": "", "err": "", "code": 0})()
+
+        horus_install.reclaimable_build_cache = cache
+        horus_install.run = run
+        if answer is not None:
+            patcher = mock.patch("builtins.input", lambda _prompt: answer)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def call(self, non_interactive=False):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            horus_install.offer_to_reclaim(self.log, non_interactive=non_interactive)
+        return buf.getvalue()
+
+    def test_a_small_cache_is_not_mentioned_at_all(self):
+        self.stub([500 * 1024**2])
+        self.assertEqual(self.call().strip(), "")
+        self.assertEqual(self.commands, [])
+
+    def test_a_non_interactive_run_never_deletes_anything(self):
+        self.stub([30 * 1024**3])
+        out = self.call(non_interactive=True)
+        self.assertIn("docker builder prune -f", out)
+        self.assertEqual(self.commands, [])
+
+    def test_declining_leaves_the_cache_alone(self):
+        self.stub([30 * 1024**3], answer="n")
+        out = self.call()
+        self.assertIn("Left alone", out)
+        self.assertEqual(self.commands, [])
+
+    def test_accepting_prunes_and_reports_what_it_freed(self):
+        self.stub([30 * 1024**3, 0], answer="y")
+        out = self.call()
+        self.assertEqual(self.commands, [["docker", "builder", "prune", "-f"]])
+        self.assertIn("Reclaimed", out)
+
 
 if __name__ == "__main__":
     unittest.main()

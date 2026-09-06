@@ -57,9 +57,27 @@ PRUNE_PATHS = (
     "src/services/knowledge-store/logs/",
     "installer/tests/",
     "src/services/knowledge-store/tests/",
+    "src/services/agent/app/models/",
 )
 
 EXECUTABLE = {".sh", ".command"}
+LF_ONLY = {".sh", ".command", ".bash", ".dockerfile"}
+LF_ONLY_NAMES = {"Dockerfile"}
+CRLF_ONLY = {".bat", ".cmd"}
+NORMALISED: list[str] = []
+
+def line_endings(arcname: str, data: bytes) -> bytes:
+    name = arcname.rsplit("/", 1)[-1]
+    suffix = Path(name).suffix.lower()
+    if suffix in LF_ONLY or name in LF_ONLY_NAMES:
+        if b"\r\n" in data:
+            NORMALISED.append(f"{arcname}  (CRLF -> LF)")
+            return data.replace(b"\r\n", b"\n")
+    elif suffix in CRLF_ONLY:
+        if b"\n" in data.replace(b"\r\n", b""):
+            NORMALISED.append(f"{arcname}  (LF -> CRLF)")
+            return data.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+    return data
 
 def is_executable_on_disk(path: Path) -> bool:
     try:
@@ -158,7 +176,7 @@ def escapes(link: Path, root: Path) -> bool:
         return True
 
 def add(zf: zipfile.ZipFile, src: Path, arcname: str, keep_mode: bool = False) -> int:
-    data = src.read_bytes()
+    data = line_endings(arcname, src.read_bytes())
     info = zipfile.ZipInfo(arcname)
     info.compress_type = zipfile.ZIP_DEFLATED
     if keep_mode and is_executable_on_disk(src):
@@ -292,6 +310,15 @@ def _fill(partial: Path, target: Path, args) -> int:
             print("        Build them in CI (desktop-release.yml) and pass the")
             print("        downloaded artifacts directory here.")
         totals["desktop apps"] = section
+
+    if NORMALISED:
+        print()
+        print(f"  WARNING: {len(NORMALISED)} file(s) had the wrong line endings in the")
+        print("  working tree and were rewritten on the way into the archive:")
+        for note in NORMALISED:
+            print(f"    {note}")
+        print("  The checkout is what is wrong: run `git add --renormalize .` so the")
+        print("  .gitattributes rules take effect, then rebuild.")
 
     size = partial.stat().st_size
     print()

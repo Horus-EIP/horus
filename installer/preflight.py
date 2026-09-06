@@ -25,7 +25,8 @@ from common import (
 )
 
 MIN_PYTHON = (3, 11)
-REQUIRED_FREE_BYTES = 40 * 1024**3
+REQUIRED_FREE_BYTES = 150 * 1024**3
+GPU_FREE_BYTES = 125 * 1024**3
 
 DOCKER_DOWNLOAD = {
     "win32": "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe",
@@ -222,16 +223,23 @@ def check_disk(log: Log, required: int = REQUIRED_FREE_BYTES) -> dict:
     if free < required:
         raise InstallError(
             EXIT_DISK_SPACE,
-            f"Not enough free disk space: {human_bytes(free)} available, "
-            f"{human_bytes(required)} needed.",
-            f"Measured at: {measured}\n({note})\n\n"
-            "Horus pulls several GB of container images and downloads model\n"
-            "weights on first start. 40 GB is the realistic floor.",
-            "Free up space, then run this again. Reclaiming Docker's own\n"
-            "leftovers is usually the quickest win:\n"
-            "  docker system prune -a --volumes\n"
-            "(that deletes unused images and volumes, so check first with\n"
-            "  docker system df)",
+            f"Horus needs {human_bytes(required)} free for a CPU install "
+            f"({human_bytes(GPU_FREE_BYTES)} for GPU). "
+            f"Found {human_bytes(free)} at {measured}.",
+            f"{measured} is the {note}.\n\n"
+            f"{human_bytes(required)} is the measured peak while the images\n"
+            "build, not a safety margin. It settles to about 130 GB (CPU)\n"
+            "or 110 GB (GPU) once the build finishes. See README-FIRST.txt.",
+            "Free up space, then run this again. Docker's own build cache\n"
+            "is usually the quickest win, and it is safe to delete:\n"
+            "  docker builder prune -f\n"
+            "To see what else Docker is holding:\n"
+            "  docker system df\n"
+            "Do NOT use `docker system prune --volumes` if Horus is already\n"
+            "installed: that deletes your ingested documents and the models\n"
+            "it downloaded, along with the space you were trying to free.\n\n"
+            f"On the GPU profile {human_bytes(GPU_FREE_BYTES)} is enough. To go\n"
+            "ahead anyway, re-run with  --skip-disk-check",
         )
     log.ok(f"{human_bytes(free)} free at {measured}")
     return {"checked": True, "path": str(measured), "free_bytes": free}
@@ -397,12 +405,20 @@ def check_ports(log: Log, infra: Path, want_admin_profile: bool = False) -> dict
     log.ok(f"all {len([p for p in PORTS if p[3] is None])} required ports free")
     return report
 
-def run_all(log: Log, infra: Path, want_admin_profile: bool = False) -> dict:
+def run_all(log: Log, infra: Path, want_admin_profile: bool = False,
+            skip_disk_check: bool = False) -> dict:
     summary: dict = {}
     check_python(log)
     summary["docker_version"] = check_docker(log)
     summary["compose_version"] = check_compose(log)
-    summary["disk"] = check_disk(log)
+    if skip_disk_check:
+        log.step("4/6  Disk space")
+        log.warn("Skipped with --skip-disk-check. If the build runs out of "
+                 "space it will fail part-way through.")
+        summary["disk"] = {"checked": False, "path": None,
+                           "free_bytes": None, "skipped": True}
+    else:
+        summary["disk"] = check_disk(log)
     summary["network"] = check_network(log)
     summary["ports"] = check_ports(log, infra, want_admin_profile)
     log.say("")

@@ -8,7 +8,7 @@ USERNAME_ADMIN = "admin"
 PASSWORD_ADMIN = "secret"
 
 TEST_USER = "bob"
-TEST_PASS = "password123"
+TEST_PASS = "Horus#Pass123"
 
 
 def bearer_headers(token: str) -> dict:

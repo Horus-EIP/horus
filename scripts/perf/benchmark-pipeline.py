@@ -678,7 +678,7 @@ async def scenario_concurrency(bench: PipelineBench, prompts, agent_id, skill, l
         wall0 = time.perf_counter()
         tasks = [
             bench.run_task(p, agent_id, skill, c)
-            for p, c in zip(batch, convs)
+            for p, c in zip(batch, convs, strict=False)
             if c is not None
         ]
         ms = await asyncio.gather(*tasks)
@@ -873,7 +873,7 @@ def build_markdown(report: dict) -> str:
 
     if "contention" in sc:
         c = sc["contention"]
-        b, l = c["baseline"], c["loaded"]
+        b, loaded = c["baseline"], c["loaded"]
         lines += [
             "## Contention (generation vs. concurrent KS ingestion)",
             "",
@@ -883,8 +883,8 @@ def build_markdown(report: dict) -> str:
             "|---|---|---|---|---|",
             f"| idle | {b['decode_tok_s'].get('median', 0):.2f} | {b['e2e_s'].get('median', 0):.2f} | "
             f"{b['gpu'].get('vram_used_mib', {}).get('peak', '?')} | {b['gpu'].get('gpu_util_pct', {}).get('mean', '?')} |",
-            f"| under load | {l['decode_tok_s'].get('median', 0):.2f} | {l['e2e_s'].get('median', 0):.2f} | "
-            f"{l['gpu'].get('vram_used_mib', {}).get('peak', '?')} | {l['gpu'].get('gpu_util_pct', {}).get('mean', '?')} |",
+            f"| under load | {loaded['decode_tok_s'].get('median', 0):.2f} | {loaded['e2e_s'].get('median', 0):.2f} | "
+            f"{loaded['gpu'].get('vram_used_mib', {}).get('peak', '?')} | {loaded['gpu'].get('gpu_util_pct', {}).get('mean', '?')} |",
             "",
             f"**Decode tok/s drop under load: {c['decode_tok_s_drop_pct']}%** "
             "— this is the headroom the NPU embedder offload (Phase 6) can recover.",

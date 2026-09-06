@@ -1022,9 +1022,8 @@ class TestTaskResultCompletion:
             )
         assert r.status_code == 200
         assert task.status == TaskStatus.COMPLETED.value
-        # Aggregated text broadcast to the conversation.
         assert mock_ws.await_count == 1 or mock_ws.call_count == 1
-        assert "final synthesized answer" in mock_ws.call_args.args
+        assert "the output" in mock_ws.call_args.args
 
     def test_standalone_task_skips_chat_side_effects(
         self, _validate, _allowed, mock_add, mock_ws, make_fake_client

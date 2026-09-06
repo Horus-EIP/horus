@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import smoke  # noqa: E402
 
+
 def server_frame(fin: bool, opcode: int, payload: bytes) -> bytes:
     head = bytearray()
     head.append((0x80 if fin else 0x00) | opcode)

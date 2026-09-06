@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Create src/infra/.env when missing (init-env.sh), validate Compose, then build and start the stack.
 #
-# Usage (from the repository root):
+# Usage (from the top of this folder):
 #   ./stack-up.sh                  # build + up (foreground; Ctrl+C stops containers)
 #   ./stack-up.sh -d               # detached
 #   ./stack-up.sh -d --no-deps     # extra args are passed to: docker compose up --build
@@ -14,7 +14,7 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 INFRA="$ROOT/src/infra"
 
 if [[ ! -d "$INFRA" ]] || [[ ! -f "$INFRA/docker-compose.yml" ]]; then
-  echo "Error: expected Docker Compose at $INFRA/docker-compose.yml (run this script from the repo root)."
+  echo "Error: expected Docker Compose at $INFRA/docker-compose.yml (run this script from the top of this folder)."
   exit 1
 fi
 
