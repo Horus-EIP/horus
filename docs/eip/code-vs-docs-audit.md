@@ -65,7 +65,7 @@
 
 | Doc | Status | Issue |
 |-----|--------|-------|
-| `operations/deployment.md` | NEEDS_UPDATE | References `requirements-cpu.txt` (no such file). Python version claim doesn't match `pyproject.toml:2 py311`. |
+| `operations/deployment.md` | NEEDS_UPDATE | References `requirements-cpu.txt` — the file exists at `src/services/mas/requirements-cpu.txt` but is used only by `ci.yml` and `scripts/docs.sh`, not by any Dockerfile. Python version claim doesn't match `pyproject.toml:2 py311`. |
 | `operations/monitoring.md` | NEEDS_UPDATE | Wrong Prometheus config path on lines 61, 69 — should be `src/infra/prometheus.yml` (file is at infra root, not under `grafana/`). |
 | `operations/secrets-management.md` | OK | High-level; no specific claims that fail. |
 | `operations/environment-matrix.md` | NEEDS_UPDATE | DB examples use `horus` / `horus_db` — actual is `postgres` / `mas_db` (`.env.example:64`). |
