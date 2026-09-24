@@ -1,8 +1,4 @@
-"""
-Structured Logging Module for Knowledge Store.
-
-Provides JSON-formatted logging with correlation ID support for request tracing.
-"""
+"""JSON-formatted structured logging with correlation ID support for request tracing."""
 
 import json
 import logging
@@ -10,15 +6,15 @@ import os
 import sys
 import uuid
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 # Context variable for correlation ID
-correlation_id_var: ContextVar[Optional[str]] = ContextVar("correlation_id", default=None)
+correlation_id_var: ContextVar[str | None] = ContextVar("correlation_id", default=None)
 
 
-def set_correlation_id(corr_id: Optional[str] = None) -> str:
+def set_correlation_id(corr_id: str | None = None) -> str:
     """Set correlation ID for current context."""
     if corr_id is None:
         corr_id = str(uuid.uuid4())
@@ -26,7 +22,7 @@ def set_correlation_id(corr_id: Optional[str] = None) -> str:
     return corr_id
 
 
-def get_correlation_id() -> Optional[str]:
+def get_correlation_id() -> str | None:
     """Get correlation ID from current context."""
     return correlation_id_var.get()
 
@@ -38,10 +34,10 @@ def clear_correlation_id():
 
 class JSONFormatter(logging.Formatter):
     """JSON formatter for structured logging."""
-    
+
     def format(self, record: logging.LogRecord) -> str:
-        log_data: Dict[str, Any] = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+        log_data: dict[str, Any] = {
+            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -50,14 +46,14 @@ class JSONFormatter(logging.Formatter):
             "line": record.lineno,
             "service": "knowledge-store",
         }
-        
+
         corr_id = get_correlation_id()
         if corr_id:
             log_data["correlation_id"] = corr_id
-        
+
         if record.exc_info:
             log_data["exception"] = self.formatException(record.exc_info)
-        
+
         # Add extra fields
         for key, value in record.__dict__.items():
             if key not in {
@@ -72,40 +68,40 @@ class JSONFormatter(logging.Formatter):
                     log_data[key] = value
                 except (TypeError, ValueError):
                     log_data[key] = str(value)
-        
+
         return json.dumps(log_data, default=str)
 
 
 class KnowledgeStoreLogger:
     """Singleton logger for Knowledge Store."""
-    
+
     _instance = None
-    _loggers: Dict[str, logging.Logger] = {}
+    _loggers: dict[str, logging.Logger] = {}
     _configured = False
-    
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
-    
+
     def __init__(self):
         if not self._configured:
             self._configure()
             self._configured = True
-    
+
     def _configure(self):
         log_level = os.getenv("LOG_LEVEL", "INFO").upper()
         json_logging = os.getenv("JSON_LOGGING", "true").lower() == "true"
         log_dir = Path(os.getenv("LOG_DIR", "logs"))
         log_dir.mkdir(exist_ok=True)
-        
+
         root_logger = logging.getLogger()
         root_logger.setLevel(getattr(logging, log_level, logging.INFO))
         root_logger.handlers.clear()
-        
+
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(getattr(logging, log_level, logging.INFO))
-        
+
         if json_logging:
             console_handler.setFormatter(JSONFormatter())
         else:
@@ -115,16 +111,18 @@ class KnowledgeStoreLogger:
                     datefmt="%Y-%m-%d %H:%M:%S",
                 )
             )
-        
+
         root_logger.addHandler(console_handler)
-        
-        # JSON file handler
-        json_log_file = log_dir / f"knowledge_store_{datetime.now().strftime('%Y%m%d')}.json"
-        json_handler = logging.FileHandler(json_log_file, encoding="utf-8")
-        json_handler.setLevel(logging.DEBUG)
-        json_handler.setFormatter(JSONFormatter())
-        root_logger.addHandler(json_handler)
-    
+
+        if os.getenv("TEST_MODE") != "1":
+            json_log_file = (
+                log_dir / f"knowledge_store_{datetime.now().strftime('%Y%m%d')}.json"
+            )
+            json_handler = logging.FileHandler(json_log_file, encoding="utf-8")
+            json_handler.setLevel(logging.DEBUG)
+            json_handler.setFormatter(JSONFormatter())
+            root_logger.addHandler(json_handler)
+
     def get_logger(self, name: str) -> logging.Logger:
         if name not in self._loggers:
             self._loggers[name] = logging.getLogger(name)

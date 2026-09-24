@@ -1,0 +1,74 @@
+{
+  "label": "baseline",
+  "timestamp": "2026-06-23T18:09:46Z",
+  "git_commit": "76b0d94",
+  "machine": {
+    "name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+    "driver": "610.62",
+    "memory_total": "8188 MiB"
+  },
+  "config": {
+    "mas_url": "http://localhost:8000",
+    "ks_url": "http://localhost:8080",
+    "scenario": "smoke",
+    "repeats": 2,
+    "concurrency_levels": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "gen_count": 4,
+    "ks_workers": 3,
+    "token_method": "approx:chars-over-4",
+    "agent_id": "9f79a0c7-27c6-4868-9ed9-dfc9341b44d6",
+    "skill": "knowledge_retrieval",
+    "observed_model": "Qwen/Qwen3-4B-Instruct-2507",
+    "observed_device": "cuda",
+    "agent_max_new_tokens": "3072 (src/infra/.env)",
+    "knowledge_store_n_results": "4 (src/infra/.env)"
+  },
+  "scenarios": {
+    "smoke": {
+      "result": {
+        "prompt_id": "q-revenue",
+        "ok": true,
+        "direct": false,
+        "error": null,
+        "submit_http_ms": 45.97,
+        "first_step_s": 0.4683,
+        "ttft_proxy_s": 0.5107,
+        "decode_s": 3.291,
+        "decode_wall_s": 3.2943,
+        "e2e_s": 3.8431,
+        "output_chars": 385,
+        "output_tokens": 96,
+        "generated_tokens": 120,
+        "prompt_tokens": 1026,
+        "decode_tok_s": 36.463,
+        "decode_tok_s_basis": "generated",
+        "suspected_spiral": false,
+        "model": "Qwen/Qwen3-4B-Instruct-2507",
+        "device": "cuda",
+        "steps": [
+          {
+            "step_type": "retrieval.start",
+            "offset_s": 0.4683
+          },
+          {
+            "step_type": "retrieval.results",
+            "offset_s": 0.5047
+          },
+          {
+            "step_type": "reasoning.start",
+            "offset_s": 0.5107
+          },
+          {
+            "step_type": "reasoning.done",
+            "offset_s": 3.805
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,34 +1,77 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Card from '@/components/ui/card';
 import Info from '@/components/ui/info';
 import { FileUpload } from '@/components/ui/file-upload';
 import { useDisclosure } from '@mantine/hooks';
 import { Modal } from '@mantine/core';
 import { config } from '@/utils/config';
-import { MdDelete } from 'react-icons/md';
-import { userApi } from '@/lib/users/api';
+import { IconTrash } from '@tabler/icons-react';
+import { UploadProgress } from '@/components/knowledge-store/upload-progress';
+import {
+  knowledgeStoreApi,
+  type UploadProgress as UploadProgressData,
+} from '@/lib/knowledge-store/api';
 
 interface ToUpload {
   file: File;
   createdAt: string;
 }
 
+/** Matches GET /file list payload (full file body is not returned). */
 interface Document {
-  id: number;
+  id: string;
   title: string;
-  content: string;
   date: string;
   size: number;
+  summary: string;
+  excerpt: string;
+  category: string;
+  document_type: string;
+  confidence_score?: number;
+}
+
+function ksUrl(path: string): string {
+  const base = config.knowledgeStoreUrl.replace(/\/$/, '');
+  const prefix = config.knowledgeStoreApiPrefix;
+  return `${base}${prefix}${path}`;
 }
 
 export default function KnowledgeStorePage() {
-
   const [toUpload, setToUpload] = useState<ToUpload[][]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isMounted, setIsMounted] = useState(false);
-  const [opened, { open, close }] = useDisclosure(false);
+  const [uploadOpened, { open: openUpload, close: closeUpload }] = useDisclosure(false);
+  const [detailDoc, setDetailDoc] = useState<Document | null>(null);
+  const [detailOpened, { open: openDetail, close: closeDetail }] = useDisclosure(false);
+  const [uploadProgress, setUploadProgress] =
+    useState<UploadProgressData | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const isUploading =
+    uploadProgress?.phase === 'uploading' ||
+    uploadProgress?.phase === 'processing';
+
+  const getDocuments = useCallback(async () => {
+    const response = await fetch(ksUrl('/file'), { method: 'GET' });
+    const data = await response.json();
+    if (response.ok && Array.isArray(data.documents)) {
+      setDocuments(
+        data.documents.map((d: Record<string, unknown>) => ({
+          id: String(d.id ?? ''),
+          title: String(d.title ?? 'Untitled'),
+          date: String(d.date ?? ''),
+          size: typeof d.size === 'number' ? d.size : Number(d.size) || 0,
+          summary: String(d.summary ?? d.excerpt ?? ''),
+          excerpt: String(d.excerpt ?? ''),
+          category: String(d.category ?? 'general'),
+          document_type: String(d.document_type ?? 'unknown'),
+          confidence_score:
+            typeof d.confidence_score === 'number' ? d.confidence_score : undefined,
+        })),
+      );
+    }
+  }, []);
 
   useEffect(() => {
     const data = localStorage.getItem('knowledgeStoreDocuments');
@@ -37,14 +80,14 @@ export default function KnowledgeStorePage() {
     }
     setIsMounted(true);
     getDocuments();
-  }, []);
+  }, [getDocuments]);
 
   useEffect(() => {
     if (isMounted) {
       localStorage.setItem('knowledgeStoreDocuments', JSON.stringify(toUpload));
     }
     getDocuments();
-  }, [toUpload, isMounted]);
+  }, [toUpload, isMounted, getDocuments]);
 
   const getFileExtension = (fileName: string) => {
     const parts = fileName?.split('.');
@@ -53,48 +96,49 @@ export default function KnowledgeStorePage() {
 
   const deleteLocalDocument = (index: number) => {
     setToUpload(toUpload.filter((_, i) => i !== index));
-  }
+  };
 
   const filesSelected = async (files: File[]) => {
     const newDocuments: ToUpload[][] = files.map((file) => [
-      {
-        file: file,
-        createdAt: new Date().toLocaleDateString()
-      }
+      { file, createdAt: new Date().toLocaleDateString() },
     ]);
-
     setToUpload([...toUpload, ...newDocuments]);
   };
 
   const uploadDocuments = async () => {
-    const formData = new FormData();
-    toUpload.forEach((doc) => {
-      formData.append('files', doc[0].file);
+    const files = toUpload.map((doc) => doc[0].file);
+    if (!files.length) return;
+
+    setUploadError(null);
+    setUploadProgress({
+      phase: 'uploading',
+      loadedBytes: 0,
+      totalBytes: files.reduce((sum, f) => sum + f.size, 0),
+      bytesPerSecond: 0,
+      etaSeconds: null,
     });
 
-    const response = await fetch(`${config.knowledgeStoreUrl}/api/knowledge-store/file`, {
-      method: 'POST',
-      body: formData,
-    });
+    const result = await knowledgeStoreApi.uploadDocumentsWithProgress(
+      files,
+      (snapshot) => setUploadProgress(snapshot)
+    );
 
-    if (response.ok) {
+    if (result.ok) {
       setToUpload([]);
-    }
-    await response.json();
-  };
-
-  const getDocuments = async () => {
-    const response = await fetch(`${config.knowledgeStoreUrl}/api/knowledge-store/file`, {
-      method: 'GET',
-    });
-    const data = await response.json();
-    if (response.ok) {
-      setDocuments(data['documents']);
+      await getDocuments();
+      // Hold the "Uploaded and indexed" confirmation on screen for a beat so
+      // the user actually sees the success state before the modal closes.
+      window.setTimeout(() => {
+        setUploadProgress(null);
+        closeUpload();
+      }, 1200);
+    } else {
+      setUploadError(result.error || 'Upload failed');
     }
   };
 
   const deleteDocument = async (index: number) => {
-    const response = await fetch(`${config.knowledgeStoreUrl}/api/knowledge-store/${documents[index].id}`, {
+    const response = await fetch(ksUrl(`/${documents[index].id}`), {
       method: 'DELETE',
     });
     if (response.ok) {
@@ -102,32 +146,26 @@ export default function KnowledgeStorePage() {
     }
   };
 
-  const uploadHeaders = [
-    "Document",
-    "Type",
-    "Size",
-    ""
-  ];
-  const documentHeaders = [
-    "Document",
-    "Date",
-    "Content",
-    "Size (bytes)",
-    "Actions"
-  ];
+  const openDocumentDetail = (doc: Document) => {
+    setDetailDoc(doc);
+    openDetail();
+  };
+
+  const uploadHeaders = ['Document', 'Type', 'Size', ''];
+  const documentHeaders = ['Document', 'Category', 'Summary', 'Date', 'Size', 'Details'];
 
   const actions = [
     {
-      icon: <MdDelete className="w-5 h-5" />,
-      ariaLabel: "Delete file",
+      icon: <IconTrash className="w-5 h-5" stroke={1.25} />,
+      ariaLabel: 'Delete file',
       onClick: deleteDocument,
     },
   ];
 
   const modalActions = [
     {
-      icon: <MdDelete className="w-5 h-5" />,
-      ariaLabel: "Delete file",
+      icon: <IconTrash className="w-5 h-5" stroke={1.25} />,
+      ariaLabel: 'Remove from queue',
       onClick: deleteLocalDocument,
     },
   ];
@@ -136,32 +174,56 @@ export default function KnowledgeStorePage() {
     <div className="flex gap-3 mt-5">
       <div className="flex-3 flex flex-col gap-5">
         <div className="gap-8 md:gap-10 ml-auto mr-auto grid grid-cols-2 md:flex md:grid-cols-4 md:gap-5 px-3 md:px-0 w-full md:w-200">
-          <Card
-            title="Total Documents"
-            number={documents.length}
-          />
+          <Card title="Total Documents" number={documents.length} />
           <Card
             title="Storage Used (bytes)"
             number={documents.reduce((acc, doc) => acc + doc.size, 0)}
           />
         </div>
-        {/* <FileUpload onFilesSelected={filesSelected}/> */}
+        <p className="mx-auto max-w-3xl px-3 text-center text-sm text-[var(--textSoft)]">
+          Upload runs automatic analysis in the knowledge store (category, entities, summary).
+          The table shows that summary and a short excerpt, not the full file.
+        </p>
         <div className="overflow-x-auto px-0 md:px-0 w-full max-w-[75vw] md:max-w-full mx-auto">
           <Info
             title="Documents Stored"
             header={documentHeaders}
             body={documents.map((doc) => [
               doc.title,
+              doc.category,
+              doc.summary.length > 180 ? `${doc.summary.slice(0, 180)}...` : doc.summary,
               doc.date,
-              doc.content,
-              doc.size
+              doc.size,
+              <button
+                key={`d-${doc.id}`}
+                type="button"
+                className="rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-xs text-sky-200 hover:bg-white/10"
+                onClick={() => openDocumentDetail(doc)}
+              >
+                View
+              </button>,
             ])}
             actions={actions}
             button="Add files"
-            onButton={open}
+            onButton={openUpload}
           />
         </div>
-        <Modal opened={opened} onClose={close} title="Upload Files" size="auto" overlayProps={{ backgroundOpacity: 0.55, blur: 3 }} style={{ color: 'white' }} centered>
+        <Modal
+          opened={uploadOpened}
+          onClose={() => {
+            if (isUploading) return; // don't let the user yank an in-flight upload
+            setUploadProgress(null);
+            closeUpload();
+          }}
+          title="Upload Files"
+          size="auto"
+          overlayProps={{ backgroundOpacity: 0.55, blur: 3 }}
+          style={{ color: 'white' }}
+          centered
+          withCloseButton={!isUploading}
+          closeOnClickOutside={!isUploading}
+          closeOnEscape={!isUploading}
+        >
           <FileUpload onFilesSelected={filesSelected} />
           <Info
             title="Files to Upload"
@@ -169,14 +231,69 @@ export default function KnowledgeStorePage() {
             body={toUpload.map((doc) => [
               doc[0].file.name,
               getFileExtension(doc[0].file.name),
-              `${doc[0].file.size} bytes`
+              `${doc[0].file.size} bytes`,
             ])}
-            actions={modalActions}
-            button="Upload"
-            onButton={uploadDocuments}
+            actions={isUploading ? [] : modalActions}
+            button={isUploading ? undefined : 'Upload'}
+            onButton={isUploading ? undefined : uploadDocuments}
           />
+          {uploadProgress && (
+            <div className="mt-3">
+              <UploadProgress
+                progress={uploadProgress}
+                errorDetail={uploadError}
+              />
+            </div>
+          )}
+        </Modal>
+
+        <Modal
+          opened={detailOpened}
+          onClose={() => {
+            closeDetail();
+            setDetailDoc(null);
+          }}
+          title={detailDoc?.title ?? 'Document'}
+          size="lg"
+          overlayProps={{ backgroundOpacity: 0.55, blur: 3 }}
+          style={{ color: 'white' }}
+          centered
+        >
+          {detailDoc && (
+            <div className="flex flex-col gap-3 text-sm text-[var(--text)]">
+              <p>
+                <span className="text-[var(--textSoft)]">Category:</span> {detailDoc.category}{' '}
+                <span className="text-[var(--textSoft)]">· Type:</span> {detailDoc.document_type}
+              </p>
+              <p>
+                <span className="text-[var(--textSoft)]">Indexed:</span> {detailDoc.date}{' '}
+                <span className="text-[var(--textSoft)]">· Size (bytes):</span> {detailDoc.size}
+                {detailDoc.confidence_score != null && (
+                  <>
+                    {' '}
+                    <span className="text-[var(--textSoft)]">· Analysis confidence:</span>{' '}
+                    {detailDoc.confidence_score.toFixed(2)}
+                  </>
+                )}
+              </p>
+              <div>
+                <p className="mb-1 font-medium text-[var(--textSoft)]">Summary (from store analysis)</p>
+                <p className="whitespace-pre-wrap rounded-lg border border-white/10 bg-black/20 p-3">
+                  {detailDoc.summary}
+                </p>
+              </div>
+              {detailDoc.excerpt && detailDoc.excerpt !== detailDoc.summary && (
+                <div>
+                  <p className="mb-1 font-medium text-[var(--textSoft)]">Text excerpt</p>
+                  <p className="whitespace-pre-wrap rounded-lg border border-white/10 bg-black/20 p-3 text-[var(--textSoft)]">
+                    {detailDoc.excerpt}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </Modal>
       </div>
     </div>
   );
-};
+}

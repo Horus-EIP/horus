@@ -1,0 +1,53 @@
+# Monolithic Loki (filesystem) for the local Compose stack.
+#
+# Security / immutability (best-effort in Docker):
+# - Loki is append-only: log lines cannot be edited in place via the API.
+# - allow_deletes: false blocks the log-deletion API.
+# - compactor.retention_enabled: false disables time-based retention (no automatic removal).
+# Anyone with host access to the Docker volume can still remove files; production WORM
+# needs object storage with Object Lock (e.g. S3) and locked-down IAM, not this layout alone.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  tsdb_shipper:
+    active_index_directory: /loki/tsdb-index
+    cache_location: /loki/tsdb-cache
+    cache_ttl: 24h
+  filesystem:
+    directory: /loki/chunks
+
+compactor:
+  working_directory: /loki/compactor
+  compaction_interval: 10m
+  retention_enabled: false
+
+limits_config:
+  allow_deletes: false

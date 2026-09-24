@@ -1,6 +1,11 @@
 'use client';
 
-import { FiSearch, FiBarChart2, FiEdit3, FiCpu } from 'react-icons/fi';
+import {
+  IconChartBar,
+  IconCpu,
+  IconEdit,
+  IconSearch,
+} from '@tabler/icons-react';
 
 export type AgentRole = 'researcher' | 'analyst' | 'writer' | 'general';
 
@@ -11,22 +16,22 @@ const ROLE_CONFIG: Record<AgentRole, {
 }> = {
   researcher: {
     label: 'Researcher',
-    icon: <FiSearch className="w-3 h-3" />,
+    icon: <IconSearch className="w-3 h-3" stroke={1.5} />,
     colors: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30',
   },
   analyst: {
     label: 'Analyst',
-    icon: <FiBarChart2 className="w-3 h-3" />,
+    icon: <IconChartBar className="w-3 h-3" stroke={1.5} />,
     colors: 'bg-fuchsia-500/15 text-fuchsia-400 border-fuchsia-500/30',
   },
   writer: {
     label: 'Writer',
-    icon: <FiEdit3 className="w-3 h-3" />,
+    icon: <IconEdit className="w-3 h-3" stroke={1.5} />,
     colors: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
   },
   general: {
     label: 'General',
-    icon: <FiCpu className="w-3 h-3" />,
+    icon: <IconCpu className="w-3 h-3" stroke={1.5} />,
     colors: 'bg-white/5 text-[var(--textSoft)] border-white/10',
   },
 };

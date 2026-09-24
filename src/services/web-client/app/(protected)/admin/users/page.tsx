@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { userApi } from "@/lib/users/api";
+import { registerField } from "@/lib/auth/schemas";
 import type { User, UserRole } from "@/lib/types";
 import Info from "@/components/ui/info";
-import { MdDelete, MdEdit, MdAdd } from "react-icons/md";
+import { IconEdit, IconPlus, IconTrash } from "@tabler/icons-react";
 import { Modal, Button, Group, Text, Select, TextInput, PasswordInput } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
@@ -161,8 +162,9 @@ const AdminUsersPage = () => {
       notifyError("Username is required");
       return;
     }
-    if (!newPassword.trim() || newPassword.length < 6) {
-      notifyError("Password must be at least 6 characters");
+    const passwordCheck = registerField.password.safeParse(newPassword);
+    if (!passwordCheck.success) {
+      notifyError(passwordCheck.error.issues[0]?.message ?? "Invalid password");
       return;
     }
 
@@ -202,12 +204,12 @@ const AdminUsersPage = () => {
 
   const actions = [
     {
-      icon: <MdEdit className="w-5 h-5" />,
+      icon: <IconEdit className="w-5 h-5" stroke={1.25} />,
       ariaLabel: "Edit user role",
       onClick: handleEditClick,
     },
     {
-      icon: <MdDelete className="w-5 h-5" />,
+      icon: <IconTrash className="w-5 h-5" stroke={1.25} />,
       ariaLabel: "Delete user",
       onClick: handleDeleteRow,
     },
@@ -324,11 +326,11 @@ const AdminUsersPage = () => {
           
           <PasswordInput
             label="Password"
-            placeholder="Enter password (min 6 characters)"
+            placeholder="At least 10 characters: uppercase, lowercase, number, special character"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             required
-            minLength={6}
+            minLength={10}
             classNames={{
               input: "bg-[var(--bg)] text-[var(--text)] border-white/10",
               label: "text-[var(--text)]",
@@ -385,7 +387,7 @@ const AdminUsersPage = () => {
               onClick={openCreate}
               className="rounded-xl bg-green-600 px-3 py-2 text-sm text-white shadow hover:bg-green-700 cursor-pointer flex items-center gap-2"
             >
-              <MdAdd className="w-5 h-5" />
+              <IconPlus className="w-5 h-5" stroke={1.25} />
               Create User
             </button>
             <button
@@ -399,6 +401,12 @@ const AdminUsersPage = () => {
               className="rounded-xl bg-white/5 px-3 py-2 text-sm text-white shadow hover:bg-white/10 cursor-pointer"
             >
               Manage Roles
+            </button>
+            <button
+              onClick={() => window.location.href = '/admin/logs'}
+              className="rounded-xl bg-white/5 px-3 py-2 text-sm text-white shadow hover:bg-white/10 cursor-pointer"
+            >
+              View Logs
             </button>
           </div>
           <Info

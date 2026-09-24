@@ -9,11 +9,9 @@ acknowledgment tracking, and timeout handling.
 from __future__ import annotations
 
 import asyncio
-import json
-import time
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from core.logger import get_logger
 from schemas.agent_message import (
@@ -35,8 +33,8 @@ class MessageStore:
     """In-memory message store for debugging and audit trails."""
 
     def __init__(self, max_messages_per_agent: int = 1000):
-        self._messages: Dict[str, List[AgentMessage]] = defaultdict(list)
-        self._by_id: Dict[str, AgentMessage] = {}
+        self._messages: dict[str, list[AgentMessage]] = defaultdict(list)
+        self._by_id: dict[str, AgentMessage] = {}
         self._max = max_messages_per_agent
 
     def store(self, message: AgentMessage) -> None:
@@ -47,10 +45,10 @@ class MessageStore:
             removed = bucket.pop(0)
             self._by_id.pop(removed.id, None)
 
-    def get(self, message_id: str) -> Optional[AgentMessage]:
+    def get(self, message_id: str) -> AgentMessage | None:
         return self._by_id.get(message_id)
 
-    def get_for_agent(self, agent_id: str) -> List[AgentMessage]:
+    def get_for_agent(self, agent_id: str) -> list[AgentMessage]:
         return list(self._messages.get(agent_id, []))
 
     def update_status(self, message_id: str, status: MessageStatus) -> None:
@@ -66,15 +64,15 @@ class DelegationRegistry:
     """
 
     def __init__(self):
-        self._pending: Dict[str, asyncio.Event] = {}
-        self._results: Dict[str, Dict[str, Any]] = {}
+        self._pending: dict[str, asyncio.Event] = {}
+        self._results: dict[str, dict[str, Any]] = {}
 
     def register(self, delegation_id: str) -> asyncio.Event:
         event = asyncio.Event()
         self._pending[delegation_id] = event
         return event
 
-    def resolve(self, delegation_id: str, result: Dict[str, Any]) -> bool:
+    def resolve(self, delegation_id: str, result: dict[str, Any]) -> bool:
         event = self._pending.pop(delegation_id, None)
         if event is None:
             return False
@@ -82,7 +80,7 @@ class DelegationRegistry:
         event.set()
         return True
 
-    def get_result(self, delegation_id: str) -> Optional[Dict[str, Any]]:
+    def get_result(self, delegation_id: str) -> dict[str, Any] | None:
         return self._results.pop(delegation_id, None)
 
     def cancel(self, delegation_id: str) -> None:
@@ -110,7 +108,7 @@ class AgentCommunicator:
         self.rabbitmq = rabbitmq_instance
         self.message_store = MessageStore()
         self.delegation_registry = DelegationRegistry()
-        self._handlers: Dict[str, Callable] = {}
+        self._handlers: dict[str, Callable] = {}
 
     # ------------------------------------------------------------------
     # Queue management
@@ -242,7 +240,7 @@ class AgentCommunicator:
         timeout = request.timeout_seconds or DEFAULT_DELEGATION_TIMEOUT
         try:
             await asyncio.wait_for(event.wait(), timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self.message_store.update_status(message.id, MessageStatus.TIMEOUT)
             self.delegation_registry.cancel(message.id)
             logger.warning(
@@ -282,10 +280,10 @@ class AgentCommunicator:
     # Introspection
     # ------------------------------------------------------------------
 
-    def get_messages_for_agent(self, agent_id: str) -> List[Dict[str, Any]]:
+    def get_messages_for_agent(self, agent_id: str) -> list[dict[str, Any]]:
         messages = self.message_store.get_for_agent(agent_id)
         return [m.model_dump() for m in messages]
 
-    def get_message(self, message_id: str) -> Optional[Dict[str, Any]]:
+    def get_message(self, message_id: str) -> dict[str, Any] | None:
         msg = self.message_store.get(message_id)
         return msg.model_dump() if msg else None

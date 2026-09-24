@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useForm } from "@tanstack/react-form";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, Lock, AlertCircle, User } from "lucide-react";
+import { IconAlertCircle, IconLock, IconUser } from "@tabler/icons-react";
 import { AuthLayout } from "@/components/auth/auth-layout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -61,7 +61,7 @@ export default function LoginPage() {
             className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg"
           >
             <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+              <IconAlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" stroke={1.25} />
               <p className="text-sm text-red-800 dark:text-red-200">{authError}</p>
             </div>
           </motion.div>
@@ -91,7 +91,7 @@ export default function LoginPage() {
                 type="text"
                 label="Username"
                 placeholder="Enter your username"
-                leftIcon={<User className="w-5 h-5" />}
+                leftIcon={<IconUser className="w-5 h-5" stroke={1.25} />}
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
@@ -116,7 +116,7 @@ export default function LoginPage() {
                 type="password"
                 label="Password"
                 placeholder="Enter your password"
-                leftIcon={<Lock className="w-5 h-5" />}
+                leftIcon={<IconLock className="w-5 h-5" stroke={1.25} />}
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}

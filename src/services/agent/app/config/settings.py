@@ -21,6 +21,8 @@ def get_int_env(key: str, default: int) -> int:
 # When running in Docker, set ORCHESTRATOR_URL to http://mas:8000
 ORCHESTRATOR_URL = os.getenv("ORCHESTRATOR_URL", "http://localhost:8000")
 
+RABBITMQ_PORT = get_int_env("RABBITMQ_PORT", 5672)
+
 # Authentication used by the agent to talk to the MAS orchestrator
 # - ORCHESTRATOR_TOKEN: direct bearer token (takes precedence)
 # - ORCHESTRATOR_USERNAME / ORCHESTRATOR_PASSWORD: credentials to fetch a token via /auth/token
@@ -33,14 +35,27 @@ AGENT_DESCRIPTION = os.getenv("AGENT_DESCRIPTION", "Autonomous MAS agent")
 
 # Knowledge Store URL - when running in Docker, set to http://knowledge_store:8080
 KNOWLEDGE_STORE_URL = os.getenv("KNOWLEDGE_STORE_URL", "http://localhost:8080")
+# Optional URL path prefix if the store is behind a gateway (default: none). Example: /api/knowledge-store
+_ks_prefix = os.getenv("KNOWLEDGE_STORE_API_PREFIX", "").strip().rstrip("/")
+KNOWLEDGE_STORE_API_PREFIX = (
+    _ks_prefix if not _ks_prefix else (_ks_prefix if _ks_prefix.startswith("/") else f"/{_ks_prefix}")
+)
 
 # Knowledge Store Client Configuration
 KNOWLEDGE_STORE_TIMEOUT = get_float_env("KNOWLEDGE_STORE_TIMEOUT", 10.0)
 KNOWLEDGE_STORE_MAX_RETRIES = get_int_env("KNOWLEDGE_STORE_MAX_RETRIES", 3)
 KNOWLEDGE_STORE_RETRY_DELAY = get_float_env("KNOWLEDGE_STORE_RETRY_DELAY", 1.0)
+# Chunks merged into RAG context (default 8; was effectively 1 via client default and hurt recall).
+KNOWLEDGE_STORE_N_RESULTS = get_int_env("KNOWLEDGE_STORE_N_RESULTS", 8)
 
-# Model Configuration
-MODEL_NAME = os.getenv("MODEL_NAME", "t5-small")
+# Model Configuration (causal instruct LLM).
+#
+# Tiered defaults: the agent does the heavy lifting — RAG synthesis, final
+# answer generation, multi-step task work — so it gets the bigger model.
+# MAS only routes/classifies and uses a 1.5B (see services/mas/core/llm_setup).
+# Override MODEL_NAME in .env if you want to drop the agent down to the small
+# model too (matches the old "same model everywhere" behaviour).
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen3-4B-Instruct-2507")
 MODEL_DEVICE = os.getenv("MODEL_DEVICE", "auto")  # "auto", "cpu", "cuda", "cuda:0", etc.
 
 AGENT_TYPE = os.getenv("AGENT_TYPE", "general")

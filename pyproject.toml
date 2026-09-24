@@ -1,0 +1,87 @@
+[tool.coverage.run]
+# Branch coverage is turned on per-run via --cov-branch in CI. These settings
+# centralize what counts as measurable code across all three services so the
+# reported percentage reflects real, reachable logic.
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/alembic/*",
+    "*/migrations/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+# Only genuinely-unreachable / not-meaningfully-testable lines belong here.
+# Never used to hide real gaps — every entry is code a unit test cannot drive.
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+# Bug-catching rules only. Style/docstring/annotation rules (D, ANN, N) are
+# off entirely. The remaining noisy style checks (W291/W293 in docstrings,
+# SIM-* opinions, UP-* upgrades that don't change behaviour) are ignored
+# below; we keep the real-bug families (F, E40x, E70x, B9xx, F8xx).
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes (undefined names, unused imports — actual bugs)
+    "I",    # isort (import sorting)
+    "B",    # flake8-bugbear (real bugs)
+    "C4",   # flake8-comprehensions
+]
+
+ignore = [
+    "E501",   # line too long — formatter owns this
+    "E701",   # multiple statements on one line — style opinion
+    "E731",   # lambda assignment — style opinion
+    "W291",   # trailing whitespace — mostly in docstrings, cosmetic
+    "W292",   # missing newline at end of file — formatter owns this
+    "W293",   # whitespace on blank line — mostly in docstrings, cosmetic
+    "B007",   # unused loop control variable — style opinion
+    "B008",   # FastAPI uses Depends() as a default arg — that's correct
+    "B904",   # raise without from — nice to have but lots of false noise
+    "C416",   # unnecessary list comprehension — style opinion
+]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "core",
+    "db",
+    "auth",
+    "agents",
+    "tasks",
+    "chat",
+    "conversations",
+    "users",
+    "schemas",
+    "app",
+    "api",
+    "analytics",
+    "agent_server",
+    "ai_agents",
+    "specialized",
+    "chroma_db",
+    "services",
+    "config",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests + integration-checks are exploratory; allow imports, unused vars,
+# E402 module-level imports (for the mock-setup-before-import pattern),
+# and skip the bugbear rule set.
+"tests/**" = ["E", "F401", "F811", "F841", "B"]
+"**/tests/**" = ["E", "F401", "F811", "F841", "B"]
+"scripts/integration-checks/**" = ["E", "F", "B"]
+"**/alembic/**" = ["E", "F", "I", "UP", "B"]
+"**/migrations/**" = ["E", "F", "I", "UP", "B"]
+"**/__init__.py" = ["F401"]
+"**/conftest.py" = ["E402"]   # heavy-library mocks must run before service imports

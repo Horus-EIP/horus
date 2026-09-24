@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Horus</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main id="app">
+    <header>
+      <h1>Horus</h1>
+      <p class="sub" id="subtitle">Starting up</p>
+    </header>
+
+    <section class="view" data-view="locating">
+      <p class="lead">Looking for your Horus installation&hellip;</p>
+      <div class="spinner" aria-hidden="true"></div>
+    </section>
+
+    <section class="view" data-view="not-found">
+      <p class="lead">Horus could not find its own files.</p>
+      <p>
+        This window is running from a copy of the app that has been moved away
+        from the folder you unzipped. Point it at that folder - the one holding
+        <code>README-FIRST.txt</code> and <code>installer</code>.
+      </p>
+      <label class="field">
+        <span>Folder</span>
+        <input type="text" id="root-input" spellcheck="false"
+               placeholder="C:\Users\you\Downloads\Horus-Beta-0.1.0" />
+      </label>
+      <p class="error" id="root-error" hidden></p>
+      <div class="actions">
+        <button class="primary" id="root-save">Use this folder</button>
+        <button id="root-quit">Quit</button>
+      </div>
+    </section>
+
+    <section class="view" data-view="no-python">
+      <p class="lead">Python 3.11 or newer is required, and was not found.</p>
+      <p>
+        Horus itself runs in Docker. Python is only used to start and stop it,
+        which is why this window cannot do anything without it.
+      </p>
+      <p>
+        Install it from <code>https://www.python.org/downloads/</code> - on
+        Windows, tick <strong>Add python.exe to PATH</strong> on the first
+        screen - then reopen Horus.
+      </p>
+      <div class="actions">
+        <button class="primary" id="python-retry">Look again</button>
+        <button id="python-quit">Quit</button>
+      </div>
+    </section>
+
+    <section class="view" data-view="docker-down">
+      <p class="lead">Docker Desktop is not running.</p>
+      <p>
+        Horus runs entirely inside Docker containers on this machine. Start
+        Docker Desktop, wait until its whale icon stops animating, then come
+        back here.
+      </p>
+      <p class="detail" id="docker-detail"></p>
+      <div class="actions">
+        <button class="primary" id="docker-retry">Try again</button>
+        <button id="docker-quit">Quit</button>
+      </div>
+    </section>
+
+    <section class="view" data-view="not-installed">
+      <p class="lead">Horus has not been installed on this machine yet.</p>
+      <p>
+        The app is only the window. The install - downloading the containers,
+        choosing which folders Horus may read - happens once, from the launcher
+        in the folder you unzipped:
+      </p>
+      <ul class="plain">
+        <li><strong>Windows</strong> double-click <code>START-HERE-Windows.bat</code></li>
+        <li><strong>macOS</strong> right-click <code>START-HERE-macOS.command</code>, choose Open</li>
+        <li><strong>Linux</strong> run <code>./START-HERE-Linux.sh</code></li>
+      </ul>
+      <div class="actions">
+        <button class="primary" id="installed-open">Open that folder</button>
+        <button id="installed-retry">I have done that</button>
+        <button id="installed-quit">Quit</button>
+      </div>
+    </section>
+
+    <section class="view" data-view="starting">
+      <p class="lead" id="starting-step">Starting Horus</p>
+      <p class="detail">
+        First launch after an install can take a few minutes: the language model
+        is loaded into memory before the stack reports healthy. This window is
+        not frozen - the elapsed time below keeps moving.
+      </p>
+
+      <table class="services" id="services" hidden>
+        <thead><tr><th>Service</th><th>State</th></tr></thead>
+        <tbody></tbody>
+      </table>
+
+      <p class="elapsed"><span id="elapsed">0s</span> elapsed</p>
+      <details class="output">
+        <summary>Show what Docker is doing</summary>
+        <pre id="output"></pre>
+      </details>
+      <div class="actions">
+        <button id="starting-log">Open install log</button>
+        <button id="starting-cancel">Stop and quit</button>
+      </div>
+    </section>
+
+    <section class="view" data-view="failed">
+      <p class="lead" id="failed-headline">Horus did not start.</p>
+      <p class="detail" id="failed-detail"></p>
+      <pre id="failed-output"></pre>
+      <div class="actions">
+        <button class="primary" id="failed-retry">Try again</button>
+        <button id="failed-log">Open install log</button>
+        <button id="failed-profile">Open hardware profile</button>
+        <button id="failed-quit">Quit</button>
+      </div>
+    </section>
+
+    <section class="view" data-view="running">
+      <p class="lead">Horus is running.</p>
+      <p>
+        The main window has the app in it. Leave this one open or close it - the
+        stack keeps running either way, and everything here is also in the Horus
+        menu.
+      </p>
+      <div class="actions">
+        <button class="primary" id="running-show">Show the app</button>
+        <button id="running-browser">Open in a browser</button>
+        <button id="running-restart">Restart Horus</button>
+        <button id="running-stop">Stop Horus</button>
+      </div>
+      <div class="actions">
+        <button id="running-log">Open install log</button>
+        <button id="running-profile">Open hardware profile</button>
+      </div>
+    </section>
+
+    <section class="view" data-view="close-prompt">
+      <p class="lead">Leave Horus running?</p>
+      <p>
+        Horus is 12 containers. Left running they keep using memory in the
+        background; shut down, the next start takes a minute or two while
+        services come back and the model reloads. Your documents are kept either
+        way.
+      </p>
+      <label class="check">
+        <input type="checkbox" id="close-remember" />
+        <span>Remember this and stop asking</span>
+      </label>
+      <div class="actions">
+        <button class="primary" id="close-leave">Leave it running</button>
+        <button id="close-shutdown">Shut it down</button>
+        <button id="close-cancel">Don't close</button>
+      </div>
+    </section>
+
+    <section class="view" data-view="stopping">
+      <p class="lead">Stopping Horus&hellip;</p>
+      <div class="spinner" aria-hidden="true"></div>
+      <details class="output">
+        <summary>Show what Docker is doing</summary>
+        <pre id="stopping-output"></pre>
+      </details>
+    </section>
+
+    <section class="view" data-view="stopped">
+      <p class="lead">Horus is stopped.</p>
+      <p>Your documents, accounts and downloaded models are untouched.</p>
+      <div class="actions">
+        <button class="primary" id="stopped-start">Start it again</button>
+        <button id="stopped-quit">Quit</button>
+      </div>
+    </section>
+  </main>
+
+  <footer id="footer"></footer>
+  <script src="app.js"></script>
+</body>
+</html>

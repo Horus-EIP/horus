@@ -1,0 +1,56 @@
+{
+  "base_url": "http://localhost:8000",
+  "timestamp": "2026-04-14T17:17:22Z",
+  "results": [
+    {
+      "name": "Health Check",
+      "iterations": 100,
+      "mean_ms": 12.852427992038429,
+      "median_ms": 12.565199984237552,
+      "std_dev_ms": 1.6718689250344367,
+      "min_ms": 10.612500132992864,
+      "max_ms": 19.37670004554093,
+      "success_rate": 100.0
+    },
+    {
+      "name": "Conversation List",
+      "iterations": 100,
+      "mean_ms": 7.61395399691537,
+      "median_ms": 6.9423000095412135,
+      "std_dev_ms": 2.18600581023321,
+      "min_ms": 5.989100085571408,
+      "max_ms": 18.80350010469556,
+      "success_rate": 100.0
+    },
+    {
+      "name": "Agent List",
+      "iterations": 100,
+      "mean_ms": 8.330311011523008,
+      "median_ms": 7.666849996894598,
+      "std_dev_ms": 2.7903387871093095,
+      "min_ms": 6.423499900847673,
+      "max_ms": 25.758399860933423,
+      "success_rate": 100.0
+    },
+    {
+      "name": "Task Queue Stats",
+      "iterations": 100,
+      "mean_ms": 12.029313002713025,
+      "median_ms": 12.069399934262037,
+      "std_dev_ms": 3.7843879817887984,
+      "min_ms": 6.759900134056807,
+      "max_ms": 34.062799997627735,
+      "success_rate": 100.0
+    },
+    {
+      "name": "Conversation Create",
+      "iterations": 100,
+      "mean_ms": 56.510987028013915,
+      "median_ms": 55.893450044095516,
+      "std_dev_ms": 5.005914974876717,
+      "min_ms": 29.36809998936951,
+      "max_ms": 84.15940008126199,
+      "success_rate": 100.0
+    }
+  ]
+}

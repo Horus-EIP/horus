@@ -1,65 +1,25 @@
-"""
-Logger Module - Multi-Agent System Logging Infrastructure
+"""Structured (JSON) logging for the MAS service.
 
-This module provides comprehensive logging functionality for the MAS application,
-featuring structured JSON logging via structlog, correlation ID support, and
-component-based log organization.
-
-Key Features:
-- Structured JSON output for machine parsing (Datadog, ELK, etc.)
-- Correlation ID tracking across requests (via contextvars)
-- Separate log files for general logs and error logs
-- Timestamp tracking for performance monitoring
-- Specialized logging for database operations, authentication, and API requests
-- Agent operation tracking and monitoring
-- Singleton pattern for logger management
-- Support for multiple log levels (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-
-Logger Hierarchy:
-The module uses structlog's logger factory. Each component (auth, db, agent, etc.)
-gets its own logger instance bound with the component name.
-
-Usage Examples:
-    from core.logger import get_logger, log_agent_operation
-
-    logger = get_logger("my_module")
-    logger.info("event_name", key="value")
-
-    # Or use convenience functions
-    log_agent_operation("Agent-001", "START", "Task assignment")
-    log_db_operation("CREATE", "users_table", "New user registered")
-
-Log File Output:
-- Daily log files: logs/mas_YYYYMMDD.log (all logs in JSON)
-- Daily error files: logs/mas_errors_YYYYMMDD.log (errors only in JSON)
+Based on ``structlog`` with correlation-id propagation via contextvars and
+daily rotating files under ``logs/``. See
+``docs/architecture.md`` for output paths and usage examples.
 """
 
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import colorama
 import structlog
-from colorama import Back, Fore, Style
+from colorama import Fore, Style
 
 colorama.init(autoreset=True)
 
 
 class ColoredFormatter(logging.Formatter):
-    """
-    Custom logging formatter with color support for terminal output.
-
-    Note: Currently unused in favor of structlog's JSONRenderer, but kept
-    for potential dev-mode toggle.
-
-    Features:
-    - Colored log levels and component names
-    - Timestamp with consistent formatting
-    - Exception information formatting
-    - Component-specific color coding for easy identification
-    """
+    """Color-coded terminal formatter (dev-only; unused in JSON mode)."""
 
     COLORS = {
         "DEBUG": Fore.CYAN,
@@ -109,36 +69,14 @@ class ColoredFormatter(logging.Formatter):
 
 
 class MASLogger:
-    """
-    Singleton logger manager for the Multi-Agent System.
-
-    Provides centralized logger creation, configuration, and specialized
-    logging methods for different operation types (database, authentication, API, etc.).
-    Configures structlog for JSON output and context management.
-
-    Attributes:
-        log_dir (Path): Directory for storing log files (logs/)
-        _instance (MASLogger): Singleton instance
-        _loggers (dict): Cache of logger instances by name
-
-    Methods:
-        get_logger(name, level): Get or create a structlog logger instance
-        log_startup(component, message): Log startup messages
-        log_success(component, message): Log successful operations
-        log_warning(component, message): Log warning messages
-        log_error(component, message): Log error messages
-        log_db_operation(operation, table, details): Log database operations
-        log_auth_operation(operation, username, success): Log authentication events
-        log_api_request(method, endpoint, status_code, duration): Log API requests
-        log_agent_operation(agent_name, operation, details): Log agent activities
-    """
+    """Singleton coordinator for structlog-based MAS loggers."""
 
     _instance = None
     _loggers = {}
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(MASLogger, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
@@ -155,6 +93,10 @@ class MASLogger:
             processors=[
                 structlog.contextvars.merge_contextvars,
                 structlog.processors.add_log_level,
+                # Interpolate %s/%d-style positional args (e.g.
+                # logger.info("decision=%s", decision)); without this they are
+                # printed literally and the values land in ``positional_args``.
+                structlog.stdlib.PositionalArgumentsFormatter(),
                 structlog.processors.StackInfoRenderer(),
                 structlog.dev.set_exc_info,
                 structlog.processors.TimeStamper(fmt="iso", utc=False),
@@ -182,31 +124,39 @@ class MASLogger:
         )
         root_logger.addHandler(console_handler)
 
-        # File Handler - JSON logging
-        log_file = self.log_dir / f"mas_{datetime.now().strftime('%Y%m%d')}.log"
-        file_handler = logging.FileHandler(log_file, encoding="utf-8")
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(
-            structlog.stdlib.ProcessorFormatter(
-                processor=structlog.processors.JSONRenderer(ensure_ascii=False)
+        # File handlers leak open FDs in short-lived pytest processes; skip in TEST_MODE.
+        if os.getenv("TEST_MODE") != "1":
+            log_file = self.log_dir / f"mas_{datetime.now().strftime('%Y%m%d')}.log"
+            file_handler = logging.FileHandler(log_file, encoding="utf-8")
+            file_handler.setLevel(logging.DEBUG)
+            file_handler.setFormatter(
+                structlog.stdlib.ProcessorFormatter(
+                    processor=structlog.processors.JSONRenderer(ensure_ascii=False)
+                )
             )
-        )
-        root_logger.addHandler(file_handler)
+            root_logger.addHandler(file_handler)
 
-        # Error File Handler - JSON logging
-        error_file = (
-            self.log_dir / f"mas_errors_{datetime.now().strftime('%Y%m%d')}.log"
-        )
-        error_handler = logging.FileHandler(error_file, encoding="utf-8")
-        error_handler.setLevel(logging.ERROR)
-        error_handler.setFormatter(
-            structlog.stdlib.ProcessorFormatter(
-                processor=structlog.processors.JSONRenderer(ensure_ascii=False)
+            error_file = (
+                self.log_dir / f"mas_errors_{datetime.now().strftime('%Y%m%d')}.log"
             )
-        )
-        root_logger.addHandler(error_handler)
+            error_handler = logging.FileHandler(error_file, encoding="utf-8")
+            error_handler.setLevel(logging.ERROR)
+            error_handler.setFormatter(
+                structlog.stdlib.ProcessorFormatter(
+                    processor=structlog.processors.JSONRenderer(ensure_ascii=False)
+                )
+            )
+            root_logger.addHandler(error_handler)
 
-    def get_logger(self, name: str, level: Optional[int] = None) -> logging.Logger:
+        # Quiet verbose third-party loggers. pika is the worst offender: it logs
+        # the full AMQP connection lifecycle (connect → "Aborting transport" →
+        # "AMQP stack terminated, failed to connect, or aborted") at INFO on
+        # every /rabbitmq/heartbeat, which reads like a wall of errors. Lift
+        # these to WARNING so genuine problems aren't buried.
+        for noisy in ("pika", "httpx", "httpcore"):
+            logging.getLogger(noisy).setLevel(logging.WARNING)
+
+    def get_logger(self, name: str, level: int | None = None) -> logging.Logger:
         """
         Get or create a structlog logger instance with the specified name.
         """

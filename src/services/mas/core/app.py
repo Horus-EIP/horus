@@ -1,33 +1,8 @@
-"""
-FastAPI Application Factory
+"""FastAPI application factory for the MAS service.
 
-This module provides the application factory pattern for creating and configuring
-the FastAPI application instance. It handles:
-
-- Application lifecycle management with async context managers
-- Middleware configuration (CORS, logging, security)
-- Router registration for all API endpoints
-- Background task management (agent heartbeat monitoring)
-- Graceful shutdown handling
-
-The application follows a modular architecture with clear separation of concerns:
-- Authentication and authorization
-- Agent registry and lifecycle management
-- Task orchestration and execution
-- Real-time communication via WebSockets
-- Conversation persistence and management
-- User administration
-
-Key Components:
-- Lifespan management for startup/shutdown tasks
-- CORS middleware for cross-origin requests
-- Custom logging middleware for request/response tracking
-- Router inclusion with organized endpoint grouping
-- Background task coordination
-
-Usage:
-    The create_app_environment() function returns a configured FastAPI instance
-    ready for deployment or testing.
+``create_app_environment()`` returns a fully wired ``FastAPI`` instance:
+middleware, routers, OpenTelemetry, Prometheus instrumentation, and the
+lifespan that boots/teardown background tasks.
 """
 
 import asyncio
@@ -35,18 +10,19 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from prometheus_client import make_asgi_app
 from prometheus_fastapi_instrumentator import Instrumentator
 
 import agents.routes
+import analytics.routes
 import chat.routes
 import conversations.routes
 import core.rabbitmq_tool
-import db.models
 import tasks.routes
 import users.routes
 from agents.controller import check_agent_heartbeat
 from auth.routes import router as auth_router
+from core.embedding_setup import start_embedding_preload_background_thread
+from core.llm_setup import start_llm_preload_background_thread
 from core.logger import get_logger, log_error, log_startup, log_success
 from core.middleware import LoggingMiddleware
 from core.rabbitmq_tool import rabbitmq_instance
@@ -61,28 +37,11 @@ logger = get_logger("app")
 
 
 def create_app_environment():
-    """
-    Create and configure the FastAPI application environment.
+    """Build the configured ``FastAPI`` instance.
 
-    This function serves as the application factory, creating a fully configured
-    FastAPI instance with all necessary middleware, routers, and settings.
-
-    Configuration includes:
-    - CORS middleware for cross-origin requests (configured for development)
-    - Custom logging middleware for request/response tracking
-    - All API routers organized by functionality
-    - Application metadata (title, version, description)
-
-    Returns:
-        FastAPI: Fully configured FastAPI application instance
-
-    Router Organization:
-        - /agents: Agent registration, management, and health monitoring
-        - /chat: WebSocket endpoints for real-time communication
-        - /conversations: Conversation CRUD operations and history
-        - /tasks: Task creation, distribution, and result handling
-        - /auth: Authentication, registration, and token management
-        - /users: User administration (admin-only operations)
+    Registers CORS, logging middleware, all routers (/agents, /chat,
+    /conversations, /tasks, /auth, /users, /rabbitmq), tracing, and
+    Prometheus instrumentation.
     """
     log_startup("APP", "Creating FastAPI application environment...")
 
@@ -143,6 +102,7 @@ def create_app_environment():
 
     routers = [
         (agents.routes.router, "Agents"),
+        (analytics.routes.router, "Analytics"),
         (chat.routes.router, "Chat"),
         (conversations.routes.router, "Conversations"),
         (tasks.routes.router, "Tasks"),
@@ -155,9 +115,8 @@ def create_app_environment():
         app.include_router(router)
         logger.info(f"{name} router included")
 
-    init_tracing(app)
-
-    log_success("app", "OpenTelemetry tracing initialized")
+    if init_tracing(app):
+        log_success("app", "OpenTelemetry tracing initialized")
 
     global instrumentator
     instrumentator = Instrumentator().instrument(app)
@@ -169,33 +128,7 @@ def create_app_environment():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Application lifespan context manager.
-
-    Manages the application lifecycle from startup to shutdown, handling:
-    - Database initialization (create tables, setup)
-    - Background task initialization (agent heartbeat monitoring)
-    - Resource cleanup on shutdown
-    - Graceful task cancellation
-
-    Startup Tasks:
-    - Create database models and tables
-    - Initialize database with default data
-    - Initialize agent heartbeat monitoring system
-    - Start background health check routines
-    - Log successful startup completion
-
-    Shutdown Tasks:
-    - Cancel all background tasks gracefully
-    - Clean up resources and connections
-    - Log successful shutdown completion
-
-    Args:
-        app: FastAPI application instance
-
-    Yields:
-        None: Context for application runtime
-    """
+    """FastAPI lifespan: init DB and background tasks at startup, cancel them cleanly on shutdown."""
     log_startup("LIFESPAN", "Starting application lifespan management...")
 
     try:
@@ -224,6 +157,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log_error("lifespan", f"Failed to connect to RabbitMQ: {str(e)}", exc_info=True)
         raise
+
+    start_llm_preload_background_thread()
+    log_success("lifespan", "LLM background preload started (if LLM_AUTOINIT=1)")
+
+    start_embedding_preload_background_thread()
+    log_success(
+        "lifespan",
+        "Sentence-embedding model background preload started (warms skill cache)",
+    )
 
     yield
     logger.info("Shutting down application...")

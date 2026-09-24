@@ -1,12 +1,20 @@
-import json
 import datetime
-from typing import Optional, Dict, Any
+import json
+from typing import Any
 
-from .. import knowledge_collection, get_embedding
 from app.chroma_db.models import DocumentModel, SmartSearchRequest
+from app.chroma_db.setup import get_embedding, knowledge_collection
 
 
-async def store_file(doc: DocumentModel, auto_analysis: Optional[Dict[str, Any]] = None):
+#: Chroma only accepts scalars as metadata values; a dict or a list raises on add().
+_SCALAR_TYPES = (str, int, float, bool)
+
+
+async def store_file(
+    doc: DocumentModel,
+    auto_analysis: dict[str, Any] | None = None,
+    extra_metadata: dict[str, Any] | None = None,
+):
     """
     Store a document in the ChromaDB knowledge collection.
 
@@ -14,6 +22,10 @@ async def store_file(doc: DocumentModel, auto_analysis: Optional[Dict[str, Any]]
         doc: DocumentModel with id, title, content, size.
         auto_analysis: Optional dict from ContentAnalyzer.analyze() with keys:
             auto_category, auto_type, auto_summary, entities, topics, confidence_score.
+        extra_metadata: Optional flat scalar fields to record alongside the rest.
+            The corpus scanner uses this for source_path / content_sha256 / source,
+            which is how a re-scan recognises a file it has already ingested.
+            Non-scalar values are dropped rather than allowed to fail the add().
     """
     embedding = get_embedding(doc.content, is_query=False)
 
@@ -41,6 +53,11 @@ async def store_file(doc: DocumentModel, auto_analysis: Optional[Dict[str, Any]]
             metadata["entities_amounts"] = json.dumps(entities["amounts"])
         if entities.get("dates"):
             metadata["entities_dates"] = json.dumps(entities["dates"])
+
+    if extra_metadata:
+        for key, value in extra_metadata.items():
+            if isinstance(value, _SCALAR_TYPES):
+                metadata[key] = value
 
     knowledge_collection.add(
         ids=[doc.id],
@@ -106,7 +123,7 @@ async def delete_document(id: str) -> dict:
     return {"status": "document deleted"}
 
 
-def build_where_clause(request: SmartSearchRequest) -> Optional[dict]:
+def build_where_clause(request: SmartSearchRequest) -> dict | None:
     """
     Build a ChromaDB metadata where-clause filter from a SmartSearchRequest.
 

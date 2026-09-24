@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { agentApi, Agent, RegisterAgentPayload } from "@/lib/agents/api";
 import Info from "@/components/ui/info";
-import { MdDelete, MdAdd } from "react-icons/md";
+import { IconPlus, IconTrash, IconKey } from "@tabler/icons-react";
 import { Modal, Button, Group, Text, TextInput, Textarea, TagsInput } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useNotification } from "@/contexts/notification-context";
@@ -13,8 +13,7 @@ import { AgentTypeBadge, getRole } from "@/components/agents/agent-type-badge";
 const header = ["Name", "Role", "Description", "Status", "Last Heartbeat"];
 
 export default function AdminAgentsPage() {
-  // TMP: Mock data until we connect real data in Sprint 2
-  // const [agents, setAgents] = useState<Agent[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   
@@ -32,11 +31,17 @@ export default function AdminAgentsPage() {
     description: "",
   });
   const [registeredApiKey, setRegisteredApiKey] = useState<string | null>(null);
-  
+
+  // Regenerate API key modal
+  const [regenOpened, { open: openRegen, close: closeRegen }] = useDisclosure(false);
+  const [regeneratingAgent, setRegeneratingAgent] = useState<Agent | null>(null);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regeneratedApiKey, setRegeneratedApiKey] = useState<string | null>(null);
+
   const { error: notifyError, success: notifySuccess } = useNotification();
   const { user } = useAuth();
 
-  const loadAgents = async () => {
+  const loadAgents = useCallback(async () => {
     try {
       setIsLoading(true);
       const result = await agentApi.getAgents();
@@ -50,20 +55,11 @@ export default function AdminAgentsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [notifyError]);
 
-  // TMP: Load data on mount until we connect real data in Sprint 2
-  // useEffect(() => {
-  //   loadAgents();
-  // }, []);
-
-  // TMP: Mock data until we connect real data in Sprint 2
-  const [agents, setAgents] = useState<Agent[]>([
-    { id: '1', name: 'ResearchBot', skills: ['search', 'retrieval', 'fetch'], status: 'active', last_heartbeat: new Date().toISOString(), description: 'Searches and retrieves documents from external sources.', created_at: '2025-01-01T00:00:00Z' },
-    { id: '2', name: 'DataAnalyst', skills: ['nlp', 'summarization', 'data'], status: 'active', last_heartbeat: new Date(Date.now() - 3 * 60000).toISOString(), description: 'Analyses and summarises large volumes of text.', created_at: '2025-01-02T00:00:00Z' },
-    { id: '3', name: 'ContentWriter', skills: ['writing', 'draft', 'content'], status: 'idle', last_heartbeat: new Date(Date.now() - 120 * 60000).toISOString(), description: 'Generates structured written content from briefs.', created_at: '2025-01-03T00:00:00Z' },
-    { id: '4', name: 'GeneralBot', skills: [], status: 'idle', last_heartbeat: new Date(Date.now() - 120 * 60000).toISOString(), description: 'A general-purpose agent for handling various tasks.', created_at: '2025-01-04T00:00:00Z' },
-  ]);
+  useEffect(() => {
+    void loadAgents();
+  }, [loadAgents]);
 
   const formatDate = (dateString: string) => {
     if (!dateString) return "Never";
@@ -173,13 +169,58 @@ export default function AdminAgentsPage() {
     closeRegister();
   };
 
+  const handleRegenerateClick = (rowIndex: number) => {
+    const agent = filteredAgents[rowIndex];
+    if (!agent) return;
+
+    if (!canManageAgents()) {
+      notifyError("Only admins can regenerate API keys");
+      return;
+    }
+
+    setRegeneratingAgent(agent);
+    setRegeneratedApiKey(null);
+    openRegen();
+  };
+
+  const handleConfirmRegenerate = async () => {
+    if (!regeneratingAgent) return;
+
+    try {
+      setIsRegenerating(true);
+      const result = await agentApi.regenerateApiKey(regeneratingAgent.id);
+
+      if (result.ok && result.data) {
+        setRegeneratedApiKey(result.data.api_key);
+        notifySuccess("API key regenerated successfully");
+      } else {
+        notifyError(result.error || "Failed to regenerate API key");
+      }
+    } catch (e) {
+      notifyError("Failed to regenerate API key");
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
+  const handleCloseRegen = () => {
+    setRegeneratingAgent(null);
+    setRegeneratedApiKey(null);
+    closeRegen();
+  };
+
   const handleRefresh = () => {
     loadAgents();
   };
 
   const actions = canManageAgents() ? [
     {
-      icon: <MdDelete className="w-5 h-5" />,
+      icon: <IconKey className="w-5 h-5" stroke={1.25} />,
+      ariaLabel: "Regenerate API key",
+      onClick: handleRegenerateClick,
+    },
+    {
+      icon: <IconTrash className="w-5 h-5" stroke={1.25} />,
       ariaLabel: "Delete agent",
       onClick: handleDeleteClick,
     },
@@ -327,6 +368,73 @@ export default function AdminAgentsPage() {
         )}
       </Modal>
 
+      {/* Regenerate API Key Modal */}
+      <Modal
+        opened={regenOpened}
+        onClose={handleCloseRegen}
+        title={<span className="font-semibold text-[var(--text)] text-lg">
+          {regeneratedApiKey ? "New API Key Generated" : "Regenerate API Key"}
+        </span>}
+        centered
+        size="lg"
+        styles={{
+          content: { backgroundColor: 'var(--bgSoft)', border: '1px solid rgba(255,255,255,0.1)' },
+          header: { backgroundColor: 'var(--bgSoft)' },
+          body: { backgroundColor: 'var(--bgSoft)' },
+        }}
+        overlayProps={{ backgroundOpacity: 0.55, blur: 3 }}
+      >
+        {regeneratedApiKey ? (
+          <div className="flex flex-col gap-4">
+            <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
+              <Text size="sm" className="text-green-400 font-medium mb-2">
+                New API key for "{regeneratingAgent?.name}". Save it now - it won't be shown again.
+              </Text>
+              <div className="bg-black/30 p-3 rounded-md">
+                <code className="text-xs text-[var(--text)] break-all">{regeneratedApiKey}</code>
+              </div>
+            </div>
+            <Text size="xs" className="text-[var(--textSoft)]">
+              The previous key no longer works. Update the agent with this key so it can keep sending heartbeats.
+            </Text>
+            <Button
+              onClick={handleCloseRegen}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              Close
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <Text size="md" className="text-[var(--textSoft)]">
+              Generate a new API key for{' '}
+              <span className="text-[var(--text)] font-bold">"{regeneratingAgent?.name}"</span>?
+            </Text>
+            <Text size="sm" className="text-[var(--textSoft)]">
+              The current key will <span className="text-red-500 underline">stop working immediately</span>. The agent must be reconfigured with the new key to keep sending heartbeats.
+            </Text>
+
+            <Group justify="flex-end" mt="md">
+              <Button
+                variant="default"
+                onClick={handleCloseRegen}
+                disabled={isRegenerating}
+                className="bg-white/5 hover:bg-white/10 border-white/10 text-[var(--text)]"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmRegenerate}
+                loading={isRegenerating}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Regenerate Key
+              </Button>
+            </Group>
+          </div>
+        )}
+      </Modal>
+
       {isLoading ? (
         <div className="rounded-2xl border border-white/10 bg-[var(--bgSoft)]/70 p-4 text-[var(--textSoft)]">
           Loading agents...
@@ -338,7 +446,7 @@ export default function AdminAgentsPage() {
               onClick={openRegister}
               className="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white shadow hover:bg-blue-700 cursor-pointer w-fit self-end flex items-center gap-2"
             >
-              <MdAdd className="w-5 h-5" />
+              <IconPlus className="w-5 h-5" stroke={1.25} />
               Register Agent
             </button>
           )}

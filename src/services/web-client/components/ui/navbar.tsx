@@ -1,8 +1,13 @@
 'use client';
 
 import { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import { MdOutlineLightMode, MdOutlineNotifications, MdOutlineViewSidebar, MdSearch } from "react-icons/md";
+import { usePathname } from "next/navigation";
+import {
+  IconBell,
+  IconLayoutSidebar,
+  IconSearch,
+  IconSun,
+} from "@tabler/icons-react";
 
 type NavbarProps = {
   onToggleSidebar: () => void;
@@ -10,7 +15,6 @@ type NavbarProps = {
 };
 
 export default function Navbar({ onToggleSidebar, sidebarOpen }: NavbarProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -37,7 +41,7 @@ export default function Navbar({ onToggleSidebar, sidebarOpen }: NavbarProps) {
                 aria-pressed={sidebarOpen}
                 className="rounded-lg p-1.5 hover:bg-white/10 text-[var(--text)]"
             >
-            <MdOutlineViewSidebar size={20} className="text-[var(--text)] my-auto rotate-y-180" />
+            <IconLayoutSidebar size={20} className="text-[var(--text)] my-auto rotate-y-180" stroke={1.25} />
             </button>
             <span>{title}</span>
         </div>
@@ -48,13 +52,13 @@ export default function Navbar({ onToggleSidebar, sidebarOpen }: NavbarProps) {
             aria-label="Open command palette"
             title="Ctrl/⌘ + K"
           >
-            <MdSearch />
+            <IconSearch size={18} stroke={1.25} />
             <span>Search…</span>
             {/* <kbd className="ml-2 rounded bg-black/30 px-1.5 py-0.5 text-xs">Ctrl/⌘ K</kbd> */}
           </button>
           <div className="flex items-center gap-4 text-[var(--text)]">
-            <MdOutlineLightMode size={18} className="opacity-80 hover:opacity-100 transition" />
-            <MdOutlineNotifications size={18} className="opacity-80 hover:opacity-100 transition" />
+            <IconSun size={18} className="opacity-80 hover:opacity-100 transition" stroke={1.25} />
+            <IconBell size={18} className="opacity-80 hover:opacity-100 transition" stroke={1.25} />
           </div>
         </div>
       </div>
@@ -63,7 +67,7 @@ export default function Navbar({ onToggleSidebar, sidebarOpen }: NavbarProps) {
         <div className="fixed inset-0 z-50 grid place-items-start bg-black/40 p-4 backdrop-blur-sm" onClick={() => setOpen(false)}>
           <div className="mx-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-[var(--bgSoft)] p-2 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/10 px-3 py-2">
-              <MdSearch />
+              <IconSearch size={18} stroke={1.25} />
               <input
                 autoFocus
                 placeholder="Busque páginas, agentes, tarefas…"

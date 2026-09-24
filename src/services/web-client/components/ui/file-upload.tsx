@@ -2,7 +2,7 @@
 
 import React, { useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload } from "lucide-react";
+import { IconUpload } from "@tabler/icons-react";
 
 interface FileUploadProps { onFilesSelected: (files: File[]) => void; }
 
@@ -17,7 +17,7 @@ export function FileUpload({ onFilesSelected }: FileUploadProps) {
         ${isDragActive ? "bg-white/10" : "bg-[var(--bgSoft)]/50 hover:bg-white/5"}`}
     >
       <input {...getInputProps()} />
-      <Upload className="mx-auto h-12 w-12 opacity-70"/>
+      <IconUpload className="mx-auto h-12 w-12 opacity-70" stroke={1.25} />
       <p className="mt-2 text-sm text-[var(--textSoft)]">
         {isDragActive ? "Drop the files here…" : "Drag and drop files or click to select"}
       </p>

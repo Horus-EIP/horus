@@ -6,12 +6,13 @@ Parses text from common file types (txt, pdf, csv). Implements Tool.run.
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple, Any
-import io
-import os
 import csv
-import requests
+import io
 import logging
+import os
+from typing import Any
+
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ class FileParserTool:
     def __init__(self, max_download_bytes: int = 5 * 1024 * 1024):
         self.max_download_bytes = max_download_bytes
 
-    def run(self, payload: Dict[str, Any]) -> str:
+    def run(self, payload: dict[str, Any]) -> str:
         """
         Extract text from a file (url or content).
         
@@ -39,7 +40,7 @@ class FileParserTool:
         Returns:
             Extracted string content.
         """
-        logger.debug(f"FileParserTool.run invoke")
+        logger.debug("FileParserTool.run invoke")
         try:
             file_url = payload.get("file_url")
             file_content = payload.get("file_content")
@@ -62,7 +63,7 @@ class FileParserTool:
             logger.error(f"File parsing error: {e}", exc_info=True)
             raise e
 
-    def _load_content(self, file_url: Optional[str], file_content: Optional[bytes]) -> Tuple[bytes, str]:
+    def _load_content(self, file_url: str | None, file_content: bytes | None) -> tuple[bytes, str]:
         if file_content is not None:
             return file_content, ""
         assert file_url is not None
@@ -78,9 +79,9 @@ class FileParserTool:
 
     def _infer_type(
         self,
-        file_type: Optional[str],
-        filename: Optional[str],
-        file_url: Optional[str],
+        file_type: str | None,
+        filename: str | None,
+        file_url: str | None,
         content: bytes,
     ) -> str:
         if file_type:

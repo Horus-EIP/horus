@@ -14,11 +14,11 @@ Message Types:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DelegationContextEntry(BaseModel):
@@ -26,7 +26,7 @@ class DelegationContextEntry(BaseModel):
 
     agent_id: str
     request: str
-    data: Dict[str, Any] = Field(default_factory=dict)
+    data: dict[str, Any] = Field(default_factory=dict)
 
 
 class MessageType(str, Enum):
@@ -56,20 +56,19 @@ class AgentMessage(BaseModel):
     sender_agent_id: str
     receiver_agent_id: str
     message_type: MessageType
-    content: Dict[str, Any] = Field(default_factory=dict)
+    content: dict[str, Any] = Field(default_factory=dict)
     conversation_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     requires_response: bool = False
     status: MessageStatus = MessageStatus.PENDING
 
     # Delegation-specific fields
     delegation_chain: list[str] = Field(default_factory=list)
     delegation_context: list[DelegationContextEntry] = Field(default_factory=list)
-    parent_message_id: Optional[str] = None
+    parent_message_id: str | None = None
     timeout_seconds: float = 30.0
 
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class DelegationRequest(BaseModel):
@@ -78,7 +77,7 @@ class DelegationRequest(BaseModel):
     sender_agent_id: str
     to_agent_type: str
     request: str
-    data: Dict[str, Any] = Field(default_factory=dict)
+    data: dict[str, Any] = Field(default_factory=dict)
     conversation_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     delegation_chain: list[str] = Field(default_factory=list)
     delegation_context: list[DelegationContextEntry] = Field(default_factory=list)
@@ -90,6 +89,6 @@ class DelegationResponse(BaseModel):
 
     delegation_id: str
     status: str
-    result: Optional[str] = None
-    error: Optional[str] = None
-    agent_id: Optional[str] = None
+    result: str | None = None
+    error: str | None = None
+    agent_id: str | None = None

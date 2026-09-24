@@ -2,12 +2,11 @@ import os
 import time
 
 from sqlalchemy import create_engine, event
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from core.config import settings
-from core.logger import get_logger, log_db_operation, log_error, log_success
+from core.logger import get_logger, log_error, log_success
 from db.pool_monitor import attach_pool_monitor
 
 logger = get_logger("database")
@@ -29,7 +28,7 @@ if os.getenv("TEST_MODE") == "1":
             connect_args={"check_same_thread": False},
             poolclass=StaticPool,
         )
-        log_success("database", f"Database engine initialized successfully (in-memory)")
+        log_success("database", "Database engine initialized successfully (in-memory)")
     except Exception as e:
         log_error(
             "database",

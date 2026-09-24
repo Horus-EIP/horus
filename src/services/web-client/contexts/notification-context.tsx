@@ -5,6 +5,7 @@ import React, {
   useContext,
   useState,
   useCallback,
+  useMemo,
   ReactNode,
 } from "react";
 
@@ -63,13 +64,33 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     [removeNotification]
   );
 
-  const value: NotificationContextValue = {
-    notify: createNotification,
-    success: (message) => createNotification(message, "success"),
-    error: (message) => createNotification(message, "error"),
-    warning: (message) => createNotification(message, "warning"),
-    info: (message) => createNotification(message, "info"),
-  };
+  const success = useCallback(
+    (message: string) => createNotification(message, "success"),
+    [createNotification]
+  );
+  const error = useCallback(
+    (message: string) => createNotification(message, "error"),
+    [createNotification]
+  );
+  const warning = useCallback(
+    (message: string) => createNotification(message, "warning"),
+    [createNotification]
+  );
+  const info = useCallback(
+    (message: string) => createNotification(message, "info"),
+    [createNotification]
+  );
+
+  const value = useMemo<NotificationContextValue>(
+    () => ({
+      notify: createNotification,
+      success,
+      error,
+      warning,
+      info,
+    }),
+    [createNotification, success, error, warning, info]
+  );
 
   return (
     <NotificationContext.Provider value={value}>

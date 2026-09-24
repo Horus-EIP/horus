@@ -15,7 +15,11 @@ ENV PATH="/venv/bin:$PATH"
 RUN pip install --upgrade pip setuptools wheel
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Cache pip downloads across builds (BuildKit) + patient timeouts/retries so large
+# ML wheels don't abort on a slow/flaky network read timeout, and a completed
+# download is reused on the next rebuild instead of re-fetched.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --timeout=120 --retries=10 -r requirements.txt
 
 # Final image
 FROM python:3.11-slim
@@ -40,6 +44,10 @@ ENV SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence_transformers
 RUN opentelemetry-bootstrap --action=install
 # Pre-download embedding model at build time to avoid latency on first request
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-base-en-v1.5')"
+
+# After build, default to no Hub access (embedding weights are in the image cache).
+ENV HF_HUB_OFFLINE=1
+ENV TRANSFORMERS_OFFLINE=1
 
 # Create document storage directories
 RUN mkdir -p documents/txt documents/pdf documents/docx documents/image

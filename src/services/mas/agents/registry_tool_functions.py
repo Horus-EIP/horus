@@ -1,54 +1,40 @@
-"""
-Agent Registry Management Functions
+"""Agent registry CRUD and heartbeat helpers.
 
-This module provides core functionality for managing the agent registry in the
-Multi-Agent System. It handles agent lifecycle operations including registration,
-deregistration, status tracking, and heartbeat monitoring.
-
-Key Features:
-- In-memory agent registry for fast access
-- UUID-based agent identification
-- Skill-based agent categorization
-- Health monitoring via heartbeat system
-- Agent status tracking (active/inactive)
-- Automatic status updates based on heartbeat timeouts
-
-The agent registry is a central component that:
-- Stores agent metadata and capabilities
-- Tracks agent availability and health status
-- Enables intelligent task routing based on agent skills
-- Provides real-time status information for monitoring
-
-Data Structure:
-    agent_registry = {
-        "agent_id": {
-            "name": "Agent Name",
-            "description": "Agent description",
-            "skills": ["skill1", "skill2"],
-            "status": "active" | "inactive",
-            "last_heartbeat": datetime object
-        }
-    }
-
-Security Considerations:
-- Agent IDs are UUIDs to prevent enumeration attacks
-- Registry operations are atomic to prevent race conditions
-- Status updates are timestamped for audit trails
+Functions prefixed with ``_`` take an explicit ``Session`` and are safe to
+call from background tasks. Public variants are used by FastAPI routes.
 """
 
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from fastapi import Depends
 from passlib.context import CryptContext
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from core.logger import get_logger
 from core.rabbitmq_tool import rabbitmq_instance
-from db.database import SessionLocal, get_db
+from core.work_queues import work_queue_name_for_agent_type
 from db.models import Agents, AgentTypes
+
+
+def _skill_cache_upsert(agent_id: str, name: str, skills: list, description: str) -> None:
+    """Best-effort skill-cache update; never let it crash the registry path."""
+    try:
+        from core.skill_cache import upsert_agent
+
+        upsert_agent(agent_id, name, list(skills or []), description or "")
+    except Exception:
+        logger.exception("Skill cache upsert failed for agent %s", agent_id)
+
+
+def _skill_cache_evict(agent_id: str) -> None:
+    try:
+        from core.skill_cache import evict_agent
+
+        evict_agent(agent_id)
+    except Exception:
+        logger.exception("Skill cache evict failed for agent %s", agent_id)
 
 logger = get_logger("registry_tool_functions")
 
@@ -62,15 +48,7 @@ bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def _get_all_agents_internal(db: Session) -> list:
-    """
-    Internal: Retrieve all agents from the database.
-
-    Args:
-        db (Session): Database session (explicit)
-
-    Returns:
-        list: List of all Agents objects
-    """
+    """Return all ``Agents`` rows; empty list if the table is missing."""
     try:
         agents = db.query(Agents).all()
 
@@ -92,16 +70,7 @@ def _get_all_agents_internal(db: Session) -> list:
 
 
 def _update_alive_agent_status_internal(agent_id: str, db: Session) -> bool:
-    """
-    Internal function to update an agent's status to 'active' and refresh heartbeat.
-
-    Args:
-        agent_id (str): UUID of the agent
-        db (Session): Database session (explicit)
-
-    Returns:
-        bool: True if update successful, False otherwise
-    """
+    """Mark agent ``active`` and bump ``last_heartbeat``."""
     try:
         agent = db.query(Agents).filter(Agents.id == agent_id).first()
         if agent is None:
@@ -111,7 +80,7 @@ def _update_alive_agent_status_internal(agent_id: str, db: Session) -> bool:
             return False
 
         agent.status = "active"
-        agent.last_heartbeat = datetime.now(timezone.utc)
+        agent.last_heartbeat = datetime.now(UTC)
         db.commit()
         logger.info(f"Agent heartbeat updated successfully - Agent ID: {agent_id}")
         return True
@@ -122,16 +91,7 @@ def _update_alive_agent_status_internal(agent_id: str, db: Session) -> bool:
 
 
 def _update_dead_agent_status_internal(agent_id: str, db: Session) -> bool:
-    """
-    Internal: Update agent status to 'inactive'.
-
-    Args:
-        agent_id (str): UUID of the agent
-        db (Session): Database session (explicit)
-
-    Returns:
-        bool: True if update successful, False otherwise
-    """
+    """Mark agent ``dead`` (heartbeat timeout)."""
     try:
         agent = db.query(Agents).filter(Agents.id == agent_id).first()
         if agent is None:
@@ -142,10 +102,10 @@ def _update_dead_agent_status_internal(agent_id: str, db: Session) -> bool:
         db.commit()
         last_heartbeat = agent.last_heartbeat
         if last_heartbeat.tzinfo is None:
-            last_heartbeat = last_heartbeat.replace(tzinfo=timezone.utc)
+            last_heartbeat = last_heartbeat.replace(tzinfo=UTC)
 
         logger.warning(
-            f"Agent marked as dead - Agent ID: {agent_id}, Last heartbeat was {(datetime.now(timezone.utc) - last_heartbeat).total_seconds():.1f}s ago"
+            f"Agent marked as dead - Agent ID: {agent_id}, Last heartbeat was {(datetime.now(UTC) - last_heartbeat).total_seconds():.1f}s ago"
         )
         return True
     except Exception as e:
@@ -155,16 +115,7 @@ def _update_dead_agent_status_internal(agent_id: str, db: Session) -> bool:
 
 
 def _batch_update_agent_status_internal(agent_statuses: dict, db: Session) -> bool:
-    """
-    Internal: Update multiple agents' status in a single transaction.
-
-    Args:
-        agent_statuses (dict): {agent_id: status}
-        db (Session): Database session (explicit)
-
-    Returns:
-        bool: True if all updates successful
-    """
+    """Apply ``{agent_id: status}`` in a single commit."""
     try:
         for agent_id, status in agent_statuses.items():
             agent = db.query(Agents).filter(Agents.id == agent_id).first()
@@ -190,27 +141,10 @@ def _batch_update_agent_status_internal(agent_statuses: dict, db: Session) -> bo
 def create_agent(
     name: str, skills: list, description: str, db: Session, Agent_type: AgentTypes
 ) -> tuple[str, str]:
-    """
-    Register a new agent in the system.
+    """Register a new agent and return ``(agent_id, plaintext_api_key)``.
 
-    Creates a new agent entry in the registry with a unique UUID identifier.
-    The agent is initially marked as 'active' with current timestamp.
-
-    Args:
-        name (str): Human-readable name for the agent
-        skills (list): List of capabilities/skills the agent possesses
-        description (str): Detailed description of the agent's purpose
-        db (Session): Database session (injected)
-
-    Returns:
-        tuple[str, str]: (agent_id, api_key) - Unique UUID and the plain text API key
-
-    Example:
-        agent_id, api_key = create_agent(
-            name="Summarizer Bot",
-            skills=["nlp", "summarization"],
-            description="Specialized in text summarization"
-        )
+    The API key is bcrypt-hashed before storage; the plaintext is shown to
+    the caller exactly once. Also creates the agent's RabbitMQ queue.
     """
     agent_id = str(uuid.uuid4())
     api_key = secrets.token_urlsafe(32)
@@ -222,7 +156,7 @@ def create_agent(
             skills=skills,
             description=description,
             status="active",
-            last_heartbeat=datetime.now(timezone.utc),
+            last_heartbeat=datetime.now(UTC),
             api_key=hash_api_key,
             type=Agent_type,
         )
@@ -232,9 +166,10 @@ def create_agent(
         db.refresh(new_agent)
         logger.info(f"Agent created successfully: {agent_id} ({name})")
 
-        # Strategic placement: Ensure queue exists immediately upon agent creation
-        rabbitmq_instance.create_queue(agent_id)
+        # Shared pool queue for this specialization (all workers of this type consume it).
+        rabbitmq_instance.create_queue(work_queue_name_for_agent_type(Agent_type))
 
+        _skill_cache_upsert(agent_id, name, skills, description)
         return agent_id, api_key
     except Exception as e:
         db.rollback()
@@ -242,30 +177,59 @@ def create_agent(
         return None, None
 
 
+def regenerate_agent_api_key(agent_id: str, db: Session) -> str | None:
+    """Rotate an agent's API key and return the new plaintext (shown once).
+
+    Stored keys are bcrypt-hashed and therefore unrecoverable, so a forgotten
+    key cannot be displayed again — it can only be replaced. This generates a
+    fresh token, hashes it for storage, and returns the plaintext so the caller
+    can surface it a single time. The previous key stops working immediately.
+
+    Returns ``None`` if the agent does not exist or the update fails (on
+    failure the old key is left untouched by the rollback).
+    """
+    try:
+        agent = db.query(Agents).filter(Agents.id == agent_id).first()
+        if agent is None:
+            logger.warning(f"Cannot regenerate API key - agent not found: {agent_id}")
+            return None
+
+        api_key = secrets.token_urlsafe(32)
+        agent.api_key = bcrypt_context.hash(api_key)
+        db.commit()
+        # Drop any cached verifications of the OLD key so it stops working
+        # immediately (otherwise the positive-cache TTL would keep honouring it).
+        try:
+            from auth.auth_tool_functions import invalidate_agent_api_key_cache
+
+            invalidate_agent_api_key_cache(agent_id)
+        except Exception:  # noqa: BLE001 - invalidation is best-effort
+            logger.debug("Auth cache invalidation skipped for %s", agent_id)
+        logger.info(f"API key regenerated successfully - Agent ID: {agent_id}")
+        return api_key
+    except Exception as e:
+        db.rollback()
+        logger.error(
+            f"Error regenerating API key - Agent ID: {agent_id}, Error: {str(e)}"
+        )
+        return None
+
+
 def delete_agent(agent_id: str, db: Session) -> bool:
-    """
-    Remove an agent from the registry.
-
-    Permanently removes the agent and cleans up all associated data.
-    This operation is irreversible.
-
-    Args:
-        agent_id (str): UUID of the agent to remove
-        db (Session): Database session (injected)
-
-    Returns:
-        bool: True if agent was found and deleted, False otherwise
-
-    Note:
-        This function also clears the agent's data dictionary before deletion
-        for security reasons.
-    """
+    """Permanently delete an agent. Returns ``False`` if not found."""
     try:
         agent = db.get(Agents, agent_id)
         if agent is None:
             return False
         db.delete(agent)
         db.commit()
+        _skill_cache_evict(agent_id)
+        try:
+            from auth.auth_tool_functions import invalidate_agent_api_key_cache
+
+            invalidate_agent_api_key_cache(agent_id)
+        except Exception:  # noqa: BLE001 - invalidation is best-effort
+            logger.debug("Auth cache invalidation skipped for %s", agent_id)
         return True
     except Exception as e:
         db.rollback()
@@ -274,16 +238,9 @@ def delete_agent(agent_id: str, db: Session) -> bool:
 
 
 def get_agent_details(agent_id: str, db: Session):
-    """
-    Retrieve detailed information about a specific agent.
+    """Return ``(id, name, skills, status, last_heartbeat, description, created_at)``.
 
-    Args:
-        agent_id (str): UUID of the agent
-        db (Session): Database session (injected)
-
-    Returns:
-        tuple: (id, name, skills, status, last_heartbeat, description, created_at)
-               or (None, None, None, None, None, None, None) if not found
+    All elements are ``None`` if the agent does not exist.
     """
     try:
         agent = db.query(Agents).filter(Agents.id == agent_id).first()
@@ -311,36 +268,19 @@ def get_agent_details(agent_id: str, db: Session):
 
 
 def get_all_agents(db: Session) -> list:
-    """
-    Retrieve all agents from the database.
-
-    Args:
-        db (Session): Database session (injected by FastAPI)
-
-    Returns:
-        list: List of all Agents objects
-    """
+    """Return all ``Agents`` rows (route-friendly wrapper)."""
     return _get_all_agents_internal(db)
 
 
 def update_alive_agent_status(agent_id: str, db: Session) -> bool:
-    """
-    Update agent status to 'active' and set current heartbeat timestamp.
-
-    Args:
-        agent_id (str): UUID of the agent
-        db (Session): Database session (injected)
-
-    Returns:
-        bool: True if update successful, False otherwise
-    """
+    """Mark agent ``active`` and refresh heartbeat."""
     try:
         agent = db.query(Agents).filter(Agents.id == agent_id).first()
         if agent is None:
             return False
 
         agent.status = "active"
-        agent.last_heartbeat = datetime.now(timezone.utc)
+        agent.last_heartbeat = datetime.now(UTC)
         db.commit()
         return True
     except Exception as e:
@@ -350,16 +290,7 @@ def update_alive_agent_status(agent_id: str, db: Session) -> bool:
 
 
 def update_dead_agent_status(agent_id: str, db: Session) -> bool:
-    """
-    Update agent status to 'inactive'.
-
-    Args:
-        agent_id (str): UUID of the agent
-        db (Session): Database session (injected)
-
-    Returns:
-        bool: True if update successful, False otherwise
-    """
+    """Mark agent ``inactive``."""
     try:
         agent = db.query(Agents).filter(Agents.id == agent_id).first()
         if agent is None:
@@ -379,23 +310,14 @@ def update_dead_agent_status(agent_id: str, db: Session) -> bool:
 
 
 def update_active_status(agent_id: str, db: Session) -> bool:
-    """
-    Update agent status to 'active'.
-
-    Args:
-        agent_id (str): UUID of the agent
-        db (Session): Database session (injected)
-
-    Returns:
-        bool: True if update successful, False otherwise
-    """
+    """Mark agent ``active`` and refresh heartbeat (route wrapper)."""
     try:
         agent = db.query(Agents).filter(Agents.id == agent_id).first()
         if agent is None:
             return False
 
         agent.status = "active"
-        agent.last_heartbeat = datetime.now(timezone.utc)
+        agent.last_heartbeat = datetime.now(UTC)
         db.commit()
         return True
     except Exception as e:
@@ -405,16 +327,7 @@ def update_active_status(agent_id: str, db: Session) -> bool:
 
 
 def get_agent_id(agent_name: str, db: Session) -> str:
-    """
-    Get agent ID by name.
-
-    Args:
-        agent_name (str): Agent name
-        db (Session): Database session (injected)
-
-    Returns:
-        str: Agent ID or None if not found
-    """
+    """Return the agent's ID by name, or ``None``."""
     try:
         agent = db.query(Agents).filter(Agents.name == agent_name).first()
         if agent is None:
@@ -455,6 +368,44 @@ def get_agent_by_type(agent_type: str, db: Session) -> str:
             if str(val).lower() == target:
                 return a.id
 
+        # Lenient resolution: the planner routes by SEMANTIC role ('compliance',
+        # 'finance', 'hr', 'communication') but only 4 enum types exist
+        # (researcher/analyst/writer/general). Without this, those plans fail
+        # validation and fall back to the heuristic — which can't slice the work,
+        # so one agent answers everything. Match the requested role against each
+        # agent's NAME and SKILLS (plus a few synonyms) so a multi-step plan
+        # routes to the right distinct specialists.
+        _syn = {
+            "finance": "analyst", "financial": "analyst", "budget": "analyst",
+            "accounting": "analyst", "analysis": "analyst",
+            "compliance": "compliance", "legal": "compliance", "policy": "compliance",
+            "audit": "compliance", "risk": "compliance", "security": "compliance",
+            "hr": "hr", "people": "hr", "human": "hr",
+            "communication": "writer", "writer": "writer", "write": "writer",
+            "draft": "writer", "messaging": "writer", "memo": "writer",
+        }
+        mapped = _syn.get(target)
+
+        def _role_matches(a) -> bool:
+            name = (a.name or "").lower()
+            sk = a.skills or []
+            skills = " ".join(sk).lower() if isinstance(sk, list) else str(sk).lower()
+            hay = f"{name} {skills}"
+            return target in hay or bool(mapped and mapped in hay)
+
+        for a in agents:  # prefer active
+            if _role_matches(a):
+                return a.id
+        for a in all_agents:
+            if _role_matches(a):
+                return a.id
+
+        # Last resort: any active non-Manager agent, so one unmappable role in an
+        # otherwise-good plan doesn't fail validation and collapse to the heuristic.
+        for a in agents:
+            if (a.name or "").lower() != "manager":
+                return a.id
+
         return None
     except Exception as e:
         logger.error(f"Error in get_agent_by_type: {e}")
@@ -466,9 +417,9 @@ def _is_agent_recently_alive(agent_info, max_age_seconds: int = 90) -> bool:
     if not last_heartbeat:
         return False
     try:
-        current_time = datetime.now(timezone.utc)
+        current_time = datetime.now(UTC)
         if last_heartbeat.tzinfo is None:
-            last_heartbeat = last_heartbeat.replace(tzinfo=timezone.utc)
+            last_heartbeat = last_heartbeat.replace(tzinfo=UTC)
         return (current_time - last_heartbeat) <= timedelta(seconds=max_age_seconds)
     except Exception as e:
         logger.error(f"Error checking agent liveness: {e}")
@@ -476,14 +427,14 @@ def _is_agent_recently_alive(agent_info, max_age_seconds: int = 90) -> bool:
 
 
 def get_available_agents(db: Session) -> list:
-    """
-    Get list of currently available agents (recently alive).
+    """Return agents with a recent heartbeat as ``(id, name, desc, type)`` tuples.
 
-    Args:
-        db (Session): Database session (injected)
-
-    Returns:
-        list: List of tuples (agent_id, agent_name, agent_description)
+    The Manager agent is intentionally excluded — it orchestrates work but
+    never executes it itself, so neither the LLM router nor the planner
+    should see it as an option for SINGLE_AGENT routing or for subtask
+    assignment. The Manager's presence in those prompts caused the planner
+    to occasionally assign subtasks to "manager", which then has no worker
+    consumer on its queue and stalls the chain.
     """
     available_agents = []
 
@@ -495,13 +446,16 @@ def get_available_agents(db: Session) -> list:
             return available_agents
 
         for agent in agents:
+            # Skip Manager (orchestrator, not a worker).
+            if agent.name == "Manager":
+                continue
             if _is_agent_recently_alive(agent):
                 available_agents.append(
                     (agent.id, agent.name, agent.description or "", agent.type)
                 )
 
         logger.info(
-            f"Agent availability check - Available: {len(available_agents)}/{len(agents)}"
+            f"Agent availability check - Available: {len(available_agents)}/{len(agents)} (Manager excluded)"
         )
         return available_agents
     except ProgrammingError as e:

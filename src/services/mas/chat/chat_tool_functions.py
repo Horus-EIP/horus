@@ -1,7 +1,6 @@
 import datetime
 import json
 import uuid
-from typing import Optional
 
 from fastapi import WebSocket, WebSocketException, status
 from fastapi.security.utils import get_authorization_scheme_param
@@ -16,33 +15,85 @@ logger = get_logger("chat")
 active_connections: dict[str, list[WebSocket]] = {}
 
 
-async def send_messages_via_websockets(conversation_id: str, message: str):
-    """
-    Broadcast a message to all active WebSocket connections for a given conversation.
+async def send_messages_via_websockets(
+    conversation_id: str,
+    message: str,
+    *,
+    agent_id: str | None = None,
+    agent_name: str | None = None,
+    skill_used: str | None = None,
+):
+    """Broadcast a message to all WebSocket clients on this conversation.
 
-    Sends a formatted JSON message with type 'agent' to all connected clients
-    listening to the specified conversation ID. Handles disconnected clients
-    gracefully by removing them from the active list.
+    When agent metadata is provided, emits ``type=task_complete`` so the chat
+    UI can render an attribution chip; otherwise falls back to the legacy
+    ``type=agent`` shape used by direct-answer / pre-attribution paths.
 
     Args:
-        conversation_id (str): The ID of the target conversation
-        message (str): The text content to broadcast
-
-    Returns:
-        None
+        conversation_id: Target conversation.
+        message: Text content to broadcast.
+        agent_id: Originating agent's UUID (optional).
+        agent_name: Human-readable agent name for the chip (optional).
+        skill_used: Skill that produced the answer (optional).
     """
-    conns = active_connections.get(conversation_id, [])
+    conv_key = str(conversation_id)
+    conns = active_connections.get(conv_key, [])
     if not conns:
         return
 
+    has_attribution = bool(agent_id or agent_name or skill_used)
+    msg_type = "task_complete" if has_attribution else "agent"
+
+    payload: dict = {
+        "type": msg_type,
+        "content": message,
+        "timestamp": datetime.datetime.now().isoformat(),
+    }
+    if has_attribution:
+        payload["agent_id"] = agent_id
+        payload["agent_name"] = agent_name
+        payload["skill_used"] = skill_used
+
     for ws in list(conns):
         try:
-            formatted = {
-                "type": "agent",
-                "content": message,
-                "timestamp": datetime.datetime.now().isoformat(),
-            }
-            await ws.send_json(formatted)
+            await ws.send_json(payload)
+        except Exception:
+            try:
+                conns.remove(ws)
+            except ValueError:
+                pass
+
+
+async def send_task_step_via_websockets(
+    conversation_id: str,
+    step: dict,
+) -> None:
+    """Broadcast a ``task_step`` "thought process" event to the conversation.
+
+    Older chat clients ignore unknown WS message types, so this is safe to
+    fan out without coordination. Drops dead sockets the same way the
+    ``agent_message`` path does.
+    """
+    conv_key = str(conversation_id)
+    conns = active_connections.get(conv_key, [])
+    if not conns:
+        return
+
+    payload = {
+        "type": "task_step",
+        "task_id": step.get("task_id"),
+        "agent_id": step.get("agent_id"),
+        "agent_name": step.get("agent_name"),
+        "step_type": step.get("step_type"),
+        "title": step.get("title"),
+        "detail": step.get("detail"),
+        "timestamp": step.get("timestamp") or datetime.datetime.now().isoformat(),
+        "metadata": step.get("metadata") or {},
+    }
+
+    for ws in list(conns):
+        try:
+            await ws.send_json(payload)
         except Exception:
             try:
                 conns.remove(ws)
@@ -58,24 +109,8 @@ def save_new_client(
     username: str = None,
     role: str = None,
 ):
-    """
-    Register a new WebSocket client and create a session record.
-
-    Adds the WebSocket connection to the in-memory active_connections registry
-    and persists session metadata in Redis. This enables tracking of active
-    users per conversation and validates session existence.
-
-    Args:
-        conv_id (str): Conversation ID
-        websocket (WebSocket): The active WebSocket connection object
-        user_id (str): User ID associated with the connection
-        token (str): JWT token used for authentication
-        username (str, optional): Username for display/logging
-        role (str, optional): User role (e.g., 'admin', 'user')
-
-    Returns:
-        str: Generated unique session ID (UUID4)
-    """
+    """Track a new WS client and persist its session in Redis. Returns session UUID."""
+    conv_id = str(conv_id)
     conns = active_connections.setdefault(conv_id, [])
     if websocket not in conns:
         conns.append(websocket)
@@ -119,6 +154,7 @@ def delete_client(conv_id: str, websocket: WebSocket, session_id: str):
     Returns:
         None
     """
+    conv_id = str(conv_id)
     conns = active_connections.get(conv_id)
     if not conns:
         logger.debug(f"WebSocket disconnected (no list) for conversation: {conv_id}")
@@ -148,6 +184,7 @@ def get_active_sessions(conv_id: str) -> list[dict]:
     Returns:
         list[dict]: List of session data dictionaries for all active clients
     """
+    conv_id = str(conv_id)
     session_ids = redis_db.smembers(f"conversation_sessions:{conv_id}")
     sessions = []
 
@@ -159,7 +196,7 @@ def get_active_sessions(conv_id: str) -> list[dict]:
     return sessions
 
 
-def _extract_token_from_ws(websocket: WebSocket, token_qs: Optional[str]) -> str:
+def _extract_token_from_ws(websocket: WebSocket, token_qs: str | None) -> str:
     if token_qs:
         return token_qs
     auth = websocket.headers.get("Authorization")

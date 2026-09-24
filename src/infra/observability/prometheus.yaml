@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'mas-api'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['mas:8000']
+    metrics_path: '/metrics'
+
+  - job_name: 'agent-api'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['agent:8001']
+    # Agent mounts metrics via Starlette Mount, which only matches the
+    # trailing-slash form; scraping bare /metrics returns a 307 redirect.
+    metrics_path: '/metrics/'
+
+  - job_name: 'knowledge-store'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['knowledge_store:8080']
+    metrics_path: '/metrics/'

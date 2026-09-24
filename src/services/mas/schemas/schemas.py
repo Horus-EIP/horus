@@ -1,187 +1,159 @@
-"""
-Pydantic Data Models and Schemas
+"""Pydantic request/response schemas for the MAS service.
 
-This module defines the Pydantic models used for API request/response validation
-and serialization throughout the MAS application. These schemas ensure data
-integrity and provide automatic API documentation.
-
-Key Features:
-- Automatic request/response validation
-- JSON serialization/deserialization
-- Type safety and IDE support
-- Automatic OpenAPI/Swagger documentation generation
-- Data transformation and validation rules
-
-Schema Categories:
-- Agent Management: Models for agent registration and configuration
-- Task Management: Models for task creation, execution, and results
-- User Management: Models for user authentication and registration
-- Authentication: Models for JWT tokens and login credentials
-- Conversation Management: Models for chat and conversation operations
-
-All models inherit from Pydantic BaseModel, providing:
-- Automatic validation of incoming data
-- Type conversion when possible
-- Clear error messages for validation failures
-- JSON Schema generation for API documentation
+Field-level details are available through FastAPI's auto-generated
+OpenAPI docs. See ``docs/architecture.md`` for the high-level
+API contract.
 """
 
-from typing import Optional
+import re
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
+from pydantic_core import PydanticCustomError
 
 from auth.permissions import Role
 from db.models import AgentTypes
 
+PASSWORD_POLICY = (
+    "Password must be at least 10 characters and include uppercase, "
+    "lowercase, number, and special character"
+)
+
+
+def check_password_policy(value: str) -> str:
+    strong = (
+        len(value) >= 10
+        and re.search("[a-z]", value)
+        and re.search("[A-Z]", value)
+        and re.search("[0-9]", value)
+        and re.search("[^a-zA-Z0-9]", value)
+    )
+    if not strong:
+        raise PydanticCustomError("password_policy", PASSWORD_POLICY)
+    return value
 
 class RegistrationForm(BaseModel):
-    """
-    Schema for agent registration requests.
-
-    Used when registering new agents in the multi-agent system.
-    Each agent must have a unique name and specify their capabilities.
-
-    Attributes:
-        name (str): Unique identifier/name for the agent
-        skills (list[str]): List of capabilities/skills the agent possesses
-        description (str): Human-readable description of the agent's purpose
-
-    Example:
-        {
-            "name": "Summarizer Agent",
-            "skills": ["nlp", "text_summarization", "content_analysis"],
-            "description": "Specialized agent for text summarization and content analysis"
-        }
-    """
+    """Agent registration payload (name, skills, description, type)."""
 
     name: str
     skills: list[str]
     description: str
-    type: Optional[AgentTypes] = None
+    type: AgentTypes | None = None
+
+
+TaskMode = Literal["auto", "specific_agent", "any_with_skill", "decompose"]
+
+
+class KnowledgeStoreFileRef(BaseModel):
+    """Reference to a file already stored in the knowledge-store service.
+
+    The agent worker resolves ``filename`` via the knowledge-store
+    ``/file/resolve`` endpoint when the task runs — no content is shipped
+    through MAS or RabbitMQ for these refs.
+    """
+
+    filename: str
+
+
+class InlineFile(BaseModel):
+    """A one-shot file attached to a task without persisting to the KS.
+
+    ``content_b64`` is base64-encoded file bytes. Capped at ~2 MB per file
+    server-side to keep RabbitMQ messages bounded; larger files should go
+    through the knowledge store instead.
+    """
+
+    filename: str
+    mime: str | None = None
+    content_b64: str
 
 
 class TaskForm(BaseModel):
-    """
-    Schema for task creation and assignment requests.
+    """Task creation payload.
 
-    Used when creating new tasks to be assigned to appropriate agents.
-    The system uses the skills_required to match with suitable agents.
+    The dispatcher honours ``mode``:
 
-    Attributes:
-        demand (str): The task description or user request
-        conversation_id (int): UUID of the conversation this task belongs to
-        skills_required (list[str]): Skills needed to complete this task
+    - ``auto`` (default) — LLM router picks the agent; ``agent_id`` is ignored.
+    - ``specific_agent`` — required ``agent_id`` is used verbatim; the dispatch
+      will queue-on-busy if the worker is currently offline.
+    - ``any_with_skill`` — first registered agent whose skills include
+      ``skills_required[0]`` is selected (live agents preferred, seeded ones
+      fall back).
 
-    Example:
-        {
-            "demand": "Summarize this document and extract key points",
-            "conversation_id": 123,
-            "skills_required": ["nlp", "summarization"]
-        }
+    ``agent_id`` and ``mode`` are optional so older clients keep working.
+    ``attached_files`` and ``inline_files`` are forwarded to the worker as a
+    unified ``files`` array; both default to empty for backward compatibility.
     """
 
     demand: str
-    conversation_id: int
+    conversation_id: int | None = None
     skills_required: list[str]
+    agent_id: str | None = None
+    mode: TaskMode | None = None
+    attached_files: list[KnowledgeStoreFileRef] = []
+    inline_files: list[InlineFile] = []
+
+
+class TaskStepForm(BaseModel):
+    """Agent-emitted "thought process" step.
+
+    Steps are coarse phase boundaries fired by the agent worker as a task
+    progresses (retrieval start/end, reasoning start/end, tool invocation,
+    errors). They're broadcast over the chat WebSocket as ``task_step``
+    events so the UI can render a live thought-process card.
+
+    All fields except ``task_id``, ``agent_id``, and ``step_type`` are
+    optional so older agents that ship a thinner step shape keep working.
+    """
+
+    task_id: str
+    agent_id: str
+    step_type: str
+    title: str | None = None
+    detail: str | None = None
+    timestamp: str | None = None
+    conversation_id: str | None = None
+    agent_name: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class TaskResultForm(BaseModel):
-    """
-    Schema for task result submission from agents.
+    """Agent-submitted task result.
 
-    Used when agents submit completed task results back to the system.
-    Includes conversation context and potential follow-up actions.
-
-    Attributes:
-        result (str): The completed task result/response
-        conversation_id (str): UUID of the conversation this result belongs to
-        agent_id (str): UUID of the agent that completed the task
-        history (list): Conversation history for context
-        future_actions (list): Planned follow-up actions/tasks
-
-    Example:
-        {
-            "result": "Document summary: Key points include...",
-            "conversation_id": "123e4567-e89b-12d3-a456-426614174000",
-            "agent_id": "987fcdeb-51a2-43d1-b456-426614174000",
-            "history": [{"role": "user", "message": "Please summarize this"}],
-            "future_actions": []
-        }
+    ``agent_name`` and ``skill_used`` are optional metadata used by the chat UI
+    to render an attribution chip (which agent answered, which skill ran).
+    Older agents that don't send them still work.
     """
 
     result: str
-    conversation_id: str
+    conversation_id: str | None = None
     agent_id: str
     task_id: str
+    agent_name: str | None = None
+    skill_used: str | None = None
 
 
 class CreateUserRequest(BaseModel):
-    """
-    Schema for user registration requests.
-
-    Used when creating new user accounts in the system.
-    Passwords are automatically hashed before storage.
-
-    Attributes:
-        username (str): Unique username for the account
-        password (str): Plain text password (will be hashed automatically)
-
-    Security Notes:
-        - Username must be unique across the system
-        - Password will be hashed using bcrypt before database storage
-        - Original password is never stored in plaintext
-
-    Example:
-        {
-            "username": "newuser123",
-            "password": "secure_password_here"
-        }
-    """
+    """User registration payload. Password is bcrypt-hashed before storage."""
 
     username: str
     password: str
 
+    @field_validator("password")
+    @classmethod
+    def password_policy(cls, value: str) -> str:
+        return check_password_policy(value)
+
 
 class Token(BaseModel):
-    """
-    Schema for JWT authentication token responses.
-
-    Returned after successful authentication to provide access credentials.
-    Used for all subsequent authenticated API requests.
-
-    Attributes:
-        access_token (str): JWT token string for authentication
-        token_type (str): Type of token, always "bearer" for JWT
-
-    Usage:
-        Include in Authorization header as: "Bearer {access_token}"
-
-    Example:
-        {
-            "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-            "token_type": "bearer"
-        }
-    """
+    """JWT access token response. Use as ``Authorization: Bearer <token>``."""
 
     access_token: str
     token_type: str
 
 
 class ConversationCreation(BaseModel):
-    """
-    Schema for conversation creation requests.
-
-    Used when creating new chat conversations in the system.
-    Each conversation requires a name for identification.
-
-    Attributes:
-        name (str): Human-readable name/title for the conversation
-
-    Example:
-        {
-            "name": "Technical Support Chat"
-        }
-    """
+    """Conversation creation payload (``name`` only)."""
 
     name: str
 
@@ -189,6 +161,11 @@ class ConversationCreation(BaseModel):
 class UserPasswordModification(BaseModel):
     old_password: str
     new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def password_policy(cls, value: str) -> str:
+        return check_password_policy(value)
 
 
 class UpdateRole(BaseModel):

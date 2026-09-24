@@ -1,0 +1,74 @@
+{
+  "label": "baseline",
+  "timestamp": "2026-06-23T18:03:48Z",
+  "git_commit": "76b0d94",
+  "machine": {
+    "name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+    "driver": "610.62",
+    "memory_total": "8188 MiB"
+  },
+  "config": {
+    "mas_url": "http://localhost:8000",
+    "ks_url": "http://localhost:8080",
+    "scenario": "smoke",
+    "repeats": 2,
+    "concurrency_levels": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "gen_count": 4,
+    "ks_workers": 3,
+    "token_method": "approx:chars-over-4",
+    "agent_id": "9f79a0c7-27c6-4868-9ed9-dfc9341b44d6",
+    "skill": "knowledge_retrieval",
+    "observed_model": "Qwen/Qwen3-4B-Instruct-2507",
+    "observed_device": "cuda",
+    "agent_max_new_tokens": "3072 (src/infra/.env)",
+    "knowledge_store_n_results": "4 (src/infra/.env)"
+  },
+  "scenarios": {
+    "smoke": {
+      "result": {
+        "prompt_id": "q-revenue",
+        "ok": false,
+        "direct": false,
+        "error": "ConnectionClosedError: sent 1011 (internal error) keepalive ping timeout; no close frame received",
+        "submit_http_ms": 188.35,
+        "first_step_s": 0.5587,
+        "ttft_proxy_s": 0.6281,
+        "decode_s": 2.027,
+        "decode_wall_s": 2.019,
+        "e2e_s": null,
+        "output_chars": null,
+        "output_tokens": null,
+        "generated_tokens": 120,
+        "prompt_tokens": 1026,
+        "decode_tok_s": null,
+        "decode_tok_s_basis": null,
+        "suspected_spiral": false,
+        "model": "Qwen/Qwen3-4B-Instruct-2507",
+        "device": "cuda",
+        "steps": [
+          {
+            "step_type": "retrieval.start",
+            "offset_s": 0.5587
+          },
+          {
+            "step_type": "retrieval.results",
+            "offset_s": 0.6124
+          },
+          {
+            "step_type": "reasoning.start",
+            "offset_s": 0.6281
+          },
+          {
+            "step_type": "reasoning.done",
+            "offset_s": 2.6471
+          }
+        ]
+      }
+    }
+  }
+}

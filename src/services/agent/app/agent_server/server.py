@@ -1,101 +1,81 @@
-"""
-server.py
----------
-This module implements the agent server that integrates with the MAS Orchestrator API.
-The agent registers itself with the orchestrator, periodically sends heartbeat signals,
-and exposes an endpoint to receive tasks.
-When a task is received, it processes the task using the RAG pipeline and sends the result
-back to the MAS via the /agents/result endpoint.
+"""Agent server: registers with MAS, runs heartbeat + queue consumers, serves HTTP.
+
+Handlers dispatch incoming tasks to the active agent (general RAG
+pipeline or one of the specialized agents) and POST results back to the
+orchestrator. See ``docs/architecture.md`` for the full
+lifecycle.
+
+The implementation is split across this package:
+
+- :mod:`agent_server.server` — module-level state, auth helpers,
+  registration + heartbeat, ``send_result``, lifespan + FastAPI app + routes.
+- :mod:`agent_server.consumers` — RabbitMQ consumer loops (task queue,
+  inter-agent comms).
+- :mod:`agent_server.delegation_bridge` — delegation request handling and
+  result posting.
+
+The consumer/delegation helpers are re-imported here so existing callers and
+tests using ``from agent_server.server import _consume_messages`` (etc.)
+continue to work.
 """
 
-import uuid
+import os
 import threading
 import time
-import json
-import os
+import uuid
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+
 import requests
-import pika
 from fastapi import FastAPI, Request
-from starlette.middleware.base import BaseHTTPMiddleware
 from prometheus_client import make_asgi_app
-from pydantic import BaseModel
-from contextlib import contextmanager
-from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
+
+from agent_server.consumers import _consume_agent_messages, _consume_messages
+from agent_server.middleware import CorrelationIDMiddleware
+from agent_server.models import Result, Task
+from agent_server.profiles import (
+    PROFILES,
+    get_primary_profile,
+    get_profile_by_agent_id,
+)
 from ai_agents.decision_making_agent import DecisionMakingAgent
-from ai_agents.rag_pipeline import RAGPipeline
-from ai_agents.tool_registry import ToolRegistry
+from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
 from ai_agents.knowledge_store_client import KnowledgeStoreClient
+from ai_agents.rag_pipeline import RAGPipeline
+from config.settings import (
+    MAX_DELEGATION_DEPTH,
+    MODEL_DEVICE,
+    MODEL_NAME,
+    ORCHESTRATOR_PASSWORD,
+    ORCHESTRATOR_TOKEN,
+    ORCHESTRATOR_URL,
+    ORCHESTRATOR_USERNAME,
+)
+from core.logger import get_correlation_id, get_logger, set_correlation_id
+from core.metrics import (
+    agent_errors_total,
+    agent_heartbeat_total,
+    agent_registered,
+    task_processing_duration,
+    task_processing_total,
+)
 from specialized.analyst_agent import AnalystAgent
 from specialized.researcher_agent import ResearcherAgent
 from specialized.writer_agent import WriterAgent
-from config.settings import (
-    ORCHESTRATOR_URL,
-    ORCHESTRATOR_USERNAME,
-    ORCHESTRATOR_PASSWORD,
-    ORCHESTRATOR_TOKEN,
-    AGENT_DESCRIPTION,
-    MODEL_NAME,
-    MODEL_DEVICE,
-    AGENT_TYPE,
-    DELEGATION_TIMEOUT,
-    MAX_DELEGATION_DEPTH,
-)
-from core.logger import get_logger, set_correlation_id, get_correlation_id
-from core.metrics import (
-    task_processing_total,
-    task_processing_duration,
-    rag_query_total,
-    rag_query_duration,
-    model_inference_total,
-    model_inference_duration,
-    knowledge_store_requests_total,
-    knowledge_store_request_duration,
-    agent_registered,
-    agent_heartbeat_total,
-    agent_errors_total,
-)
 
 logger = get_logger("agent_server")
 
-app = FastAPI(title="Horus Agent Service", version="1.0.0")
 
-# OpenTelemetry auto-instrumentation is handled by opentelemetry-instrument wrapper
-# See Dockerfile CMD for details
-
-# Mount Prometheus metrics endpoint
-metrics_app = make_asgi_app()
-app.mount("/metrics", metrics_app)
-
-
-class CorrelationIDMiddleware(BaseHTTPMiddleware):
-    """Middleware to extract and set correlation ID from headers."""
-    
-    async def dispatch(self, request: Request, call_next):
-        # Extract correlation ID from headers
-        corr_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
-        if corr_id:
-            set_correlation_id(corr_id)
-        else:
-            # Generate new correlation ID if not present
-            new_corr_id = str(uuid.uuid4())
-            set_correlation_id(new_corr_id)
-        
-        response = await call_next(request)
-        
-        # Add correlation ID to response headers
-        if corr_id := get_correlation_id():
-            response.headers["X-Request-ID"] = corr_id
-        
-        return response
-
-app.add_middleware(CorrelationIDMiddleware)
-
-# Agent details
-# Will be set after successful registration with MAS
-AGENT_ID = None
-AGENT_API_KEY = None  # Plain API key returned at registration, used for agent auth
-AGENT_NAME = "HorusAgent"
-SKILLS = ["knowledge_retrieval", "decision_making", "rag_pipeline"]
+# Multi-identity worker: a single container registers under N profiles (see
+# agent_server.profiles). The module-level ``AGENT_ID`` / ``AGENT_API_KEY`` /
+# ``AGENT_NAME`` / ``SKILLS`` aliases below point at the primary (first)
+# profile for backward compatibility — older callers and tests that imported
+# them keep working. Multi-profile-aware code paths read from
+# :mod:`agent_server.profiles` directly.
+AGENT_ID: str | None = None
+AGENT_API_KEY: str | None = None
+AGENT_NAME: str = get_primary_profile().name
+SKILLS: list[str] = list(get_primary_profile().skills)
 AGENT_CAPABILITIES = {
     "knowledge_retrieval": "Search and retrieve information from knowledge stores",
     "decision_making": "Analyze data and make informed decisions",
@@ -107,46 +87,59 @@ AGENT_CAPABILITIES = {
 knowledge_store_client = KnowledgeStoreClient()
 retrieval_agent = KnowledgeRetrievalAgent(store_interface=knowledge_store_client)
 decision_agent = DecisionMakingAgent(model_name=MODEL_NAME, device=MODEL_DEVICE)
-tool_registry = ToolRegistry()  # default tools will be added by pipeline if empty
+# None → RAGPipeline builds the default registry (parse, calc, extract_data, etc.).
+# An empty ToolRegistry() breaks ReAct tools that call tool_registry.run("parse", ...).
 
-if AGENT_TYPE == "researcher":
-    active_agent = ResearcherAgent(retrieval_agent)
-elif AGENT_TYPE == "analyst":
-    active_agent = AnalystAgent()
-elif AGENT_TYPE == "writer":
-    active_agent = WriterAgent(decision_agent)
-else:
-    active_agent = RAGPipeline(
-    retrieval_agent,
-    decision_agent,
-    tool_registry=tool_registry,
-    )
+# Build one pipeline per agent type up front so the multi-queue consumer can
+# dispatch the right one for each incoming task. All pipelines share the same
+# ``decision_agent`` (and therefore the same Qwen instance) — only the wrapper
+# class differs. This is what lets a single container act as 5 named agents
+# without loading 5 LLMs.
+pipelines: dict[str, object] = {
+    "general": RAGPipeline(retrieval_agent, decision_agent, tool_registry=None),
+    "researcher": ResearcherAgent(retrieval_agent),
+    "analyst": AnalystAgent(),
+    "writer": WriterAgent(decision_agent),
+}
 
-class Task(BaseModel):
-    """
-    Model for tasks received from the MAS Orchestrator.
-    """
-    task_id: str = None  # Auto-generated if not provided.
-    query: str | None = None
-    conversation_id: str
-    operation: str | None = None
-    expression: str | None = None
-    file_url: str | None = None
-    file_content: str | None = None  # base64/utf-8 text; small files only
-    file_type: str | None = None
-    filename: str | None = None
-    text: str | None = None
-    max_sentences: int | None = None
+# Legacy single-pipeline aliases — kept so older callers that imported
+# ``active_agent`` keep working. Points at whatever the primary profile is.
+active_agent = pipelines.get(get_primary_profile().type, pipelines["general"])
+rag_pipeline: RAGPipeline | None = (
+    active_agent if isinstance(active_agent, RAGPipeline) else None
+)
 
-class Result(BaseModel):
-    """
-    Model for sending task results back to the MAS Orchestrator.
-    """
-    agent_id: str
-    result: str
+
+def get_pipeline_for_type(agent_type: str):
+    """Return the pipeline instance to run for a given type (general by default)."""
+    return pipelines.get((agent_type or "general").lower(), pipelines["general"])
+
+# Shared RabbitMQ work-queue prefix (aligned with MAS ``agent_work_queue_prefix``).
+# The consumer subscribes to ``{prefix}.{type}`` for every unique type across
+# registered profiles, so one process can serve general + analyst + writer +
+# researcher tasks concurrently. The single-type ``WORK_QUEUE_NAME`` alias is
+# preserved for legacy callers that imported it; resolves to the primary
+# profile's queue.
+_wq_prefix = os.getenv("HORUS_WORK_QUEUE_PREFIX", "horus.work").strip().rstrip(".")
+
+
+def work_queue_name_for_type(agent_type: str) -> str:
+    at = (agent_type or "general").lower()
+    if "." in at:
+        at = at.split(".")[-1]
+    return f"{_wq_prefix}.{at}"
+
+
+WORK_QUEUE_NAME = work_queue_name_for_type(get_primary_profile().type)
 
 
 _AUTH_TOKEN = None  # cached bearer token for orchestrator requests
+
+
+def _invalidate_cached_mas_token():
+    """Drop cached JWT so the next call re-logins (password grant) or re-reads env token."""
+    global _AUTH_TOKEN
+    _AUTH_TOKEN = None
 
 
 def _get_orchestrator_token():
@@ -175,438 +168,362 @@ def _get_orchestrator_token():
     return None
 
 
-def _build_headers(include_api_key: bool = False) -> dict:
-    """
-    Construct headers for MAS requests.
+def _build_headers(
+    include_api_key: bool = False,
+    *,
+    agent_id: str | None = None,
+    api_key: str | None = None,
+) -> dict:
+    """Return MAS request headers; optionally adds ``X-API-Key``/``Agent-ID``.
 
-    - Always tries to attach Authorization if available.
-    - Optionally attaches X-API-Key (agent_id:api_key) for agent-auth endpoints.
+    Callers can pass an explicit ``agent_id``/``api_key`` to authenticate as a
+    specific registered profile (so result POSTs for "Finance-Analyst" are
+    signed with that profile's credentials rather than the primary's).
     """
     headers: dict = {}
     token = _get_orchestrator_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
-    if include_api_key and AGENT_ID and AGENT_API_KEY:
-        headers["X-API-Key"] = f"{AGENT_ID}:{AGENT_API_KEY}"
-        headers["Agent-ID"] = AGENT_ID
+    if include_api_key:
+        # Default to the primary profile's credentials when nothing is passed.
+        aid = agent_id or AGENT_ID
+        akey = api_key or AGENT_API_KEY
+        if aid and akey:
+            headers["X-API-Key"] = f"{aid}:{akey}"
+            headers["Agent-ID"] = aid
     return headers
 
 
-def register_agent():
-    """Register the agent with MAS. Keep retrying until successful.
+def _register_one_profile(profile) -> bool:
+    """Register a single profile with MAS. Returns True on success.
 
-    Uses a simple backoff to handle MAS not being ready at container start.
+    Handles the 409 case by cleaning up any inactive entry with the same name
+    (e.g. from a previous container run) and retrying.
     """
-    global AGENT_ID, AGENT_API_KEY
     url = f"{ORCHESTRATOR_URL}/agents/register"
-    base_name = AGENT_NAME
+    base_name = profile.name
     name_variant = base_name
-    backoff_seconds = 1
-    while not AGENT_ID:
+    while True:
         try:
             payload = {
                 "name": name_variant,
-                "skills": SKILLS,
-                "description": AGENT_DESCRIPTION,
-                "type": AGENT_TYPE
+                "skills": profile.skills,
+                "description": profile.description,
+                "type": profile.type,
             }
             response = requests.post(
                 url, json=payload, headers=_build_headers(), timeout=5
             )
             if response.status_code == 200:
                 data = response.json()
-                AGENT_ID = data.get("agent_id")
-                AGENT_API_KEY = data.get("api_key")
-                logger.info(f"Agent registered successfully with id: {AGENT_ID}")
-                agent_registered.set(1)
-                if not AGENT_API_KEY:
-                    logger.warning("MAS did not return api_key; agent auth will fail.")
-                break
-            if response.status_code == 409:
-                name_variant = f"{base_name}-{uuid.uuid4().hex[:6]}"
-                logger.warning(f"Agent name conflict. Retrying with name '{name_variant}'")
-            else:
-                logger.error(f"Agent registration failed: {response.status_code} - {response.text}")
-                agent_errors_total.labels(error_type="registration").inc()
-        except Exception as e:
-            logger.error(f"Error registering agent (will retry): {e}", exc_info=True)
-            agent_errors_total.labels(error_type="registration").inc()
-        time.sleep(backoff_seconds)
-        backoff_seconds = min(backoff_seconds * 2, 30)
-
-def send_heartbeat():
-    """
-    Sends a heartbeat to the MAS Orchestrator using the /agents/heartbeat endpoint.
-    """
-    if not AGENT_ID:
-        return
-    url = f"{ORCHESTRATOR_URL}/agents/heartbeat/{AGENT_ID}"
-    try:
-        response = requests.post(url, headers=_build_headers(include_api_key=True))
-        if response.status_code != 200:
-            logger.warning(f"Heartbeat failed: {response.status_code} - {response.text}")
-            agent_heartbeat_total.labels(status="error").inc()
-            agent_errors_total.labels(error_type="heartbeat").inc()
-        else:
-            logger.debug(f"Heartbeat sent successfully: {response.json()}")
-            agent_heartbeat_total.labels(status="success").inc()
-    except Exception as e:
-        logger.error(f"Error sending heartbeat: {e}", exc_info=True)
-        agent_heartbeat_total.labels(status="error").inc()
-        agent_errors_total.labels(error_type="heartbeat").inc()
-
-def heartbeat_task():
-    """
-    Background task that sends a heartbeat every 30 seconds.
-    """
-    while True:
-        send_heartbeat()
-        time.sleep(30)  # Adjust the interval as needed.
-
-
-def _consume_messages():
-    """
-    Connect to RabbitMQ and consume tasks sent to this agent's queue. Each message
-    is expected to be a JSON string with at least 'demand' and 'conversation_id'.
-    It is transformed into the internal task format and processed by the RAG pipeline.
-    Uses asyncio to handle async pipeline processing.
-    Uses asyncio to handle async pipeline processing.
-    """
-    import asyncio
-    
-    if not AGENT_ID:
-        logger.error("Cannot start consumer: AGENT_ID not set")
-        return
-
-    try:
-        rabbit_host = os.getenv("RABBITMQ_HOST", "localhost")
-        rabbit_user = os.getenv("RABBITMQ_USER", "guest")
-        rabbit_pass = os.getenv("RABBITMQ_PASSWORD", "guest")
-        credentials = pika.PlainCredentials(rabbit_user, rabbit_pass)
-        connection = pika.BlockingConnection(
-            pika.ConnectionParameters(
-                host=rabbit_host,
-                credentials=credentials,
-                heartbeat=600,
-                blocked_connection_timeout=300,
-            )
-        )
-        channel = connection.channel()
-        # Declare a durable queue to avoid RabbitMQ 'transient_nonexcl_queues' deprecation
-        channel.queue_declare(
-            queue=AGENT_ID,
-            passive=False,
-            durable=True,
-            exclusive=False,
-            auto_delete=False,
-            arguments={"x-max-priority": 10},
-        )
-
-        def _on_message(ch, method, properties, body):
-            try:
-                payload = json.loads(body.decode("utf-8")) if body else {}
-            except Exception:
-                # Fallback: treat body as plain text demand
-                payload = {"demand": body.decode("utf-8")}
-
-            demand = payload.get("demand", "")
-            conversation_id = payload.get("conversation_id", "")
-            task_id = payload.get("task_id") or ("task_" + uuid.uuid4().hex)
-            
-            # Extract correlation ID from message properties if available
-            corr_id = properties.headers.get("X-Request-ID") if properties.headers else None
-            if corr_id:
-                set_correlation_id(corr_id)
-
-            logger.info(
-                f"Received task: task_id={task_id}, conversation_id={conversation_id}, "
-                f"demand_length={len(demand)}, correlation_id={get_correlation_id()}"
-            )
-
-            # Adapt to pipeline expected schema; include optional utility fields
-            task_dict = {
-                "task_id": task_id,
-                "query": demand or payload.get("query", ""),
-                "operation": payload.get("operation"),
-                "expression": payload.get("expression"),
-                "file_url": payload.get("file_url"),
-                "file_content": payload.get("file_content"),
-                "file_type": payload.get("file_type"),
-                "filename": payload.get("filename"),
-                "text": payload.get("text"),
-                "max_sentences": payload.get("max_sentences"),
-                "format": payload.get("format"),
-                "extraction_type": payload.get("extraction_type"),
-                "analysis_type": payload.get("analysis_type"),
-            }
-            
-            # Process task asynchronously (pika is sync, but pipeline is async)
-            # Create new event loop for this thread if needed
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            # Run async pipeline processing with metrics
-            import time as time_module
-            start_time = time_module.time()
-            try:
-                if AGENT_TYPE == "general":
-                    result_pipeline = loop.run_until_complete(active_agent.process_task(task_dict))
-                    final_result_text = result_pipeline["response"]
-                elif AGENT_TYPE in ["researcher", "analyst", "writer"]:
-                    final_result_text = loop.run_until_complete(
-                        active_agent.process_request(
-                            task_type=task_dict.get("operation"),
-                            data=task_dict.get("query"),
-                            extra_parameters=task_dict
-                        )
-                    )
-
-                processing_duration = time_module.time() - start_time
-                
-                task_processing_duration.observe(processing_duration)
-                task_processing_total.labels(status="success").inc()
-                
+                profile.agent_id = data.get("agent_id")
+                profile.api_key = data.get("api_key")
                 logger.info(
-                    f"Task processed successfully: task_id={task_id}, "
-                    f"duration={processing_duration:.2f}s, correlation_id={get_correlation_id()}"
+                    "Profile registered: name=%s id=%s type=%s",
+                    profile.name,
+                    profile.agent_id,
+                    profile.type,
                 )
-
-                # Send result back to MAS (requires conversation_id and task_id)
-                if conversation_id and task_id:
-                    send_result(final_result_text, conversation_id, task_id)
-            except Exception as e:
-                processing_duration = time_module.time() - start_time
-                task_processing_duration.observe(processing_duration)
-                task_processing_total.labels(status="error").inc()
-                agent_errors_total.labels(error_type="task_processing").inc()
-                logger.error(
-                    f"Task processing failed: task_id={task_id}, error={str(e)}, "
-                    f"correlation_id={get_correlation_id()}",
-                    exc_info=True
+                return True
+            if response.status_code == 409:
+                # The worker is the canonical owner of its default profile
+                # names — any row in MAS with this name is from a previous
+                # container run and must be evicted, regardless of whether
+                # MAS still thinks it's active (a heartbeat 25s ago wins
+                # against MAS's 30s staleness check on a quick redeploy).
+                # Delete all rows matching the name, then retry with the same
+                # label so the UI never accumulates ``Foo-abc123`` ghosts.
+                logger.warning(
+                    "Profile '%s' already registered; reclaiming the name",
+                    name_variant,
                 )
-                raise
+                deleted_any = False
+                try:
+                    list_resp = requests.get(
+                        f"{ORCHESTRATOR_URL}/agents/details/",
+                        headers=_build_headers(),
+                        timeout=5,
+                    )
+                    if list_resp.status_code == 200:
+                        ghosts = [
+                            a for a in list_resp.json()
+                            if a.get("name") == name_variant
+                        ]
+                        for ghost in ghosts:
+                            del_resp = requests.delete(
+                                f"{ORCHESTRATOR_URL}/agents/unregister/{ghost['id']}",
+                                headers=_build_headers(),
+                                timeout=5,
+                            )
+                            if del_resp.status_code == 200:
+                                logger.info(
+                                    "Evicted stale row name=%s id=%s",
+                                    name_variant,
+                                    ghost.get("id"),
+                                )
+                                deleted_any = True
+                            else:
+                                logger.warning(
+                                    "Could not delete %s: %s - %s",
+                                    ghost.get("id"),
+                                    del_resp.status_code,
+                                    del_resp.text,
+                                )
+                except Exception as cleanup_err:
+                    logger.warning("Stale cleanup failed: %s", cleanup_err)
+                if deleted_any:
+                    continue  # retry with the same name
+                # Cleanup couldn't free the name (permissions, race) — fall
+                # back to a unique suffix so registration at least succeeds.
+                name_variant = f"{base_name}-{uuid.uuid4().hex[:6]}"
+                continue
+            logger.error(
+                "Registration failed for %s: %s - %s",
+                profile.name,
+                response.status_code,
+                response.text,
+            )
+            agent_errors_total.labels(error_type="registration").inc()
+            return False
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+            # Expected while MAS is still starting up; register_profiles() retries
+            # with backoff. Log without a traceback to avoid boot-time spam.
+            logger.warning(
+                "MAS not reachable yet for %s, will retry: %s", profile.name, exc
+            )
+            agent_errors_total.labels(error_type="registration").inc()
+            return False
+        except Exception as exc:
+            logger.error(
+                "Error registering %s (will retry): %s", profile.name, exc, exc_info=True
+            )
+            agent_errors_total.labels(error_type="registration").inc()
+            return False
 
-            # Acknowledge the message
-            ch.basic_ack(delivery_tag=method.delivery_tag)
 
-        channel.basic_qos(prefetch_count=1)
-        channel.basic_consume(queue=AGENT_ID, on_message_callback=_on_message)
-        logger.info(f"RabbitMQ consumer started, listening on queue '{AGENT_ID}'")
-        channel.start_consuming()
-    except Exception as e:
-        logger.error(f"Error in RabbitMQ consumer: {e}", exc_info=True)
-        agent_errors_total.labels(error_type="rabbitmq").inc()
+def register_profiles():
+    """Register every profile with MAS; keeps retrying until at least one succeeds.
 
-def _consume_agent_messages():
+    Backward-compat: ``AGENT_ID`` / ``AGENT_API_KEY`` module globals are aliased
+    to the first successfully registered profile so older imports keep working.
     """
-    Consume inter-agent messages from the agent's communication queue.
-    Handles delegation requests from other agents routed through MAS.
-    """
-    import asyncio
+    global AGENT_ID, AGENT_API_KEY
+    backoff_seconds = 1
+    while True:
+        any_success = False
+        for profile in PROFILES:
+            if profile.agent_id:
+                continue
+            if _register_one_profile(profile):
+                any_success = True
+        if any(p.agent_id for p in PROFILES):
+            primary = get_primary_profile()
+            AGENT_ID = primary.agent_id
+            AGENT_API_KEY = primary.api_key
+            agent_registered.set(1)
+            registered = [p.name for p in PROFILES if p.agent_id]
+            logger.info("Registered %d profile(s): %s", len(registered), ", ".join(registered))
+            return
+        if not any_success:
+            time.sleep(backoff_seconds)
+            backoff_seconds = min(backoff_seconds * 2, 30)
 
-    if not AGENT_ID:
-        logger.error("Cannot start agent message consumer: AGENT_ID not set")
+
+# Legacy alias for any caller still importing ``register_agent``.
+register_agent = register_profiles
+
+
+def _heartbeat_for_profile(profile) -> None:
+    if not profile.agent_id or not profile.api_key:
         return
-
+    url = f"{ORCHESTRATOR_URL}/agents/heartbeat/{profile.agent_id}"
     try:
-        rabbit_host = os.getenv("RABBITMQ_HOST", "localhost")
-        rabbit_user = os.getenv("RABBITMQ_USER", "guest")
-        rabbit_pass = os.getenv("RABBITMQ_PASSWORD", "guest")
-        credentials = pika.PlainCredentials(rabbit_user, rabbit_pass)
-        connection = pika.BlockingConnection(
-            pika.ConnectionParameters(
-                host=rabbit_host,
-                credentials=credentials,
-                heartbeat=600,
-                blocked_connection_timeout=300,
+        headers = _build_headers(
+            include_api_key=True, agent_id=profile.agent_id, api_key=profile.api_key
+        )
+        response = requests.post(url, headers=headers, timeout=5)
+        if response.status_code == 401 and not ORCHESTRATOR_TOKEN:
+            # JWT expired — drop the cache and retry once with a fresh token.
+            _invalidate_cached_mas_token()
+            headers = _build_headers(
+                include_api_key=True,
+                agent_id=profile.agent_id,
+                api_key=profile.api_key,
             )
-        )
-        channel = connection.channel()
-        queue_name = f"agent_comm_{AGENT_ID}"
-        channel.queue_declare(
-            queue=queue_name,
-            passive=False,
-            durable=True,
-            exclusive=False,
-            auto_delete=False,
-            arguments={"x-max-priority": 10},
-        )
-
-        def _on_agent_message(ch, method, properties, body):
-            try:
-                payload = json.loads(body.decode("utf-8")) if body else {}
-            except Exception:
-                logger.error("Failed to decode agent message")
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-                return
-
-            message_type = payload.get("message_type", "")
-            message_id = payload.get("id", "")
-            sender = payload.get("sender_agent_id", "")
-
-            logger.info(
-                f"Received agent message: id={message_id}, type={message_type}, "
-                f"from={sender}"
-            )
-
-            if message_type == "delegation":
-                _process_delegation_message(payload)
-            else:
-                logger.warning(f"Unknown agent message type: {message_type}")
-
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-
-        channel.basic_qos(prefetch_count=1)
-        channel.basic_consume(queue=queue_name, on_message_callback=_on_agent_message)
-        logger.info(f"Agent message consumer started on queue '{queue_name}'")
-        channel.start_consuming()
-    except Exception as e:
-        logger.error(f"Error in agent message consumer: {e}", exc_info=True)
-
-
-def _format_delegation_context(context_entries: list) -> str:
-    """Build a readable summary of accumulated delegation context."""
-    if not context_entries:
-        return ""
-    parts = []
-    for i, entry in enumerate(context_entries, 1):
-        agent_id = entry.get("agent_id", "unknown")
-        req = entry.get("request", "")
-        data = entry.get("data", {})
-        section = f"[Agent {i} — {agent_id}]\n  Request: {req}"
-        if data:
-            section += f"\n  Data: {json.dumps(data)}"
-        parts.append(section)
-    return "Prior delegation context:\n" + "\n".join(parts)
-
-
-def _process_delegation_message(payload: dict):
-    """Process a delegation request received from another agent via MAS."""
-    import asyncio
-
-    content = payload.get("content", {})
-    request_text = content.get("request", "")
-    data = content.get("data", {})
-    message_id = payload.get("id", "")
-    sender = payload.get("sender_agent_id", "")
-    delegation_chain = payload.get("delegation_chain", [])
-    delegation_context = payload.get("delegation_context", [])
-
-    logger.info(
-        f"Processing delegation from {sender}: {request_text[:100]}... "
-        f"(chain depth={len(delegation_chain)}, context entries={len(delegation_context)})"
-    )
-
-    query = request_text
-    if data:
-        query = f"{request_text}\n\nData: {json.dumps(data)}"
-
-    context_summary = _format_delegation_context(delegation_context)
-    if context_summary:
-        query = f"{context_summary}\n\n---\nCurrent request:\n{query}"
-
-    task_dict = {
-        "task_id": f"delegation_{message_id}",
-        "query": query,
-        "mode": "react",
-    }
-
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    if AGENT_TYPE == "general" and hasattr(active_agent, "react_agent") and active_agent.react_agent:
-        active_agent.react_agent._incoming_delegation_context = delegation_context
-
-    try:
-        result_dict = loop.run_until_complete(active_agent.process_task(task_dict))
-        result_text = result_dict.get("response", "")
-        logger.info(f"Delegation {message_id} completed successfully")
-    except Exception as e:
-        result_text = f"Delegation processing failed: {e}"
-        logger.error(f"Delegation {message_id} failed: {e}", exc_info=True)
-    finally:
-        if AGENT_TYPE == "general" and hasattr(active_agent, "react_agent") and active_agent.react_agent:
-            active_agent.react_agent._incoming_delegation_context = None
-
-    _send_delegation_result(message_id, result_text)
-
-
-def _send_delegation_result(delegation_id: str, result: str):
-    """Send delegation result back to MAS orchestrator."""
-    url = f"{ORCHESTRATOR_URL}/rabbitmq/delegation-result"
-    payload = {
-        "delegation_id": delegation_id,
-        "result": result,
-        "agent_id": AGENT_ID,
-    }
-    try:
-        response = requests.post(
-            url, json=payload, headers=_build_headers(include_api_key=True), timeout=10
-        )
+            response = requests.post(url, headers=headers, timeout=5)
         if response.status_code != 200:
             logger.warning(
-                f"Failed to send delegation result: {response.status_code} - {response.text}"
+                "Heartbeat for %s failed: %s - %s",
+                profile.name,
+                response.status_code,
+                response.text,
             )
+            agent_heartbeat_total.labels(status="error").inc()
         else:
-            logger.debug(f"Delegation result sent: {delegation_id}")
-    except Exception as e:
-        logger.error(f"Error sending delegation result: {e}", exc_info=True)
+            agent_heartbeat_total.labels(status="success").inc()
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+        # MAS briefly unreachable (e.g. a restart); the loop retries next cycle.
+        logger.warning(
+            "Heartbeat for %s deferred (MAS unreachable): %s", profile.name, exc
+        )
+        agent_heartbeat_total.labels(status="error").inc()
+    except Exception as exc:
+        logger.error("Heartbeat error for %s: %s", profile.name, exc, exc_info=True)
+        agent_heartbeat_total.labels(status="error").inc()
 
 
-def send_result(result: str, conversation_id: str, task_id: str):
+def send_heartbeat():
+    """Send a heartbeat for every registered profile."""
+    for profile in PROFILES:
+        _heartbeat_for_profile(profile)
+
+
+def heartbeat_task():
+    """Background loop: heartbeat every 30 seconds."""
+    while True:
+        send_heartbeat()
+        time.sleep(30)
+
+
+def send_result(
+    result: str,
+    conversation_id: str,
+    task_id: str,
+    assigned_agent_id: str | None = None,
+    skill_used: str | None = None,
+):
     """
     Sends the processed task result to the MAS Orchestrator using the /tasks/task-result/ endpoint.
+
     Args:
         result: The result string generated by the RAG pipeline.
         conversation_id: The conversation ID for this task.
         task_id: The unique task ID.
+        assigned_agent_id: Task assignee UUID. The matching registered profile
+            authenticates the POST so MAS sees the result coming from the
+            expected identity and the chat UI shows the right attribution.
+        skill_used: Optional skill the worker exercised for this task (e.g.
+            ``financial_analysis``).
     """
     url = f"{ORCHESTRATOR_URL}/tasks/task-result/"
+
+    # Pick the profile that matches the assigned agent so the X-API-Key header
+    # and ``agent_name`` both belong to the identity MAS expects. Falls back
+    # to the primary profile (legacy single-agent flow).
+    profile = get_profile_by_agent_id(assigned_agent_id) or get_primary_profile()
+    body_agent_id = assigned_agent_id or profile.agent_id
+    effective_skill = skill_used or (profile.skills[0] if profile.skills else None)
+
     payload = {
-        "agent_id": AGENT_ID,
+        "agent_id": body_agent_id,
+        "agent_name": profile.name,
+        "skill_used": effective_skill,
         "result": result,
-        "conversation_id": conversation_id,
+        "conversation_id": str(conversation_id),
         "task_id": task_id,
     }
     try:
         response = requests.post(
-            url, json=payload, headers=_build_headers(include_api_key=True)
+            url,
+            json=payload,
+            headers=_build_headers(
+                include_api_key=True,
+                agent_id=profile.agent_id,
+                api_key=profile.api_key,
+            ),
         )
         if response.status_code != 200:
-            logger.warning(f"Failed to send result: {response.status_code} - {response.text}")
+            logger.warning(
+                "Failed to send result (as %s): %s - %s",
+                profile.name,
+                response.status_code,
+                response.text,
+            )
         else:
-            logger.debug(f"Result sent successfully: {response.json()}")
+            logger.debug("Result sent successfully as %s", profile.name)
     except Exception as e:
         logger.error(f"Error sending result: {e}", exc_info=True)
 
-@app.on_event("startup")
-async def startup_event():
+
+def send_step(
+    step: dict,
+    conversation_id: str,
+    task_id: str,
+    assigned_agent_id: str | None = None,
+) -> None:
+    """Fire-and-forget POST of a thought-process step to MAS.
+
+    Steps are best-effort: if MAS is slow or down the call short-circuits and
+    the task continues. Authenticated as the profile that owns the task so
+    MAS sees a step coming from the same identity as the eventual result.
     """
-    On startup, register the agent with the MAS Orchestrator and start the heartbeat thread.
-    """
+    url = f"{ORCHESTRATOR_URL}/tasks/task-step/"
+    profile = get_profile_by_agent_id(assigned_agent_id) or get_primary_profile()
+    body_agent_id = assigned_agent_id or profile.agent_id
+    ts = step.get("timestamp") or datetime.now(UTC).isoformat()
+    payload = {
+        "task_id": task_id,
+        "conversation_id": str(conversation_id) if conversation_id else None,
+        "agent_id": body_agent_id,
+        "agent_name": profile.name,
+        "step_type": step.get("step_type"),
+        "title": step.get("title"),
+        "detail": step.get("detail"),
+        "timestamp": ts,
+        "metadata": step.get("metadata") or {},
+    }
+    try:
+        response = requests.post(
+            url,
+            json=payload,
+            headers=_build_headers(
+                include_api_key=True,
+                agent_id=profile.agent_id,
+                api_key=profile.api_key,
+            ),
+            timeout=3,
+        )
+        if response.status_code >= 400:
+            # 404 / 405 here means MAS doesn't expose the endpoint yet — that's
+            # fine, the result path still works. Log quietly.
+            logger.debug(
+                "Step POST returned %s (%s): %s",
+                response.status_code,
+                step.get("step_type"),
+                response.text[:200],
+            )
+    except Exception as e:
+        logger.debug("Step POST failed (%s): %s", step.get("step_type"), e)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup/shutdown (replaces deprecated on_event)."""
     logger.info("Agent service starting up...")
     register_agent()
-    # Start heartbeat if registration succeeded and we have an id
     heartbeat_thread = threading.Thread(target=heartbeat_task, daemon=True)
     heartbeat_thread.start()
     logger.info("Heartbeat thread started")
-
-    # Start RabbitMQ consumer in background
     consumer_thread = threading.Thread(target=_consume_messages, daemon=True)
     consumer_thread.start()
-    logger.info("Agent service startup complete")
-
-    # Start agent-to-agent message consumer
     agent_msg_thread = threading.Thread(target=_consume_agent_messages, daemon=True)
     agent_msg_thread.start()
     logger.info("Agent-to-agent message consumer started")
+    logger.info("Agent service startup complete")
+    yield
+
+
+app = FastAPI(title="Horus Agent Service", version="1.0.0", lifespan=lifespan)
+
+# OpenTelemetry auto-instrumentation is handled by opentelemetry-instrument wrapper
+# See Dockerfile CMD for details
+
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
+
+app.add_middleware(CorrelationIDMiddleware)
+
 
 @app.get(
     "/capabilities",
@@ -617,6 +534,7 @@ async def startup_event():
 def get_capabilities():
     return {
         "agent_id": AGENT_ID,
+        "work_queue": WORK_QUEUE_NAME,
         "agent_name": AGENT_NAME,
         "skills": SKILLS,
         "capabilities": AGENT_CAPABILITIES,
@@ -637,65 +555,59 @@ def get_capabilities():
     }
 )
 async def receive_task(task: Task, request: Request):
-    """
-    Endpoint to receive a task from the MAS Orchestrator.
-
-    When a POST request with a task payload is received, the agent:
-      1. Auto-generates a task_id if one isn't provided.
-      2. Processes the task using the active agent (General RAG Pipeline or Specialized Agent).
-      3. Sends the result back to the MAS Orchestrator.
-      4. Returns the task result.
-    """
+    """Process a task via HTTP, POST the result back to MAS, and return it."""
     if not task.task_id:
         task.task_id = "task_" + uuid.uuid4().hex
-    
+
     # Extract correlation ID from request headers
     corr_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
     if corr_id:
         set_correlation_id(corr_id)
-    
-    logger.info(
-        f"Received task via HTTP: task_id={task.task_id}, conversation_id={task.conversation_id}, "
-        f"correlation_id={get_correlation_id()}"
-    )
-    
-    # Extract correlation ID from request headers
-    corr_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
-    if corr_id:
-        set_correlation_id(corr_id)
-    
+
     logger.info(
         f"Received task via HTTP: task_id={task.task_id}, conversation_id={task.conversation_id}, "
         f"correlation_id={get_correlation_id()}"
     )
 
-    # Process the task using the RAG pipeline (async) with metrics
+    # Process the task using the RAG pipeline (async) with metrics. The HTTP
+    # path always runs the primary profile's pipeline; the RabbitMQ consumer
+    # path is multi-queue-aware and dispatches per task type.
     import time as time_module
     start_time = time_module.time()
     try:
-        task_dict = task.dict()
-        if AGENT_TYPE == "general":
-            result_pipeline = await active_agent.process_task(task_dict)
+        task_dict = task.model_dump()
+        primary_type = get_primary_profile().type
+        primary_pipeline = get_pipeline_for_type(primary_type)
+        if primary_type == "general":
+            result_pipeline = await primary_pipeline.process_task(task_dict)
             final_result_text = result_pipeline["response"]
-        elif AGENT_TYPE in ["researcher", "analyst", "writer"]:
-             final_result_text = await active_agent.process_request(
+        elif primary_type in ("researcher", "analyst", "writer"):
+            final_result_text = await primary_pipeline.process_request(
                 task_type=task_dict.get("operation"),
                 data=task_dict.get("query"),
-                extra_parameters=task_dict
+                extra_parameters=task_dict,
             )
+        else:
+            raise ValueError(f"Unsupported primary type: {primary_type}")
 
         processing_duration = time_module.time() - start_time
-        
+
         task_processing_duration.observe(processing_duration)
         task_processing_total.labels(status="success").inc()
-        
+
         logger.info(
             f"Task processed successfully via HTTP: task_id={task.task_id}, "
             f"duration={processing_duration:.2f}s, correlation_id={get_correlation_id()}"
         )
 
         # Send the result back to the orchestrator.
-        send_result(final_result_text, task.conversation_id, task.task_id)
+        send_result(
+            final_result_text,
+            task.conversation_id,
+            task.task_id,
+            assigned_agent_id=task_dict.get("assigned_agent_id"),
+            skill_used=task_dict.get("skill_used") or task_dict.get("operation"),
+        )
 
         # Return the result in the format expected by the response_model
         return Result(

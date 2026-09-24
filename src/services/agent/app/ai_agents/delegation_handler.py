@@ -16,9 +16,10 @@ Flow:
 from __future__ import annotations
 
 import logging
-import requests
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
+
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +35,9 @@ class DelegationRecord:
     to_agent_type: str
     request: str
     status: str = "pending"
-    result: Optional[str] = None
-    error: Optional[str] = None
-    target_agent_id: Optional[str] = None
+    result: str | None = None
+    error: str | None = None
+    target_agent_id: str | None = None
 
 
 @dataclass
@@ -48,7 +49,7 @@ class DelegationChainTracker:
     If the same agent appears twice, a loop is detected.
     """
 
-    chain: List[str] = field(default_factory=list)
+    chain: list[str] = field(default_factory=list)
     max_depth: int = DEFAULT_MAX_DEPTH
 
     def can_delegate(self) -> bool:
@@ -90,16 +91,16 @@ class DelegationHandler:
         self.max_depth = max_depth
         self.timeout_seconds = timeout_seconds
         self.chain_tracker = DelegationChainTracker(max_depth=max_depth)
-        self.history: List[DelegationRecord] = []
+        self.history: list[DelegationRecord] = []
 
     def delegate(
         self,
         to_agent_type: str,
         request: str,
-        data: Optional[Dict[str, Any]] = None,
+        data: dict[str, Any] | None = None,
         conversation_id: str = "",
-        delegation_context: Optional[List[Dict[str, Any]]] = None,
-    ) -> Dict[str, Any]:
+        delegation_context: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """
         Delegate work to another agent type.
 
@@ -206,7 +207,7 @@ class DelegationHandler:
             self.history.append(record)
             return {"status": "error", "error": error_msg}
 
-    def get_history(self) -> List[Dict[str, Any]]:
+    def get_history(self) -> list[dict[str, Any]]:
         return [
             {
                 "delegation_id": r.delegation_id,

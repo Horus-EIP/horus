@@ -18,7 +18,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317"
 
 # Agent Settings
 export AGENT_DESCRIPTION="Data Extraction Agent"
-export MODEL_NAME="t5-small"
+export MODEL_NAME="Qwen/Qwen3-4B-Instruct-2507"
 
 echo "Starting Agent Server on port 8001..."
 uvicorn agent_server.server:app --host 0.0.0.0 --port 8001

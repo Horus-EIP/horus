@@ -1,22 +1,48 @@
-FROM python:3.13-slim
+FROM python:3.11-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
 COPY ./requirements.txt ./requirements.txt
 
-# Install build dependencies for grpcio and other packages
-RUN apt-get update && apt-get install -y \
-    curl \
-    build-essential \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
+# Install build dependencies for grpcio and other packages.
+# --no-install-recommends avoids manpages/man-db triggers that often yield apt exit 100 in slim images.
+RUN apt-get update -o Acquire::Retries=5 \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        build-essential \
+        g++ \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-RUN pip install --no-cache-dir --use-deprecated=legacy-resolver -r requirements.txt
+# Cache pip downloads across builds (BuildKit) + patient timeouts/retries so large
+# ML wheels (torch ~500MB) don't abort on a slow/flaky network read timeout, and a
+# completed download is reused on the next rebuild instead of re-fetched.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --use-deprecated=legacy-resolver --timeout=120 --retries=10 -r requirements.txt
 
 # Install OpenTelemetry auto-instrumentation
 RUN opentelemetry-bootstrap --action=install
 
 COPY . .
+
+# Orchestrator LLM is NOT baked into the image anymore. It downloads on first
+# container start into a mounted named volume (see entrypoint.sh + compose
+# ``mas_model_cache`` volume). Keeps the image at ~3 GB instead of ~11 GB and
+# makes rebuilds fast.
+
+# Sentence-embedding model for skill suggestion. ~90 MB, CPU-only, used by
+# /tasks/suggest-skills. Small enough to bake in so the suggest endpoint works
+# the moment the container is up.
+ENV HF_HUB_DISABLE_TELEMETRY=1
+RUN mkdir -p models && \
+    python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='sentence-transformers/all-MiniLM-L6-v2', local_dir='models/all-MiniLM-L6-v2', local_dir_use_symlinks=False, allow_patterns=['*.json', '*.txt', 'model.safetensors', '*/*.json', '*/*.txt'])"
+
+# Default to ONLINE for the first run so bootstrap_llm.py can pull the LLM.
+# Operators can flip both to 1 in their env once the cache volume is warm.
+ENV HF_HUB_OFFLINE=0
+ENV TRANSFORMERS_OFFLINE=0
 
 ENV RABBITMQ_HOST=rabbitmq
 

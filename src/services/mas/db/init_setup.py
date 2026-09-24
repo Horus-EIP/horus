@@ -8,8 +8,7 @@ from core.hybrid_logging import log_user_action
 from core.logger import get_logger, log_db_operation, log_error, log_success
 from db.database import Base, SessionLocal, engine
 from db.migrate_critical_logs import create_critical_logs_table
-from db.models import (Agents, Conversations, CriticalLogs, Messages, Task,
-                       TaskResult, Users)
+from db.models import Users
 
 logger = get_logger("init_db")
 
@@ -112,6 +111,15 @@ def init_db():
             )
         else:
             logger.info(f"Admin user already exists: {admin_user.username}")
+
+        # The five specialist agents are no longer DB-seeded — the agent worker
+        # registers them itself at startup as real, heartbeating identities (see
+        # services/agent/app/agent_server/profiles.py). The Manager is the lone
+        # exception: it runs only inside MAS with no worker, so seed it here (or
+        # chain-root creation is skipped on every multi-agent task). Idempotent.
+        from db.seed_agents import seed_manager_agent
+
+        seed_manager_agent(db)
 
         log_success("init_db", "Database initialization completed successfully")
 

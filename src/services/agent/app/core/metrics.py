@@ -4,8 +4,8 @@ Prometheus metrics for the agent service.
 Exposes metrics for task processing, RAG queries, model inference, and error rates.
 """
 
-from prometheus_client import Counter, Histogram, Gauge
-from typing import Optional
+
+from prometheus_client import Counter, Gauge, Histogram
 
 # Task processing metrics
 task_processing_total = Counter(

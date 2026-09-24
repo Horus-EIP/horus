@@ -9,19 +9,48 @@ multi-step THOUGHT → ACTION → OBSERVATION loops for complex queries.
 """
 
 import logging
-from typing import Dict, Any, Optional
+import os
+from typing import Any
 
-from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
-from ai_agents.decision_making_agent import DecisionMakingAgent
-from ai_agents.tool_registry import ToolRegistry
 from ai_agents.calculator_tool import CalculatorTool
+from ai_agents.decision_making_agent import DecisionMakingAgent
 from ai_agents.file_parser_tool import FileParserTool
+from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
+from ai_agents.step_emitter import emit_step
 from ai_agents.summarizer_tool import SummarizerTool
+from ai_agents.tool_registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
-from ai_agents.data_extractor_tool import DataExtractorTool
-from ai_agents.payment_analyzer_tool import PaymentAnalyzerTool
+from ai_agents.data_extractor_tool import DataExtractorTool  # noqa: E402
+from ai_agents.payment_analyzer_tool import PaymentAnalyzerTool  # noqa: E402
+
+# Cap the embedding/retrieval query. BGE-base truncates at 512 tokens (~2k
+# chars), so anything longer is silently dropped by the embedder anyway — and a
+# long chain transcript embeds mostly front-matter, not the actual task.
+_RETRIEVAL_QUERY_CHAR_CAP = 2000
+
+# Wall-clock budget for a single decide() call. This, not TASK_TIMEOUT, is what
+# actually bounds a chat answer, and on expiry the pipeline returns a canned
+# string as a *successful* task -- so too low a value reads as a bad answer
+# rather than as a timeout. The old flat 120s default was a GPU number: a
+# CPU-only worker cannot finish a 4B generation anywhere near it.
+# REACT_TIMEOUT_SECONDS still overrides both.
+_REACT_TIMEOUT_GPU_DEFAULT = 120.0
+_REACT_TIMEOUT_CPU_DEFAULT = 900.0
+
+
+def _react_timeout(device: object) -> float:
+    """Seconds to allow one decide() call, defaulting by device."""
+    raw = os.getenv("REACT_TIMEOUT_SECONDS", "").strip()
+    if raw:
+        try:
+            return float(raw)
+        except ValueError:
+            logger.warning("Ignoring non-numeric REACT_TIMEOUT_SECONDS=%r", raw)
+    on_cpu = str(device or "").lower().startswith("cpu")
+    return _REACT_TIMEOUT_CPU_DEFAULT if on_cpu else _REACT_TIMEOUT_GPU_DEFAULT
+
 
 class RAGPipeline:
     """
@@ -37,7 +66,7 @@ class RAGPipeline:
         self,
         retrieval_agent: KnowledgeRetrievalAgent,
         decision_agent: DecisionMakingAgent,
-        tool_registry: Optional[ToolRegistry] = None,
+        tool_registry: ToolRegistry | None = None,
         *,
         use_react: bool = False,
     ):
@@ -77,30 +106,77 @@ class RAGPipeline:
     # Public API
     # ------------------------------------------------------------------
 
-    async def generate_response(self, query: str) -> str:
+    async def generate_response(
+        self, query: str, retrieval_query: str | None = None
+    ) -> str:
         """
         Generate a response by retrieving and processing data (async).
 
         Args:
-            query: The user query string.
+            query: The user query string (fed to the LLM in full).
+            retrieval_query: Optional focused query used ONLY for knowledge
+                retrieval. Defaults to ``query``. Lets a multi-agent chain pass
+                the bare assigned task for embedding while the LLM still sees the
+                full transcript for grounding.
 
         Returns:
             A formatted response string with insights.
         """
-        data = await self.retrieval_agent.fetch(query)
-        context_text = data.get("data", "")
-        # Decision agent is CPU-bound, run in thread pool to not block event loop
         import asyncio
-        insight = await asyncio.to_thread(
-            self.decision_agent.decide,
-            query=query,
-            context=context_text
-        )
-        response = insight
-        # Response generated successfully
-        return response
 
-    async def generate_response_react(self, query: str) -> Dict[str, Any]:
+        timeout = _react_timeout(getattr(self.decision_agent, "device", None))
+
+        rquery = retrieval_query or query
+        if len(rquery) > _RETRIEVAL_QUERY_CHAR_CAP:
+            rquery = rquery[:_RETRIEVAL_QUERY_CHAR_CAP]
+        data = await self.retrieval_agent.fetch(rquery)
+        context_text = data.get("data", "")
+
+        # Phase 3: exact-match response cache. Keyed on (query + retrieved
+        # context + generation params), so a hit is safe across users and
+        # document versions — different retrieval yields a different key — and
+        # skips the costly model generation. No-op unless AGENT_RESPONSE_CACHE.
+        from ai_agents.response_cache import get_cached, set_cached
+
+        cached = await get_cached(query, context_text)
+        if cached is not None:
+            emit_step(
+                "cache.hit",
+                "Answer served from cache",
+                "An identical query over identical retrieved content was already "
+                "answered; skipped model generation.",
+                source="response_cache",
+            )
+            return cached
+
+        try:
+            insight = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.decision_agent.decide,
+                    query=query,
+                    context=context_text,
+                ),
+                timeout=timeout,
+            )
+        except TimeoutError:
+            logger.warning(
+                "Single-shot LLM inference timed out after %.0fs for query: %r",
+                timeout,
+                query[:120],
+            )
+            # Do not cache the timeout fallback — it is not a real answer.
+            return (
+                "The model took too long to respond (no answer within "
+                f"{timeout:.0f}s). Try a shorter question, or ask an "
+                "administrator to raise REACT_TIMEOUT_SECONDS. On a CPU-only "
+                "deployment this is expected for long questions: generation is "
+                "many times slower than on a GPU."
+            )
+
+        await set_cached(query, context_text, insight)
+        return insight
+
+    async def generate_response_react(self, query: str) -> dict[str, Any]:
         """
         Generate a response using the ReAct multi-step reasoning loop.
 
@@ -112,7 +188,7 @@ class RAGPipeline:
         """
         return await self.react_agent.run(query)
 
-    async def process_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
+    async def process_task(self, task: dict[str, Any]) -> dict[str, Any]:
         """
         Process a task from the MAS Orchestrator (async).
 
@@ -128,6 +204,12 @@ class RAGPipeline:
         if operation and self.tool_registry.has(operation):
             # Tools are CPU-bound, run in thread pool
             import asyncio
+            emit_step(
+                "tool.invoke",
+                f"Running tool: {operation}",
+                f"Dispatching to the '{operation}' tool in the registry.",
+                tool=operation,
+            )
             response_text = await asyncio.to_thread(
                 self.tool_registry.run,
                 operation,
@@ -140,6 +222,9 @@ class RAGPipeline:
             }
 
         query = task.get("query", "")
+        # Focused retrieval query (bare assigned task in a chain); falls back to
+        # the full query for single-agent / first-step tasks.
+        retrieval_query = task.get("retrieval_query") or query
 
         # Determine whether to use ReAct mode
         task_mode = (task.get("mode") or "").lower().strip()
@@ -147,6 +232,12 @@ class RAGPipeline:
 
         if should_react:
             logger.info(f"Using ReAct reasoning for query: {query!r}")
+            emit_step(
+                "reasoning.start",
+                "Starting ReAct multi-step reasoning",
+                "Switching to the THOUGHT → ACTION → OBSERVATION loop.",
+                mode="react",
+            )
             result = await self.generate_response_react(query)
             return {
                 "task_id": task.get("task_id"),
@@ -157,7 +248,9 @@ class RAGPipeline:
             }
 
         # Default single-shot mode
-        response_text = await self.generate_response(query)
+        response_text = await self.generate_response(
+            query, retrieval_query=retrieval_query
+        )
         return {
             "task_id": task.get("task_id"),
             "response": response_text,

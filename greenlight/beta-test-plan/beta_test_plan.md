@@ -16,7 +16,7 @@ The system operates through several interconnected components:
 - **Knowledge Store**: A document management system powered by ChromaDB that allows users to upload, organize, and query documents for context-aware AI responses
 - **Web Client**: A Next.js-based dashboard providing chat interface, conversation management, knowledge store UI, admin functionalities, and real-time analytics
 
-The platform uses PostgreSQL for data persistence, Redis for caching, RabbitMQ for message queuing, and integrates comprehensive observability through Prometheus, Grafana, and Jaeger.
+The platform uses PostgreSQL for data persistence, Redis for caching, RabbitMQ for message queuing, and integrates comprehensive observability through Prometheus, Loki, and Tempo, surfaced in the web client's admin pages.
 
 ---
 

@@ -7,12 +7,12 @@ Provides structured logging with JSON output support and correlation ID tracking
 import json
 import logging
 import sys
-from datetime import datetime
-from typing import Any, Dict, Optional
 from contextvars import ContextVar
+from datetime import UTC, datetime
+from typing import Any
 
 # Context variable for correlation ID
-correlation_id: ContextVar[Optional[str]] = ContextVar("correlation_id", default=None)
+correlation_id: ContextVar[str | None] = ContextVar("correlation_id", default=None)
 
 
 class StructuredFormatter(logging.Formatter):
@@ -20,8 +20,10 @@ class StructuredFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         """Format log record as JSON."""
-        log_data: Dict[str, Any] = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+        log_data: dict[str, Any] = {
+            "timestamp": datetime.now(UTC)
+            .isoformat()
+            .replace("+00:00", "Z"),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -49,7 +51,7 @@ class StructuredFormatter(logging.Formatter):
 class AgentLogger:
     """Structured logger for agent service."""
 
-    _loggers: Dict[str, logging.Logger] = {}
+    _loggers: dict[str, logging.Logger] = {}
     _configured = False
 
     @classmethod
@@ -57,7 +59,7 @@ class AgentLogger:
         cls,
         level: str = "INFO",
         json_output: bool = False,
-        log_file: Optional[str] = None,
+        log_file: str | None = None,
     ):
         """Configure logging for the agent service."""
         if cls._configured:
@@ -88,6 +90,12 @@ class AgentLogger:
             file_handler.setFormatter(StructuredFormatter())
             root_logger.addHandler(file_handler)
 
+        # Quiet verbose third-party loggers: pika prints the entire AMQP
+        # connection lifecycle at INFO, and httpx logs a line per request with
+        # the full (very long) knowledge-store query URL on every retrieval.
+        for noisy in ("pika", "httpx", "httpcore"):
+            logging.getLogger(noisy).setLevel(logging.WARNING)
+
         cls._configured = True
 
     @classmethod
@@ -104,18 +112,18 @@ def get_logger(name: str) -> logging.Logger:
     return AgentLogger.get_logger(name)
 
 
-def set_correlation_id(corr_id: Optional[str]):
+def set_correlation_id(corr_id: str | None):
     """Set correlation ID for current context."""
     correlation_id.set(corr_id)
 
 
-def get_correlation_id() -> Optional[str]:
+def get_correlation_id() -> str | None:
     """Get correlation ID from current context."""
     return correlation_id.get()
 
 
 # Configure logging on import
-import os
+import os  # noqa: E402
 
 json_logging = os.getenv("AGENT_JSON_LOGGING", "false").lower() == "true"
 log_level = os.getenv("AGENT_LOG_LEVEL", "INFO")

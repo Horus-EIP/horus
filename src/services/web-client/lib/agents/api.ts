@@ -22,20 +22,34 @@ export interface RegisterAgentResponse {
   api_key: string;
 }
 
+export interface RegenerateApiKeyResponse {
+  message: string;
+  agent_id: string;
+  api_key: string;
+}
+
 export interface AgentResponse<T = void> {
   ok: boolean;
   data?: T;
   error?: string;
+  /** True when the underlying request was aborted (navigation or timeout). */
+  aborted?: boolean;
 }
 
 export const agentApi = {
-  async getAgents(): Promise<AgentResponse<Agent[]>> {
-    const response = await apiClient.get<Agent[]>("/agents/details/", { retry: 1 });
+  async getAgents(
+    options?: { signal?: AbortSignal }
+  ): Promise<AgentResponse<Agent[]>> {
+    const response = await apiClient.get<Agent[]>("/agents/details", {
+      retry: 1,
+      signal: options?.signal,
+    });
 
     if (!response.ok || !response.data) {
       return {
         ok: false,
         error: response.error || "Failed to fetch agents",
+        aborted: response.aborted,
       };
     }
 
@@ -72,6 +86,26 @@ export const agentApi = {
       return {
         ok: false,
         error: response.error || "Failed to register agent",
+      };
+    }
+
+    return {
+      ok: true,
+      data: response.data,
+    };
+  },
+
+  async regenerateApiKey(agentId: string): Promise<AgentResponse<RegenerateApiKeyResponse>> {
+    const response = await apiClient.post<RegenerateApiKeyResponse>(
+      `/agents/regenerate-key/${agentId}`,
+      undefined,
+      { retry: 1 }
+    );
+
+    if (!response.ok || !response.data) {
+      return {
+        ok: false,
+        error: response.error || "Failed to regenerate API key",
       };
     }
 

@@ -1,10 +1,9 @@
-import json
 import os
+import threading
 from pathlib import Path
 
 import torch
-from transformers import (AutoModelForCausalLM, AutoTokenizer,
-                          BitsAndBytesConfig)
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 from core.config import settings
 from core.logger import get_logger
@@ -14,22 +13,87 @@ logger = get_logger("llm_setup")
 os.environ.setdefault(
     "PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True,max_split_size_mb:64"
 )
-os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-torch.set_num_threads(1)
 torch.backends.cuda.matmul.allow_tf32 = True
 
+
+def _configure_llm_cpu_threads() -> None:
+    """Use more CPU cores when the orchestrator runs on CPU (default was 1 thread = very slow)."""
+    raw = os.getenv("LLM_TORCH_INTRAOP_THREADS", "").strip()
+    if raw:
+        try:
+            n = max(1, int(raw))
+        except ValueError:
+            n = max(1, min(8, (os.cpu_count() or 4)))
+    else:
+        n = max(1, min(8, (os.cpu_count() or 4)))
+    os.environ.setdefault("OMP_NUM_THREADS", str(n))
+    torch.set_num_threads(n)
+    logger.info("LLM CPU thread budget: OMP/torch intra-op=%s", n)
+
+
+_configure_llm_cpu_threads()
+
+
+def _cpu_dtype() -> torch.dtype:
+    """Weight dtype for a CPU load.
+
+    float16 is the wrong default on CPU: many PyTorch CPU kernels have no fp16
+    path, so generation is either pathologically slow or raises outright. Prefer
+    bfloat16 (same 2 bytes per weight, widely supported) and fall back to
+    float32, which always works but doubles resident memory. Override with
+    LLM_CPU_DTYPE=bfloat16|float32|float16.
+    """
+    aliases = {
+        "bfloat16": torch.bfloat16,
+        "bf16": torch.bfloat16,
+        "float32": torch.float32,
+        "fp32": torch.float32,
+        "float16": torch.float16,
+        "fp16": torch.float16,
+    }
+    override = os.getenv("LLM_CPU_DTYPE", "").strip().lower()
+    if override:
+        if override in aliases:
+            return aliases[override]
+        logger.warning("Ignoring unknown LLM_CPU_DTYPE=%r", override)
+    try:
+        probe = torch.zeros(2, 2, dtype=torch.bfloat16)
+        _ = probe @ probe
+        return torch.bfloat16
+    except Exception:
+        return torch.float32
+
 BASE_DIR = Path(__file__).resolve().parent.parent
-MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
-MODEL_DIR = BASE_DIR / "models/Qwen3_instruct_4B"
+# MAS is a thin router/classifier — it picks an agent, sometimes decomposes a
+# task into subtasks, and otherwise gets out of the way. That work doesn't
+# need a big model, so we default to Qwen2.5-1.5B-Instruct (~3 GB, Apache 2.0,
+# no Hub gating). The agent worker keeps the full 4B model for actual task
+# execution (RAG synthesis, answer generation). Override LLM_MODEL_ID if you
+# want a different MAS-side model (e.g. bump to 4B if decomposition quality
+# matters more than orchestrator latency).
+MODEL_ID = os.environ.get("LLM_MODEL_ID", "Qwen/Qwen2.5-1.5B-Instruct").strip()
+
+
+def _resolve_model_dir() -> Path:
+    explicit = os.environ.get("LLM_MODEL_DIR", "").strip()
+    if explicit:
+        return Path(explicit)
+    leaf = MODEL_ID.split("/")[-1] or "model"
+    return BASE_DIR / "models" / leaf
+
+
+MODEL_DIR = _resolve_model_dir()
 OFFLOAD_DIR = BASE_DIR / "offload"
 OFFLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+# Minimum files we expect after a successful snapshot_download. ``tokenizer.json``
+# is universal across HF causal-LM repos; ``config.json`` is required to load
+# the model. The old list expected sharded weights which only exist on >2 GB
+# checkpoints — 1.5B models ship a single ``model.safetensors`` instead.
 REQUIRED_FILES = [
     "config.json",
-    "generation_config.json",
     "tokenizer.json",
-    "model.safetensors.index.json",
 ]
 
 
@@ -43,8 +107,25 @@ def is_model_dir_exists():
     return True
 
 
-GPU_BUDGET = "3.2GiB"
-CPU_BUDGET = "2GiB"  # Adjusted for tight system memory
+def _accelerate_max_memory() -> dict | None:
+    """
+    If LLM_GPU_MEMORY_CAP is unset, return None so Accelerate uses all visible VRAM
+    (avoids the old 3.2GiB cap that forced heavy CPU offload).
+    Set e.g. LLM_GPU_MEMORY_CAP=6GiB and LLM_CPU_OFFLOAD_CAP=16GiB to limit/split.
+    """
+    cap = os.getenv("LLM_GPU_MEMORY_CAP", "").strip()
+    if not cap:
+        return None
+    cpu = os.getenv("LLM_CPU_OFFLOAD_CAP", "8GiB").strip() or "8GiB"
+    return {0: cap, "cpu": cpu}
+
+
+def _llm_use_gpu() -> bool:
+    if getattr(settings, "llm_force_cpu", None) == 1:
+        return False
+    if os.environ.get("LLM_FORCE_CPU", "").strip().lower() in ("1", "true", "yes"):
+        return False
+    return torch.cuda.is_available()
 
 
 def _bnb4bit():
@@ -60,11 +141,19 @@ def _bnb4bit():
     )
 
 
-def get_llm():
+def _model_device(model: torch.nn.Module) -> torch.device:
+    try:
+        return next(model.parameters()).device
+    except (StopIteration, AttributeError):
+        pass
+    dev = getattr(model, "device", None)
+    if dev is not None:
+        return dev if isinstance(dev, torch.device) else torch.device(str(dev))
+    return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    if not torch.cuda.is_available():
-        logger.warning("No NVIDIA GPU detected. LLM will not be loaded.")
-        return None, None
+
+def get_llm():
+    use_gpu = _llm_use_gpu()
 
     if is_model_dir_exists():
         model_path = MODEL_DIR
@@ -75,51 +164,163 @@ def get_llm():
         model_path, use_fast=True, trust_remote_code=True
     )
 
-    if torch.cuda.is_available():
-        max_memory = {0: GPU_BUDGET, "cpu": CPU_BUDGET}
+    if use_gpu:
+        max_memory = _accelerate_max_memory()
+        gpu_kw: dict = {
+            "quantization_config": _bnb4bit(),
+            "device_map": "auto",
+            "low_cpu_mem_usage": True,
+            "attn_implementation": "sdpa",
+            "trust_remote_code": True,
+        }
+        if max_memory is not None:
+            gpu_kw["max_memory"] = max_memory
+            gpu_kw["offload_folder"] = str(OFFLOAD_DIR)
+            logger.info("LLM load with max_memory=%s", max_memory)
+        else:
+            logger.info("LLM load without VRAM cap (uses full GPU when possible).")
+        model = AutoModelForCausalLM.from_pretrained(model_path, **gpu_kw)
+    else:
+        cpu_dtype = _cpu_dtype()
+        logger.info(
+            "Loading LLM on CPU (no GPU or LLM_FORCE_CPU=1), dtype=%s.", cpu_dtype
+        )
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
-            quantization_config=_bnb4bit(),
-            device_map="auto",
-            max_memory=max_memory,
+            torch_dtype=cpu_dtype,
+            device_map={"": "cpu"},
             low_cpu_mem_usage=True,
             attn_implementation="sdpa",
-            offload_folder=str(OFFLOAD_DIR),
-            trust_remote_code=True,
-        )
-    else:
-        model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            device_map={"": "cpu"},
-            dtype=torch.float32,
-            low_cpu_mem_usage=True,
             trust_remote_code=True,
         )
 
     model.eval()
+    dev = _model_device(model)
+    logger.info(
+        "Orchestrator LLM ready: parameter_device=%s torch.cuda.is_available()=%s "
+        "torch.version.cuda=%s (if CUDA is False, stack runs on CPU — high RAM, no GPU utilization)",
+        dev,
+        torch.cuda.is_available(),
+        getattr(torch.version, "cuda", None),
+    )
     return tokenizer, model
 
 
 tokenizer = None
 model = None
+_llm_load_lock = threading.Lock()
 
-# Prevent loading LLM in test mode or if disabled
-if settings.llm_autoinit == 1 and os.environ.get("TEST_MODE") != "1":
-    tokenizer, model = get_llm()
+
+def _ensure_llm_loaded() -> None:
+    """Load the model on first use so Uvicorn can bind and pass Docker healthchecks quickly."""
+    global tokenizer, model
+    if os.environ.get("TEST_MODE") == "1":
+        return
+    if _llm_backend() == "vllm":
+        # No in-process router under vLLM — ask_llm routes to the server.
+        return
+    if getattr(settings, "llm_autoinit", 0) != 1:
+        return
+    if tokenizer is not None and model is not None:
+        return
+    with _llm_load_lock:
+        if tokenizer is not None and model is not None:
+            return
+        logger.info("Loading LLM (lazy, first request or background use)...")
+        tokenizer, model = get_llm()
+
+
+def start_llm_preload_background_thread() -> None:
+    """
+    When LLM_AUTOINIT=1, load the model in a daemon thread after HTTP is up.
+    Avoids blocking the first /tasks/new_task on a multi‑minute HF download + CPU load
+    (which also starves the single Uvicorn worker and breaks the RabbitMQ healthcheck).
+    """
+    if os.environ.get("TEST_MODE") == "1":
+        return
+    if getattr(settings, "llm_autoinit", 0) != 1:
+        return
+
+    def _worker() -> None:
+        try:
+            logger.info("Background thread: preloading orchestrator LLM...")
+            _ensure_llm_loaded()
+            logger.info("Background thread: orchestrator LLM preload finished.")
+        except Exception:
+            logger.exception(
+                "Background LLM preload failed; first ask_llm will retry loading."
+            )
+
+    threading.Thread(target=_worker, name="mas-llm-preload", daemon=True).start()
+
+
+def _llm_backend() -> str:
+    """Orchestrator LLM backend (Phase 4 Lever #3): 'transformers' (in-process
+    1.5B router, default) or 'vllm' (call the external vLLM server). Under 'vllm'
+    MAS does NOT load a local model and every ask_llm goes to vLLM — fixing the
+    multi-agent aggregation latency (the CPU router was the e2e killer)."""
+    return os.getenv("LLM_BACKEND", "transformers").strip().lower()
+
+
+def _vllm_base_url() -> str:
+    return os.getenv("LLM_VLLM_URL", "http://host.docker.internal:18000/v1")
+
+
+def _vllm_model_name() -> str:
+    return os.getenv("LLM_VLLM_MODEL", "qwen3-4b")
+
+
+def _vllm_timeout() -> float:
+    try:
+        return float(os.getenv("LLM_VLLM_TIMEOUT", "120"))
+    except ValueError:
+        return 120.0
+
+
+def _ask_vllm(messages: list, max_new_tokens: int) -> str:
+    """Run an orchestration LLM call against the external vLLM server. Greedy to
+    match the in-process path; vLLM applies the chat template server-side. Uses
+    stdlib urllib so no new MAS dependency / image rebuild is needed for deps."""
+    import json
+    import urllib.request
+
+    url = _vllm_base_url().rstrip("/") + "/chat/completions"
+    # Budget max_tokens to the room left under max_model_len so a big prompt
+    # (e.g. the aggregation step's full chain history) neither 400s nor silently
+    # truncates. Estimate prompt tokens from chars (~chars/3, conservative).
+    try:
+        max_model_len = max(512, int(os.getenv("LLM_VLLM_MAX_MODEL_LEN", "8192")))
+    except ValueError:
+        max_model_len = 8192
+    est_prompt = sum(len(str(m.get("content", ""))) for m in messages) // 3
+    safe_max = max(256, min(int(max_new_tokens), max_model_len - est_prompt - 256))
+    body = json.dumps(
+        {
+            "model": _vllm_model_name(),
+            "messages": messages,
+            "max_tokens": safe_max,
+            "temperature": 0.0,
+            "stream": False,
+        }
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        url, body, {"Content-Type": "application/json"}, method="POST"
+    )
+    with urllib.request.urlopen(req, timeout=_vllm_timeout()) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    return (data["choices"][0]["message"].get("content") or "").strip()
 
 
 def ask_llm(messages: list, max_new_tokens: int = 256):
+    if _llm_backend() == "vllm":
+        return _ask_vllm(messages, max_new_tokens)
     logger.info("Entering ask_llm, checking model...")
+    _ensure_llm_loaded()
     if tokenizer is None or model is None:
-        logger.warning("LLM not initialized. Returning mock response.")
-        return json.dumps(
-            {
-                "next_action": "run_agents",
-                "actions": [
-                    {"agent": "test_agent_math_fixed", "input": "Calculate sqrt(16)"}
-                ],
-                "final_answer": "",
-            }
+        raise RuntimeError(
+            "LLM is not loaded. Set LLM_AUTOINIT=1, ensure the model is available "
+            "(local files under models/ or Hugging Face download), and check container "
+            "memory / logs."
         )
 
     logger.info("Tokenizing prompt...")
@@ -133,25 +334,28 @@ def ask_llm(messages: list, max_new_tokens: int = 256):
         prompt,
         return_tensors="pt",
         truncation=True,
-        max_length=1024,
+        max_length=4096,
         add_special_tokens=True,
     )
-    input_ids = enc["input_ids"].to(model.device)
+    device = _model_device(model)
+    input_ids = enc["input_ids"].to(device)
     attn_mask = enc.get("attention_mask")
     if attn_mask is not None:
-        attn_mask = attn_mask.to(model.device)
+        attn_mask = attn_mask.to(device)
 
     logger.info(f"Starting generation with max_new_tokens={max_new_tokens}...")
     import time
 
     start_time = time.time()
-    torch.cuda.empty_cache()  # Clear cache before generation
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
     with torch.no_grad():
         out = model.generate(
             input_ids=input_ids,
             attention_mask=attn_mask,
             max_new_tokens=max_new_tokens,
             do_sample=False,
+            repetition_penalty=1.3,
             return_dict_in_generate=True,
             pad_token_id=tokenizer.eos_token_id,
             eos_token_id=tokenizer.eos_token_id,

@@ -1,5 +1,7 @@
 from datetime import datetime
+
 from pydantic import BaseModel, Field
+
 
 class EntityModel(BaseModel):
     people: list[str] = Field(default_factory=list)

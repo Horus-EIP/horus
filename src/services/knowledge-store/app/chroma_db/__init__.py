@@ -1,6 +1,18 @@
-from app.chroma_db.setup import chroma_client, model, knowledge_collection, COLLECTION_NAME, get_embedding
 from app.chroma_db.models import DocumentModel, SmartSearchRequest
-from app.chroma_db.services import store_file, query_knowledge, delete_document, query_with_filters, build_where_clause
+from app.chroma_db.services import (
+    build_where_clause,
+    delete_document,
+    query_knowledge,
+    query_with_filters,
+    store_file,
+)
+from app.chroma_db.setup import (
+    COLLECTION_NAME,
+    chroma_client,
+    get_embedding,
+    knowledge_collection,
+    model,
+)
 
 __all__ = [
     "chroma_client",

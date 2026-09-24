@@ -1,3 +1,15 @@
+# Horus stack (single Compose file).
+#
+# GPU (NVIDIA): four services request `gpus: all` — `mas`, `agent`, `vllm` and
+# `knowledge_store`. Install the NVIDIA Container Toolkit so Docker exposes CUDA. If your
+# host has no GPU (or Compose errors on startup), comment out the `gpus: all` lines under
+# those four services, or set
+# `LLM_FORCE_CPU=1` / `MODEL_DEVICE=cpu` in `.env` so workloads fall back to CPU inside the
+# containers where supported.
+#
+# Eager LLMs: the agent loads the decision model at startup (`AGENT_LAZY_DECISION_MODEL=0`),
+# so the first chat does not pay a one-time load cost (container start is slower instead).
+
 services:
   # =============================================================================
   # CORE APPLICATION SERVICES
@@ -6,8 +18,9 @@ services:
   rabbitmq:
     image: rabbitmq:4.1.2-management
     container_name: rabbitmq
+    restart: unless-stopped
     ports:
-      - "${RABBITMQ_PORT}:5672"
+      - "${RABBITMQ_PORT:-5672}:5672"
       - "15672:15672"
     networks:
       - horus-net
@@ -27,45 +40,67 @@ services:
       context: ../services/mas
       dockerfile: Dockerfile
     container_name: mas
-    mem_limit: 8g
-    memswap_limit: 10g
+    restart: unless-stopped
+    mem_limit: ${MAS_MEM_LIMIT:-14g}
+    memswap_limit: ${MAS_MEMSWAP_LIMIT:-16g}
+    gpus: all
+    # Reach the vLLM server on the host/WSL for orchestration LLM calls (Lever #3).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - .env
     environment:
-      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      # Must be the Docker service name, not localhost (compose passes .env which may use localhost for host-side tools).
+      - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=${RABBITMQ_USER}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
-      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      # Internal AMQP port inside the stack (not the host mapping in RABBITMQ_PORT)
+      - RABBITMQ_PORT=5672
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
-      - DB_PORT=${DB_PORT}
       - DB_HOST=postgres
+      - DB_PORT=5432
       - REDIS_HOST=redis
-      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - SUPER_USER_USERNAME=${SUPER_USER_USERNAME}
       - SUPER_USER_PASSWORD=${SUPER_USER_PASSWORD}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_ALGORITHM=${JWT_ALGORITHM}
-      - LLM_AUTOINIT=${LLM_AUTOINIT:-0}
-      - LLM_BACKEND=${LLM_BACKEND:-mock}
+      - LLM_AUTOINIT=${LLM_AUTOINIT:-1}
+      # 0 = use CUDA when the container sees a GPU (`gpus: all` above). 1 = CPU-only orchestrator LLM.
       - LLM_FORCE_CPU=${LLM_FORCE_CPU:-0}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
-      # OpenTelemetry - Send to Tempo
-      - OTEL_ENABLED=true
+      # OpenTelemetry — enabled by default; Tempo is always-on in this stack.
+      # Flip OTEL_SDK_DISABLED=true and OTEL_ENABLED=false in .env to opt out.
+      - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-false}
+      - OTEL_ENABLED=${OTEL_ENABLED:-true}
       - OTEL_SERVICE_NAME=mas
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
       - JSON_LOGGING=true
       - LOG_LEVEL=INFO
-      - TASK_TIMEOUT_SECONDS=300
+      # Wall-clock cap for RUNNING tasks (LLM + agent). TASK_TIMEOUT_SECONDS also accepted by MAS settings.
+      - TASK_TIMEOUT=${TASK_TIMEOUT:-1800}
+      # MAS is a thin router/decomposer — it doesn't need the full 4B model.
+      # Default: Qwen2.5-1.5B-Instruct (~3 GB). The agent service keeps the
+      # bigger Qwen3-4B for actual task execution. Set LLM_MODEL_ID to bump
+      # MAS to a heavier model if your decomposition prompts need it.
+      - LLM_MODEL_ID=${LLM_MODEL_ID:-Qwen/Qwen2.5-1.5B-Instruct}
+      - LLM_MODEL_DIR=/app/models/llm
+      # Default ONLINE so first-run can pull. Flip to 1 once the cache is warm.
+      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
+      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
     healthcheck:
-      test: ["CMD", "curl", "-f", "-X", "POST", "http://localhost:8000/rabbitmq/heartbeat"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+      # HTTP is only accepted after lifespan completes (DB + RabbitMQ); this gates dependents.
+      # Use a generous timeout: a single Uvicorn worker can be busy with HF/LLM I/O; short
+      # timeouts falsely mark the service unhealthy while chat requests are still in flight.
+      test: ["CMD", "curl", "-f", "-m", "25", "-X", "POST", "http://localhost:8000/rabbitmq/heartbeat"]
+      interval: 15s
+      timeout: 30s
+      retries: 5
+      # 900s: MAS downloads a 3.10 GB router model on first start. Failures during
+      # start_period do not count, so this only delays declaring a dead MAS.
+      start_period: 900s
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -77,82 +112,228 @@ services:
       - "8000:8000"
     networks:
       - horus-net
+    volumes:
+      - mas_model_cache:/app/models/llm
 
   web-client:
     build:
       context: ../services/web-client
       dockerfile: Dockerfile
+      args:
+        ORCHESTRATOR_URL: http://mas:8000
+        NEXT_PUBLIC_KNOWLEDGE_STORE_URL: http://localhost:8080
+        # Browser calls KS on host port; leave empty unless a gateway adds a path prefix.
+        NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX: ${NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX:-}
     container_name: web_client
+    restart: unless-stopped
     depends_on:
-      - mas
+      mas:
+        condition: service_healthy
+      loki:
+        condition: service_started
+      prometheus:
+        condition: service_started
+      tempo:
+        condition: service_started
     ports:
       - "3000:3000"
     networks:
       - horus-net
-    volumes:
-      - ../services/web-client:/app
-      - /app/node_modules
     environment:
       - NEXT_TELEMETRY_DISABLED=1
+      - ORCHESTRATOR_URL=http://mas:8000
+      # Server-side only: the admin observability pages proxy to these via
+      # app/api/{logs,metrics,traces}. Internal Docker hosts — never expose to the browser.
+      - LOKI_URL=http://loki:3100
+      - PROMETHEUS_URL=http://prometheus:9090
+      - TEMPO_URL=http://tempo:3200
       - NEXT_PUBLIC_KNOWLEDGE_STORE_URL=http://localhost:8080
-      - CHOKIDAR_USEPOLLING=true
-      - WATCHPACK_POLLING=true
+      - NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX=${NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX:-}
 
   agent:
     build:
       context: ../services/agent
       dockerfile: Dockerfile
     container_name: agent
+    restart: unless-stopped
+    # Agent inference (Qwen instruct decision LLM, spaCy tools, etc.): NVIDIA Container Toolkit on the host.
+    # No GPU? Remove the next line or run without requesting devices (Compose will error if unsupported).
+    gpus: all
+    env_file:
+      - .env
     environment:
+      # Overrides host-oriented .env (localhost) with Docker network hosts.
       - ORCHESTRATOR_URL=http://mas:8000
-      - ORCHESTRATOR_USERNAME=admin
-      - ORCHESTRATOR_PASSWORD=secret
+      - ORCHESTRATOR_USERNAME=${SUPER_USER_USERNAME}
+      - ORCHESTRATOR_PASSWORD=${SUPER_USER_PASSWORD}
       - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
       - RABBITMQ_USER=${RABBITMQ_USER}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      # Store listens at / and /file on :8080 (no path prefix unless behind a gateway).
       - KNOWLEDGE_STORE_URL=http://knowledge_store:8080
+      - KNOWLEDGE_STORE_API_PREFIX=${KNOWLEDGE_STORE_API_PREFIX:-}
       - KNOWLEDGE_STORE_TIMEOUT=10.0
       - KNOWLEDGE_STORE_MAX_RETRIES=3
       - KNOWLEDGE_STORE_RETRY_DELAY=1.0
-      # OpenTelemetry instrumentation for Tempo
-      - OTEL_ENABLED=true
+      # auto = use CUDA inside the container when visible; set MODEL_DEVICE=cpu in .env to force CPU only.
+      - MODEL_DEVICE=${MODEL_DEVICE:-auto}
+      # The agent runs RAG synthesis + answer generation, so it gets the
+      # bigger model (Qwen3-4B). MAS routes/decomposes with a 1.5B Qwen.
+      # Override MODEL_NAME to share a single model across both services.
+      - MODEL_NAME=${MODEL_NAME:-Qwen/Qwen3-4B-Instruct-2507}
+      - MODEL_DIR=/app/models/llm
+      # The agent worker registers under multiple identities (General-Assistant,
+      # Finance-Analyst, Compliance-Officer, Document-Writer, Researcher) by
+      # default, all backed by the same Qwen instance. To run as a single
+      # specialised identity instead, set AGENT_NAME / AGENT_TYPE / AGENT_SKILLS
+      # in your .env. For a fully custom lineup, pass AGENT_PROFILES_JSON
+      # (a JSON array of {name, type, skills, description} objects).
+      # 0 = load the LLM at agent startup (ready for first chat; slower boot).
+      - AGENT_LAZY_DECISION_MODEL=${AGENT_LAZY_DECISION_MODEL:-0}
+      - AGENT_SPACY_PREFER_SM=1
+      # OpenTelemetry instrumentation — enabled by default; Tempo is always-on.
+      # Set OTEL_SDK_DISABLED=true and OTEL_ENABLED=false in .env to opt out.
+      - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-false}
+      - OTEL_ENABLED=${OTEL_ENABLED:-true}
       - OTEL_SERVICE_NAME=agent
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
+      # Default ONLINE so first-run can pull. Flip to 1 once the cache is warm.
+      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
+      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
+      # Redis for the Phase 3 response cache. The .env REDIS_HOST is the host-side
+      # value (localhost); override to the compose service name for the container.
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     depends_on:
       mas:
-        condition: service_started
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       knowledge_store:
         condition: service_started
+      redis:
+        condition: service_healthy
     ports:
       - "8001:8001"
     networks:
       - horus-net
+    # Reach the vLLM server running on the host/WSL (Phase 4, LLM_BACKEND=vllm).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ../services/agent/app:/app
+      - agent_model_cache:/app/models/llm
+
+  # vLLM serving the 4B worker (Phase 4 keystone). Runs as a managed Compose
+  # service so Docker keeps it alive across crashes/reboots (restart:
+  # unless-stopped) — replacing the fragile host WSL process. Agent + MAS reach
+  # it at http://vllm:8000/v1 on the internal network. Shares the 8GB GPU with
+  # BGE; --gpu-memory-utilization 0.70 + --enforce-eager leave room (see scripts/perf).
+  vllm:
+    image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.23.0}
+    container_name: vllm
+    gpus: all
+    shm_size: "${VLLM_SHM_SIZE:-4gb}"
+    command:
+      - --model
+      - ${VLLM_MODEL:-warshanks/Qwen3-4B-Instruct-2507-AWQ}
+      - --served-model-name
+      - ${VLLM_SERVED_MODEL_NAME:-qwen3-4b}
+      # 8192 so a RAG prompt (~12k-char context ≈ 3-4k tok) + max_tokens(3072)
+      # fits — at 6144 large multi-agent prompts hit vLLM 400s (context overflow).
+      - --max-model-len
+      - "${VLLM_MAX_MODEL_LEN:-8192}"
+      # 0.70 gives ~1.8GB KV (one 8192 seq needs ~1.1GB) while leaving room for
+      # BGE on the shared 8GB GPU.
+      - --gpu-memory-utilization
+      - "${VLLM_GPU_MEMORY_UTILIZATION:-0.70}"
+      - --enforce-eager
+    environment:
+      # FlashAttention + native sampler avoid flashinfer's runtime JIT (no nvcc
+      # in the image); disable vLLM's usage telemetry for air-gap friendliness.
+      - VLLM_ATTENTION_BACKEND=FLASH_ATTN
+      - VLLM_USE_FLASHINFER_SAMPLER=0
+      - VLLM_NO_USAGE_STATS=1
+      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
+      - HF_HOME=/root/.cache/huggingface
+      # Authenticate to the HF Hub for higher rate limits / faster, un-throttled
+      # model downloads. Set HF_TOKEN=hf_... in src/infra/.env (a Read-scoped
+      # token). Empty by default → anonymous (rate-limited) downloads.
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      - vllm_hf_cache:/root/.cache/huggingface
+    ports:
+      - "${VLLM_HOST_PORT:-18000}:8000"
+    restart: unless-stopped
+    networks:
+      - horus-net
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 20s
+      timeout: 10s
+      retries: ${VLLM_HC_RETRIES:-40}
+      start_period: ${VLLM_HC_START_PERIOD:-300s}
 
   knowledge_store:
     build:
       context: ../services/knowledge-store
       dockerfile: Dockerfile
     container_name: knowledge_store
+    restart: unless-stopped
+    gpus: all
     environment:
       - CHROMA_TELEMETRY_ENABLED=0
       - POSTHOG_DISABLED=true
       - SENTENCE_TRANSFORMERS_NO_TELEMETRY=1
       - HF_HUB_DISABLE_TELEMETRY=1
-      # OpenTelemetry instrumentation for Tempo
-      - OTEL_ENABLED=true
+      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
+      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
+      # Embedder device: "auto" (GPU when available, historical default) or "cpu"
+      # to keep the BGE embedder off the shared 8 GB GPU so it doesn't evict the
+      # agent's 4B model under ingestion load (see scripts/perf).
+      - KNOWLEDGE_STORE_EMBED_DEVICE=${KNOWLEDGE_STORE_EMBED_DEVICE:-auto}
+      # Where POST /corpus/scan looks for documents to index. This block has no
+      # `env_file: - .env`, so a value set only in .env would never reach the
+      # container — it has to be listed here.
+      - CORPUS_DIR=/app/corpus
+      # Shared secret for POST /corpus/scan and GET /corpus/status (sent as the
+      # X-Corpus-Token header). Same reason as CORPUS_DIR above: no env_file
+      # here, so it must be listed explicitly or it never reaches the container.
+      # Empty on purpose — the app refuses those routes with 503 when it is
+      # unset, so an upgraded .env with no token fails closed instead of leaving
+      # the tester's folder readable.
+      - CORPUS_SCAN_TOKEN=${CORPUS_SCAN_TOKEN:-}
+      # OpenTelemetry — enabled by default; Tempo is always-on.
+      - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-false}
+      - OTEL_ENABLED=${OTEL_ENABLED:-true}
       - OTEL_SERVICE_NAME=knowledge-store
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
     ports:
-      - "8080:8080"
+      # Loopback only. Nothing off-box needs this port: the other services reach
+      # it as http://knowledge_store:8080 on horus-net, and the browser UI uses
+      # http://localhost:8080. Published on 0.0.0.0 it handed every host on the
+      # tester's LAN (cafe, hotel, office) the corpus routes and the document
+      # query endpoint.
+      - "127.0.0.1:8080:8080"
     networks:
       - horus-net
     volumes:
-      - knowledge_store_documents:/documents
-      - knowledge_store_chroma:/chroma_data
+      # Mount the named volumes at the paths the app ACTUALLY writes to. The
+      # service runs with WORKDIR /app and persists Chroma to /app/chroma_data
+      # (app/chroma_db/setup.py: PersistentClient path = <workdir>/chroma_data)
+      # and uploaded files under /app/documents (Dockerfile `mkdir -p documents`
+      # + routes use the relative "documents" dir). Previously these mounted at
+      # /chroma_data and /documents, so the real data stayed in the image layer
+      # and every `--build` rebuilt (and wiped) it.
+      - knowledge_store_documents:/app/documents
+      - knowledge_store_chroma:/app/chroma_data
+      # The tester's own folder, indexed on demand by POST /corpus/scan.
+      # Read-only: the scanner only ever reads, and the app enforces containment
+      # itself (app/api/routes/corpus.py) because :ro does not stop a symlink
+      # inside the folder pointing somewhere it should not.
+      - ${HORUS_CORPUS_DIR:-../../demo_assets}:/app/corpus:ro
 
   # =============================================================================
   # DATA STORES
@@ -161,6 +342,7 @@ services:
   postgres:
     image: postgres:latest
     container_name: postgres
+    restart: unless-stopped
     volumes:
       - postgresql_data:/var/lib/postgresql
       - ./initdb.d:/docker-entrypoint-initdb.d:ro
@@ -172,7 +354,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     command: postgres -c 'shared_preload_libraries=pg_stat_statements' -c 'pg_stat_statements.track=all'
     ports:
-      - "${DB_PORT}:5432"
+      - "${DB_PORT:-5432}:5432"
     networks:
       - horus-net
     healthcheck:
@@ -185,7 +367,7 @@ services:
     image: redis:7
     container_name: redis
     ports:
-      - "${REDIS_PORT}:6379"
+      - "${REDIS_PORT:-6379}:6379"
     env_file:
       - .env
     command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${REDIS_PASSWORD}"]
@@ -208,6 +390,8 @@ services:
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
+    # Opt-in: `docker compose --profile admin up` to start.
+    profiles: ["admin"]
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     env_file:
@@ -225,6 +409,7 @@ services:
   redisinsight:
     image: redis/redisinsight:latest
     container_name: redisinsight
+    profiles: ["admin"]
     depends_on:
       - redis
     ports:
@@ -236,17 +421,47 @@ services:
       - horus-net
 
   # =============================================================================
-  # OBSERVABILITY - Grafana + Tempo + Prometheus (Simple & Reliable)
-  # Single UI at http://localhost:3301 for traces and metrics
+  # OBSERVABILITY - Tempo + Prometheus + Loki/Promtail
+  # Backends only. Logs, metrics, and traces are viewed in the web client's admin
+  # pages (/admin/logs, /admin/metrics, /admin/traces) via app/api/{logs,metrics,
+  # traces}; Grafana is no longer part of the stack.
   # =============================================================================
 
+  # Always-on observability backends (Loki + Promtail + Tempo + Prometheus).
+  # All four start with a plain `docker compose up` and feed the in-app admin pages.
+  loki:
+    image: grafana/loki:3.4.2
+    container_name: loki
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./observability/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki_data:/loki
+    networks:
+      - horus-net
+    restart: unless-stopped
+
+  # Reads the Docker API to tail logs from Compose services (requires the socket; treat as privileged).
+  promtail:
+    image: grafana/promtail:3.4.2
+    container_name: promtail
+    command: ["-config.file=/etc/promtail/promtail.yaml"]
+    volumes:
+      - ./observability/promtail.yaml:/etc/promtail/promtail.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+    networks:
+      - horus-net
+    restart: unless-stopped
+
   # Tempo - Distributed tracing backend (receives OTLP traces)
+  # Pin to Tempo 2.x: `latest` (Tempo 3+) expects Kafka topics; this repo uses local disk only (see observability/tempo.yaml).
   tempo:
-    image: grafana/tempo:latest
+    image: grafana/tempo:2.6.0
     container_name: tempo
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
-      - ./grafana/tempo.yaml:/etc/tempo.yaml:ro
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
       - tempo_data:/var/tempo
     ports:
       - "4317:4317"     # OTLP gRPC
@@ -264,30 +479,8 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--web.enable-lifecycle'
     volumes:
-      - ./grafana/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
-    networks:
-      - horus-net
-    restart: unless-stopped
-
-  # Grafana - Single UI for traces and metrics
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-    volumes:
-      - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
-      - grafana_data:/var/lib/grafana
-    ports:
-      - "3301:3000"
-    depends_on:
-      - tempo
-      - prometheus
     networks:
       - horus-net
     restart: unless-stopped
@@ -307,4 +500,10 @@ volumes:
   redisinsight_data:
   tempo_data:
   prometheus_data:
-  grafana_data:
+  loki_data:
+  # Per-service LLM caches: populated by bootstrap_llm.py on first container
+  # start, persist across rebuilds so model downloads happen exactly once.
+  mas_model_cache:
+  agent_model_cache:
+  # vLLM's HuggingFace cache — holds the AWQ model so it downloads exactly once.
+  vllm_hf_cache:

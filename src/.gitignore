@@ -40,14 +40,19 @@ htmlcov/
 *.temp
 
 # Node / Next.js (web client)
-services/web-client/app/node_modules/
-services/web-client/app/.next/
-services/web-client/app/.turbo/
-services/web-client/app/.cache/
+services/web-client/node_modules/
+services/web-client/.next/
+services/web-client/out/
+services/web-client/.turbo/
+services/web-client/.cache/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Agent / MAS: local model trees (Docker build downloads Qwen; keep mas/models/.dockerignore only)
+services/agent/app/models/
+services/mas/models/Qwen3_instruct_4B/
 
 # Knowledge Store persisted data (keep dirs, ignore contents)
 services/knowledge-store/documents/*

@@ -1,0 +1,81 @@
+site_name: Horus AI Documentation
+site_description: Documentation for the Horus AI multi-agent orchestration platform
+docs_dir: .
+site_dir: ../_docs_build/mkdocs
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - content.code.copy
+
+plugins:
+  - search
+  - mermaid2
+
+markdown_extensions:
+  - tables
+  - fenced_code
+  - codehilite
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - admonition
+  - attr_list
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:mermaid2.fence_mermaid_custom
+
+exclude_docs: |
+  ip_protection/
+  archive/
+
+nav:
+  - Home: README.md
+  - Getting Started: getting-started.md
+  - Architecture: architecture.md
+  - API Reference: api-reference.md
+  - Operations: operations.md
+  - Security & Compliance: security.md
+  - Contributing: contributing.md
+  - Demo: demo.md
+  - Changelog: ../CHANGELOG.md
+  - EIP Deliverables:
+      - Index: eip/README.md
+      - Objectives Audit: eip/objectives-audit.md
+      - Performance (Point D): eip/performance.md
+      - Tech Watch (Point 1): eip/tech-watch.md
+      - Community Contributions (Point 1): eip/community-contributions.md
+      - Protection Plan (Point A): eip/protection-plan.md
+      - Diffusion Strategy (Point A): eip/diffusion-strategy.md
+      - Code-vs-Docs Audit (archived): eip/code-vs-docs-audit.md
+  - ADRs:
+      - ADR-001 RabbitMQ: adr/ADR-001-rabbitmq.md
+      - ADR-002 ChromaDB: adr/ADR-002-chromadb.md
+      - ADR-003 FastAPI: adr/ADR-003-fastapi.md
+  - Assets:
+      - Horus Presentation v8: assets/horus_presentation_v8.pdf
+      - Research — Agent Management: assets/research/mas/Agent_Management.pdf
+      - Research — LLM Infrastructure: assets/research/mas/LLM_infrastructure.pdf
+      - Research — Observability: assets/research/mas/Observability.pdf
+      - Research — Orchestrator Infrastructure: assets/research/mas/Orchestrator_infrastructure.pdf
+      - Research — Security Process: assets/research/mas/Security_Process.pdf

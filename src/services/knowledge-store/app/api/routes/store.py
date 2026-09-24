@@ -1,24 +1,22 @@
-import json
-import os
 import asyncio
-from typing import Optional
+import json
 
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
+from app.api.utils import docx_to_text, pdf_to_text, save_file
 from app.chroma_db import (
     DocumentModel,
     SmartSearchRequest,
-    store_file,
+    build_where_clause,
     delete_document,
+    knowledge_collection,
     query_knowledge,
     query_with_filters,
-    build_where_clause,
-    knowledge_collection,
+    store_file,
 )
+from app.core.logging import get_logger
 from app.services.content_analyzer import ContentAnalyzer
 from app.services.document_chunker import DocumentChunker
-from app.api.utils import pdf_to_text, save_file, docx_to_text
-from app.core.logging import get_logger
 
 router = APIRouter(tags=["Store"])
 logger = get_logger("StoreRouter")
@@ -88,7 +86,7 @@ async def add_text(doc: DocumentModel):
     },
 )
 async def query_knowledge_store(
-    query: str, n_results: int = 1, filters: Optional[str] = Query(None)
+    query: str, n_results: int = 1, filters: str | None = Query(None)
 ):
     """
     Query the knowledge store with optional JSON metadata filters.
@@ -175,12 +173,12 @@ async def smart_search(request: SmartSearchRequest):
     if not documents:
         raise HTTPException(status_code=404, detail="No results found")
 
-    filtered = list(zip(documents, metadatas, distances))
+    filtered = list(zip(documents, metadatas, distances, strict=False))
 
     if not filtered:
         raise HTTPException(status_code=404, detail="No results found within distance threshold")
 
-    filtered_docs, filtered_metas, filtered_dists = zip(*filtered)
+    filtered_docs, filtered_metas, filtered_dists = zip(*filtered, strict=False)
     return {
         "query": request.query,
         "filters": where_clause,
@@ -284,10 +282,10 @@ async def upload_file(file: UploadFile = File(...)):
         elif file_ext == "docx":
             text = await docx_to_text(doc_path)
         elif file_ext == "txt":
-            with open(doc_path, "r") as f:
+            with open(doc_path) as f:
                 text = f.read()
         else:
-            with open(doc_path, "r", encoding="utf-8", errors="ignore") as f:
+            with open(doc_path, encoding="utf-8", errors="ignore") as f:
                 text = f.read()
 
         logger.info(f"Text extracted from {file.filename}, length: {len(text)} chars.")

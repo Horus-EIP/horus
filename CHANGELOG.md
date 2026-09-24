@@ -1,0 +1,135 @@
+# Changelog
+
+All notable changes to **Horus AI** since project inception.
+
+Format inspired by [Keep a Changelog](https://keepachangelog.com/). Entries are reverse-chronological. The repo's commit convention is `[+]` added · `[~]` changed/refactored · `[x]` fixed · `[#]` cleanup. Each entry below cites its commit SHA.
+
+---
+
+## Highlights
+
+Major tech integrations and milestones across the project life cycle:
+
+- **2025-05**: Project bootstrapped — initial repo structure, docs, base CI.
+- **2025-08**: Horus MVP base ships — service-oriented layout (`mas`, `agent`, `knowledge-store`, `web-client`), Docker Compose stack, OpenTelemetry instrumentation.
+- **2025-10**: Research dossiers added on Orchestrator infrastructure, LLM infrastructure, Agent management, Observability, and Security process.
+- **2026-01**: First-semester review — full multi-agent system, WebSocket chat, RAG pipeline, JWT+RBAC auth.
+- **2026-02 → 2026-03**: Knowledge Store hardening — file management, smart-search, OCR, hybrid search, chunking, embedding tuning.
+- **2026-04**: Observability stack consolidation — Loki + Promtail + Tempo + Prometheus + Grafana, shared RabbitMQ work queues, demo guide & cheatsheet, ADRs for RabbitMQ / ChromaDB / FastAPI, code-quality review for greenlight.
+- **2026-05**: Pre-release fixes — environment + Docker tuning, agent seeding, consumer queue routing.
+- **2026-06**: Grafana removed — logs, metrics, and traces now viewed in the web client's admin pages (Loki, Prometheus, Tempo backends, admin-only); `src/infra/grafana` renamed to `src/infra/observability`.
+
+---
+
+## June 2026
+
+### Changed
+
+- Remove Grafana; view logs, metrics, and traces in the web client's admin pages (`/admin/logs`, `/admin/metrics`, `/admin/traces`) backed by Loki, Prometheus, and Tempo — the in-app routes enforce the `admin` role; rename backend config dir `src/infra/grafana` → `src/infra/observability` (`4582fed`)
+
+
+## May 2026
+
+### Added
+
+- Update .env and Docker configurations for agent service (`e775b7d`)
+
+
+## April 2026
+
+### Added
+
+- Introduce stack management scripts and enhance environment setup (`452fc89`)
+- Update environment configurations and enhance documentation (`f9022f9`)
+- Enhance Knowledge Store API and Update Documentation (`578cca1`)
+- Update environment variables for GPU and agent configurations (`f1f4f07`)
+- Enhance agent registration and RAG pipeline timeout handling (`710fabd`)
+- Add internal technical report forTesting and enhance agent response handling (`9c42531`)
+- Adding of the greenlight directory structure (`0606a80`)
+- Adding of the greenlight directory structure (`a7abbbf`)
+- Adding Summary for greenlight code review (`15d9717`)
+- Adding ADR Documentation for chromadb, fastapi and rabbitmq (`c9dd5cb`)
+- Adding ADR Documentation for chromadb, fastapi and rabbitmq (`4ae57bf`)
+- Update MAS and RAG benchmark scripts for improved functionality and documentation (`827d9ba`)
+- Add docstring-length pre-commit hook and CI check script (`508bdb1`)
+- Add architecture narratives and contributor code style guide (`4e45560`)
+- Add demo guide and copy-paste cheatsheet for Horus live demo (`7b998f9`)
+- Enhance observability stack with Loki and Promtail integration (`dbc8f5b`)
+- Enhance agent service with shared RabbitMQ work queues and documentation updates (`cfdba9b`)
+- Update Grafana configuration and add new documentation (`a2af311`)
+- Implement default agent seeding and update RabbitMQ consumer (`7794f97`)
+- Implement Update action Plan (`50ac9f8`)
+
+### Changed
+
+- Merge: Semester 2 Academic Cycle  (#189) (`1690ee3`)
+- Restructure docs, tests, scripts and CI (`78f5c29`)
+- Restructure docs, tests, scripts and CI (Part 2) (`61ef604`)
+- Update configurations and enhance logging for services (`4d2b0a7`)
+- feat: add code quality and coverage reports (`924348e`)
+- feat: add html coverage artifacts (`4e8e2b3`)
+- fix: align ruff report with configured quality gate (`decb165`)
+- fix: stabilize py312 env and raise service coverage above 70 (`ea8c95f`)
+- Split agent server.py into consumers + delegation_bridge modules (`552e011`)
+- Split MAS db/models.py into per-model package (`f5f0985`)
+- Split MAS tasks/task_tool_functions.py into focused modules (`a62e9b8`)
+- Extract OpenAPI response docs from MAS route files (`02da271`)
+- Reconcile agent service merge drift (`70512b1`)
+
+### Fixed
+
+- Update consumer test for assigned_agent_id kwarg (`566044d`)
+- Fix consumers.py basic_consume queue (use WORK_QUEUE_NAME) (`983f240`)
+
+### Cleanup
+
+- Trim verbose comments and docstrings across MAS service (`31158b6`)
+- Trim verbose comments across agent and knowledge-store services (`d43caa5`)
+
+
+## January 2026
+
+### Changed
+
+- First Semester Review: Complete Horus Multi-Agent System Implementation (#110) (`1f3a203`)
+- Refactor beta test plan documentation to enhance clarity and consistency (`331abec`)
+
+
+## October 2025
+
+### Changed
+
+- Create Orchestrator_infrastructure.docx (`4c22c13`)
+- Delete Orchestrator_infrastructure.docx (`464cb2f`)
+
+
+## August 2025
+
+### Added
+
+- Add complete Horus MVP base and service-oriented repo layout (`f4c2fd4`)
+
+### Changed
+
+- Align README and CI with new src/ layout (`56a1534`)
+
+### Fixed
+
+- Fix knowledge-store telemetry error and RabbitMQ management warning (`d5dd717`)
+
+### Cleanup
+
+- Temporary no-op CI to unblock PRs (`0371d04`)
+
+
+## May 2025
+
+### Added
+
+- Initialize Horus project with full structure, docs, and base configuration (`0ffa2ad`)
+
+### Fixed
+
+- Fix missing pytest-cov dependency for CI coverage (`da3f731`)
+
+

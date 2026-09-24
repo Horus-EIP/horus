@@ -1,16 +1,16 @@
+'use client';
+
 import {
-  Box,
-  Card,
-  Heading,
-  Text,
   Badge,
   Button,
+  Card,
+  Divider,
+  Group,
   SimpleGrid,
-  HStack,
-  Separator
-} from '@chakra-ui/react'
-
-import React from 'react';
+  Stack,
+  Text,
+  Title,
+} from '@mantine/core';
 
 const roles = [
   {
@@ -31,61 +31,65 @@ const roles = [
     description: 'Basic access to own data',
     perms: ['Create Tasks', 'Read Tasks', 'Read Agents', 'Execute Agents']
   }
-]
+];
 
 export default function RoleCards() {
   return (
     <div className="space-y-4 p-4 md:p-6">
       <div className="rounded-2xl border border-white/10 bg-[var(--bgSoft)]/70 p-2 md:p-4 shadow-xl backdrop-blur-xl">
         <h2 className="text-lg font-semibold text-[var(--text)] mb-3">Roles Management</h2>
-        <SimpleGrid gap={4} templateColumns='repeat(auto-fit, minmax(300px, 1fr))'>
-
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
           {roles.map((role) => (
-            <Card.Root key={role.id} borderTopWidth="4px" borderColor="whiteAlpha.400" overflow="hidden" bg={'var(--bgSoft)'}>
-
-              <Card.Header pb={0}>
-                <HStack justify="space-between" align="start">
-                  <Box>
-                    <Heading size='md'>{role.title}</Heading>
-                    <Text color='gray.500' fontSize='sm' mt={1}>
+            <Card
+              key={role.id}
+              padding="lg"
+              radius="md"
+              withBorder
+              style={{
+                background: 'var(--bgSoft)',
+                borderTopWidth: 4,
+                borderTopColor: 'rgba(255,255,255,0.35)',
+              }}
+            >
+              <Stack gap="sm">
+                <Group justify="space-between" align="flex-start" wrap="nowrap">
+                  <div>
+                    <Title order={4}>{role.title}</Title>
+                    <Text size="sm" c="dimmed" mt={4}>
                       {role.description}
                     </Text>
-                  </Box>
-                  <Badge colorPalette='var(--bgSoft)' borderRadius='full' px={2}>
+                  </div>
+                  <Badge variant="light" radius="xl">
                     {role.perms.length} perms
                   </Badge>
-                </HStack>
-              </Card.Header>
+                </Group>
 
-              <Card.Body>
-                <Text fontSize='xs' fontWeight='bold' color='gray.400' mb={3} textTransform="uppercase">
+                <Text size="xs" fw={700} c="dimmed" tt="uppercase">
                   Access Scope
                 </Text>
-                <HStack gap={2} wrap="wrap">
+                <Group gap={6} wrap="wrap">
                   {role.perms.map((perm, index) => (
-                    <Badge key={index} variant='outline' px={2} py={1} borderRadius="md" fontWeight="normal">
+                    <Badge key={index} variant="outline" radius="md" fw={400}>
                       {perm}
                     </Badge>
                   ))}
-                </HStack>
-              </Card.Body>
+                </Group>
 
-              <Separator borderColor={'whiteAlpha.200'} />
+                <Divider color="dark.4" />
 
-              <Card.Footer justifyContent='flex-end' display='flex'>
-                <HStack gap={4} pt={2}>
-                  <Button variant='ghost' colorPalette='blue' size='sm' cursor={'not-allowed'}>
+                <Group justify="flex-end" gap="md" pt="xs">
+                  <Button variant="subtle" size="xs" disabled>
                     Edit
                   </Button>
-                  <Button variant='ghost' colorPalette='red' size='sm' cursor={'not-allowed'}>
+                  <Button variant="subtle" color="red" size="xs" disabled>
                     Delete
                   </Button>
-                </HStack>
-              </Card.Footer>
-            </Card.Root>
+                </Group>
+              </Stack>
+            </Card>
           ))}
         </SimpleGrid>
       </div>
     </div>
-  )
+  );
 }

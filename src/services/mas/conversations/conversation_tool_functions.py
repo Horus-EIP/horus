@@ -1,52 +1,11 @@
-"""
-Conversation Tool Functions - Message Management & History Tracking
+"""Conversation persistence helpers.
 
-Provides utility functions for managing conversation history, retrieving user
-conversations, and adding messages to conversations. These functions form the
-core of the conversation persistence layer.
-
-Functions:
-    - get_history(conv_id, db): Retrieve message history for a conversation
-    - get_conversations(user_name, db): List all conversations for a user
-    - add_messages(author, message, conversation_id, db): Add message to conversation
-    - get_full_history(conv_id, db): Retrieve complete history without pagination
-
-Key Features:
-    - Message ordering by creation timestamp and ID for consistency
-    - Conversation filtering by user ownership
-    - Transaction management with savepoint support
-    - Error handling with proper rollback on failures
-    - Support for multiple message authors (user, assistant, system)
-    - Automatic session management for standalone function calls
-
-Message Authors:
-    - "user": Human user messages
-    - "assistant": Agent/AI generated responses
-    - "system": System notifications and status updates
-
-Database Operations:
-    - Queries are ordered by creation time for chronological consistency
-    - Transactions use savepoints for atomic operations
-    - Proper rollback and error handling
-    - Sessions are automatically managed when not injected
-    - Connection properly closed in all code paths
-
-Usage Examples:
-    from conversations.conversation_tool_functions import get_history, add_messages
-
-    # Get conversation history
-    messages = get_history(conversation_id=1)
-    for msg in messages:
-        print(f"{msg.role}: {msg.content}")
-
-    # Add message to conversation
-    new_msg = add_messages("user", "Hello, analyze this document", 1)
-
-    # Get all conversations for user
-    convs = get_conversations("john_doe")
+Read, list, and append conversation messages. See
+``docs/architecture.md`` for the message-author convention and
+session-management rules.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import Depends
 from sqlalchemy.exc import SQLAlchemyError
@@ -59,29 +18,16 @@ from db.models import Conversations, Messages
 logger = get_logger("conversations")
 
 
-def get_history(conv_id: int, db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
-    """
-    Retrieve all messages from a conversation in chronological order.
-
-    Fetches message history for a given conversation, ordering by creation
-    timestamp and ID for consistent, chronological ordering. Ensures proper
-    transaction handling and connection cleanup.
+def get_history(conv_id: int, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+    """Return messages of a conversation in chronological order.
 
     Args:
-        conv_id (int): The conversation ID to retrieve history for
-        db (Session): Database session (injected by FastAPI dependency or passed directly)
+        conv_id: Conversation id.
+        db: Active session (DI or passed in). When omitted, a session is
+            opened and closed internally.
 
     Returns:
-        List[Dict]: List of message dictionaries with id, role, content, created_at
-                   Returns empty list if conversation has no messages or doesn't exist
-
-    Raises:
-        Exception: Logs error but returns empty list (graceful fallback)
-
-    Example:
-        >>> messages = get_history(conv_id=1)
-        >>> for msg in messages:
-        ...     print(f"{msg['role']}: {msg['content']}")
+        List of message dicts; empty list on error or missing conversation.
     """
     close_db = False
     try:
@@ -112,13 +58,19 @@ def get_history(conv_id: int, db: Session = Depends(get_db)) -> List[Dict[str, A
                 f"Retrieved {len(messages)} messages - Conversation ID: {conv_id}"
             )
 
-        # Convert to dictionaries for consistency
+        # Convert to dictionaries for consistency. Attribution fields are
+        # included so the chat history endpoint returns enough metadata for
+        # the frontend to restore agent chips + Manager violet styling on a
+        # full page reload.
         return [
             {
                 "id": msg.id,
                 "role": msg.role,
                 "content": msg.content,
                 "created_at": msg.created_at.isoformat() if msg.created_at else None,
+                "agent_id": msg.agent_id,
+                "agent_name": msg.agent_name,
+                "skill_used": msg.skill_used,
             }
             for msg in messages
         ]
@@ -139,18 +91,10 @@ def get_history(conv_id: int, db: Session = Depends(get_db)) -> List[Dict[str, A
             db.close()
 
 
-def get_full_history(conv_id: int, db: Session = None) -> List[Dict[str, Any]]:
-    """
-    Retrieve complete conversation history without pagination.
+def get_full_history(conv_id: int, db: Session = None) -> list[dict[str, Any]]:
+    """Return the full history of a conversation (no pagination).
 
-    Useful for export/archive operations. Same as get_history but explicit.
-
-    Args:
-        conv_id (int): Conversation ID
-        db (Session): Database session
-
-    Returns:
-        List[Dict]: Complete message history
+    Convenience wrapper around :func:`get_history` for export or archive paths.
     """
     if db is None:
         db = SessionLocal()
@@ -159,29 +103,15 @@ def get_full_history(conv_id: int, db: Session = None) -> List[Dict[str, Any]]:
 
 def get_conversations(
     user_name: str, db: Session = Depends(get_db)
-) -> List[Dict[str, Any]]:
-    """
-    Retrieve all conversations owned by a specific user.
-
-    Fetches all conversations where the user is the owner, ordered by
-    most recent modification time (descending) for UI display.
-    Ensures proper transaction handling and connection cleanup.
+) -> list[dict[str, Any]]:
+    """List conversations owned by ``user_name``, most-recent first.
 
     Args:
-        user_name (str): Username of the conversation owner
-        db (Session): Database session (injected by FastAPI dependency or passed directly)
+        user_name: Owner username.
+        db: Active session (DI or passed in).
 
     Returns:
-        List[Dict]: List of conversation dictionaries ordered by recency
-                   Returns empty list if user has no conversations
-
-    Raises:
-        Exception: Logs error but returns empty list (graceful fallback)
-
-    Example:
-        >>> conversations = get_conversations("john_doe")
-        >>> for conv in conversations:
-        ...     print(f"Conversation {conv['id']}: {conv['name']}")
+        Conversation dicts ordered by ``modified_at`` descending; empty on error.
     """
     close_db = False
     try:
@@ -232,29 +162,11 @@ def get_conversations(
             db.close()
 
 
-def get_all_conversations(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
-    """
-    Retrieve all conversations owned by a specific user.
+def get_all_conversations(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+    """List every conversation (admin/audit use), most-recent first.
 
-    Fetches all conversations where the user is the owner, ordered by
-    most recent modification time (descending) for UI display.
-    Ensures proper transaction handling and connection cleanup.
-
-    Args:
-        user_name (str): Username of the conversation owner
-        db (Session): Database session (injected by FastAPI dependency or passed directly)
-
-    Returns:
-        List[Dict]: List of conversation dictionaries ordered by recency
-                   Returns empty list if user has no conversations
-
-    Raises:
-        Exception: Logs error but returns empty list (graceful fallback)
-
-    Example:
-        >>> conversations = get_conversations("john_doe")
-        >>> for conv in conversations:
-        ...     print(f"Conversation {conv['id']}: {conv['name']}")
+    Unlike :func:`get_conversations`, not filtered by owner. Intended for
+    admin views; callers must enforce RBAC upstream.
     """
     close_db = False
     try:
@@ -301,39 +213,31 @@ def get_all_conversations(db: Session = Depends(get_db)) -> List[Dict[str, Any]]
 
 
 def add_messages(
-    author: str, message: str, conversation_id: int, db: Session = Depends(get_db)
-) -> Optional[Dict[str, Any]]:
-    """
-    Add a new message to a conversation with proper transaction management.
-
-    Creates and persists a new message within a conversation. Uses transaction
-    management with savepoints for atomicity. The message is immediately committed
-    to the database and the object is refreshed to include server-generated fields.
+    author: str,
+    message: str,
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    *,
+    agent_id: str | None = None,
+    agent_name: str | None = None,
+    skill_used: str | None = None,
+) -> dict[str, Any] | None:
+    """Append one message to a conversation inside a savepoint.
 
     Args:
-        author (str): Message author/role (values: "user", "assistant", "system")
-        message (str): Message content/text
-        conversation_id (int): ID of the conversation to add message to
-        db (Session): Database session (injected by FastAPI dependency or passed directly)
+        author: ``"user"``, ``"assistant"``, or ``"system"``.
+        message: Message body.
+        conversation_id: Target conversation.
+        db: Active session (DI or passed in).
+        agent_id: Originating agent UUID (kw-only). Persists alongside the
+            row so chat-history reload can restore attribution chips +
+            Manager violet styling. Pass ``None`` for user messages.
+        agent_name: Human-readable agent name (kw-only).
+        skill_used: Skill the agent exercised (kw-only).
 
     Returns:
-        Dict: Created message object with id, role, content, created_at
-             Returns None on error (rollback performed)
-
-    Raises:
-        Exception: Logs error, rolls back transaction, returns None
-
-    Example:
-        >>> msg = add_messages("user", "Please summarize the document", 1)
-        >>> if msg:
-        ...     print(f"Message {msg['id']} added at {msg['created_at']}")
-
-    Notes:
-        - Author must be one of: "user", "assistant", "system"
-        - Message content should be validated by caller if needed
-        - Timestamps are generated by database server
-        - Transaction is committed immediately for durability
-        - Includes savepoint for failure recovery
+        The created message dict, or ``None`` if the conversation is missing
+        or a database error occurs (transaction rolled back).
     """
     close_db = False
     savepoint = None
@@ -358,8 +262,15 @@ def add_messages(
         # Create savepoint for nested transaction
         savepoint = db.begin_nested()
 
-        # Create and add message
-        msg = Messages(role=author, content=message, conversation_id=conversation_id)
+        # Create and add message (with optional attribution metadata).
+        msg = Messages(
+            role=author,
+            content=message,
+            conversation_id=conversation_id,
+            agent_id=agent_id,
+            agent_name=agent_name,
+            skill_used=skill_used,
+        )
         db.add(msg)
 
         # Commit nested transaction
@@ -379,6 +290,9 @@ def add_messages(
             "role": msg.role,
             "content": msg.content,
             "created_at": msg.created_at.isoformat() if msg.created_at else None,
+            "agent_id": msg.agent_id,
+            "agent_name": msg.agent_name,
+            "skill_used": msg.skill_used,
         }
 
     except SQLAlchemyError as e:

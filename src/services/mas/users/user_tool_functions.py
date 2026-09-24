@@ -1,12 +1,9 @@
-import uuid
-from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from auth.permissions import Role
 from core.logger import get_logger
-from db.database import SessionLocal, get_db
 from db.models import Users
 
 logger = get_logger("users_tool_functions")
@@ -77,7 +74,7 @@ def delete_user(user_id: int, db: Session):
         raise HTTPException(status_code=404, detail="User not found")
 
     if target_user.username == Role.ADMIN.value:
-        logger.warning(f"Attempt to delete main admin account")
+        logger.warning("Attempt to delete main admin account")
         raise HTTPException(
             status_code=403, detail="Cannot delete the main admin account"
         )

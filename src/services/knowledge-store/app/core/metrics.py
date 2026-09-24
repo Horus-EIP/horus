@@ -1,19 +1,8 @@
-"""
-Prometheus Metrics for Knowledge Store.
+"""Prometheus metrics for document operations, query latency, embeddings, and collection stats."""
 
-Collects metrics for:
-- Document operations (add, delete, get)
-- Query operations and latency
-- Embedding generation time
-- Collection statistics
-"""
+from prometheus_client import Counter, Gauge, Histogram, Info
 
-from prometheus_client import Counter, Histogram, Gauge, Info
-
-# =============================================================================
-# Document Metrics
-# =============================================================================
-
+# --- Document metrics ---
 DOCUMENT_OPERATIONS = Counter(
     "knowledge_store_document_operations_total",
     "Total number of document operations",
@@ -25,10 +14,7 @@ DOCUMENT_COUNT = Gauge(
     "Total number of documents in the store"
 )
 
-# =============================================================================
-# Query Metrics
-# =============================================================================
-
+# --- Query metrics ---
 QUERY_COUNT = Counter(
     "knowledge_store_queries_total",
     "Total number of queries",
@@ -47,10 +33,7 @@ QUERY_RESULTS = Histogram(
     buckets=[0, 1, 2, 5, 10, 20, 50, 100]
 )
 
-# =============================================================================
-# Embedding Metrics
-# =============================================================================
-
+# --- Embedding metrics ---
 EMBEDDING_TIME = Histogram(
     "knowledge_store_embedding_duration_seconds",
     "Time to generate embeddings",
@@ -63,19 +46,13 @@ EMBEDDING_COUNT = Counter(
     ["status"]
 )
 
-# =============================================================================
-# System Info
-# =============================================================================
-
+# --- System info ---
 SYSTEM_INFO = Info(
     "knowledge_store_system",
     "Knowledge Store system information"
 )
 
-# =============================================================================
-# Helper Functions
-# =============================================================================
-
+# --- Helpers ---
 
 def record_document_operation(operation: str, success: bool):
     """Record a document operation."""

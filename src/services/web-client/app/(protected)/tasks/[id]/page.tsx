@@ -1,91 +1,279 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { SubtaskTree } from '@/components/tasks/subtask-tree';
 import { MessageFlow } from '@/components/tasks/message-flow';
 import { DelegationChain } from '@/components/tasks/delegation-chain';
 import { CollaborationView } from '@/components/agents/collaboration-view';
-import { TaskDetail } from '@/lib/tasks/types';
+import type { TaskDetail, TaskStatus, Subtask, AgentMessage, DelegationStep } from '@/lib/tasks/types';
+import { chatApi, type TaskDetails } from '@/lib/chat/api';
+import { agentApi, type Agent } from '@/lib/agents/api';
+import { useNotification } from '@/contexts/notification-context';
 
-//TMP: MOCK
-export const MOCK_TASK: TaskDetail = {
-  id: 'task-1',
-  title: 'Analyse and summarise Q3 financial report',
-  status: 'running',
-  createdAt: new Date(Date.now() - 30 * 60000).toISOString(),
-  collaboratingAgents: ['ResearchBot', 'DataAnalyst', 'ContentWriter'],
-  subtasks: [
-    {
-      id: 'st-1',
-      title: 'Fetch report documents',
-      status: 'completed',
-      assignedAgent: 'ResearchBot',
-      children: [
-        { id: 'st-1-1', title: 'Search internal storage', status: 'completed', assignedAgent: 'ResearchBot' },
-        { id: 'st-1-2', title: 'Fetch external sources', status: 'completed', assignedAgent: 'ResearchBot' },
-      ],
-    },
-    {
-      id: 'st-2',
-      title: 'Analyse financial data',
-      status: 'running',
-      assignedAgent: 'DataAnalyst',
-      children: [
-        { id: 'st-2-1', title: 'Extract key metrics', status: 'completed', assignedAgent: 'DataAnalyst' },
-        { id: 'st-2-2', title: 'Identify trends', status: 'running', assignedAgent: 'DataAnalyst' },
-      ],
-    },
-    {
-      id: 'st-3',
-      title: 'Write executive summary',
-      status: 'pending',
-      assignedAgent: 'ContentWriter',
-    },
-  ],
-  messages: [
-    { id: 'm-1', fromAgent: 'GeneralBot', toAgent: 'ResearchBot', type: 'instruction', content: 'Fetch all Q3 financial documents.', timestamp: new Date(Date.now() - 28 * 60000).toISOString() },
-    { id: 'm-2', fromAgent: 'ResearchBot', toAgent: 'GeneralBot', type: 'result', content: 'Found 4 documents. Passing to DataAnalyst.', timestamp: new Date(Date.now() - 20 * 60000).toISOString() },
-    { id: 'm-3', fromAgent: 'GeneralBot', toAgent: 'DataAnalyst', type: 'instruction', content: 'Analyse the retrieved documents for key metrics.', timestamp: new Date(Date.now() - 19 * 60000).toISOString() },
-    { id: 'm-4', fromAgent: 'DataAnalyst', toAgent: 'GeneralBot', type: 'question', content: 'Should I include YoY comparison?', timestamp: new Date(Date.now() - 10 * 60000).toISOString() },
-    { id: 'm-5', fromAgent: 'GeneralBot', toAgent: 'DataAnalyst', type: 'answer', content: 'Yes, include YoY comparison for all metrics.', timestamp: new Date(Date.now() - 9 * 60000).toISOString() },
-  ],
-  delegationChain: [
-    { agentName: 'GeneralBot', action: 'Task received and decomposed', timestamp: new Date(Date.now() - 30 * 60000).toISOString() },
-    { agentName: 'ResearchBot', action: 'Delegated: document retrieval', timestamp: new Date(Date.now() - 28 * 60000).toISOString() },
-    { agentName: 'DataAnalyst', action: 'Delegated: data analysis', timestamp: new Date(Date.now() - 19 * 60000).toISOString() },
-    { agentName: 'ContentWriter', action: 'Pending: summary writing', timestamp: new Date(Date.now() - 1 * 60000).toISOString() },
-  ],
-};
-
-
-const STATUS_COLORS = {
+const STATUS_COLORS: Record<string, string> = {
   completed: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30',
-  running:   'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30',
-  pending:   'bg-white/10 text-[var(--textSoft)] ring-1 ring-white/10',
-  failed:    'bg-red-500/20 text-red-300 ring-1 ring-red-500/30',
+  running: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30',
+  pending: 'bg-white/10 text-[var(--textSoft)] ring-1 ring-white/10',
+  failed: 'bg-red-500/20 text-red-300 ring-1 ring-red-500/30',
   cancelled: 'bg-gray-500/20 text-gray-300 ring-1 ring-gray-500/30',
 };
 
+function normalizeStatus(s: string): TaskStatus {
+  if (s === 'canceled') return 'cancelled';
+  const allowed: TaskStatus[] = ['pending', 'running', 'completed', 'failed', 'cancelled'];
+  return (allowed.includes(s as TaskStatus) ? s : 'pending') as TaskStatus;
+}
+
+function historyToMessages(history: unknown[] | undefined): AgentMessage[] {
+  if (!Array.isArray(history)) return [];
+  return history.map((raw, i) => {
+    const h = raw as Record<string, unknown>;
+    const role = String(h.role ?? 'assistant');
+    const content = String(h.message ?? h.content ?? '');
+    return {
+      id: `h-${i}`,
+      fromAgent: role === 'user' ? 'User' : 'Assistant',
+      toAgent: '—',
+      type: 'result',
+      content,
+      timestamp: typeof h.timestamp === 'string' ? h.timestamp : new Date().toISOString(),
+    };
+  });
+}
+
+function buildTaskDetail(data: TaskDetails): TaskDetail & { result?: string; query: string } {
+  const subtasks: Subtask[] = (data.subtasks ?? []).map((st) => ({
+    id: st.id,
+    title: st.title,
+    status: normalizeStatus(st.status),
+    assignedAgent: st.assignedAgent,
+  }));
+  const agents = new Set<string>([data.agent_id]);
+  subtasks.forEach((s) => agents.add(s.assignedAgent));
+
+  const messages = historyToMessages(data.history as unknown[] | undefined);
+  const delegationChain: DelegationStep[] =
+    subtasks.length > 0
+      ? subtasks.map((s) => ({
+          agentName: s.assignedAgent,
+          action: s.title,
+          timestamp: data.created_at,
+        }))
+      : [
+          {
+            agentName: data.agent_id,
+            action: data.query.slice(0, 120) + (data.query.length > 120 ? '…' : ''),
+            timestamp: data.created_at,
+          },
+        ];
+
+  return {
+    id: data.task_id,
+    title: data.query.length > 120 ? `${data.query.slice(0, 120)}…` : data.query,
+    status: normalizeStatus(data.status),
+    createdAt: data.created_at,
+    collaboratingAgents: Array.from(agents),
+    subtasks,
+    messages,
+    delegationChain,
+    // Keep these so the page can render the final answer + original query.
+    result: data.result,
+    query: data.query,
+  };
+}
+
 export default function TaskDetailPage() {
-  const task = MOCK_TASK;
+  const params = useParams();
+  const taskId = typeof params.id === 'string' ? params.id : '';
+  const { error: notifyError } = useNotification();
+  const [task, setTask] = useState<TaskDetail | null>(null);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  useEffect(() => {
+    if (!taskId) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    let pollId: number | null = null;
+    // One controller for the effect's lifetime: cleanup aborts every in-flight
+    // request (and the shared signal is OR'd with a per-request timeout in the
+    // api client) so navigating away can't leave doomed fetches hanging.
+    const ac = new AbortController();
+
+    const fetchOnce = async (isInitial: boolean) => {
+      if (isInitial) setLoading(true);
+
+      const taskRes = await chatApi.getTask(taskId, { signal: ac.signal });
+      if (cancelled || ac.signal.aborted) return;
+      if (!taskRes.ok || !taskRes.data) {
+        if (isInitial) {
+          notifyError(
+            taskRes.aborted
+              ? 'Timed out loading task. Retrying…'
+              : taskRes.error || 'Failed to load task'
+          );
+          setTask(null);
+        }
+      } else {
+        setTask(buildTaskDetail(taskRes.data));
+        // Stop polling once the task reaches a terminal state.
+        const status = normalizeStatus(taskRes.data.status);
+        if (
+          (status === 'completed' || status === 'failed' || status === 'cancelled') &&
+          pollId !== null
+        ) {
+          window.clearInterval(pollId);
+          pollId = null;
+        }
+      }
+      // Drop the spinner as soon as the task itself is resolved — the agent
+      // list below fills in independently and shouldn't gate first paint.
+      if (isInitial) setLoading(false);
+
+      const agentsRes = await agentApi.getAgents({ signal: ac.signal });
+      if (cancelled || ac.signal.aborted) return;
+      if (agentsRes.ok && agentsRes.data) {
+        setAgents(agentsRes.data);
+      }
+    };
+
+    void fetchOnce(true);
+    // Poll every 3 s while the task is still active — the worker posts
+    // results asynchronously, so the page would otherwise sit on "running"
+    // forever without manual refresh.
+    pollId = window.setInterval(() => void fetchOnce(false), 3000);
+
+    return () => {
+      cancelled = true;
+      ac.abort();
+      if (pollId !== null) window.clearInterval(pollId);
+    };
+  }, [taskId, notifyError]);
+
+  const collaborating = useMemo(() => {
+    if (!task) return [];
+    const ids = new Set(task.collaboratingAgents);
+    return agents.filter((a: Agent) => ids.has(a.id));
+  }, [task, agents]);
+
+  const handleCancel = async () => {
+    if (!task || isCancelling) return;
+    setIsCancelling(true);
+    const res = await chatApi.cancelTask(task.id, 'Cancelled from task view');
+    setIsCancelling(false);
+    if (!res.ok) {
+      notifyError(res.error || 'Failed to cancel task');
+      return;
+    }
+    // Optimistic — the 3s poll confirms and stops itself on the terminal state.
+    setTask((prev) => (prev ? { ...prev, status: 'cancelled' } : prev));
+  };
+
+  if (!taskId) {
+    return (
+      <div className="p-4 md:p-6 text-[var(--textSoft)] text-sm">Invalid task id.</div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="p-4 md:p-6 text-[var(--textSoft)] text-sm">Loading task…</div>
+    );
+  }
+
+  if (!task) {
+    return (
+      <div className="p-4 md:p-6 text-[var(--textSoft)] text-sm">Task not found or could not be loaded.</div>
+    );
+  }
+
+  const statusClass = STATUS_COLORS[task.status] ?? STATUS_COLORS.pending;
+
+  const taskWithExtras = task as TaskDetail & { result?: string; query?: string };
+  const finalAnswer = taskWithExtras.result ?? '';
+  const originalQuery = taskWithExtras.query ?? task.title;
 
   return (
     <div className="space-y-6 p-4 md:p-6">
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold text-[var(--text)]">{task.title}</h1>
-          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_COLORS[task.status]}`}>
+          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusClass}`}>
             {task.status}
           </span>
+          {(task.status === 'running' || task.status === 'pending') && (
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={isCancelling}
+              className="text-xs px-2.5 py-1 rounded-full font-medium bg-red-500/20 text-red-300 ring-1 ring-red-500/30 hover:bg-red-500/30 disabled:opacity-50 cursor-pointer transition"
+            >
+              {isCancelling ? 'Cancelling…' : 'Cancel task'}
+            </button>
+          )}
         </div>
         <span className="text-xs text-[var(--textSoft)]">Task ID: {task.id}</span>
       </div>
 
-      <CollaborationView title="Collaborating Agents" />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SubtaskTree subtasks={task.subtasks} />
-        <MessageFlow messages={task.messages} />
+      {/* Original request */}
+      <div className="rounded-2xl border border-white/10 bg-[var(--bgSoft)]/70 p-4">
+        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--textSoft)]">
+          Request
+        </p>
+        <p className="whitespace-pre-wrap text-sm text-[var(--text)]">
+          {originalQuery}
+        </p>
       </div>
+
+      {/* Final answer — only when completed. */}
+      {task.status === 'completed' && (
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-emerald-300">
+            Result
+          </p>
+          {finalAnswer ? (
+            <pre className="whitespace-pre-wrap font-sans text-sm text-[var(--text)]">
+              {finalAnswer}
+            </pre>
+          ) : (
+            <p className="text-sm text-[var(--textSoft)]">
+              Task is marked completed but no result body was returned by the
+              agent. Check the message history below or the agent logs.
+            </p>
+          )}
+        </div>
+      )}
+
+      {(task.status === 'running' || task.status === 'pending') && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-200">
+          Task is still {task.status}. The page auto-refreshes every few
+          seconds — the result will appear here once the agent finishes.
+        </div>
+      )}
+
+      {task.status === 'failed' && (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-200">
+          Task failed. See the agent logs for details.
+        </div>
+      )}
+
+      <CollaborationView title="Collaborating agents" agents={collaborating} isLoading={false} />
+
+      {task.subtasks.length > 0 || task.messages.length > 0 ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <SubtaskTree subtasks={task.subtasks} />
+          <MessageFlow messages={task.messages} />
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-white/10 bg-[var(--bgSoft)]/70 p-4 text-sm text-[var(--textSoft)]">
+          No subtasks or message history recorded for this task yet. When the agent finishes, refresh this page to
+          see updates.
+        </div>
+      )}
 
       <DelegationChain steps={task.delegationChain} />
     </div>

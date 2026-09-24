@@ -19,7 +19,7 @@ export const baseRegisterSchema = z
       .min(1, 'Username is required'),
     password: z
       .string()
-      .min(8, 'Password must be at least 8 characters')
+      .min(10, 'Password must be at least 10 characters')
       .regex(
         passwordRegex,
         'Password must include uppercase, lowercase, number, and special character'

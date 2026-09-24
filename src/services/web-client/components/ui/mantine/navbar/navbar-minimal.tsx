@@ -2,12 +2,13 @@
 
 import {
   IconDeviceDesktopAnalytics,
-  IconRobot,
   IconMessages,
-  IconMessageCircle,
   IconChecklist,
   IconFiles,
   IconLogout,
+  IconLogs,
+  IconChartArea,
+  IconBinaryTree2,
   IconUsersGroup
 } from '@tabler/icons-react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -51,7 +52,6 @@ function NavbarLink({ icon: Icon, label, active, onClick, status }: NavbarLinkPr
 const mockdata = [
   { icon: IconDeviceDesktopAnalytics, label: 'Dashboard', status: 'active' },
   { icon: IconMessages, label: 'Chat', status: 'active' },
-  { icon: IconMessageCircle, label: 'Conversations', status: 'active' },
   { icon: IconChecklist, label: 'Tasks', status: 'active' },
   { icon: IconFiles, label: 'Knowledge-Store', status: 'active' },
 ];
@@ -92,12 +92,37 @@ export function NavbarMinimal() {
 
       <Stack justify="center" gap={0}>
         {user?.role === 'admin' && (
-          <NavbarLink
-            icon={IconUsersGroup}
-            label="Admin"
-            active={pathname?.startsWith('/admin')}
-            onClick={() => router.push('/admin/users')}
-          />
+          <>
+            <NavbarLink
+              icon={IconUsersGroup}
+              label="Admin"
+              active={
+                pathname?.startsWith('/admin') &&
+                !pathname?.startsWith('/admin/logs') &&
+                !pathname?.startsWith('/admin/metrics') &&
+                !pathname?.startsWith('/admin/traces')
+              }
+              onClick={() => router.push('/admin/users')}
+            />
+            <NavbarLink
+              icon={IconLogs}
+              label="Logs"
+              active={pathname?.startsWith('/admin/logs')}
+              onClick={() => router.push('/admin/logs')}
+            />
+            <NavbarLink
+              icon={IconChartArea}
+              label="Metrics"
+              active={pathname?.startsWith('/admin/metrics')}
+              onClick={() => router.push('/admin/metrics')}
+            />
+            <NavbarLink
+              icon={IconBinaryTree2}
+              label="Traces"
+              active={pathname?.startsWith('/admin/traces')}
+              onClick={() => router.push('/admin/traces')}
+            />
+          </>
         )}
 
         <NavbarLink

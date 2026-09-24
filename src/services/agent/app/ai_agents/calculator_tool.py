@@ -6,10 +6,10 @@ Safe arithmetic calculator tool implementing the Tool interface.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
 import ast
-import math
 import logging
+import math
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class CalculatorTool:
         "nan": math.nan,
     }
 
-    def run(self, payload: Dict[str, Any]) -> str:
+    def run(self, payload: dict[str, Any]) -> str:
         """
         Execute the calculation tool.
         

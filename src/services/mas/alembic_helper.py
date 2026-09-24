@@ -6,7 +6,6 @@ This script provides utilities for managing Alembic migrations.
 Usage: python alembic_helper.py [command]
 """
 
-import os
 import subprocess
 import sys
 

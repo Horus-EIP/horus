@@ -7,8 +7,9 @@ to the pipeline via a stable `run(name, payload)` API.
 
 from __future__ import annotations
 
-from typing import Dict, Any, Protocol, Optional, Iterable
 import logging
+from collections.abc import Iterable
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -16,18 +17,18 @@ logger = logging.getLogger(__name__)
 class Tool(Protocol):
     name: str
 
-    def run(self, payload: Dict[str, Any]) -> str:
+    def run(self, payload: dict[str, Any]) -> str:
         ...
 
 
 class ToolRegistry:
     def __init__(self):
         """Initialize the tool registry."""
-        self._tools: Dict[str, Tool] = {}
-        self._aliases: Dict[str, str] = {}
+        self._tools: dict[str, Tool] = {}
+        self._aliases: dict[str, str] = {}
         logger.info("ToolRegistry initialized")
 
-    def register(self, tool: Tool, *, aliases: Optional[Iterable[str]] = None) -> None:
+    def register(self, tool: Tool, *, aliases: Iterable[str] | None = None) -> None:
         """
         Register a new tool.
 
@@ -41,7 +42,7 @@ class ToolRegistry:
                 self._aliases[alias] = tool.name
         logger.debug(f"Registered tool '{tool.name}' with aliases={aliases}")
 
-    def get(self, name: str) -> Optional[Tool]:
+    def get(self, name: str) -> Tool | None:
         """
         Retrieve a tool by name or alias.
         
@@ -53,15 +54,15 @@ class ToolRegistry:
         """
         if name in self._tools:
             return self._tools[name]
-        
+
         resolved_name = self._aliases.get(name)
         if resolved_name and resolved_name in self._tools:
             return self._tools[resolved_name]
-            
+
         logger.warning(f"Tool '{name}' not found")
         return None
 
-    def resolve(self, name: str) -> Optional[Tool]:
+    def resolve(self, name: str) -> Tool | None:
         if name in self._tools:
             return self._tools[name]
         canonical = self._aliases.get(name)
@@ -72,7 +73,7 @@ class ToolRegistry:
     def has(self, name: str) -> bool:
         return self.resolve(name) is not None
 
-    def run(self, name: str, payload: Dict[str, Any]) -> str:
+    def run(self, name: str, payload: dict[str, Any]) -> str:
         tool = self.resolve(name)
         if tool is None:
             raise KeyError(f"Unknown tool: {name}")
