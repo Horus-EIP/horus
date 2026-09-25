@@ -23,6 +23,7 @@ issue-<id>-<short-description>
 ```
 
 Examples:
+
 - `issue-42-agent-heartbeat`
 - `issue-99-fix-jwt-expiry`
 
@@ -36,18 +37,19 @@ Every commit message must follow this format:
 Optional longer description explaining why the change was made.
 ```
 
-| Symbol | Meaning | Use when... |
-|--------|---------|-------------|
-| `[+]` | Add | Adding a new file, feature, or functionality |
-| `[~]` | Update / Refactor | Modifying or refactoring existing code |
-| `[x]` | Fix | Fixing a bug, typo, or issue |
-| `[-]` | Remove | Deleting code, files, or deprecated features |
-| `[!]` | Breaking | Introducing breaking changes or hotfixes |
-| `[#]` | Docs | Updating documentation or comments |
-| `[>]` | Performance | Improving speed, memory, or efficiency |
-| `[?]` | WIP | Committing unfinished or experimental code |
+| Symbol  | Meaning           | Use when...                                  |
+| ------- | ----------------- | -------------------------------------------- |
+| `[+]` | Add               | Adding a new file, feature, or functionality |
+| `[~]` | Update / Refactor | Modifying or refactoring existing code       |
+| `[x]` | Fix               | Fixing a bug, typo, or issue                 |
+| `[-]` | Remove            | Deleting code, files, or deprecated features |
+| `[!]` | Breaking          | Introducing breaking changes or hotfixes     |
+| `[#]` | Docs              | Updating documentation or comments           |
+| `[>]` | Performance       | Improving speed, memory, or efficiency       |
+| `[?]` | WIP               | Committing unfinished or experimental code   |
 
 Example:
+
 ```
 [+] Add agent heartbeat monitoring
 
@@ -90,6 +92,7 @@ This project follows the **Google Style Guides** for both languages:
 Before submitting a PR, ensure:
 
 1. **All existing tests pass.** Run:
+
    ```bash
    # Python services (from repository root; separate PYTHONPATH per service)
    pytest -c tests/mas/pytest.ini tests/mas -vv
@@ -100,10 +103,9 @@ Before submitting a PR, ensure:
    # Web client
    cd src/services/web-client && npm test
    ```
-
 2. **New features include tests.** Follow the patterns in the existing test suites.
-
 3. **No linter errors.** Run:
+
    ```bash
    # Python (from repo root)
    ruff check src/services/
@@ -115,6 +117,7 @@ Before submitting a PR, ensure:
 ### Reporting Bugs
 
 Open a GitHub Issue with:
+
 - Steps to reproduce
 - Expected behavior vs. actual behavior
 - Environment details (OS, Docker version, browser)
@@ -123,6 +126,7 @@ Open a GitHub Issue with:
 ### Requesting Features
 
 Open a GitHub Issue with the `enhancement` label describing:
+
 - The problem the feature would solve
 - Your proposed approach (if any)
 - Any relevant context or mockups
@@ -135,13 +139,13 @@ This repository uses a structured workflow to keep changes traceable and reviewa
 
 ### Workflow summary
 
-| Rule | Description |
-|------|-------------|
-| Task to issue | Work is tracked from a GitHub Issue when your team uses issues |
-| Branch per issue | Branch names often follow `issue-<id>-<short-description>` |
-| Commits | Follow [commit convention](commit-convention.md) |
-| Pull requests | Link to the issue and request review per team policy |
-| Merge | Use squash merge if that is team standard; delete the branch after merge |
+| Rule             | Description                                                              |
+| ---------------- | ------------------------------------------------------------------------ |
+| Task to issue    | Work is tracked from a GitHub Issue when your team uses issues           |
+| Branch per issue | Branch names often follow`issue-<id>-<short-description>`              |
+| Commits          | Follow[commit convention](commit-convention.md)                           |
+| Pull requests    | Link to the issue and request review per team policy                     |
+| Merge            | Use squash merge if that is team standard; delete the branch after merge |
 
 Adjust approval counts and branch naming to match your organization’s rules.
 
@@ -155,6 +159,7 @@ All work must be associated with a GitHub **Issue**. No issue = no code.
 
 1. **Create a GitHub Issue** before you start any task.
 2. **Create a Branch from that Issue** using:
+
    ```
    issue-<issue-number>-<short-description>
    ```
@@ -164,6 +169,7 @@ All work must be associated with a GitHub **Issue**. No issue = no code.
 4. **Estimate time** required (e.g., `2h`, `1d`, `3d`).
 5. **Work only in that branch**, and reference the issue in your commits and PRs.
 6. **Open a Pull Request**, link the issue with:
+
    ```
    Fixes #<issue-number>
    ```
@@ -183,11 +189,10 @@ Create a core handler that routes messages between AI agents using internal prot
 Estimate: 1d  
 Assignee: @yourusername  
 Labels: enhancement, AI  
-Milestone: MVP v1  
+Milestone: MVP v1
 ```
 
 ---
-
 
 ## Git commit convention
 
@@ -203,16 +208,16 @@ Longer explanation of what was done, why it was done, and how (if necessary).
 
 ### Symbols and meanings
 
-| Symbol | Meaning                   | Use when...                                               |
-|--------|---------------------------|------------------------------------------------------------|
-| [+]    | Add                       | Adding a new file, feature, class, or functionality        |
-| [~]    | Update / Modify / Refactor| Updating or refactoring existing code                     |
-| [x]    | Fix                       | Fixing a bug, typo, or issue                              |
-| [-]    | Remove                    | Deleting code, files, or deprecated features              |
-| [!]    | Important / Breaking      | Introducing breaking changes or hotfixes                  |
-| [#]    | Docs / Comment            | Updating README, markdown, or inline comments             |
-| [>]    | Performance / Optimization| Improving speed, memory, or efficiency                    |
-| [?]    | Work In Progress (WIP)    | Committing unfinished or experimental code                |
+| Symbol | Meaning                    | Use when...                                         |
+| ------ | -------------------------- | --------------------------------------------------- |
+| [+]    | Add                        | Adding a new file, feature, class, or functionality |
+| [~]    | Update / Modify / Refactor | Updating or refactoring existing code               |
+| [x]    | Fix                        | Fixing a bug, typo, or issue                        |
+| [-]    | Remove                     | Deleting code, files, or deprecated features        |
+| [!]    | Important / Breaking       | Introducing breaking changes or hotfixes            |
+| [#]    | Docs / Comment             | Updating README, markdown, or inline comments       |
+| [>]    | Performance / Optimization | Improving speed, memory, or efficiency              |
+| [?]    | Work In Progress (WIP)     | Committing unfinished or experimental code          |
 
 ### Description guidelines
 
@@ -300,14 +305,14 @@ helper until the code explains itself.
 If you want to explain the **design** of a subsystem, a **protocol**, a
 **decision**, or a **runbook**:
 
-| Content type | Location |
-|--------------|----------|
-| "Why we chose X over Y" | `docs/adr/NNNN-<topic>.md` (ADR) |
-| How a subsystem works end-to-end | `docs/architecture.md` (per-service section) |
-| Protocols (WebSocket, AMQP, HTTP contracts) | `docs/architecture.md` + `docs/api-reference.md` |
-| Config / env vars | `docs/operations.md` and `docs/getting-started.md` |
-| How to run locally | `docs/getting-started.md` |
-| Troubleshooting | `docs/getting-started.md` (Troubleshooting section) |
+| Content type                                | Location                                               |
+| ------------------------------------------- | ------------------------------------------------------ |
+| "Why we chose X over Y"                     | `docs/adr/NNNN-<topic>.md` (ADR)                     |
+| How a subsystem works end-to-end            | `docs/architecture.md` (per-service section)         |
+| Protocols (WebSocket, AMQP, HTTP contracts) | `docs/architecture.md` + `docs/api-reference.md`   |
+| Config / env vars                           | `docs/operations.md` and `docs/getting-started.md` |
+| How to run locally                          | `docs/getting-started.md`                            |
+| Troubleshooting                             | `docs/getting-started.md` (Troubleshooting section)  |
 
 #### Rule 6 — section banners are OK, commented-out code is not
 
@@ -366,24 +371,24 @@ The Horus system is tested across Python services (MAS first), with CI running s
 
 ### Types of tests
 
-| Type | Status | Description |
-|------|--------|-------------|
-| Unit tests | Active | MAS core logic and APIs under `tests/mas/` (see CI for exclusions) |
-| Integration tests | Active | `tests/mas/test_integration.py` against a running MAS instance (CI job `test-integration`) |
-| End-to-end tests | Planned | Full stack including web client |
-| Performance tests | Planned | Agent latency, RAG throughput |
-| Security tests | Planned | Authorization, access control, data handling |
+| Type              | Status  | Description                                                                                    |
+| ----------------- | ------- | ---------------------------------------------------------------------------------------------- |
+| Unit tests        | Active  | MAS core logic and APIs under`tests/mas/` (see CI for exclusions)                            |
+| Integration tests | Active  | `tests/mas/test_integration.py` against a running MAS instance (CI job `test-integration`) |
+| End-to-end tests  | Planned | Full stack including web client                                                                |
+| Performance tests | Planned | Agent latency, RAG throughput                                                                  |
+| Security tests    | Planned | Authorization, access control, data handling                                                   |
 
 ### Tools
 
-- `pytest`, `pytest-asyncio`, `httpx`, `websockets` for Python  
-- `coverage.py` where enabled locally (e.g. `scripts/test/run-mas.sh`)  
-- GitHub Actions — `.github/workflows/ci.yml` at the repository root  
+- `pytest`, `pytest-asyncio`, `httpx`, `websockets` for Python
+- `coverage.py` where enabled locally (e.g. `scripts/test/run-mas.sh`)
+- GitHub Actions — `.github/workflows/ci.yml` at the repository root
 
 ### Coverage goals
 
-- Short term: maintain meaningful coverage on new MAS code paths touched by tests  
-- Longer term: raise coverage on orchestration, auth, and task flows as suites grow  
+- Short term: maintain meaningful coverage on new MAS code paths touched by tests
+- Longer term: raise coverage on orchestration, auth, and task flows as suites grow
 
 ### Example commands
 
@@ -397,99 +402,3 @@ bash scripts/test/run-mas.sh
 ### Continuous testing
 
 CI runs on each push and pull request; see the workflow file for Python version, infra services started with Docker Compose, and exact pytest invocations.
-
----
-
-## Documentation Audit Prompt for Claude Code
-
-Paste the section below into Claude Code, run from the repo root.
-
----
-
-You are auditing the documentation of this repository (Horus AI — an EIP multi-agent orchestration platform). The goal is to find stale, contradictory, or missing documentation and propose concrete fixes. Treat code as the source of truth; treat docs as claims to verify against the code.
-
-### Scope
-
-Audit every `.md` file under:
-- `/docs/**`
-- Root-level: `README.md`, `beta_test_plan.md`
-- `/greenlight/**/*.md`
-
-Do NOT modify:
-- `/docs/archive/**` (historical, frozen on purpose)
-- `/docs/ip_protection/**` (legal documents, do not touch)
-- Any `.pdf`, `.docx`, `.pptx` file
-- Any file under `/src/`, `/tests/`, `/scripts/` unless verifying a doc claim
-
-### What "stale" means here
-
-For each doc, check it against the current code and config and flag:
-
-1. **API drift** — endpoints, request/response schemas, WebSocket events, or auth flows in `docs/api-reference.md` that no longer match `src/`. Verify against actual route definitions, Pydantic models, and handlers.
-2. **Architecture drift** — claims in `docs/architecture.md` (services, message buses, data stores, agent topology) that don't match the current `src/` layout or `docker-compose`/infra files. Verify ADRs in `docs/adr/` (`ADR-001-rabbitmq.md`, `ADR-002-chromadb.md`, `ADR-003-fastapi.md`) are still accurate — flag any "superseded" status that isn't documented.
-3. **Config drift** — env vars, secrets, ports, service names mentioned in docs vs. `pyproject.toml`, `.env.example`, compose files, and `src/` config modules.
-4. **Setup/onboarding drift** — `docs/getting-started.md` (Onboarding, Configuration, Troubleshooting sections): do the commands actually work? Are the prerequisites correct? Do referenced scripts in `/scripts/` still exist with the documented interface?
-5. **Operations drift** — `docs/operations.md` (Deployment, Monitoring, Secrets, Environment Matrix sections): do they reference real environments and real metrics/dashboards?
-6. **Broken internal links** — every relative link between markdown files (including the MkDocs `nav` in `docs/mkdocs.yml`).
-7. **Dead references** — references to files, scripts, modules, or services that no longer exist.
-8. **Contradictions** — two docs that say different things about the same component (e.g., one says Redis, another says ChromaDB).
-9. **TODOs and placeholders** — any `TODO`, `TBD`, `FIXME`, `XXX`, `???`, "coming soon", "to be added", or empty section.
-10. **Orphaned docs** — markdown files not referenced in `docs/mkdocs.yml` nav and not linked from any other doc.
-11. **Orphaned root-level docs** — anything at the repo root that should be inside `/docs/` (currently the only intentional root-level doc is `beta_test_plan.md`). Propose where each should move and update the MkDocs nav.
-
-### How to verify
-
-For each claim, open the relevant code file and confirm. Do not trust docs against docs. Examples:
-- `mas-api.md` says `POST /agents/spawn` → grep for the route in `src/`, check the handler signature, check the Pydantic schema.
-- `rbac.md` lists roles → check the enum/constants in `src/`.
-- `deployment.md` mentions a service → confirm it exists in compose/infra files.
-- `environment-matrix.md` lists env vars → diff against `.env.example` and config loaders.
-
-### Deliverables
-
-Produce three things, in this order:
-
-#### 1. `AUDIT_REPORT.md` at the repo root
-
-For each doc file, one section:
-
-```
-#### path/to/doc.md
-- Status: OK | NEEDS_UPDATE | BROKEN | ORPHANED | SHOULD_MOVE
-- Last meaningful update: <date from git log>
-- Issues found:
-  - <issue> — evidence: <file:line in code>
-  - <issue> — evidence: <file:line in code>
-- Suggested action: <one of: update in place / move to <path> / merge into <doc> / delete / leave>
-```
-
-End the report with:
-- A **summary table**: doc | status | severity (low/med/high).
-- A **cross-cutting findings** section listing contradictions across multiple docs.
-- A **prioritized fix list** (top 10 things to fix first).
-
-#### 2. Concrete edits
-
-After the report, apply the fixes that are unambiguous and low-risk:
-- Fix broken internal links.
-- Remove dead references.
-- Update obviously stale config values (env vars, ports, service names) where the code clearly shows the current value.
-- Move root-level docs into `/docs/` and update `mkdocs.yml` nav accordingly.
-- Update `mkdocs.yml` to include any orphaned docs that should be in the nav, or list them under an "Archive" or "Reference" section.
-
-For each edit, keep the diff small and focused. Do not rewrite prose for style. Only change what's factually wrong or structurally needed.
-
-#### 3. `AUDIT_FOLLOWUPS.md`
-
-Anything you found that needs a human decision (ambiguous semantics, ADRs that may need superseding, big rewrites, docs that may be obsolete entirely). One bullet per item, with a recommended action and the reasoning.
-
-### Rules
-
-- Be ruthless about evidence. Every "stale" claim must cite a code file and line.
-- Never invent code that doesn't exist to justify a doc change. If you can't verify, mark as `NEEDS_HUMAN_REVIEW` and put it in `AUDIT_FOLLOWUPS.md`.
-- Do not touch `/docs/archive/**` or `/docs/ip_protection/**`.
-- Do not delete files without explicit listing in the followups doc first.
-- Keep commit-sized diffs: if you're editing more than ~10 files in one pass, stop and report first.
-- Run `mkdocs build --strict` at the end and fix any broken-link warnings it produces.
-
-Start by listing all in-scope docs and giving me a 10-line plan of attack before doing any verification.
