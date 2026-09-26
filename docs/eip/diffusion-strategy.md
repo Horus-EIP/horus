@@ -54,7 +54,7 @@ What we share, what stays closed, and why. Companion to the [protection plan](pr
 | Marketing demo video | Before EIP greenlight | Public, YouTube unlisted |
 | Public website (landing only — value prop + contact form) | Q3 2026 | Static site, separate domain |
 | One blog post per technology adoption (RabbitMQ, ChromaDB, Tempo) | After each ADR | Public — Medium/Dev.to |
-| Open-source helper libraries (e.g. our pre-commit docstring-length hook) | Opportunistic | Public GitHub, MIT license |
+| Open-source helper libraries (e.g. our pre-commit docstring-length hook) | Not planned: everything stays closed ([ADR-004](../adr/ADR-004-closed-source-licence.md)). Only a fallback if the study supervisor requires a public part | — |
 
 ## What we will NOT publish
 
@@ -68,11 +68,12 @@ What we share, what stays closed, and why. Companion to the [protection plan](pr
 
 ## Open-source posture
 
-Horus is **proprietary** for now (see [LICENSE](../../LICENSE)). The reasoning, per Objective A:
+**Decision (24/09/2026): Horus is fully closed source** under the proprietary [LICENSE](../../LICENSE) (v2). The full justification (business model, protection, dependency licences, alternatives rejected) is in [ADR-004](../adr/ADR-004-closed-source-licence.md). In short:
 
 - The orchestration and document-analysis logic is the commercial moat.
 - Self-hosting is the customer promise; an open core would not change customer behaviour but would forfeit the moat.
-- Selective open-sourcing of **isolated utilities** (e.g. the pre-commit docstring hook in `scripts/ci/check-docstring-length.py`) is on the table — they don't carry IP value individually and build goodwill.
+- Open-sourcing **isolated utilities** (e.g. the pre-commit docstring hook in `scripts/ci/check-docstring-length.py`) is **not planned**. A separate public repository containing no Horus code is kept only as a fallback if the study supervisor requires a public part.
+- External contributions happen **by invitation**, under an NDA + Contributor Agreement, in the private repository.
 
 If we re-evaluate, the trigger conditions are:
 1. A clear partner commitment to community maintenance.
@@ -85,5 +86,5 @@ Neither is true today.
 ## Review
 
 - **Owner:** Loup Marquez
-- **Last review:** `[ TO FILL ]`
-- **Linked docs:** [protection-plan.md](protection-plan.md) · [security.md](../security.md) · [LICENSE](../../LICENSE)
+- **Last review:** 26/09/2026 (licence decision, ADR-004)
+- **Linked docs:** [protection-plan.md](protection-plan.md) · [security.md](../security.md) · [LICENSE](../../LICENSE) · [ADR-004](../adr/ADR-004-closed-source-licence.md)

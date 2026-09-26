@@ -18,35 +18,35 @@ The service is a **FastAPI** application (port 8080) backed by:
 
 ## Supported File Types
 
-| Format  | Library           | Notes                              |
-|---------|--------------------|------------------------------------|
-| PDF     | pdfplumber, PyMuPDF | Text-based PDF extraction         |
-| DOCX    | python-docx        | Microsoft Word documents           |
-| Image   | pytesseract (OCR)  | Scanned PDFs and images            |
-| TXT     | built-in           | Plain text files                   |
+| Format | Library           | Notes                     |
+| ------ | ----------------- | ------------------------- |
+| PDF    | pdfplumber        | Text-based PDF extraction |
+| DOCX   | python-docx       | Microsoft Word documents  |
+| Image  | pytesseract (OCR) | Scanned PDFs and images   |
+| TXT    | built-in          | Plain text files          |
 
 ## API Endpoints
 
 ### Store routes (prefix: `/`)
 
-| Method   | Path                | Description                                        |
-|----------|---------------------|----------------------------------------------------|
-| `POST`   | `/`                 | Add a text document (with auto-analysis)            |
-| `GET`    | `/`                 | Query the knowledge store by text similarity        |
-| `DELETE` | `/{id}`             | Delete a document by ID                             |
-| `POST`   | `/upload`           | Upload a file, extract text, analyze, and chunk     |
-| `POST`   | `/smart-search`     | Search with metadata filters (category, entities)   |
-| `GET`    | `/search-by-entity` | Search by entity type and value                     |
-| `GET`    | `/categories`       | List all document categories with counts            |
+| Method     | Path                  | Description                                       |
+| ---------- | --------------------- | ------------------------------------------------- |
+| `POST`   | `/`                 | Add a text document (with auto-analysis)          |
+| `GET`    | `/`                 | Query the knowledge store by text similarity      |
+| `DELETE` | `/{id}`             | Delete a document by ID                           |
+| `POST`   | `/upload`           | Upload a file, extract text, analyze, and chunk   |
+| `POST`   | `/smart-search`     | Search with metadata filters (category, entities) |
+| `GET`    | `/search-by-entity` | Search by entity type and value                   |
+| `GET`    | `/categories`       | List all document categories with counts          |
 
 ### File routes (prefix: `/file`)
 
-| Method   | Path              | Description                                     |
-|----------|-------------------|-------------------------------------------------|
-| `POST`   | `/file`           | Upload multiple files (PDF, DOCX, TXT)           |
-| `GET`    | `/file`           | List all indexed files and metadata               |
-| `DELETE` | `/file/{filename}`| Delete a file from storage                        |
-| `POST`   | `/file/{type}`    | Upload a single file by type with text conversion |
+| Method     | Path                 | Description                                       |
+| ---------- | -------------------- | ------------------------------------------------- |
+| `POST`   | `/file`            | Upload multiple files (PDF, DOCX, TXT)            |
+| `GET`    | `/file`            | List all indexed files and metadata               |
+| `DELETE` | `/file/{filename}` | Delete a file from storage                        |
+| `POST`   | `/file/{type}`     | Upload a single file by type with text conversion |
 
 Interactive API documentation is available at `/docs` when the server is running.
 
@@ -87,9 +87,9 @@ Pytest suites and client scripts: `tests/knowledge_store/` at the repository roo
 
 The service reads environment variables directly. Defaults are suitable for local development.
 
-| Variable                         | Description                              | Default                   |
-|----------------------------------|------------------------------------------|---------------------------|
-| `CHROMA_TELEMETRY_ENABLED`       | Disable ChromaDB telemetry               | `0`                       |
+| Variable                     | Description                | Default |
+| ---------------------------- | -------------------------- | ------- |
+| `CHROMA_TELEMETRY_ENABLED` | Disable ChromaDB telemetry | `0`   |
 
 The embedding model (`BAAI/bge-base-en-v1.5`) is configured in `app/chroma_db/setup.py`. For deployment with other services, see `src/infra/.env.example`.
 

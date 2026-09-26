@@ -186,7 +186,11 @@ All work must start as a GitHub Issue. See [docs/contributing.md](docs/contribut
 
 ## License
 
-This software is proprietary. Use requires a valid commercial license agreement. See [LICENSE](LICENSE) for details.
+Horus is **closed-source, proprietary software** (all rights reserved). Having access to this repository or to a Horus build gives no right to use, copy or distribute it: every use requires a signed agreement with the licensors (commercial licence, evaluation licence or contributor agreement).
+
+- Terms: [LICENSE](LICENSE) (Horus Proprietary Software Licence v2, 30/09/2026)
+- Why Horus is closed source: [ADR-004](docs/adr/ADR-004-closed-source-licence.md)
+- Third-party open-source components keep their own licences: [dependency licence inventory](docs/eip/dependency-licence-inventory.xlsx)
 
 ## Authors
 
