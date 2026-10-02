@@ -43,11 +43,13 @@ Our goal is to gather architectural advice on CPU-only optimization and recruit 
 
 
 * **Key Community Feedback & Advice Received:**
-  * **Open-source vs Unpaid Model:** Some community members noted that asking for free contributions on a closed-source project can face resistance; suggesting to rely on personal research or a paid tool if core challenges need outsourcing[cite: 1].
-  * **Installer & Runtime Separation:** Treat the installer and runtime as separate resource budgets. Detect CPU features, RAM, available VRAM, and disk before downloading anything; offer a small default model and lazy, resumable model downloads instead of a massive 25 GB upfront dependency.
-  * **Routing Latency Fixes:** The 40s routing step should be tackled first by using a cheap non-generative approach (e.g., small embedding model with nearest-neighbor lookup or regex) to drop routing latency to milliseconds.
-  * **WebSocket & Concurrency Management:** For CPU-only inference, cap context and concurrent agents, use a bounded queue, and send progress or heartbeat frames over the WebSocket so a 40-second generation is not mistaken for a dead connection.
-  * **Standalone Executables:** Consider compiling Python code with tools like Nuitka into a true standalone executable binary to bypass long Python dependency installation times.
+  * **Community Stance on Closed Source/Unpaid Help:** Feedback highlighted that outsourcing core engineering challenges for a closed-source, unpaid project can face strong skepticism in open-source communities. *Action taken:* Clarified student status and transparency, pivoting the thread strictly toward technical architecture advice and acknowledging hardware gaps (like expanding beyond NVIDIA GPU detection to iGPUs and NPUs).
+  * **Non-Generative Routing Optimization:** The 40s routing latency comes from using a generative model for routing. Instead, use a lightweight approach (e.g., small embedding model with nearest-neighbor lookup, or keyword/regex pass) to drop routing to milliseconds.
+  * **Agent Segmentation & Context Isolation:** Running agentic work on low-end hardware is possible (e.g., 4B models like Qwen-based variants doing web searches or sub-tasks), *provided* tasks are strictly segmented and isolated with a limited cognitive surface, small context bloat, and tight delegation trees.
+  * **Installer vs. Runtime Separation & Lazy Loading:** Treat the installer and runtime as separate resource budgets. Detect CPU features, RAM, VRAM, and disk *before* pulling anything; avoid a 25 GB upfront dependency by implementing lazy, resumable model downloads and a small default model.
+  * **Python Stack & Binary Compilation:** The 21–46 min installation time is largely driven by PyTorch/CUDA wheels. On CPU paths, switch to lightweight binaries (like `llama.cpp` / `llama-cpp-python` CPU wheels) or compile Python code into standalone binaries using tools like **Nuitka**.
+  * **WebSocket Resilience & Job Queuing:** Long CPU generations/load times cause WebSocket drops. Treat long calls as asynchronous jobs (return a job ID immediately), stream tokens, and send regular heartbeat/progress frames.
+  * **Fixed Tiering Profiles:** Rather than trying to auto-tune everything dynamically, detect system capabilities at first run (RAM, AVX2/AVX-512) and select from 2–3 pre-tested fixed configuration profiles.
 ---
 ### 2. Reddit: r/selfhosted
 
