@@ -126,6 +126,42 @@ Our goal is to gather architectural advice on CPU-only optimization and recruit 
 > To be transparent: Horus is closed source and will be licensed to companies. Contributing is voluntary and unpaid. Before seeing any code, contributors sign a short confidentiality and contributor agreement, and the code they contribute becomes part of Horus. In return we offer thorough code reviews, full credit in the project and a professional reference on request.
 > We're not sharing code or private links publicly. If this interests you, comment below or DM me with your experience in local inference, CPU optimisation or offline apps.
 
+* **Expert Insights from Offline App Developers (e.g., NoNetPlay feedback):** 
+  * Saving users from a broken first download is more critical than having a faster model; resumable range requests and multiple regional mirrors prevent users from abandoning the app right at the start.
+  * Keep routing off the heavy path: a small classifier or embedding lookup in front drastically reduces initial blocking time.
+
+#### Feedback from Reddit (r/LocalLLm & r/LocalLLaMA)
+
+    The 25 GB Problem & App/Weights Separation:
+
+        Feedback from developers of offline apps (e.g., NoNetPlay) highlighted that the massive initial download size is the real conversion killer, far worse than a 40s routing delay.
+
+        Solution: Decouple the app binary from the model weights. Ship a tiny bootstrap installer (~35 MB) and pull models afterward via a custom downloader.
+
+    Downloader & CDN Best Practices:
+
+        Implement multiple regional mirrors (CDN performance varies heavily by country).
+
+        Always use resumable downloads (partial files + HTTP range requests) with final hash verification. First-download failure is where most users quit; a retry that resumes rather than restarting is invaluable.
+
+    Python Dependency Hell (21–46 min setup):
+
+        Indicates code compilation or heavy package resolution happening on the user's machine (a lottery). Fix by pinning wheels or shipping a prebuilt runtime.
+
+    Hardware Gating vs. Tiering Strategy:
+
+        Either enforce a hard gate on chip generation (rejecting unsupported hardware cleanly rather than delivering a broken 3-minute first token) or perform a fixed-tier detection once at install (RAM + core count) and store the choice locally.
+
+    Transport Layer & WebSocket Resilience:
+
+        40s routing on CPU is an expected hardware cost; the transport layer should not drop connections. Stream tokens as they come, or send regular heartbeat frames every few seconds.
+
+    Routing & Context Optimization:
+
+        Keep routing off the heavy generative model path by placing a small classifier, embedding lookup, or regex pass in front.
+
+        Ensure agents act as logical actors sharing a single resident model process with a bounded queue and strict context caps, rather than spinning up separate heavy model instances.
+
 ---
 
 ### 4. Reddit: r/localaistack
@@ -315,6 +351,17 @@ Published Post Content:
 
         We're not sharing code or private links publicly. If this interests you, comment below or DM me with your experience in local inference, CPU optimisation or offline apps.
 
+#### Feedback 
+
+External Providers / Alternatives: Mention of exploring external inference providers (e.g., featherless.ai) if local constraints become too tight.
+
+Model Recommendations for Low-End Hardware:
+
+    Suggestions to look into specialized architectures for constrained environments (e.g., darkc0de/K2-Horizon-MoVA-36B-A4B-heretic).
+
+    Ultra-lightweight alternatives like specific GGUF quants (e.g., mradermacher/gemma-4-E4B-it-ultra-uncensored-heretic-i1-GGUF at Q5_K_M).
+
+Quantization Sweet Spot: For GGUF/CPU, Q4_K_M is acceptable, but Q5_K_M is preferred. All other quants are generally considered a waste of disk space and performance.
 ### 8. Reddit: r/selfhostedai
 * **Name + link:** Reddit - r/selfhostedai (https://www.reddit.com/r/SelfHostedAI/comments/1ww04wd/how_do_you_keep_a_local_multiagent_app_usable_on/)
 * **Type:** Subreddit / Online Community
