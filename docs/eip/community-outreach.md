@@ -217,7 +217,7 @@ Published Post Content:
 
 ### 6. Dev.to Community
 
-Name + link: Dev.to (https://dev.to/gersonrjr/ai-can-write-code-but-can-you-understand-it-c9f)
+Name + link: Dev.to (https://dev.to/nogigi83/how-do-you-keep-a-local-multi-agent-app-usable-on-cpu-only-low-ram-machines-4gok)
 
 Type: Developer Community & Blogging Platform
 
