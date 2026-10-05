@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
+from prometheus_client import REGISTRY
 
 from core.llm_setup import _bnb4bit, ask_llm, get_llm, is_model_dir_exists
 
@@ -179,3 +180,30 @@ def test_openai_compatible_backend_leaves_scheduling_to_the_server(monkeypatch):
 
     assert answers == ["routed", "routed"]
     assert probe.peak == 2
+
+
+class _PromptIds:
+    def __init__(self, length: int):
+        self.length = length
+
+    def to(self, _device):
+        return self
+
+    def size(self, _dimension: int) -> int:
+        return self.length
+
+
+def test_the_in_process_router_records_the_tokenizer_count_of_its_prompt(monkeypatch):
+    monkeypatch.setenv("LLM_BACKEND", "transformers")
+    out = MagicMock()
+    out.sequences = [list(range(60))]
+    tokenizer, model = _fake_router_llm(lambda **_kwargs: out)
+    tokenizer.return_value = {"input_ids": _PromptIds(57)}
+    labels = {"call": "intent", "source": "tokenizer"}
+    sum_before = REGISTRY.get_sample_value("mas_llm_prompt_tokens_sum", labels) or 0.0
+
+    with patch("core.llm_setup.tokenizer", tokenizer), patch("core.llm_setup.model", model):
+        assert ask_llm([{"role": "user", "content": "route me"}], 16, call="intent") == "routed"
+
+    assert REGISTRY.get_sample_value("mas_llm_prompt_tokens_sum", labels) == sum_before + 57
+    assert tokenizer.decode.call_args.args[0] == [57, 58, 59]

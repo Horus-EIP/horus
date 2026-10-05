@@ -905,12 +905,15 @@ class TestConsumeMessagesCallback:
 
             captured["persona"] = profiles.current_persona.get()
             captured["name"] = profiles.current_agent_name.get()
+            captured["tools"] = profiles.current_tools.get()
             return {"response": "OK"}
 
         pipeline.process_task = AsyncMock(side_effect=_proc)
         srv.get_pipeline_for_type.return_value = pipeline
 
-        active = SimpleNamespace(system_prompt="BE A PIRATE", name="Pirate")
+        active = SimpleNamespace(
+            system_prompt="BE A PIRATE", name="Pirate", tools=("search_knowledge", "calc")
+        )
         ch = MagicMock()
         body = json.dumps(
             {"demand": "x", "task_id": "t", "assigned_agent_id": "a1"}
@@ -921,10 +924,12 @@ class TestConsumeMessagesCallback:
 
         assert captured["persona"] == "BE A PIRATE"
         assert captured["name"] == "Pirate"
+        assert captured["tools"] == ("search_knowledge", "calc")
         # And it is reset after the task (no leak).
         from agent_server import profiles
 
         assert profiles.current_persona.get() is None
+        assert profiles.current_tools.get() is None
 
     def test_unsupported_queue_type_raises_inside_processing(self, fake_pika):
         # A queue type that is neither "general" nor a known specialist (and

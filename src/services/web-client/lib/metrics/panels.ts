@@ -62,10 +62,34 @@ export const ROUTING_PANELS: MetricPanelSpec[] = [
   },
 ];
 
+export interface PromptTokenPanelSpec extends MetricPanelSpec {
+  histogram: string;
+}
+
+export function averagePerCallQuery(histogram: string): string {
+  return `sum by (call) (rate(${histogram}_sum[${LATENCY_RATE_WINDOW}])) / sum by (call) (rate(${histogram}_count[${LATENCY_RATE_WINDOW}]))`;
+}
+
+function promptTokenPanel(title: string, histogram: string): PromptTokenPanelSpec {
+  return {
+    title,
+    histogram,
+    query: averagePerCallQuery(histogram),
+    nameLabel: "call",
+    unit: " tokens",
+  };
+}
+
+export const PROMPT_TOKEN_PANELS: PromptTokenPanelSpec[] = [
+  promptTokenPanel("Agent Prompt Tokens per Call", "agent_llm_prompt_tokens"),
+  promptTokenPanel("MAS Prompt Tokens per Call", "mas_llm_prompt_tokens"),
+];
+
 export const METRIC_PANELS: MetricPanelSpec[] = [
   { title: "Task Queue Depth", query: "mas_task_queue_depth" },
   { title: "Task Errors Rate", query: "rate(mas_task_errors_total[5m])", unit: "/s" },
   { title: "Active Agents", query: "mas_agent_count", nameLabel: "status" },
   ...LATENCY_PANELS,
   ...ROUTING_PANELS,
+  ...PROMPT_TOKEN_PANELS,
 ];

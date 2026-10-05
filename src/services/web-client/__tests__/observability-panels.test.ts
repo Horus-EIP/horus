@@ -4,9 +4,11 @@ import { describe, it, expect } from "vitest";
 import {
   LATENCY_PANELS,
   METRIC_PANELS,
+  PROMPT_TOKEN_PANELS,
   ROUTING_DECISION_HISTOGRAM,
   ROUTING_DECISIONS_COUNTER,
   ROUTING_PANELS,
+  averagePerCallQuery,
   latencyQuantilesQuery,
 } from "@/lib/metrics/panels";
 import { TRACED_SERVICES } from "@/lib/traces/services";
@@ -82,14 +84,42 @@ describe("metrics latency panels", () => {
     }
   });
 
-  it("keep the overview panels ahead of the latency and routing panels", () => {
+  it("keep the overview panels ahead of the latency, routing and prompt token panels", () => {
     expect(METRIC_PANELS.map((panel) => panel.title)).toEqual([
       "Task Queue Depth",
       "Task Errors Rate",
       "Active Agents",
       ...LATENCY_PANELS.map((panel) => panel.title),
       ...ROUTING_PANELS.map((panel) => panel.title),
+      ...PROMPT_TOKEN_PANELS.map((panel) => panel.title),
     ]);
+  });
+});
+
+describe("prompt token panels", () => {
+  it("chart the agent's and the orchestrator's prompt token histograms", () => {
+    expect(PROMPT_TOKEN_PANELS.map((panel) => panel.histogram)).toEqual([
+      "agent_llm_prompt_tokens",
+      "mas_llm_prompt_tokens",
+    ]);
+  });
+
+  it("divide the summed tokens by the number of calls, one series per call", () => {
+    expect(averagePerCallQuery("mas_llm_prompt_tokens")).toBe(
+      "sum by (call) (rate(mas_llm_prompt_tokens_sum[5m])) / sum by (call) (rate(mas_llm_prompt_tokens_count[5m]))"
+    );
+    for (const panel of PROMPT_TOKEN_PANELS) {
+      expect(panel.query).toBe(averagePerCallQuery(panel.histogram));
+      expect(panel.nameLabel).toBe("call");
+      expect(panel.unit).toBe(" tokens");
+    }
+  });
+
+  it("only chart histograms a scraped service declares", () => {
+    for (const panel of PROMPT_TOKEN_PANELS) {
+      expect(declaredHistograms).toContain(panel.histogram);
+      expect(scrapedHosts).toContain(scrapeHostOf(panel.histogram));
+    }
   });
 });
 

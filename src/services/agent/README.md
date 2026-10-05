@@ -56,6 +56,37 @@ When one answer takes longer than `REACT_TIMEOUT_SECONDS` (default 900 s on CPU,
 
 Set the agent type with the `AGENT_TYPE` environment variable. Keep `HORUS_WORK_QUEUE_PREFIX` in sync with MAS `agent_work_queue_prefix` (default `horus.work`).
 
+## Agent identities
+
+One worker registers five identities with MAS (`agent_server/profiles.py`, `DEFAULT_PROFILES`). An identity is a name, a type (its work queue), skills and a description (what the router sees), a system prompt and at most five tools:
+
+| Identity | Type | Tools |
+|---|---|---|
+| General-Assistant | `general` | `search_knowledge`, `extract_data`, `calc`, `delegate` |
+| Finance-Analyst | `analyst` | `search_knowledge`, `analyze_payments`, `calc`, `delegate` |
+| Compliance-Officer | `analyst` | `search_knowledge`, `extract_data`, `delegate` |
+| HR-Assistant | `general` | `search_knowledge`, `calc`, `delegate` |
+| Researcher | `researcher` | `search_knowledge`, `extract_data`, `delegate` |
+
+Each system prompt only scopes the identity to its documents and style, and stays under 300 tokens (`SYSTEM_PROMPT_TOKEN_BUDGET`; 50 to 137 tokens today with the Qwen3-4B-Instruct-2507 tokenizer). How to answer, cite and say "not found" belongs to the answer contract, so a persona never repeats or contradicts it. `tests/agent/unit/test_agent_identities.py` enforces both limits: it counts with the model's `tokenizer.json` when the model is on disk (`MODEL_DIR` or `app/models/*/`) and otherwise with a conservative estimate of one token per 3 characters, which the same test checks never undercounts the tokenizer on these prompts. An identity defined another way (`AGENT_PROFILES_JSON`, `AGENT_NAME`, or adopted from MAS) has no system prompt and the tools `search_knowledge`, `extract_data`, `calc`, `delegate`; listing more than five tools, an unknown tool or one tool twice raises an error. The consumer binds the identity of each task (`current_persona`, `current_tools`), and the ReAct loop describes and runs only that identity's tools; with no identity bound (a delegated request) it offers all five.
+
+### Prompt layout
+
+Every prompt puts what never changes first and what changes last, so llama-server's prompt cache reuses the start of the previous prompt:
+
+| Call (`call` label) | System message (fixed for an identity) | User message |
+|---|---|---|
+| `answer` (RAG answer) | identity system prompt, `---`, the answer contract rules | the labelled passages, then `Request: ...` |
+| `react_step` | identity system prompt, `---`, the ReAct format with the identity's tool definitions | `User query: ...`, the reasoning so far (only ever extended), the step line |
+| `grounded` (`decide` with context) | the grounded-answer rules | the retrieved content, then `Task: ...` |
+| `instruction` (`decide` without context, the writer) | a one-line instruction | the request |
+
+No system message holds a timestamp, an id or the request, so two calls for one identity send byte-identical system messages (`tests/agent/unit/test_prompt_layout.py`). The request appears once: a chain step's request carries the whole chain transcript, and repeating it before and after the passages doubled it.
+
+### Prompt tokens
+
+Every successful LLM call logs `LLM prompt tokens: call=... prompt_tokens=... source=... budget=...` and observes the histogram `agent_llm_prompt_tokens{call,source}`, so the average per call is `sum by (call) (rate(agent_llm_prompt_tokens_sum[5m])) / sum by (call) (rate(agent_llm_prompt_tokens_count[5m]))` (the "Agent Prompt Tokens per Call" panel on `/admin/metrics`). `source` says how the tokens were counted: `usage` is `usage.prompt_tokens` of the OpenAI-compatible response (llama-server, vLLM; a stream asks for it with `stream_options.include_usage`), `tokenizer` the length of the tokenized prompt on the in-process transformers backend, `estimate` one token per 3 characters when neither exists (an injected model, a server that sends no usage). A prompt longer than `AGENT_PROMPT_TOKEN_BUDGET` tokens (default 4096, half of the 8192-token context llama-server runs with) logs a warning and counts in `agent_llm_prompts_over_budget_total{call}`. `scripts/perf/prompt-tokens.py` checks the averages of a run against the budget.
+
 ## Tool Registry
 
 The RAG pipeline ships with a set of built-in tools that can be invoked by setting the `operation` field on a task:
@@ -81,9 +112,12 @@ agent/
       settings.py               # Environment-based configuration
     agent_server/
       server.py                 # FastAPI app, registration, heartbeat, RabbitMQ consumers
+      profiles.py               # The five identities: system prompts and tools
     ai_agents/
       rag_pipeline.py           # RAGPipeline (retrieve + decide + tools)
       react_agent.py            # Multi-step ReAct reasoning agent
+      agent_tools.py            # ReAct tool definitions and the five-tool limit
+      prompt_tokens.py          # Prompt token logging, histogram and budget
       knowledge_retrieval_agent.py
       decision_making_agent.py
       knowledge_store_client.py # HTTP client for the Knowledge Store service
@@ -140,6 +174,7 @@ In practice, most tasks arrive through the RabbitMQ consumer rather than the HTT
 | `AGENT_MAX_CONCURRENT_TASKS` | Tasks this process runs at a time; the worker takes no message while they are all busy | `1` |
 | `AGENT_WORKER_ID`         | Stable worker name for task claims. It must differ between agent containers | the host name |
 | `REACT_TIMEOUT_SECONDS`   | Limit on one answer; past it the task fails with `reason: "timeout"` | `900` on CPU, `120` on GPU |
+| `AGENT_PROMPT_TOKEN_BUDGET` | Prompt tokens one LLM call may use before it logs a warning and counts in `agent_llm_prompts_over_budget_total` | `4096` |
 | `DELEGATION_TIMEOUT`      | Timeout for delegation requests (seconds)  | `30.0`                    |
 | `MAX_DELEGATION_DEPTH`    | Maximum inter-agent delegation chain depth | `5`                       |
 

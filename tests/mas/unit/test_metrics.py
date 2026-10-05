@@ -69,3 +69,30 @@ class TestRoutingDecisions:
 
         assert sample("mas_routing_decision_seconds_bucket", labels) == before + 1
         assert sample("mas_routing_decision_seconds_bucket", {"method": "llm", "le": "1800.0"}) is not None
+
+
+class TestPromptTokens:
+    def test_a_prompt_lands_in_the_bucket_of_its_size_under_its_call_and_source(self):
+        labels = {"call": "plan", "source": "usage"}
+        under_1024 = sample("mas_llm_prompt_tokens_bucket", {**labels, "le": "1024.0"}) or 0.0
+        under_768 = sample("mas_llm_prompt_tokens_bucket", {**labels, "le": "768.0"}) or 0.0
+
+        metrics.observe_prompt_tokens("plan", "usage", 900, 4096)
+
+        assert sample("mas_llm_prompt_tokens_bucket", {**labels, "le": "768.0"}) == under_768
+        assert sample("mas_llm_prompt_tokens_bucket", {**labels, "le": "1024.0"}) == under_1024 + 1
+
+    def test_the_buckets_reach_a_whole_chain_transcript(self):
+        metrics.observe_prompt_tokens("aggregate", "estimate", 20000, 4096)
+
+        assert sample(
+            "mas_llm_prompt_tokens_bucket", {"call": "aggregate", "source": "estimate", "le": "32768.0"}
+        ) is not None
+
+    def test_only_a_prompt_over_the_budget_is_counted(self):
+        before = sample("mas_llm_prompts_over_budget_total", {"call": "review"}) or 0.0
+
+        assert metrics.observe_prompt_tokens("review", "usage", 4096, 4096) is False
+        assert metrics.observe_prompt_tokens("review", "usage", 4097, 4096) is True
+
+        assert sample("mas_llm_prompts_over_budget_total", {"call": "review"}) == before + 1

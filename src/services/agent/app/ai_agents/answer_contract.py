@@ -313,12 +313,7 @@ def _capped_context(context: str) -> str:
 
 def answer_prompt(request: str, context: str, labels: Sequence[str]) -> tuple[str, str]:
     passages = _capped_context(context or "").strip() or "(no passages)"
-    user_content = (
-        f"Request: {request}\n\n"
-        f"Passages:\n{passages}\n\n"
-        f"Answer this request with the JSON object: {request}"
-    )
-    return _answer_rules(bool(labels)), user_content
+    return _answer_rules(bool(labels)), f"Passages:\n{passages}\n\nRequest: {request}"
 
 
 def _strict_object(raw: str) -> dict[str, Any] | None:

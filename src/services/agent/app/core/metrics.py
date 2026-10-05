@@ -57,6 +57,23 @@ model_inference_duration = Histogram(
     buckets=LONG_RUNNING_BUCKETS
 )
 
+PROMPT_TOKEN_BUCKETS = (
+    64, 128, 256, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 16384, 32768
+)
+
+llm_prompt_tokens = Histogram(
+    "agent_llm_prompt_tokens",
+    "Prompt tokens of each agent LLM call, by call and by how they were counted",
+    ["call", "source"],
+    buckets=PROMPT_TOKEN_BUCKETS,
+)
+
+llm_prompts_over_budget_total = Counter(
+    "agent_llm_prompts_over_budget_total",
+    "Agent LLM calls whose prompt was longer than AGENT_PROMPT_TOKEN_BUDGET",
+    ["call"],
+)
+
 # Knowledge store client metrics
 knowledge_store_requests_total = Counter(
     "agent_knowledge_store_requests_total",

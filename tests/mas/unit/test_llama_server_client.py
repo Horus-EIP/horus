@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import bootstrap_llm
 import pytest
+from prometheus_client import REGISTRY
 
 import core.llm_setup as llm_setup
 
@@ -185,3 +186,73 @@ def test_the_server_backend_is_recognised(llama_server_env):
     assert llm_setup.llm_server_backend() is True
     llama_server_env.setenv("LLM_BACKEND", "transformers")
     assert llm_setup.llm_server_backend() is False
+
+
+def prompt_token_sample(suffix: str, labels: dict) -> float:
+    return REGISTRY.get_sample_value(f"mas_llm_prompt_tokens_{suffix}", labels) or 0.0
+
+
+def over_budget_count(call: str) -> float:
+    return REGISTRY.get_sample_value("mas_llm_prompts_over_budget_total", {"call": call}) or 0.0
+
+
+def test_the_prompt_tokens_llama_server_reports_are_recorded_under_the_call(llama_server_env):
+    labels = {"call": "aggregate", "source": "usage"}
+    count_before = prompt_token_sample("count", labels)
+    sum_before = prompt_token_sample("sum", labels)
+    server = FakeUrlopen(llama_server_completion("Summary."))
+    with patch("urllib.request.urlopen", server):
+        llm_setup.ask_llm([{"role": "user", "content": "Summarise."}], 512, call="aggregate")
+    assert prompt_token_sample("count", labels) == count_before + 1
+    assert prompt_token_sample("sum", labels) == sum_before + 640
+
+
+def test_the_constrained_router_call_is_recorded_under_its_schema_name(llama_server_env):
+    labels = {"call": "task_route", "source": "usage"}
+    count_before = prompt_token_sample("count", labels)
+    server = FakeUrlopen(llama_server_completion(ROUTING_REPLY))
+    with patch("urllib.request.urlopen", server):
+        llm_setup.ask_llm_with_json_schema(
+            [{"role": "user", "content": "Route this."}], "task_route", ROUTE_SCHEMA, 32
+        )
+    assert prompt_token_sample("count", labels) == count_before + 1
+
+
+def test_a_reply_without_usage_records_an_estimate_from_the_messages(llama_server_env):
+    labels = {"call": "review", "source": "estimate"}
+    sum_before = prompt_token_sample("sum", labels)
+    body = llama_server_completion('{"decision": "DONE"}')
+    del body["usage"]
+    messages = [{"role": "system", "content": "s" * 30}, {"role": "user", "content": "u" * 31}]
+    with patch("urllib.request.urlopen", FakeUrlopen(body)):
+        llm_setup.ask_llm(messages, 384, call="review")
+    assert prompt_token_sample("sum", labels) == sum_before + 21
+
+
+def test_a_prompt_over_the_budget_is_counted(llama_server_env):
+    llama_server_env.setenv("LLM_PROMPT_TOKEN_BUDGET", "600")
+    before = over_budget_count("plan")
+    with patch("urllib.request.urlopen", FakeUrlopen(llama_server_completion("{}"))):
+        llm_setup.ask_llm([{"role": "user", "content": "Plan this."}], 2048, call="plan")
+    assert over_budget_count("plan") == before + 1
+
+
+def test_a_prompt_within_the_budget_is_not_counted(llama_server_env):
+    before = over_budget_count("announce")
+    with patch("urllib.request.urlopen", FakeUrlopen(llama_server_completion("I'll do it."))):
+        llm_setup.ask_llm([{"role": "user", "content": "Announce."}], 256, call="announce")
+    assert over_budget_count("announce") == before
+
+
+@pytest.mark.parametrize("raw", ["", "abc", "0", "-3"])
+def test_an_unusable_budget_falls_back_to_the_default(monkeypatch, raw):
+    monkeypatch.setenv("LLM_PROMPT_TOKEN_BUDGET", raw)
+    assert llm_setup.prompt_token_budget() == llm_setup.DEFAULT_PROMPT_TOKEN_BUDGET == 4096
+
+
+def test_an_unlabelled_call_is_recorded_as_other(llama_server_env):
+    labels = {"call": "other", "source": "usage"}
+    count_before = prompt_token_sample("count", labels)
+    with patch("urllib.request.urlopen", FakeUrlopen(llama_server_completion("ok"))):
+        llm_setup.ask_llm([{"role": "user", "content": "Hi."}], 64)
+    assert prompt_token_sample("count", labels) == count_before + 1

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import threading
+from enum import Enum
 from pathlib import Path
 
 try:
@@ -15,8 +16,57 @@ except ImportError:
 
 from core.config import settings
 from core.logger import get_logger
+from core.metrics import observe_prompt_tokens
 
 logger = get_logger("llm_setup")
+
+DEFAULT_PROMPT_TOKEN_BUDGET = 4096
+CONSERVATIVE_CHARS_PER_TOKEN = 3
+UNLABELLED_CALL = "other"
+
+
+class PromptTokenSource(str, Enum):
+    USAGE = "usage"
+    TOKENIZER = "tokenizer"
+    ESTIMATE = "estimate"
+
+
+def prompt_token_budget() -> int:
+    raw = os.getenv("LLM_PROMPT_TOKEN_BUDGET", "").strip()
+    try:
+        budget = int(raw)
+    except ValueError:
+        return DEFAULT_PROMPT_TOKEN_BUDGET
+    return budget if budget > 0 else DEFAULT_PROMPT_TOKEN_BUDGET
+
+
+def estimate_prompt_tokens(messages: list) -> int:
+    characters = sum(len(str(message.get("content", ""))) for message in messages)
+    return -(-characters // CONSERVATIVE_CHARS_PER_TOKEN)
+
+
+def record_prompt_tokens(call: str, tokens: int, source: PromptTokenSource) -> None:
+    budget = prompt_token_budget()
+    over_budget = observe_prompt_tokens(call, source.value, tokens, budget)
+    logger.info(
+        "LLM prompt tokens", call=call, prompt_tokens=tokens, source=source.value, budget=budget
+    )
+    if over_budget:
+        logger.warning(
+            "LLM prompt over its token budget",
+            call=call,
+            prompt_tokens=tokens,
+            budget=budget,
+        )
+
+
+def _served_prompt_tokens(data: dict, messages: list) -> tuple[int, PromptTokenSource]:
+    usage = data.get("usage") if isinstance(data, dict) else None
+    tokens = usage.get("prompt_tokens") if isinstance(usage, dict) else None
+    if isinstance(tokens, int) and not isinstance(tokens, bool):
+        return tokens, PromptTokenSource.USAGE
+    return estimate_prompt_tokens(messages), PromptTokenSource.ESTIMATE
+
 
 IN_PROCESS_STACK_MISSING = (
     "The in-process router LLM needs torch and transformers, which this image does not "
@@ -304,7 +354,7 @@ def llm_server_backend() -> bool:
     return _llm_backend() == "vllm"
 
 
-def _post_chat_completion(body: dict) -> str:
+def _post_chat_completion(body: dict, call: str) -> str:
     import json
     import urllib.request
 
@@ -314,7 +364,9 @@ def _post_chat_completion(body: dict) -> str:
     )
     with urllib.request.urlopen(req, timeout=_vllm_timeout()) as resp:
         data = json.loads(resp.read().decode("utf-8"))
-    return (data["choices"][0]["message"].get("content") or "").strip()
+    content = (data["choices"][0]["message"].get("content") or "").strip()
+    record_prompt_tokens(call, *_served_prompt_tokens(data, body["messages"]))
+    return content
 
 
 def ask_llm_with_json_schema(
@@ -335,11 +387,12 @@ def ask_llm_with_json_schema(
                 "type": "json_schema",
                 "json_schema": {"name": schema_name, "strict": True, "schema": schema},
             },
-        }
+        },
+        schema_name,
     )
 
 
-def _ask_vllm(messages: list, max_new_tokens: int) -> str:
+def _ask_vllm(messages: list, max_new_tokens: int, call: str) -> str:
     """Run an orchestration LLM call against the external vLLM server. Greedy to
     match the in-process path; vLLM applies the chat template server-side. Uses
     stdlib urllib so no new MAS dependency / image rebuild is needed for deps."""
@@ -350,7 +403,7 @@ def _ask_vllm(messages: list, max_new_tokens: int) -> str:
         max_model_len = max(512, int(os.getenv("LLM_VLLM_MAX_MODEL_LEN", "8192")))
     except ValueError:
         max_model_len = 8192
-    est_prompt = sum(len(str(m.get("content", ""))) for m in messages) // 3
+    est_prompt = estimate_prompt_tokens(messages)
     safe_max = max(256, min(int(max_new_tokens), max_model_len - est_prompt - 256))
     return _post_chat_completion(
         {
@@ -359,13 +412,14 @@ def _ask_vllm(messages: list, max_new_tokens: int) -> str:
             "max_tokens": safe_max,
             "temperature": 0.0,
             "stream": False,
-        }
+        },
+        call,
     )
 
 
-def ask_llm(messages: list, max_new_tokens: int = 256):
+def ask_llm(messages: list, max_new_tokens: int = 256, call: str = UNLABELLED_CALL):
     if _llm_backend() == "vllm":
-        return _ask_vllm(messages, max_new_tokens)
+        return _ask_vllm(messages, max_new_tokens, call)
     _require_in_process_stack()
     logger.info("Entering ask_llm, checking model...")
     _ensure_llm_loaded()
@@ -420,8 +474,10 @@ def ask_llm(messages: list, max_new_tokens: int = 256):
         f"after waiting {start_time - queued_at:.2f}s for the previous one"
     )
 
+    prompt_length = input_ids.size(1)
+    record_prompt_tokens(call, int(prompt_length), PromptTokenSource.TOKENIZER)
     seq = out.sequences[0]
-    gen_only = seq[input_ids.size(1) :]
+    gen_only = seq[prompt_length:]
     text = tokenizer.decode(
         gen_only, skip_special_tokens=True, clean_up_tokenization_spaces=False
     ).strip()

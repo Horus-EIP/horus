@@ -1190,7 +1190,7 @@ def _request(decision) -> str:
 
 def _passages(decision) -> str:
     user_content = decision.complete.call_args.args[1]
-    return user_content.split("Passages:\n", 1)[1].split("\n\nAnswer this request", 1)[0]
+    return user_content.split("Passages:\n", 1)[1].rsplit("\n\nRequest: ", 1)[0]
 
 
 class TestRAGPipelineConstruction:

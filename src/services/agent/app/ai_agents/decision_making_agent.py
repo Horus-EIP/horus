@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from ai_agents.generation_stop import GenerationStopped, generation_stop_event
+from ai_agents.prompt_tokens import TokenSource, estimate_tokens, record_prompt_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,53 @@ _IDEOGRAPHIC_FULL_STOP_TO_PERIOD = str.maketrans({"。": "."})
 
 def _normalize_model_text(text: str) -> str:
     return unicodedata.normalize("NFKC", text).translate(_IDEOGRAPHIC_FULL_STOP_TO_PERIOD)
+
+
+def clean_model_text(text: str) -> str:
+    text = _normalize_model_text(text)
+    if not _is_degenerate_output(text):
+        return text
+    logger.warning(
+        "Degenerate self-correction loop detected in model output (length=%d); replacing "
+        "with clean fallback. Raw output preview: %r",
+        len(text),
+        text[:400],
+    )
+    return DEGENERATE_OUTPUT_FALLBACK
+
+
+ANSWER_CALL = "answer"
+GROUNDED_CALL = "grounded"
+INSTRUCTION_CALL = "instruction"
+
+INSTRUCTION_SYSTEM_PROMPT = "You are a helpful assistant. Follow the user's instructions concisely."
+
+GROUNDED_SYSTEM_PROMPT = (
+    "You are a helpful assistant. Use only the retrieved content to complete the task. "
+    "Format every answer in Markdown: start with a brief ## heading when the answer "
+    "has multiple parts, use **bold** for important labels, use bullet lists for "
+    "enumerations, and keep paragraphs short so the reply is easy to scan. "
+    "Never echo or duplicate the retrieved text — synthesise.\n\n"
+    "CRITICAL: Once you write a number, fact, or quote, COMMIT TO IT. "
+    "Do not revise or second-guess in the same answer. Self-correcting "
+    "loops ('wait — no — $265K — actually $263K') destroy the answer's "
+    "trustworthiness. Pick the single statement that best fits the "
+    "question and stop.\n\n"
+    "RULES (read before answering):\n"
+    "1. Use ONLY the retrieved content. Do NOT invent facts.\n"
+    "2. Pick ONE answer and commit. If the retrieved content has "
+    "multiple similar-looking figures, pick the one that matches "
+    "the question's exact wording and move on. Do NOT write 'wait', "
+    "'no', 'actually', 'correction', 'let me recheck', or any "
+    "self-correcting phrase. Do NOT second-guess.\n"
+    "3. If the retrieved content genuinely lacks the answer, say "
+    "'The retrieved content does not contain this information.' in "
+    "ONE sentence and stop. Do NOT keep searching by re-quoting.\n"
+    "4. Never quote the retrieved text back to question it. State "
+    "facts confidently in your own words.\n"
+    "5. Keep the answer concise. Use short paragraphs and bullet "
+    "lists. Stop when the question is answered."
+)
 
 
 def _early_stop_enabled() -> bool:
@@ -673,6 +721,14 @@ class DecisionMakingAgent:
     def constrains_output(self) -> bool:
         return self.decision_model is None and _llm_backend() == "vllm"
 
+    def _prompt_token_count(self, prompt: str) -> tuple[int, TokenSource]:
+        counted = self._last_prompt_tokens
+        if self.decision_model is None and isinstance(counted, int) and not isinstance(counted, bool):
+            if _llm_backend() == "vllm":
+                return counted, TokenSource.USAGE
+            return counted, TokenSource.TOKENIZER
+        return estimate_tokens(prompt), TokenSource.ESTIMATE
+
     def _generate_causal(
         self,
         user_content: str,
@@ -1081,96 +1137,46 @@ class DecisionMakingAgent:
         without changing every helper's signature.
         """
         if context is None:
-            user_content = query
-            system_content = (
-                "You are a helpful assistant. Follow the user's instructions concisely."
+            return clean_model_text(
+                self._infer(
+                    query,
+                    query,
+                    INSTRUCTION_SYSTEM_PROMPT,
+                    on_context=False,
+                    call=INSTRUCTION_CALL,
+                )
             )
-        else:
-            # Cap retrieved context BEFORE building the prompt. Knowledge-store
-            # retrieval can return multiple full documents (e.g. IT Security
-            # Policy + 2026 Budget + Q4 Report) for an underspecified query;
-            # if we dump that verbatim into the prompt, tokenizer truncation
-            # cuts the ``Task: ...`` line off the end and the model ends up
-            # echoing/repeating retrieved chunks instead of answering. ~12k
-            # chars (~3k tokens) leaves room for the persona, instructions,
-            # and the bracketed task line under the 8192-token prompt budget.
-            max_ctx_chars = _max_context_chars()
-            ctx = context or ""
-            if len(ctx) > max_ctx_chars:
-                ctx = ctx[:max_ctx_chars] + "\n…[retrieved content truncated]"
-
-            # Bracket the task at both ends: even if the middle gets truncated,
-            # the instruction at the top and the question at the bottom both
-            # survive so the model always sees what it's being asked to do.
-            user_content = (
-                f"Task: {query}\n\n"
-                "RULES (read before answering):\n"
-                "1. Use ONLY the retrieved content below. Do NOT invent facts.\n"
-                "2. Pick ONE answer and commit. If the retrieved content has "
-                "multiple similar-looking figures, pick the one that matches "
-                "the question's exact wording and move on. Do NOT write 'wait', "
-                "'no', 'actually', 'correction', 'let me recheck', or any "
-                "self-correcting phrase. Do NOT second-guess.\n"
-                "3. If the retrieved content genuinely lacks the answer, say "
-                "'The retrieved content does not contain this information.' in "
-                "ONE sentence and stop. Do NOT keep searching by re-quoting.\n"
-                "4. Never quote the retrieved text back to question it. State "
-                "facts confidently in your own words.\n"
-                "5. Keep the answer concise. Use short paragraphs and bullet "
-                "lists. Stop when the question is answered.\n\n"
-                f"Retrieved Content:\n{ctx}\n\n"
-                f"Now answer the task: {query}"
-            )
-            system_content = (
-                "You are a helpful assistant. Use only the retrieved content to complete the task. "
-                "Format every answer in Markdown: start with a brief ## heading when the answer "
-                "has multiple parts, use **bold** for important labels, use bullet lists for "
-                "enumerations, and keep paragraphs short so the reply is easy to scan. "
-                "Never echo or duplicate the retrieved text — synthesise.\n\n"
-                "CRITICAL: Once you write a number, fact, or quote, COMMIT TO IT. "
-                "Do not revise or second-guess in the same answer. Self-correcting "
-                "loops ('wait — no — $265K — actually $263K') destroy the answer's "
-                "trustworthiness. Pick the single statement that best fits the "
-                "question and stop."
-            )
-
-        callable_prompt = None
-        if context is not None:
-            callable_prompt = (
-                "You are a helpful assistant. Answer using ONLY the provided context. "
-                "Format the answer in Markdown (## heading when helpful, **bold** labels, "
-                "bullet lists for multiple items, short paragraphs). "
-                "If the user asked for a summary, cover the main points without inventing facts. "
-                "If the answer is not present in the context, say: "
-                "'I don't have that information yet.'\n\n"
-                f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"
-            )
-        text = _normalize_model_text(
+        # Cap retrieved context BEFORE building the prompt. Knowledge-store
+        # retrieval can return multiple full documents (e.g. IT Security
+        # Policy + 2026 Budget + Q4 Report) for an underspecified query;
+        # if we dump that verbatim into the prompt, tokenizer truncation
+        # cuts the ``Task: ...`` line off the end and the model ends up
+        # echoing/repeating retrieved chunks instead of answering. ~12k
+        # chars (~3k tokens) leaves room for the persona, instructions,
+        # and the task line under the 8192-token prompt budget.
+        max_ctx_chars = _max_context_chars()
+        ctx = context or ""
+        if len(ctx) > max_ctx_chars:
+            ctx = ctx[:max_ctx_chars] + "\n…[retrieved content truncated]"
+        callable_prompt = (
+            "You are a helpful assistant. Answer using ONLY the provided context. "
+            "Format the answer in Markdown (## heading when helpful, **bold** labels, "
+            "bullet lists for multiple items, short paragraphs). "
+            "If the user asked for a summary, cover the main points without inventing facts. "
+            "If the answer is not present in the context, say: "
+            "'I don't have that information yet.'\n\n"
+            f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"
+        )
+        return clean_model_text(
             self._infer(
                 query,
-                user_content,
-                system_content,
-                on_context=context is not None,
+                f"Retrieved Content:\n{ctx}\n\nTask: {query}",
+                GROUNDED_SYSTEM_PROMPT,
+                on_context=True,
                 callable_prompt=callable_prompt,
+                call=GROUNDED_CALL,
             )
         )
-        # Final guard: if the model produced a self-correction spiral
-        # despite the anti-loop prompt + bad_words_ids, replace the
-        # output with a clean fallback. The raw text is logged so the
-        # task detail page still has it for debugging, but the user
-        # never sees pages of "→ no → wait → actually $265K — no" in
-        # chat. Detection is a simple density-of-contradiction-markers
-        # check; well-formed answers virtually never trip it.
-        if _is_degenerate_output(text):
-            logger.warning(
-                "Degenerate self-correction loop detected in model output "
-                "(length=%d); replacing with clean fallback. Raw output "
-                "preview: %r",
-                len(text),
-                text[:400],
-            )
-            text = DEGENERATE_OUTPUT_FALLBACK
-        return text
 
     def complete(
         self,
@@ -1180,6 +1186,7 @@ class DecisionMakingAgent:
         *,
         response_format: dict | None = None,
         stream_view: StreamView | None = None,
+        call: str = ANSWER_CALL,
     ) -> str:
         return self._infer(
             query,
@@ -1188,6 +1195,12 @@ class DecisionMakingAgent:
             on_context=True,
             response_format=response_format,
             stream_view=stream_view,
+            call=call,
+        )
+
+    def reason(self, query: str, user_content: str, system_content: str, *, call: str) -> str:
+        return clean_model_text(
+            self._infer(query, user_content, system_content, on_context=True, call=call)
         )
 
     def _infer(
@@ -1200,6 +1213,7 @@ class DecisionMakingAgent:
         callable_prompt: str | None = None,
         response_format: dict | None = None,
         stream_view: StreamView | None = None,
+        call: str = ANSWER_CALL,
     ) -> str:
         if _llm_backend() != "vllm":
             self._ensure_causal_loaded()
@@ -1263,9 +1277,11 @@ class DecisionMakingAgent:
         self._last_gen_tokens = None
         self._last_prompt_tokens = None
 
+        prompt = f"{system_content}\n\n{user_content}"
+        if self.decision_model is not None and callable_prompt:
+            prompt = callable_prompt
         try:
             if self.decision_model is not None:
-                prompt = callable_prompt or f"{system_content}\n\n{user_content}"
                 result = self.decision_model(prompt)
                 text = self._coerce_callable_output(result)
             elif _llm_backend() == "vllm":
@@ -1281,6 +1297,7 @@ class DecisionMakingAgent:
                 )
 
             inference_duration = time.time() - start_time
+            record_prompt_tokens(call, *self._prompt_token_count(prompt))
             if _METRICS_AVAILABLE:
                 model_inference_duration.labels(
                     model_name=self.model_name,

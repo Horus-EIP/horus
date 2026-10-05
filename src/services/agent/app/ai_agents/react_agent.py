@@ -12,11 +12,23 @@ import logging
 import os
 import re
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from ai_agents.agent_tools import (
+    ANALYZE_PAYMENTS,
+    CALC,
+    DELEGATE,
+    EXTRACT_DATA,
+    SEARCH_KNOWLEDGE,
+    tool_definitions_block,
+)
+
 logger = logging.getLogger(__name__)
+
+REACT_STEP_CALL = "react_step"
 
 # --- Constants ---
 MAX_REACT_STEPS = 5
@@ -54,32 +66,22 @@ STEP_PROMPT = (
     "Continue reasoning.\n"
 )
 
-TOOL_DESCRIPTIONS = {
-    "search_knowledge": (
-        "search_knowledge(query) – Search the knowledge store for relevant "
-        "information. If the user names a file (e.g. report.pdf, notes.txt), include "
-        "that exact filename in the query so the store can resolve it by name. "
-        "Returns contextual text."
-    ),
-    "extract_data": (
-        "extract_data(file_url_or_content, file_type) – Parse and extract data "
-        "from a file (PDF, CSV, TXT). Returns extracted text."
-    ),
-    "analyze_payments": (
-        "analyze_payments(query) – Analyze payment data from the knowledge store. "
-        "Returns payment insights and statistics."
-    ),
-    "calc": (
-        "calc(expression) – Evaluate a safe mathematical expression. "
-        "Supports +, -, *, /, sqrt, sin, cos, log, etc."
-    ),
-    "delegate": (
-        "delegate(to_agent_type, request) – Delegate a sub-task to another "
-        "agent type (e.g., 'analyst', 'researcher'). The target agent will "
-        "process the request and return a result. Use when a task requires "
-        "capabilities outside your expertise."
-    ),
-}
+
+def react_system_prompt(tool_names: Sequence[str], max_steps: int) -> str:
+    return SYSTEM_PROMPT.format(
+        tool_descriptions=tool_definitions_block(tool_names),
+        max_steps=max_steps,
+    )
+
+
+def react_step_prompt(query: str, reasoning_trace: Sequence[str], step_number: int) -> str:
+    sections = [f"User query: {query}"]
+    if reasoning_trace:
+        sections.append("Reasoning so far:\n" + "\n".join(reasoning_trace))
+    sections.append(
+        f"Step {step_number}: Provide your next THOUGHT and ACTION (or FINAL_ANSWER)."
+    )
+    return "\n\n".join(sections)
 
 # --- Data structures  (L5-T6 – execution history tracking) ---
 
@@ -239,7 +241,7 @@ class ReactAgent:
         for step_num in range(1, self.max_steps + 1):
             # ---------- THOUGHT generation  (L5-T3) ----------
             thought, is_final, final_text = await self._generate_thought(
-                query, reasoning_trace, context_parts, step_num
+                query, reasoning_trace, step_num
             )
 
             history.add_step(
@@ -304,7 +306,6 @@ class ReactAgent:
         self,
         query: str,
         reasoning_trace: list[str],
-        context_parts: list[str],
         step_number: int,
     ) -> tuple[str, bool, str]:
         """
@@ -313,31 +314,12 @@ class ReactAgent:
         Returns:
             (thought_text, is_final_answer, final_answer_text)
         """
-        tool_desc = "\n".join(
-            f"  - {desc}" for desc in TOOL_DESCRIPTIONS.values()
-        )
-        system = SYSTEM_PROMPT.format(
-            tool_descriptions=tool_desc,
-            max_steps=self.max_steps,
-        )
-
-        trace_text = "\n".join(reasoning_trace) if reasoning_trace else ""
-        context_text = "\n".join(context_parts) if context_parts else ""
-
-        prompt = (
-            f"{system}\n"
-            f"User query: {query}\n\n"
-        )
-        if trace_text:
-            prompt += f"Reasoning so far:\n{trace_text}\n\n"
-        if context_text:
-            prompt += f"Gathered context:\n{context_text}\n\n"
-        prompt += f"Step {step_number}: Provide your next THOUGHT and ACTION (or FINAL_ANSWER).\n"
-
         raw = await asyncio.to_thread(
-            self.decision_agent.decide,
-            query=query,
-            context=prompt,
+            self.decision_agent.reason,
+            query,
+            react_step_prompt(query, reasoning_trace, step_number),
+            react_system_prompt(self.tool_names(), self.max_steps),
+            call=REACT_STEP_CALL,
         )
 
         # Parse for FINAL_ANSWER
@@ -403,12 +385,13 @@ class ReactAgent:
         Execute the selected tool and return (observation_text, source_label).
         """
         start = time.perf_counter()
-        handler = self._tool_handlers.get(tool_name)
+        tool_names = self.tool_names()
+        handler = self._tool_handlers.get(tool_name) if tool_name in tool_names else None
 
         if handler is None:
             return (
                 f"[Error] Unknown tool '{tool_name}'. "
-                f"Available: {', '.join(self._tool_handlers.keys())}",
+                f"Available: {', '.join(tool_names)}",
                 None,
             )
 
@@ -432,13 +415,24 @@ class ReactAgent:
     def _build_tool_handlers(self) -> dict[str, Any]:
         """Build a mapping of tool-name → async handler callable."""
         handlers = {
-            "search_knowledge": self._handle_search_knowledge,
-            "extract_data": self._handle_extract_data,
-            "analyze_payments": self._handle_analyze_payments,
-            "calc": self._handle_calc,
-            "delegate": self._handle_delegate,
+            SEARCH_KNOWLEDGE: self._handle_search_knowledge,
+            EXTRACT_DATA: self._handle_extract_data,
+            ANALYZE_PAYMENTS: self._handle_analyze_payments,
+            CALC: self._handle_calc,
+            DELEGATE: self._handle_delegate,
         }
         return handlers
+
+    def tool_names(self) -> tuple[str, ...]:
+        try:
+            from agent_server.profiles import current_tools
+
+            identity_tools = current_tools.get()
+        except Exception:
+            identity_tools = None
+        if identity_tools is None:
+            return tuple(self._tool_handlers)
+        return tuple(name for name in identity_tools if name in self._tool_handlers)
 
     async def _handle_search_knowledge(
         self, args: list[str]

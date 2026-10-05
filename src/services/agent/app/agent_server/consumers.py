@@ -573,6 +573,7 @@ def _run_task(payload: dict, queue_type: str, correlation_id: str | None) -> Non
         current_agent_name,
         current_persona,
         current_step_emitter,
+        current_tools,
         get_profile_by_agent_id,
     )
 
@@ -594,6 +595,7 @@ def _run_task(payload: dict, queue_type: str, correlation_id: str | None) -> Non
     active_profile = get_profile_by_agent_id(assigned_agent_id)
     persona_token = current_persona.set(active_profile.system_prompt if active_profile else None)
     name_token = current_agent_name.set(active_profile.name if active_profile else None)
+    tools_token = current_tools.set(active_profile.tools if active_profile else None)
     emit_step = _OrderedStepSender(
         lambda event: server.send_step(
             event, conversation_id, task_id, assigned_agent_id=assigned_agent_id
@@ -671,6 +673,7 @@ def _run_task(payload: dict, queue_type: str, correlation_id: str | None) -> Non
         try:
             current_persona.reset(persona_token)
             current_agent_name.reset(name_token)
+            current_tools.reset(tools_token)
             current_step_emitter.reset(emitter_token)
         except (LookupError, ValueError):
             pass

@@ -36,6 +36,12 @@ from tasks.prompts import (
 logger = get_logger("task_tool_functions")
 tracer = trace.get_tracer(__name__)
 
+INTENT_CALL = "intent"
+PLAN_CALL = "plan"
+ANNOUNCE_CALL = "announce"
+REVIEW_CALL = "review"
+AGGREGATE_CALL = "aggregate"
+
 
 def build_action_list(actions_dict, agents_available, db: Session = None):
     """Resolve agent names to IDs and return ``(agent_id, input)`` tuples.
@@ -291,7 +297,7 @@ def decompose_task(user_input: str, db: Session = None):
 
     pretty_log("GENERATING DECOMPOSITION PLAN WITH LLM...", "🧠")
     prompt = get_decomposition_prompt(user_input, available_agents)
-    output = ask_llm(prompt, max_new_tokens=2048)
+    output = ask_llm(prompt, max_new_tokens=2048, call=PLAN_CALL)
     logger.debug(f"LLM decomposition raw output: {output}")
 
     output = clean_json_output(output)
@@ -403,7 +409,7 @@ def manager_announce_plan(
 
     try:
         prompt = get_manager_announcement_prompt(user_demand, steps)
-        text = ask_llm(prompt, max_new_tokens=256).strip()
+        text = ask_llm(prompt, max_new_tokens=256, call=ANNOUNCE_CALL).strip()
         # Strip markdown/code fences a small model sometimes adds despite
         # being told plain text.
         for fence in ("```text", "```markdown", "```"):
@@ -451,7 +457,7 @@ def manager_review_step(
             remaining_steps=remaining_view,
             available_agent_types=available_agent_types,
         )
-        raw = ask_llm(prompt, max_new_tokens=384)
+        raw = ask_llm(prompt, max_new_tokens=384, call=REVIEW_CALL)
         cleaned = clean_json_output(raw)
         parsed = json.loads(cleaned)
     except Exception as exc:
@@ -543,7 +549,7 @@ def choose_route_with_llm(user_input: str, db: Session) -> tuple[str | None, tup
 
     prompt = get_prompt(user_input, available_agents)
     logger.info("Calling ask_llm from select_agent_for_task...")
-    output = ask_llm(prompt, max_new_tokens=1024)
+    output = ask_llm(prompt, max_new_tokens=1024, call=INTENT_CALL)
     logger.info(f"Received LLM output (length: {len(output)}): {output[:100]}...")
 
     output = clean_json_output(output)
@@ -716,5 +722,5 @@ def aggregate_results(history, result):
     prompt = get_prompt_final_answer_generation(history, result)
     # The final synthesized briefing needs real room — 512 truncated multi-part
     # answers mid-section. _ask_vllm budgets this down to fit max_model_len.
-    output = ask_llm(prompt, max_new_tokens=3072)
+    output = ask_llm(prompt, max_new_tokens=3072, call=AGGREGATE_CALL)
     return output

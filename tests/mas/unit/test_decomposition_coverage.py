@@ -266,38 +266,38 @@ class TestPromptBuilders:
         msgs = P.get_prompt_final_answer_generation("orig request", "the result")
         assert msgs[0]["role"] == "system"
         assert "synthesizer" in msgs[0]["content"]
-        assert "orig request" in msgs[1]["content"]
+        assert "Address the original user request directly." in msgs[0]["content"]
         assert "the result" in msgs[1]["content"]
+        assert msgs[1]["content"].endswith("ORIGINAL USER REQUEST:\norig request")
 
     def test_router_prompt_lists_agents_and_renders_single_brace_schema(self):
         msgs = P.get_prompt("Q4 revenue?", self.AGENTS)
-        user = msgs[1]["content"]
-        assert "Researcher: finds facts" in user
-        assert '{\n      "classification"' in user
-        assert "{{" not in user and "}}" not in user
-        assert "COMPLEX_TASK" in msgs[0]["content"]
+        system = msgs[0]["content"]
+        assert "Researcher: finds facts" in system
+        assert '{\n  "classification"' in system
+        assert "{{" not in system and "}}" not in system
+        assert "COMPLEX_TASK" in system
+        assert msgs[1]["content"] == "USER INPUT:\nQ4 revenue?"
 
     def test_router_prompt_limits_direct_answer_to_greetings_small_talk_and_arithmetic(self):
-        msgs = P.get_prompt("hi", self.AGENTS)
-        system = msgs[0]["content"]
+        system = P.get_prompt("hi", self.AGENTS)[0]["content"]
         assert "trivial questions" not in system
+        assert "A factual question is NEVER DIRECT_ANSWER" in system
         assert "capital of Peru" in system
-        assert "capital of Peru" in msgs[1]["content"]
 
     def test_decomposition_prompt_normalises_dotted_enum_types(self):
         dotted = [("a1", "Researcher", "finds facts", "AgentType.RESEARCHER")]
         msgs = P.get_decomposition_prompt("do a thing", dotted)
-        user = msgs[1]["content"]
-        # "AgentType.RESEARCHER" -> "researcher" via split('.')[-1].lower()
-        assert "Type: researcher" in user
-        assert "do a thing" in user
-        assert '"sub_tasks": [' in user
-        assert "{{" not in user and "}}" not in user
+        system = msgs[0]["content"]
+        assert "Type: researcher" in system
+        assert '"sub_tasks": [' in system
+        assert "{{" not in system and "}}" not in system
+        assert msgs[1]["content"] == "USER INPUT:\ndo a thing"
 
     def test_decomposition_prompt_lowercases_plain_type(self):
         plain = [("a1", "Writer", "writes", "WRITER")]
-        user = P.get_decomposition_prompt("x", plain)[1]["content"]
-        assert "Type: writer" in user
+        system = P.get_decomposition_prompt("x", plain)[0]["content"]
+        assert "Type: writer" in system
 
     def test_manager_announcement_prompt_enumerates_steps(self):
         steps = [
@@ -308,8 +308,9 @@ class TestPromptBuilders:
         user = msgs[1]["content"]
         assert "1. researcher: gather data" in user
         assert "2. writer: draft report" in user
-        assert "build a report" in user
+        assert user.endswith("USER DEMAND:\nbuild a report")
         assert "Manager" in msgs[0]["content"]
+        assert "Plain text, no JSON, no code fences." in msgs[0]["content"]
 
     def test_manager_review_prompt_with_remaining_steps(self):
         steps = [{"agent_type": "writer", "description": "finish draft"}]
@@ -323,8 +324,10 @@ class TestPromptBuilders:
         assert "writer: finish draft" in user
         assert "researcher, writer" in user
         assert "so far so good" in user
-        assert '{"decision"' in user
-        assert "{{" not in user and "}}" not in user
+        assert user.endswith("USER DEMAND:\ndemand")
+        system = msgs[0]["content"]
+        assert '{"decision"' in system
+        assert "{{" not in system and "}}" not in system
 
     def test_manager_review_prompt_empty_remaining_and_types(self):
         msgs = P.get_manager_review_prompt(
@@ -337,6 +340,75 @@ class TestPromptBuilders:
         assert "none — this was the last planned step" in user
         # default agent type label when none supplied
         assert "general" in user
+
+
+ROSTER_WITH_IDS = [
+    ("agent-id-researcher", "Researcher", "finds facts", _Type.RESEARCHER),
+    ("agent-id-writer", "Writer", "writes prose", _Type.WRITER),
+    ("agent-id-general", "General", "answers anything", _Type.GENERAL),
+]
+
+PROMPT_BUILDERS = {
+    "intent": lambda request, agents: P.get_prompt(request, agents),
+    "plan": lambda request, agents: P.get_decomposition_prompt(request, agents),
+    "aggregate": lambda request, _agents: P.get_prompt_final_answer_generation(
+        request, f"Specialist output for: {request}"
+    ),
+    "announce": lambda request, _agents: P.get_manager_announcement_prompt(
+        request, [{"agent_type": "writer", "description": f"Draft: {request}"}]
+    ),
+    "review": lambda request, _agents: P.get_manager_review_prompt(
+        request,
+        f"[Step 1] Researcher found facts for {request}",
+        [{"agent_type": "writer", "description": f"Draft: {request}"}],
+        ["researcher", "writer"],
+    ),
+}
+
+
+class TestFixedPromptPrefix:
+    @pytest.mark.parametrize("call", sorted(PROMPT_BUILDERS))
+    def test_the_system_message_is_byte_identical_across_requests_and_roster_orders(self, call):
+        build = PROMPT_BUILDERS[call]
+
+        first = build("What was Q4 2025 revenue?", ROSTER_WITH_IDS)
+        second = build("How many vacation days carry over?", list(reversed(ROSTER_WITH_IDS)))
+
+        assert first[0]["role"] == "system"
+        assert first[0]["content"].encode("utf-8") == second[0]["content"].encode("utf-8")
+        assert "Q4 2025 revenue" not in first[0]["content"]
+        assert all(agent_id not in first[0]["content"] for agent_id, *_ in ROSTER_WITH_IDS)
+
+    @pytest.mark.parametrize("call", sorted(PROMPT_BUILDERS))
+    def test_the_request_closes_the_user_message(self, call):
+        messages = PROMPT_BUILDERS[call]("What was Q4 2025 revenue?", ROSTER_WITH_IDS)
+
+        assert [message["role"] for message in messages] == ["system", "user"]
+        assert messages[1]["content"].endswith("What was Q4 2025 revenue?")
+
+    @pytest.mark.parametrize(
+        ("run", "expected"),
+        [
+            (lambda: D.aggregate_results("history", "result"), "aggregate"),
+            (lambda: D.decompose_task("Compare revenue and leave", FakeDB()), "plan"),
+            (lambda: D.choose_route_with_llm("What was revenue?", FakeDB()), "intent"),
+            (lambda: D.manager_review_step("d", "t", [], ["writer"], FakeDB()), "review"),
+        ],
+        ids=["aggregate", "plan", "intent", "review"],
+    )
+    def test_each_llm_call_names_its_prompt_for_the_token_metrics(self, monkeypatch, run, expected):
+        calls = []
+
+        def _fake(prompt, **kwargs):
+            calls.append(kwargs.get("call"))
+            return "{}"
+
+        monkeypatch.setattr(D, "ask_llm", _fake)
+        monkeypatch.setattr(D, "get_available_agents", lambda db: ROSTER_WITH_IDS)
+        monkeypatch.setattr(D, "_heuristic_decompose", lambda user_input, db: (None, []))
+        run()
+
+        assert calls == [expected]
 
 
 # ========================= build_action_list ============================== #
@@ -573,7 +645,7 @@ class TestDecomposeTask:
         prompts = _capture_llm_prompts(monkeypatch, json.dumps(GOOD_PLAN))
         D.decompose_task("complex request", FakeDB())
         rendered = _rendered_text(prompts[0])
-        assert '{\n      "sub_tasks": [\n        {\n          "id": "1"' in rendered
+        assert '{\n  "sub_tasks": [\n    {\n      "id": "1"' in rendered
         assert "{{" not in rendered and "}}" not in rendered
 
 
@@ -1080,8 +1152,8 @@ class TestDirectAnswerPostCheck:
         )
         D.select_agent_for_task("hello", FakeDB())
         rendered = _rendered_text(prompts[0])
-        assert '{\n      "classification": "DIRECT_ANSWER" | "SINGLE_AGENT"' in rendered
-        assert '"final_answer": "<answer_if_DIRECT_ANSWER>"\n    }' in rendered
+        assert '{\n  "classification": "DIRECT_ANSWER" | "SINGLE_AGENT"' in rendered
+        assert '"final_answer": "<answer_if_DIRECT_ANSWER>"\n}' in rendered
         assert "{{" not in rendered and "}}" not in rendered
 
 

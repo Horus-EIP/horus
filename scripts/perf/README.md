@@ -88,6 +88,23 @@ scenario. Both LLMs decode greedily (`do_sample=False`) so runs are deterministi
 > take minutes. Trim with `--repeats`, `--concurrency 1,2`, `--gen-count`, and a
 > generous `--event-timeout` for a feasible baseline.
 
+#### Prompt tokens per call (`prompt-tokens.py`)
+
+The agent and MAS record the prompt tokens of every LLM call in `agent_llm_prompt_tokens{call,source}` and `mas_llm_prompt_tokens{call,source}` (see "Prompt tokens" in the agent README and "LLM prompts" in the MAS README). `prompt-tokens.py` reads both `/metrics` endpoints (or saved files), prints the number of calls, the average prompt tokens and the calls over budget for each `call`, and exits with 1 when an average is over its budget. It needs only the standard library.
+
+```bash
+# before the run: save the counters, so only the run's calls are averaged
+python prompt-tokens.py --save results-archive/prompt-tokens-before
+
+# after the run
+python prompt-tokens.py --since results-archive/prompt-tokens-before --json results-archive/prompt-tokens.json
+
+# other hosts or budgets
+python prompt-tokens.py --agent http://localhost:8001/metrics/ --mas http://localhost:8000/metrics --agent-budget 3000
+```
+
+Exit codes: 0 every average is within its budget, 1 one is over, 2 no LLM call was recorded.
+
 ### Baseline Metrics
 
 Expected baseline performance targets:

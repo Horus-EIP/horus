@@ -36,3 +36,22 @@ class TestLatencyBuckets:
 
         assert sample(STORE_BUCKET, {"le": "30.0"}) == under_thirty_seconds
         assert sample(STORE_BUCKET, {"le": "60.0"}) == under_a_minute + 1
+
+
+class TestPromptTokenBuckets:
+    def test_a_prompt_lands_in_the_bucket_of_its_size(self):
+        labels = {"call": "answer", "source": "usage"}
+        under_4096 = sample("agent_llm_prompt_tokens_bucket", {**labels, "le": "4096.0"}) or 0.0
+        under_3072 = sample("agent_llm_prompt_tokens_bucket", {**labels, "le": "3072.0"}) or 0.0
+
+        metrics.llm_prompt_tokens.labels(**labels).observe(3600)
+
+        assert sample("agent_llm_prompt_tokens_bucket", {**labels, "le": "3072.0"}) == under_3072
+        assert sample("agent_llm_prompt_tokens_bucket", {**labels, "le": "4096.0"}) == under_4096 + 1
+
+    def test_the_buckets_reach_a_whole_chain_transcript(self):
+        metrics.llm_prompt_tokens.labels(call="answer", source="estimate")
+
+        assert sample(
+            "agent_llm_prompt_tokens_bucket", {"call": "answer", "source": "estimate", "le": "32768.0"}
+        ) is not None

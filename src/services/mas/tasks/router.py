@@ -309,12 +309,16 @@ def embedding_decision(
     )
 
 
+def prompt_roster(roster: Sequence[RosterAgent]) -> list[RosterAgent]:
+    return sorted(roster, key=lambda agent: (agent.name, agent.description))
+
+
 def llm_route_schema(roster: Sequence[RosterAgent]) -> dict:
     return {
         "type": "object",
         "properties": {
             "route": {"type": "string", "enum": [route.value for route in LLM_ROUTES]},
-            "agent": {"type": "string", "enum": [agent.name for agent in roster]},
+            "agent": {"type": "string", "enum": sorted({agent.name for agent in roster})},
         },
         "required": ["route", "agent"],
         "additionalProperties": False,
@@ -322,7 +326,7 @@ def llm_route_schema(roster: Sequence[RosterAgent]) -> dict:
 
 
 def llm_route_messages(question: str, roster: Sequence[RosterAgent]) -> list[dict]:
-    agents_block = "\n".join(_roster_line(agent) for agent in roster)
+    agents_block = "\n".join(_roster_line(agent) for agent in prompt_roster(roster))
     return [
         {
             "role": "system",

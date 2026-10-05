@@ -129,6 +129,7 @@ All configuration is loaded from environment variables. A reference file is loca
 | `ROUTER_MIN_SCORE`     | Embedding stage: lowest agent score that may decide a route | `0.40` |
 | `ROUTER_MIN_MARGIN`    | Embedding stage: lowest lead of the best agent over the next one | `0.10` |
 | `ROUTER_LLM_MAX_TOKENS` | Token budget of the constrained LLM routing call | `32` |
+| `LLM_PROMPT_TOKEN_BUDGET` | Prompt tokens one orchestrator LLM call may use before it logs a warning and counts in `mas_llm_prompts_over_budget_total` | `4096` |
 | `MAS_EMBED_THREADS`    | Threads of the MiniLM embedder's ONNX Runtime session. Unset, the embedder takes `LLM_TORCH_INTRAOP_THREADS` (the installer's thread budget for MAS, 1 on the CPU profiles), and without either onnxruntime chooses | unset |
 | `FASTEMBED_CACHE_PATH` | Where FastEmbed keeps the ONNX model. The image sets `/app/models/fastembed` and downloads the model there at build time | FastEmbed's default (a temp folder) |
 
@@ -173,6 +174,31 @@ Measured on 2026-10-05 (AMD Ryzen AI 9 HX 370, Windows 11, rules and embeddings,
 An agent reports `completed` (with the `sources` it cites), `not_found` (the passages did not contain the answer) or `failed` with a `reason` on `POST /tasks/task-result/` (see "Answer contract" in the agent README). MAS keeps the dispatch payload of every task it publishes in Redis (`horus:task:{task_id}:dispatch`, 24 h, without an auto-created agent's API key; a task with inline files keeps none, since their content is not kept). On a first `not_found` or `failed` MAS asks the same agent once more, under the same task id, with `attempt: 2` and another retrieval query: the user's own question for a step of a chain, otherwise the request without its filler words ("What was the Q4 2025 revenue?" becomes "Q4 2025 revenue"). It clears the task's claim, adds the first answer to the task's history with its status, and sends a `task_status` event `retrying` whose `detail` says why. A `failed` answer with no other query is tried once more as it was; a `not_found` one is not. A timeout is never tried again (it would wait as long a second time), and neither is a task whose request was cancelled.
 
 When the second attempt is `not_found` too, or there is nothing to try, the task completes with "The documents don't contain this information." and no sources; when it fails again, the task fails as before. The answer's sources are stored in `task_results.sources` and `messages.sources` (migration `c3f9a7e1d5b2`), sent in the `result` event and returned by `GET /tasks/{task_id}` and the conversation history. A chain's final answer keeps every source of its steps, each `chunk_id` once (a source without one, such as an attached file, once per document), in the order they were first cited.
+
+## LLM prompts
+
+Every orchestrator prompt (`tasks/prompts.py`, `tasks/router.py`) is a system message that holds everything fixed, followed by a user message that holds what changes, the request last, so llama-server's prompt cache reuses the start of the previous prompt:
+
+| Call (`call` label) | System message | User message |
+|---|---|---|
+| `task_route` (router fallback, B-92) | routing rules, then the live agents sorted by name | the question |
+| `intent` (full LLM router) | routing rules and JSON schema, then the live agents sorted by name | `USER INPUT:` and the request |
+| `plan` (planner) | planning rules and JSON schema, then the live agent types sorted by name | `USER INPUT:` and the request |
+| `announce` (Manager plan message) | the Manager's instructions | the planned steps, then the user demand |
+| `review` (Manager review after a step) | the review rules and JSON schema | the chain transcript, the remaining steps, the agent types, then the user demand |
+| `aggregate` (chain synthesis) | the synthesis instructions | the specialists' output, then the original request |
+
+No system message holds a timestamp, an id or the request. The agents are sorted because the database returns them in no fixed order (a heartbeat rewrites a row), which changed the system message, and the `agent` enum of the routing schema, from one call to the next; `tests/mas/unit/test_router.py` and `tests/mas/unit/test_decomposition_coverage.py` check that two requests with the roster in two orders send byte-identical system messages.
+
+Every call logs `LLM prompt tokens` with `call`, `prompt_tokens`, `source` and `budget`, and observes the histogram `mas_llm_prompt_tokens{call,source}` (the "MAS Prompt Tokens per Call" panel on `/admin/metrics` divides its sum by its count). `source` is `usage` (`usage.prompt_tokens` of the llama-server or vLLM response), `tokenizer` (the tokenized prompt of the in-process router) or `estimate` (one token per 3 characters when a server sends no usage). A prompt longer than `LLM_PROMPT_TOKEN_BUDGET` tokens (default 4096) logs a warning and counts in `mas_llm_prompts_over_budget_total{call}`. To measure the average prompt per call of a run against the budget, save the agent's and MAS's metrics before it and compare after it:
+
+```bash
+python scripts/perf/prompt-tokens.py --save /tmp/before
+# run the questions
+python scripts/perf/prompt-tokens.py --since /tmp/before --json prompt-tokens.json
+```
+
+The script prints the calls, the average prompt tokens and the calls over budget for every `call` of both services and exits with 1 when an average is over its budget (`--agent-budget`, `--mas-budget`, default 4096).
 
 ## Local Development
 

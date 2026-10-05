@@ -851,8 +851,12 @@ FINAL_ANSWER: <answer with [Source: <origin>] citations>
 
 ### 2. Tool registry
 
-The ReAct agent can call five tools. They are registered at agent
-construction time and injected into the system prompt:
+The ReAct agent knows five tools (`ai_agents/agent_tools.py`). Each agent
+identity offers at most five of them (`agent_server/profiles.py`, see
+"Agent identities" in the agent README): the system prompt describes only
+the tools of the identity that owns the task, and a call to any other tool
+gets an "Unknown tool" observation. A request with no identity bound (a
+delegation) is offered all five.
 
 | Tool | Signature | Purpose |
 |------|-----------|---------|
@@ -864,6 +868,14 @@ construction time and injected into the system prompt:
 
 Each tool call returns an **observation** string plus an optional **source**
 identifier that is appended to the final answer's citation list.
+
+Each step sends the identity's system prompt, then the ReAct format with
+the tool definitions, as the system message, which stays byte-identical
+from one step to the next; the user message holds the query, the
+reasoning so far (thoughts, actions and observations, each observation
+once) and the step line. A step only adds to the reasoning of the step
+before it, so llama-server's prompt cache reuses the earlier prompt up to
+its step line.
 
 ### 3. Step limit and timeout
 
@@ -902,8 +914,10 @@ continues. This is how multi-agent coordination is implemented without
 any centralized planner — each agent is a peer.
 
 Incoming delegation context (when this agent is the *callee*) is
-threaded through `_incoming_delegation_context` and rendered into the
-system prompt so the callee can see what was already tried upstream.
+written at the start of the request, in the user message (the system
+message stays fixed), so the callee can see what was already tried
+upstream; `_incoming_delegation_context` passes it on to any further
+delegation.
 
 ### 6. Failure modes
 

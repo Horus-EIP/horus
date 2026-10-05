@@ -254,14 +254,25 @@ class TestSchemaAndPrompt:
         assert response_format["json_schema"]["strict"] is True
         assert response_format["json_schema"]["schema"] == answer_schema(["S1"])
 
-    def test_the_prompt_keeps_the_rules_first_and_the_passages_last(self):
+    def test_the_prompt_keeps_the_rules_first_and_the_passages_then_the_request_last(self):
         system, user = answer_prompt("What was Q4 revenue?", "[S1] Q4.md\nRevenue $4.2M.", ["S1"])
 
         assert '"sources": ["S1"]' in system
         assert "not_found" in system
-        assert user.startswith("Request: What was Q4 revenue?")
-        assert "Passages:\n[S1] Q4.md\nRevenue $4.2M." in user
-        assert user.endswith("Answer this request with the JSON object: What was Q4 revenue?")
+        assert user == "Passages:\n[S1] Q4.md\nRevenue $4.2M.\n\nRequest: What was Q4 revenue?"
+
+    def test_the_request_is_written_once(self):
+        _, user = answer_prompt("Summarise the travel policy", "[S1] Travel.md\nFly economy.", ["S1"])
+
+        assert user.count("Summarise the travel policy") == 1
+
+    @pytest.mark.parametrize("labels", [["S1"], []])
+    def test_the_rules_do_not_depend_on_the_request_or_the_passages(self, labels):
+        first, _ = answer_prompt("What was Q4 revenue?", "[S1] Q4.md\nRevenue $4.2M.", labels)
+        second, _ = answer_prompt("Who approves leave?", "[S1] HR.md\nYour manager.", labels)
+
+        assert first.encode("utf-8") == second.encode("utf-8")
+        assert "Q4" not in first and "leave" not in first
 
     def test_the_prompt_caps_the_passages(self, monkeypatch):
         monkeypatch.setenv("AGENT_MAX_CONTEXT_CHARS", "6000")

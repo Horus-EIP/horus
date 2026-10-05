@@ -346,8 +346,8 @@ class TestConstrainedLlm:
 
         assert schema["properties"]["route"]["enum"] == ["SINGLE_AGENT", "COMPLEX_TASK"]
         assert schema["properties"]["agent"]["enum"] == [
-            "Finance-Analyst",
             "Compliance-Officer",
+            "Finance-Analyst",
             "HR-Assistant",
         ]
         assert schema["required"] == ["route", "agent"]
@@ -358,6 +358,18 @@ class TestConstrainedLlm:
 
         assert "- Finance-Analyst: Finance." in system["content"]
         assert user == {"role": "user", "content": "Who approves a $4,000 purchase?"}
+
+    def test_the_system_message_is_the_same_whatever_the_question_and_roster_order(self):
+        reordered = (HR, FINANCE, COMPLIANCE)
+
+        first, _ = llm_route_messages("Who approves a $4,000 purchase?", ROSTER)
+        second, _ = llm_route_messages("How many vacation days carry over?", reordered)
+
+        assert first == second
+        assert all(agent.agent_id not in first["content"] for agent in ROSTER)
+
+    def test_the_schema_is_the_same_whatever_the_roster_order(self):
+        assert llm_route_schema((HR, FINANCE, COMPLIANCE)) == llm_route_schema(ROSTER)
 
     def test_a_very_long_question_is_cut_before_it_reaches_the_llm(self):
         _system, user = llm_route_messages("x" * 50_000, ROSTER)
