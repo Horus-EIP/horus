@@ -30,26 +30,26 @@ Fixes for what the ATP beta testers hit. Not tagged yet: the tag waits for the s
 
 ### Fixed
 
-- **F25** `/tasks/new` and the chat file picker no longer crash when two knowledge-store documents share a filename: each document is picked by id, and same-named copies are labelled with their upload time and size. Regression test: `web/__tests__/file-attachments.test.tsx` "regression F25 duplicate knowledge-store file names", plus `tests/mas/api/test_tasks_routes_coverage.py::TestAttachedKnowledgeStoreRefs::test_f25_same_name_documents_dispatch_with_their_doc_ids` (`6db6bcc`)
-- **F28** Task stats count top-level tasks only, so Total Tasks matches the Recent tasks list; the always-zero `timeout` count is gone. Regression test: `tests/mas/api/test_tasks_routes_coverage.py::TestQueueStatsHelper::test_f28_queue_stats_count_root_tasks_not_subtasks` (`0908680`)
-- **F7** Back after logout no longer restores the logged-in view: logout goes through the auth context, the login redirect replaces the history entry, and a page restored from the back-forward cache checks the session again. Regression test: `web/__tests__/navbar-logout.test.tsx` "regression F7 navbar logout" and "regression F7 back-forward cache restore" (`2cb874b`)
-- **F20** Factual questions such as "What is the capital of Peru?" are no longer answered without retrieval: only greetings, small talk and arithmetic stay DIRECT_ANSWER, and a code post-check sends anything else to an agent. The router, planner and review prompts no longer show the model doubled braces. Test: `tests/mas/unit/test_decomposition_coverage.py::TestDirectAnswerPostCheck::test_f20_capital_of_peru_is_rerouted_to_single_agent` (`31b0e9d`)
-- **F15** Deleting a document removes its stored file and every entry built from the same corpus file, and a later corpus scan does not add it back. `POST /corpus/scan?include_deleted=true` brings deleted files back on purpose. Test: `tests/knowledge_store/api/test_store_routes.py::TestStoreDelete::test_deleted_document_is_absent_from_later_queries` (`76fcb9c`)
-- **Tek3 R18** Agent answers and streamed tokens are NFKC-normalised, so "Ｑ４ ２０２５ $4。2M" reads "Q4 2025 $4.2M" (`8847dbc`)
-- **F1/T5** The installer pulls images one at a time and retries each up to 3 times. When Docker cancels a start because a service is still downloading its model, the installer waits for it to become healthy and starts the rest, instead of exiting with code 42. `docker compose config` output, which holds `.env` secrets, is kept out of `install-log.txt` (`b4b0ca7`)
+- **F25** `/tasks/new` and the chat file picker no longer crash when two knowledge-store documents share a filename: each document is picked by id, and same-named copies are labelled with their upload time and size. Regression test: `web/__tests__/file-attachments.test.tsx` "regression F25 duplicate knowledge-store file names", plus `tests/mas/api/test_tasks_routes_coverage.py::TestAttachedKnowledgeStoreRefs::test_f25_same_name_documents_dispatch_with_their_doc_ids` (`0b93375`)
+- **F28** Task stats count top-level tasks only, so Total Tasks matches the Recent tasks list; the always-zero `timeout` count is gone. Regression test: `tests/mas/api/test_tasks_routes_coverage.py::TestQueueStatsHelper::test_f28_queue_stats_count_root_tasks_not_subtasks` (`ff82920`)
+- **F7** Back after logout no longer restores the logged-in view: logout goes through the auth context, the login redirect replaces the history entry, and a page restored from the back-forward cache checks the session again. Regression test: `web/__tests__/navbar-logout.test.tsx` "regression F7 navbar logout" and "regression F7 back-forward cache restore" (`905cedb`)
+- **F20** Factual questions such as "What is the capital of Peru?" are no longer answered without retrieval: only greetings, small talk and arithmetic stay DIRECT_ANSWER, and a code post-check sends anything else to an agent. The router, planner and review prompts no longer show the model doubled braces. Test: `tests/mas/unit/test_decomposition_coverage.py::TestDirectAnswerPostCheck::test_f20_capital_of_peru_is_rerouted_to_single_agent` (`5ed7a61`)
+- **F15** Deleting a document removes its stored file and every entry built from the same corpus file, and a later corpus scan does not add it back. `POST /corpus/scan?include_deleted=true` brings deleted files back on purpose. Test: `tests/knowledge_store/api/test_store_routes.py::TestStoreDelete::test_deleted_document_is_absent_from_later_queries` (`3e4e54a`)
+- **Tek3 R18** Agent answers and streamed tokens are NFKC-normalised, so "Ｑ４ ２０２５ $4。2M" reads "Q4 2025 $4.2M" (`a0c0ec5`)
+- **F1/T5** The installer pulls images one at a time and retries each up to 3 times. When Docker cancels a start because a service is still downloading its model, the installer waits for it to become healthy and starts the rest, instead of exiting with code 42. `docker compose config` output, which holds `.env` secrets, is kept out of `install-log.txt` (`78bb12e`)
 
 ### Added
 
-- **F13/F14** Search field and category filter on the Knowledge Store page; `GET /categories` and `GET /file` use the same `general` label for documents without a category (`86eacdc`)
-- Healthchecks for the agent (new unauthenticated `GET /health`), the knowledge store and the web client (new `GET /api/health`); dependents wait for `service_healthy` (B-59, `0d397da`)
-- One version number: `VERSION` at the repository root feeds the installer, the bundle name, the services' `/health` and OpenAPI version, the web client and the desktop shell; `scripts/ci/check-versions.py` fails CI when a copy differs (B-51, `d136093`)
-- 100-question evaluation set on `demo_assets/` (`tests/eval/testset.yaml`) and `scripts/eval/run-eval.py`, which writes `benchmarks/<label>-<date>.json` (B-54, `7f0e74c`)
+- **F13/F14** Search field and category filter on the Knowledge Store page; `GET /categories` and `GET /file` use the same `general` label for documents without a category (`c2b3184`)
+- Healthchecks for the agent (new unauthenticated `GET /health`), the knowledge store and the web client (new `GET /api/health`); dependents wait for `service_healthy` (B-59, `8d1da93`)
+- One version number: `VERSION` at the repository root feeds the installer, the bundle name, the services' `/health` and OpenAPI version, the web client and the desktop shell; `scripts/ci/check-versions.py` fails CI when a copy differs (B-51, `2cdc325`)
+- 100-question evaluation set on `demo_assets/` (`tests/eval/testset.yaml`) and `scripts/eval/run-eval.py`, which writes `benchmarks/<label>-<date>.json` (B-54, `084a1c2`)
 
 ### Changed
 
-- The first-install time is given as 1.5 to 2 hours everywhere, the figure the beta testers measured (`b4b0ca7`)
-- Task attachments carry an optional `doc_id` next to the filename; filename-only requests work as before (`6db6bcc`)
-- `DELETE /{id}` on the knowledge store returns `deleted_ids` and `removed_files`, and answers 404 for an unknown id (`76fcb9c`)
+- The first-install time is given as 1.5 to 2 hours everywhere, the figure the beta testers measured (`78bb12e`)
+- Task attachments carry an optional `doc_id` next to the filename; filename-only requests work as before (`0b93375`)
+- `DELETE /{id}` on the knowledge store returns `deleted_ids` and `removed_files`, and answers 404 for an unknown id (`3e4e54a`)
 
 
 ## 0.1.1 - 2026-09-07
