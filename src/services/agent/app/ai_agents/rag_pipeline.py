@@ -13,9 +13,10 @@ import os
 from typing import Any
 
 from ai_agents.calculator_tool import CalculatorTool
-from ai_agents.decision_making_agent import DecisionMakingAgent
+from ai_agents.decision_making_agent import DecisionMakingAgent, _max_context_chars
 from ai_agents.file_parser_tool import FileParserTool
 from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
+from ai_agents.knowledge_store_client import format_passages
 from ai_agents.step_emitter import emit_step
 from ai_agents.summarizer_tool import SummarizerTool
 from ai_agents.tool_registry import ToolRegistry
@@ -29,6 +30,9 @@ from ai_agents.payment_analyzer_tool import PaymentAnalyzerTool  # noqa: E402
 # chars), so anything longer is silently dropped by the embedder anyway — and a
 # long chain transcript embeds mostly front-matter, not the actual task.
 _RETRIEVAL_QUERY_CHAR_CAP = 2000
+
+_ONE_PASSAGE_CHARS = 1100
+_OTHER_PASSAGES_HEADER = "--- Other Knowledge Store Passages ---"
 
 # Wall-clock budget for a single decide() call. This, not TASK_TIMEOUT, is what
 # actually bounds a chat answer, and on expiry the pipeline returns a canned
@@ -111,6 +115,7 @@ class RAGPipeline:
         query: str,
         retrieval_query: str | None = None,
         attached_context: str | None = None,
+        attached_files: list[dict[str, Any]] | None = None,
     ) -> str:
         """
         Generate a response by retrieving and processing data (async).
@@ -132,19 +137,27 @@ class RAGPipeline:
         from ai_agents.response_cache import current_corpus_version, get_cached, set_cached
 
         corpus_version = await current_corpus_version()
+        rquery = retrieval_query or query
+        if len(rquery) > _RETRIEVAL_QUERY_CHAR_CAP:
+            rquery = rquery[:_RETRIEVAL_QUERY_CHAR_CAP]
         if attached_context:
+            attached = attached_files or []
+            others = await self._passages_beside_attachments(rquery, attached_context, attached)
             emit_step(
                 "retrieval.results",
                 "Using the attached files",
-                "Answering from the files attached to this task; the knowledge "
-                "store was not searched again.",
+                (
+                    "Answering from the files attached to this task, followed by the "
+                    "knowledge-store passages from other documents."
+                    if others
+                    else "Answering from the files attached to this task."
+                ),
                 source="attached_files",
+                chunk_count=len(attached),
+                chunks=[f.get("filename") for f in attached if f.get("filename")],
             )
-            context_text = attached_context
+            context_text = f"{attached_context}\n{others}" if others else attached_context
         else:
-            rquery = retrieval_query or query
-            if len(rquery) > _RETRIEVAL_QUERY_CHAR_CAP:
-                rquery = rquery[:_RETRIEVAL_QUERY_CHAR_CAP]
             data = await self.retrieval_agent.fetch(rquery)
             context_text = data.get("data", "")
 
@@ -189,6 +202,29 @@ class RAGPipeline:
 
         await set_cached(query, context_text, corpus_version, insight)
         return insight
+
+    async def _passages_beside_attachments(
+        self, query: str, attached_context: str, attached_files: list[dict[str, Any]]
+    ) -> str:
+        if _max_context_chars() - len(attached_context) < _ONE_PASSAGE_CHARS:
+            return ""
+        try:
+            data = await self.retrieval_agent.fetch(query)
+        except Exception as exc:
+            logger.warning("Retrieval beside the attached files failed: %s", exc)
+            return ""
+        passages = data.get("passages") if isinstance(data, dict) else None
+        attached_ids = {str(f["doc_id"]) for f in attached_files if f.get("doc_id")}
+        attached_names = {f["filename"] for f in attached_files if f.get("filename")}
+        others = [
+            passage for passage in passages or []
+            if isinstance(passage, dict)
+            and passage.get("doc_id") not in attached_ids
+            and passage.get("title") not in attached_names
+        ]
+        if not others:
+            return ""
+        return f"{_OTHER_PASSAGES_HEADER}\n{format_passages(others)}"
 
     async def generate_response_react(self, query: str) -> dict[str, Any]:
         """
@@ -264,8 +300,12 @@ class RAGPipeline:
         # Default single-shot mode
         attached_context = task.get("attached_context")
         if attached_context:
+            demand = task.get("demand") or query
             response_text = await self.generate_response(
-                task.get("demand") or query, attached_context=attached_context
+                demand,
+                retrieval_query=task.get("retrieval_query") or demand,
+                attached_context=attached_context,
+                attached_files=task.get("files") or [],
             )
         else:
             response_text = await self.generate_response(

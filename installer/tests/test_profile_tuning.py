@@ -206,11 +206,31 @@ class MemoryCeilings(unittest.TestCase):
         for key in MEMORY_KEYS:
             self.assertIn(key, profiles.MANAGED_KEYS)
 
+PASSAGE_PROMPT_CHARS = 1060
+AGENT_DEFAULT_CONTEXT_CHARS = 12000
+
 class ShorterCpuPrompts(unittest.TestCase):
-    def test_cpu_profiles_fetch_four_documents(self):
+    def test_cpu_profiles_fetch_five_passages(self):
         for name in CPU_PROFILES:
             with self.subTest(name):
-                self.assertEqual(profiles.env_for(name)["KNOWLEDGE_STORE_N_RESULTS"], "4")
+                self.assertEqual(profiles.env_for(name)["KNOWLEDGE_STORE_N_RESULTS"], "5")
+
+    def test_every_profile_fits_its_passages_whole_under_the_context_cap(self):
+        for name in profiles.PROFILE_ORDER:
+            with self.subTest(name):
+                env = profiles.env_for(name)
+                cap = int(env.get("AGENT_MAX_CONTEXT_CHARS", AGENT_DEFAULT_CONTEXT_CHARS))
+                passages = int(env["KNOWLEDGE_STORE_N_RESULTS"])
+                self.assertLessEqual(passages * PASSAGE_PROMPT_CHARS, cap)
+
+    def test_cpu_profiles_fetch_as_many_passages_as_their_cap_holds(self):
+        for name in CPU_PROFILES:
+            with self.subTest(name):
+                env = profiles.env_for(name)
+                passages = int(env["KNOWLEDGE_STORE_N_RESULTS"])
+                self.assertGreater(
+                    (passages + 1) * PASSAGE_PROMPT_CHARS, int(env["AGENT_MAX_CONTEXT_CHARS"])
+                )
 
     def test_cpu_profiles_cap_the_retrieved_context_at_six_thousand_characters(self):
         for name in CPU_PROFILES:
@@ -222,7 +242,7 @@ class ShorterCpuPrompts(unittest.TestCase):
             with self.subTest(name):
                 self.assertEqual(profiles.env_for(name)["AGENT_STREAM_TOKENS"], "1")
 
-    def test_gpu_profiles_keep_ten_documents_and_the_code_defaults(self):
+    def test_gpu_profiles_keep_ten_passages_and_the_code_defaults(self):
         for name in GPU_PROFILES:
             with self.subTest(name):
                 env = profiles.env_for(name)

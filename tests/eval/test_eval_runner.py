@@ -301,6 +301,33 @@ class TestRetrieve:
         assert record["source_ranks"] == [5]
         assert record["source_correct_auto"] is False
 
+    def test_passages_count_once_per_document_at_their_best_rank(self, runner, monkeypatch, items):
+        item = next(i for i in items if i["id"] == "exp-01")
+        passages = [
+            ("doc-1:2", "doc-1", "1_Q4_2025_Financial_Report.md"),
+            ("doc-1:0", "doc-1", "1_Q4_2025_Financial_Report.md"),
+            ("doc-4:3", "doc-4", "4_Expense_Policy.md"),
+            ("doc-1:1", "doc-1", "1_Q4_2025_Financial_Report.md"),
+            ("doc-4:0", "doc-4", "4_Expense_Policy.md"),
+        ]
+        body = {
+            "ids": [[chunk_id for chunk_id, _doc, _title in passages]],
+            "metadatas": [[
+                {"doc_id": doc_id, "title": title, "chunk_index": int(chunk_id[-1])}
+                for chunk_id, doc_id, title in passages
+            ]],
+        }
+        self.patch_client(monkeypatch, lambda request: httpx.Response(200, json=body))
+        record = question_record(item, runner.retrieve("http://ks:8080", item["question"], 50))
+        assert record["retrieved_sources"] == [
+            ["1_Q4_2025_Financial_Report.md", "4_Expense_Policy.md"]
+        ]
+        assert record["source_ranks"] == [2]
+
+    def test_the_default_depth_reaches_every_passage_of_the_demo_corpus(self, runner):
+        args = runner.build_parser().parse_args(["--label", "x", "--mode", "retrieval"])
+        assert args.top_k >= 22
+
     def test_no_results_is_an_empty_ranking(self, runner, monkeypatch):
         self.patch_client(monkeypatch, lambda request: httpx.Response(404, json={"error": "none"}))
         outcome = runner.retrieve("http://ks:8080", "anything", 10)

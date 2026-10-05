@@ -11,6 +11,7 @@ runs when you invoke pytest with ``-m requires_stack``.
 
 from __future__ import annotations
 
+import math
 import os
 import sys
 import types
@@ -112,16 +113,69 @@ def _metadata_matches(metadata: dict, where: dict | None) -> bool:
             return False
         if operator == "$in" and value not in expected:
             return False
+        if operator in _COMPARISONS and (value is None or not _COMPARISONS[operator](value, expected)):
+            return False
     return True
+
+
+_COMPARISONS = {
+    "$gt": lambda value, expected: value > expected,
+    "$gte": lambda value, expected: value >= expected,
+    "$lt": lambda value, expected: value < expected,
+    "$lte": lambda value, expected: value <= expected,
+}
+
+
+def _as_vector(value) -> list[float] | None:
+    if isinstance(value, (list, tuple)) and all(isinstance(x, (int, float)) for x in value):
+        return [float(x) for x in value]
+    return None
+
+
+def _cosine(left: list[float] | None, right: list[float] | None) -> float:
+    if not left or not right or len(left) != len(right):
+        return 0.0
+    norm = math.sqrt(sum(x * x for x in left)) * math.sqrt(sum(y * y for y in right))
+    return sum(x * y for x, y in zip(left, right, strict=True)) / norm if norm else 0.0
 
 
 class FakeChromaCollection:
     def __init__(self):
         self.rows: dict[str, tuple[str, dict]] = {}
+        self.vectors: dict[str, list[float]] = {}
 
     def add(self, ids, documents, metadatas, embeddings=None):
-        for entry_id, document, metadata in zip(ids, documents, metadatas, strict=True):
+        if len(set(ids)) != len(ids):
+            raise ValueError("Expected IDs to be unique")
+        vectors = embeddings if isinstance(embeddings, list) else [None] * len(ids)
+        for entry_id, document, metadata, vector in zip(
+            ids, documents, metadatas, vectors, strict=True
+        ):
             self.rows[entry_id] = (document, dict(metadata))
+            self._keep_vector(entry_id, vector)
+
+    def upsert(self, ids, documents, metadatas, embeddings=None):
+        self.add(ids=ids, documents=documents, metadatas=metadatas, embeddings=embeddings)
+
+    def update(self, ids, embeddings=None, metadatas=None, documents=None):
+        for index, entry_id in enumerate(ids):
+            if entry_id not in self.rows:
+                continue
+            document, metadata = self.rows[entry_id]
+            if documents is not None:
+                document = documents[index]
+            if metadatas is not None:
+                metadata = dict(metadatas[index])
+            self.rows[entry_id] = (document, metadata)
+            if isinstance(embeddings, list):
+                self._keep_vector(entry_id, embeddings[index])
+
+    def _keep_vector(self, entry_id, vector) -> None:
+        kept = _as_vector(vector)
+        if kept is None:
+            self.vectors.pop(entry_id, None)
+        else:
+            self.vectors[entry_id] = kept
 
     def _select(self, ids=None, where=None) -> list[str]:
         return [
@@ -129,8 +183,10 @@ class FakeChromaCollection:
             if (ids is None or entry_id in ids) and _metadata_matches(metadata, where)
         ]
 
-    def get(self, ids=None, where=None, include=None):
-        selected = self._select(ids, where)
+    def get(self, ids=None, where=None, include=None, limit=None, offset=None):
+        selected = self._select(ids, where)[offset or 0:]
+        if limit is not None:
+            selected = selected[:limit]
         return {
             "ids": selected,
             "documents": [self.rows[i][0] for i in selected],
@@ -138,12 +194,17 @@ class FakeChromaCollection:
         }
 
     def query(self, query_embeddings, n_results, include=None, where=None):
-        selected = self._select(where=where)[:n_results]
+        wanted = _as_vector(query_embeddings[0]) if query_embeddings else None
+        scored = sorted(
+            self._select(where=where),
+            key=lambda entry_id: -_cosine(wanted, self.vectors.get(entry_id)),
+        )
+        selected = scored[:n_results]
         return {
             "ids": [selected],
             "documents": [[self.rows[i][0] for i in selected]],
             "metadatas": [[dict(self.rows[i][1]) for i in selected]],
-            "distances": [[0.0 for _ in selected]],
+            "distances": [[1.0 - _cosine(wanted, self.vectors.get(i)) for i in selected]],
         }
 
     def delete(self, ids):
@@ -155,11 +216,11 @@ class FakeChromaCollection:
 
 @pytest.fixture
 def fake_collection(monkeypatch, tmp_path):
-    from app.api.routes import corpus, file, store  # noqa: PLC0415
+    from app.api.routes import corpus  # noqa: PLC0415
     from app.chroma_db.services import file_service  # noqa: PLC0415
 
     collection = FakeChromaCollection()
-    for module in (file_service, store, file, corpus):
+    for module in (file_service, corpus):
         monkeypatch.setattr(module, "knowledge_collection", collection)
     monkeypatch.chdir(tmp_path)
     return collection

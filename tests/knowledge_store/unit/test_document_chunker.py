@@ -1,125 +1,127 @@
-from unittest.mock import MagicMock, patch
-
 import pytest
 
-from app.services.document_chunker import DocumentChunker
+from app.services.document_chunker import DocumentChunker, TextChunk, page_of
 
 
-@pytest.fixture(autouse=False)
-def mock_spacy_chunker():
-    import app.services.document_chunker as chunker_mod
-    original_model = chunker_mod._nlp_model
-    chunker_mod._nlp_model = None
+def _sentences(count: int, width: int = 60) -> str:
+    return " ".join(f"Sentence {n} " + "x" * (width - 14) + "." for n in range(count))
 
-    with patch("app.services.document_chunker.spacy") as mock_spacy_lib:
-        nlp_mock = MagicMock()
-        mock_spacy_lib.load.return_value = nlp_mock
 
-        def nlp_side_effect(text):
-            doc = MagicMock()
-            raw_sents = [s.strip() for s in text.split('.') if s.strip()]
-            sents_mocks = []
-            for s in raw_sents:
-                m = MagicMock()
-                m.text = s + "."
-                sents_mocks.append(m)
-            doc.sents = sents_mocks
-            return doc
+def _covered(chunks: list[TextChunk]) -> set[int]:
+    return {i for chunk in chunks for i in range(chunk.char_start, chunk.char_end)}
 
-        nlp_mock.side_effect = nlp_side_effect
-        yield mock_spacy_lib
 
-    chunker_mod._nlp_model = original_model
+def _non_space(text: str) -> set[int]:
+    return {i for i, char in enumerate(text) if not char.isspace()}
 
-def test_chunk_document_basic(mock_spacy_chunker):
-    chunker = DocumentChunker(chunk_size=100, overlap=20)
-    text = "This is sentence one. This is sentence two. This is sentence three."
 
-    chunks = chunker.chunk_document(text)
-    assert isinstance(chunks, list)
-    assert len(chunks) == 1
-    assert "sentence one" in chunks[0]
+def test_defaults_are_a_thousand_characters_with_two_hundred_overlap():
+    chunker = DocumentChunker()
 
-def test_chunk_document_large(mock_spacy_chunker):
-    # chunk_size small to force split
-    chunker = DocumentChunker(chunk_size=20, overlap=5)
-    text = "Short one. Short two. Short three. Short four."
+    assert (chunker.chunk_size, chunker.overlap) == (1000, 200)
 
-    chunks = chunker.chunk_document(text)
+
+def test_a_short_text_is_one_chunk_with_its_offsets():
+    text = "  This is sentence one. This is sentence two.  "
+
+    chunks = DocumentChunker().split(text)
+
+    assert chunks == [TextChunk("This is sentence one. This is sentence two.", 2, 45)]
+
+
+def test_empty_or_blank_text_gives_no_chunks():
+    assert DocumentChunker().split("") == []
+    assert DocumentChunker().split(" \n\t ") == []
+
+
+def test_every_chunk_is_the_exact_slice_of_the_text_it_points_at():
+    text = _sentences(80)
+
+    chunks = DocumentChunker().split(text)
+
+    assert len(chunks) > 3
+    assert all(text[c.char_start:c.char_end] == c.text for c in chunks)
+
+
+def test_no_chunk_is_longer_than_the_chunk_size():
+    text = _sentences(80, width=170)
+
+    chunks = DocumentChunker(chunk_size=1000, overlap=200).split(text)
+
+    assert max(len(chunk.text) for chunk in chunks) <= 1000
+
+
+def test_consecutive_chunks_overlap_by_at_most_the_overlap():
+    text = _sentences(80)
+
+    chunks = DocumentChunker(chunk_size=1000, overlap=200).split(text)
+
+    for previous, following in zip(chunks, chunks[1:], strict=False):
+        shared = previous.char_end - following.char_start
+        assert 0 < shared <= 200
+
+
+def test_the_chunks_cover_every_sentence():
+    text = _sentences(80)
+
+    chunks = DocumentChunker().split(text)
+
+    assert _non_space(text) <= _covered(chunks)
+
+
+def test_a_sentence_longer_than_a_chunk_is_cut_between_words_with_overlap():
+    words = " ".join(f"word{n:04d}" for n in range(400))
+
+    chunks = DocumentChunker(chunk_size=1000, overlap=200).split(words)
+
+    assert len(chunks) >= 4
+    assert all(len(chunk.text) <= 1000 for chunk in chunks)
+    assert all(chunk.text.startswith("word") and chunk.text[-4:].isdigit() for chunk in chunks)
+    for previous, following in zip(chunks, chunks[1:], strict=False):
+        assert following.char_start < previous.char_end
+    assert _non_space(words) <= _covered(chunks)
+
+
+def test_line_breaks_end_a_sentence():
+    text = "# Heading\n- first item\n- second item"
+
+    chunker = DocumentChunker(chunk_size=20, overlap=0)
+
+    assert [chunk.text for chunk in chunker.split(text)] == [
+        "# Heading",
+        "- first item",
+        "- second item",
+    ]
+
+
+def test_without_overlap_chunks_do_not_share_text():
+    text = _sentences(40)
+
+    chunks = DocumentChunker(chunk_size=300, overlap=0).split(text)
+
     assert len(chunks) > 1
-    # Check overlap
-    # Overlap logic: last sentences of prev chunk inserted into new chunk.
-    # We won't assert exact overlap logic here without tracing exact implementation
-    # but we assert we have multiple chunks.
+    for previous, following in zip(chunks, chunks[1:], strict=False):
+        assert following.char_start >= previous.char_end
 
-def test_chunker_init_exception():
-    import app.services.document_chunker
-    # Reset global singleton to force reload attempt
-    original_model = app.services.document_chunker._nlp_model
-    app.services.document_chunker._nlp_model = None
 
-    try:
-        with patch("app.services.document_chunker.spacy.load", side_effect=OSError("Error")):
-            with pytest.raises(RuntimeError):
-                DocumentChunker()
-    finally:
-        app.services.document_chunker._nlp_model = original_model
+def test_chunk_document_returns_the_chunk_texts():
+    text = _sentences(40)
+    chunker = DocumentChunker(chunk_size=300, overlap=50)
 
-def test_compute_overlap_break():
-    with patch("app.services.document_chunker.spacy.load"):
-        # Overlap is 200 by default. chunk_size 1000.
-        chunker = DocumentChunker(overlap=10)
+    assert chunker.chunk_document(text) == [chunk.text for chunk in chunker.split(text)]
 
-        # Sentences to overlap.
-        # "Short" (5), "Short" (5). Total 10.
-        # If we add another "Longer one", it might break.
 
-        # Logic:
-        # for sentence in reversed(sentences):
-        #   if len(sentence) + current_overlap > self.overlap: break
+@pytest.mark.parametrize(("chunk_size", "overlap"), [(0, 0), (100, 100), (100, -1)])
+def test_invalid_sizes_are_refused(chunk_size, overlap):
+    with pytest.raises(ValueError):
+        DocumentChunker(chunk_size=chunk_size, overlap=overlap)
 
-        s1 = "A" * 5
-        s2 = "B" * 6  # 5+6 = 11 > 10. Should break after s1? No, reversed.
 
-        # reversed: s2, s1.
-        # s2: len 6. current 0. 6 <= 10. OK. overlap=["BBBBBB"], current=6.
-        # s1: len 5. current 6. 11 > 10. Break.
+class TestPageOf:
+    def test_a_position_maps_to_the_page_it_falls_on(self):
+        starts = (0, 100, 250)
 
-        overlap_sentences = chunker._compute_overlap([s1, s2])
-        assert len(overlap_sentences) == 1
-        assert overlap_sentences[0] == s2
+        assert [page_of(at, starts) for at in (0, 99, 100, 249, 250, 999)] == [1, 1, 2, 2, 3, 3]
 
-def test_text_divider_empty_sentence():
-    with patch("app.services.document_chunker.spacy.load"):
-        chunker = DocumentChunker()
-        doc = MagicMock()
-
-        s1 = MagicMock(); s1.text = "Valid."
-        s2 = MagicMock(); s2.text = "\n  \n" # Empty after strip
-        s3 = MagicMock(); s3.text = "Also valid."
-
-        doc.sents = [s1, s2, s3]
-
-        chunks = chunker._text_divider(doc)
-        # Should ignore s2
-        assert len(chunks) == 1 # Depending on size
-        assert "Valid. Also valid." in chunks[0]
-
-def test_text_divider_split():
-    with patch("app.services.document_chunker.spacy.load"):
-        chunker = DocumentChunker(chunk_size=10, overlap=0)
-        doc = MagicMock()
-
-        # "Five." (5)
-        # "Five." (5) -> Total 10. OK.
-        # "Five." (5) -> Total 15 > 10. Split.
-
-        s1 = MagicMock(); s1.text = "Five."
-        s2 = MagicMock(); s2.text = "Five."
-        s3 = MagicMock(); s3.text = "Sixxxx."
-
-        doc.sents = [s1, s2, s3]
-
-        chunks = chunker._text_divider(doc)
-        # Should contain at least 2 chunks
-        assert len(chunks) >= 2
+    def test_no_page_starts_means_the_page_is_unknown(self):
+        assert page_of(10, ()) is None

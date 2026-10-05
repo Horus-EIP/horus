@@ -94,7 +94,7 @@ class TestCorpusScanAfterDelete:
         restored = await _scan(corpus_root, "reports/q4.md", include_deleted=True)
 
         assert _decision(restored) == "ingested"
-        assert list(fake_collection.rows) == [doc_id]
+        assert list(fake_collection.rows) == [f"{doc_id}:0"]
         assert not deleted_sources.was_deleted("reports/q4.md", digest)
         assert _decision(await _scan(corpus_root, "reports/q4.md")) == "skipped_unchanged"
 

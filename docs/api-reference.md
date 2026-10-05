@@ -1309,7 +1309,7 @@ Vector database and document retrieval service.
 
 Prometheus metrics are exposed at **`GET /metrics`** (no trailing slash required).
 
-The service uses ChromaDB with the `BAAI/bge-base-en-v1.5` embedding model (see `main.py`).
+The service uses ChromaDB with the `BAAI/bge-base-en-v1.5` embedding model (see `main.py`). Every document is stored as passages of at most 1,000 characters (about 200 characters of overlap), one vector each, with the id `{doc_id}:{n}`. `GET /` returns passages; every other route works on documents.
 
 Authentication is not enforced on these endpoints in the default configuration (treat the service as internal to the Docker network).
 
@@ -1394,7 +1394,20 @@ Add a plain text document to the knowledge store. Automatic content analysis is 
 
 #### GET /
 
-Query the knowledge store for relevant documents using semantic search with optional metadata filters.
+Query the knowledge store for relevant passages using semantic search with optional metadata filters. `n_results` counts passages, so one document can appear several times. Each passage's id is its chunk id `{doc_id}:{n}`, and its metadata carries:
+
+| Field | Description |
+|-------|-------------|
+| doc_id | Id of the document the passage belongs to |
+| title | Document title (file name) |
+| source_path | Corpus path for a scanned file, empty for an upload |
+| chunk_index | Position of the passage in the document, from 0 |
+| char_start, char_end | Where the passage sits in the extracted text |
+| page | PDFs only: the page the passage starts on |
+| category | Document category |
+| embed_model | Embedder that produced the passage's vector |
+
+The passage with `chunk_index` 0 also carries the document-level data: `date`, `size`, `chunk_count` and the auto-analysis.
 
 **Auth:** None (internal service)
 
@@ -1410,15 +1423,15 @@ Query the knowledge store for relevant documents using semantic search with opti
 
 ```json
 {
-  "ids": [["id1", "id2"]],
+  "ids": [["3f9a2c:4", "b71e09:0"]],
   "distances": [[0.1, 0.2]],
   "metadatas": [[
-    { "title": "Doc 1" },
-    { "title": "Doc 2" }
+    { "doc_id": "3f9a2c", "title": "Doc 1.pdf", "chunk_index": 4, "char_start": 3200, "char_end": 4180, "page": 2, "source_path": "", "category": "finance", "embed_model": "sentence-transformers:BAAI/bge-base-en-v1.5" },
+    { "doc_id": "b71e09", "title": "Doc 2.md", "chunk_index": 0, "char_start": 0, "char_end": 950, "source_path": "policies/doc2.md", "category": "hr", "embed_model": "sentence-transformers:BAAI/bge-base-en-v1.5" }
   ]],
   "documents": [[
-    "Content 1",
-    "Content 2"
+    "Passage of Doc 1",
+    "Passage of Doc 2"
   ]]
 }
 ```
@@ -1435,7 +1448,7 @@ Query the knowledge store for relevant documents using semantic search with opti
 
 Remove a document from the knowledge store by its ID. This is the call behind the trash icon on the Knowledge Store page. One call removes:
 
-- every entry whose ID is `id`, or whose `doc_id` metadata is `id`;
+- every entry whose ID is `id`, or whose `doc_id` metadata is `id`: every passage of the document;
 - every other entry indexed from the same corpus file (same `source_path`), such as an older version left by a re-scan;
 - the uploaded file in `documents/`, unless another entry still points at the same file.
 
@@ -1469,7 +1482,7 @@ A deleted corpus file goes on the deleted list (`chroma_data/deleted_sources.jso
 
 #### POST /smart-search
 
-Perform an advanced search with metadata filters including category, entities, and confidence score.
+Search documents with metadata filters including category, entities, and confidence score. Each document appears once, with its best-matching passage; `n_results` counts documents. `categories` filters passages; `entities`, `min_confidence` and `entity_type` filter on the document's analysis, stored on its first passage.
 
 **Auth:** None (internal service)
 
@@ -1489,14 +1502,16 @@ Perform an advanced search with metadata filters including category, entities, a
 ```json
 {
   "query": "financial report",
-  "filters": { "auto_category": "finance" },
+  "filters": { "category": { "$eq": "finance" } },
   "total": 3,
   "results": {
-    "documents": ["Content 1", "Content 2", "Content 3"],
+    "ids": ["q1", "q2", "annual"],
+    "chunk_ids": ["q1:2", "q2:0", "annual:5"],
+    "documents": ["Best passage of Q1", "Best passage of Q2", "Best passage of the summary"],
     "metadatas": [
-      { "title": "Q1 Report", "auto_category": "finance" },
-      { "title": "Q2 Report", "auto_category": "finance" },
-      { "title": "Annual Summary", "auto_category": "finance" }
+      { "doc_id": "q1", "title": "Q1 Report", "chunk_index": 2, "category": "finance", "auto_summary": "..." },
+      { "doc_id": "q2", "title": "Q2 Report", "chunk_index": 0, "category": "finance", "auto_summary": "..." },
+      { "doc_id": "annual", "title": "Annual Summary", "chunk_index": 5, "category": "finance", "auto_summary": "..." }
     ],
     "distances": [0.12, 0.18, 0.25]
   }
@@ -1512,7 +1527,7 @@ Perform an advanced search with metadata filters including category, entities, a
 
 #### GET /search-by-entity
 
-Search for documents containing a specific named entity.
+Search for documents containing a specific named entity. Each document appears once, with its best-matching passage; `ids` are document ids and `chunk_ids` the passages.
 
 **Auth:** None (internal service)
 
@@ -1533,8 +1548,9 @@ Search for documents containing a specific named entity.
   "filter": { "entities_people": { "$contains": "John Doe" } },
   "total": 2,
   "results": {
-    "ids": [["id1", "id2"]],
-    "documents": [["Doc content 1", "Doc content 2"]],
+    "ids": [["contract-a", "report-b"]],
+    "chunk_ids": [["contract-a:0", "report-b:3"]],
+    "documents": [["Passage of contract A", "Passage of report B"]],
     "metadatas": [[{ "title": "Contract A" }, { "title": "Report B" }]],
     "distances": [[0.05, 0.12]]
   }
@@ -1569,7 +1585,7 @@ Get all document categories in the knowledge store with document counts.
 }
 ```
 
-Categories are sorted by count in descending order. A document stored without a category is counted as `general`, the same label `GET /file` shows for it.
+Categories are sorted by count in descending order. Counts are documents, not passages. A document stored without a category is counted as `general`, the same label `GET /file` shows for it.
 
 **Errors:**
 
@@ -1579,7 +1595,7 @@ Categories are sorted by count in descending order. A document stored without a 
 
 #### GET /corpus-version
 
-Return an opaque version of the indexed corpus. It changes whenever an entry is added to or removed from the index: every upload (`POST /file`, `POST /file/{type}`, `POST /`), every delete (`DELETE /{id}`), and every `POST /corpus/scan` that ingests a file or replaces an older version of one. A scan that skips every file, a dry run, a query or a listing leaves it unchanged. The version lives in memory, so a restart of the service also changes it. Restart the service after a re-index done outside it, such as `scripts/migrate-embeddings.py`.
+Return an opaque version of the indexed corpus. It changes whenever an entry is added to or removed from the index: every upload (`POST /file`, `POST /file/{type}`, `POST /`), every delete (`DELETE /{id}`), and every `POST /corpus/scan` that ingests a file or replaces an older version of one. A scan that skips every file, a dry run, a query or a listing leaves it unchanged. The version lives in memory, so a restart of the service also changes it. `POST /corpus/reindex` (run by `scripts/reindex-knowledge-store.py`) changes it for every document it re-indexes. Restart the service after a re-index done outside it, such as `scripts/migrate-embeddings.py`.
 
 The agent's response cache (`AGENT_RESPONSE_CACHE=1`) puts this version in its cache key, so an answer cached before a change is never served after it. The agent reads the version again after at most `AGENT_RESPONSE_CACHE_VERSION_TTL` seconds (default `5`). When the read fails, the agent answers without the cache.
 
@@ -1672,7 +1688,7 @@ Returns a list of results, one per file. Failed files include an `error` field i
 
 #### GET /file
 
-List all files currently indexed in the knowledge store. Returns **analysis metadata and short text only** (auto-summary from ingest, category, type, and a capped excerpt). Full document bodies are not included so large files do not blow up the UI or agents listing the store.
+List all documents currently indexed in the knowledge store, one entry per document however many passages it was split into. Returns **analysis metadata and short text only** (auto-summary from ingest, category, type, and a capped excerpt). Full document bodies are not included so large files do not blow up the UI or agents listing the store.
 
 **Auth:** None (internal service)
 
@@ -1699,6 +1715,37 @@ List all files currently indexed in the knowledge store. Returns **analysis meta
 **Errors:**
 
 - `404` -- Error retrieving files from the store
+
+---
+
+#### GET /file/{doc_id}/text
+
+Return the full text of one document by its id, rebuilt from its passages. The agent reads an attached knowledge-store file through this route when the task carries the file's `doc_id`, and falls back to `GET /file/resolve` by filename otherwise.
+
+**Auth:** None (internal service)
+
+**Path Parameters:**
+
+| Parameter | Type   | Description  |
+|-----------|--------|--------------|
+| doc_id    | string | Document id  |
+
+**Response:** `200 OK`
+
+```json
+{
+  "doc_id": "a1b2c3d4e5f6",
+  "title": "doc.pdf",
+  "category": "finance",
+  "chunk_count": 3,
+  "text": "Full document text..."
+}
+```
+
+**Errors:**
+
+- `404` -- No document with that id
+- `500` -- The index could not be read
 
 ---
 

@@ -1037,6 +1037,19 @@ class TestSummarizeRetrieved:
         _, titles, _ = _summarize_retrieved(data)
         assert titles == ["S1", "S2"]
 
+    def test_passages_give_the_passage_count_and_the_distinct_titles_in_rank_order(self):
+        data = {
+            "data": "[Source: B.md]\nb1\n\n[Source: A.md]\na\n\n[Source: B.md]\nb2",
+            "passages": [
+                {"chunk_id": "b:1", "title": "B.md"},
+                {"chunk_id": "a:0", "title": "A.md"},
+                {"chunk_id": "b:2", "title": "B.md"},
+            ],
+        }
+        count, titles, _ = _summarize_retrieved(data)
+        assert count == 3
+        assert titles == ["B.md", "A.md"]
+
     def test_caps_chunk_titles_at_ten(self):
         data = {"data": [{"title": f"doc{i}"} for i in range(20)]}
         count, titles, _ = _summarize_retrieved(data)
@@ -1327,11 +1340,19 @@ class TestProcessTask:
         assert result["response"] == "answer"
         reg.run.assert_not_called()
 
-    async def test_attached_files_are_the_context_and_are_not_retrieved_again(self):
+    async def test_attached_files_come_first_and_their_own_passages_are_not_retrieved_again(
+        self,
+    ):
         reg = MagicMock()
         reg.has.return_value = False
         pipe, retrieval, decision = _pipeline(tool_registry=reg)
-        retrieval.fetch = AsyncMock(return_value={"data": "Q4 REVENUE 4.2M"})
+        retrieval.fetch = AsyncMock(return_value={
+            "data": "ignored",
+            "passages": [
+                {"doc_id": "doc-q4", "title": "q4.md", "text": "Q4 REVENUE 4.2M"},
+                {"doc_id": "doc-budget", "title": "budget.md", "text": "2026 BUDGET 5M"},
+            ],
+        })
         decision.decide.return_value = "4.2M"
         block = "[file: q4.md (source=knowledge_store)]\nQ4 REVENUE 4.2M"
         result = await pipe.process_task(
@@ -1340,12 +1361,81 @@ class TestProcessTask:
                 "query": f"{block}\n\nwhat was the revenue?",
                 "demand": "what was the revenue?",
                 "attached_context": block,
+                "files": [{"filename": "q4.md", "source": "knowledge_store", "doc_id": "doc-q4"}],
             }
         )
         assert result["response"] == "4.2M"
-        retrieval.fetch.assert_not_called()
+        retrieval.fetch.assert_awaited_once_with("what was the revenue?")
         _, kwargs = decision.decide.call_args
         assert kwargs["query"] == "what was the revenue?"
+        assert kwargs["context"] == (
+            f"{block}\n--- Other Knowledge Store Passages ---\n"
+            "[Source: budget.md]\n2026 BUDGET 5M"
+        )
+        assert kwargs["context"].count("Q4 REVENUE 4.2M") == 1
+
+    async def test_passages_of_an_attached_file_without_doc_id_are_dropped_by_title(self):
+        reg = MagicMock()
+        reg.has.return_value = False
+        pipe, retrieval, decision = _pipeline(tool_registry=reg)
+        retrieval.fetch = AsyncMock(return_value={
+            "passages": [{"doc_id": "doc-q4", "title": "q4.md", "text": "Q4 REVENUE 4.2M"}],
+        })
+        decision.decide.return_value = "4.2M"
+        block = "[file: q4.md (source=inline)]\nQ4 REVENUE 4.2M"
+        await pipe.process_task(
+            {
+                "task_id": "T6b",
+                "query": block,
+                "demand": "what was the revenue?",
+                "attached_context": block,
+                "files": [{"filename": "q4.md", "source": "inline"}],
+            }
+        )
+        _, kwargs = decision.decide.call_args
+        assert kwargs["context"] == block
+
+    async def test_a_failing_retrieval_still_answers_from_the_attached_files(self):
+        reg = MagicMock()
+        reg.has.return_value = False
+        pipe, retrieval, decision = _pipeline(tool_registry=reg)
+        retrieval.fetch = AsyncMock(side_effect=RuntimeError("knowledge store down"))
+        decision.decide.return_value = "4.2M"
+        block = "[file: q4.md (source=knowledge_store)]\nQ4 REVENUE 4.2M"
+        result = await pipe.process_task(
+            {
+                "task_id": "T6d",
+                "query": block,
+                "demand": "what was the revenue?",
+                "attached_context": block,
+                "files": [{"filename": "q4.md", "source": "knowledge_store", "doc_id": "doc-q4"}],
+            }
+        )
+        assert result["response"] == "4.2M"
+        _, kwargs = decision.decide.call_args
+        assert kwargs["context"] == block
+
+    async def test_attachments_that_fill_the_context_cap_are_not_joined_by_retrieval(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("AGENT_MAX_CONTEXT_CHARS", "1500")
+        reg = MagicMock()
+        reg.has.return_value = False
+        pipe, retrieval, decision = _pipeline(tool_registry=reg)
+        retrieval.fetch = AsyncMock(return_value={"data": "x", "passages": []})
+        decision.decide.return_value = "answer"
+        block = "[file: big.md (source=knowledge_store)]\n" + "y" * 1000
+        await pipe.process_task(
+            {
+                "task_id": "T6c",
+                "query": block,
+                "demand": "summarise",
+                "attached_context": block,
+                "files": [{"filename": "big.md", "source": "knowledge_store"}],
+            }
+        )
+        retrieval.fetch.assert_not_called()
+        _, kwargs = decision.decide.call_args
         assert kwargs["context"] == block
 
     async def test_attached_file_text_appears_once_in_the_prompt(self):

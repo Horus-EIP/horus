@@ -181,9 +181,10 @@ The Knowledge Store is the organization's private memory. It ingests documents (
 | `api/utils.py` | Request validation and response formatting |
 | `chroma_db/setup.py` | ChromaDB client initialization and collection management |
 | `chroma_db/models/` | Pydantic models for documents and search results |
-| `chroma_db/services/file_service.py` | File processing pipeline |
+| `chroma_db/services/file_service.py` | File processing pipeline: one entry per passage (`{doc_id}:{n}`), document-level listing, search and delete |
+| `chroma_db/services/reindex.py` | Re-index of stored documents: whole-file entries to passages, re-embedding |
 | `services/content_analyzer.py` | Content type detection and metadata extraction |
-| `services/document_chunker.py` | Recursive text splitting with configurable overlap |
+| `services/document_chunker.py` | Splits text into passages of at most 1,000 characters (200 overlap) with their character offsets |
 | `core/` | Logging, metrics, correlation ID middleware |
 
 #### 3.4 Web Client

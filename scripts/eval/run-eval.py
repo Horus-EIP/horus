@@ -442,7 +442,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--submit-timeout", type=float, default=900.0)
     parser.add_argument("--poll-interval", type=float, default=5.0)
     parser.add_argument("--agent-wait", type=float, default=300.0)
-    parser.add_argument("--top-k", type=int, default=10)
+    parser.add_argument("--top-k", type=int, default=50)
     parser.add_argument("--no-warmup", action="store_true")
     parser.add_argument("--skip-corpus-check", action="store_true")
     parser.add_argument("--corpus-token", default=os.environ.get("CORPUS_SCAN_TOKEN"))

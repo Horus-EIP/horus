@@ -154,11 +154,15 @@ class TestCategories:
         r = client.get("/categories")
         assert r.status_code in (200, 500)
 
-    @patch("app.api.routes.store.knowledge_collection")
-    def test_documents_without_category_are_counted_as_general(self, collection, client):
-        collection.get.return_value = {"metadatas": [
-            {"auto_category": "finance"}, {"auto_category": ""}, {"auto_category": "  "}, {}, None,
-        ]}
+    def test_documents_without_category_are_counted_as_general(self, client, fake_collection):
+        metadatas = [
+            {"auto_category": "finance"}, {"auto_category": ""}, {"auto_category": "  "}, {}, {},
+        ]
+        fake_collection.add(
+            ids=[f"doc-{n}" for n in range(5)],
+            documents=["body"] * 5,
+            metadatas=metadatas,
+        )
         r = client.get("/categories")
         assert r.status_code == 200
         assert r.json() == {
@@ -169,9 +173,7 @@ class TestCategories:
             ],
         }
 
-    @patch("app.api.routes.file.knowledge_collection")
-    @patch("app.api.routes.store.knowledge_collection")
-    def test_empty_category_label_matches_file_listing(self, store_collection, file_collection):
+    def test_empty_category_label_matches_file_listing(self, fake_collection):
         from app.api.routes.file import router as file_router  # noqa: PLC0415
         from app.api.routes.store import router as store_router  # noqa: PLC0415
 
@@ -179,20 +181,37 @@ class TestCategories:
         app.include_router(file_router, prefix="/file")
         app.include_router(store_router)
         file_and_store_client = TestClient(app)
-        stored = {
-            "ids": ["a", "b", "c"],
-            "documents": ["body a", "body b", "body c"],
-            "metadatas": [
+        fake_collection.add(
+            ids=["a", "b", "c"],
+            documents=["body a", "body b", "body c"],
+            metadatas=[
                 {"title": "a.md", "auto_category": ""},
                 {"title": "b.md", "auto_category": " "},
                 {"title": "c.md"},
             ],
-        }
-        store_collection.get.return_value = stored
-        file_collection.get.return_value = stored
+        )
 
         listed = file_and_store_client.get("/file").json()["documents"]
         counted = file_and_store_client.get("/categories").json()["categories"]
 
         assert {doc["category"] for doc in listed} == {"general"}
         assert counted == [{"category": "general", "count": 3}]
+
+    def test_chunks_of_one_document_count_once(self, client, fake_collection):
+        fake_collection.add(
+            ids=["doc-a:0", "doc-a:1", "doc-b:0"],
+            documents=["part one", "part two", "other"],
+            metadatas=[
+                {"doc_id": "doc-a", "chunk_index": 0, "category": "finance"},
+                {"doc_id": "doc-a", "chunk_index": 1, "category": "finance"},
+                {"doc_id": "doc-b", "chunk_index": 0, "category": "hr"},
+            ],
+        )
+
+        assert client.get("/categories").json() == {
+            "total_documents": 2,
+            "categories": [
+                {"category": "finance", "count": 1},
+                {"category": "hr", "count": 1},
+            ],
+        }

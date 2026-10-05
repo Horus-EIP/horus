@@ -63,6 +63,13 @@ async def pdf_to_text(filepath: str) -> str:
             text += page.extract_text() + '\n'
     return text
 
+async def pdf_pages(filepath: str) -> list[str]:
+    with pdfplumber.open(filepath) as pdf:
+        return [page.extract_text() or '' for page in pdf.pages]
+
+async def image_pdf_pages(filepath: str) -> list[str]:
+    return [pytesseract.image_to_string(img) for img in convert_from_path(filepath)]
+
 async def save_file(file: UploadFile, dir_name: str) -> str:
     """
     Save an uploaded file to the local filesystem.

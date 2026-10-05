@@ -16,7 +16,7 @@ from app.chroma_db.services import deleted_sources, file_service
 class TestStoreFile:
     async def test_store_file_minimal_metadata(self, monkeypatch):
         captured: dict = {}
-        monkeypatch.setattr(file_service, "get_embedding", lambda *a, **k: [0.1, 0.2])
+        monkeypatch.setattr(file_service, "get_embeddings", lambda texts: [[0.1, 0.2]] * len(texts))
         monkeypatch.setattr(
             file_service.knowledge_collection, "add", lambda **kw: captured.update(kw)
         )
@@ -25,18 +25,25 @@ class TestStoreFile:
             DocumentModel(id="1", title="t.txt", content="hello", size=5)
         )
 
-        assert captured["ids"] == ["1"]
+        assert captured["ids"] == ["1:0"]
         assert captured["documents"] == ["hello"]
         assert captured["embeddings"] == [[0.1, 0.2]]
         md = captured["metadatas"][0]
         assert md["title"] == "t.txt"
         assert md["size"] == 5
+        assert md["doc_id"] == "1"
+        assert md["chunk_index"] == 0
+        assert (md["char_start"], md["char_end"]) == (0, 5)
+        assert md["category"] == "general"
+        assert md["source_path"] == ""
+        assert md["embed_model"] == file_service.EMBED_MODEL
+        assert "page" not in md
         # No auto-analysis → none of the auto_* keys are present.
         assert "auto_category" not in md
 
     async def test_store_file_with_full_auto_analysis(self, monkeypatch):
         captured: dict = {}
-        monkeypatch.setattr(file_service, "get_embedding", lambda *a, **k: [0.0])
+        monkeypatch.setattr(file_service, "get_embeddings", lambda texts: [[0.0]] * len(texts))
         monkeypatch.setattr(
             file_service.knowledge_collection, "add", lambda **kw: captured.update(kw)
         )
@@ -70,7 +77,7 @@ class TestStoreFile:
 
     async def test_store_file_auto_analysis_without_entities(self, monkeypatch):
         captured: dict = {}
-        monkeypatch.setattr(file_service, "get_embedding", lambda *a, **k: [0.0])
+        monkeypatch.setattr(file_service, "get_embeddings", lambda texts: [[0.0]] * len(texts))
         monkeypatch.setattr(
             file_service.knowledge_collection, "add", lambda **kw: captured.update(kw)
         )

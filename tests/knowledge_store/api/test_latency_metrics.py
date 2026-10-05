@@ -51,10 +51,19 @@ class Recorded:
         return self._read()[key] - self.before[key]
 
 
+VECTOR = [0.1, 0.2, 0.3]
+
+
+def _encoded(texts, normalize_embeddings=True):
+    encoded = MagicMock()
+    encoded.tolist.return_value = [VECTOR for _ in texts] if isinstance(texts, list) else VECTOR
+    return encoded
+
+
 @pytest.fixture
 def embedder(monkeypatch):
     model = MagicMock()
-    model.encode.return_value.tolist.return_value = [0.1, 0.2, 0.3]
+    model.encode.side_effect = _encoded
     monkeypatch.setattr(setup, "model", model)
     return model
 
@@ -74,9 +83,9 @@ def stored(fake_collection):
         ids=["q4", "budget", "policy"],
         documents=["Q4 revenue was 4.2M", "The 2026 budget", "Expense policy"],
         metadatas=[
-            {"title": "q4.md", "auto_category": "finance"},
-            {"title": "budget.md", "auto_category": "finance"},
-            {"title": "policy.md", "auto_category": "hr"},
+            {"doc_id": "q4", "title": "q4.md", "category": "finance"},
+            {"doc_id": "budget", "title": "budget.md", "category": "finance"},
+            {"doc_id": "policy", "title": "policy.md", "category": "hr"},
         ],
     )
     return fake_collection
@@ -136,7 +145,7 @@ class TestQueryLatency:
 
     async def test_the_query_helpers_still_return_the_collection_results(self, stored, embedder):
         results = await file_service.query_with_filters(
-            "revenue", {"auto_category": {"$eq": "hr"}}, 5
+            "revenue", {"category": {"$eq": "hr"}}, 5
         )
 
         assert results["ids"] == [["policy"]]
@@ -163,7 +172,7 @@ class TestEmbeddingLatency:
 
         assert recorded.since(EMBEDDINGS, SUCCESS) == 1
         assert recorded.since(EMBEDDING_LATENCY_COUNT) == 1
-        assert "notes" in fake_collection.rows
+        assert [metadata["doc_id"] for _, metadata in fake_collection.rows.values()] == ["notes"]
 
     def test_a_failed_embedding_is_recorded_as_an_error_and_raised(self, embedder):
         embedder.encode.side_effect = RuntimeError("model unavailable")

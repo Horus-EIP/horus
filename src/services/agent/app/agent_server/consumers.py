@@ -110,22 +110,40 @@ async def _resolve_attached_files(files: list[dict]) -> list[dict]:
         name = f.get("filename") or ""
         if not name:
             continue
+        doc_id = str(f.get("doc_id") or "").strip()
         if source == "inline":
             text = _decode_inline_file(f.get("content_b64") or "")
         elif source == "knowledge_store":
-            try:
-                hit = await client.resolve_by_filename(name)
-                text = (hit or {}).get("data") or ""
-            except Exception as exc:
-                logger.warning("KS resolve failed for %s: %s", name, exc)
-                text = ""
+            text = await _knowledge_store_text(client, doc_id, name)
         else:
             logger.warning("Unknown file source %r for %s; skipping", source, name)
             continue
         if len(text) > _MAX_FILE_CONTEXT_CHARS:
             text = text[:_MAX_FILE_CONTEXT_CHARS] + "\n…[truncated]"
-        resolved.append({"filename": name, "source": source, "text": text})
+        entry = {"filename": name, "source": source, "text": text}
+        if doc_id:
+            entry["doc_id"] = doc_id
+        resolved.append(entry)
     return resolved
+
+
+async def _knowledge_store_text(client, doc_id: str, name: str) -> str:
+    if doc_id:
+        try:
+            hit = await client.resolve_by_doc_id(doc_id)
+            text = (hit or {}).get("data") or ""
+        except Exception as exc:
+            logger.warning("KS resolve by doc_id failed for %s (%s): %s", name, doc_id, exc)
+            text = ""
+        if text:
+            return text
+        logger.info("KS has no text for doc_id %s; resolving %s by its filename", doc_id, name)
+    try:
+        hit = await client.resolve_by_filename(name)
+        return (hit or {}).get("data") or ""
+    except Exception as exc:
+        logger.warning("KS resolve failed for %s: %s", name, exc)
+        return ""
 
 
 def _prepend_files_to_demand(demand: str, resolved: list[dict]) -> str:

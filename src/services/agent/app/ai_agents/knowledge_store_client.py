@@ -9,6 +9,7 @@ import logging
 import re
 import time
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from opentelemetry import trace
@@ -49,6 +50,47 @@ def extract_probable_filename_from_query(query: str) -> str | None:
     if matches:
         return matches[-1].strip()
     return None
+
+def _first_row(value: Any) -> list[Any]:
+    if isinstance(value, list) and value and isinstance(value[0], list):
+        return value[0]
+    return []
+
+
+def passages_from_query_result(result: dict[str, Any]) -> list[dict[str, Any]]:
+    ids = _first_row(result.get("ids"))
+    metadatas = _first_row(result.get("metadatas"))
+    distances = _first_row(result.get("distances"))
+    passages: list[dict[str, Any]] = []
+    for index, text in enumerate(_first_row(result.get("documents"))):
+        metadata = metadatas[index] if index < len(metadatas) else None
+        metadata = dict(metadata) if isinstance(metadata, dict) else {}
+        chunk_id = str(ids[index]) if index < len(ids) else ""
+        passages.append({
+            "chunk_id": chunk_id,
+            "doc_id": str(metadata.get("doc_id") or chunk_id),
+            "title": metadata.get("title") or "",
+            "chunk_index": metadata.get("chunk_index"),
+            "page": metadata.get("page"),
+            "distance": distances[index] if index < len(distances) else None,
+            "text": text if isinstance(text, str) else str(text or ""),
+            "metadata": metadata,
+        })
+    return passages
+
+
+def format_passage(passage: dict[str, Any]) -> str:
+    title = passage.get("title")
+    if not title:
+        return passage.get("text") or ""
+    page = passage.get("page")
+    label = f"{title}, page {page}" if page is not None else title
+    return f"[Source: {label}]\n{passage.get('text') or ''}"
+
+
+def format_passages(passages: list[dict[str, Any]]) -> str:
+    return "\n\n".join(format_passage(passage) for passage in passages)
+
 
 # Import metrics if available (avoid circular imports)
 try:
@@ -165,15 +207,15 @@ class KnowledgeStoreClient:
                         knowledge_store_requests_total.labels(status="success").inc()
 
                     if documents and documents[0]:
-                        # Combine all document texts
-                        document_text = "\n\n".join(documents[0])
+                        passages = passages_from_query_result(result)
                         logger.debug(
-                            f"Successfully retrieved {len(documents[0])} document(s) for query: {query} "
+                            f"Successfully retrieved {len(passages)} passage(s) for query: {query} "
                             f"(duration: {duration:.3f}s)"
                         )
                         return {
                             "query": query,
-                            "data": document_text,
+                            "data": format_passages(passages),
+                            "passages": passages,
                         }
                     else:
                         # No results found
@@ -375,6 +417,50 @@ class KnowledgeStoreClient:
                     await asyncio.sleep(self.retry_delay)
 
         return {"query": f"__file__:{name}", "data": ""}
+
+    async def resolve_by_doc_id(self, doc_id: str) -> dict[str, Any]:
+        label = f"__doc__:{doc_id}"
+        url = f"{self._api_root()}/file/{quote(doc_id, safe='')}/text"
+        logger.debug("Resolving knowledge store document by doc_id=%r via %s", doc_id, url)
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            for attempt in range(self.max_retries):
+                try:
+                    response = await client.get(url)
+                    if response.status_code == 404:
+                        return {"query": label, "data": ""}
+                    response.raise_for_status()
+                    payload = response.json()
+                    text = (payload.get("text") or "").strip()
+                    if not text:
+                        return {"query": label, "data": ""}
+                    title = payload.get("title") or ""
+                    return {
+                        "query": label,
+                        "data": f"[Indexed file: {title} | id: {doc_id}]\n\n{text}",
+                        "doc_id": doc_id,
+                        "title": title,
+                    }
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 404:
+                        return {"query": label, "data": ""}
+                    logger.warning(
+                        "resolve_by_doc_id HTTP error %s (attempt %s/%s)",
+                        e.response.status_code,
+                        attempt + 1,
+                        self.max_retries,
+                    )
+                except (httpx.TimeoutException, httpx.RequestError, Exception) as e:
+                    logger.warning(
+                        "resolve_by_doc_id request error: %s (attempt %s/%s)",
+                        e,
+                        attempt + 1,
+                        self.max_retries,
+                    )
+                if attempt < self.max_retries - 1:
+                    await asyncio.sleep(self.retry_delay)
+
+        return {"query": label, "data": ""}
 
     @tracer.start_as_current_span("knowledge_store_fetch_for_rag")
     async def fetch_for_rag(

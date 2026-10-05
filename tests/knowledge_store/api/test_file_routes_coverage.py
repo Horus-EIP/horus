@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.routes import file as file_mod
+from app.chroma_db.services import file_service
 
 
 @pytest.fixture
@@ -39,7 +40,7 @@ class TestResolve:
             "documents": ["body A", "body B"],
             "metadatas": [{"title": "notes.txt"}, {"title": "other.txt"}],
         })
-        monkeypatch.setattr(file_mod.knowledge_collection, "get", getter)
+        monkeypatch.setattr(file_service.knowledge_collection, "get", getter)
         r = client.get("/file/resolve", params={"name": "notes.txt"})
         assert r.status_code == 200
         body = r.json()
@@ -47,14 +48,14 @@ class TestResolve:
         assert "body A" in body["text"]
 
     def test_no_match_returns_404(self, client, monkeypatch):
-        monkeypatch.setattr(file_mod.knowledge_collection, "get", MagicMock(return_value={
+        monkeypatch.setattr(file_service.knowledge_collection, "get", MagicMock(return_value={
             "ids": ["a"], "documents": ["x"], "metadatas": [{"title": "zzz.txt"}],
         }))
         r = client.get("/file/resolve", params={"name": "nope.txt"})
         assert r.status_code == 404
 
     def test_backend_error_returns_404(self, client, monkeypatch):
-        monkeypatch.setattr(file_mod.knowledge_collection, "get", MagicMock(side_effect=RuntimeError("boom")))
+        monkeypatch.setattr(file_service.knowledge_collection, "get", MagicMock(side_effect=RuntimeError("boom")))
         r = client.get("/file/resolve", params={"name": "x"})
         assert r.status_code == 404
 
@@ -70,7 +71,7 @@ class TestListFiles:
                 "auto_type": "report", "confidence_score": 0.7,
             }],
         })
-        monkeypatch.setattr(file_mod.knowledge_collection, "get", getter)
+        monkeypatch.setattr(file_service.knowledge_collection, "get", getter)
         r = client.get("/file")
         assert r.status_code == 200
         docs = r.json()["documents"]
@@ -79,7 +80,7 @@ class TestListFiles:
         assert docs[0]["confidence_score"] == 0.7
 
     def test_backend_error_returns_404(self, client, monkeypatch):
-        monkeypatch.setattr(file_mod.knowledge_collection, "get", MagicMock(side_effect=RuntimeError("boom")))
+        monkeypatch.setattr(file_service.knowledge_collection, "get", MagicMock(side_effect=RuntimeError("boom")))
         r = client.get("/file")
         assert r.status_code == 404
 
@@ -87,7 +88,7 @@ class TestListFiles:
 class TestUpload:
     def test_pdf_success(self, client, monkeypatch):
         monkeypatch.setattr(file_mod, "save_file", AsyncMock(return_value="/tmp/x.pdf"))
-        monkeypatch.setattr(file_mod, "pdf_to_text", AsyncMock(return_value="text"))
+        monkeypatch.setattr(file_mod, "pdf_pages", AsyncMock(return_value=["text"]))
         monkeypatch.setattr(file_mod._content_analyzer, "analyze", MagicMock(return_value={"auto_category": "c"}))
         monkeypatch.setattr(file_mod, "store_file", AsyncMock())
         monkeypatch.setattr(file_mod.os.path, "getsize", lambda p: 123)
@@ -106,7 +107,7 @@ class TestUpload:
 
     def test_upload_records_where_the_file_is_stored(self, client, monkeypatch):
         monkeypatch.setattr(file_mod, "save_file", AsyncMock(return_value="documents/pdf/x.pdf"))
-        monkeypatch.setattr(file_mod, "pdf_to_text", AsyncMock(return_value="text"))
+        monkeypatch.setattr(file_mod, "pdf_pages", AsyncMock(return_value=["text"]))
         monkeypatch.setattr(file_mod._content_analyzer, "analyze", MagicMock(return_value={}))
         store = AsyncMock()
         monkeypatch.setattr(file_mod, "store_file", store)
@@ -136,18 +137,18 @@ class TestDelete:
 class TestUploadToText:
     def test_pdf_success(self, client, monkeypatch):
         monkeypatch.setattr(file_mod, "save_file", AsyncMock(return_value="/tmp/x.pdf"))
-        monkeypatch.setattr(file_mod, "pdf_to_text", AsyncMock(return_value="extracted"))
+        monkeypatch.setattr(file_mod, "pdf_pages", AsyncMock(return_value=["extracted"]))
         monkeypatch.setattr(file_mod._content_analyzer, "analyze", MagicMock(return_value={"auto_category": "c"}))
         monkeypatch.setattr(file_mod, "store_file", AsyncMock())
         monkeypatch.setattr(file_mod.os.path, "exists", lambda p: False)
         r = client.post("/file/pdf", params={"doc_id": "d1"},
                         files={"file": ("x.pdf", b"%PDF", "application/pdf")})
         assert r.status_code == 200
-        assert r.json()["text"] == "extracted"
+        assert r.json()["text"] == "extracted\n"
 
     def test_upload_records_where_the_file_is_stored(self, client, monkeypatch):
         monkeypatch.setattr(file_mod, "save_file", AsyncMock(return_value="documents/image/x.pdf"))
-        monkeypatch.setattr(file_mod, "image_pdf_to_text", AsyncMock(return_value="scanned"))
+        monkeypatch.setattr(file_mod, "image_pdf_pages", AsyncMock(return_value=["scanned"]))
         monkeypatch.setattr(file_mod._content_analyzer, "analyze", MagicMock(return_value={}))
         store = AsyncMock()
         monkeypatch.setattr(file_mod, "store_file", store)
@@ -178,7 +179,7 @@ class TestUploadToText:
 
     def test_image_success(self, client, monkeypatch):
         monkeypatch.setattr(file_mod, "save_file", AsyncMock(return_value="/tmp/x.png"))
-        monkeypatch.setattr(file_mod, "image_pdf_to_text", AsyncMock(return_value="ocr"))
+        monkeypatch.setattr(file_mod, "image_pdf_pages", AsyncMock(return_value=["ocr"]))
         monkeypatch.setattr(file_mod._content_analyzer, "analyze", MagicMock(return_value={}))
         monkeypatch.setattr(file_mod, "store_file", AsyncMock())
         monkeypatch.setattr(file_mod.os.path, "exists", lambda p: True)
@@ -230,7 +231,7 @@ class TestListEdges:
             "documents": [long_text],
             "metadatas": [{"title": "d", "size": "notint", "confidence_score": "bad"}],
         })
-        monkeypatch.setattr(file_mod.knowledge_collection, "get", getter)
+        monkeypatch.setattr(file_service.knowledge_collection, "get", getter)
         r = client.get("/file")
         assert r.status_code == 200
         doc = r.json()["documents"][0]

@@ -155,19 +155,62 @@ class TestResolveAttachedFiles:
         assert out[0]["text"].endswith("KS body")
         assert "report.pdf" in out[0]["text"]
 
-    async def test_knowledge_store_ref_with_doc_id_still_resolves_by_filename(self):
+    async def test_knowledge_store_ref_with_doc_id_is_resolved_by_its_doc_id(self):
         files = [
             {"source": "knowledge_store", "filename": "report.pdf", "doc_id": "abc123"}
         ]
         client = MagicMock()
+        client.resolve_by_doc_id = AsyncMock(
+            return_value={"query": "__doc__:abc123", "data": "the second report.pdf"}
+        )
         client.resolve_by_filename = AsyncMock(return_value=None)
         with patch(
             "ai_agents.knowledge_store_client.KnowledgeStoreClient",
             return_value=client,
         ):
             out = await consumers._resolve_attached_files(files)
+        client.resolve_by_doc_id.assert_awaited_once_with("abc123")
+        client.resolve_by_filename.assert_not_called()
+        assert out == [{
+            "filename": "report.pdf",
+            "source": "knowledge_store",
+            "text": "the second report.pdf",
+            "doc_id": "abc123",
+        }]
+
+    async def test_a_doc_id_the_store_does_not_know_falls_back_to_the_filename(self):
+        files = [
+            {"source": "knowledge_store", "filename": "report.pdf", "doc_id": "gone"}
+        ]
+        client = MagicMock()
+        client.resolve_by_doc_id = AsyncMock(return_value={"query": "__doc__:gone", "data": ""})
+        client.resolve_by_filename = AsyncMock(
+            return_value={"query": "__file__:report.pdf", "data": "by name"}
+        )
+        with patch(
+            "ai_agents.knowledge_store_client.KnowledgeStoreClient",
+            return_value=client,
+        ):
+            out = await consumers._resolve_attached_files(files)
         client.resolve_by_filename.assert_awaited_once_with("report.pdf")
-        assert [r["filename"] for r in out] == ["report.pdf"]
+        assert out[0]["text"] == "by name"
+        assert out[0]["doc_id"] == "gone"
+
+    async def test_a_failing_doc_id_lookup_falls_back_to_the_filename(self):
+        files = [
+            {"source": "knowledge_store", "filename": "report.pdf", "doc_id": "abc123"}
+        ]
+        client = MagicMock()
+        client.resolve_by_doc_id = AsyncMock(side_effect=RuntimeError("ks down"))
+        client.resolve_by_filename = AsyncMock(
+            return_value={"query": "__file__:report.pdf", "data": "by name"}
+        )
+        with patch(
+            "ai_agents.knowledge_store_client.KnowledgeStoreClient",
+            return_value=client,
+        ):
+            out = await consumers._resolve_attached_files(files)
+        assert out[0]["text"] == "by name"
 
     async def test_knowledge_store_none_hit_yields_empty_text(self):
         files = [{"source": "knowledge_store", "filename": "missing.pdf"}]

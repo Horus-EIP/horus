@@ -1,113 +1,124 @@
-import spacy
+import re
+from bisect import bisect_right
+from collections.abc import Iterator, Sequence
+from typing import NamedTuple
 
 from app.core.logging import get_logger
 
 logger = get_logger("DocumentChunker")
-_nlp_model = None
+
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+|\s*\n\s*")
+
+
+class TextChunk(NamedTuple):
+    text: str
+    char_start: int
+    char_end: int
+
+
+class _Span(NamedTuple):
+    start: int
+    end: int
+
+
+def page_of(char_start: int, page_starts: Sequence[int]) -> int | None:
+    if not page_starts:
+        return None
+    return max(1, bisect_right(page_starts, char_start))
+
 
 class DocumentChunker:
-    """
-    Service for splitting large text documents into smaller, overlapping chunks
-    suitable for embedding and retrieval.
-    """
-
-    def __init__(self, chunk_size=1000, overlap=200):
-        """
-        Initialize the DocumentChunker.
-
-        Args:
-            chunk_size (int): The maximum size of each chunk in characters.
-            overlap (int): The number of characters to overlap between chunks.
-        
-        Raises:
-            RuntimeError: If the Spacy model cannot be loaded or found.
-        """
-        global _nlp_model
-        if _nlp_model is None:
-            try:
-                _nlp_model = spacy.load("en_core_web_trf")
-                logger.info("Spacy model loaded successfully")
-            except OSError:
-                logger.info("Downloading Spacy model...")
-                raise RuntimeError("Spacy model not found. Please download it using 'python -m spacy download en_core_web_trf'.")
-
-        self.nlp = _nlp_model
-
+    def __init__(self, chunk_size: int = 1000, overlap: int = 200):
+        if chunk_size <= 0:
+            raise ValueError(f"chunk_size must be positive, got {chunk_size}")
+        if not 0 <= overlap < chunk_size:
+            raise ValueError(f"overlap must be in [0, {chunk_size}), got {overlap}")
         self.chunk_size = chunk_size
         self.overlap = overlap
 
+    def split(self, text: str) -> list[TextChunk]:
+        text = text or ""
+        pieces = [piece for sentence in _sentences(text) for piece in self._fit(text, sentence)]
+        chunks = [
+            TextChunk(text[group[0].start:group[-1].end], group[0].start, group[-1].end)
+            for group in self._pack(pieces)
+        ]
+        logger.debug("Split %d characters into %d chunks", len(text), len(chunks))
+        return chunks
+
     def chunk_document(self, text: str) -> list[str]:
-        """
-        Split a document into chunks.
+        return [chunk.text for chunk in self.split(text)]
 
-        Args:
-            text (str): The full text of the document.
+    def _fit(self, text: str, sentence: _Span) -> list[_Span]:
+        if sentence.end - sentence.start <= self.chunk_size:
+            return [sentence]
+        windows: list[_Span] = []
+        start = sentence.start
+        while sentence.end - start > self.chunk_size:
+            cut = _cut_before(text, start, start + self.chunk_size)
+            windows.append(_Span(start, cut))
+            start = _word_start(text, max(cut - self.overlap, start + 1), cut)
+            while start < sentence.end and text[start].isspace():
+                start += 1
+        windows.append(_Span(start, sentence.end))
+        return windows
 
-        Returns:
-            List[str]: A list of text chunks.
-        """
-        logger.info(f"Starting document chunking. Text length: {len(text)} chars.")
-        doc = self.nlp(text)
-        chunks = self._text_divider(doc)
-        logger.info(f"Document chunking completed. Generated {len(chunks)} chunks.")
+    def _pack(self, pieces: list[_Span]) -> list[list[_Span]]:
+        groups: list[list[_Span]] = []
+        current: list[_Span] = []
+        for piece in pieces:
+            if current and piece.end - current[0].start > self.chunk_size:
+                groups.append(current)
+                current = self._carry_over(current, piece)
+            current.append(piece)
+        if current:
+            groups.append(current)
+        return groups
 
-        return chunks
-
-    def _compute_overlap(self, sentences: list[str]) -> list[str]:
-        """
-        Calculate the overlapping sentences for the next chunk.
-
-        Args:
-            sentences (List[str]): The list of sentences in the current chunk.
-
-        Returns:
-            List[str]: The list of sentences to include in the next chunk as overlap.
-        """
-        current_overlap = 0
-        overlap_sentences = []
-
-        for sentence in reversed(sentences):
-            if len(sentence) + current_overlap > self.overlap:
+    def _carry_over(self, group: list[_Span], incoming: _Span) -> list[_Span]:
+        kept: list[_Span] = []
+        for piece in reversed(group):
+            if group[-1].end - piece.start > self.overlap:
                 break
-            else:
-                overlap_sentences.insert(0, sentence)
-                current_overlap += len(sentence)
+            kept.insert(0, piece)
+        if not kept and self.overlap:
+            kept = [group[-1]]
+        while kept and incoming.end - kept[0].start > self.chunk_size:
+            kept.pop(0)
+        return kept
 
-        if not overlap_sentences and sentences:
-            overlap_sentences.append(sentences[-1])
 
-        return overlap_sentences
+def _sentences(text: str) -> Iterator[_Span]:
+    start = 0
+    for match in _SENTENCE_BREAK.finditer(text):
+        yield from _trimmed(text, start, match.start())
+        start = match.end()
+    yield from _trimmed(text, start, len(text))
 
-    def _text_divider(self, doc) -> list[str]:
-        """
-        Divide the processed document into chunks based on sentence boundaries and size limits.
 
-        Args:
-            doc (spacy.tokens.Doc): The processed Spacy document.
+def _trimmed(text: str, start: int, end: int) -> Iterator[_Span]:
+    while start < end and text[start].isspace():
+        start += 1
+    while end > start and text[end - 1].isspace():
+        end -= 1
+    if start < end:
+        yield _Span(start, end)
 
-        Returns:
-            List[str]: A list of text chunks.
-        """
-        chunks = []
-        current_sentences = []
-        len_buffer = 0
-        for sentence in doc.sents:
-            clean_sentence = sentence.text.replace("\n", " ").strip()
-            if not clean_sentence:
-                continue
 
-            if len_buffer + len(clean_sentence) > self.chunk_size and current_sentences:
-                chunk = " ".join(current_sentences)
-                chunks.append(chunk)
-                current_sentences = self._compute_overlap(current_sentences)
-                current_sentences.append(clean_sentence)
-                len_buffer = sum(len(s) for s in current_sentences)
-            else:
-                current_sentences.append(clean_sentence)
-                len_buffer += len(clean_sentence)
+def _cut_before(text: str, start: int, limit: int) -> int:
+    floor = start + (limit - start) // 2
+    cut = limit
+    while cut > floor and not text[cut].isspace():
+        cut -= 1
+    if cut == floor:
+        cut = limit
+    while cut > start + 1 and text[cut - 1].isspace():
+        cut -= 1
+    return cut
 
-        if current_sentences:
-            chunk = " ".join(current_sentences)
-            chunks.append(chunk)
 
-        return chunks
+def _word_start(text: str, position: int, limit: int) -> int:
+    for candidate in range(position, limit):
+        if text[candidate - 1].isspace() and not text[candidate].isspace():
+            return candidate
+    return position

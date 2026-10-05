@@ -63,7 +63,10 @@ _WORKER_MODEL = "Qwen/Qwen3-4B-Instruct-2507"
 _N_RESULTS = Setting(
     "10", MEASURED,
     "Retrieval breadth. Raising 4 -> 10 is what stopped the worker inventing "
-    "figures on the demo corpus; it quoted the real number instead.",
+    "figures on the demo corpus; it quoted the real number instead. That was "
+    "measured with whole documents; results are now passages of at most 1,000 "
+    "characters, and ten of them, about 10,600 characters with their source "
+    "lines, fit whole under the agent's 12,000-character context cap.",
 )
 
 _SERVED_NAME = "qwen3-4b"
@@ -295,21 +298,24 @@ def _cpu_common() -> dict[str, Setting]:
             "neither number has been timed on a CPU-only host.",
         ),
         "KNOWLEDGE_STORE_N_RESULTS": Setting(
-            "4", DERIVED,
-            "Each result is a whole document, joined best-ranked first, and "
-            "AGENT_MAX_CONTEXT_CHARS=6000 keeps only the first two or so of "
-            "them. Fetching 4 instead of 10 drops documents the model would "
-            "never see. The GPU profiles keep 10, where raising 4 to 10 "
-            "measurably stopped invented figures, so check answer quality on "
-            "the test set before trusting this value.",
+            "5", DERIVED,
+            "Each result is a passage of at most 1,000 characters, shown with a "
+            "source line of its document title: about 1,060 characters each. "
+            "Five is the most that fit whole under AGENT_MAX_CONTEXT_CHARS=6000 "
+            "(about 5,300 characters), so the prompt keeps the size B-89 chose "
+            "while it draws on up to five places, often in different documents, "
+            "instead of the first two whole documents. Six would have the cap cut "
+            "the last one. Check answer quality on the test set before trusting "
+            "this value.",
         ),
         "AGENT_MAX_CONTEXT_CHARS": Setting(
             "6000", DERIVED,
             "Half the 12,000-character default: about 1,500 to 2,000 tokens of "
             "retrieved text instead of 3,000 to 4,000. On a CPU the whole "
             "prompt is read before the first word of the answer, so this "
-            "halves the retrieved part of that wait. The cut falls on the "
-            "lowest-ranked text. Not measured yet.",
+            "halves the retrieved part of that wait. It holds the five passages "
+            "of KNOWLEDGE_STORE_N_RESULTS whole and only cuts when long titles "
+            "make their source lines longer. Not measured yet.",
         ),
         "AGENT_STREAM_TOKENS": Setting(
             "1", DERIVED,

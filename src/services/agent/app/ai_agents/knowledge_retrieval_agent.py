@@ -29,7 +29,14 @@ def _summarize_retrieved(data: Any) -> tuple[int, list[str], str]:
         return chunk_count, doc_titles, preview
 
     chunks = data.get("data")
-    if isinstance(chunks, list):
+    passages = data.get("passages")
+    if isinstance(passages, list) and passages:
+        chunk_count = len(passages)
+        for passage in passages:
+            title = passage.get("title") if isinstance(passage, dict) else None
+            if title and title not in doc_titles:
+                doc_titles.append(str(title))
+    elif isinstance(chunks, list):
         chunk_count = len(chunks)
         for c in chunks[:10]:
             if isinstance(c, dict):

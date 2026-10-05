@@ -40,7 +40,7 @@ On the CPU stack the GGUF lives in the `llm_models` volume, not on the host. Its
 | Option | Meaning |
 |---|---|
 | `--mode chat` (default) | Every question goes through `POST /tasks/new_task/` in `auto` mode, one new conversation per question, and the answer is read from the chat WebSocket. If the socket drops, the runner polls `GET /tasks/{id}` until the task ends. |
-| `--mode retrieval` | Only queries the knowledge store (`GET /?query=...&n_results=--top-k`) for the 84 in-corpus questions and scores the source by rank (see [Source checking](#source-checking)). No LLM, takes seconds. Keep `--top-k` (default 10) at least the number of stored documents so `source_ranks` shows where a missed document landed. |
+| `--mode retrieval` | Only queries the knowledge store (`GET /?query=...&n_results=--top-k`) for the 84 in-corpus questions and scores the source by rank (see [Source checking](#source-checking)). No LLM, takes seconds. `--top-k` counts passages, not documents: the knowledge store returns chunks of at most 1,000 characters, and the five `demo_assets/` files make 22 of them. The passages are mapped to their documents, each ranked by its best passage. Keep `--top-k` (default 50) at least the number of stored passages so `source_ranks` shows where a missed document landed. |
 | `--ids`, `--category`, `--limit` | Run part of the set (comma-separated). |
 | `--event-timeout` | Seconds to wait for each final answer (default 1800). |
 | `--submit-timeout` | Seconds for the `new_task` request itself, which stays open during routing (default 900). |
@@ -115,7 +115,7 @@ One entry per question, in test set order.
 | `total_s` | Time from submitting the question to the final answer. |
 | `answer` | The final answer as received. |
 | `retrieval_steps` | Number of `retrieval.results` steps the agent sent. `null` in retrieval mode. |
-| `retrieved_sources` | One list per retrieval (each `retrieval.results` step, or the single knowledge-store query in retrieval mode): the distinct document titles in rank order. `null` when a retrieval returned content without saying which documents it came from, which is what the agent does today. |
+| `retrieved_sources` | One list per retrieval (each `retrieval.results` step, or the single knowledge-store query in retrieval mode): the distinct document titles in rank order, a document ranked by its best passage. `null` when a retrieval returned content without saying which documents it came from, which the agent still does when it reads a file named in the question or falls back to the document list. |
 | `cited_sources` | Titles in the `sources` of the final answer event, or `null` when the answer carries no `sources` list (today's answers never do). |
 | `source_basis` | What `source_correct_auto` was decided from: `cited`, `retrieval`, or `null` when it could not be decided. |
 | `source_ranks` | For each expected document, its best rank over `retrieved_sources` (1 = first), `null` when it was never retrieved. |
@@ -147,10 +147,10 @@ Documents are compared by file name without extension. In order:
 1. **Questions outside the corpus** are not scored (`null`).
 2. **Greetings and arithmetic** are correct when no retrieval happened (`retrieval_steps` is 0) and the answer cites nothing. A greeting the router sent to an agent that queried the knowledge store is wrong.
 3. **Cited sources.** When the final answer carries `sources`, the question is correct when every expected document is cited.
-4. **Retrieved sources.** Otherwise the question is correct when every expected document is among the first N distinct documents of a retrieval, N being the number of expected documents (rank 1 for a one-document question, ranks 1 and 2 for a two-document one). Being returned somewhere is not enough: the knowledge store keeps one vector per file today, so any query with `n_results` of 5 or more returns the whole corpus.
+4. **Retrieved sources.** Otherwise the question is correct when every expected document is among the first N distinct documents of a retrieval, N being the number of expected documents (rank 1 for a one-document question, ranks 1 and 2 for a two-document one). Being returned somewhere is not enough: a deep enough retrieval returns every document. Several passages of one document count as that document once, at the rank of its first passage.
 5. When the WebSocket dropped before the answer (`timing_source` is `poll`) or the question failed, events may be missing, so only what was seen decides: a retrieval that ranks the right documents first is still correct and a retrieval for a greeting is still wrong. Anything else is `null` rather than a guess.
 
-On today's stack chat mode cannot score in-corpus sources: the agent's `retrieval.results` steps carry `chunk_count: 1, chunks: []`, because the knowledge-store client returns only the joined text, and answers carry no sources. These questions get `source_basis: null` and `source_correct_auto: null`, so `summary.source_correct_auto.n` counts only the direct questions. Chat-mode source checking needs B-97 (the agent client keeps chunk titles, so retrieval steps name their documents) or B-98 (answers cite their sources). Until then, measure retrieval with `--mode retrieval`.
+Since B-97 the knowledge-store client keeps each passage's document, so the agent's `retrieval.results` steps carry the number of passages in `chunk_count` and the distinct document titles in rank order in `chunks`, and chat mode scores in-corpus sources from them. Answers still carry no sources until B-98. A question whose retrieval returned no passages (the agent read a file named in the question, or fell back to the document list) gets `source_basis: null` and `source_correct_auto: null`.
 
 ## Manual review
 

@@ -64,11 +64,17 @@ print(
 
 BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 
+EMBED_MODEL = f"sentence-transformers:{MODEL_NAME}"
+
 @timed_embedding
 def get_embedding(text: str, is_query: bool = False) -> list[float]:
     if is_query:
         text = BGE_QUERY_PREFIX + text
     return model.encode(text, normalize_embeddings=True).tolist()
+
+@timed_embedding
+def get_embeddings(texts: list[str]) -> list[list[float]]:
+    return model.encode(list(texts), normalize_embeddings=True).tolist()
 
 COLLECTION_NAME = "knowledge_collection"
 
