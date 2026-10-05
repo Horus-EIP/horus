@@ -41,6 +41,7 @@ export const LATENCY_PANELS: LatencyPanelSpec[] = [
     "Agent Knowledge Store Request Time",
     "agent_knowledge_store_request_duration_seconds"
   ),
+  latencyPanel("Knowledge Store Query Time", "knowledge_store_query_duration_seconds"),
 ];
 
 export const METRIC_PANELS: MetricPanelSpec[] = [

@@ -39,12 +39,13 @@ function scrapeHostOf(histogram: string): string | undefined {
 }
 
 describe("metrics latency panels", () => {
-  it("chart the MAS task histogram and the agent's latency histograms", () => {
+  it("chart the MAS task histogram, the agent's latency histograms and the knowledge store's query histogram", () => {
     expect(LATENCY_PANELS.map((panel) => panel.histogram)).toEqual([
       "mas_task_processing_seconds",
       "agent_task_processing_duration_seconds",
       "agent_model_inference_duration_seconds",
       "agent_knowledge_store_request_duration_seconds",
+      "knowledge_store_query_duration_seconds",
     ]);
   });
 

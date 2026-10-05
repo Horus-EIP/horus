@@ -10,6 +10,7 @@ from app.chroma_db.services.corpus_version import bump_corpus_version
 from app.chroma_db.services.deleted_sources import remember_deleted
 from app.chroma_db.setup import get_embedding, knowledge_collection
 from app.core.logging import get_logger
+from app.core.metrics import timed_query
 
 logger = get_logger("FileService")
 
@@ -82,6 +83,7 @@ async def store_file(
     bump_corpus_version()
 
 
+@timed_query
 async def query_knowledge(query: str, n_results: int) -> dict:
     """
     Query the knowledge store for documents relevant to the search string.
@@ -102,6 +104,7 @@ async def query_knowledge(query: str, n_results: int) -> dict:
     )
 
 
+@timed_query
 async def query_with_filters(query: str, filters: dict, n_results: int) -> dict:
     """
     Query the knowledge store with a query string and metadata filters.

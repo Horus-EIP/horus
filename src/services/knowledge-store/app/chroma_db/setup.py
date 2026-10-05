@@ -10,6 +10,8 @@ import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 
+from app.core.metrics import timed_embedding
+
 try:
     import posthog  # type: ignore
 
@@ -62,6 +64,7 @@ print(
 
 BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 
+@timed_embedding
 def get_embedding(text: str, is_query: bool = False) -> list[float]:
     if is_query:
         text = BGE_QUERY_PREFIX + text
