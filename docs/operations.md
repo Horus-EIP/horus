@@ -62,6 +62,22 @@ docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --build -d
 
 The overlay sets the build argument `TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu` for mas, agent and knowledge_store. Each of these Dockerfiles installs the `torch==X` line of its `requirements.txt` from that index first, then the rest of the requirements, which keep the torch already installed. Without the overlay, the argument defaults to `https://pypi.org/simple`, which is the CUDA build the GPU profiles use. All requirement files pin the same torch version; change them together.
 
+#### The CPU model server
+
+The overlay also adds `llm`: one llama-server (`ghcr.io/ggml-org/llama.cpp:server-b11382`) that serves Qwen3-4B-Instruct-2507 Q4_K_M to MAS and to every agent. The `cpu-*` profiles point both clients at it with `LLM_BACKEND=vllm` (the OpenAI-compatible client mode), `LLM_VLLM_URL=http://llm:8080/v1`, `LLM_VLLM_MODEL=qwen3-4b`, `LLM_VLLM_MAX_MODEL_LEN=8192` and `LLM_VLLM_TIMEOUT=900`. With that backend MAS and the agent load no model in-process and their entrypoints download none; MAS still loads its MiniLM skill embedder. The GPU profiles keep the `vllm` service.
+
+- **Start order.** The one-shot service `llm-model` puts the GGUF into the `llm_models` volume and checks its SHA-256 (`src/infra/llm/fetch-model.sh`), `llm` starts once it has exited successfully, and `mas` and `agent` wait for `llm` to be healthy (`GET /health`, 10 minute start window). A verified file is not downloaded again. The source, size and hash are in `scripts/models/README.md`.
+- **Server flags.** `--ctx-size` and `--alias` come from `LLM_VLLM_MAX_MODEL_LEN` and `LLM_VLLM_MODEL`, so server and clients cannot disagree. One slot (`--parallel 1`; other requests wait in its queue), `--load-mode mmap`, `--cache-ram 1024`, `--metrics`, f16 KV cache.
+- **Resources.** `LLM_SERVER_THREADS` (default 4) is `--threads`; the installer writes the physical core count and gives MAS and the agent one torch thread each. `LLM_SERVER_MEM_LIMIT` (default `6g`) is the memory ceiling, and the swap ceiling follows it unless `LLM_SERVER_MEMSWAP_LIMIT` is set. On the CPU, MAS defaults to `3g` and the agent to `4g`.
+- **Network.** The port is not published to the host. llama-server runs without an API key because only the containers on `horus-net` reach it.
+
+```bash
+cd src/infra
+docker compose logs llm-model
+docker compose logs -f llm
+docker compose exec llm curl -s localhost:8080/health
+```
+
 ---
 
 ### Production considerations

@@ -4,12 +4,22 @@ services:
       args:
         TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
     gpus: !reset null
+    mem_limit: ${MAS_MEM_LIMIT:-3g}
+    memswap_limit: ${MAS_MEMSWAP_LIMIT:-${MAS_MEM_LIMIT:-3g}}
+    depends_on:
+      llm:
+        condition: service_healthy
 
   agent:
     build:
       args:
         TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
     gpus: !reset null
+    mem_limit: ${AGENT_MEM_LIMIT:-4g}
+    memswap_limit: ${AGENT_MEMSWAP_LIMIT:-${AGENT_MEM_LIMIT:-4g}}
+    depends_on:
+      llm:
+        condition: service_healthy
 
   knowledge_store:
     build:
@@ -22,3 +32,64 @@ services:
     profiles: ["gpu"]
     deploy:
       replicas: 0
+
+  llm-model:
+    image: ${LLM_SERVER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-b11382}
+    container_name: llm_model
+    entrypoint: ["/bin/sh", "/opt/horus/fetch-model.sh"]
+    environment:
+      - LLM_GGUF_FILE=qwen3-4b-instruct-2507-Q4_K_M.gguf
+      - LLM_GGUF_URL=${LLM_GGUF_URL:-https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/a06e946bb6b655725eafa393f4a9745d460374c9/Qwen3-4B-Instruct-2507-Q4_K_M.gguf}
+      - LLM_GGUF_SHA256=${LLM_GGUF_SHA256:-3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597}
+      - LLM_GGUF_SIZE=${LLM_GGUF_SIZE:-2497281120}
+      - HF_TOKEN=${HF_TOKEN:-}
+    healthcheck:
+      disable: true
+    volumes:
+      - ./llm/fetch-model.sh:/opt/horus/fetch-model.sh:ro
+      - llm_models:/models
+    networks:
+      - horus-net
+
+  llm:
+    image: ${LLM_SERVER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-b11382}
+    container_name: llm
+    restart: unless-stopped
+    mem_limit: ${LLM_SERVER_MEM_LIMIT:-6g}
+    memswap_limit: ${LLM_SERVER_MEMSWAP_LIMIT:-${LLM_SERVER_MEM_LIMIT:-6g}}
+    command:
+      - --model
+      - /models/qwen3-4b-instruct-2507-Q4_K_M.gguf
+      - --alias
+      - ${LLM_VLLM_MODEL:-qwen3-4b}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --ctx-size
+      - ${LLM_VLLM_MAX_MODEL_LEN:-8192}
+      - --parallel
+      - "1"
+      - --load-mode
+      - mmap
+      - --cache-ram
+      - "1024"
+      - --threads
+      - ${LLM_SERVER_THREADS:-4}
+      - --metrics
+    depends_on:
+      llm-model:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-m", "10", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 15s
+      retries: 5
+      start_period: 600s
+    networks:
+      - horus-net
+    volumes:
+      - llm_models:/models:ro
+
+volumes:
+  llm_models: {}

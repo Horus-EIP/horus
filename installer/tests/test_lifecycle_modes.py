@@ -58,6 +58,19 @@ class ExpectedServices(unittest.TestCase):
         )
         self.assertNotIn("vllm", horus_install.expected_services(infra))
 
+    def test_cpu_overlay_expects_llama_server_as_llm(self):
+        for separator in (":", ";"):
+            with self.subTest(separator=separator):
+                infra = write_env(
+                    self.tmp,
+                    f"COMPOSE_FILE=docker-compose.yml{separator}{profiles.CPU_OVERLAY}\n",
+                )
+                self.assertIn("llm", horus_install.expected_services(infra))
+
+    def test_gpu_env_does_not_expect_llm(self):
+        infra = write_env(self.tmp, "COMPOSE_FILE=docker-compose.yml\n")
+        self.assertNotIn("llm", horus_install.expected_services(infra))
+
     def test_core_services_are_always_expected(self):
         infra = write_env(self.tmp, f"COMPOSE_FILE=a:{profiles.CPU_OVERLAY}\n")
         expected = horus_install.expected_services(infra)
@@ -317,6 +330,38 @@ class CpuProfileDoesNotFailTheInstall(unittest.TestCase):
         self.assertIn("65 of the 68", joined)
         self.assertIn("F41", joined)
         self.assertIn("14 minutes", joined)
+        self.assertIn("llama-server", joined)
+
+    def unanswered_chat(self, model_server):
+        import smoke
+        steps, _ = self.make_steps()
+        deadline = smoke.time.monotonic() + 600
+        with mock.patch.object(smoke, "ask", return_value=("", "no answer in 480s")), \
+                self.assertRaises(InstallError) as caught:
+            smoke.step_chat(steps, None, "http://localhost:8000", deadline, "token",
+                            model_server)
+        return caught.exception.fix
+
+    def test_an_unanswered_cpu_chat_points_at_the_llm_container(self):
+        fix = self.unanswered_chat("llm")
+        self.assertIn("docker compose ps llm", fix)
+        self.assertIn("docker compose logs --tail 80 llm", fix)
+        self.assertIn("LLM_SERVER_MEM_LIMIT", fix)
+        self.assertNotIn("vllm", fix)
+
+    def test_an_unanswered_gpu_chat_points_at_the_vllm_container(self):
+        fix = self.unanswered_chat("vllm")
+        self.assertIn("docker compose ps vllm", fix)
+        self.assertIn("--profile cpu-standard", fix)
+
+    def test_the_smoke_test_reads_the_model_server_from_the_compose_files(self):
+        import smoke
+        with tempfile.TemporaryDirectory() as name:
+            cpu = write_env(Path(name), f"COMPOSE_FILE=docker-compose.yml:{profiles.CPU_OVERLAY}\n")
+            self.assertEqual(smoke.model_server_of(cpu), "llm")
+        with tempfile.TemporaryDirectory() as name:
+            gpu = write_env(Path(name), "COMPOSE_FILE=docker-compose.yml\n")
+            self.assertEqual(smoke.model_server_of(gpu), "vllm")
 
 
 class Parser(unittest.TestCase):

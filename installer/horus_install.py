@@ -71,10 +71,8 @@ def cpu_overlay_active(infra: Path) -> bool:
     return answer
 
 def expected_services(infra: Path) -> list[str]:
-    expect = list(CORE_SERVICES)
-    if not cpu_overlay_active(infra):
-        expect.append("vllm")
-    return expect
+    server = profiles.CPU_MODEL_SERVER if cpu_overlay_active(infra) else profiles.GPU_MODEL_SERVER
+    return [*CORE_SERVICES, server]
 
 _GIB = 1024 ** 3
 
@@ -599,13 +597,16 @@ def warn_cpu_expectations(log: Log) -> None:
     log.say("  store, tasks, conversations and the admin pages all behave")
     log.say("  normally. That is 65 of the 68 acceptance-test scenarios.")
     log.say("")
-    log.say(yellow("  What does NOT work is the model itself."))
-    log.say("  Measured on a 12-core CPU: one question took 14 minutes and came")
-    log.say("  back wrong. The same question on a GPU answers in about 4 seconds.")
-    log.say("  Test scenarios F41, F42 and F43 need an NVIDIA GPU. Nothing else does.")
+    log.say(yellow("  What is NOT known yet is how well the model answers."))
+    log.say("  The CPU profile now serves one quantized 4B model with llama-server")
+    log.say("  instead of two models inside the services. That has not been timed")
+    log.say("  on a CPU-only machine. The old setup, measured on a 12-core CPU, took")
+    log.say("  14 minutes for one question and came back wrong; a GPU answers in")
+    log.say("  about 4 seconds. Test scenarios F41, F42 and F43 need an NVIDIA GPU.")
+    log.say("  Nothing else does.")
     log.say("")
-    log.say("  The install will still finish and report success. Do not file the")
-    log.say("  slow or wrong answer as a bug - it is a known limitation.")
+    log.say("  The install will still finish and report success. A slow answer is")
+    log.say("  expected; please note how long it took in your report.")
     log.say("")
 
 
@@ -634,7 +635,8 @@ def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
     expect = expected_services(infra)
     log.step("Starting Horus")
     log.say(f"  {len(expect)} services"
-            + ("" if "vllm" in expect else "  (CPU profile: vllm is not started)"))
+            + ("" if profiles.GPU_MODEL_SERVER in expect
+               else "  (CPU profile: llama-server runs as llm instead of vllm)"))
 
     up, code = up_waiting_out_a_dependency_abort(
         log, infra, ["up", "-d"] + (["--build"] if build else []), timeout)
@@ -931,9 +933,7 @@ def _dispatch(log: Log, args) -> int:
 
     pull_and_build(log, infra, no_build=args.no_build, timeout=args.timeout)
 
-    expect = list(CORE_SERVICES)
-    if profiles.PROFILES[name].runs_vllm:
-        expect.append("vllm")
+    expect = [*CORE_SERVICES, profiles.model_server(name)]
     wait_for_health(log, infra, expect, timeout=args.timeout)
 
     if args.skip_smoke:
@@ -944,6 +944,7 @@ def _dispatch(log: Log, args) -> int:
             log, repo,
             timeout=min(args.timeout, 1200),
             require_answer_quality=not profiles.is_cpu_profile(name),
+            model_server=profiles.model_server(name),
         )
 
     if not result.get("passed"):
@@ -995,9 +996,9 @@ def _success(log: Log, infra: Path, profile_name: str, choice: dict,
     log.say(f"  Documents   {consent.describe(choice)}")
     log.say("")
     if profiles.is_cpu_profile(profile_name):
-        log.say(yellow("  Running on the CPU, so the AI answers are not usable:"))
-        log.say(yellow("  expect about 15 minutes per question, and the answer may"))
-        log.say(yellow("  be wrong. Everything else works normally - 65 of the 68"))
+        log.say(yellow("  Running on the CPU: the AI answers come from llama-server"))
+        log.say(yellow("  and take minutes, not seconds; this setup has not been"))
+        log.say(yellow("  timed yet. Everything else works normally - 65 of the 68"))
         log.say(yellow("  test scenarios. Only F41, F42 and F43 need an NVIDIA GPU."))
         log.say("")
     app_dir = BUNDLE_DIR / "app"

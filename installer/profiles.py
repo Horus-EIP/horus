@@ -59,7 +59,6 @@ class Profile:
 
 _ROUTER_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 _WORKER_MODEL = "Qwen/Qwen3-4B-Instruct-2507"
-_SMALL_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 
 _N_RESULTS = Setting(
     "10", MEASURED,
@@ -69,7 +68,25 @@ _N_RESULTS = Setting(
 
 _SERVED_NAME = "qwen3-4b"
 
+GPU_MODEL_SERVER = "vllm"
+
+CPU_MODEL_SERVER = "llm"
+
+CPU_MODEL_SERVER_PORT = 8080
+
+CPU_MODEL_SERVER_URL = f"http://{CPU_MODEL_SERVER}:{CPU_MODEL_SERVER_PORT}/v1"
+
+CPU_CONTEXT_TOKENS = 8192
+
+GGUF_BYTES = 2_497_281_120
+
 _KNOWLEDGE_STORE_MEMORY = "6g"
+
+_CPU_MAS_MEMORY = "3g"
+
+_CPU_AGENT_MEMORY = "4g"
+
+_CPU_MODEL_SERVER_MEMORY = "6g"
 
 def _no_swap_why(swap_key: str) -> str:
     return (
@@ -78,10 +95,26 @@ def _no_swap_why(swap_key: str) -> str:
         "restarted instead of pushing the whole host into swap."
     )
 
-def _memory_settings(agent_limit: str, agent_why: str) -> dict[str, Setting]:
+def _memory_settings() -> dict[str, Setting]:
     return {
+        "MAS_MEM_LIMIT": Setting(
+            _CPU_MAS_MEMORY, DERIVED,
+            "MAS holds no model on the CPU: routing and aggregation run in "
+            "llama-server. What is left is Python, torch, transformers and the "
+            "90 MB MiniLM skill embedder, about 1 to 1.5 GB by estimate, so 3g "
+            "is about twice that. MAS logs its peak RSS on every 'Completed "
+            "task' line; read it before going lower. "
+            + _no_swap_why("MAS_MEMSWAP_LIMIT"),
+        ),
         "AGENT_MEM_LIMIT": Setting(
-            agent_limit, DERIVED, f"{agent_why} {_no_swap_why('AGENT_MEMSWAP_LIMIT')}",
+            _CPU_AGENT_MEMORY, DERIVED,
+            "The agent holds no decision model on the CPU: it calls "
+            "llama-server. Python, torch, transformers and spaCy "
+            "en_core_web_sm come to about 1 to 1.5 GB by estimate. The ReAct "
+            "summarize tool, which chat does not use, would load "
+            "distilbart-cnn-12-6 (about 1.2 GB in fp32) on first use, and 4g "
+            "holds both. The agent logs its peak RSS on every 'Task processed' "
+            "line. " + _no_swap_why("AGENT_MEMSWAP_LIMIT"),
         ),
         "KNOWLEDGE_STORE_MEM_LIMIT": Setting(
             _KNOWLEDGE_STORE_MEMORY, DERIVED,
@@ -91,9 +124,23 @@ def _memory_settings(agent_limit: str, agent_why: str) -> dict[str, Setting]:
             "ingestion. Sized from those weights, not measured. "
             + _no_swap_why("KNOWLEDGE_STORE_MEMSWAP_LIMIT"),
         ),
+        "LLM_SERVER_MEM_LIMIT": Setting(
+            _CPU_MODEL_SERVER_MEMORY, DERIVED,
+            f"llama-server holds the Q4_K_M weights ({GGUF_BYTES:,} bytes, "
+            "2.3 GiB, memory-mapped), the KV cache of 8,192 tokens in f16 (36 "
+            "layers x 8 KV heads x 128 x 2 for K and V x 2 bytes x 8,192 = "
+            "1.1 GiB) and a few hundred MB of compute buffers: about 4 GiB. "
+            "--cache-ram lets its prompt cache take up to 1 GiB more, which "
+            "leaves about 1 GiB of margin under 6g. Arithmetic, not a "
+            "measurement. " + _no_swap_why("LLM_SERVER_MEMSWAP_LIMIT"),
+        ),
     }
 
-THREAD_KEYS: tuple[str, ...] = ("LLM_TORCH_INTRAOP_THREADS", "AGENT_TORCH_INTRAOP_THREADS")
+THREAD_KEYS: tuple[str, ...] = (
+    "LLM_SERVER_THREADS", "LLM_TORCH_INTRAOP_THREADS", "AGENT_TORCH_INTRAOP_THREADS",
+)
+
+TORCH_THREADS_WITHOUT_A_MODEL = 1
 
 PHYSICAL_CORES_FALLBACK = 4
 
@@ -112,30 +159,31 @@ def physical_cores(probe: dict | None) -> tuple[int, str]:
         )
     return count, f"{count} physical cores detected"
 
-def split_threads(cores: int) -> tuple[int, int]:
-    router = max(1, cores // 3)
-    return router, max(1, cores - router)
-
 def _thread_settings(probe: dict | None) -> dict[str, Setting]:
     cores, basis = physical_cores(probe)
-    router, worker = split_threads(cores)
     return {
+        "LLM_SERVER_THREADS": Setting(
+            str(cores), DERIVED,
+            f"llama-server's generation threads: all {cores} physical cores "
+            f"({basis}). It is the only process that generates on this "
+            "machine: MAS and the agent wait on its HTTP answer, and the "
+            "knowledge store embeds the question before generation starts. "
+            "Generation is bound by memory bandwidth, so hyperthreads add "
+            "nothing to it and stay free for the MAS event loop, the knowledge "
+            "store and the databases. llama.cpp's own default is the physical "
+            "core count too. Not benchmarked; B-91 compares thread counts.",
+        ),
         "LLM_TORCH_INTRAOP_THREADS": Setting(
-            str(router), DERIVED,
-            f"The MAS router's torch threads: a third of the {cores} cores "
-            f"({basis}). The router reads a short prompt, the question and the "
-            "agent list, and MAS runs one generation at a time, so it needs "
-            "the smaller share.",
+            str(TORCH_THREADS_WITHOUT_A_MODEL), DERIVED,
+            "MAS loads no model in-process on the CPU. Its torch only runs the "
+            "small MiniLM skill embedder on short texts, outside generation, "
+            "so one thread is enough and never competes with llama-server.",
         ),
         "AGENT_TORCH_INTRAOP_THREADS": Setting(
-            str(worker), DERIVED,
-            f"The agent worker gets the rest of the {cores} cores ({basis}). "
-            "It prefills thousands of retrieved tokens for every answer, the "
-            "longest step of a CPU chat. Router and worker add up to the "
-            "physical cores, so running together they never oversubscribe "
-            "them, and any hyperthreads stay free for the MAS event loop, the "
-            "knowledge store and the databases. A single core cannot be split: "
-            "each service then gets one thread. Not benchmarked.",
+            str(TORCH_THREADS_WITHOUT_A_MODEL), DERIVED,
+            "The agent loads no decision model on the CPU, so its torch has "
+            "no generation to run. One thread, so nothing it does competes "
+            "with llama-server.",
         ),
     }
 
@@ -191,9 +239,38 @@ def _vllm_common() -> dict[str, Setting]:
 def _cpu_common() -> dict[str, Setting]:
     return {
         "LLM_BACKEND": Setting(
-            "transformers", MEASURED,
-            "In-process HuggingFace inference. The pinned vllm image is CUDA-only "
-            "and crash-loops on a CPU host, so it must not be the backend here.",
+            "vllm", DERIVED,
+            "The OpenAI-compatible client mode of MAS and the agent; 'vllm' is "
+            "its historical name. On the CPU the server behind it is "
+            "llama-server in the llm container, one process for the router "
+            "and every agent, so neither service loads or downloads a model "
+            "of its own. There is no fallback: if llm is down, chat fails.",
+        ),
+        "LLM_VLLM_URL": Setting(
+            CPU_MODEL_SERVER_URL, DERIVED,
+            "In-network address of the llm service. Its port is not published "
+            "to the host: only the containers on horus-net reach it, which is "
+            "why it runs without an API key.",
+        ),
+        "LLM_VLLM_MODEL": Setting(
+            _SERVED_NAME, DERIVED,
+            "The name llama-server answers to. Compose passes this same value "
+            "to its --alias, so the two cannot drift apart.",
+        ),
+        "LLM_VLLM_MAX_MODEL_LEN": Setting(
+            str(CPU_CONTEXT_TOKENS), DERIVED,
+            "The context both clients fit their prompt and answer into. "
+            "Compose passes the same value to llama-server's --ctx-size, which "
+            "otherwise takes the model's own 262,144 tokens and a KV cache far "
+            "larger than this machine's RAM.",
+        ),
+        "LLM_VLLM_TIMEOUT": Setting(
+            "900", DERIVED,
+            "Seconds MAS and the agent wait on one call to llama-server. It "
+            "answers one request at a time and queues the others, so a call "
+            "can wait behind a whole answer before its own prompt is read. The "
+            "GPU profiles keep the code default of 120. Not timed on a "
+            "CPU-only host.",
         ),
         "LLM_FORCE_CPU": Setting(
             "1", MEASURED, "No CUDA to find; say so instead of letting torch probe and fail.",
@@ -242,6 +319,7 @@ def _cpu_common() -> dict[str, Setting]:
             "spiral before anything is shown. The chat's live preview has "
             "unit tests but has not been watched in a browser on a CPU host.",
         ),
+        **_memory_settings(),
     }
 
 PROFILES: dict[str, Profile] = {}
@@ -249,44 +327,34 @@ PROFILES: dict[str, Profile] = {}
 def _add(p: Profile) -> None:
     PROFILES[p.name] = p
 
+_CPU_MEMORY_NOTE = (
+    "The memory ceilings (MAS 3g, agent 4g, knowledge store 6g, llm 6g) are "
+    "ceilings, not a budget: they add up to more than 16 GB. They stop one "
+    "runaway container from pushing the host into swap. Expected use is lower: "
+    "about 4 GiB for llm, 2 to 3 GB for the knowledge store and 1 to 1.5 GB "
+    "each for MAS and the agent, by estimate."
+)
+
 _add(Profile(
     name="cpu-lean",
     trigger=f"No CUDA usable from Docker, under about 16 GB of RAM "
             f"(threshold {CPU_RAM_SPLIT_GIB:.1f} GiB reported).",
     runs_vllm=False,
-    summary="Smallest everything. Slow but it finishes.",
-    settings={
-        **_cpu_common(),
-        "LLM_MODEL_ID": Setting(
-            _SMALL_MODEL, MEASURED,
-            "1.5B router - the shipping default, unchanged.",
-        ),
-        "MODEL_NAME": Setting(
-            _SMALL_MODEL, DERIVED,
-            "1.5B worker too. The 4B model needs ~9 GB of resident RAM on top of "
-            "twelve containers; on a small machine it swaps and never finishes. "
-            "That is the argument for downgrading the worker, not a measurement "
-            "of it - the swap has been reasoned about, never timed.",
-        ),
-        **_memory_settings(
-            "6g",
-            "The 1.5B worker in bf16 is 3.1 GB of weights. Its KV cache is "
-            "small (28 layers x 2 KV heads x 128 x 2 for K and V x 2 bytes, "
-            "about 0.2 GB at 8k tokens) and torch, transformers and spaCy "
-            "add about 1.5 GB. Arithmetic, not a measurement.",
-        ),
-    },
+    summary="The cpu-standard model server on a smaller machine. Untested.",
+    settings=_cpu_common(),
     notes=(
-        "Answer quality is noticeably below the GPU stack: this is the 1.5B "
-        "model doing work the 4B model normally does.",
-        "Expect minutes, not seconds, for the first answer of a session.",
-        "No CPU-only machine has been benchmarked. The timeouts and the model "
-        "downgrade are reasoned, not measured - if this profile behaves oddly, "
-        "suspect those numbers before you suspect a bug.",
-        "The memory ceilings (agent 6g, knowledge store 6g, MAS 14g) are "
-        "ceilings, not a budget: on a machine this size they add up to more "
-        "than its RAM. They stop one runaway container from pushing the host "
-        "into swap.",
+        "Runs what cpu-standard runs: one llama-server (the llm service) with "
+        "Qwen3-4B-Instruct-2507 Q4_K_M, about 4 GiB resident. That is less "
+        "than the two 1.5B models this profile used to load in-process (6.2 GB "
+        "of bf16 weights), and answers come from the 4B model again.",
+        "Whether it fits next to the rest of the stack on a machine this size "
+        "has not been measured. Machines under 16 GB get a smaller GGUF or a "
+        "'not supported' screen once the CPU benchmark (B-91) has run.",
+        "No CPU-only machine has been benchmarked with llama-server. The "
+        "timeouts, threads and memory ceilings are reasoned, not measured - if "
+        "this profile behaves oddly, suspect those numbers before you suspect "
+        "a bug.",
+        _CPU_MEMORY_NOTE,
     ),
 ))
 
@@ -295,43 +363,25 @@ _add(Profile(
     trigger=f"No CUDA usable from Docker, about 16 GB of RAM or more "
             f"(threshold {CPU_RAM_SPLIT_GIB:.1f} GiB reported).",
     runs_vllm=False,
-    summary="Today's tiered defaults, forced onto the CPU.",
-    settings={
-        **_cpu_common(),
-        "LLM_MODEL_ID": Setting(
-            _ROUTER_MODEL, MEASURED, "1.5B router - the shipping default.",
-        ),
-        "MODEL_NAME": Setting(
-            _WORKER_MODEL, MEASURED, "4B worker - the shipping default.",
-        ),
-        **_memory_settings(
-            "12g",
-            "The 4B worker in bf16 is 8.1 GB of weights. The KV cache of an "
-            "8k-token prompt and answer adds about 1.1 GB (36 layers x 8 KV "
-            "heads x 128 x 2 for K and V x 2 bytes) and torch, transformers "
-            "and spaCy about 1.5 GB, which leaves about 1 GB of margin. "
-            "Arithmetic, not a measurement.",
-        ),
-    },
+    summary="Qwen3-4B Q4_K_M on llama-server: one model for MAS and every agent.",
+    settings=_cpu_common(),
     notes=(
-        "This is the shipping model pair; only the device changes.",
-        "MEASURED 2026-09-01, on a 12-core laptop CPU with 64 GB of RAM - the "
-        "first time this profile has ever been run. One grounded question took "
-        "14m 14s end to end, and the answer was WRONG: the agent's anti-spiral "
-        "guard fired instead of an answer. Retrieval was fine (the right "
-        "document ranked first and contained the figure); generation is what "
-        "failed. Everything else passed - auth, RBAC, five agents registering, "
-        "ingestion, the chat socket.",
-        "So treat this profile as 'the stack comes up and is demonstrably "
-        "correct everywhere except the model'. On the same machine a GPU run "
-        "answers in about 4 seconds.",
+        "One llama-server process (the llm service) serves "
+        "Qwen3-4B-Instruct-2507 Q4_K_M to MAS and every agent. MAS and the "
+        "agent load no model in-process and download none.",
+        "Before llama-server, this profile ran a 1.5B router in MAS and the 4B "
+        "worker in bf16 in the agent, both with Transformers. MEASURED "
+        "2026-09-01 that way, on a 12-core laptop CPU with 64 GB of RAM: one "
+        "grounded question took 14m 14s end to end and the answer was WRONG - "
+        "the anti-spiral guard fired instead of an answer. Retrieval was fine "
+        "and everything else passed. The same machine answers in about 4 "
+        "seconds on its GPU.",
+        "llama-server has not been timed on a CPU-only machine yet; the "
+        "100-question test set (B-91) does that.",
         "The timeouts are still DERIVED, not fitted - but the 1800s ReAct "
         "budget was at least shown to be generous rather than tight: the slow "
         "run finished well inside it and was not truncated.",
-        "The memory ceilings (agent 12g, knowledge store 6g, MAS 14g) add up "
-        "to more than a 16 GB machine has. They stop one runaway container "
-        "from pushing the host into swap; they do not make the two in-process "
-        "models fit. That needs one shared model server for MAS and the agent.",
+        _CPU_MEMORY_NOTE,
     ),
 ))
 
@@ -468,6 +518,12 @@ PROFILE_ORDER: tuple[str, ...] = (
 def is_cpu_profile(name: str) -> bool:
     return str(name).startswith("cpu")
 
+def model_server(name: str) -> str:
+    return GPU_MODEL_SERVER if get(name).runs_vllm else CPU_MODEL_SERVER
+
+def model_server_for_compose_file(compose_file: str) -> str:
+    return CPU_MODEL_SERVER if CPU_OVERLAY in compose_file else GPU_MODEL_SERVER
+
 
 CPU_OVERLAY = "docker-compose.cpu.yml"
 BASE_COMPOSE = "docker-compose.yml"
@@ -492,18 +548,19 @@ def _gib(n: int | float | None) -> float | None:
 def _cpu_profile_for_ram(ram_gib: float | None) -> tuple[str, str]:
     if ram_gib is None:
         return "cpu-lean", (
-            "Total RAM could not be measured, so the smaller-model profile "
-            "is chosen. It is the one that cannot run out of memory."
+            "Total RAM could not be measured, so the low-RAM profile is "
+            "chosen. It runs the same llama-server model as cpu-standard."
         )
     if ram_gib < CPU_RAM_SPLIT_GIB:
         return "cpu-lean", (
             f"{ram_gib:.1f} GiB RAM is under the {CPU_RAM_SPLIT_GIB:.0f} GiB "
-            "line, so the 1.5B model is used for both the router and the "
-            "worker. The 4B worker would swap on this machine."
+            "line. For now this profile runs the same llama-server model as "
+            "cpu-standard; what machines this size get is decided after the "
+            "CPU benchmark (B-91)."
         )
     return "cpu-standard", (
-        f"{ram_gib:.1f} GiB RAM is enough for the shipping model pair "
-        "(1.5B router, 4B worker) held in system memory."
+        f"{ram_gib:.1f} GiB RAM holds the llama-server 4B model (about 4 GiB) "
+        "next to the rest of the stack."
     )
 
 def select_profile(probe: dict) -> tuple[str, list[str]]:
@@ -657,7 +714,7 @@ def describe(profile_name: str, probe: dict | None = None) -> str:
         f"  {p.summary}",
         "",
         f"  Selected when:  {p.trigger}",
-        f"  vLLM service:   {'starts (GPU inference)' if p.runs_vllm else 'NOT started'}",
+        f"  Model server:   {'vllm (GPU inference)' if p.runs_vllm else 'llm (llama-server on the CPU)'}",
         f"  Confidence:     {'measured - this exact config has been run' if p.confidence == MEASURED else 'derived - reasoned from the measured gpu-8g config, NOT benchmarked'}",
         "",
         "  Writes to src/infra/.env:",

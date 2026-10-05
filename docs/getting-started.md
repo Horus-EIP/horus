@@ -105,7 +105,7 @@ cd src/infra
 docker compose ps
 ```
 
-Every application service declares a healthcheck, so wait until `mas`, `agent`, `knowledge_store` and `web-client` (and `vllm` on a GPU machine) show `(healthy)`, not just `Up`. Each one probes an unauthenticated endpoint inside its own container:
+Every application service declares a healthcheck, so wait until `mas`, `agent`, `knowledge_store` and `web-client` show `(healthy)`, not just `Up`, together with the model server: `vllm` on a GPU machine, `llm` (llama-server) with the CPU overlay. Each one probes an unauthenticated endpoint inside its own container:
 
 | Service | Probe | Allowed first start |
 |---------|-------|---------------------|
@@ -113,8 +113,9 @@ Every application service declares a healthcheck, so wait until `mas`, `agent`, 
 | `agent` | `GET /health` on :8001 (python) | 30 min (decision model download and load) |
 | `knowledge_store` | `GET /health` on :8080 (python) | 10 min |
 | `web-client` | `GET /api/health` on :3000 (wget) | 2 min |
+| `llm` (CPU only) | `GET /health` on :8080 inside `horus-net` (curl) | 10 min (model load) |
 
-A service is only marked `unhealthy` after that start window, so `(health: starting)` during a first install is normal. The agent starts only once `mas` and `knowledge_store` are healthy, and `mas` only once `postgres`, `redis` and `rabbitmq` are.
+A service is only marked `unhealthy` after that start window, so `(health: starting)` during a first install is normal. The agent starts only once `mas` and `knowledge_store` are healthy, and `mas` only once `postgres`, `redis` and `rabbitmq` are. With the CPU overlay, `mas` and `agent` also wait for `llm`, which starts after the one-shot `llm-model` has downloaded and checked the 2.5 GB model (`docker compose logs llm-model` shows the download). On the CPU, MAS and the agent load no model of their own, so their start windows are mostly unused.
 
 **PostgreSQL** (adjust user and database to match `.env`):
 

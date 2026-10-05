@@ -16,6 +16,7 @@ import urllib.request
 import uuid
 from pathlib import Path
 
+import profiles
 from common import (
     EXIT_SMOKE_FAILED,
     InstallError,
@@ -474,6 +475,22 @@ def read_env(path: Path) -> dict[str, str]:
             val = val[1:-1]
         values[key] = val
     return values
+
+def model_server_of(infra: Path) -> str:
+    compose_file = read_env(infra / ".env").get("COMPOSE_FILE", "")
+    return profiles.model_server_for_compose_file(compose_file)
+
+MODEL_SERVER_HINTS = {
+    profiles.GPU_MODEL_SERVER: (
+        "On a machine without a usable GPU, reinstall with --profile cpu-standard."
+    ),
+    profiles.CPU_MODEL_SERVER: (
+        "On a CPU profile llm is llama-server. If its log shows it was killed\n"
+        "for memory, raise LLM_SERVER_MEM_LIMIT in src/infra/.env. If it never\n"
+        "started, the model download did not finish:\n"
+        "  docker compose logs llm-model"
+    ),
+}
 
 def admin_credentials(infra: Path, steps: Steps) -> tuple[str, str]:
     env_path = infra / ".env"
@@ -955,7 +972,8 @@ def ask(
     finally:
         client.close()
 
-def step_chat(steps: Steps, log: Log, mas: str, deadline: float, token: str) -> str:
+def step_chat(steps: Steps, log: Log, mas: str, deadline: float, token: str,
+              model_server: str = profiles.GPU_MODEL_SERVER) -> str:
     steps.start("7/9  Ask a question about the demo document")
     budget = _remaining(deadline, steps, "asking the demo question")
     answer, note = ask(log, mas, token, QUESTION, "horus-smoke", max(30.0, budget - 120.0))
@@ -964,14 +982,13 @@ def step_chat(steps: Steps, log: Log, mas: str, deadline: float, token: str) -> 
             steps,
             "The stack never produced an answer.",
             f"Asked: {QUESTION!r}\nResult: {note}",
-            "Almost always the AI worker: it is either still loading model\n"
-            "weights, or the LLM backend it was told to use is not running.\n"
-            "  docker compose -f src/infra/docker-compose.yml logs -f agent\n"
-            "If LLM_BACKEND=vllm in src/infra/.env, the vllm container must be\n"
-            "healthy - there is no automatic fallback:\n"
-            "  docker compose -f src/infra/docker-compose.yml ps vllm\n"
-            "  docker compose -f src/infra/docker-compose.yml logs --tail 80 vllm\n"
-            "On a machine without a usable GPU, reinstall with --profile cpu.",
+            "Almost always the AI worker: it is either still starting, or the\n"
+            f"model server it calls, the {model_server} container, is not healthy.\n"
+            "There is no automatic fallback. From src/infra:\n"
+            "  docker compose logs -f agent\n"
+            f"  docker compose ps {model_server}\n"
+            f"  docker compose logs --tail 80 {model_server}\n"
+            + MODEL_SERVER_HINTS.get(model_server, ""),
         )
     steps.passed(f"{note} ({len(answer)} chars)")
     log.debug("answer: " + answer[:1000].replace("\n", " "))
@@ -1036,7 +1053,8 @@ def step_negative_control(steps: Steps, log: Log, mas: str, token: str, deadline
     steps.passed("declined to answer outside the document set")
 
 def run(log: Log, repo: Path, base_urls: dict | None = None,
-        timeout: int = DEFAULT_TIMEOUT, require_answer_quality: bool = True) -> dict:
+        timeout: int = DEFAULT_TIMEOUT, require_answer_quality: bool = True,
+        model_server: str | None = None) -> dict:
     urls = dict(DEFAULT_BASE_URLS)
     urls.update(base_urls or {})
     mas = urls["mas"].rstrip("/")
@@ -1056,7 +1074,8 @@ def run(log: Log, repo: Path, base_urls: dict | None = None,
         step_authenticated_ping(steps, mas, token, deadline)
         workers = step_wait_for_agents(steps, mas, token, deadline)
         step_upload_document(steps, ks, repo, deadline)
-        answer = step_chat(steps, log, mas, deadline, token)
+        answer = step_chat(steps, log, mas, deadline, token,
+                           model_server or model_server_of(infra_dir(repo)))
         step_check_answer(steps, answer, require_answer_quality)
         step_negative_control(steps, log, mas, token, deadline)
     except InstallError:

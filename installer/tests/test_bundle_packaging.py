@@ -364,7 +364,8 @@ class ComposeMemoryCeilings(unittest.TestCase):
     def test_every_memory_ceiling_a_profile_writes_is_read_by_compose(self):
         read = {
             key
-            for spec in self.services.values()
+            for services in (self.services, cpu_overlay_services())
+            for spec in services.values()
             for field in ("mem_limit", "memswap_limit") if field in spec
             for key in referenced_keys(str(spec[field]))
         }

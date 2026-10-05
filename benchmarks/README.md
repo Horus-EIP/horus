@@ -35,6 +35,8 @@ python scripts/eval/run-eval.py --label eval-cpu16-q4km-baseline \
   --sample-resources
 ```
 
+On the CPU stack the GGUF lives in the `llm_models` volume, not on the host. Its verified hash is in the volume next to it: from `src/infra`, `docker compose exec llm cat /models/qwen3-4b-instruct-2507-Q4_K_M.gguf.sha256`. The llama.cpp build number of the `llm` image is in `scripts/models/README.md`.
+
 | Option | Meaning |
 |---|---|
 | `--mode chat` (default) | Every question goes through `POST /tasks/new_task/` in `auto` mode, one new conversation per question, and the answer is read from the chat WebSocket. If the socket drops, the runner polls `GET /tasks/{id}` until the task ends. |
@@ -80,7 +82,7 @@ The report is rewritten after every question, so an interrupted run keeps what i
 | `git_commit` | Short commit of the checkout that ran the script. |
 | `mas_url`, `ks_url`, `event_timeout_s`, `submit_timeout_s`, `top_k` | Run settings. |
 | `warmup` | The warmup question that was asked before the scored ones, or `null`. |
-| `server_settings` | `LLM_BACKEND`, `LLM_VLLM_MODEL`, `KNOWLEDGE_STORE_N_RESULTS`, `AGENT_MAX_NEW_TOKENS`, `AGENT_MAX_CONTEXT_CHARS`, `AGENT_STREAM_TOKENS`, `AGENT_RESPONSE_CACHE`, `LLM_TORCH_INTRAOP_THREADS`, `AGENT_TORCH_INTRAOP_THREADS`, each labelled with where the value came from (the runner's environment, or `src/infra/.env` of this checkout). Turn the response cache off for timing runs. |
+| `server_settings` | `LLM_BACKEND`, `LLM_VLLM_URL` (`http://llm:8080/v1` is llama-server, `http://vllm:8000/v1` is vLLM), `LLM_VLLM_MODEL`, `KNOWLEDGE_STORE_N_RESULTS`, `AGENT_MAX_NEW_TOKENS`, `AGENT_MAX_CONTEXT_CHARS`, `AGENT_STREAM_TOKENS`, `AGENT_RESPONSE_CACHE`, `LLM_SERVER_THREADS`, `LLM_TORCH_INTRAOP_THREADS`, `AGENT_TORCH_INTRAOP_THREADS`, each labelled with where the value came from (the runner's environment, or `src/infra/.env` of this checkout). Turn the response cache off for timing runs. |
 | `observed_models`, `observed_devices` | What the agent reported in its `reasoning.start` steps. |
 
 ### `testset`

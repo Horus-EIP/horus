@@ -944,6 +944,10 @@ class DecisionMakingAgent:
                     chunk = _json.loads(data)
                 except ValueError:
                     continue
+                error = chunk.get("error")
+                if error:
+                    message = error.get("message") if isinstance(error, dict) else error
+                    raise RuntimeError(f"LLM server stopped the stream: {message}")
                 usage = chunk.get("usage")
                 if usage:
                     self._last_gen_tokens = usage.get("completion_tokens")

@@ -642,11 +642,12 @@ def write_profile_json(
         prof = profiles.get(profile_name)
         provenance = profiles.provenance_for(profile_name, probe_data)
         runs_vllm = prof.runs_vllm
+        model_server = profiles.model_server(profile_name)
         confidence = prof.confidence
         trigger = prof.trigger
         notes = list(prof.notes)
     except Exception as exc:  # noqa: BLE001 - a bad name must not lose the probe
-        provenance, runs_vllm, confidence = {}, None, "unknown"
+        provenance, runs_vllm, model_server, confidence = {}, None, None, "unknown"
         trigger, notes = "", [f"profile lookup failed: {exc}"]
 
     derived = sorted(k for k, v in provenance.items()
@@ -661,6 +662,7 @@ def write_profile_json(
             "name": profile_name,
             "trigger": trigger,
             "runs_vllm": runs_vllm,
+            "model_server": model_server,
             "confidence": confidence,
             "reasons": list(reasons),
             "notes": notes,

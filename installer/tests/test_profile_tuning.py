@@ -19,17 +19,22 @@ from common import Log  # noqa: E402
 
 CPU_PROFILES = [name for name in profiles.PROFILE_ORDER if profiles.is_cpu_profile(name)]
 GPU_PROFILES = [name for name in profiles.PROFILE_ORDER if not profiles.is_cpu_profile(name)]
-MEMORY_KEYS = ("AGENT_MEM_LIMIT", "KNOWLEDGE_STORE_MEM_LIMIT")
-SWAP_KEYS = ("AGENT_MEMSWAP_LIMIT", "KNOWLEDGE_STORE_MEMSWAP_LIMIT")
+MEMORY_KEYS = ("MAS_MEM_LIMIT", "AGENT_MEM_LIMIT", "KNOWLEDGE_STORE_MEM_LIMIT",
+               "LLM_SERVER_MEM_LIMIT")
+SWAP_KEYS = ("MAS_MEMSWAP_LIMIT", "AGENT_MEMSWAP_LIMIT", "KNOWLEDGE_STORE_MEMSWAP_LIMIT",
+             "LLM_SERVER_MEMSWAP_LIMIT")
+IN_PROCESS_MODEL_KEYS = ("LLM_MODEL_ID", "MODEL_NAME")
+GIB = 1024 ** 3
 
 def cpu_probe(physical: int | None, logical: int | None = None,
               logical_fallback: bool = False) -> dict:
     return {"cpu": {"physical_cores": physical, "logical_cores": logical,
                     "count_is_logical_fallback": logical_fallback}}
 
-def thread_env(physical: int | None, **kwargs) -> tuple[int, int]:
+def thread_env(physical: int | None, **kwargs) -> tuple[int, int, int]:
     env = profiles.env_for("cpu-standard", cpu_probe(physical, **kwargs))
-    return (int(env["LLM_TORCH_INTRAOP_THREADS"]),
+    return (int(env["LLM_SERVER_THREADS"]),
+            int(env["LLM_TORCH_INTRAOP_THREADS"]),
             int(env["AGENT_TORCH_INTRAOP_THREADS"]))
 
 def gib(value: str) -> int:
@@ -37,39 +42,36 @@ def gib(value: str) -> int:
     return int(value[:-1])
 
 class ThreadBudget(unittest.TestCase):
-    def test_router_and_worker_threads_add_up_to_the_physical_cores(self):
-        for cores in range(2, 33):
+    def test_llama_server_gets_every_physical_core(self):
+        for cores in range(1, 33):
             with self.subTest(cores=cores):
-                self.assertEqual(sum(thread_env(cores)), cores)
+                self.assertEqual(thread_env(cores)[0], cores)
 
-    def test_the_router_gets_fewer_threads_than_the_worker(self):
-        for cores in range(3, 33):
+    def test_mas_and_the_agent_keep_one_torch_thread_each(self):
+        for cores in range(1, 33):
             with self.subTest(cores=cores):
-                router, worker = thread_env(cores)
-                self.assertLess(router, worker)
+                self.assertEqual(thread_env(cores)[1:], (1, 1))
 
-    def test_a_single_core_still_gives_each_service_one_thread(self):
-        self.assertEqual(thread_env(1), (1, 1))
+    def test_an_eight_core_machine_gives_llama_server_eight_threads(self):
+        self.assertEqual(thread_env(8), (8, 1, 1))
 
-    def test_an_eight_core_machine_gives_the_router_two_threads(self):
-        self.assertEqual(thread_env(8), (2, 6))
-
-    def test_a_logical_only_count_is_halved_before_splitting(self):
-        self.assertEqual(thread_env(16, logical=16, logical_fallback=True), (2, 6))
+    def test_a_logical_only_count_is_halved_before_it_reaches_llama_server(self):
+        self.assertEqual(thread_env(16, logical=16, logical_fallback=True), (8, 1, 1))
 
     def test_an_unknown_core_count_falls_back_to_four_cores(self):
         for probe in (None, {}, {"cpu": {}}, cpu_probe(None), cpu_probe(0)):
             with self.subTest(probe=probe):
                 env = profiles.env_for("cpu-lean", probe)
+                self.assertEqual(env["LLM_SERVER_THREADS"], "4")
                 self.assertEqual(env["LLM_TORCH_INTRAOP_THREADS"], "1")
-                self.assertEqual(env["AGENT_TORCH_INTRAOP_THREADS"], "3")
+                self.assertEqual(env["AGENT_TORCH_INTRAOP_THREADS"], "1")
 
-    def test_every_cpu_profile_writes_both_thread_settings(self):
+    def test_every_cpu_profile_writes_all_three_thread_settings(self):
         for name in CPU_PROFILES:
             with self.subTest(name):
                 env = profiles.env_for(name, cpu_probe(6))
-                self.assertEqual(env["LLM_TORCH_INTRAOP_THREADS"], "2")
-                self.assertEqual(env["AGENT_TORCH_INTRAOP_THREADS"], "4")
+                self.assertEqual(
+                    [env[key] for key in profiles.THREAD_KEYS], ["6", "1", "1"])
 
     def test_gpu_profiles_leave_the_thread_settings_to_the_code_default(self):
         for name in GPU_PROFILES:
@@ -82,17 +84,67 @@ class ThreadBudget(unittest.TestCase):
         for key in profiles.THREAD_KEYS:
             self.assertIn(key, profiles.MANAGED_KEYS)
 
-    def test_the_provenance_explains_the_split_with_the_detected_cores(self):
+    def test_the_provenance_explains_the_threads_with_the_detected_cores(self):
         provenance = profiles.provenance_for("cpu-standard", cpu_probe(12))
-        router = provenance["LLM_TORCH_INTRAOP_THREADS"]
-        worker = provenance["AGENT_TORCH_INTRAOP_THREADS"]
-        self.assertEqual((router["value"], worker["value"]), ("4", "8"))
-        self.assertEqual(router["provenance"], profiles.DERIVED)
-        self.assertIn("12 physical cores detected", router["why"])
-        self.assertIn("never oversubscribe", worker["why"])
+        server = provenance["LLM_SERVER_THREADS"]
+        self.assertEqual(server["value"], "12")
+        self.assertEqual(server["provenance"], profiles.DERIVED)
+        self.assertIn("12 physical cores detected", server["why"])
+        for key in ("LLM_TORCH_INTRAOP_THREADS", "AGENT_TORCH_INTRAOP_THREADS"):
+            with self.subTest(key):
+                self.assertIn("llama-server", provenance[key]["why"])
+
+class CpuModelServer(unittest.TestCase):
+    def test_cpu_profiles_point_both_clients_at_llama_server(self):
+        for name in CPU_PROFILES:
+            with self.subTest(name):
+                env = profiles.env_for(name)
+                self.assertEqual(env["LLM_BACKEND"], "vllm")
+                self.assertEqual(env["LLM_VLLM_URL"], "http://llm:8080/v1")
+                self.assertEqual(env["LLM_VLLM_MODEL"], "qwen3-4b")
+                self.assertEqual(env["LLM_VLLM_MAX_MODEL_LEN"], "8192")
+                self.assertEqual(env["LLM_VLLM_TIMEOUT"], "900")
+
+    def test_cpu_profiles_configure_no_local_model(self):
+        for name in CPU_PROFILES:
+            with self.subTest(name):
+                env = profiles.env_for(name, cpu_probe(8))
+                for key in IN_PROCESS_MODEL_KEYS:
+                    self.assertNotIn(key, env)
+                self.assertNotIn("transformers", env.values())
+                self.assertEqual(profiles.model_server(name), "llm")
+
+    def test_a_cpu_reinstall_deactivates_the_in_process_model_ids(self):
+        for key in IN_PROCESS_MODEL_KEYS:
+            self.assertIn(key, profiles.MANAGED_KEYS)
+
+    def test_gpu_profiles_keep_vllm_and_its_timeout(self):
+        for name in GPU_PROFILES:
+            with self.subTest(name):
+                env = profiles.env_for(name)
+                self.assertEqual(env["LLM_VLLM_URL"], "http://vllm:8000/v1")
+                self.assertNotIn("LLM_VLLM_TIMEOUT", env)
+                self.assertNotIn("LLM_SERVER_THREADS", env)
+                self.assertEqual(profiles.model_server(name), "vllm")
+
+    def test_the_cpu_client_settings_are_derived_until_a_cpu_run(self):
+        for name in CPU_PROFILES:
+            provenance = profiles.provenance_for(name)
+            for key in ("LLM_BACKEND", "LLM_VLLM_URL", "LLM_VLLM_MODEL",
+                        "LLM_VLLM_MAX_MODEL_LEN", "LLM_VLLM_TIMEOUT"):
+                with self.subTest(f"{name} {key}"):
+                    self.assertEqual(provenance[key]["provenance"], profiles.DERIVED)
+
+    def test_the_model_server_follows_the_compose_files(self):
+        self.assertEqual(profiles.model_server_for_compose_file(
+            f"{profiles.BASE_COMPOSE}:{profiles.CPU_OVERLAY}"), "llm")
+        self.assertEqual(profiles.model_server_for_compose_file(
+            f"{profiles.BASE_COMPOSE};{profiles.CPU_OVERLAY}"), "llm")
+        self.assertEqual(profiles.model_server_for_compose_file(profiles.BASE_COMPOSE), "vllm")
+        self.assertEqual(profiles.model_server_for_compose_file(""), "vllm")
 
 class MemoryCeilings(unittest.TestCase):
-    def test_every_cpu_profile_caps_the_agent_and_the_knowledge_store(self):
+    def test_every_cpu_profile_caps_each_python_service_and_the_model_server(self):
         for name in CPU_PROFILES:
             with self.subTest(name):
                 env = profiles.env_for(name)
@@ -118,17 +170,21 @@ class MemoryCeilings(unittest.TestCase):
         for key in SWAP_KEYS:
             self.assertNotIn(key, profiles.MANAGED_KEYS)
 
-    def test_the_4b_worker_gets_more_room_than_the_1_5b_worker(self):
-        lean = profiles.env_for("cpu-lean")["AGENT_MEM_LIMIT"]
-        standard = profiles.env_for("cpu-standard")["AGENT_MEM_LIMIT"]
-        self.assertGreaterEqual(gib(standard) - gib(lean), 4)
-
-    def test_the_agent_ceiling_holds_the_worker_weights(self):
-        weights_gib = {"cpu-lean": 3.1, "cpu-standard": 8.1}
-        for name, weights in weights_gib.items():
+    def test_mas_and_the_agent_get_less_room_now_that_they_hold_no_model(self):
+        for name in CPU_PROFILES:
             with self.subTest(name):
-                ceiling = gib(profiles.env_for(name)["AGENT_MEM_LIMIT"])
-                self.assertGreater(ceiling, weights + 2)
+                env = profiles.env_for(name)
+                self.assertLess(gib(env["MAS_MEM_LIMIT"]), 14)
+                self.assertLess(gib(env["AGENT_MEM_LIMIT"]), 6)
+
+    def test_the_model_server_ceiling_holds_weights_kv_cache_and_prompt_cache(self):
+        weights = profiles.GGUF_BYTES / GIB
+        kv_cache = 36 * 8 * 128 * 2 * 2 * profiles.CPU_CONTEXT_TOKENS / GIB
+        prompt_cache = 1.0
+        for name in CPU_PROFILES:
+            with self.subTest(name):
+                ceiling = gib(profiles.env_for(name)["LLM_SERVER_MEM_LIMIT"])
+                self.assertGreater(ceiling, weights + kv_cache + prompt_cache + 0.5)
 
     def test_memory_ceilings_are_derived_and_explained(self):
         for name in CPU_PROFILES:
@@ -189,10 +245,17 @@ class ShorterCpuPrompts(unittest.TestCase):
 class DescribeShowsTheComputedSettings(unittest.TestCase):
     def test_describe_lists_thread_and_memory_settings_with_their_reasons(self):
         text = profiles.describe("cpu-standard", cpu_probe(8))
-        self.assertRegex(text, r"LLM_TORCH_INTRAOP_THREADS\s+= 2 ")
-        self.assertRegex(text, r"AGENT_TORCH_INTRAOP_THREADS\s+= 6 ")
-        self.assertRegex(text, r"AGENT_MEM_LIMIT\s+= 12g ")
+        self.assertRegex(text, r"LLM_SERVER_THREADS\s+= 8 ")
+        self.assertRegex(text, r"LLM_TORCH_INTRAOP_THREADS\s+= 1 ")
+        self.assertRegex(text, r"AGENT_TORCH_INTRAOP_THREADS\s+= 1 ")
+        self.assertRegex(text, r"AGENT_MEM_LIMIT\s+= 4g ")
+        self.assertRegex(text, r"LLM_SERVER_MEM_LIMIT\s+= 6g ")
         self.assertIn("8 physical cores detected", " ".join(text.split()))
+
+    def test_describe_names_the_model_server_of_each_profile(self):
+        self.assertIn("Model server:   llm (llama-server on the CPU)",
+                      profiles.describe("cpu-standard"))
+        self.assertIn("Model server:   vllm (GPU inference)", profiles.describe("gpu-8g"))
 
     def test_describe_all_still_renders_every_profile(self):
         text = profiles.describe_all()
@@ -297,7 +360,7 @@ class InstallWritesTheTuning(unittest.TestCase):
             write_json = patch(mock.patch.object(horus_install.hardware, "write_profile_json"))
             apply_env = patch(mock.patch.object(horus_install, "apply_env"))
             patch(mock.patch.object(horus_install, "pull_and_build"))
-            patch(mock.patch.object(horus_install, "wait_for_health"))
+            self.wait_for_health = patch(mock.patch.object(horus_install, "wait_for_health"))
             patch(mock.patch.object(horus_install, "_success"))
             patch(contextlib.redirect_stdout(io.StringIO()))
             code = horus_install._dispatch(self.log, args)
@@ -306,14 +369,29 @@ class InstallWritesTheTuning(unittest.TestCase):
 
     def test_a_cpu_install_writes_threads_from_the_detected_cores(self):
         env, _ = self.install("cpu-lean", "linux-cpu-8gb")
+        self.assertEqual(env["LLM_SERVER_THREADS"], "4")
         self.assertEqual(env["LLM_TORCH_INTRAOP_THREADS"], "1")
-        self.assertEqual(env["AGENT_TORCH_INTRAOP_THREADS"], "3")
+        self.assertEqual(env["AGENT_TORCH_INTRAOP_THREADS"], "1")
 
     def test_a_cpu_install_writes_the_memory_ceilings(self):
         env, _ = self.install("cpu-standard", "nvidia-16gb")
-        self.assertEqual(env["AGENT_MEM_LIMIT"], "12g")
+        self.assertEqual(env["MAS_MEM_LIMIT"], "3g")
+        self.assertEqual(env["AGENT_MEM_LIMIT"], "4g")
         self.assertEqual(env["KNOWLEDGE_STORE_MEM_LIMIT"], "6g")
-        self.assertEqual(sum(int(env[key]) for key in profiles.THREAD_KEYS), 8)
+        self.assertEqual(env["LLM_SERVER_MEM_LIMIT"], "6g")
+        self.assertEqual(env["LLM_SERVER_THREADS"], "8")
+
+    def test_a_cpu_install_waits_for_llama_server_instead_of_vllm(self):
+        self.install("cpu-standard", "nvidia-16gb")
+        expect = self.wait_for_health.call_args.args[2]
+        self.assertIn("llm", expect)
+        self.assertNotIn("vllm", expect)
+
+    def test_a_gpu_install_still_waits_for_vllm(self):
+        self.install("gpu-8g", "nvidia-8gb")
+        expect = self.wait_for_health.call_args.args[2]
+        self.assertIn("vllm", expect)
+        self.assertNotIn("llm", expect)
 
     def test_the_profile_json_receives_the_probe_the_threads_came_from(self):
         _, written = self.install("cpu-lean", "linux-cpu-8gb")
@@ -321,7 +399,7 @@ class InstallWritesTheTuning(unittest.TestCase):
         self.assertEqual(name, "cpu-lean")
         provenance = profiles.provenance_for(name, probe)
         self.assertIn("4 physical cores detected",
-                      provenance["AGENT_TORCH_INTRAOP_THREADS"]["why"])
+                      provenance["LLM_SERVER_THREADS"]["why"])
 
 class ProfileJsonRecordsTheComputedSettings(unittest.TestCase):
     def test_the_written_provenance_matches_the_probe(self):
@@ -332,9 +410,11 @@ class ProfileJsonRecordsTheComputedSettings(unittest.TestCase):
             hardware.write_profile_json(path, probe, "cpu-standard", env, ["test"])
             document = json.loads(path.read_text(encoding="utf-8"))
         provenance = document["tuning_provenance"]
-        self.assertEqual(provenance["LLM_TORCH_INTRAOP_THREADS"]["value"], "3")
-        self.assertEqual(provenance["AGENT_TORCH_INTRAOP_THREADS"]["value"], "7")
-        self.assertIn("AGENT_TORCH_INTRAOP_THREADS", document["derived_settings"])
+        self.assertEqual(provenance["LLM_SERVER_THREADS"]["value"], "10")
+        self.assertEqual(provenance["LLM_TORCH_INTRAOP_THREADS"]["value"], "1")
+        self.assertEqual(provenance["AGENT_TORCH_INTRAOP_THREADS"]["value"], "1")
+        self.assertIn("LLM_SERVER_THREADS", document["derived_settings"])
+        self.assertEqual(document["profile"]["model_server"], "llm")
 
 if __name__ == "__main__":
     unittest.main()
