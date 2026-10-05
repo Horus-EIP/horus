@@ -1300,3 +1300,67 @@ class TestProcessTask:
         )
         assert result["response"] == "answer"
         reg.run.assert_not_called()
+
+    async def test_attached_files_are_the_context_and_are_not_retrieved_again(self):
+        reg = MagicMock()
+        reg.has.return_value = False
+        pipe, retrieval, decision = _pipeline(tool_registry=reg)
+        retrieval.fetch = AsyncMock(return_value={"data": "Q4 REVENUE 4.2M"})
+        decision.decide.return_value = "4.2M"
+        block = "[file: q4.md (source=knowledge_store)]\nQ4 REVENUE 4.2M"
+        result = await pipe.process_task(
+            {
+                "task_id": "T6",
+                "query": f"{block}\n\nwhat was the revenue?",
+                "demand": "what was the revenue?",
+                "attached_context": block,
+            }
+        )
+        assert result["response"] == "4.2M"
+        retrieval.fetch.assert_not_called()
+        _, kwargs = decision.decide.call_args
+        assert kwargs["query"] == "what was the revenue?"
+        assert kwargs["context"] == block
+
+    async def test_attached_file_text_appears_once_in_the_prompt(self):
+        body = "Q4 REVENUE WAS 4.2M"
+        block = (
+            "--- Attached Files ---\n[file: q4.md (source=knowledge_store)]\n"
+            f"{body}\n--- End Attached Files ---\n"
+        )
+        prompts = []
+
+        def served(_self, user_content, system_content):
+            prompts.append(f"{system_content}\n\n{user_content}")
+            return "4.2M"
+
+        retrieval = MagicMock()
+        retrieval.fetch = AsyncMock(return_value={"data": body})
+        pipe = RAGPipeline(retrieval, _causal_agent())
+        with patch.dict("os.environ", {"LLM_BACKEND": "vllm"}), patch.object(
+            DecisionMakingAgent, "_generate_vllm", served
+        ):
+            result = await pipe.process_task(
+                {
+                    "task_id": "T7",
+                    "query": f"{block}\nwhat was the revenue?",
+                    "demand": "what was the revenue?",
+                    "attached_context": block,
+                }
+            )
+        assert result["response"] == "4.2M"
+        assert prompts[0].count(body) == 1
+        assert "what was the revenue?" in prompts[0]
+
+    async def test_without_attached_context_retrieval_runs_on_the_query(self):
+        reg = MagicMock()
+        reg.has.return_value = False
+        pipe, retrieval, decision = _pipeline(tool_registry=reg)
+        retrieval.fetch = AsyncMock(return_value={"data": "ctx"})
+        decision.decide.return_value = "answer"
+        await pipe.process_task(
+            {"task_id": "T8", "query": "full q", "demand": "q", "attached_context": None}
+        )
+        retrieval.fetch.assert_awaited_once_with("full q")
+        _, kwargs = decision.decide.call_args
+        assert kwargs["query"] == "full q"

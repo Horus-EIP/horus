@@ -115,7 +115,7 @@ async def _resolve_attached_files(files: list[dict]) -> list[dict]:
         elif source == "knowledge_store":
             try:
                 hit = await client.resolve_by_filename(name)
-                text = (hit or {}).get("text") or ""
+                text = (hit or {}).get("data") or ""
             except Exception as exc:
                 logger.warning("KS resolve failed for %s: %s", name, exc)
                 text = ""
@@ -137,6 +137,10 @@ def _prepend_files_to_demand(demand: str, resolved: list[dict]) -> str:
     """
     if not resolved:
         return demand
+    return _attached_files_block(resolved) + "\n" + (demand or "")
+
+
+def _attached_files_block(resolved: list[dict]) -> str:
     pieces: list[str] = ["--- Attached Files ---"]
     total = 0
     for r in resolved:
@@ -152,7 +156,7 @@ def _prepend_files_to_demand(demand: str, resolved: list[dict]) -> str:
         pieces.append(body)
         total += len(header) + len(body) + 2
     pieces.append("--- End Attached Files ---\n")
-    return "\n".join(pieces) + "\n" + (demand or "")
+    return "\n".join(pieces)
 
 
 # Reconnect settings for the blocking consumers. A RabbitMQ restart or a
@@ -357,10 +361,15 @@ def _consume_messages_session() -> bool:
                 )
                 effective_demand = _prepend_files_to_demand(demand, resolved_files)
                 first_file = resolved_files[0] if resolved_files else {}
+                any_file_readable = any(f.get("text") for f in resolved_files)
 
                 task_dict = {
                     "task_id": task_id,
                     "query": effective_demand or payload.get("query", ""),
+                    "demand": demand,
+                    "attached_context": (
+                        _attached_files_block(resolved_files) if any_file_readable else None
+                    ),
                     # Optional focused query for knowledge retrieval only; the LLM
                     # still sees the full ``query``. Falls back to ``query`` when
                     # MAS doesn't supply one (single-agent / first-step tasks).

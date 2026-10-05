@@ -107,7 +107,10 @@ class RAGPipeline:
     # ------------------------------------------------------------------
 
     async def generate_response(
-        self, query: str, retrieval_query: str | None = None
+        self,
+        query: str,
+        retrieval_query: str | None = None,
+        attached_context: str | None = None,
     ) -> str:
         """
         Generate a response by retrieving and processing data (async).
@@ -126,15 +129,24 @@ class RAGPipeline:
 
         timeout = _react_timeout(getattr(self.decision_agent, "device", None))
 
-        rquery = retrieval_query or query
-        if len(rquery) > _RETRIEVAL_QUERY_CHAR_CAP:
-            rquery = rquery[:_RETRIEVAL_QUERY_CHAR_CAP]
-
         from ai_agents.response_cache import current_corpus_version, get_cached, set_cached
 
         corpus_version = await current_corpus_version()
-        data = await self.retrieval_agent.fetch(rquery)
-        context_text = data.get("data", "")
+        if attached_context:
+            emit_step(
+                "retrieval.results",
+                "Using the attached files",
+                "Answering from the files attached to this task; the knowledge "
+                "store was not searched again.",
+                source="attached_files",
+            )
+            context_text = attached_context
+        else:
+            rquery = retrieval_query or query
+            if len(rquery) > _RETRIEVAL_QUERY_CHAR_CAP:
+                rquery = rquery[:_RETRIEVAL_QUERY_CHAR_CAP]
+            data = await self.retrieval_agent.fetch(rquery)
+            context_text = data.get("data", "")
 
         # Phase 3: exact-match response cache. Keyed on (query + retrieved
         # context + generation params), so a hit is safe across users and
@@ -250,9 +262,15 @@ class RAGPipeline:
             }
 
         # Default single-shot mode
-        response_text = await self.generate_response(
-            query, retrieval_query=retrieval_query
-        )
+        attached_context = task.get("attached_context")
+        if attached_context:
+            response_text = await self.generate_response(
+                task.get("demand") or query, attached_context=attached_context
+            )
+        else:
+            response_text = await self.generate_response(
+                query, retrieval_query=retrieval_query
+            )
         return {
             "task_id": task.get("task_id"),
             "response": response_text,

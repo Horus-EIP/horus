@@ -124,7 +124,9 @@ class TestResolveAttachedFiles:
     async def test_knowledge_store_file_resolved_via_client(self):
         files = [{"source": "knowledge_store", "filename": "report.pdf"}]
         client = MagicMock()
-        client.resolve_by_filename = AsyncMock(return_value={"text": "KS body"})
+        client.resolve_by_filename = AsyncMock(
+            return_value={"query": "__file__:report.pdf", "data": "KS body"}
+        )
         with patch(
             "ai_agents.knowledge_store_client.KnowledgeStoreClient",
             return_value=client,
@@ -134,6 +136,24 @@ class TestResolveAttachedFiles:
         assert out == [
             {"filename": "report.pdf", "source": "knowledge_store", "text": "KS body"}
         ]
+
+    async def test_knowledge_store_text_survives_the_real_client(self, monkeypatch):
+        import ai_agents.knowledge_store_client as ksc
+
+        response = MagicMock(status_code=200)
+        response.json.return_value = {
+            "text": "KS body",
+            "matched_titles": ["report.pdf"],
+            "doc_ids": ["d1"],
+        }
+        http = MagicMock()
+        http.__aenter__.return_value = http
+        http.get = AsyncMock(return_value=response)
+        monkeypatch.setattr(ksc.httpx, "AsyncClient", MagicMock(return_value=http))
+        files = [{"source": "knowledge_store", "filename": "report.pdf"}]
+        out = await consumers._resolve_attached_files(files)
+        assert out[0]["text"].endswith("KS body")
+        assert "report.pdf" in out[0]["text"]
 
     async def test_knowledge_store_ref_with_doc_id_still_resolves_by_filename(self):
         files = [
@@ -893,6 +913,62 @@ class TestConsumeMessagesCallback:
         assert "FILE BODY" in task_arg["query"]
         assert "use the file" in task_arg["query"]
         assert task_arg["files"][0]["filename"] == "notes.txt"
+
+    def test_attached_file_text_is_handed_over_once_as_context(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        pipeline = MagicMock()
+        pipeline.process_task = AsyncMock(return_value={"response": "OK"})
+        srv.get_pipeline_for_type.return_value = pipeline
+        client = MagicMock()
+        client.resolve_by_filename = AsyncMock(
+            return_value={"query": "__file__:q4.md", "data": "Q4 REVENUE 4.2M"}
+        )
+        body = json.dumps(
+            {
+                "demand": "what was the revenue?",
+                "task_id": "tk",
+                "files": [{"source": "knowledge_store", "filename": "q4.md"}],
+            }
+        ).encode("utf-8")
+
+        with self._patch_profiles(), patch(
+            "ai_agents.knowledge_store_client.KnowledgeStoreClient",
+            return_value=client,
+        ):
+            cb(MagicMock(), _make_method(19), _make_props(), body)
+
+        task_arg = pipeline.process_task.await_args.args[0]
+        assert task_arg["demand"] == "what was the revenue?"
+        assert "[file: q4.md (source=knowledge_store)]" in task_arg["attached_context"]
+        assert task_arg["attached_context"].count("Q4 REVENUE 4.2M") == 1
+        assert "Q4 REVENUE 4.2M" not in task_arg["demand"]
+
+    def test_unreadable_attachments_give_no_attached_context(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        pipeline = MagicMock()
+        pipeline.process_task = AsyncMock(return_value={"response": "OK"})
+        srv.get_pipeline_for_type.return_value = pipeline
+        client = MagicMock()
+        client.resolve_by_filename = AsyncMock(
+            return_value={"query": "__file__:gone.md", "data": ""}
+        )
+        body = json.dumps(
+            {
+                "demand": "what does it say?",
+                "task_id": "tg",
+                "files": [{"source": "knowledge_store", "filename": "gone.md"}],
+            }
+        ).encode("utf-8")
+
+        with self._patch_profiles(), patch(
+            "ai_agents.knowledge_store_client.KnowledgeStoreClient",
+            return_value=client,
+        ):
+            cb(MagicMock(), _make_method(20), _make_props(), body)
+
+        task_arg = pipeline.process_task.await_args.args[0]
+        assert task_arg["attached_context"] is None
+        assert "(no content available)" in task_arg["query"]
 
 
 # --------------------------------------------------------------------------- #
