@@ -21,9 +21,10 @@ from core.llm_setup import ask_llm
 from core.logger import get_logger
 from core.rabbitmq_tool import rabbitmq_instance
 from db.database import SessionLocal
-from db.models import Agents
+from db.models import Agents, AgentTypes
 from tasks.collaborative_task import CollaborativeTask
 from tasks.demo_log import pretty_log
+from tasks.intent_rules import classify_trivial_intent
 from tasks.prompts import (
     clean_json_output,
     get_decomposition_prompt,
@@ -523,6 +524,11 @@ def select_agent_for_task(user_input: str, db: Session = None):
     classification = json_output.get("classification", "UNKNOWN")
     pretty_log(f"ROUTER CLASSIFICATION: {classification.upper()}", "🎯")
 
+    if classification == "DIRECT_ANSWER" and classify_trivial_intent(user_input) is None:
+        return _reroute_direct_answer_to_single_agent(
+            user_input, json_output.get("agent_name"), available_agents
+        )
+
     if classification == "COMPLEX_TASK":
         # Multi-agent collaboration is the headline feature of this platform —
         # when the router flags a request as COMPLEX_TASK, hand it straight to
@@ -579,6 +585,34 @@ def select_agent_for_task(user_input: str, db: Session = None):
         f"Unknown classification '{classification}'. Falling back to decomposition."
     )
     return None, None, None, []
+
+
+def _reroute_direct_answer_to_single_agent(
+    user_input: str, router_agent_name: str | None, available_agents: list
+):
+    named_agent_id = _available_agent_id_by_name(router_agent_name, available_agents)
+    agent_id = named_agent_id or _default_agent_id(available_agents)
+    logger.info(
+        "DIRECT_ANSWER refused for a request that is not a greeting, small talk or "
+        "arithmetic; re-routing to SINGLE_AGENT",
+        agent_id=agent_id,
+    )
+    pretty_log(f"DIRECT ANSWER REFUSED -> SINGLE AGENT {agent_id}", "↪️")
+    return agent_id, user_input, None, []
+
+
+def _available_agent_id_by_name(agent_name: str | None, available_agents: list) -> str | None:
+    for agent_id, name, _description, _agent_type in available_agents:
+        if name == agent_name:
+            return agent_id
+    return None
+
+
+def _default_agent_id(available_agents: list) -> str:
+    for agent_id, _name, _description, agent_type in available_agents:
+        if str(getattr(agent_type, "value", agent_type)).lower() == AgentTypes.GENERAL.value:
+            return agent_id
+    return available_agents[0][0]
 
 
 def select_agent_by_mode(

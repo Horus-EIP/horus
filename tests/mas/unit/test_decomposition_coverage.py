@@ -199,6 +199,21 @@ def _patch_llm(monkeypatch, output):
     monkeypatch.setattr(D, "ask_llm", _fake)
 
 
+def _capture_llm_prompts(monkeypatch, output):
+    prompts = []
+
+    def _fake(prompt, **kwargs):
+        prompts.append(prompt)
+        return output
+
+    monkeypatch.setattr(D, "ask_llm", _fake)
+    return prompts
+
+
+def _rendered_text(messages):
+    return "\n".join(message["content"] for message in messages)
+
+
 # ============================ clean_json_output ============================ #
 class TestCleanJsonOutput:
     def test_plain_object_untouched(self):
@@ -254,13 +269,20 @@ class TestPromptBuilders:
         assert "orig request" in msgs[1]["content"]
         assert "the result" in msgs[1]["content"]
 
-    def test_router_prompt_lists_agents_and_escapes_schema(self):
+    def test_router_prompt_lists_agents_and_renders_single_brace_schema(self):
         msgs = P.get_prompt("Q4 revenue?", self.AGENTS)
         user = msgs[1]["content"]
         assert "Researcher: finds facts" in user
-        # Schema braces are doubled so an f-string template would survive .format.
-        assert "{{" in user and "}}" in user
+        assert '{\n      "classification"' in user
+        assert "{{" not in user and "}}" not in user
         assert "COMPLEX_TASK" in msgs[0]["content"]
+
+    def test_router_prompt_limits_direct_answer_to_greetings_small_talk_and_arithmetic(self):
+        msgs = P.get_prompt("hi", self.AGENTS)
+        system = msgs[0]["content"]
+        assert "trivial questions" not in system
+        assert "capital of Peru" in system
+        assert "capital of Peru" in msgs[1]["content"]
 
     def test_decomposition_prompt_normalises_dotted_enum_types(self):
         dotted = [("a1", "Researcher", "finds facts", "AgentType.RESEARCHER")]
@@ -269,6 +291,8 @@ class TestPromptBuilders:
         # "AgentType.RESEARCHER" -> "researcher" via split('.')[-1].lower()
         assert "Type: researcher" in user
         assert "do a thing" in user
+        assert '"sub_tasks": [' in user
+        assert "{{" not in user and "}}" not in user
 
     def test_decomposition_prompt_lowercases_plain_type(self):
         plain = [("a1", "Writer", "writes", "WRITER")]
@@ -299,8 +323,8 @@ class TestPromptBuilders:
         assert "writer: finish draft" in user
         assert "researcher, writer" in user
         assert "so far so good" in user
-        # schema braces doubled
-        assert '{{"decision"' in user
+        assert '{"decision"' in user
+        assert "{{" not in user and "}}" not in user
 
     def test_manager_review_prompt_empty_remaining_and_types(self):
         msgs = P.get_manager_review_prompt(
@@ -540,6 +564,17 @@ class TestDecomposeTask:
         monkeypatch.setattr(D, "get_available_agents", lambda db: [])
         _patch_llm(monkeypatch, "x")
         assert D.decompose_task("req") == (None, [])
+
+    def test_planner_prompt_sent_to_model_has_single_braces(self, monkeypatch):
+        monkeypatch.setattr(
+            D, "get_available_agents", lambda db: [("a1", "R", "d", _Type.RESEARCHER)]
+        )
+        monkeypatch.setattr(D, "get_agent_by_type", lambda t, db: f"id-{t}")
+        prompts = _capture_llm_prompts(monkeypatch, json.dumps(GOOD_PLAN))
+        D.decompose_task("complex request", FakeDB())
+        rendered = _rendered_text(prompts[0])
+        assert '{\n      "sub_tasks": [\n        {\n          "id": "1"' in rendered
+        assert "{{" not in rendered and "}}" not in rendered
 
 
 # ========================= _heuristic_decompose =========================== #
@@ -834,6 +869,14 @@ class TestManagerReviewStep:
         out = D.manager_review_step("d", "t", [], [], FakeDB())
         assert out == {"decision": "CONTINUE"}
 
+    def test_review_prompt_sent_to_model_has_single_braces(self, monkeypatch):
+        self._setup(monkeypatch)
+        prompts = _capture_llm_prompts(monkeypatch, json.dumps({"decision": "DONE"}))
+        D.manager_review_step("d", "t", [], ["researcher"], FakeDB())
+        rendered = _rendered_text(prompts[0])
+        assert '{"decision": "CONTINUE" | "INSERT" | "DONE",' in rendered
+        assert "{{" not in rendered and "}}" not in rendered
+
 
 # ======================== select_agent_for_task =========================== #
 class TestSelectAgentForTask:
@@ -937,6 +980,109 @@ class TestSelectAgentForTask:
         monkeypatch.setattr(D, "get_available_agents", lambda db: [])
         _patch_llm(monkeypatch, "x")
         assert D.select_agent_for_task("q") == (None, None, None, [])
+
+
+class TestDirectAnswerPostCheck:
+    ROUTER_PLACEHOLDERS = {
+        "agent_name": "<agent_name_if_SINGLE_AGENT>",
+        "rewritten_input": "<optimized_input_if_SINGLE_AGENT>",
+    }
+
+    def _agents(self, monkeypatch, agents=None):
+        roster = agents if agents is not None else [
+            ("a1", "Researcher", "finds facts", _Type.RESEARCHER),
+            ("g1", "General-Assistant", "general RAG assistant", _Type.GENERAL),
+        ]
+        monkeypatch.setattr(D, "get_available_agents", lambda db: roster)
+
+    def _router_says_direct_answer(self, monkeypatch, final_answer, **extra):
+        reply = {"classification": "DIRECT_ANSWER", "final_answer": final_answer, **extra}
+        _patch_llm(monkeypatch, json.dumps(reply))
+
+    def test_f20_capital_of_peru_is_rerouted_to_single_agent(self, monkeypatch):
+        self._agents(monkeypatch)
+        self._router_says_direct_answer(
+            monkeypatch, "The capital of Peru is Lima.", **self.ROUTER_PLACEHOLDERS
+        )
+        out = D.select_agent_for_task("What is the capital of Peru?", FakeDB())
+        assert out == ("g1", "What is the capital of Peru?", None, [])
+
+    def test_hello_stays_direct_answer(self, monkeypatch):
+        self._agents(monkeypatch)
+        self._router_says_direct_answer(monkeypatch, "Hello! How can I help?")
+        out = D.select_agent_for_task("hello", FakeDB())
+        assert out == (None, None, "Response for user : Hello! How can I help?", [])
+
+    def test_small_talk_stays_direct_answer(self, monkeypatch):
+        self._agents(monkeypatch)
+        self._router_says_direct_answer(monkeypatch, "You're welcome!")
+        out = D.select_agent_for_task("Thanks a lot!", FakeDB())
+        assert out == (None, None, "Response for user : You're welcome!", [])
+
+    def test_arithmetic_stays_direct_answer(self, monkeypatch):
+        self._agents(monkeypatch)
+        self._router_says_direct_answer(monkeypatch, "4")
+        out = D.select_agent_for_task("what's 2+2?", FakeDB())
+        assert out == (None, None, "Response for user : 4", [])
+
+    def test_greeting_followed_by_factual_question_is_rerouted(self, monkeypatch):
+        self._agents(monkeypatch)
+        self._router_says_direct_answer(monkeypatch, "Hi! Lima.")
+        demand = "Hi! What is the capital of Peru?"
+        assert D.select_agent_for_task(demand, FakeDB()) == ("g1", demand, None, [])
+
+    def test_rerouted_request_uses_router_agent_name_when_it_is_available(self, monkeypatch):
+        self._agents(monkeypatch)
+        self._router_says_direct_answer(
+            monkeypatch, "Lima.", agent_name="Researcher", rewritten_input="capital?"
+        )
+        out = D.select_agent_for_task("What is the capital of Peru?", FakeDB())
+        assert out == ("a1", "What is the capital of Peru?", None, [])
+
+    @pytest.mark.parametrize("router_agent_name", ["Manager", "Offline-Analyst"])
+    def test_rerouted_request_ignores_router_agent_name_that_is_not_available(
+        self, monkeypatch, router_agent_name
+    ):
+        self._agents(monkeypatch)
+        monkeypatch.setattr(D, "get_agent_id", lambda name, db: "id-without-live-consumer")
+        self._router_says_direct_answer(monkeypatch, "Lima.", agent_name=router_agent_name)
+        out = D.select_agent_for_task("What is the capital of Peru?", FakeDB())
+        assert out == ("g1", "What is the capital of Peru?", None, [])
+
+    def test_rerouted_request_without_general_agent_uses_first_available(self, monkeypatch):
+        self._agents(
+            monkeypatch,
+            [
+                ("w1", "Writer", "writes prose", _Type.WRITER),
+                ("a1", "Researcher", "finds facts", _Type.RESEARCHER),
+            ],
+        )
+        self._router_says_direct_answer(monkeypatch, "Lima.")
+        out = D.select_agent_for_task("What is the capital of Peru?", FakeDB())
+        assert out == ("w1", "What is the capital of Peru?", None, [])
+
+    def test_rerouted_request_matches_plain_string_general_type(self, monkeypatch):
+        self._agents(
+            monkeypatch,
+            [
+                ("a1", "Researcher", "finds facts", "researcher"),
+                ("g1", "General-Assistant", "general RAG assistant", "general"),
+            ],
+        )
+        self._router_says_direct_answer(monkeypatch, "Lima.")
+        out = D.select_agent_for_task("What is the capital of Peru?", FakeDB())
+        assert out == ("g1", "What is the capital of Peru?", None, [])
+
+    def test_router_prompt_sent_to_model_has_single_braces(self, monkeypatch):
+        self._agents(monkeypatch)
+        prompts = _capture_llm_prompts(
+            monkeypatch, json.dumps({"classification": "DIRECT_ANSWER", "final_answer": "Hi!"})
+        )
+        D.select_agent_for_task("hello", FakeDB())
+        rendered = _rendered_text(prompts[0])
+        assert '{\n      "classification": "DIRECT_ANSWER" | "SINGLE_AGENT"' in rendered
+        assert '"final_answer": "<answer_if_DIRECT_ANSWER>"\n    }' in rendered
+        assert "{{" not in rendered and "}}" not in rendered
 
 
 # ========================= select_agent_by_mode =========================== #

@@ -54,8 +54,6 @@ def get_prompt(user_input, suitable_agents):
         f"- {name}: {desc} (Type: {agent_type})"
         for _, name, desc, agent_type in suitable_agents
     )
-    schema_literal = response_format.replace("{", "{{").replace("}", "}}")
-
     messages = [
         {
             "role": "system",
@@ -69,8 +67,12 @@ def get_prompt(user_input, suitable_agents):
                 "everything. Default to COMPLEX_TASK whenever the request "
                 "touches more than ONE agent's domain.\n\n"
                 "Classify the USER INPUT as exactly one of:\n"
-                " - DIRECT_ANSWER: only for greetings, small talk, arithmetic, "
-                "or trivial questions that need no document retrieval.\n"
+                " - DIRECT_ANSWER: ONLY for greetings, small talk (thanks, how "
+                "are you, goodbye) and pure arithmetic (e.g. 'what is 6x7?'). "
+                "Any factual or knowledge question, however simple or well "
+                "known (e.g. 'what is the capital of Peru?'), is NEVER a "
+                "DIRECT_ANSWER: route it to an agent so the documents are "
+                "searched.\n"
                 " - SINGLE_AGENT: the request falls cleanly inside ONE agent's "
                 "domain (e.g. 'what was Q4 revenue?' → Finance-Analyst alone).\n"
                 " - COMPLEX_TASK: the request needs information or analysis from "
@@ -94,12 +96,13 @@ def get_prompt(user_input, suitable_agents):
     - Return ONLY a valid JSON object matching exactly this schema:
 
 
-    {schema_literal}
+    {response_format}
 
 
     - If one agent can handle the request entirely: set "classification": "SINGLE_AGENT", fill "agent_name" and "rewritten_input".
     - If the request touches 2+ agents' domains, or needs multiple distinct retrievals (finance + compliance, finance + HR, IT security + finance, etc.): set "classification": "COMPLEX_TASK".
-    - If no agent is needed (e.g. "hi", "what's 2+2"): set "classification": "DIRECT_ANSWER", fill "final_answer".
+    - Only for a greeting, small talk or pure arithmetic (e.g. "hi", "thanks", "what's 2+2"): set "classification": "DIRECT_ANSWER", fill "final_answer".
+    - A factual question is NEVER DIRECT_ANSWER, even when you know the answer (e.g. "what is the capital of Peru?"): use SINGLE_AGENT, or COMPLEX_TASK if it spans several domains.
     - When the request mentions multiple document types ("financial report AND policy", "report AND handbook"), it is ALWAYS COMPLEX_TASK.
     - No text outside the JSON. No code fences, no explanations.
         """,
@@ -136,8 +139,6 @@ def get_decomposition_prompt(user_input, suitable_agents):
         f"- Type: {str(agent_type).split('.')[-1].lower() if '.' in str(agent_type) else str(agent_type).lower()} (Name: {name}): {desc}"
         for _, name, desc, agent_type in suitable_agents
     )
-    schema = response_format.replace("{", "{{").replace("}", "}}")
-
     messages = [
         {
             "role": "system",
@@ -158,7 +159,7 @@ def get_decomposition_prompt(user_input, suitable_agents):
     - Return ONLY a valid JSON object matching exactly this schema template:
 
 
-    {schema}
+    {response_format}
 
 
     - No text outside the JSON. No code fences, no explanations.
@@ -245,7 +246,6 @@ def get_manager_review_prompt(
         ' "next_action": "<the new subtask demand if INSERT>",'
         ' "reasoning": "<one short sentence>"}'
     )
-    schema_literal = schema.replace("{", "{{").replace("}", "}}")
     return [
         {
             "role": "system",
@@ -274,7 +274,7 @@ def get_manager_review_prompt(
                 " - CONTINUE: the chain is on track and the next planned "
                 "step is appropriate.\n\n"
                 "Return ONLY a JSON object matching this schema, no prose:\n"
-                f"{schema_literal}"
+                f"{schema}"
             ),
         },
     ]
