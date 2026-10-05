@@ -167,7 +167,7 @@ docker compose exec mas python -m tasks.router_eval --testset /tmp/router_testse
 
 `--min-score` and `--min-margin` try other thresholds. `tests/mas/unit/test_router_model.py` (marker `requires_model`) runs the same report when FastEmbed's MiniLM model is on disk and is skipped otherwise.
 
-Measured on 2026-10-05 (AMD Ryzen AI 9 HX 370, Windows 11, rules and embeddings, no LLM): the same 116 decisions with sentence-transformers and with FastEmbed (98.7% correct without the LLM, 33.6% sent to it); embedding-stage latency p50 9.0 ms and p95 16.1 ms before, 3.3 ms and 7.5 ms after.
+Measured on 2026-10-05 (AMD Ryzen AI 9 HX 370, 12 cores, Windows 11, rules and embeddings, no LLM, three runs of each embedder in turn): the same 116 decisions with sentence-transformers 5.7.0 and with FastEmbed 0.8.1, so `ROUTER_MIN_SCORE` and `ROUTER_MIN_MARGIN` stay at 0.40 and 0.10. Rules 21 (all correct), embeddings 56 (55 correct, the same misroute `hr-06` with the same scores), 33.6% sent to the LLM, 98.7% correct without it. Time to a decision without the LLM, p50 / p95: 6.7–7.1 ms / 10.6–11.8 ms with sentence-transformers, 2.4–2.6 ms / 5.0–6.0 ms with FastEmbed on onnxruntime's default threads, 3.2–3.3 ms / 9.0–9.9 ms with `MAS_EMBED_THREADS=1`, the CPU profiles' budget.
 
 ## Agent answers
 
