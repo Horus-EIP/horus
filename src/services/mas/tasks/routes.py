@@ -1034,6 +1034,13 @@ async def _route_by_selection(
         if _routing_was_stopped(queued, db):
             return _stopped_outcome(queued.id)
 
+    if direct_response and _has_attachments(task):
+        logger.info(
+            "Discarding the direct answer: the task has attached files, "
+            "so an agent reads them instead"
+        )
+        direct_response = None
+
     # Skill-based fallback. The LLM router can fail (bad JSON, picked an
     # unknown agent name, classified as COMPLEX) even when there *is* an
     # agent that advertises the user's requested skill. Walk the supplied
@@ -1141,19 +1148,6 @@ async def _route_by_selection(
                 user_demand = task.demand
                 future_actions = []
 
-    # If the user attached files, skip the direct-LLM-answer path so the
-    # worker actually gets to read the attachments. The orchestrator-side LLM
-    # doesn't see file content, so its "direct answer" would be misleading.
-    # The downstream decomposition fallback will pick an agent if none was
-    # chosen above.
-    has_attachments = bool(task.attached_files) or bool(task.inline_files)
-    if has_attachments and direct_response:
-        logger.info(
-            "Discarding direct-answer because the task has attached files; "
-            "forcing agent dispatch so files are processed."
-        )
-        direct_response = None
-
     # 2. Direct Answer Handling
     if direct_response:
         return await _answer_directly(queued, task, direct_response, db)
@@ -1253,6 +1247,10 @@ async def _route_by_selection(
         message=message,
         extra_payload=credentials,
     )
+
+
+def _has_attachments(task: TaskForm) -> bool:
+    return bool(task.attached_files) or bool(task.inline_files)
 
 
 def _routing_was_stopped(queued: Task, db: Session) -> bool:

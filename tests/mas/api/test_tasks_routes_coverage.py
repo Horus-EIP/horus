@@ -568,6 +568,67 @@ class TestCreateNewTaskSingleAgent:
         dispatch.publish.assert_called_once()
         assert "assigned to agent" in submitted.outcome["message"]
 
+    @patch("tasks.routes.decompose_task", return_value=(None, []))
+    @patch("tasks.routes.route_task", return_value=(None, None, "Hello! How can I help?", []))
+    @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
+    async def test_direct_answer_with_attachments_goes_to_the_catch_all_agent(
+        self, _by_mode, _for_task, decompose, dispatch, submit_task, routing_db, as_user
+    ):
+        _add_agent(routing_db, "catch-all", "General-Assistant")
+
+        submitted = await submit_task(
+            _task_form(
+                demand="hello",
+                skills_required=[],
+                conversation_id=7,
+                attached_files=[{"filename": "report.pdf", "doc_id": "doc-1"}],
+            ),
+            user=as_user,
+        )
+
+        task_id = submitted.response.json()["task_id"]
+        decompose.assert_not_called()
+        agent_id, payload = _dispatched(dispatch)
+        assert agent_id == "catch-all"
+        assert payload["demand"] == "hello"
+        assert payload["files"] == [
+            {"source": "knowledge_store", "filename": "report.pdf", "doc_id": "doc-1"}
+        ]
+        task = _stored(routing_db, task_id)
+        assert task.status == TaskStatus.RUNNING.value
+        assert task.agent_id == "catch-all"
+        assert "Hello! How can I help?" not in _published_texts(task_id)
+
+    @patch("tasks.routes.decompose_task", return_value=(None, []))
+    @patch("tasks.routes.route_task", return_value=(None, None, "4", []))
+    @patch("tasks.routes.select_agent_by_mode")
+    async def test_direct_answer_with_attachments_goes_to_the_requested_skill(
+        self, by_mode, _for_task, decompose, dispatch, submit_task, as_user
+    ):
+        by_mode.side_effect = [
+            (None, None, None, []),
+            ("skill-agent", "what is 2+2", None, []),
+        ]
+
+        await submit_task(
+            _task_form(
+                demand="what is 2+2",
+                skills_required=["analysis"],
+                inline_files=[
+                    {
+                        "filename": "notes.txt",
+                        "content_b64": base64.b64encode(b"2+2 is 5 here").decode(),
+                    }
+                ],
+            ),
+            user=as_user,
+        )
+
+        decompose.assert_not_called()
+        agent_id, payload = _dispatched(dispatch)
+        assert agent_id == "skill-agent"
+        assert payload["files"][0]["source"] == "inline"
+
 
 class TestCreateNewTaskAutoCreateAndCatchAll:
     @patch("tasks.routes.create_agent", return_value=("auto-id", "auto-key"))
