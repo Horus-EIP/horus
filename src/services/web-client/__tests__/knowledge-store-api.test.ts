@@ -75,6 +75,35 @@ describe("knowledgeStoreApi.smartSearch", () => {
     });
   });
 
+  it("gives each hit the document id the store returns", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse(200, {
+        results: {
+          ids: ["doc-expense", "doc-security"],
+          documents: ["Expense body", "Security body"],
+          metadatas: [{ title: "4_Expense_Policy.md" }, { title: "5_IT_Security_Policy.md" }],
+          distances: [0.21, 0.48],
+        },
+      })
+    );
+
+    const result = await knowledgeStoreApi.smartSearch({ query: "policy" });
+
+    expect(result.data?.map((hit) => hit.id)).toEqual(["doc-expense", "doc-security"]);
+  });
+
+  it("leaves the id unset when the store sends none", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse(200, {
+        results: { documents: ["Body"], metadatas: [{ title: "a.md" }], distances: [0.1] },
+      })
+    );
+
+    const result = await knowledgeStoreApi.smartSearch({ query: "policy" });
+
+    expect(result.data?.[0]).not.toHaveProperty("id");
+  });
+
   it("treats the store's 404 for no match as an empty result list", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(
       jsonResponse(404, { error: "No results found" })

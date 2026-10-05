@@ -252,6 +252,38 @@ describe("KnowledgeStorePage search and category filter", () => {
     await waitForFullList();
   });
 
+  it("matches a search hit to its row by document id when the store sends one", async () => {
+    const undated = { ...handbook, date: "Unknown" };
+    global.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (method === "GET" && url.endsWith("/file")) {
+        return Promise.resolve(
+          jsonResponse(200, { documents: [expensePolicy, securityPolicy, undated] })
+        );
+      }
+      if (method === "POST" && url.endsWith("/smart-search")) {
+        return Promise.resolve(
+          jsonResponse(200, {
+            results: {
+              ids: [undated.id],
+              documents: [undated.summary],
+              metadatas: [{ title: undated.title }],
+              distances: [0.1],
+            },
+          })
+        );
+      }
+      return knowledgeStoreFetch(input, init);
+    }) as typeof fetch;
+    renderPage();
+    await waitFor(() => expect(listedTitles()).toHaveLength(3));
+
+    await userEvent.type(screen.getByPlaceholderText("Search documents..."), "handbook");
+
+    await waitFor(() => expect(listedTitles()).toEqual([handbook.title]));
+  });
+
   it("deletes the document shown in the filtered row", async () => {
     renderPage();
     await waitForFullList();

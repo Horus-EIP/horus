@@ -82,6 +82,23 @@ class TestSmartSearchFull:
         assert r.status_code == 200
         assert r.json()["total"] == 2
 
+    def test_each_hit_carries_its_document_id(self, client, monkeypatch):
+        results = {**_results(["a", "b"]), "ids": [["doc-a", "doc-b"]]}
+        monkeypatch.setattr(store_mod, "query_knowledge", AsyncMock(return_value=results))
+        r = client.post("/smart-search", json={"query": "x"})
+        assert r.status_code == 200
+        body = r.json()["results"]
+        assert body["ids"] == ["doc-a", "doc-b"]
+        assert body["documents"] == ["a", "b"]
+
+    def test_hits_without_ids_are_still_returned(self, client, monkeypatch):
+        monkeypatch.setattr(store_mod, "query_knowledge", AsyncMock(return_value=_results(["a"])))
+        r = client.post("/smart-search", json={"query": "x"})
+        assert r.status_code == 200
+        body = r.json()["results"]
+        assert body["ids"] == []
+        assert body["documents"] == ["a"]
+
     def test_with_filters_success(self, client, monkeypatch):
         monkeypatch.setattr(store_mod, "query_with_filters", AsyncMock(return_value=_results(["a"])))
         r = client.post("/smart-search", json={"query": "x", "categories": ["finance"]})

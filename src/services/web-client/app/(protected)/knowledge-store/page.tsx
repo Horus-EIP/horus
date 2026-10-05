@@ -45,6 +45,7 @@ function ksUrl(path: string): string {
 }
 
 function isSearchHitFor(hit: SmartSearchHit, doc: Document): boolean {
+  if (hit.id) return hit.id === doc.id;
   return hit.metadata.title === doc.title && hit.metadata.date === doc.date;
 }
 

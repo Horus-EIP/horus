@@ -44,6 +44,7 @@ export interface SmartSearchMetadata {
 }
 
 export interface SmartSearchHit {
+  id?: string;
   content: string;
   metadata: SmartSearchMetadata;
   distance: number | null;
@@ -51,6 +52,7 @@ export interface SmartSearchHit {
 
 interface SmartSearchResponse {
   results?: {
+    ids?: string[];
     documents?: string[];
     metadatas?: (SmartSearchMetadata | null)[];
     distances?: number[];
@@ -95,11 +97,13 @@ export const knowledgeStoreApi = {
         return { ok: false, error: `Knowledge store responded ${res.status}` };
       }
       const json = (await res.json()) as SmartSearchResponse;
+      const ids = json.results?.ids ?? [];
       const metadatas = json.results?.metadatas ?? [];
       const distances = json.results?.distances ?? [];
       return {
         ok: true,
         data: (json.results?.documents ?? []).map((content, index) => ({
+          ...(ids[index] ? { id: ids[index] } : {}),
           content,
           metadata: metadatas[index] ?? {},
           distance: distances[index] ?? null,

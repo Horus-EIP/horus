@@ -183,6 +183,7 @@ async def smart_search(request: SmartSearchRequest):
     documents = results.get("documents", [[]])[0]
     metadatas = results.get("metadatas", [[]])[0]
     distances = results.get("distances", [[]])[0]
+    ids = (results.get("ids") or [[]])[0]
 
     if not documents:
         raise HTTPException(status_code=404, detail="No results found")
@@ -198,6 +199,7 @@ async def smart_search(request: SmartSearchRequest):
         "filters": where_clause,
         "total": len(filtered_docs),
         "results": {
+            "ids": [str(doc_id) for doc_id in ids[: len(filtered_docs)]],
             "documents": filtered_docs,
             "metadatas": filtered_metas,
             "distances": filtered_dists,
