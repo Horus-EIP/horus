@@ -211,6 +211,29 @@ class TestCorpusVersion:
         assert decision.decide.call_count == 1
 
 
+class TestGenerationSettings:
+    async def test_a_different_context_cap_misses_the_cache(self, redis, monkeypatch):
+        pipeline, decision = _pipeline("Revenue was $4.2M.", "Revenue was $4.2M.")
+
+        monkeypatch.setenv("AGENT_MAX_CONTEXT_CHARS", "12000")
+        await pipeline.generate_response(QUESTION)
+        monkeypatch.setenv("AGENT_MAX_CONTEXT_CHARS", "6000")
+        await pipeline.generate_response(QUESTION)
+
+        assert decision.decide.call_count == 2
+        assert len(redis.entries) == 2
+
+    async def test_an_unset_cap_shares_the_entry_of_the_default_cap(self, redis, monkeypatch):
+        pipeline, decision = _pipeline("Revenue was $4.2M.")
+
+        monkeypatch.delenv("AGENT_MAX_CONTEXT_CHARS", raising=False)
+        await pipeline.generate_response(QUESTION)
+        monkeypatch.setenv("AGENT_MAX_CONTEXT_CHARS", str(dma.DEFAULT_MAX_CONTEXT_CHARS))
+        await pipeline.generate_response(QUESTION)
+
+        assert decision.decide.call_count == 1
+
+
 class TestOnlyValidatedAnswersAreCached:
     async def test_a_degenerate_answer_is_never_cached(self, redis):
         assert dma._is_degenerate_output(SPIRAL)

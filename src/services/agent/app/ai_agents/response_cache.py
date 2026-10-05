@@ -28,6 +28,7 @@ import httpx
 from ai_agents.decision_making_agent import (
     DEGENERATE_OUTPUT_FALLBACK,
     _is_degenerate_output,
+    _max_context_chars,
     _normalize_model_text,
 )
 from config.settings import KNOWLEDGE_STORE_API_PREFIX, KNOWLEDGE_STORE_URL
@@ -89,6 +90,7 @@ def _gen_params_signature() -> str:
             os.getenv("LLM_VLLM_MODEL", "") if os.getenv("LLM_BACKEND") == "vllm"
             else os.getenv("MODEL_NAME", "Qwen/Qwen3-4B-Instruct-2507"),
             os.getenv("AGENT_MAX_NEW_TOKENS", "256"),
+            str(_max_context_chars()),
             os.getenv("AGENT_EARLY_STOP", "1"),
         )
     )
