@@ -8,6 +8,7 @@ import pytest
 
 import ai_agents.decision_making_agent as dma
 import ai_agents.response_cache as response_cache
+from ai_agents.generation_stop import GenerationTimedOut
 from ai_agents.rag_pipeline import RAGPipeline
 
 QUESTION = "What was Q4 2025 revenue?"
@@ -294,11 +295,11 @@ class TestOnlyValidatedAnswersAreCached:
         decision.decide.side_effect = lambda **_kwargs: release.wait(5) and "late answer"
 
         try:
-            answer = await pipeline.generate_response(QUESTION)
+            with pytest.raises(GenerationTimedOut):
+                await pipeline.generate_response(QUESTION)
         finally:
             release.set()
 
-        assert "took too long" in answer
         assert redis.entries == {}
 
     async def test_an_entry_that_fails_validation_is_not_served(self, redis):

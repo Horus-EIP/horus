@@ -6,6 +6,7 @@ API contract.
 """
 
 import re
+from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -118,6 +119,11 @@ class TaskStepForm(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class TaskResultStatus(str, Enum):
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class TaskResultForm(BaseModel):
     """Agent-submitted task result.
 
@@ -133,6 +139,19 @@ class TaskResultForm(BaseModel):
     agent_name: str | None = None
     skill_used: str | None = None
     sources: list[dict[str, Any]] | None = None
+    status: TaskResultStatus = TaskResultStatus.COMPLETED
+    reason: str | None = Field(default=None, max_length=64)
+
+
+class TaskClaimForm(BaseModel):
+    agent_id: str
+    worker_id: str = Field(min_length=1, max_length=200)
+    run_id: str = Field(min_length=1, max_length=200)
+
+
+class WorkerRunForm(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=200)
+    run_id: str = Field(min_length=1, max_length=200)
 
 
 class CreateUserRequest(BaseModel):

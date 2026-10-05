@@ -11,7 +11,7 @@ MAS is a **FastAPI** application backed by:
 
 - **PostgreSQL** (via SQLAlchemy 2.x + Alembic migrations) for persistent storage of users, agents, conversations, tasks, and messages.
 - **Redis** for session caching and token management.
-- **RabbitMQ** for asynchronous task dispatch and inter-agent delegation messaging.
+- **RabbitMQ** for asynchronous task dispatch and inter-agent delegation messaging. Tasks go to bounded `horus.work.{type}` queues (`x-max-length`, `x-overflow: reject-publish`) with publisher confirms; when a queue is full the task waits in MAS's line and the user sees "Busy, position N" (see "Bounded work queues and the agent worker" in `docs/architecture.md`).
 - **Prometheus** metrics exposed at `/metrics` via `prometheus-fastapi-instrumentator`.
 - **OpenTelemetry** tracing exported over OTLP to Tempo (viewable in Grafana).
 
@@ -123,6 +123,7 @@ All configuration is loaded from environment variables. A reference file is loca
 | `RABBITMQ_PORT`        | RabbitMQ port                            | `5672`        |
 | `RABBITMQ_USER`        | RabbitMQ username                        | `guest`       |
 | `RABBITMQ_PASSWORD`    | RabbitMQ password                        | `guest`       |
+| `WORK_QUEUE_MAX_LENGTH` | Waiting tasks each `horus.work.{type}` queue holds before a new task waits in MAS's line as "Busy, position N". The agent reads the same variable. A queue declared earlier with another limit, or none, is declared again once it is empty | `10` |
 | `LLM_AUTOINIT`         | Auto-load LLM at startup (0 to disable) | `0`           |
 | `TASK_TIMEOUT`         | Global task timeout in seconds           | `300`         |
 | `ROUTER_MIN_SCORE`     | Embedding stage: lowest agent score that may decide a route | `0.40` |

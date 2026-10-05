@@ -631,14 +631,23 @@ class TestLifespan:
             def start(self):
                 started.append(self.target)
 
+        order = []
         with (
-            patch.object(server, "register_agent") as mock_register,
+            patch.object(
+                server, "register_agent", side_effect=lambda: order.append("register")
+            ) as mock_register,
+            patch.object(
+                server,
+                "fail_abandoned_claims",
+                side_effect=lambda: order.append("abandoned") or [],
+            ),
             patch.object(threading, "Thread", FakeThread),
         ):
             async with server.lifespan(server.app):
                 pass
 
         mock_register.assert_called_once()
+        assert order == ["register", "abandoned"]
         # Heartbeat + task consumer + agent-message consumer = 3 daemon threads.
         assert server.heartbeat_task in started
         assert server._consume_messages in started

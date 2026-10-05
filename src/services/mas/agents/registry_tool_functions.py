@@ -169,7 +169,7 @@ def create_agent(
         logger.info(f"Agent created successfully: {agent_id} ({name})")
 
         # Shared pool queue for this specialization (all workers of this type consume it).
-        rabbitmq_instance.create_queue(work_queue_name_for_agent_type(Agent_type))
+        rabbitmq_instance.ensure_work_queue(work_queue_name_for_agent_type(Agent_type))
 
         _skill_cache_upsert(agent_id, name, skills, description)
         return agent_id, api_key

@@ -5,14 +5,17 @@ agents. See ``docs/architecture.md`` for the task lifecycle,
 payload shapes, and error codes.
 """
 
+import asyncio
 import json
 import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -23,6 +26,7 @@ from conversations.conversation_tool_functions import add_messages
 from core.logger import get_logger, log_agent_operation
 from core.memory_usage import peak_rss_mb
 from core.metrics import TASK_ERRORS, TASK_QUEUE_DEPTH, observe_task_processing_time
+from core.rabbitmq_manager import WorkQueueFull
 from core.rabbitmq_tool import rabbitmq_instance
 from core.skill_cache import rank_skills
 from core.task_events import (
@@ -37,7 +41,14 @@ from core.work_queues import agent_may_submit_task_result, resolve_work_queue_fo
 from db.database import SessionLocal, get_db
 from db.models import Agents, Conversations, Task, TaskResult
 from db.models.agent_types import AgentTypes
-from schemas.schemas import TaskForm, TaskResultForm, TaskStepForm
+from schemas.schemas import (
+    TaskClaimForm,
+    TaskForm,
+    TaskResultForm,
+    TaskResultStatus,
+    TaskStepForm,
+    WorkerRunForm,
+)
 from tasks.decomposition import get_manager_agent, manager_announce_plan, manager_review_step
 from tasks.idempotency import IDEMPOTENCY_KEY_MAX_LENGTH, claim_task_id, release_task_id
 from tasks.openapi_docs import (
@@ -60,6 +71,7 @@ from tasks.task_tool_functions import (
     select_agent_by_mode,
     validating_task_results,
 )
+from tasks.work_queue_line import BUSY_RETRY_INTERVAL_S, BUSY_STATUS, work_queue_line
 
 logger = get_logger("task_routes")
 
@@ -72,6 +84,17 @@ ROUTE_NONE = "none"
 TASK_EVENTS_PAGE_DEFAULT = 1000
 TASK_EVENTS_PAGE_MAX = 10_000
 CANCELLED_TASK_TEXT = "This request was cancelled before it finished."
+AGENT_FAILED_TEXT = "The agent could not answer this request."
+AGENT_RESTARTED_TEXT = (
+    "The agent restarted while it was working on this request, so the request "
+    "was stopped. Please send it again."
+)
+AGENT_RESTARTED_REASON = "agent_restarted"
+AGENT_UNREGISTERED_TEXT = (
+    "The agent this request was given to is no longer registered (it probably "
+    "restarted), so the request was stopped before it started. Please send it again."
+)
+AGENT_UNREGISTERED_REASON = "agent_unregistered"
 
 
 def _next_specialist_name(skills: list[str], db: Session) -> str:
@@ -103,7 +126,202 @@ def _publish_task_to_work_queue(
             detail="Could not resolve RabbitMQ work queue for assigned agent",
         )
     payload.setdefault("assigned_agent_id", assigned_agent_id)
-    rabbitmq_instance.publish(queue, json.dumps(payload))
+    rabbitmq_instance.publish_task(queue, json.dumps(payload))
+
+
+@dataclass(frozen=True)
+class _WorkDispatch:
+    agent_id: str
+    payload: dict
+    task_id: str
+    root_id: str
+    conversation_id: int | None
+
+    @property
+    def task_ids(self) -> list[str]:
+        return list(dict.fromkeys([self.task_id, self.root_id]))
+
+
+def _work_queue_key(db: Session, agent_id: str) -> str:
+    return resolve_work_queue_for_agent_id(db, agent_id) or agent_id
+
+
+def _set_waiting_status(db: Session, dispatch: _WorkDispatch, waiting: bool) -> None:
+    current, target = (
+        (TaskStatus.RUNNING.value, TaskStatus.QUEUED.value)
+        if waiting
+        else (TaskStatus.QUEUED.value, TaskStatus.RUNNING.value)
+    )
+    db.query(Task).filter(Task.id.in_(dispatch.task_ids), Task.status == current).update(
+        {Task.status: target}, synchronize_session=False
+    )
+    db.commit()
+
+
+def _dispatch_was_stopped(db: Session, dispatch: _WorkDispatch) -> bool:
+    statuses = db.query(Task.status).filter(Task.id.in_(dispatch.task_ids)).all()
+    return len(statuses) < len(dispatch.task_ids) or any(
+        is_final_status(status) for (status,) in statuses
+    )
+
+
+def _cancel_never_dispatched(db: Session, dispatch: _WorkDispatch) -> None:
+    db.query(Task).filter(
+        Task.id.in_(dispatch.task_ids),
+        Task.status.in_(sorted(IN_PROGRESS_STATUSES)),
+    ).update(
+        {Task.status: TaskStatus.CANCELED.value, Task.completed_at: datetime.now(UTC)},
+        synchronize_session=False,
+    )
+    db.commit()
+
+
+async def _report_busy(dispatch: _WorkDispatch, position: int) -> None:
+    logger.info(
+        "Work queue full; the task waits in line",
+        task_id=dispatch.task_id,
+        root_task_id=dispatch.root_id,
+        position=position,
+    )
+    await publish_task_status(
+        dispatch.root_id,
+        dispatch.conversation_id,
+        BUSY_STATUS,
+        stage=TaskStage.QUEUED,
+        detail=f"Busy, position {position}",
+        position=position,
+    )
+
+
+async def _publish_unless_full(db: Session, dispatch: _WorkDispatch) -> bool:
+    queue = _work_queue_key(db, dispatch.agent_id)
+    if work_queue_line.has_waiting(queue):
+        depth = work_queue_line.depth(queue)
+    else:
+        try:
+            _publish_task_to_work_queue(db, dispatch.agent_id, dict(dispatch.payload))
+            return True
+        except WorkQueueFull as full:
+            depth = full.depth
+    work_queue_line.join(queue, dispatch.task_id, depth)
+    _set_waiting_status(db, dispatch, waiting=True)
+    await _report_busy(dispatch, work_queue_line.position(queue, dispatch.task_id))
+    return False
+
+
+def _release_db_connection(db: Session) -> None:
+    db.commit()
+
+
+async def _wait_for_room(db: Session, dispatch: _WorkDispatch) -> bool:
+    queue = _work_queue_key(db, dispatch.agent_id)
+    reported = work_queue_line.position(queue, dispatch.task_id)
+    try:
+        while True:
+            _release_db_connection(db)
+            await asyncio.sleep(BUSY_RETRY_INTERVAL_S)
+            if _dispatch_was_stopped(db, dispatch):
+                _cancel_never_dispatched(db, dispatch)
+                logger.info("Task %s was stopped while it waited in line", dispatch.task_id)
+                return False
+            if work_queue_line.ahead_of(queue, dispatch.task_id) == 0:
+                try:
+                    _publish_task_to_work_queue(db, dispatch.agent_id, dict(dispatch.payload))
+                    return True
+                except WorkQueueFull as full:
+                    work_queue_line.record_depth(queue, full.depth)
+            position = work_queue_line.position(queue, dispatch.task_id)
+            if position != reported:
+                await _report_busy(dispatch, position)
+                reported = position
+    finally:
+        work_queue_line.leave(queue, dispatch.task_id)
+
+
+async def _hand_to_agents(db: Session, dispatch: _WorkDispatch) -> bool:
+    handed = await _publish_unless_full(db, dispatch) or await _wait_for_room(db, dispatch)
+    if handed:
+        _set_waiting_status(db, dispatch, waiting=False)
+    return handed
+
+
+async def _wait_for_room_job(dispatch: _WorkDispatch) -> bool:
+    db = SessionLocal()
+    try:
+        handed = await _wait_for_room(db, dispatch)
+        if handed:
+            _set_waiting_status(db, dispatch, waiting=False)
+            await _announce_dispatch(db, dispatch)
+        return handed
+    except Exception as exc:
+        logger.exception("Could not hand task %s to an agent", dispatch.task_id)
+        db.rollback()
+        task = db.query(Task).filter(Task.id == dispatch.task_id).first()
+        if task is not None:
+            await _fail_task_tree(
+                db,
+                task,
+                f"The orchestrator could not hand this request to an agent: {exc}",
+                reason="dispatch_failed",
+            )
+        return False
+    finally:
+        db.close()
+
+
+async def _fail_task_tree(
+    db: Session,
+    task: Task,
+    text: str,
+    *,
+    reason: str,
+    agent_id: str | None = None,
+    agent_name: str | None = None,
+    skill_used: str | None = None,
+) -> bool:
+    root = (
+        db.query(Task).filter(Task.id == task.parent_task_id).first()
+        if task.parent_task_id
+        else None
+    )
+    reported = root or task
+    already_finished = is_final_status(reported.status)
+    for row in (task, root):
+        if row is None or is_final_status(row.status):
+            continue
+        row.status = TaskStatus.FAILED.value
+        if row.result is not None:
+            row.result.result_data = text
+            row.result.future_actions = []
+    db.commit()
+    if already_finished:
+        return False
+    message = None
+    if reported.conversation_id is not None:
+        message = add_messages(
+            "assistant",
+            text,
+            reported.conversation_id,
+            db,
+            agent_id=agent_id,
+            agent_name=agent_name,
+            skill_used=skill_used,
+        )
+    await publish_agent_message(
+        reported.id,
+        reported.conversation_id,
+        text,
+        event_type=TaskEventType.ERROR,
+        stage=TaskStage.GENERATION,
+        agent_id=agent_id,
+        agent_name=agent_name,
+        skill_used=skill_used,
+        status=TaskStatus.FAILED.value,
+        reason=reason,
+        route=ROUTE_AGENT,
+        message_id=_message_id(message),
+    )
+    return True
 
 
 async def _broadcast_manager_message(
@@ -1139,18 +1357,15 @@ async def _fail_unrouted_task(
     return await _fail_routing(queued, task, text, db)
 
 
-async def _announce_dispatch(
-    root: Task, task: TaskForm, agent_id: str, db: Session
-) -> None:
-    agent_row = db.query(Agents).filter(Agents.id == agent_id).first()
-    agent_name = agent_row.name if agent_row is not None else agent_id
+async def _announce_dispatch(db: Session, dispatch: _WorkDispatch) -> None:
+    agent_name = _agent_name(db, dispatch.agent_id) or dispatch.agent_id
     await publish_task_status(
-        root.id,
-        task.conversation_id,
+        dispatch.root_id,
+        dispatch.conversation_id,
         TaskStatus.RUNNING.value,
         stage=TaskStage.RETRIEVAL,
         detail=f"Assigned to {agent_name}",
-        agent_id=agent_id,
+        agent_id=dispatch.agent_id,
         agent_name=agent_name,
     )
 
@@ -1169,14 +1384,17 @@ async def _dispatch_single_agent(
     demand = user_demand or task.demand
     queued.agent_id = agent_id
     queued.query = demand
-    queued.status = TaskStatus.RUNNING.value
     db.commit()
-    await _announce_dispatch(queued, task, agent_id, db)
-    _publish_task_to_work_queue(
-        db,
+    dispatch = _WorkDispatch(
         agent_id,
         _dispatch_payload(task, queued.id, demand, files_payload, extra_payload),
+        queued.id,
+        queued.id,
+        task.conversation_id,
     )
+    if not await _hand_to_agents(db, dispatch):
+        return _stopped_outcome(dispatch.root_id)
+    await _announce_dispatch(db, dispatch)
     TASK_QUEUE_DEPTH.inc()
     log_agent_operation(
         agent_id, "TASK", f"Assigned task {queued.id}: {task.demand[:50]}..."
@@ -1220,12 +1438,16 @@ async def _dispatch_chain(
     subtask.order = 1
     db.commit()
 
-    await _announce_dispatch(queued, task, agent_id, db)
-    _publish_task_to_work_queue(
-        db,
+    dispatch = _WorkDispatch(
         agent_id,
         _dispatch_payload(task, subtask_id, demand, files_payload, extra_payload),
+        subtask_id,
+        queued.id,
+        task.conversation_id,
     )
+    if not await _hand_to_agents(db, dispatch):
+        return _stopped_outcome(dispatch.root_id)
+    await _announce_dispatch(db, dispatch)
     TASK_QUEUE_DEPTH.inc()
     log_agent_operation(
         agent_id,
@@ -1354,6 +1576,9 @@ async def sharing_agent_result(
             status_code=403,
             detail="Authenticated agent is not allowed to complete this task",
         )
+
+    if task_result.status == TaskResultStatus.FAILED:
+        return await _record_agent_failure(task, task_result, db)
 
     try:
         validating_task_results(
@@ -1565,8 +1790,7 @@ async def sharing_agent_result(
             subtask.order = (task.order or 0) + 1
             db.commit()
 
-            _publish_task_to_work_queue(
-                db,
+            next_step = _WorkDispatch(
                 new_agent,
                 {
                     "conversation_id": task.conversation_id,
@@ -1579,7 +1803,12 @@ async def sharing_agent_result(
                     # assigned task so knowledge-store retrieval stays on-target.
                     "retrieval_query": new_action,
                 },
+                new_subtask_id,
+                chain_root_id,
+                task.conversation_id,
             )
+            if not await _publish_unless_full(db, next_step):
+                task_jobs.submit(new_subtask_id, _wait_for_room_job(next_step))
             TASK_QUEUE_DEPTH.inc()
             logger.info(
                 f"Chained to next task: {new_subtask_id} assigned to agent {new_agent}"
@@ -1763,6 +1992,180 @@ async def sharing_agent_result(
         raise HTTPException(
             status_code=500, detail=f"Error processing task result: {str(e)}"
         )
+
+
+def _agent_is_registered(db: Session, agent_id: str) -> bool:
+    return db.query(Agents.id).filter(Agents.id == agent_id).first() is not None
+
+
+def _agent_name(db: Session, agent_id: str | None) -> str | None:
+    if not agent_id:
+        return None
+    agent = db.query(Agents).filter(Agents.id == agent_id).first()
+    return agent.name if agent is not None else None
+
+
+async def _record_agent_failure(
+    task: Task, task_result: TaskResultForm, db: Session
+) -> dict:
+    reason = task_result.reason or "error"
+    text = (task_result.result or "").strip() or AGENT_FAILED_TEXT
+    reported = await _fail_task_tree(
+        db,
+        task,
+        text,
+        reason=reason,
+        agent_id=task.agent_id,
+        agent_name=task_result.agent_name or _agent_name(db, task.agent_id),
+        skill_used=task_result.skill_used,
+    )
+    TASK_QUEUE_DEPTH.dec()
+    TASK_ERRORS.labels(agent_id=task_result.agent_id, error_type=reason).inc()
+    log_agent_operation(
+        task_result.agent_id,
+        "TASK",
+        f"Task {task.id} failed ({reason}) peak_rss_mb={peak_rss_mb()}",
+    )
+    return {
+        "message": f"Failure of task {task.id} recorded",
+        "reported": reported,
+    }
+
+
+@router.post(
+    "/{task_id}/claim",
+    summary="Claim a task before running it",
+    description=(
+        "Called by an agent worker when it takes a task from its work queue, "
+        "before it acknowledges the message. The first claim stores the worker "
+        "and its run in the task row and marks the task running. The same "
+        "claim sent again by the same run is answered 200 again, so a claim "
+        "whose answer was lost can be retried; a claim by any other worker or "
+        "run, and a claim of a finished, failed or cancelled task, gets 409, so "
+        "a task never runs twice. A task whose assigned agent is no longer "
+        "registered fails at once and gets 409. Requires the agent's "
+        "``X-API-Key`` header."
+    ),
+    status_code=200,
+    tags=["Tasks"],
+)
+async def claim_task(
+    task_id: str,
+    claim: TaskClaimForm,
+    verified_agent: Annotated[tuple[str, str], Depends(verify_agent_api_key)],
+    db: Session = Depends(get_db),
+):
+    verified_agent_id, _ = verified_agent
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if claim.agent_id != task.agent_id:
+        raise HTTPException(
+            status_code=403,
+            detail="agent_id in body must match the task's assigned agent",
+        )
+    if not agent_may_submit_task_result(verified_agent_id, task.agent_id, db):
+        if not _agent_is_registered(db, task.agent_id):
+            await _fail_task_tree(
+                db,
+                task,
+                AGENT_UNREGISTERED_TEXT,
+                reason=AGENT_UNREGISTERED_REASON,
+                agent_id=task.agent_id,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail="The task's agent is no longer registered; the task failed",
+            )
+        raise HTTPException(
+            status_code=403,
+            detail="Authenticated agent is not allowed to run this task",
+        )
+    if is_final_status(task.status):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Task is {_task_status_value(task.status)}; it will not run",
+        )
+    if (task.claimed_by, task.claim_run) == (claim.worker_id, claim.run_id):
+        return {"task_id": task_id, "status": TaskStatus.RUNNING.value}
+    claimed = (
+        db.query(Task)
+        .filter(
+            Task.id == task_id,
+            Task.claimed_by.is_(None),
+            Task.status.in_(sorted(IN_PROGRESS_STATUSES)),
+        )
+        .update(
+            {
+                Task.claimed_by: claim.worker_id,
+                Task.claim_run: claim.run_id,
+                Task.started_at: datetime.now(UTC),
+                Task.status: TaskStatus.RUNNING.value,
+            },
+            synchronize_session=False,
+        )
+    )
+    db.commit()
+    if not claimed:
+        raise HTTPException(status_code=409, detail="Task was already claimed")
+    logger.info(
+        "Task claimed",
+        task_id=task_id,
+        worker_id=claim.worker_id,
+        run_id=claim.run_id,
+    )
+    return {"task_id": task_id, "status": TaskStatus.RUNNING.value}
+
+
+@router.post(
+    "/abandoned-claims",
+    summary="Fail the tasks an earlier run of a worker left unfinished",
+    description=(
+        "Called once by an agent worker when it starts, after it registered. "
+        "Every task still queued or running that was claimed by the same "
+        "worker id under another run id, or claimed by any worker for an "
+        "agent that is no longer registered (a recreated container gets a "
+        "new host name and replaces its agents when it registers), is marked "
+        "failed, with a failed event and a chat message asking the user to "
+        "send the request again. Requires the agent's ``X-API-Key`` header."
+    ),
+    status_code=200,
+    tags=["Tasks"],
+)
+async def fail_abandoned_claims(
+    run: WorkerRunForm,
+    verified_agent: Annotated[tuple[str, str], Depends(verify_agent_api_key)],
+    db: Session = Depends(get_db),
+):
+    abandoned = (
+        db.query(Task)
+        .filter(
+            Task.claimed_by.is_not(None),
+            Task.status.in_(sorted(IN_PROGRESS_STATUSES)),
+            or_(
+                and_(Task.claimed_by == run.worker_id, Task.claim_run != run.run_id),
+                Task.agent_id.not_in(select(Agents.id)),
+            ),
+        )
+        .all()
+    )
+    failed = [task.id for task in abandoned]
+    for task in abandoned:
+        await _fail_task_tree(
+            db,
+            task,
+            AGENT_RESTARTED_TEXT,
+            reason=AGENT_RESTARTED_REASON,
+            agent_id=task.agent_id,
+            agent_name=_agent_name(db, task.agent_id),
+        )
+    if failed:
+        logger.warning(
+            "Failed the tasks an earlier run of worker %s left unfinished: %s",
+            run.worker_id,
+            failed,
+        )
+    return {"failed": failed}
 
 
 @router.post(

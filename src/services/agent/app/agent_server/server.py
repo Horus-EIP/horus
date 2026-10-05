@@ -20,6 +20,7 @@ continue to work.
 """
 
 import os
+import socket
 import threading
 import time
 import uuid
@@ -30,7 +31,7 @@ import requests
 from fastapi import FastAPI, Request
 from prometheus_client import make_asgi_app
 
-from agent_server.consumers import _consume_agent_messages, _consume_messages
+from agent_server.consumers import TaskClaim, _consume_agent_messages, _consume_messages
 from agent_server.middleware import CorrelationIDMiddleware
 from agent_server.models import Result, Task
 from agent_server.profiles import (
@@ -132,6 +133,10 @@ def work_queue_name_for_type(agent_type: str) -> str:
 
 
 WORK_QUEUE_NAME = work_queue_name_for_type(get_primary_profile().type)
+
+WORKER_ID = os.getenv("AGENT_WORKER_ID", "").strip() or socket.gethostname()
+WORKER_RUN_ID = uuid.uuid4().hex
+_CLAIM_TIMEOUT_SECONDS = 10
 
 
 _AUTH_TOKEN = None  # cached bearer token for orchestrator requests
@@ -387,12 +392,116 @@ def heartbeat_task():
         time.sleep(30)
 
 
+def _post_as_profile(path: str, body: dict, profile) -> requests.Response:
+    url = f"{ORCHESTRATOR_URL}{path}"
+
+    def _post() -> requests.Response:
+        return requests.post(
+            url,
+            json=body,
+            headers=_build_headers(
+                include_api_key=True,
+                agent_id=profile.agent_id,
+                api_key=profile.api_key,
+            ),
+            timeout=_CLAIM_TIMEOUT_SECONDS,
+        )
+
+    response = _post()
+    if response.status_code == 401 and not ORCHESTRATOR_TOKEN:
+        _invalidate_cached_mas_token()
+        response = _post()
+    return response
+
+
+def _detail(response: requests.Response) -> str | None:
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    return body.get("detail") if isinstance(body, dict) else None
+
+
+def claim_task(task_id: str, assigned_agent_id: str | None) -> TaskClaim:
+    profile = get_profile_by_agent_id(assigned_agent_id) or get_primary_profile()
+    body = {
+        "agent_id": assigned_agent_id or profile.agent_id,
+        "worker_id": WORKER_ID,
+        "run_id": WORKER_RUN_ID,
+    }
+    try:
+        response = _post_as_profile(f"/tasks/{task_id}/claim", body, profile)
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Claim of task %s did not reach MAS: %s", task_id, exc)
+        return TaskClaim.UNAVAILABLE
+    if response.status_code == 200:
+        return TaskClaim.CLAIMED
+    if response.status_code == 404 and _detail(response) == "Not Found":
+        logger.warning(
+            "MAS has no claim endpoint (older release); task %s runs unclaimed", task_id
+        )
+        return TaskClaim.CLAIMED
+    if response.status_code in (404, 409):
+        logger.info(
+            "MAS refused the claim of task %s: %s - %s",
+            task_id,
+            response.status_code,
+            response.text[:200],
+        )
+        return TaskClaim.REFUSED
+    if response.status_code in (403, 422):
+        logger.warning(
+            "MAS will never accept the claim of task %s, so its message is dropped: %s - %s",
+            task_id,
+            response.status_code,
+            response.text[:200],
+        )
+        return TaskClaim.REFUSED
+    logger.warning(
+        "Claim of task %s failed: %s - %s",
+        task_id,
+        response.status_code,
+        response.text[:200],
+    )
+    return TaskClaim.UNAVAILABLE
+
+
+def fail_abandoned_claims() -> list[str]:
+    profile = get_primary_profile()
+    body = {"worker_id": WORKER_ID, "run_id": WORKER_RUN_ID}
+    try:
+        response = _post_as_profile("/tasks/abandoned-claims", body, profile)
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Could not report the tasks an earlier run left unfinished: %s", exc)
+        return []
+    if response.status_code != 200:
+        logger.warning(
+            "MAS did not fail the tasks an earlier run left unfinished: %s - %s",
+            response.status_code,
+            response.text[:200],
+        )
+        return []
+    try:
+        failed = list(response.json().get("failed") or [])
+    except (ValueError, AttributeError):
+        failed = []
+    if failed:
+        logger.warning(
+            "MAS failed %d task(s) an earlier run of worker %s left unfinished",
+            len(failed),
+            WORKER_ID,
+        )
+    return failed
+
+
 def send_result(
     result: str,
     conversation_id: str,
     task_id: str,
     assigned_agent_id: str | None = None,
     skill_used: str | None = None,
+    status: str = "completed",
+    reason: str | None = None,
 ):
     """
     Sends the processed task result to the MAS Orchestrator using the /tasks/task-result/ endpoint.
@@ -423,7 +532,10 @@ def send_result(
         "result": result,
         "conversation_id": str(conversation_id),
         "task_id": task_id,
+        "status": status,
     }
+    if reason:
+        payload["reason"] = reason
     try:
         response = requests.post(
             url,
@@ -503,6 +615,7 @@ async def lifespan(app: FastAPI):
     """Startup/shutdown (replaces deprecated on_event)."""
     logger.info("Agent service starting up...")
     register_agent()
+    fail_abandoned_claims()
     heartbeat_thread = threading.Thread(target=heartbeat_task, daemon=True)
     heartbeat_thread.start()
     logger.info("Heartbeat thread started")

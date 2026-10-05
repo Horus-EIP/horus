@@ -1,14 +1,46 @@
+import threading
 import time
 
 import pika
 from opentelemetry import trace
 from opentelemetry.propagate import extract, inject
+from pika.exceptions import ChannelClosedByBroker, NackError, UnroutableError
 
 from core.config import settings
 from core.logger import get_logger
 
 logger = get_logger("rabbitmq_manager")
 tracer = trace.get_tracer(__name__)
+
+PRIORITY_QUEUE_ARGUMENTS = {"x-max-priority": 10}
+WORK_QUEUE_OVERFLOW = "reject-publish"
+DEFAULT_WORK_QUEUE_MAX_LENGTH = 10
+PRECONDITION_FAILED = 406
+
+
+class WorkQueueFull(Exception):
+    def __init__(self, queue: str, depth: int) -> None:
+        super().__init__(f"Work queue {queue} is full: {depth} task(s) are waiting in it")
+        self.queue = queue
+        self.depth = depth
+
+
+class WorkQueueUnroutable(Exception):
+    def __init__(self, queue: str) -> None:
+        super().__init__(f"RabbitMQ could not route a task to work queue {queue}")
+        self.queue = queue
+
+
+def work_queue_max_length() -> int:
+    return getattr(settings, "work_queue_max_length", None) or DEFAULT_WORK_QUEUE_MAX_LENGTH
+
+
+def work_queue_arguments(max_length: int) -> dict:
+    return {
+        **PRIORITY_QUEUE_ARGUMENTS,
+        "x-max-length": max_length,
+        "x-overflow": WORK_QUEUE_OVERFLOW,
+    }
 
 
 class RabbitMQ:
@@ -36,6 +68,7 @@ class RabbitMQ:
         self.channel = None
         self.retries = retries
         self.delay_with_seconds = delay
+        self._lock = threading.RLock()
 
     def _ensure_connection(self):
         """
@@ -107,7 +140,7 @@ class RabbitMQ:
                     blocked_connection_timeout=300,
                 )
                 self.connection = pika.BlockingConnection(parameters)
-                self.channel = self.connection.channel()
+                self._open_channel()
                 logger.info(f"Connected to RabbitMQ at {self.host}:{self.port}")
                 return True
             except Exception as e:
@@ -122,6 +155,10 @@ class RabbitMQ:
             f"RabbitMQ connection failed after {self.retries} retries: {last_err}"
         )
         raise last_err
+
+    def _open_channel(self):
+        self.channel = self.connection.channel()
+        self.channel.confirm_delivery()
 
     def close(self):
         """
@@ -145,10 +182,11 @@ class RabbitMQ:
                 durable=True,
                 exclusive=False,
                 auto_delete=False,
-                arguments={"x-max-priority": 10},
+                arguments=PRIORITY_QUEUE_ARGUMENTS,
             )
 
-        self._execute_with_retry(_action)
+        with self._lock:
+            self._execute_with_retry(_action)
 
     def delete_queue(self, queue_name):
         """
@@ -157,7 +195,119 @@ class RabbitMQ:
         Args:
             queue_name (str): The name of the queue to delete.
         """
-        self._execute_with_retry(lambda: self.channel.queue_delete(queue_name))
+        with self._lock:
+            self._execute_with_retry(lambda: self.channel.queue_delete(queue_name))
+
+    def ensure_work_queue(self, queue_name: str) -> int:
+        with self._lock:
+            depth, _bounded = self._execute_with_retry(
+                lambda: self._declare_work_queue(queue_name)
+            )
+        return depth
+
+    def work_queue_depth(self, queue_name: str) -> int:
+        with self._lock:
+            return self._execute_with_retry(lambda: self._ready_count(queue_name))
+
+    def _ready_count(self, queue_name: str) -> int:
+        declared = self.channel.queue_declare(queue=queue_name, passive=True)
+        return int(declared.method.message_count)
+
+    def _declare_bounded(self, queue_name: str, max_length: int) -> int:
+        declared = self.channel.queue_declare(
+            queue=queue_name,
+            passive=False,
+            durable=True,
+            exclusive=False,
+            auto_delete=False,
+            arguments=work_queue_arguments(max_length),
+        )
+        return int(declared.method.message_count)
+
+    def _declare_work_queue(self, queue_name: str) -> tuple[int, bool]:
+        max_length = work_queue_max_length()
+        try:
+            return self._declare_bounded(queue_name, max_length), True
+        except ChannelClosedByBroker as exc:
+            if exc.reply_code != PRECONDITION_FAILED:
+                raise
+        self._open_channel()
+        return self._redeclare_when_empty(queue_name, max_length)
+
+    def _redeclare_when_empty(self, queue_name: str, max_length: int) -> tuple[int, bool]:
+        depth = self._ready_count(queue_name)
+        if depth == 0:
+            try:
+                self.channel.queue_delete(queue=queue_name, if_empty=True)
+                depth = self._declare_bounded(queue_name, max_length)
+            except ChannelClosedByBroker as exc:
+                if exc.reply_code != PRECONDITION_FAILED:
+                    raise
+                self._open_channel()
+                depth = self._ready_count(queue_name)
+            else:
+                logger.info(
+                    "Work queue %s re-declared with x-max-length=%s and x-overflow=%s",
+                    queue_name,
+                    max_length,
+                    WORK_QUEUE_OVERFLOW,
+                )
+                return depth, True
+        logger.warning(
+            "Work queue %s was declared with other arguments and still holds %s "
+            "task(s); MAS keeps it to %s waiting tasks itself and re-declares it "
+            "with x-max-length and x-overflow=%s once it is empty",
+            queue_name,
+            depth,
+            max_length,
+            WORK_QUEUE_OVERFLOW,
+        )
+        return depth, False
+
+    def _publish_confirmed(self, queue_name: str, message, priority_value: int) -> None:
+        depth, bounded = self._declare_work_queue(queue_name)
+        if not bounded and depth >= work_queue_max_length():
+            raise WorkQueueFull(queue_name, depth)
+        headers = {}
+        inject(headers)
+        try:
+            self.channel.basic_publish(
+                exchange="",
+                routing_key=queue_name,
+                body=message,
+                properties=pika.BasicProperties(
+                    delivery_mode=2, headers=headers, priority=priority_value
+                ),
+                mandatory=True,
+            )
+        except NackError:
+            raise WorkQueueFull(queue_name, self._ready_count(queue_name)) from None
+
+    def publish_task(self, queue_name: str, message, priority_value: int = 1) -> None:
+        def _action():
+            try:
+                self._publish_confirmed(queue_name, message, priority_value)
+            except UnroutableError:
+                logger.warning(
+                    "RabbitMQ returned a task sent to %s as unroutable; declaring the "
+                    "queue and sending the task again",
+                    queue_name,
+                )
+                try:
+                    self._publish_confirmed(queue_name, message, priority_value)
+                except UnroutableError:
+                    raise WorkQueueUnroutable(queue_name) from None
+            logger.info(f"Sent task to work queue {queue_name}")
+
+        with tracer.start_as_current_span(
+            f"publish {queue_name}",
+            kind=trace.SpanKind.PRODUCER,
+            attributes={
+                "messaging.system": "rabbitmq",
+                "messaging.destination.name": queue_name,
+            },
+        ), self._lock:
+            self._execute_with_retry(_action)
 
     def consume(self, queue_name, callback):
         """
@@ -243,7 +393,7 @@ class RabbitMQ:
                 "messaging.system": "rabbitmq",
                 "messaging.destination.name": queue_name,
             },
-        ):
+        ), self._lock:
             self._execute_with_retry(_action)
 
     # ------------------------------------------------------------------

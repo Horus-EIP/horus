@@ -10,11 +10,13 @@ multi-step THOUGHT → ACTION → OBSERVATION loops for complex queries.
 
 import logging
 import os
+import threading
 from typing import Any
 
 from ai_agents.calculator_tool import CalculatorTool
 from ai_agents.decision_making_agent import DecisionMakingAgent, _max_context_chars
 from ai_agents.file_parser_tool import FileParserTool
+from ai_agents.generation_stop import GenerationTimedOut, current_generation_stop
 from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
 from ai_agents.knowledge_store_client import format_passages
 from ai_agents.step_emitter import emit_step
@@ -35,9 +37,7 @@ _ONE_PASSAGE_CHARS = 1100
 _OTHER_PASSAGES_HEADER = "--- Other Knowledge Store Passages ---"
 
 # Wall-clock budget for a single decide() call. This, not TASK_TIMEOUT, is what
-# actually bounds a chat answer, and on expiry the pipeline returns a canned
-# string as a *successful* task -- so too low a value reads as a bad answer
-# rather than as a timeout. The old flat 120s default was a GPU number: a
+# actually bounds a chat answer. The old flat 120s default was a GPU number: a
 # CPU-only worker cannot finish a 4B generation anywhere near it.
 # REACT_TIMEOUT_SECONDS still overrides both.
 _REACT_TIMEOUT_GPU_DEFAULT = 120.0
@@ -176,6 +176,8 @@ class RAGPipeline:
             )
             return cached
 
+        stop = threading.Event()
+        stop_binding = current_generation_stop.set(stop)
         try:
             insight = await asyncio.wait_for(
                 asyncio.to_thread(
@@ -186,19 +188,15 @@ class RAGPipeline:
                 timeout=timeout,
             )
         except TimeoutError:
+            stop.set()
             logger.warning(
-                "Single-shot LLM inference timed out after %.0fs for query: %r",
+                "Single-shot LLM inference timed out after %.0fs; generation asked to stop. Query: %r",
                 timeout,
                 query[:120],
             )
-            # Do not cache the timeout fallback — it is not a real answer.
-            return (
-                "The model took too long to respond (no answer within "
-                f"{timeout:.0f}s). Try a shorter question, or ask an "
-                "administrator to raise REACT_TIMEOUT_SECONDS. On a CPU-only "
-                "deployment this is expected for long questions: generation is "
-                "many times slower than on a GPU."
-            )
+            raise GenerationTimedOut(timeout) from None
+        finally:
+            current_generation_stop.reset(stop_binding)
 
         await set_cached(query, context_text, corpus_version, insight)
         return insight

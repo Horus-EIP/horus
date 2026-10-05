@@ -8,6 +8,7 @@ export type AgentAnswer = {
   agentName?: string;
   skillUsed?: string;
   messageId?: number;
+  failed?: boolean;
 };
 
 const FINISHED_TASK_STATUSES = ["completed", "failed", "cancelled"];
@@ -27,12 +28,17 @@ function finishedTaskText(task: TaskDetails): string {
   return FAILED_TASK_TEXT;
 }
 
-export function finishedTaskAnswer(task: TaskDetails): { content: string; agentId: string } {
+export function finishedTaskAnswer(task: TaskDetails): {
+  content: string;
+  agentId: string;
+  failed: boolean;
+} {
   const subtasks = task.subtasks ?? [];
   const answeringAgentId = subtasks[subtasks.length - 1]?.assignedAgent || task.agent_id;
   return {
     content: finishedTaskText(task),
     agentId: answeringAgentId,
+    failed: task.status === "failed",
   };
 }
 
@@ -60,7 +66,7 @@ export function appendAgentAnswer(messages: Message[], answer: AgentAnswer): Mes
       text: answer.content,
       sender: "agent",
       timestamp: answer.timestamp,
-      status: "sent",
+      status: answer.failed ? "error" : "sent",
       agentId: answer.agentId,
       agentName: answer.agentName,
       skillUsed: answer.skillUsed,

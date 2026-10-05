@@ -83,7 +83,7 @@ def _isolate_side_effects(monkeypatch):
 
     These are monkeypatched (auto-revert) rather than mutated in place.
     """
-    monkeypatch.setattr(rtf.rabbitmq_instance, "create_queue", MagicMock())
+    monkeypatch.setattr(rtf.rabbitmq_instance, "ensure_work_queue", MagicMock())
     monkeypatch.setattr(rtf, "_skill_cache_upsert", MagicMock())
     monkeypatch.setattr(rtf, "_skill_cache_evict", MagicMock())
     yield
@@ -280,7 +280,7 @@ class TestCreateAgent:
         db.commit.assert_called_once()
         db.refresh.assert_called_once()
         # Queue + skill cache side effects fired.
-        rtf.rabbitmq_instance.create_queue.assert_called_once()
+        rtf.rabbitmq_instance.ensure_work_queue.assert_called_once_with("horus.work.researcher")
         rtf._skill_cache_upsert.assert_called_once()
         # The stored api_key on the row is the bcrypt hash, not the plaintext.
         stored = db.add.call_args[0][0]
@@ -296,7 +296,7 @@ class TestCreateAgent:
         assert agent_id is None and api_key is None
         db.rollback.assert_called_once()
         # Side effects must NOT fire on the failure path.
-        rtf.rabbitmq_instance.create_queue.assert_not_called()
+        rtf.rabbitmq_instance.ensure_work_queue.assert_not_called()
         rtf._skill_cache_upsert.assert_not_called()
 
 

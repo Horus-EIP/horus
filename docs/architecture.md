@@ -445,6 +445,18 @@ erDiagram
 - **Manager:** `core.rabbitmq_manager.RabbitMQ` handles connection, retry, and channel management.
 - **Retry:** Exponential backoff with up to 500 retries for robust startup.
 - **Heartbeat:** 600s keep-alive interval to maintain connection stability.
+- **Publisher confirms:** MAS's channel runs in confirm mode (`confirm_delivery()`), and tasks are published `mandatory` and persistent. A nack raises `WorkQueueFull`. A task the broker returns as unroutable (its queue was deleted between the declare and the publish) is declared again and published once more; returned a second time, it raises `WorkQueueUnroutable` and the request fails instead of waiting as busy. Without confirms a message the broker rejects is dropped silently.
+- **Thread safety:** one `BlockingConnection` is shared by the event loop and the thread pool, so every channel operation holds one lock.
+
+##### Bounded work queues and the agent worker
+
+- **Queue arguments.** Each `horus.work.{type}` queue is declared with `x-max-priority: 10`, `x-max-length: WORK_QUEUE_MAX_LENGTH` (default 10, read by MAS and by the agent from the shared `.env`) and `x-overflow: reject-publish`. Only ready messages count; the agent acknowledges a task as soon as it starts it, so running tasks never fill the queue.
+- **Upgrading queues declared by an older release.** RabbitMQ refuses to declare an existing queue again with other arguments (`PRECONDITION_FAILED`, the channel closes). MAS, which owns the queue arguments, then reopens its channel, reads the queue's ready count with a passive declare and, when it is 0, deletes it with `if_empty` and declares it again with the limit. When it still holds tasks, MAS keeps it as it is, refuses to publish while it holds `WORK_QUEUE_MAX_LENGTH` tasks or more (the same `busy` path as a nack), and tries again at the next publish, so the queue is upgraded the first time it is empty. Changing `WORK_QUEUE_MAX_LENGTH` later takes the same path. The agent never fights MAS over the arguments: it declares a queue passively, creates it with the limit only when it does not exist, and accepts a queue declared with other arguments.
+  Why not a RabbitMQ policy: a policy is set through the management API or a definitions file. The management API needs the HTTP port and an administrator account from MAS, and a definitions file needs a second file mounted into the broker, which is a compose change; `rabbitmq.conf` alone does not define a policy for queues that already exist (its default operator policies are applied when a virtual host is created, and the `/` host of an existing install already exists). Deleting an empty queue loses nothing, needs no broker change, and leaves the queue arguments, not a separate object, as the single place where the limit lives. The agent pulls tasks with `basic.get` and has no consumer on the queue, so the delete cancels nothing.
+- **Full queue.** A rejected publish puts the task in MAS's first-in, first-out line for that queue (in memory, `tasks/work_queue_line.py`); its database status goes back to `queued` and a `busy` status event with `position` N is stored at once. MAS retries the head of the line every second, and gives its database connection back to the pool between tries, so a long line cannot exhaust the pool; a request that arrives while the line is not empty joins it without publishing. When a task leaves the line, MAS sends the `running` status ("Assigned to …"), which replaces the busy label in the chat. N = 1 + the ready count of the queue at the last rejection + the tasks ahead in MAS's line. A request cancelled or timed out while it waits leaves the line and is never published. If MAS restarts, the waiting tasks are `queued` and fail at start-up with a message asking the user to send them again.
+- **Agent worker.** The consumer thread pulls one message at a time with `basic.get`, and only when one of its `AGENT_MAX_CONCURRENT_TASKS` worker threads (default 1) is free. For each message it claims the task in MAS (`POST /tasks/{task_id}/claim`), then acknowledges the message, then hands the task to a worker thread. The claim is the task's state in the database: who runs it, which run of that worker, and since when. Only the first claim succeeds, so a message delivered again (for example after a connection drop between the claim and the acknowledgement) never runs the task on another worker or in another run, and a task cancelled while it waited in the queue is dropped. The same claim sent again by the same run is answered 200 again, so a claim whose answer was lost (MAS committed it, the reply timed out) can be retried instead of leaving the task claimed by nobody; the worker remembers the ids of the last 10,000 tasks it started in this run and drops a message for one of them. If MAS does not answer the claim (unreachable, 5xx, 401), the message goes back to the queue and the worker waits 5 s; a claim MAS will never accept (403, 422) is dropped so it cannot block the queue. A task whose assigned agent is no longer registered (the agent restarted and registered new ids while the task waited in the queue) fails at its claim, with a chat message asking the user to send it again, because MAS would refuse its result anyway. The consumer thread itself never runs a task, so it keeps servicing the connection (heartbeats) during a 15-minute CPU answer, and the broker's consumer timeout never applies because nothing stays unacknowledged.
+- **Agent restart.** A task that was acknowledged but not finished when the agent stopped is **failed, not run again**. The new process calls `POST /tasks/abandoned-claims` with its worker id (`AGENT_WORKER_ID`, or the container's host name, which survives a restart of the same container) and its new run id; MAS fails every task the older runs of that worker left unfinished, and every claimed task whose agent is no longer registered, with a chat message asking the user to send it again. Running it again automatically would be at-least-once delivery: the most likely cause of the restart on a 16 GB CPU host is an out-of-memory kill or a crash in that very task, which would then loop, and the user would get an answer to a question asked up to an hour earlier with no sign of the restart. A container that is recreated gets a new host name, but it registers its profiles again before the call and so replaces the agent rows of the old container: the tasks the old container had claimed have no registered agent any more and fail on the same call. Only when MAS is unreachable during that call are they left to `TASK_TIMEOUT`.
+- **Answer timeout.** When one answer takes longer than `REACT_TIMEOUT_SECONDS`, the RAG pipeline sets a stop flag and raises `GenerationTimedOut`; the worker reports the task with `status: "failed"`, `reason: "timeout"`. On the OpenAI-compatible backend (llama-server, vLLM) the answer is always read as a stream when it can be stopped, and the stream is closed at the next chunk after the flag is set, which makes the server cancel the generation. On the transformers backend a `StoppingCriteria` reads the flag at every token. A server still reading a long prompt sends no chunk, so the stop takes effect when the first token comes.
 
 ---
 
@@ -469,6 +481,9 @@ All services are configured via environment variables, typically set in `docker-
 | | `RABBITMQ_PORT` | Yes | RabbitMQ port |
 | | `RABBITMQ_USER` | Yes | RabbitMQ username |
 | | `RABBITMQ_PASSWORD` | Yes | RabbitMQ password |
+| | `WORK_QUEUE_MAX_LENGTH` | No | Waiting tasks each `horus.work.{type}` queue holds before MAS answers "busy, position N" (default 10). Read by MAS and the agent. |
+| **Agent worker** | `AGENT_MAX_CONCURRENT_TASKS` | No | Tasks one agent process runs at a time (default 1). |
+| | `AGENT_WORKER_ID` | No | Stable worker name for task claims (default: the container's host name). Must differ between agent containers. |
 | **Application** | `LLM_AUTOINIT` | No | Auto-initialize LLM on startup (0 or 1) |
 
 A complete example with all variables is available at `src/infra/.env.example`.
@@ -1198,6 +1213,10 @@ A unit of work assigned to an agent within a conversation. Tasks support hierarc
 | `query` | String | Not null | The instruction or question the agent must process. |
 | `order` | Integer | Nullable | Execution order hint for sibling tasks. |
 | `skills_required` | JSON | Nullable | Skills requested for the task, plus the skill the agent reports using when its result arrives. |
+| `owner_username` | String | Nullable, indexed | User who queued the task. |
+| `claimed_by` | String | Nullable, indexed | Worker that claimed the task before running it (`AGENT_WORKER_ID` or its host name). |
+| `claim_run` | String | Nullable | Run of that worker; a later run fails the unfinished tasks of earlier runs. |
+| `started_at` | DateTime (tz) | Nullable | When an agent claimed the task. |
 | `created_at` | DateTime (tz) | Not null, server default `now()` | Task creation timestamp. |
 | `updated_at` | DateTime (tz) | Not null, server default `now()`, auto-update | Last status change timestamp. |
 | `completed_at` | DateTime (tz) | Nullable | Set once, when the status first becomes `completed`, `canceled` or `failed`. |
@@ -1389,10 +1408,10 @@ This note explains the gap between the **desired behavior** (create an agent whe
    Each worker calls `POST /agents/register` and gets its own `agent_id` and `api_key`. MAS ensures the **shared** queue for that worker’s `AgentTypes` exists (same queue name for all workers of that type).
 
 2. **Dispatch**  
-   MAS publishes task JSON to `resolve_work_queue_for_agent_id(assignee)` (e.g. `horus.work.general`), including `assigned_agent_id` for result correlation.
+   MAS publishes task JSON to `resolve_work_queue_for_agent_id(assignee)` (e.g. `horus.work.general`), including `assigned_agent_id` for result correlation, with publisher confirms. A full queue rejects the task and MAS keeps it in line (see "Bounded work queues and the agent worker").
 
 3. **Execution**  
-   Workers consume the **type** queue (`WORK_QUEUE_NAME` in `agent_server/server.py`). Any idle pool member may run the task.
+   Workers pull from the **type** queues (`WORK_QUEUE_NAME` in `agent_server/server.py`) when a worker thread is free. Any idle pool member may run the task; it claims the task in MAS first, so only one does.
 
 4. **Conversation delete**  
    Still cascades messages and tasks only; unregistering a worker removes its DB row but **not** the shared type queue.

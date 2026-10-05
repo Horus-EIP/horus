@@ -33,6 +33,9 @@ class Task(Base):
     order = Column(Integer, nullable=True)
     skills_required = Column(JSON, nullable=True)
     owner_username = Column(String, nullable=True, index=True)
+    claimed_by = Column(String, nullable=True, index=True)
+    claim_run = Column(String, nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

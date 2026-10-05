@@ -241,6 +241,13 @@ export const MessageList: React.FC<MessageListProps> = ({
                   {formatTimestamp(message.timestamp)}
                 </span>
 
+                {message.sender === "agent" && message.status === "error" && (
+                  <span className="text-[10px] text-right flex items-center gap-1">
+                    <span className="text-red-400">Failed</span>
+                    <IconExclamationCircle className="w-3 h-3 text-red-400" />
+                  </span>
+                )}
+
                 {message.sender === "user" && (
                   <span className="text-[10px] opacity-80 text-right text-[var(--textSoft)] flex items-center gap-1">
                     {message.status === "sending" && "Sending..."}

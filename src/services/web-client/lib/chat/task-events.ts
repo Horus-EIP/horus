@@ -10,6 +10,7 @@ export type TaskProgress = {
   stage?: string;
   detail?: string;
   elapsedS?: number;
+  position?: number;
 };
 
 export type TaskFrameHandlers = {
@@ -22,6 +23,8 @@ export type TaskFrameHandlers = {
 const TERMINAL_EVENTS = new Set(["result", "error"]);
 const PROGRESS_FRAME_TYPES = new Set(["task_status", "heartbeat"]);
 const MAX_REPLAY_PAGES = 20;
+const BUSY_STATUS = "busy";
+const FAILED_STATUS = "failed";
 
 const STAGE_LABELS: Record<string, string> = {
   queued: "Queued, waiting for the orchestrator",
@@ -139,6 +142,10 @@ function directAnswerStep(taskId: string): TaskStepEvent {
   };
 }
 
+function numberOf(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined;
+}
+
 function answerOf(frame: TaskFrame): AgentAnswer {
   return {
     content: String(frame.content ?? ""),
@@ -146,7 +153,8 @@ function answerOf(frame: TaskFrame): AgentAnswer {
     agentId: textOf(frame.agent_id),
     agentName: textOf(frame.agent_name),
     skillUsed: textOf(frame.skill_used),
-    messageId: typeof frame.message_id === "number" ? frame.message_id : undefined,
+    messageId: numberOf(frame.message_id),
+    failed: frame.event === "error" && frame.status === FAILED_STATUS,
   };
 }
 
@@ -174,7 +182,8 @@ export function routeTaskFrame(frame: TaskFrame, handlers: TaskFrameHandlers): v
       status: textOf(frame.status),
       stage: textOf(frame.stage),
       detail: textOf(frame.detail),
-      elapsedS: typeof frame.elapsed_s === "number" ? frame.elapsed_s : undefined,
+      elapsedS: numberOf(frame.elapsed_s),
+      position: numberOf(frame.position),
     });
     return;
   }
@@ -208,6 +217,7 @@ export function mergeTaskProgress(
     stage: next.stage ?? current.stage,
     detail: next.status ? next.detail : current.detail,
     elapsedS: next.elapsedS ?? current.elapsedS,
+    position: next.status ? next.position : current.position,
   };
 }
 
@@ -220,6 +230,10 @@ export function formatElapsed(seconds: number): string {
 
 export function taskProgressLabel(progress: TaskProgress | null): string | null {
   if (!progress) return null;
+  if (progress.status === BUSY_STATUS && progress.position !== undefined) {
+    const label = `Busy, position ${progress.position}`;
+    return progress.elapsedS !== undefined ? `${label} · ${formatElapsed(progress.elapsedS)}` : label;
+  }
   if (progress.status && !KNOWN_STATUSES.has(progress.status) && progress.detail) {
     return progress.detail;
   }

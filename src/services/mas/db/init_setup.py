@@ -1,5 +1,8 @@
 import os
 import subprocess
+import sys
+
+from sqlalchemy import text
 
 from auth.auth_tool_functions import bcrypt_context
 from auth.permissions import Role
@@ -9,8 +12,46 @@ from core.logger import get_logger, log_db_operation, log_error, log_success
 from db.database import Base, SessionLocal, engine
 from db.migrate_critical_logs import create_critical_logs_table
 from db.models import Users
+from tasks.status import TaskStatus
 
 logger = get_logger("init_db")
+
+TASK_STATUS_LABELS_SQL = (
+    "SELECT e.enumlabel FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid "
+    "WHERE t.typname = 'taskstatus'"
+)
+
+
+def ensure_task_status_enum(bind) -> list[str]:
+    if bind.dialect.name != "postgresql":
+        return []
+    with bind.connect() as connection:
+        present = {row[0] for row in connection.execute(text(TASK_STATUS_LABELS_SQL))}
+    missing = [status.value for status in TaskStatus if present and status.value not in present]
+    if missing:
+        with bind.connect() as connection:
+            autocommit = connection.execution_options(isolation_level="AUTOCOMMIT")
+            for value in missing:
+                autocommit.execute(
+                    text(f"ALTER TYPE taskstatus ADD VALUE IF NOT EXISTS '{value}'")
+                )
+        logger.warning(f"The taskstatus enum lacked {missing}; the values were added")
+    return missing
+
+
+def stamp_alembic_head() -> bool:
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "stamp", "head"],
+        cwd=os.path.dirname(os.path.abspath(__file__)),
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        log_error("migration", f"Could not stamp the Alembic head: {result.stderr}")
+        return False
+    log_success("migration", "Schema built from the models; Alembic stamped at head")
+    return True
 
 
 def run_migrations():
@@ -67,6 +108,7 @@ def init_db():
             try:
                 Base.metadata.create_all(bind=engine)
                 logger.info("Database tables created via SQLAlchemy fallback")
+                stamp_alembic_head()
                 # Refresh table list
                 tables = inspector.get_table_names()
                 logger.info(f"Tables after fallback: {tables}")
@@ -80,6 +122,11 @@ def init_db():
         logger.debug(f"Could not check table status: {str(e)}")
     finally:
         db.close()
+
+    try:
+        ensure_task_status_enum(engine)
+    except Exception as e:
+        log_error("init_db", f"Could not check the taskstatus enum: {str(e)}", exc_info=True)
 
     if not create_critical_logs_table():
         log_error("init_db", "Failed to create critical_logs table")

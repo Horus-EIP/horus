@@ -283,6 +283,7 @@ describe("chat page after a WebSocket reconnect", () => {
       { timeout: 3000 }
     );
     expect(screen.queryByText("Traceback")).not.toBeInTheDocument();
+    expect(screen.getByText("Failed")).toBeInTheDocument();
   });
 
   it("shows the timeout notice replayed from the task's events, once", async () => {
@@ -401,6 +402,42 @@ describe("chat page sending a question", () => {
     await screen.findByText(ANSWER);
     expect(screen.getByLabelText("Send message")).toBeInTheDocument();
     expect(screen.queryByText("Choosing the right agents · 1m 05s")).not.toBeInTheDocument();
+  });
+
+  it("shows the place in line, then marks a timed-out answer as failed", async () => {
+    await ask("Summarise every 2025 report");
+
+    latestSocket().deliver({
+      type: "task_status",
+      status: "busy",
+      detail: "Busy, position 11",
+      position: 11,
+      task_id: "root-9",
+      seq: 2,
+      event: "progress",
+      stage: "queued",
+    });
+    await screen.findByText("Busy, position 11");
+
+    latestSocket().deliver({
+      type: "task_complete",
+      content: "The model did not finish its answer within 900s, so this request was stopped.",
+      agent_id: "agent-finance",
+      agent_name: "Finance-Analyst",
+      status: "failed",
+      reason: "timeout",
+      task_id: "root-9",
+      seq: 3,
+      event: "error",
+      stage: "generation",
+    });
+
+    await screen.findByText(
+      "The model did not finish its answer within 900s, so this request was stopped."
+    );
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.queryByText("Busy, position 11")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Send message")).toBeInTheDocument();
   });
 
   it("explains why a question could not be routed", async () => {

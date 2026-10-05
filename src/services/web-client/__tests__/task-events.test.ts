@@ -257,4 +257,95 @@ describe("task progress label", () => {
       taskProgressLabel({ taskId: "root-7", status: "busy", detail: "Busy, position 3" })
     ).toBe("Busy, position 3");
   });
+
+  it("shows the place in line of a request that waits for a full queue", () => {
+    const busy = mergeTaskProgress(null, {
+      taskId: "root-7",
+      status: "busy",
+      stage: "queued",
+      detail: "Busy, position 11",
+      position: 11,
+    });
+    const waiting = mergeTaskProgress(busy, { taskId: "root-7", stage: "queued", elapsedS: 25 });
+    const moved = mergeTaskProgress(waiting, {
+      taskId: "root-7",
+      status: "busy",
+      stage: "queued",
+      detail: "Busy, position 4",
+      position: 4,
+    });
+    const running = mergeTaskProgress(moved, {
+      taskId: "root-7",
+      status: "running",
+      stage: "retrieval",
+    });
+
+    expect(taskProgressLabel(busy)).toBe("Busy, position 11");
+    expect(taskProgressLabel(waiting)).toBe("Busy, position 11 · 25s");
+    expect(taskProgressLabel(moved)).toBe("Busy, position 4 · 25s");
+    expect(running.position).toBeUndefined();
+    expect(taskProgressLabel(running)).toBe("Searching the documents · 25s");
+  });
+});
+
+describe("failed and busy frames", () => {
+  it("passes the place in line of a busy status on", () => {
+    const sink = handlers();
+
+    routeTaskFrame(
+      {
+        type: "task_status",
+        status: "busy",
+        stage: "queued",
+        detail: "Busy, position 11",
+        position: 11,
+        task_id: "root-7",
+        seq: 2,
+        event: "progress",
+      },
+      sink
+    );
+
+    expect(sink.onProgress).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: "root-7", status: "busy", position: 11 })
+    );
+  });
+
+  it("marks the answer of a failed task as failed and ends the turn", () => {
+    const sink = handlers();
+
+    routeTaskFrame(
+      {
+        type: "task_complete",
+        content: "The model did not finish its answer within 900s.",
+        agent_name: "General-Assistant",
+        status: "failed",
+        reason: "timeout",
+        task_id: "root-7",
+        seq: 9,
+        event: "error",
+      },
+      sink
+    );
+
+    expect(sink.onAnswer).toHaveBeenCalledWith(expect.objectContaining({ failed: true }), true);
+  });
+
+  it("does not mark a cancelled task as failed", () => {
+    const sink = handlers();
+
+    routeTaskFrame(
+      {
+        type: "agent",
+        content: "This request was cancelled before it finished.",
+        status: "cancelled",
+        task_id: "root-7",
+        seq: 6,
+        event: "error",
+      },
+      sink
+    );
+
+    expect(sink.onAnswer).toHaveBeenCalledWith(expect.objectContaining({ failed: false }), true);
+  });
 });

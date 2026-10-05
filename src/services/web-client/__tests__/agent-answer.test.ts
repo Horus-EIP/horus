@@ -108,6 +108,16 @@ describe("appendAgentAnswer", () => {
 
     expect(appendAgentAnswer(messages, { ...answer, content: "   " })).toBe(messages);
   });
+
+  it("marks the message of a failed task as failed", () => {
+    const messages = appendAgentAnswer([question], {
+      ...answer,
+      content: "The model did not finish its answer within 900s.",
+      failed: true,
+    });
+
+    expect(messages[1]).toMatchObject({ sender: "agent", status: "error" });
+  });
 });
 
 describe("finishedTaskAnswer", () => {
@@ -124,6 +134,7 @@ describe("finishedTaskAnswer", () => {
     expect(finishedTaskAnswer(task({ status: "completed", result: "Revenue grew 12%." }))).toEqual({
       content: "Revenue grew 12%.",
       agentId: "agent-finance",
+      failed: false,
     });
   });
 
@@ -141,6 +152,7 @@ describe("finishedTaskAnswer", () => {
     expect(finishedTaskAnswer(chain)).toEqual({
       content: "Combined briefing",
       agentId: "agent-writer",
+      failed: false,
     });
   });
 
@@ -149,6 +161,12 @@ describe("finishedTaskAnswer", () => {
       FAILED_TASK_TEXT
     );
     expect(finishedTaskAnswer(task({ status: "cancelled" })).content).toBe(CANCELLED_TASK_TEXT);
+  });
+
+  it("marks only a failed task's answer as failed", () => {
+    expect(finishedTaskAnswer(task({ status: "failed" })).failed).toBe(true);
+    expect(finishedTaskAnswer(task({ status: "cancelled" })).failed).toBe(false);
+    expect(finishedTaskAnswer(task({ status: "completed", result: "ok" })).failed).toBe(false);
   });
 
   it("shows the timeout notice stored on a timed-out task", () => {

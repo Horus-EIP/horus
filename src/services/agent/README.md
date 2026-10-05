@@ -11,7 +11,7 @@ The service is a **FastAPI** application (port 8001) with background threads for
 
 1. **Registration** -- On startup the agent registers itself with MAS via `POST /agents/register` and receives an `agent_id` and `api_key`.
 2. **Heartbeat** -- A daemon thread sends a heartbeat to MAS every 30 seconds.
-3. **RabbitMQ consumer** -- A blocking consumer listens on `{HORUS_WORK_QUEUE_PREFIX}.{AGENT_TYPE}` (default `horus.work.general`, etc.). Task messages include `assigned_agent_id` so `/tasks/task-result/` matches the orchestrator’s `Task.agent_id`.
+3. **RabbitMQ task worker** -- One thread pulls from `{HORUS_WORK_QUEUE_PREFIX}.{type}` for every registered type (default `horus.work.general`, etc.), one message at a time and only when one of the `AGENT_MAX_CONCURRENT_TASKS` worker threads is free. It claims the task in MAS (`POST /tasks/{task_id}/claim`), acknowledges the message, and runs the task in a worker thread, so a long answer never blocks the connection's heartbeat and a task never runs twice: a message delivered again, or a task cancelled while it waited, is refused by the claim and dropped, and the worker never starts the same task twice in one run even when MAS confirms a repeated claim (a claim whose answer was lost is sent again and confirmed). A claim MAS cannot answer puts the message back in the queue; one it will never accept (403, 422) drops it. Task messages include `assigned_agent_id` so `/tasks/task-result/` matches the orchestrator’s `Task.agent_id`. At start-up the worker asks MAS to fail the tasks an earlier run of the same worker left unfinished (`POST /tasks/abandoned-claims`); they are not run again.
 4. **Inter-agent messaging** -- A second consumer handles delegation requests from other agents routed through MAS.
 
 ### RAG Pipeline
@@ -22,6 +22,8 @@ The default (`general`) agent type uses `RAGPipeline`, which chains:
 - **DecisionMakingAgent** -- Runs a Hugging Face causal instruct model (default `Qwen/Qwen3-4B-Instruct-2507`, or `app/models/Qwen3_instruct_4B/` when complete) to answer from retrieved context.
 
 The pipeline also supports a **ReAct** reasoning mode (`ReactAgent`) that performs multi-step THOUGHT, ACTION, OBSERVATION loops for complex queries.
+
+When one answer takes longer than `REACT_TIMEOUT_SECONDS` (default 900 s on CPU, 120 s on GPU), the pipeline asks the generation to stop and the task is reported to MAS with `status: "failed"` and `reason: "timeout"`, not as an answer. On the OpenAI-compatible backend (llama-server, vLLM) the answer is then read as a stream, which is closed at the next chunk so the server cancels the generation; on the transformers backend a stopping criterion ends it at the next token. Any other pipeline error is reported as `failed` with `reason: "error"`.
 
 ## Agent Types
 
@@ -114,6 +116,10 @@ In practice, most tasks arrive through the RabbitMQ consumer rather than the HTT
 | `RABBITMQ_HOST`           | RabbitMQ host                              | `localhost`               |
 | `RABBITMQ_USER`           | RabbitMQ username                          | `guest`                   |
 | `RABBITMQ_PASSWORD`       | RabbitMQ password                          | `guest`                   |
+| `WORK_QUEUE_MAX_LENGTH`   | `x-max-length` used when the agent creates a work queue that does not exist yet (MAS reads the same variable) | `10` |
+| `AGENT_MAX_CONCURRENT_TASKS` | Tasks this process runs at a time; the worker takes no message while they are all busy | `1` |
+| `AGENT_WORKER_ID`         | Stable worker name for task claims. It must differ between agent containers | the host name |
+| `REACT_TIMEOUT_SECONDS`   | Limit on one answer; past it the task fails with `reason: "timeout"` | `900` on CPU, `120` on GPU |
 | `DELEGATION_TIMEOUT`      | Timeout for delegation requests (seconds)  | `30.0`                    |
 | `MAX_DELEGATION_DEPTH`    | Maximum inter-agent delegation chain depth | `5`                       |
 

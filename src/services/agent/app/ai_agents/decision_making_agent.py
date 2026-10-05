@@ -17,6 +17,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from ai_agents.generation_stop import GenerationStopped, generation_stop_event
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -271,6 +273,14 @@ if _TRANSFORMERS_AVAILABLE and StoppingCriteria is not None:
 
 else:  # transformers unavailable — generation path is never reached in this case
     _SpiralStoppingCriteria = None  # type: ignore
+
+
+class _StopRequestedCriteria:
+    def __init__(self, stop: threading.Event) -> None:
+        self._stop = stop
+
+    def __call__(self, input_ids: Any, scores: Any = None, **kwargs: Any) -> bool:
+        return self._stop.is_set()
 
 
 def _configure_agent_torch_threads() -> None:
@@ -705,10 +715,14 @@ class DecisionMakingAgent:
         # letting it run to max_new_tokens (see _early_stop_enabled / the
         # measured 3072-token, ~150s worst case). No-op for well-formed answers.
         spiral_criteria = None
-        stopping = None
+        criteria: list[Any] = []
         if _early_stop_enabled() and _SpiralStoppingCriteria is not None:
             spiral_criteria = _SpiralStoppingCriteria(tok, input_ids.size(1))
-            stopping = StoppingCriteriaList([spiral_criteria])
+            criteria.append(spiral_criteria)
+        stop = generation_stop_event()
+        if stop is not None:
+            criteria.append(_StopRequestedCriteria(stop))
+        stopping = StoppingCriteriaList(criteria) if criteria else None
 
         # Greedy decoding on a 4B model with no penalties loops once it hits a
         # repeatable phrase (the "(Duplicate)" failure mode). repetition_penalty
@@ -738,6 +752,8 @@ class DecisionMakingAgent:
             with torch.no_grad():
                 out = model.generate(**gen_kwargs)
 
+        if stop is not None and stop.is_set():
+            raise GenerationStopped("Generation stopped by its caller")
         seq = out.sequences[0]
         gen_only = seq[input_ids.size(1) :]
         # Exact token counts for benchmark telemetry. Captured raw — before any
@@ -869,8 +885,10 @@ class DecisionMakingAgent:
             {"role": "system", "content": system_content},
             {"role": "user", "content": user_content},
         ]
-        if _stream_tokens_enabled():
-            return self._generate_vllm_streaming(messages, max_tokens)
+        if _stream_tokens_enabled() or generation_stop_event() is not None:
+            return self._generate_vllm_streaming(
+                messages, max_tokens, emit_tokens=_stream_tokens_enabled()
+            )
 
         url = _vllm_base_url().rstrip("/") + "/chat/completions"
         payload = {
@@ -889,7 +907,9 @@ class DecisionMakingAgent:
         self._last_prompt_tokens = usage.get("prompt_tokens")
         return text
 
-    def _generate_vllm_streaming(self, messages: list, max_tokens: int) -> str:
+    def _generate_vllm_streaming(
+        self, messages: list, max_tokens: int, emit_tokens: bool = True
+    ) -> str:
         """Stream a vLLM chat completion (SSE) and emit confirmed-clean tokens as
         batched ``reasoning.delta`` steps — the Phase-1 streaming UX on the vLLM
         backend. Same hold-a-beat guard as the transformers path: buffer
@@ -907,6 +927,12 @@ class DecisionMakingAgent:
             def _emit(*_a: Any, **_kw: Any) -> None:  # type: ignore[misc]
                 return None
 
+        if not emit_tokens:
+
+            def _emit(*_a: Any, **_kw: Any) -> None:  # type: ignore[misc]
+                return None
+
+        stop = generation_stop_event()
         url = _vllm_base_url().rstrip("/") + "/chat/completions"
         payload = {
             "model": _vllm_model_name(),
@@ -942,6 +968,9 @@ class DecisionMakingAgent:
         ) as resp:
             resp.raise_for_status()
             for raw in resp.iter_lines():
+                if stop is not None and stop.is_set():
+                    logger.info("Generation stopped by its caller; closing the stream")
+                    raise GenerationStopped("Generation stopped by its caller")
                 if not raw:
                     continue
                 line = raw.decode("utf-8") if isinstance(raw, bytes) else raw
@@ -1184,6 +1213,12 @@ class DecisionMakingAgent:
                 text = DEGENERATE_OUTPUT_FALLBACK
 
             return text
+        except GenerationStopped:
+            logger.info(
+                "Reasoning stopped after %.1fs at its caller's request",
+                time.time() - start_time,
+            )
+            raise
         except Exception as e:
             inference_duration = time.time() - start_time
             if _METRICS_AVAILABLE:

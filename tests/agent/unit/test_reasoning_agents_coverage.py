@@ -26,6 +26,7 @@ import pytest
 
 import ai_agents.decision_making_agent as dma
 from ai_agents.decision_making_agent import DecisionMakingAgent
+from ai_agents.generation_stop import GenerationTimedOut
 from ai_agents.knowledge_retrieval_agent import (
     KnowledgeRetrievalAgent,
     _summarize_retrieved,
@@ -1235,7 +1236,7 @@ class TestGenerateResponse:
         _, kwargs = decision.decide.call_args
         assert kwargs["context"] == ""
 
-    async def test_timeout_returns_friendly_message(self):
+    async def test_timeout_fails_with_the_limit_in_its_message(self):
         pipe, retrieval, decision = _pipeline()
         retrieval.fetch = AsyncMock(return_value={"data": "ctx"})
 
@@ -1245,10 +1246,11 @@ class TestGenerateResponse:
                 coro.close()
             raise TimeoutError()
 
-        with patch("asyncio.wait_for", fake_wait_for):
-            out = await pipe.generate_response("a question")
-        assert "took too long" in out
-        assert "REACT_TIMEOUT_SECONDS" in out
+        with patch("asyncio.wait_for", fake_wait_for), pytest.raises(
+            GenerationTimedOut
+        ) as raised:
+            await pipe.generate_response("a question")
+        assert "REACT_TIMEOUT_SECONDS" in str(raised.value)
 
 
 class TestGenerateResponseReact:

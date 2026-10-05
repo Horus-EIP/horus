@@ -25,8 +25,8 @@ logger = get_logger("task_controller")
 HEARTBEAT_INTERVAL_S = 5.0
 
 INTERRUPTED_ROUTING_TEXT = (
-    "The orchestrator restarted before this request was routed, so it was not "
-    "processed. Please send it again."
+    "The orchestrator restarted before this request reached an agent, so it was "
+    "not processed. Please send it again."
 )
 
 
@@ -189,6 +189,8 @@ async def fail_interrupted_routing(session_factory=SessionLocal) -> int:
                 task.result.result_data = INTERRUPTED_ROUTING_TEXT
         db.commit()
         for task in stranded:
+            if task.parent_task_id is not None:
+                continue
             await publish_agent_message(
                 task.id,
                 task.conversation_id,

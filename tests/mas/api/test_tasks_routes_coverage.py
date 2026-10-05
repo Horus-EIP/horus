@@ -26,6 +26,7 @@ Agent-authenticated routes (``task-result/`` / ``task-step/``) depend on
 from __future__ import annotations
 
 import base64
+import json
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -1574,7 +1575,7 @@ class TestPublishHelper:
             _publish_task_to_work_queue(MagicMock(), "agent-9", payload)
         # assignee id injected + published to the resolved queue.
         assert payload["assigned_agent_id"] == "agent-9"
-        mock_rmq.publish.assert_called_once()
+        mock_rmq.publish_task.assert_called_once_with("q.general", json.dumps(payload))
 
 
 # --------------------------------------------------------------------------- #

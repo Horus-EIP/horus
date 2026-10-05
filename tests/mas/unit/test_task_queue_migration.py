@@ -62,7 +62,8 @@ def test_queue_migration_follows_previous_head_and_stays_single_head():
     script = ScriptDirectory(str(ALEMBIC_DIR))
 
     assert script.get_revision(REVISION).down_revision == PREVIOUS_HEAD
-    assert script.get_heads() == [REVISION]
+    assert len(script.get_heads()) == 1
+    assert REVISION in {revision.revision for revision in script.walk_revisions()}
 
 
 def test_upgrade_adds_the_queued_status_to_the_postgres_enum():

@@ -25,18 +25,93 @@ import os
 import threading
 import time as time_module
 import uuid
-from collections import deque
+from collections import OrderedDict, deque
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from enum import Enum
 
 import pika
-from pika.exceptions import AMQPError
+from pika.exceptions import AMQPError, ChannelClosedByBroker
 
+from ai_agents.generation_stop import GenerationTimedOut
 from config.settings import RABBITMQ_PORT
 from core.logger import get_correlation_id, get_logger, set_correlation_id
 from core.memory_usage import peak_rss_mb
 from core.metrics import agent_errors_total, task_processing_duration, task_processing_total
 
 logger = get_logger("agent_server.consumers")
+
+NOT_FOUND = 404
+PRECONDITION_FAILED = 406
+DEFAULT_WORK_QUEUE_MAX_LENGTH = 10
+DEFAULT_MAX_CONCURRENT_TASKS = 1
+_IDLE_POLL_SECONDS = 0.5
+_CLAIM_RETRY_SECONDS = 5.0
+REMEMBERED_TASK_IDS = 10_000
+
+
+class TaskClaim(str, Enum):
+    CLAIMED = "claimed"
+    REFUSED = "refused"
+    UNAVAILABLE = "unavailable"
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        logger.warning("Ignoring non-numeric %s=%r", name, raw)
+        return default
+
+
+def work_queue_arguments() -> dict:
+    return {
+        "x-max-priority": 10,
+        "x-max-length": _positive_int_env("WORK_QUEUE_MAX_LENGTH", DEFAULT_WORK_QUEUE_MAX_LENGTH),
+        "x-overflow": "reject-publish",
+    }
+
+
+class TaskWorkerPool:
+    def __init__(self, max_workers: int, remembered_tasks: int = REMEMBERED_TASK_IDS) -> None:
+        self.max_workers = max_workers
+        self._executor = ThreadPoolExecutor(
+            max_workers=max_workers, thread_name_prefix="agent-task"
+        )
+        self._lock = threading.Lock()
+        self._busy = 0
+        self._remembered_tasks = remembered_tasks
+        self._started: OrderedDict[str, None] = OrderedDict()
+
+    def has_free_slot(self) -> bool:
+        with self._lock:
+            return self._busy < self.max_workers
+
+    def has_started(self, task_id: str) -> bool:
+        with self._lock:
+            return task_id in self._started
+
+    def submit(self, job: Callable[[], None], task_id: str | None = None) -> None:
+        with self._lock:
+            self._busy += 1
+            if task_id:
+                self._started[task_id] = None
+                while len(self._started) > self._remembered_tasks:
+                    self._started.popitem(last=False)
+        self._executor.submit(job).add_done_callback(self._release)
+
+    def _release(self, _future) -> None:
+        with self._lock:
+            self._busy -= 1
+
+
+task_workers = TaskWorkerPool(
+    _positive_int_env("AGENT_MAX_CONCURRENT_TASKS", DEFAULT_MAX_CONCURRENT_TASKS)
+)
+_stop_pulling = threading.Event()
 
 # Per-file caps for the demand-prepend context block. Anything larger is
 # truncated with a marker so prompts stay bounded for downstream LLM calls.
@@ -214,340 +289,32 @@ def _consume_messages():
 
 
 def _consume_messages_session() -> bool:
-    """Consume tasks from this agent's RabbitMQ queue and run them through the pipeline.
-
-    Each message is a JSON payload with at least ``demand`` and
-    ``conversation_id``. Result is POSTed back via ``send_result``. Returns
-    ``True`` to stop permanently, ``False`` if the connection dropped.
-    """
-    from agent_server import server  # lazy: state + send_result live there
+    from agent_server import server
     from agent_server.profiles import unique_agent_types
 
     if not server.AGENT_ID:
         logger.error("Cannot start consumer: AGENT_ID not set")
-        return True  # permanent — reconnecting can't set AGENT_ID
+        return True
 
-    # Which work queues to subscribe to depends on which profile types are
-    # registered. ``unique_agent_types()`` is e.g. ["general", "analyst",
-    # "writer", "researcher"] for the default 5-profile lineup — one channel,
-    # one consumer-tag per queue, all sharing the same Qwen.
     types = unique_agent_types() or ["general"]
     queue_to_type: dict[str, str] = {
         server.work_queue_name_for_type(t): t for t in types
     }
 
     try:
-        rabbit_host = os.getenv("RABBITMQ_HOST", "localhost")
-        rabbit_user = os.getenv("RABBITMQ_USER", "guest")
-        rabbit_pass = os.getenv("RABBITMQ_PASSWORD", "guest")
-        credentials = pika.PlainCredentials(rabbit_user, rabbit_pass)
-        connection = pika.BlockingConnection(
-            pika.ConnectionParameters(
-                host=rabbit_host,
-                port=RABBITMQ_PORT,
-                credentials=credentials,
-                heartbeat=600,
-                blocked_connection_timeout=300,
-            )
-        )
+        connection = _open_connection()
         channel = connection.channel()
         for queue_name in queue_to_type:
-            channel.queue_declare(
-                queue=queue_name,
-                passive=False,
-                durable=True,
-                exclusive=False,
-                auto_delete=False,
-                arguments={"x-max-priority": 10},
-            )
-
-        def _make_on_message(queue_type: str):
-            """Bind ``queue_type`` into the per-message handler closure.
-
-            Each subscribed queue gets its own callback that knows which type
-            of pipeline to run for tasks it receives.
-            """
-
-            def _on_message(ch, method, properties, body):
-                try:
-                    payload = json.loads(body.decode("utf-8")) if body else {}
-                except Exception:
-                    payload = {"demand": body.decode("utf-8")}
-
-                # Cancel control messages share the work queue. They carry no
-                # demand/conversation_id; just ack and move on.
-                if payload.get("type") == "cancel":
-                    logger.info(
-                        "Received cancel control message (task_id=%s)",
-                        payload.get("task_id"),
-                    )
-                    ch.basic_ack(delivery_tag=method.delivery_tag)
-                    return
-
-                demand = payload.get("demand", "")
-                # Standalone tasks publish a null/missing conversation_id;
-                # normalise to "" so downstream code treats it uniformly.
-                conversation_id = payload.get("conversation_id") or ""
-                task_id = payload.get("task_id") or ("task_" + uuid.uuid4().hex)
-                if not (demand or payload.get("query")):
-                    logger.warning(
-                        "RabbitMQ task message has no demand/query (task_id=%s).",
-                        task_id,
-                    )
-                    ch.basic_ack(delivery_tag=method.delivery_tag)
-                    return
-
-                corr_id = properties.headers.get("X-Request-ID") if properties.headers else None
-                if corr_id:
-                    set_correlation_id(corr_id)
-
-                logger.info(
-                    "Received task on %s queue: task_id=%s, conv=%s, demand_len=%d, corr=%s",
-                    queue_type,
-                    task_id,
-                    conversation_id,
-                    len(demand),
-                    get_correlation_id(),
-                )
-
-                # If MAS minted a new specialist for this task it ships the
-                # credentials inline. Adopt them into our profile registry so
-                # heartbeats + result POSTs use the right identity going
-                # forward (no MAS round-trip needed on subsequent tasks).
-                external_agent_id = payload.get("assigned_agent_id")
-                external_api_key = payload.get("assigned_agent_api_key")
-                if external_agent_id and external_api_key:
-                    from agent_server.profiles import upsert_external_profile
-
-                    upsert_external_profile(
-                        agent_id=external_agent_id,
-                        api_key=external_api_key,
-                        name=payload.get("assigned_agent_name") or "",
-                        agent_type=payload.get("assigned_agent_type") or queue_type,
-                        skills=payload.get("assigned_agent_skills") or [],
-                    )
-
-                # Bind the active profile to a contextvar so the LLM layer
-                # can read its persona without every helper accepting a new
-                # arg. The reset token is held in this frame so the binding
-                # is scoped to this task only.
-                from agent_server.profiles import (
-                    current_agent_name,
-                    current_persona,
-                    current_step_emitter,
-                    get_profile_by_agent_id,
-                )
-
-                active_profile = get_profile_by_agent_id(
-                    payload.get("assigned_agent_id")
-                )
-                persona_token = current_persona.set(
-                    active_profile.system_prompt if active_profile else None
-                )
-                name_token = current_agent_name.set(
-                    active_profile.name if active_profile else None
-                )
-
-                # Fire-and-forget HTTP emitter for "thought process" steps.
-                # Runs the POST on a daemon thread so pipeline work never
-                # waits on MAS — steps drop silently if MAS is slow or down.
-                _assigned_for_emit = payload.get("assigned_agent_id")
-                _conv_for_emit = conversation_id
-                _task_for_emit = task_id
-
-                def _post_step(event: dict) -> None:
-                    server.send_step(
-                        event,
-                        _conv_for_emit,
-                        _task_for_emit,
-                        assigned_agent_id=_assigned_for_emit,
-                    )
-
-                _emit_step = _OrderedStepSender(_post_step)
-
-                emitter_token = current_step_emitter.set(_emit_step)
-
-                try:
-                    loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-
-                attached_files_meta = payload.get("files") or []
-                resolved_files = loop.run_until_complete(
-                    _resolve_attached_files(attached_files_meta)
-                )
-                effective_demand = _prepend_files_to_demand(demand, resolved_files)
-                first_file = resolved_files[0] if resolved_files else {}
-                any_file_readable = any(f.get("text") for f in resolved_files)
-
-                task_dict = {
-                    "task_id": task_id,
-                    "query": effective_demand or payload.get("query", ""),
-                    "demand": demand,
-                    "attached_context": (
-                        _attached_files_block(resolved_files) if any_file_readable else None
-                    ),
-                    # Optional focused query for knowledge retrieval only; the LLM
-                    # still sees the full ``query``. Falls back to ``query`` when
-                    # MAS doesn't supply one (single-agent / first-step tasks).
-                    "retrieval_query": payload.get("retrieval_query"),
-                    "operation": payload.get("operation"),
-                    "expression": payload.get("expression"),
-                    "file_url": payload.get("file_url"),
-                    "file_content": payload.get("file_content") or first_file.get("text"),
-                    "file_type": payload.get("file_type"),
-                    "filename": payload.get("filename") or first_file.get("filename"),
-                    "files": resolved_files,
-                    "text": payload.get("text"),
-                    "max_sentences": payload.get("max_sentences"),
-                    "format": payload.get("format"),
-                    "extraction_type": payload.get("extraction_type"),
-                    "analysis_type": payload.get("analysis_type"),
-                }
-
-                # Pick the pipeline that matches the queue this message came
-                # from — NOT a globally-bound AGENT_TYPE. The same process
-                # serves general / analyst / writer / researcher tasks here.
-                pipeline = server.get_pipeline_for_type(queue_type)
-
-                start_time = time_module.time()
-                # Specialists' op-typed paths (extract / analyze / calculate /
-                # summarize / write / format) expect the caller to supply the
-                # raw input inline and skip retrieval — they're tool calls, not
-                # response modes. Natural-language tasks (e.g. "summarise Q4
-                # financial risks") arrive without ``operation`` and need RAG.
-                # When no operation is set, route to the general RAG pipeline
-                # so retrieval runs against the KS. The active profile's
-                # persona is already bound on ``current_persona``, so the
-                # answer is still scoped to the specialist's domain.
-                op = (task_dict.get("operation") or "").strip().lower()
-                effective_type = queue_type
-                if queue_type in ("researcher", "analyst", "writer") and not op:
-                    logger.info(
-                        "Specialist task without 'operation' → general RAG fallback "
-                        "(queue_type=%s task_id=%s)",
-                        queue_type,
-                        task_id,
-                    )
-                    effective_type = "general"
-                    pipeline = server.get_pipeline_for_type("general")
-
-                try:
-                    if effective_type == "general":
-                        result_pipeline = loop.run_until_complete(
-                            pipeline.process_task(task_dict)
-                        )
-                        final_result_text = result_pipeline["response"]
-                    elif effective_type in ("researcher", "analyst", "writer"):
-                        final_result_text = loop.run_until_complete(
-                            pipeline.process_request(
-                                task_type=op,
-                                data=task_dict.get("query"),
-                                extra_parameters=task_dict,
-                            )
-                        )
-                    else:
-                        raise ValueError(f"Unsupported queue type: {effective_type}")
-
-                    processing_duration = time_module.time() - start_time
-                    task_processing_duration.observe(processing_duration)
-                    task_processing_total.labels(status="success").inc()
-
-                    logger.info(
-                        "Task processed (%s): task_id=%s duration=%.2fs peak_rss_mb=%s",
-                        queue_type,
-                        task_id,
-                        processing_duration,
-                        peak_rss_mb(),
-                    )
-
-                    if task_id:
-                        server.send_result(
-                            final_result_text,
-                            conversation_id,
-                            task_id,
-                            assigned_agent_id=payload.get("assigned_agent_id"),
-                            skill_used=payload.get("skill_used")
-                            or payload.get("operation"),
-                        )
-                except Exception as e:
-                    processing_duration = time_module.time() - start_time
-                    task_processing_duration.observe(processing_duration)
-                    task_processing_total.labels(status="error").inc()
-                    agent_errors_total.labels(error_type="task_processing").inc()
-                    logger.error(
-                        "Task processing failed: task_id=%s error=%s peak_rss_mb=%s",
-                        task_id,
-                        str(e),
-                        peak_rss_mb(),
-                        exc_info=True,
-                    )
-                    # Surface the failure to the UI as an error step. The
-                    # inner agents emit their own step on retrieval / reasoning
-                    # errors, but tool errors and KS resolution errors only
-                    # bubble up here — without this emit those would have no
-                    # entry in the thought-process card.
-                    try:
-                        _emit_step(
-                            {
-                                "step_type": "error",
-                                "title": "Task processing failed",
-                                "detail": str(e),
-                                "timestamp": None,
-                                "metadata": {"phase": "pipeline"},
-                            }
-                        )
-                    except Exception:
-                        pass
-                    err_msg = f"Agent processing failed: {e}"
-                    if task_id:
-                        try:
-                            server.send_result(
-                                err_msg,
-                                str(conversation_id),
-                                str(task_id),
-                                assigned_agent_id=payload.get("assigned_agent_id"),
-                                skill_used=payload.get("skill_used")
-                                or payload.get("operation"),
-                            )
-                        except Exception as send_exc:
-                            logger.error(
-                                "Failed to send error result to MAS: %s", send_exc
-                            )
-                else:
-                    ch.basic_ack(delivery_tag=method.delivery_tag)
-                    return
-                finally:
-                    # Reset the persona binding so it doesn't leak into the
-                    # next task on this consumer thread. Runs on both the
-                    # success and exception paths.
-                    try:
-                        current_persona.reset(persona_token)
-                        current_agent_name.reset(name_token)
-                        current_step_emitter.reset(emitter_token)
-                    except (LookupError, ValueError):
-                        pass
-
-                # Failed path: ack so the message is not redelivered forever.
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-
-            return _on_message
-
-        channel.basic_qos(prefetch_count=1)
-        for queue_name, queue_type in queue_to_type.items():
-            channel.basic_consume(
-                queue=queue_name, on_message_callback=_make_on_message(queue_type)
-            )
+            channel = _declare_work_queue(connection, channel, queue_name)
         logger.info(
-            "RabbitMQ consumer started, listening on %d queue(s): %s",
+            "RabbitMQ task worker started (%d task(s) at a time), pulling from %d queue(s): %s",
+            task_workers.max_workers,
             len(queue_to_type),
             ", ".join(queue_to_type),
         )
-        channel.start_consuming()
-        return True  # returned without error → graceful stop
+        _pull_tasks(connection, channel, queue_to_type, task_workers)
+        return True
     except (AMQPError, OSError) as e:
-        # Broker restart / blip / socket drop — reconnect, don't kill the thread.
         logger.warning("Task consumer connection lost (%s); will reconnect", e)
         agent_errors_total.labels(error_type="rabbitmq").inc()
         return False
@@ -555,6 +322,328 @@ def _consume_messages_session() -> bool:
         logger.error(f"Error in RabbitMQ consumer: {e}", exc_info=True)
         agent_errors_total.labels(error_type="rabbitmq").inc()
         return False
+
+
+def _open_connection():
+    credentials = pika.PlainCredentials(
+        os.getenv("RABBITMQ_USER", "guest"), os.getenv("RABBITMQ_PASSWORD", "guest")
+    )
+    return pika.BlockingConnection(
+        pika.ConnectionParameters(
+            host=os.getenv("RABBITMQ_HOST", "localhost"),
+            port=RABBITMQ_PORT,
+            credentials=credentials,
+            heartbeat=600,
+            blocked_connection_timeout=300,
+        )
+    )
+
+
+def _declare_work_queue(connection, channel, queue_name: str):
+    try:
+        channel.queue_declare(queue=queue_name, passive=True)
+        return channel
+    except ChannelClosedByBroker as exc:
+        if exc.reply_code != NOT_FOUND:
+            raise
+    channel = connection.channel()
+    try:
+        channel.queue_declare(
+            queue=queue_name,
+            passive=False,
+            durable=True,
+            exclusive=False,
+            auto_delete=False,
+            arguments=work_queue_arguments(),
+        )
+        return channel
+    except ChannelClosedByBroker as exc:
+        if exc.reply_code != PRECONDITION_FAILED:
+            raise
+    channel = connection.channel()
+    channel.queue_declare(queue=queue_name, passive=True)
+    return channel
+
+
+def _pull_tasks(connection, channel, queue_to_type: dict[str, str], workers) -> None:
+    queues = list(queue_to_type)
+    first = 0
+    while not _stop_pulling.is_set():
+        if not workers.has_free_slot():
+            connection.process_data_events(time_limit=_IDLE_POLL_SECONDS)
+            continue
+        pause = _IDLE_POLL_SECONDS
+        for offset in range(len(queues)):
+            queue_name = queues[(first + offset) % len(queues)]
+            method, properties, body = channel.basic_get(queue=queue_name, auto_ack=False)
+            if method is None:
+                continue
+            first = (first + offset + 1) % len(queues)
+            pause = _handle_delivery(
+                channel, method, properties, body, queue_to_type[queue_name], workers
+            )
+            break
+        if pause:
+            connection.process_data_events(time_limit=pause)
+
+
+def _decode_payload(body) -> dict:
+    try:
+        return json.loads(body.decode("utf-8")) if body else {}
+    except Exception:
+        return {"demand": body.decode("utf-8")}
+
+
+def _adopt_assigned_profile(payload: dict, queue_type: str) -> None:
+    external_agent_id = payload.get("assigned_agent_id")
+    external_api_key = payload.get("assigned_agent_api_key")
+    if external_agent_id and external_api_key:
+        from agent_server.profiles import upsert_external_profile
+
+        upsert_external_profile(
+            agent_id=external_agent_id,
+            api_key=external_api_key,
+            name=payload.get("assigned_agent_name") or "",
+            agent_type=payload.get("assigned_agent_type") or queue_type,
+            skills=payload.get("assigned_agent_skills") or [],
+        )
+
+
+def _handle_delivery(channel, method, properties, body, queue_type: str, workers) -> float:
+    from agent_server import server
+
+    payload = _decode_payload(body)
+    if payload.get("type") == "cancel":
+        logger.info("Received cancel control message (task_id=%s)", payload.get("task_id"))
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+        return 0.0
+
+    task_id = payload.get("task_id")
+    if not (payload.get("demand") or payload.get("query")):
+        logger.warning("RabbitMQ task message has no demand/query (task_id=%s).", task_id)
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+        return 0.0
+
+    _adopt_assigned_profile(payload, queue_type)
+    if task_id:
+        if workers.has_started(task_id):
+            logger.info(
+                "Task %s was delivered again after this worker started it; its message is dropped",
+                task_id,
+            )
+            channel.basic_ack(delivery_tag=method.delivery_tag)
+            return 0.0
+        claim = server.claim_task(task_id, payload.get("assigned_agent_id"))
+        if claim is TaskClaim.UNAVAILABLE:
+            logger.warning(
+                "MAS did not confirm the claim of task %s; its message goes back to the queue",
+                task_id,
+            )
+            channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+            return _CLAIM_RETRY_SECONDS
+        if claim is TaskClaim.REFUSED:
+            logger.info(
+                "Task %s is already claimed, finished or cancelled; its message is dropped",
+                task_id,
+            )
+            channel.basic_ack(delivery_tag=method.delivery_tag)
+            return 0.0
+
+    headers = getattr(properties, "headers", None) or {}
+    correlation_id = headers.get("X-Request-ID")
+    try:
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+    finally:
+        workers.submit(lambda: _run_task(payload, queue_type, correlation_id), task_id)
+    return 0.0
+
+
+def _task_dict(task_id: str, demand: str, payload: dict, resolved_files: list[dict]) -> dict:
+    effective_demand = _prepend_files_to_demand(demand, resolved_files)
+    first_file = resolved_files[0] if resolved_files else {}
+    any_file_readable = any(f.get("text") for f in resolved_files)
+    return {
+        "task_id": task_id,
+        "query": effective_demand or payload.get("query", ""),
+        "demand": demand,
+        "attached_context": (
+            _attached_files_block(resolved_files) if any_file_readable else None
+        ),
+        "retrieval_query": payload.get("retrieval_query"),
+        "operation": payload.get("operation"),
+        "expression": payload.get("expression"),
+        "file_url": payload.get("file_url"),
+        "file_content": payload.get("file_content") or first_file.get("text"),
+        "file_type": payload.get("file_type"),
+        "filename": payload.get("filename") or first_file.get("filename"),
+        "files": resolved_files,
+        "text": payload.get("text"),
+        "max_sentences": payload.get("max_sentences"),
+        "format": payload.get("format"),
+        "extraction_type": payload.get("extraction_type"),
+        "analysis_type": payload.get("analysis_type"),
+    }
+
+
+async def _answer(payload: dict, queue_type: str, task_id: str, demand: str) -> str:
+    from agent_server import server
+
+    resolved_files = await _resolve_attached_files(payload.get("files") or [])
+    task_dict = _task_dict(task_id, demand, payload, resolved_files)
+    op = (task_dict.get("operation") or "").strip().lower()
+    effective_type = queue_type
+    pipeline = server.get_pipeline_for_type(queue_type)
+    if queue_type in ("researcher", "analyst", "writer") and not op:
+        logger.info(
+            "Specialist task without 'operation' → general RAG fallback "
+            "(queue_type=%s task_id=%s)",
+            queue_type,
+            task_id,
+        )
+        effective_type = "general"
+        pipeline = server.get_pipeline_for_type("general")
+    if effective_type == "general":
+        result_pipeline = await pipeline.process_task(task_dict)
+        return result_pipeline["response"]
+    if effective_type in ("researcher", "analyst", "writer"):
+        return await pipeline.process_request(
+            task_type=op,
+            data=task_dict.get("query"),
+            extra_parameters=task_dict,
+        )
+    raise ValueError(f"Unsupported queue type: {effective_type}")
+
+
+def _report_failure(
+    emit_step: Callable[[dict], None],
+    title: str,
+    detail: str,
+    phase: str,
+) -> None:
+    try:
+        emit_step(
+            {
+                "step_type": "error",
+                "title": title,
+                "detail": detail,
+                "timestamp": None,
+                "metadata": {"phase": phase},
+            }
+        )
+    except Exception:
+        logger.debug("Failure step could not be emitted", exc_info=True)
+
+
+def _send_failed_result(text: str, conversation_id, task_id: str, payload: dict, reason: str) -> None:
+    from agent_server import server
+
+    try:
+        server.send_result(
+            text,
+            str(conversation_id),
+            str(task_id),
+            assigned_agent_id=payload.get("assigned_agent_id"),
+            skill_used=payload.get("skill_used") or payload.get("operation"),
+            status="failed",
+            reason=reason,
+        )
+    except Exception as send_exc:
+        logger.error("Failed to send error result to MAS: %s", send_exc)
+
+
+def _run_task(payload: dict, queue_type: str, correlation_id: str | None) -> None:
+    from agent_server import server
+    from agent_server.profiles import (
+        current_agent_name,
+        current_persona,
+        current_step_emitter,
+        get_profile_by_agent_id,
+    )
+
+    if correlation_id:
+        set_correlation_id(correlation_id)
+    demand = payload.get("demand", "")
+    conversation_id = payload.get("conversation_id") or ""
+    task_id = payload.get("task_id") or ("task_" + uuid.uuid4().hex)
+    assigned_agent_id = payload.get("assigned_agent_id")
+    logger.info(
+        "Received task on %s queue: task_id=%s, conv=%s, demand_len=%d, corr=%s",
+        queue_type,
+        task_id,
+        conversation_id,
+        len(demand),
+        get_correlation_id(),
+    )
+
+    active_profile = get_profile_by_agent_id(assigned_agent_id)
+    persona_token = current_persona.set(active_profile.system_prompt if active_profile else None)
+    name_token = current_agent_name.set(active_profile.name if active_profile else None)
+    emit_step = _OrderedStepSender(
+        lambda event: server.send_step(
+            event, conversation_id, task_id, assigned_agent_id=assigned_agent_id
+        )
+    )
+    emitter_token = current_step_emitter.set(emit_step)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    start_time = time_module.time()
+    try:
+        final_result_text = loop.run_until_complete(
+            _answer(payload, queue_type, task_id, demand)
+        )
+        processing_duration = time_module.time() - start_time
+        task_processing_duration.observe(processing_duration)
+        task_processing_total.labels(status="success").inc()
+        logger.info(
+            "Task processed (%s): task_id=%s duration=%.2fs peak_rss_mb=%s",
+            queue_type,
+            task_id,
+            processing_duration,
+            peak_rss_mb(),
+        )
+        server.send_result(
+            final_result_text,
+            conversation_id,
+            task_id,
+            assigned_agent_id=assigned_agent_id,
+            skill_used=payload.get("skill_used") or payload.get("operation"),
+        )
+    except GenerationTimedOut as timed_out:
+        task_processing_duration.observe(time_module.time() - start_time)
+        task_processing_total.labels(status="error").inc()
+        agent_errors_total.labels(error_type="timeout").inc()
+        logger.warning(
+            "Task timed out: task_id=%s after=%.0fs peak_rss_mb=%s",
+            task_id,
+            timed_out.seconds,
+            peak_rss_mb(),
+        )
+        _report_failure(emit_step, "Answer timed out", str(timed_out), "generation")
+        _send_failed_result(str(timed_out), conversation_id, task_id, payload, "timeout")
+    except Exception as e:
+        task_processing_duration.observe(time_module.time() - start_time)
+        task_processing_total.labels(status="error").inc()
+        agent_errors_total.labels(error_type="task_processing").inc()
+        logger.error(
+            "Task processing failed: task_id=%s error=%s peak_rss_mb=%s",
+            task_id,
+            str(e),
+            peak_rss_mb(),
+            exc_info=True,
+        )
+        _report_failure(emit_step, "Task processing failed", str(e), "pipeline")
+        _send_failed_result(
+            f"Agent processing failed: {e}", conversation_id, task_id, payload, "error"
+        )
+    finally:
+        try:
+            current_persona.reset(persona_token)
+            current_agent_name.reset(name_token)
+            current_step_emitter.reset(emitter_token)
+        except (LookupError, ValueError):
+            pass
+        asyncio.set_event_loop(None)
+        loop.close()
 
 
 def _consume_agent_messages():

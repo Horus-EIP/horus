@@ -473,12 +473,16 @@ A replayed `Idempotency-Key` returns the same body shape with the task's current
 |---------|-------------|-------|
 | Direct answer (greeting, small talk, arithmetic) | `completed`, the answer is the task result | `result` with `route: "direct_answer"` |
 | One agent | `running`, then `completed` when the agent posts its result | `progress` (`status: "running"`), later `result` with `route: "agent"` |
+| The agent type's work queue is full | `queued` while the task waits in MAS, then `running` once RabbitMQ accepts it | `progress` with `status: "busy"`, `position` and `detail: "Busy, position N"`, sent again whenever N changes, then `progress` with `status: "running"` when the task leaves the line |
+| The agent fails or its answer times out | `failed`, the agent's message is the task result | `error` with `status: "failed"` and `reason` (`timeout` or `error`) |
 | Chain | the task becomes the chain root (`running`); its subtasks are dispatched one by one | Manager messages as `progress`, later `result` |
 | Nothing can handle the demand (no agents, no plan) | `failed`, the reason is the task result | `error` with `route: "none"` |
 | The router or the dispatch crashes | `failed` | `error` |
 | The task was cancelled while it was routed | stays `canceled`, nothing is dispatched | `error` with `status: "cancelled"` |
 
-At start-up MAS marks the tasks still `queued` (their routing job died with the previous process) as `failed` and stores an `error` event saying so. The `TASK_TIMEOUT` watchdog watches `queued` tasks as well as `running` ones.
+At start-up MAS marks the tasks still `queued` (their routing job, or their place in the line for a full work queue, died with the previous process) as `failed` and stores an `error` event saying so. The `TASK_TIMEOUT` watchdog watches `queued` tasks as well as `running` ones.
+
+**Full work queues.** Each `horus.work.{type}` queue holds at most `WORK_QUEUE_MAX_LENGTH` waiting tasks (default 10) and rejects the next publish (`x-overflow: reject-publish`). MAS publishes with publisher confirms, so a rejected task is never dropped silently: MAS keeps it in a first-in, first-out line per queue, sends the `busy` status at once (before any wait), and retries the head of the line every second. A request that arrives while others wait joins the end of the line without publishing, so the order holds. **N** is the number of tasks that an agent of that type will take before this one, plus one: the tasks waiting in the RabbitMQ queue (its ready count when the last publish was rejected, so `WORK_QUEUE_MAX_LENGTH` in practice) plus the tasks ahead of it in MAS's line. Tasks an agent is already running are not counted. With the default limit the first task that has to wait shows position 11 (10 tasks in the queue, then this one); N goes down by one each time a task ahead of it leaves MAS's line, and the task is published as soon as it is first in line and the queue has room.
 
 The user message is saved to the conversation when the task is queued, before routing.
 
@@ -561,7 +565,7 @@ Token deltas (`reasoning.delta` steps) are stored as `token` events. The agent a
 
 #### POST /tasks/task-result/
 
-Submit a completed task result from an agent. Updates the task status to COMPLETED, stores the result, handles sub-task chaining, and broadcasts the final answer via WebSocket.
+Submit the outcome of a task from an agent. With `status: "completed"` (the default) MAS marks the task COMPLETED, stores the result, handles sub-task chaining, and broadcasts the final answer via WebSocket. With `status: "failed"` MAS marks the task FAILED (and the root of its chain, whose remaining steps are dropped), stores the agent's message as the result and in the conversation, and stores an `error` event with `status: "failed"` and the `reason`. If the request already ended (cancelled or timed out by `TASK_TIMEOUT`), a late failure changes nothing and sends nothing.
 
 **Auth:** Agent API Key (`X-API-Key` + `Agent-ID` headers)
 
@@ -573,6 +577,8 @@ Submit a completed task result from an agent. Updates the task status to COMPLET
 | result | string | Yes | The result / output text. |
 | conversation_id | string | Yes | Conversation this task belongs to. |
 | sources | object[] | No | Sources of the answer. Carried as-is in the task's `result` event; agents do not send them yet (B-98). |
+| status | string | No | `completed` (default) or `failed`. |
+| reason | string | No | Why a task failed, for example `timeout` (the answer took longer than `REACT_TIMEOUT_SECONDS` and its generation was stopped) or `error`. At most 64 characters. |
 | agent_id | string | Yes | **Task assignee** UUID (must match `Task.agent_id`). Pooled workers authenticate with their own `X-API-Key` / `Agent-ID` but set this field to the orchestrator-chosen assignee (see task message `assigned_agent_id`). |
 
 **Response 200:**
@@ -591,6 +597,57 @@ Submit a completed task result from an agent. Updates the task status to COMPLET
 | `404` | `Task not found` or `TaskResult not found` |
 | `422` | Request body validation error. |
 | `500` | Processing error (database, WebSocket, or internal). |
+
+---
+
+#### POST /tasks/{task_id}/claim
+
+Called by an agent worker when it takes a task message from its work queue, before it acknowledges the message. The first claim stores the worker and its run in the task row (`claimed_by`, `claim_run`, `started_at`) and marks the task `running`. The same claim sent again by the same run (same `worker_id` and `run_id`) gets `200` again and changes nothing, so a claim whose answer was lost can be retried; the worker itself never starts a task twice in one run. A claim by another worker or another run gets `409`, so a message that is delivered again never runs the task a second time; a finished, failed or cancelled task also gets `409`, so a task cancelled while it waited in the queue is dropped by the agent. When the task's assigned agent is no longer registered (the agent restarted and registered new ids while the task waited in the queue), the task fails at once, with a chat message and an `error` event (`status: "failed"`, `reason: "agent_unregistered"`) asking the user to send it again, and the claim gets `409`.
+
+**Auth:** Agent API Key (`X-API-Key` + `Agent-ID` headers). The authenticated worker must be the assignee or share its `AgentTypes` pool.
+
+**Request:** `application/json`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| agent_id | string | Yes | Task assignee UUID (must match `Task.agent_id`). |
+| worker_id | string | Yes | Stable name of the worker: `AGENT_WORKER_ID`, or the container's host name. |
+| run_id | string | Yes | Random id of the worker process, new at every start. |
+
+**Response 200:**
+
+```json
+{"task_id": "3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13", "status": "running"}
+```
+
+**Errors:**
+
+| Code | Detail |
+|------|--------|
+| `403` | Body `agent_id` must match the task assignee, or the worker may not run it. |
+| `404` | `Task not found` |
+| `409` | `Task was already claimed`, `Task is <status>; it will not run`, or `The task's agent is no longer registered; the task failed`. |
+
+---
+
+#### POST /tasks/abandoned-claims
+
+Called once by an agent worker when it starts, after it registered. Every task still `queued` or `running` that was claimed by the same `worker_id` under another `run_id`, or claimed by any worker for an agent that is no longer registered (a recreated container has a new host name and replaces its agents when it registers), is marked `failed` (with the root of its chain), with a chat message and an `error` event (`status: "failed"`, `reason: "agent_restarted"`) asking the user to send the request again.
+
+**Auth:** Agent API Key (`X-API-Key` + `Agent-ID` headers)
+
+**Request:** `application/json`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| worker_id | string | Yes | Stable name of the worker. |
+| run_id | string | Yes | Id of the run that is starting now. |
+
+**Response 200:**
+
+```json
+{"failed": ["3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13"]}
+```
 
 ---
 
@@ -1244,7 +1301,28 @@ Returns an empty array `[]` if no messages exist for the agent.
   "task_id": "string",
   "result": "string",
   "conversation_id": "string",
-  "agent_id": "string"
+  "agent_id": "string",
+  "status": "completed | failed",
+  "reason": "string (optional)"
+}
+```
+
+#### TaskClaimForm
+
+```json
+{
+  "agent_id": "string",
+  "worker_id": "string",
+  "run_id": "string"
+}
+```
+
+#### WorkerRunForm
+
+```json
+{
+  "worker_id": "string",
+  "run_id": "string"
 }
 ```
 
@@ -2000,7 +2078,11 @@ Every frame about a task is an event of that task. MAS stores the event first (s
 }
 ```
 
-`status` is `queued`, `routing`, `running` or `aggregating`. Clients should show `detail` for a status they do not know: B-94 adds a "busy, position N" status this way.
+`status` is `queued`, `routing`, `running`, `aggregating` or `busy`. Clients should show `detail` for a status they do not know. A `busy` frame means the agent type's work queue is full and the task waits in MAS's line; it carries `position` (N, defined under `POST /tasks/new_task/`) and `detail: "Busy, position N"`, comes right after the rejected publish and again whenever N changes:
+
+```json
+{"type": "task_status", "status": "busy", "detail": "Busy, position 11", "position": 11, "task_id": "3f6c…", "seq": 4, "event": "progress", "stage": "queued", "ts": "2026-10-05T09:30:14Z"}
+```
 
 **Heartbeat** (`event: heartbeat`): every 5 s for each queued or running top-level task whose conversation has a connected socket, with the current stage and the seconds since the task was created.
 
@@ -2057,12 +2139,16 @@ Every frame about a task is an event of that task. MAS stores the event first (s
 | No agent could take the demand | `error` | `failed` | `route: "none"`; `content` says why |
 | Cancelled by a user | `error` | `cancelled` | `reason: "user"` |
 | Stopped by `TASK_TIMEOUT` | `error` | `cancelled` | `reason: "timeout"`; the notice is also the task result |
+| The agent's answer took longer than `REACT_TIMEOUT_SECONDS` | `error` | `failed` | `reason: "timeout"`; the agent's notice is the task result and the chat shows it as failed |
+| The agent failed | `error` | `failed` | `reason: "error"` |
+| The agent restarted while it ran the task | `error` | `failed` | `reason: "agent_restarted"` |
+| The task's agent was no longer registered when a worker took the task | `error` | `failed` | `reason: "agent_unregistered"` |
 
 #### Message Types Summary
 
 | Type          | Direction        | Description                                            |
 |---------------|------------------|--------------------------------------------------------|
-| `task_status` | Server to Client | Queued, routing, dispatched, aggregating               |
+| `task_status` | Server to Client | Queued, routing, busy (position N), dispatched, aggregating |
 | `heartbeat`   | Server to Client | Liveness of a running task, every 5 s                  |
 | `task_step`   | Server to Client | Agent thought-process step or streamed answer chunk    |
 | `task_complete` | Server to Client | Attributed message: Manager update or final answer   |
