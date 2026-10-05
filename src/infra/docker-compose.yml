@@ -105,7 +105,7 @@ services:
       rabbitmq:
         condition: service_healthy
       postgres:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_healthy
     ports:
@@ -135,6 +135,12 @@ services:
         condition: service_started
       tempo:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "10", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
     ports:
       - "3000:3000"
     networks:
@@ -206,13 +212,19 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=10)"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 1800s
     depends_on:
       mas:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
       knowledge_store:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_healthy
     ports:
@@ -310,6 +322,12 @@ services:
       - OTEL_ENABLED=${OTEL_ENABLED:-true}
       - OTEL_SERVICE_NAME=knowledge-store
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=10)"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 600s
     ports:
       # Loopback only. Nothing off-box needs this port: the other services reach
       # it as http://knowledge_store:8080 on horus-net, and the browser UI uses

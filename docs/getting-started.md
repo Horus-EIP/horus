@@ -105,6 +105,17 @@ cd src/infra
 docker compose ps
 ```
 
+Every application service declares a healthcheck, so wait until `mas`, `agent`, `knowledge_store` and `web-client` (and `vllm` on a GPU machine) show `(healthy)`, not just `Up`. Each one probes an unauthenticated endpoint inside its own container:
+
+| Service | Probe | Allowed first start |
+|---------|-------|---------------------|
+| `mas` | `POST /rabbitmq/heartbeat` (curl) | 15 min (router model download) |
+| `agent` | `GET /health` on :8001 (python) | 30 min (decision model download and load) |
+| `knowledge_store` | `GET /health` on :8080 (python) | 10 min |
+| `web-client` | `GET /api/health` on :3000 (wget) | 2 min |
+
+A service is only marked `unhealthy` after that start window, so `(health: starting)` during a first install is normal. The agent starts only once `mas` and `knowledge_store` are healthy, and `mas` only once `postgres`, `redis` and `rabbitmq` are.
+
 **PostgreSQL** (adjust user and database to match `.env`):
 
 ```bash

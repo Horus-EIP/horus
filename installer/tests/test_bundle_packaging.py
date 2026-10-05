@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -9,14 +10,68 @@ import unittest
 import zipfile
 from pathlib import Path
 
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
 REPO = Path(__file__).resolve().parent.parent.parent
 BUNDLER = REPO / "packaging" / "build_bundle.py"
+INFRA = REPO / "src" / "infra"
 sys.path.insert(0, str(REPO / "packaging"))
+sys.path.insert(0, str(REPO / "installer"))
 import build_bundle  # noqa: E402
+import horus_install  # noqa: E402
 
 posix_only = unittest.skipUnless(
     os.name == "posix", "needs a POSIX kernel for modes and symlinks"
 )
+needs_yaml = unittest.skipUnless(yaml is not None, "needs PyYAML to read the compose file")
+
+SOURCE_BUILT_SERVICES = {"mas", "agent", "knowledge_store", "web-client"}
+
+def compose_services() -> dict:
+    text = (INFRA / "docker-compose.yml").read_text(encoding="utf-8")
+    return yaml.safe_load(text)["services"]
+
+def duration_seconds(value) -> int:
+    match = re.fullmatch(r"(\d+)([smh])", str(value).strip())
+    if match is None:
+        raise ValueError(f"not a plain duration: {value!r}")
+    return int(match.group(1)) * {"s": 1, "m": 60, "h": 3600}[match.group(2)]
+
+def dependency_conditions(spec: dict) -> dict[str, str]:
+    depends = spec.get("depends_on") or {}
+    if isinstance(depends, list):
+        return dict.fromkeys(depends, "service_started")
+    return {name: (rule or {}).get("condition", "service_started")
+            for name, rule in depends.items()}
+
+def probe_command(healthcheck: dict) -> list[str]:
+    test = healthcheck["test"]
+    if isinstance(test, str):
+        return test.split()
+    if test[0] == "CMD-SHELL":
+        return test[1].split()
+    return list(test[1:])
+
+def final_stage(dockerfile: Path) -> tuple[str, str]:
+    text = dockerfile.read_text(encoding="utf-8").replace("\\\n", " ")
+    starts = list(re.finditer(r"^FROM\s+(\S+)", text, re.MULTILINE))
+    last = starts[-1]
+    return last.group(1), text[last.end():]
+
+def image_ships(tool: str, base: str, stage: str) -> bool:
+    if tool in ("python", "python3") and base.startswith("python:"):
+        return True
+    if tool == "wget" and "alpine" in base:
+        return True
+    installs = [line for line in stage.splitlines()
+                if line.lstrip().startswith("RUN") and "install" in line]
+    return any(re.search(rf"\b{re.escape(tool)}\b", line) for line in installs)
+
+def container_ports(spec: dict) -> set[str]:
+    return {str(mapping).rsplit(":", 1)[-1] for mapping in spec.get("ports", [])}
 
 def make_app(root: Path) -> Path:
     app = root / "Horus.app"
@@ -186,6 +241,60 @@ class ExecutableBitGuard(unittest.TestCase):
             self.assertIn("not executable", result.stdout)
             self.assertFalse(list((tmp / "dist").glob("*.zip")),
                              "a broken archive was written anyway")
+
+@needs_yaml
+class ComposeHealthchecks(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.services = compose_services()
+        cls.built = {name: spec for name, spec in cls.services.items() if "build" in spec}
+
+    def test_the_app_services_are_the_ones_built_from_source(self):
+        self.assertEqual(set(self.built), SOURCE_BUILT_SERVICES)
+
+    def test_every_app_service_declares_a_healthcheck(self):
+        for name, spec in self.built.items():
+            with self.subTest(name):
+                self.assertIn("healthcheck", spec, f"{name} declares no healthcheck")
+                self.assertTrue(probe_command(spec["healthcheck"]))
+
+    def test_every_service_the_installer_waits_for_declares_a_healthcheck(self):
+        for name in [*horus_install.CORE_SERVICES, "vllm"]:
+            with self.subTest(name):
+                self.assertIn("healthcheck", self.services[name],
+                              f"the installer waits on {name}, which never reports health")
+
+    def test_app_healthchecks_allow_a_slow_first_start(self):
+        for name, spec in self.built.items():
+            with self.subTest(name):
+                period = duration_seconds(spec["healthcheck"].get("start_period", "0s"))
+                self.assertGreaterEqual(period, 120)
+
+    def test_each_probe_uses_a_tool_its_image_ships(self):
+        for name, spec in self.built.items():
+            with self.subTest(name):
+                build = spec["build"]
+                dockerfile = INFRA / build["context"] / build.get("dockerfile", "Dockerfile")
+                base, stage = final_stage(dockerfile)
+                tool = probe_command(spec["healthcheck"])[0]
+                self.assertTrue(image_ships(tool, base, stage),
+                                f"{name} probes with {tool}, which its {base} image lacks")
+
+    def test_each_probe_targets_the_port_its_service_listens_on(self):
+        for name, spec in self.built.items():
+            with self.subTest(name):
+                probe = " ".join(probe_command(spec["healthcheck"]))
+                ports = set(re.findall(r"//(?:localhost|127\.0\.0\.1):(\d+)/", probe))
+                self.assertTrue(ports, f"{name} probe has no local URL: {probe}")
+                self.assertLessEqual(ports, container_ports(spec))
+
+    def test_app_services_wait_for_dependencies_to_be_healthy(self):
+        for name, spec in self.built.items():
+            for dependency, condition in dependency_conditions(spec).items():
+                if "healthcheck" not in self.services[dependency]:
+                    continue
+                with self.subTest(f"{name} -> {dependency}"):
+                    self.assertEqual(condition, "service_healthy")
 
 if __name__ == "__main__":
     unittest.main()

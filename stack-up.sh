@@ -29,10 +29,10 @@ echo "Compose file OK."
 cat <<'EOF'
 
 Horus — URLs from your host (browser / curl)
-  Web UI             http://localhost:3000
+  Web UI             http://localhost:3000   (health: /api/health)
   MAS API            http://localhost:8000   (Swagger: /docs)
   Knowledge Store    http://localhost:8080   (health: /health, list: GET /file, search: GET /)
-  Agent              http://localhost:8001
+  Agent              http://localhost:8001   (health: /health)
 
 Docker-only hostnames (do NOT put these in NEXT_PUBLIC_* — the browser cannot resolve them):
   mas, knowledge_store, agent, rabbitmq, postgres, redis, tempo, …

@@ -526,6 +526,16 @@ app.add_middleware(CorrelationIDMiddleware)
 
 
 @app.get(
+    "/health",
+    summary="Liveness probe",
+    description="Answers once startup has finished. Loads no model and calls no other service.",
+    tags=["Health"],
+)
+async def health_check():
+    return {"status": "healthy", "service": "agent"}
+
+
+@app.get(
     "/capabilities",
     summary="Get agent capabilities",
     description="Returns the capabilities and skills this agent supports, including delegation.",
