@@ -209,6 +209,7 @@ def get_llm():
 tokenizer = None
 model = None
 _llm_load_lock = threading.Lock()
+_generation_lock = threading.Lock()
 
 
 def _ensure_llm_loaded() -> None:
@@ -346,21 +347,26 @@ def ask_llm(messages: list, max_new_tokens: int = 256):
     logger.info(f"Starting generation with max_new_tokens={max_new_tokens}...")
     import time
 
-    start_time = time.time()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    with torch.no_grad():
-        out = model.generate(
-            input_ids=input_ids,
-            attention_mask=attn_mask,
-            max_new_tokens=max_new_tokens,
-            do_sample=False,
-            repetition_penalty=1.3,
-            return_dict_in_generate=True,
-            pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=tokenizer.eos_token_id,
-        )
-    logger.info(f"Generation finished in {time.time() - start_time:.2f}s")
+    queued_at = time.time()
+    with _generation_lock:
+        start_time = time.time()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        with torch.no_grad():
+            out = model.generate(
+                input_ids=input_ids,
+                attention_mask=attn_mask,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                repetition_penalty=1.3,
+                return_dict_in_generate=True,
+                pad_token_id=tokenizer.eos_token_id,
+                eos_token_id=tokenizer.eos_token_id,
+            )
+    logger.info(
+        f"Generation finished in {time.time() - start_time:.2f}s "
+        f"after waiting {start_time - queued_at:.2f}s for the previous one"
+    )
 
     seq = out.sequences[0]
     gen_only = seq[input_ids.size(1) :]

@@ -22,6 +22,7 @@ sys.path.insert(0, str(REPO / "packaging"))
 sys.path.insert(0, str(REPO / "installer"))
 import build_bundle  # noqa: E402
 import horus_install  # noqa: E402
+import profiles  # noqa: E402
 
 posix_only = unittest.skipUnless(
     os.name == "posix", "needs a POSIX kernel for modes and symlinks"
@@ -29,6 +30,8 @@ posix_only = unittest.skipUnless(
 needs_yaml = unittest.skipUnless(yaml is not None, "needs PyYAML to read the compose file")
 
 SOURCE_BUILT_SERVICES = {"mas", "agent", "knowledge_store", "web-client"}
+
+MEMORY_REFERENCE = re.compile(r"^\$\{(\w+):-(\d+g)\}$")
 
 def compose_services() -> dict:
     text = (INFRA / "docker-compose.yml").read_text(encoding="utf-8")
@@ -293,6 +296,38 @@ class ComposeReleaseVersion(unittest.TestCase):
             with self.subTest(name):
                 self.assertIn("HORUS_VERSION=${HORUS_VERSION:-}",
                               services[name].get("environment", []))
+
+@needs_yaml
+class ComposeMemoryCeilings(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.services = compose_services()
+
+    def test_each_python_service_takes_its_memory_ceilings_from_the_env(self):
+        for name in ("mas", "agent", "knowledge_store"):
+            for field in ("mem_limit", "memswap_limit"):
+                with self.subTest(f"{name} {field}"):
+                    self.assertRegex(str(self.services[name].get(field, "")),
+                                     MEMORY_REFERENCE)
+
+    def test_agent_and_knowledge_store_default_to_no_swap(self):
+        for name in ("agent", "knowledge_store"):
+            with self.subTest(name):
+                spec = self.services[name]
+                limit = MEMORY_REFERENCE.match(spec["mem_limit"]).group(2)
+                swap = MEMORY_REFERENCE.match(spec["memswap_limit"]).group(2)
+                self.assertEqual(limit, swap)
+
+    def test_every_memory_ceiling_a_profile_writes_is_read_by_compose(self):
+        read = {
+            MEMORY_REFERENCE.match(str(spec[field])).group(1)
+            for spec in self.services.values()
+            for field in ("mem_limit", "memswap_limit") if field in spec
+        }
+        written = {key for key in profiles.MANAGED_KEYS
+                   if key.endswith(("_MEM_LIMIT", "_MEMSWAP_LIMIT"))}
+        self.assertTrue(written)
+        self.assertLessEqual(written, read)
 
 @needs_yaml
 class ComposeHealthchecks(unittest.TestCase):

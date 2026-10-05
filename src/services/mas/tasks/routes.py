@@ -21,6 +21,7 @@ from auth.permissions import Permission
 from chat.chat_tool_functions import send_messages_via_websockets, send_task_step_via_websockets
 from conversations.conversation_tool_functions import add_messages
 from core.logger import get_logger, log_agent_operation
+from core.memory_usage import peak_rss_mb
 from core.metrics import TASK_ERRORS, TASK_QUEUE_DEPTH
 from core.rabbitmq_tool import rabbitmq_instance
 from core.skill_cache import rank_skills
@@ -1091,7 +1092,9 @@ async def sharing_agent_result(
 
         TASK_QUEUE_DEPTH.dec()
         log_agent_operation(
-            task_result.agent_id, "TASK", f"Completed task {task_result.task_id}"
+            task_result.agent_id,
+            "TASK",
+            f"Completed task {task_result.task_id} peak_rss_mb={peak_rss_mb()}",
         )
 
         # Hard depth cap: the Manager can re-route cyclically (INSERT), but a step

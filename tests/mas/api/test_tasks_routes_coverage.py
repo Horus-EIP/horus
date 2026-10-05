@@ -1116,6 +1116,22 @@ class TestTaskResultCompletion:
             )
         assert r.status_code == 200  # fell back gracefully
 
+    def test_completion_log_line_reports_the_peak_rss(
+        self, _validate, _allowed, mock_add, mock_ws, make_fake_client
+    ):
+        tr = _result(future_actions=[])
+        task = _task(id="t1", agent_id="agent-1", conversation_id=None, result=tr)
+        fake = _FakeSession(first_map={"Task": task})
+        with patch("tasks.routes.peak_rss_mb", return_value="4321"), patch(
+            "tasks.routes.log_agent_operation"
+        ) as log_operation:
+            client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
+            r = client.post("/tasks/task-result/", json=_result_body())
+        assert r.status_code == 200
+        log_operation.assert_any_call(
+            "agent-1", "TASK", "Completed task t1 peak_rss_mb=4321"
+        )
+
     def test_missing_taskresult_row_returns_404(
         self, _validate, _allowed, mock_add, mock_ws, make_fake_client
     ):

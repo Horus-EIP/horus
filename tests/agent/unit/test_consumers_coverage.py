@@ -395,6 +395,52 @@ class TestConsumeMessagesCallback:
         # Success path acks exactly once with the delivery tag.
         ch.basic_ack.assert_called_once_with(delivery_tag=11)
 
+    def test_completion_log_line_reports_the_peak_rss(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        pipeline = MagicMock()
+        pipeline.process_task = AsyncMock(return_value={"response": "ANSWER"})
+        srv.get_pipeline_for_type.return_value = pipeline
+        body = json.dumps({"demand": "q", "task_id": "task-42"}).encode("utf-8")
+
+        with self._patch_profiles(), patch.object(
+            consumers, "peak_rss_mb", return_value="4321"
+        ), patch.object(consumers, "logger") as log:
+            cb(MagicMock(), _make_method(11), _make_props(), body)
+
+        completion = [
+            call.args for call in log.info.call_args_list
+            if call.args and str(call.args[0]).startswith("Task processed")
+        ]
+        assert completion == [
+            (
+                "Task processed (%s): task_id=%s duration=%.2fs peak_rss_mb=%s",
+                "general",
+                "task-42",
+                completion[0][3],
+                "4321",
+            )
+        ]
+
+    def test_failure_log_line_reports_the_peak_rss(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        pipeline = MagicMock()
+        pipeline.process_task = AsyncMock(side_effect=RuntimeError("boom"))
+        srv.get_pipeline_for_type.return_value = pipeline
+        body = json.dumps({"demand": "q", "task_id": "task-43"}).encode("utf-8")
+
+        with self._patch_profiles(), patch.object(
+            consumers, "peak_rss_mb", return_value="4321"
+        ), patch.object(consumers, "logger") as log:
+            cb(MagicMock(), _make_method(12), _make_props(), body)
+
+        log.error.assert_any_call(
+            "Task processing failed: task_id=%s error=%s peak_rss_mb=%s",
+            "task-43",
+            "boom",
+            "4321",
+            exc_info=True,
+        )
+
     def test_cancel_control_message_just_acks(self, fake_pika):
         srv, cb = _start_consumer_and_get_callback(fake_pika)
         ch = MagicMock()

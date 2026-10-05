@@ -106,11 +106,35 @@ def _sum_kv_ints(text: str, key: str) -> int | None:
                 found = True
     return total if found else None
 
-def _cpu_linux(log: Log) -> tuple[str | None, int | None, str]:
+LINUX_CPUINFO = Path("/proc/cpuinfo")
+
+LINUX_CPU_SYSFS = Path("/sys/devices/system/cpu")
+
+def _cores_from_sysfs(root: Path) -> int | None:
+    siblings: set[str] = set()
+    for path in root.glob("cpu[0-9]*/topology/thread_siblings_list"):
+        try:
+            siblings.add(path.read_text(errors="replace").strip())
+        except OSError:
+            continue
+    siblings.discard("")
+    return len(siblings) or None
+
+def _cpu_linux(log: Log, cpuinfo: Path = LINUX_CPUINFO,
+               sysfs: Path = LINUX_CPU_SYSFS) -> tuple[str | None, int | None, str]:
+    model, count, source = _cpu_from_cpuinfo(log, cpuinfo)
+    if count is not None:
+        return model, count, source
+    from_sysfs = _cores_from_sysfs(sysfs)
+    if from_sysfs is not None:
+        return model, from_sysfs, f"{sysfs.as_posix()} thread siblings"
+    return model, None, source
+
+def _cpu_from_cpuinfo(log: Log, cpuinfo: Path) -> tuple[str | None, int | None, str]:
     try:
-        text = Path("/proc/cpuinfo").read_text(errors="replace")
+        text = cpuinfo.read_text(errors="replace")
     except OSError as exc:
-        log.debug(f"/proc/cpuinfo unreadable: {exc}")
+        log.debug(f"{cpuinfo.as_posix()} unreadable: {exc}")
         return None, None, "unavailable"
 
     model = None
@@ -616,7 +640,7 @@ def write_profile_json(
 
     try:
         prof = profiles.get(profile_name)
-        provenance = profiles.provenance_for(profile_name)
+        provenance = profiles.provenance_for(profile_name, probe_data)
         runs_vllm = prof.runs_vllm
         confidence = prof.confidence
         trigger = prof.trigger

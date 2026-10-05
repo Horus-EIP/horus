@@ -1,4 +1,7 @@
+import json
 import os
+import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -98,3 +101,81 @@ def test_ask_llm_mocked():
         with patch("core.llm_setup.model", mock_model):
             response = ask_llm([{"role": "user", "content": "hello"}])
             assert response == "response"
+
+
+def _fake_router_llm(generate):
+    tokenizer = MagicMock()
+    tokenizer.apply_chat_template.return_value = "prompt"
+    tokenizer.return_value = {"input_ids": MagicMock(), "attention_mask": MagicMock()}
+    tokenizer.decode.return_value = "routed"
+    tokenizer.eos_token_id = 1
+    model = MagicMock()
+    param = MagicMock()
+    param.device = "cpu"
+    model.parameters = MagicMock(side_effect=lambda: iter([param]))
+    model.generate.side_effect = generate
+    return tokenizer, model
+
+
+class _ConcurrencyProbe:
+    def __init__(self, hold_seconds: float, result=None):
+        self.hold_seconds = hold_seconds
+        self.result = result
+        self.active = 0
+        self.peak = 0
+        self._lock = threading.Lock()
+
+    def __call__(self, *args, **kwargs):
+        with self._lock:
+            self.active += 1
+            self.peak = max(self.peak, self.active)
+        time.sleep(self.hold_seconds)
+        with self._lock:
+            self.active -= 1
+        return self.result
+
+
+def _ask_from_threads(count: int) -> list:
+    answers: list = []
+    threads = [
+        threading.Thread(
+            target=lambda: answers.append(ask_llm([{"role": "user", "content": "route me"}]))
+        )
+        for _ in range(count)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+    return answers
+
+
+def test_in_process_router_generates_one_request_at_a_time(monkeypatch):
+    monkeypatch.setenv("LLM_BACKEND", "transformers")
+    out = MagicMock()
+    out.sequences = [MagicMock()]
+    probe = _ConcurrencyProbe(0.2, out)
+    tokenizer, model = _fake_router_llm(probe)
+
+    with patch("core.llm_setup.tokenizer", tokenizer), patch("core.llm_setup.model", model):
+        answers = _ask_from_threads(3)
+
+    assert answers == ["routed", "routed", "routed"]
+    assert model.generate.call_count == 3
+    assert probe.peak == 1
+
+
+def test_openai_compatible_backend_leaves_scheduling_to_the_server(monkeypatch):
+    monkeypatch.setenv("LLM_BACKEND", "vllm")
+    response = MagicMock()
+    response.read.return_value = json.dumps(
+        {"choices": [{"message": {"content": "routed"}}]}
+    ).encode("utf-8")
+    response.__enter__.return_value = response
+    probe = _ConcurrencyProbe(0.2, response)
+
+    with patch("urllib.request.urlopen", probe):
+        answers = _ask_from_threads(2)
+
+    assert answers == ["routed", "routed"]
+    assert probe.peak == 2

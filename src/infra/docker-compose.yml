@@ -163,6 +163,8 @@ services:
       dockerfile: Dockerfile
     container_name: agent
     restart: unless-stopped
+    mem_limit: ${AGENT_MEM_LIMIT:-12g}
+    memswap_limit: ${AGENT_MEMSWAP_LIMIT:-12g}
     # Agent inference (Qwen instruct decision LLM, spaCy tools, etc.): NVIDIA Container Toolkit on the host.
     # No GPU? Remove the next line or run without requesting devices (Compose will error if unsupported).
     gpus: all
@@ -296,6 +298,8 @@ services:
       dockerfile: Dockerfile
     container_name: knowledge_store
     restart: unless-stopped
+    mem_limit: ${KNOWLEDGE_STORE_MEM_LIMIT:-6g}
+    memswap_limit: ${KNOWLEDGE_STORE_MEMSWAP_LIMIT:-6g}
     gpus: all
     environment:
       - HORUS_VERSION=${HORUS_VERSION:-}

@@ -69,6 +69,76 @@ _N_RESULTS = Setting(
 
 _SERVED_NAME = "qwen3-4b"
 
+_KNOWLEDGE_STORE_MEMORY = "6g"
+
+_NO_SWAP_WHY = (
+    "Equal to the memory limit, so the container never swaps. Past its limit "
+    "it is killed and restarted by Compose instead of pushing the whole host "
+    "into swap."
+)
+
+def _memory_settings(agent_limit: str, agent_why: str) -> dict[str, Setting]:
+    return {
+        "AGENT_MEM_LIMIT": Setting(agent_limit, DERIVED, agent_why),
+        "AGENT_MEMSWAP_LIMIT": Setting(agent_limit, DERIVED, _NO_SWAP_WHY),
+        "KNOWLEDGE_STORE_MEM_LIMIT": Setting(
+            _KNOWLEDGE_STORE_MEMORY, DERIVED,
+            "The knowledge store holds the BGE base embedder, spaCy "
+            "en_core_web_trf, t5-small and distilbart-cnn-6-6 in fp32, about "
+            "2.1 GB of weights, plus torch, Chroma and the working set of an "
+            "ingestion. Sized from those weights, not measured.",
+        ),
+        "KNOWLEDGE_STORE_MEMSWAP_LIMIT": Setting(
+            _KNOWLEDGE_STORE_MEMORY, DERIVED, _NO_SWAP_WHY,
+        ),
+    }
+
+THREAD_KEYS: tuple[str, ...] = ("LLM_TORCH_INTRAOP_THREADS", "AGENT_TORCH_INTRAOP_THREADS")
+
+PHYSICAL_CORES_FALLBACK = 4
+
+def physical_cores(probe: dict | None) -> tuple[int, str]:
+    cpu = (probe or {}).get("cpu") or {}
+    count = cpu.get("physical_cores")
+    if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+        return PHYSICAL_CORES_FALLBACK, (
+            f"the core count could not be read, so {PHYSICAL_CORES_FALLBACK} "
+            "physical cores are assumed"
+        )
+    if cpu.get("count_is_logical_fallback"):
+        return max(1, count // 2), (
+            f"only the logical count ({count}) could be read, so half of it is "
+            "assumed to be physical"
+        )
+    return count, f"{count} physical cores detected"
+
+def split_threads(cores: int) -> tuple[int, int]:
+    router = max(1, cores // 3)
+    return router, max(1, cores - router)
+
+def _thread_settings(probe: dict | None) -> dict[str, Setting]:
+    cores, basis = physical_cores(probe)
+    router, worker = split_threads(cores)
+    return {
+        "LLM_TORCH_INTRAOP_THREADS": Setting(
+            str(router), DERIVED,
+            f"The MAS router's torch threads: a third of the {cores} cores "
+            f"({basis}). The router reads a short prompt, the question and the "
+            "agent list, and MAS runs one generation at a time, so it needs "
+            "the smaller share.",
+        ),
+        "AGENT_TORCH_INTRAOP_THREADS": Setting(
+            str(worker), DERIVED,
+            f"The agent worker gets the rest of the {cores} cores ({basis}). "
+            "It prefills thousands of retrieved tokens for every answer, the "
+            "longest step of a CPU chat. Router and worker add up to the "
+            "physical cores, so running together they never oversubscribe "
+            "them, and any hyperthreads stay free for the MAS event loop, the "
+            "knowledge store and the databases. A single core cannot be split: "
+            "each service then gets one thread. Not benchmarked.",
+        ),
+    }
+
 def _vllm_common() -> dict[str, Setting]:
     return {
         "LLM_BACKEND": Setting(
@@ -174,6 +244,13 @@ _add(Profile(
             "That is the argument for downgrading the worker, not a measurement "
             "of it - the swap has been reasoned about, never timed.",
         ),
+        **_memory_settings(
+            "6g",
+            "The 1.5B worker in bf16 is 3.1 GB of weights. Its KV cache is "
+            "small (28 layers x 2 KV heads x 128 x 2 bytes, about 0.2 GB at 8k "
+            "tokens) and torch, transformers and spaCy add about 1.5 GB. "
+            "Arithmetic, not a measurement.",
+        ),
     },
     notes=(
         "Answer quality is noticeably below the GPU stack: this is the 1.5B "
@@ -182,6 +259,10 @@ _add(Profile(
         "No CPU-only machine has been benchmarked. The timeouts and the model "
         "downgrade are reasoned, not measured - if this profile behaves oddly, "
         "suspect those numbers before you suspect a bug.",
+        "The memory ceilings (agent 6g, knowledge store 6g, MAS 14g) are "
+        "ceilings, not a budget: on a machine this size they add up to more "
+        "than its RAM. They stop one runaway container from pushing the host "
+        "into swap.",
     ),
 ))
 
@@ -199,6 +280,14 @@ _add(Profile(
         "MODEL_NAME": Setting(
             _WORKER_MODEL, MEASURED, "4B worker - the shipping default.",
         ),
+        **_memory_settings(
+            "12g",
+            "The 4B worker in bf16 is 8.1 GB of weights. The KV cache of an "
+            "8k-token prompt and answer adds about 1.1 GB (36 layers x 8 KV "
+            "heads x 128 x 2 bytes) and torch, transformers and spaCy about "
+            "1.5 GB, which leaves about 1 GB of margin. Arithmetic, not a "
+            "measurement.",
+        ),
     },
     notes=(
         "This is the shipping model pair; only the device changes.",
@@ -215,6 +304,10 @@ _add(Profile(
         "The timeouts are still DERIVED, not fitted - but the 1800s ReAct "
         "budget was at least shown to be generous rather than tight: the slow "
         "run finished well inside it and was not truncated.",
+        "The memory ceilings (agent 12g, knowledge store 6g, MAS 14g) add up "
+        "to more than a 16 GB machine has. They stop one runaway container "
+        "from pushing the host into swap; they do not make the two in-process "
+        "models fit. That needs one shared model server for MAS and the agent.",
     ),
 ))
 
@@ -341,7 +434,7 @@ _add(Profile(
 ))
 
 MANAGED_KEYS: tuple[str, ...] = tuple(sorted(
-    {"COMPOSE_FILE"} | {k for p in PROFILES.values() for k in p.settings}
+    {"COMPOSE_FILE", *THREAD_KEYS} | {k for p in PROFILES.values() for k in p.settings}
 ))
 
 PROFILE_ORDER: tuple[str, ...] = (
@@ -500,17 +593,25 @@ def _compose_file_value(runs_vllm: bool, probe: dict | None) -> str:
         return BASE_COMPOSE
     return sep.join((BASE_COMPOSE, CPU_OVERLAY))
 
+def settings_for(profile_name: str, probe: dict | None = None) -> dict[str, Setting]:
+    profile = get(profile_name)
+    settings = dict(profile.settings)
+    if is_cpu_profile(profile.name):
+        settings.update(_thread_settings(probe))
+    return settings
+
 def env_for(profile_name: str, probe: dict | None = None) -> dict[str, str]:
     profile = get(profile_name)
-    env = {k: s.value for k, s in profile.settings.items()}
+    env = {k: s.value for k, s in settings_for(profile_name, probe).items()}
     env["COMPOSE_FILE"] = _compose_file_value(profile.runs_vllm, probe)
     return env
 
-def provenance_for(profile_name: str) -> dict[str, dict[str, str]]:
+def provenance_for(profile_name: str,
+                   probe: dict | None = None) -> dict[str, dict[str, str]]:
     profile = get(profile_name)
     out: dict[str, dict[str, str]] = {
         key: {"value": s.value, "provenance": s.provenance, "why": s.why}
-        for key, s in profile.settings.items()
+        for key, s in settings_for(profile_name, probe).items()
     }
     out["COMPOSE_FILE"] = {
         "value": _compose_file_value(profile.runs_vllm, None),
@@ -522,9 +623,10 @@ def provenance_for(profile_name: str) -> dict[str, dict[str, str]]:
     }
     return out
 
-def describe(profile_name: str) -> str:
+def describe(profile_name: str, probe: dict | None = None) -> str:
     p = get(profile_name)
-    env = env_for(profile_name)
+    env = env_for(profile_name, probe)
+    settings = settings_for(profile_name, probe)
 
     lines = [
         f"Profile: {p.name}",
@@ -539,14 +641,14 @@ def describe(profile_name: str) -> str:
 
     width = max(len(k) for k in env)
     for key, value in env.items():
-        setting = p.settings.get(key)
+        setting = settings.get(key)
         tag = f"[{setting.provenance}]" if setting else f"[{MEASURED}]"
         lines.append(f"    {key:<{width}} = {value}   {tag}")
 
     lines.append("")
     lines.append("  Why those numbers:")
     for key in env:
-        setting = p.settings.get(key)
+        setting = settings.get(key)
         why = setting.why if setting else (
             "Activates the CPU Compose overlay (or clears it on a GPU machine)."
         )

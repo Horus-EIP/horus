@@ -31,6 +31,7 @@ from pika.exceptions import AMQPError
 
 from config.settings import RABBITMQ_PORT
 from core.logger import get_correlation_id, get_logger, set_correlation_id
+from core.memory_usage import peak_rss_mb
 from core.metrics import agent_errors_total, task_processing_duration, task_processing_total
 
 logger = get_logger("agent_server.consumers")
@@ -398,10 +399,11 @@ def _consume_messages_session() -> bool:
                     task_processing_total.labels(status="success").inc()
 
                     logger.info(
-                        "Task processed (%s): task_id=%s duration=%.2fs",
+                        "Task processed (%s): task_id=%s duration=%.2fs peak_rss_mb=%s",
                         queue_type,
                         task_id,
                         processing_duration,
+                        peak_rss_mb(),
                     )
 
                     if task_id:
@@ -419,9 +421,10 @@ def _consume_messages_session() -> bool:
                     task_processing_total.labels(status="error").inc()
                     agent_errors_total.labels(error_type="task_processing").inc()
                     logger.error(
-                        "Task processing failed: task_id=%s error=%s",
+                        "Task processing failed: task_id=%s error=%s peak_rss_mb=%s",
                         task_id,
                         str(e),
+                        peak_rss_mb(),
                         exc_info=True,
                     )
                     # Surface the failure to the UI as an error step. The
