@@ -87,7 +87,7 @@ On Windows the "not supported" screen must say that Docker gets half of the RAM 
 2. `docker-compose.cpu.yml`: take the KV cache types and the prompt cache from the environment, for example `--cache-type-k ${LLM_SERVER_CACHE_TYPE_K:-f16}`, `--cache-type-v ${LLM_SERVER_CACHE_TYPE_V:-f16}`, `--flash-attn ${LLM_SERVER_FLASH_ATTN:-auto}` and `--cache-ram ${LLM_SERVER_CACHE_RAM_MIB:-1024}`. `--ctx-size` already follows `LLM_VLLM_MAX_MODEL_LEN`.
 3. `installer/profiles.py`: `cpu-lean` sets `LLM_VLLM_MAX_MODEL_LEN=4096`, the two cache types to `q8_0`, flash attention `on` (a quantized V cache needs it), `LLM_SERVER_CACHE_RAM_MIB=256` and `LLM_SERVER_MEM_LIMIT=5g`. Its trigger becomes 13.5 to 15.0 GiB of Docker memory.
 4. Under 13.5 GiB: the "not supported" screen with the Docker memory found, the 13.5 GiB needed, and on Windows the WSL advice above. `--profile cpu-lean` or `--profile cpu-standard` still overrides it, with a warning, for people who want to try.
-5. The thresholds live in one place in `installer/profiles.py` and quote this ADR.
+5. The thresholds live in one place in `installer/profiles.py` and quote this ADR. The Q4_K_M entry of `models/manifest.json` (B-95) says `min_ram_gb: 16` and lists both CPU profiles: make it agree with the lean floor, or state that the installer's thresholds decide.
 
 ## Measurement protocol
 

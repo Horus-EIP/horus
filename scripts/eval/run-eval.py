@@ -506,7 +506,7 @@ def model_info(args: argparse.Namespace, llama_server: dict[str, Any] | None) ->
     if args.model_sha256:
         sha256_source = "given"
     elif sha256:
-        sha256_source = "llm container: the .sha256 that llm-model wrote after verifying the download"
+        sha256_source = "llm container: the .sha256 written next to the GGUF once its hash was verified"
     else:
         sha256_source = None
     return {

@@ -49,7 +49,7 @@ Stop the Horus stack first (`cd src/infra && docker compose stop`): it competes 
 python scripts/benchmarks/run-llama-bench.py --models-dir ~/horus-bench-models --fetch
 ```
 
-Only the Python standard library and Docker are needed. `--fetch` downloads the GGUFs that are missing with `src/infra/llm/fetch-model.sh` in the server image: resumable, size and SHA-256 checked before the file is renamed into place.
+Only the Python standard library and Docker are needed. `--fetch` downloads the GGUFs that are missing with `src/infra/llm/fetch-model.sh` in the server image: resumable, size and SHA-256 checked before the file is renamed into place. Where Horus is installed with a CPU profile, the Q4_K_M is already in the stack's model folder (`models/` at the top of the Horus folder, or the installer's `--models-dir`, see `scripts/models/README.md`): `--models-dir models --fetch` uses it and adds the Q5_K_M next to it.
 
 | GGUF | Source | Size (bytes) | SHA-256 |
 |---|---|---:|---|
@@ -124,7 +124,7 @@ pip install httpx websockets pyyaml
 python scripts/eval/run-eval.py --label eval-cpu16-standard --reference cpu16 --sample-resources
 ```
 
-On the CPU stack the runner reads the llama-server facts from the running `llm` container (`docker inspect`, `GET /props` and the `.sha256` file `llm-model` writes next to the GGUF once it has verified it): the llama.cpp build, the model file and its SHA-256, and the server arguments, so the report says which context size and KV cache type ran. `--llama-cpp-build` and `--model-*` override them; on the GPU path, where there is no `llm` container, they are the only source.
+On the CPU stack the runner reads the llama-server facts from the running `llm` container (`docker inspect`, `GET /props` and the `.sha256` file written next to the GGUF once its hash was verified): the llama.cpp build, the model file and its SHA-256, and the server arguments, so the report says which context size and KV cache type ran. `--llama-cpp-build` and `--model-*` override them; on the GPU path, where there is no `llm` container, they are the only source.
 
 | Option | Meaning |
 |---|---|

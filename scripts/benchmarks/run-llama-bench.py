@@ -79,7 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     location = parser.add_mutually_exclusive_group()
     location.add_argument("--models-dir", help="Host folder that holds the GGUF files.")
     location.add_argument(
-        "--models-volume", help="Docker volume that holds the GGUF files, e.g. infra_llm_models."
+        "--models-volume", help="Docker volume that holds the GGUF files."
     )
     parser.add_argument(
         "--model",
