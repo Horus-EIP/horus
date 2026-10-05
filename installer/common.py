@@ -269,6 +269,7 @@ def run(
     timeout: int = 60,
     cwd: Path | None = None,
     env: dict | None = None,
+    log_output: bool = True,
 ) -> Result:
     log.debug(f"$ {' '.join(cmd)}" + (f"   (cwd={cwd})" if cwd else ""))
     merged = None
@@ -299,6 +300,9 @@ def run(
     out = (proc.stdout or "").strip()
     err = (proc.stderr or "").strip()
     log.debug(f"  -> exit {proc.returncode}")
+    if not log_output:
+        log.debug(f"  output not logged ({len(out)} + {len(err)} characters)")
+        return Result(proc.returncode, out, err)
     for label, blob in (("stdout", out), ("stderr", err)):
         if blob:
             for line in blob.splitlines()[:20]:

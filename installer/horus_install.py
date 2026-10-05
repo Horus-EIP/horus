@@ -22,6 +22,7 @@ import profiles  # noqa: E402
 import smoke  # noqa: E402
 from common import (  # noqa: E402
     BUNDLE_DIR,
+    EXIT_COMPOSE_PULL_FAILED,
     EXIT_COMPOSE_UP_FAILED,
     EXIT_ENV_WRITE_FAILED,
     EXIT_HEALTH_TIMEOUT,
@@ -298,14 +299,15 @@ def corpus_scan_token(log: Log, infra: Path) -> str:
 
 def _stream(cmd: list[str], log: Log, cwd: Path, label: str,
             heartbeat: int = 30, watch_for: tuple[str, ...] = (),
-            found: set[str] | None = None) -> int:
-    log.debug(f"$ {' '.join(cmd)}   (cwd={cwd})")
+            found: set[str] | None = None, env: dict[str, str] | None = None) -> int:
+    log.debug(f"$ {' '.join(cmd)}   (cwd={cwd})" + (f"   (env {env})" if env else ""))
     start = time.monotonic()
     last_beat = start
     try:
         proc = subprocess.Popen(
             cmd, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
+            env={**os.environ, **env} if env else None,
         )
     except OSError as exc:
         log.fail(f"{label}: could not start docker ({exc})")
@@ -333,20 +335,111 @@ def _stream(cmd: list[str], log: Log, cwd: Path, label: str,
 
 DEPENDENCY_ABORT = "dependency failed to start"
 
+FIRST_INSTALL_TIME = "1.5 to 2 hours"
+
+PULL_ATTEMPTS = 3
+PULL_BACKOFF_SECONDS = 15
+ONE_IMAGE_AT_A_TIME = {"COMPOSE_PARALLEL_LIMIT": "1"}
+
 def compose(args: list[str]) -> list[str]:
     return ["docker", "compose"] + args
 
-def pull_and_build(log: Log, infra: Path, no_build: bool = False) -> None:
+def pullable_images(log: Log, infra: Path) -> dict[str, str] | None:
+    res = run(compose(["config", "--format", "json"]), log, timeout=90, cwd=infra,
+              log_output=False)
+    if not res.ok:
+        log.debug("  stderr: " + (res.err.splitlines()[0] if res.err else "(empty)"))
+        return None
+    try:
+        config = json.loads(res.out)
+    except ValueError:
+        return None
+    services = config.get("services") if isinstance(config, dict) else None
+    if not isinstance(services, dict):
+        return None
+    return {
+        name: str(spec["image"])
+        for name, spec in services.items()
+        if isinstance(spec, dict) and spec.get("image") and not spec.get("build")
+    }
+
+def _pull_with_retries(log: Log, infra: Path, label: str, args: list[str]) -> bool:
+    cmd = compose(["pull"] + args)
+    for attempt in range(1, PULL_ATTEMPTS + 1):
+        suffix = "" if attempt == 1 else f" (attempt {attempt} of {PULL_ATTEMPTS})"
+        if _stream(cmd, log, infra, label + suffix, env=ONE_IMAGE_AT_A_TIME) == 0:
+            return True
+        if attempt < PULL_ATTEMPTS:
+            pause = PULL_BACKOFF_SECONDS * attempt
+            log.warn(f"`{' '.join(cmd)}` failed (attempt {attempt} of {PULL_ATTEMPTS}); "
+                     f"trying again in {pause}s")
+            time.sleep(pause)
+    return False
+
+def _image_on_this_machine(log: Log, image: str) -> bool:
+    return run(["docker", "image", "inspect", "--format", "{{.Id}}", image],
+               log, timeout=60).ok
+
+def pull_images(log: Log, infra: Path) -> None:
+    images = pullable_images(log, infra)
+    if images is None:
+        log.info("`docker compose config` gave no service list; pulling every image "
+                 "in one call, still one image at a time")
+        if not _pull_with_retries(log, infra, "pull", ["--ignore-buildable"]):
+            log.warn(f"`docker compose pull` still failed after {PULL_ATTEMPTS} tries; "
+                     "continuing to the build step, which will surface anything "
+                     "genuinely missing")
+        return
+
+    missing: list[tuple[str, str]] = []
+    for index, (service, image) in enumerate(images.items(), start=1):
+        log.say(f"  [{index}/{len(images)}] {service}  " + dim(image))
+        if _pull_with_retries(log, infra, f"pull {service}", [service]):
+            continue
+        if _image_on_this_machine(log, image):
+            log.warn(f"Could not download {image} after {PULL_ATTEMPTS} tries; "
+                     "using the copy already on this machine")
+            continue
+        missing.append((service, image))
+
+    if missing:
+        names = " ".join(service for service, _image in missing)
+        raise InstallError(
+            EXIT_COMPOSE_PULL_FAILED,
+            f"{len(missing)} container image(s) could not be downloaded.",
+            f"Each was tried {PULL_ATTEMPTS} times, one image at a time:\n  "
+            + "\n  ".join(f"{service}  ({image})" for service, image in missing),
+            "This is almost always the network or Docker Hub (a timeout or a\n"
+            "download limit), not this machine. Everything already downloaded\n"
+            "is kept, so trying again only fetches what is missing.\n"
+            "  1. Check the internet connection, and the proxy or VPN if you use one.\n"
+            "  2. Download what is missing by hand to see Docker's own error:\n"
+            f"       cd {infra}\n"
+            f"       docker compose pull {names}\n"
+            "  3. Run your START-HERE file again. It resumes where it stopped.\n"
+            "If Docker says 'toomanyrequests', Docker Hub is limiting this\n"
+            "connection: wait a while, or sign in with  docker login  first.\n"
+            f"Full log: {LOG_PATH}",
+        )
+
+def services_still_starting(log: Log, infra: Path) -> list[str]:
+    starting: list[str] = []
+    for row in _ps(log, infra):
+        name = str(row.get("Service") or row.get("Name") or "")
+        state, health = _state_of(row)
+        if name and state == "running" and health in ("starting", "unhealthy"):
+            starting.append(name)
+    return starting
+
+def pull_and_build(log: Log, infra: Path, no_build: bool = False,
+                   timeout: int = 1800) -> None:
     log.step("Downloading container images")
-    log.say("  This is the long part. On a first install expect roughly")
-    log.say("  10-15 minutes to build, then several more minutes while the")
+    log.say(f"  This is the long part. A first install takes {FIRST_INSTALL_TIME}:")
+    log.say("  the images download one at a time, the containers build, then the")
     log.say("  language models download in the background. It is not frozen.")
     log.say("")
 
-    code = _stream(compose(["pull", "--ignore-buildable"]), log, infra, "pull")
-    if code != 0:
-        log.warn("`docker compose pull` reported errors; continuing to the build "
-                 "step, which will surface anything genuinely missing")
+    pull_images(log, infra)
 
     log.step("Building and starting the stack")
     up = ["up", "-d"] + ([] if no_build else ["--build"])
@@ -359,9 +452,15 @@ def pull_and_build(log: Log, infra: Path, no_build: bool = False) -> None:
         log.say("  On a first install this is almost always a model download:")
         log.say("  the service takes longer than Docker waits, Docker marks it")
         log.say("  unhealthy, and everything depending on it is cancelled. What")
-        log.say("  was downloaded is kept, so starting again picks up from there.")
-        log.say("  Trying once more.")
+        log.say("  was downloaded is kept. Waiting for that service to finish,")
+        log.say("  then starting the rest.")
         log.say("")
+        starting = services_still_starting(log, infra)
+        if starting:
+            wait_for_health(log, infra, starting, timeout=timeout)
+        else:
+            log.info("no service is still starting; starting the rest straight away")
+        up = ["up", "-d"]
         seen.clear()
         code = _stream(compose(up), log, infra, "up (second attempt)",
                        watch_for=(DEPENDENCY_ABORT,), found=seen)
@@ -386,9 +485,10 @@ def pull_and_build(log: Log, infra: Path, no_build: bool = False) -> None:
             "  - a transient registry error           ->  just run this again,\n"
             "    it resumes from what was already downloaded\n"
             "\n"
-            "This was already retried once. If Docker named a service that\n"
-            "was still downloading a model, the stack is probably fine and\n"
-            "only needs starting again, which waits instead of cancelling:\n"
+            "This was already retried once, after waiting for the services\n"
+            "that were still starting. If Docker named a service that was\n"
+            "still downloading a model, the stack is probably fine and only\n"
+            "needs starting again:\n"
             "  START-HERE (your platform) --start\n"
             f"Full log: {LOG_PATH}",
         )
@@ -487,7 +587,7 @@ def warn_cpu_expectations(log: Log) -> None:
     log.say(yellow("  No NVIDIA GPU was usable, so Horus will run on the CPU."))
     log.say(yellow("=" * 72))
     log.say("")
-    log.say("  Read this before you spend an hour on the install.")
+    log.say(f"  Read this before you spend {FIRST_INSTALL_TIME} on the install.")
     log.say("")
     log.say("  Everything except the AI answers works on the CPU: the whole stack")
     log.say("  starts, and sign-in, permissions, users, agents, the knowledge")

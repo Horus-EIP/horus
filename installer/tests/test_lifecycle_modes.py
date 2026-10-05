@@ -15,11 +15,16 @@ import horus_install  # noqa: E402
 import profiles  # noqa: E402
 from common import (  # noqa: E402
     EVENT_PREFIX,
+    EXIT_COMPOSE_PULL_FAILED,
+    EXIT_COMPOSE_UP_FAILED,
+    EXIT_HEALTH_TIMEOUT,
     EXIT_NOT_INSTALLED,
     Events,
     InstallError,
     Log,
+    Result,
     exit_name,
+    run,
 )
 
 
@@ -336,7 +341,68 @@ class Parser(unittest.TestCase):
             self.parse(["--not-a-flag"])
         self.assertEqual(caught.exception.code, 2)
 
-class ComposeUpRetry(unittest.TestCase):
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+ABORT = "dependency failed to start: container mas is unhealthy"
+
+PULLABLE = {"postgres": {"image": "postgres:latest"}, "redis": {"image": "redis:7"}}
+BUILT = {"mas": {"build": {"context": "../services/mas"}, "image": "infra-mas"}}
+
+def compose_config(services):
+    return {"name": "infra", "services": dict(services)}
+
+def ps_row(service, health, state="running"):
+    return {"Service": service, "State": state, "Health": health}
+
+class FakeDocker:
+
+    def __init__(self, config=None, pulls=(), ups=((0, ""),), ps=((),), local_images=()):
+        self.config = config
+        self.pulls = list(pulls)
+        self.ups = list(ups)
+        self.ps = [list(rows) for rows in ps]
+        self.local_images = set(local_images)
+        self.history: list[str] = []
+        self.labels: list[str] = []
+        self.pull_envs: list[dict | None] = []
+        self.config_logged: list[bool] = []
+
+    def stream(self, cmd, log, cwd, label, heartbeat=30, watch_for=(), found=None, env=None):
+        self.history.append(" ".join(cmd[2:]))
+        self.labels.append(label)
+        if cmd[2] == "pull":
+            self.pull_envs.append(env)
+            return self.pulls.pop(0) if self.pulls else 0
+        code, line = self.ups.pop(0)
+        if found is not None:
+            for phrase in watch_for:
+                if phrase in line:
+                    found.add(phrase)
+        return code
+
+    def run(self, cmd, log, timeout=60, cwd=None, env=None, log_output=True):
+        if cmd[1:3] == ["compose", "config"]:
+            self.history.append("config")
+            self.config_logged.append(log_output)
+            if self.config is None:
+                return Result(1, "", "no configuration file provided")
+            return Result(0, json.dumps(self.config), "")
+        if cmd[1:3] == ["compose", "ps"]:
+            self.history.append("ps")
+            rows = self.ps.pop(0) if len(self.ps) > 1 else self.ps[0]
+            return Result(0, json.dumps(rows), "")
+        if cmd[1:3] == ["image", "inspect"]:
+            self.history.append("inspect " + cmd[-1])
+            return Result(0 if cmd[-1] in self.local_images else 1, "", "")
+        raise AssertionError(f"unexpected command {cmd}")
+
+    def pulled(self) -> list[str]:
+        return [entry for entry in self.history if entry.startswith("pull")]
+
+    def started(self) -> list[str]:
+        return [entry for entry in self.history if entry.startswith("up")]
+
+class FakeDockerCase(unittest.TestCase):
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -344,69 +410,228 @@ class ComposeUpRetry(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.log = Log(self.tmp / "install-log.txt")
         self.addCleanup(self.log.close, 0)
-        self._real_stream = horus_install._stream
-        self.addCleanup(setattr, horus_install, "_stream", self._real_stream)
+        for name in ("_stream", "run"):
+            self.addCleanup(setattr, horus_install, name, getattr(horus_install, name))
+        sleeper = mock.patch.object(horus_install.time, "sleep")
+        self.sleep = sleeper.start()
+        self.addCleanup(sleeper.stop)
 
-    def fake_stream(self, outcomes):
-        calls = []
-
-        def stream(cmd, log, cwd, label, heartbeat=30, watch_for=(), found=None):
-            code, line = outcomes[len(calls)]
-            calls.append(label)
-            if found is not None:
-                for phrase in watch_for:
-                    if phrase in line:
-                        found.add(phrase)
-            return code
-
-        horus_install._stream = stream
-        return calls
-
-    def run_it(self, outcomes):
-        calls = self.fake_stream(outcomes)
+    def run_it(self, docker, no_build=True, **kwargs):
+        horus_install._stream = docker.stream
+        horus_install.run = docker.run
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             try:
-                horus_install.pull_and_build(self.log, self.tmp, no_build=True)
+                horus_install.pull_and_build(self.log, self.tmp, no_build=no_build, **kwargs)
                 raised = None
             except InstallError as exc:
                 raised = exc
-        return calls, buf.getvalue(), raised
+        return buf.getvalue(), raised
+
+class ImagePulls(FakeDockerCase):
+
+    def test_each_image_is_pulled_on_its_own_one_at_a_time(self):
+        docker = FakeDocker(config=compose_config(PULLABLE))
+        _out, raised = self.run_it(docker)
+        self.assertIsNone(raised)
+        self.assertEqual(docker.pulled(), ["pull postgres", "pull redis"])
+        for env in docker.pull_envs:
+            self.assertEqual(env, {"COMPOSE_PARALLEL_LIMIT": "1"})
+
+    def test_buildable_services_are_left_to_the_build(self):
+        docker = FakeDocker(config=compose_config({**PULLABLE, **BUILT}))
+        self.run_it(docker)
+        self.assertNotIn("pull mas", docker.pulled())
+
+    def test_a_failed_pull_is_retried_then_succeeds(self):
+        docker = FakeDocker(config=compose_config(PULLABLE), pulls=[1, 0, 0])
+        out, raised = self.run_it(docker)
+        self.assertIsNone(raised)
+        self.assertEqual(docker.pulled(), ["pull postgres", "pull postgres", "pull redis"])
+        self.assertIn("attempt 2 of 3", docker.labels[1])
+        self.assertIn("trying again", out)
+        self.assertEqual(docker.started(), ["up -d"])
+
+    def test_each_image_gets_three_tries_with_a_growing_short_pause(self):
+        docker = FakeDocker(config=compose_config(PULLABLE), pulls=[1, 1, 0, 0])
+        _out, raised = self.run_it(docker)
+        self.assertIsNone(raised)
+        self.assertEqual(docker.pulled().count("pull postgres"), 3)
+        pauses = [call.args[0] for call in self.sleep.call_args_list]
+        self.assertEqual(len(pauses), 2)
+        self.assertLess(pauses[0], pauses[1])
+        self.assertLessEqual(pauses[-1], 60)
+
+    def test_an_image_still_failing_after_three_tries_stops_with_what_to_do_next(self):
+        docker = FakeDocker(config=compose_config(PULLABLE), pulls=[0, 1, 1, 1])
+        _out, raised = self.run_it(docker)
+        self.assertIsNotNone(raised)
+        self.assertEqual(raised.code, EXIT_COMPOSE_PULL_FAILED)
+        self.assertEqual(docker.pulled().count("pull redis"), 3)
+        self.assertIn("redis", raised.detail)
+        self.assertNotIn("postgres", raised.detail)
+        self.assertIn("docker compose pull redis", raised.fix)
+        self.assertIn("START-HERE", raised.fix)
+        self.assertEqual(docker.started(), [])
+
+    def test_an_image_already_on_this_machine_is_used_when_the_pull_keeps_failing(self):
+        docker = FakeDocker(config=compose_config(PULLABLE), pulls=[1, 1, 1, 0],
+                            local_images={"postgres:latest"})
+        out, raised = self.run_it(docker)
+        self.assertIsNone(raised)
+        self.assertIn("inspect postgres:latest", docker.history)
+        self.assertIn("already on this machine", out)
+        self.assertEqual(docker.started(), ["up -d"])
+
+    def test_the_service_list_is_read_without_logging_the_secrets_it_holds(self):
+        docker = FakeDocker(config=compose_config(PULLABLE))
+        self.run_it(docker)
+        self.assertEqual(docker.config_logged, [False])
+
+    def test_without_a_service_list_one_pull_for_everything_is_retried(self):
+        docker = FakeDocker(config=None, pulls=[1, 0])
+        _out, raised = self.run_it(docker)
+        self.assertIsNone(raised)
+        self.assertEqual(docker.pulled(), ["pull --ignore-buildable"] * 2)
+        self.assertEqual(docker.pull_envs, [{"COMPOSE_PARALLEL_LIMIT": "1"}] * 2)
+        self.assertEqual(docker.started(), ["up -d"])
+
+class RunCanKeepOutputOutOfTheLog(unittest.TestCase):
+
+    SECRET = "JWT_SECRET_KEY=not-for-the-log"
+
+    def run_and_read_log(self, **kwargs):
+        with tempfile.TemporaryDirectory() as name:
+            log_path = Path(name) / "install-log.txt"
+            log = Log(log_path)
+            result = run(
+                [sys.executable, "-c", "import os; print(os.environ['HORUS_TEST_SECRET'])"],
+                log, env={"HORUS_TEST_SECRET": self.SECRET}, **kwargs,
+            )
+            log.close(0)
+            return result, log_path.read_text(encoding="utf-8")
+
+    def test_output_is_logged_by_default(self):
+        _result, text = self.run_and_read_log()
+        self.assertIn(self.SECRET, text)
+
+    def test_output_can_be_kept_out_of_the_log_and_still_returned(self):
+        result, text = self.run_and_read_log(log_output=False)
+        self.assertEqual(result.out, self.SECRET)
+        self.assertNotIn(self.SECRET, text)
+        self.assertIn("output not logged", text)
+
+class DependencyAbort(FakeDockerCase):
 
     def test_a_dependency_abort_is_retried_once_and_can_succeed(self):
-        calls, out, raised = self.run_it([
-            (0, ""),
-            (1, "dependency failed to start: container mas is unhealthy"),
-            (0, ""),
-        ])
+        docker = FakeDocker(config=compose_config({}), ups=[(1, ABORT), (0, "")])
+        out, raised = self.run_it(docker)
         self.assertIsNone(raised)
-        self.assertEqual(len(calls), 3)
-        self.assertIn("second attempt", calls[2])
+        self.assertEqual(len(docker.started()), 2)
+        self.assertIn("second attempt", docker.labels[-1])
         self.assertIn("still starting", out)
 
-    def test_the_retry_happens_at_most_once(self):
-        calls, _out, raised = self.run_it([
-            (1, "dependency failed to start: container mas is unhealthy"),
-            (1, "dependency failed to start: container mas is unhealthy"),
-            (1, "dependency failed to start: container mas is unhealthy"),
-        ])
+    def test_a_dependency_abort_waits_for_the_starting_service_then_starts_the_rest(self):
+        docker = FakeDocker(
+            config=compose_config({}),
+            ups=[(1, ABORT), (0, "")],
+            ps=[
+                [ps_row("mas", "unhealthy"), ps_row("postgres", "healthy"),
+                 ps_row("agent", "", state="created")],
+                [ps_row("mas", "starting")],
+                [ps_row("mas", "healthy")],
+            ],
+        )
+        patcher = mock.patch.object(horus_install, "wait_for_health",
+                                    wraps=horus_install.wait_for_health)
+        waited = patcher.start()
+        self.addCleanup(patcher.stop)
+        _out, raised = self.run_it(docker)
+        self.assertIsNone(raised)
+        self.assertEqual(waited.call_count, 1)
+        self.assertEqual(waited.call_args.args[2], ["mas"])
+        self.assertTrue(self.sleep.called)
+        second_up = len(docker.history) - 1
+        self.assertEqual(docker.history[second_up], "up -d")
+        self.assertLess(docker.history.index("ps"), second_up)
+
+    def test_the_second_start_does_not_rebuild(self):
+        docker = FakeDocker(config=compose_config({}), ups=[(1, ABORT), (0, "")])
+        _out, raised = self.run_it(docker, no_build=False)
+        self.assertIsNone(raised)
+        self.assertEqual(docker.started(), ["up -d --build", "up -d"])
+
+    def test_the_no_build_path_never_builds(self):
+        docker = FakeDocker(config=compose_config({}), ups=[(1, ABORT), (0, "")])
+        _out, raised = self.run_it(docker, no_build=True)
+        self.assertIsNone(raised)
+        self.assertEqual(docker.started(), ["up -d", "up -d"])
+
+    def test_a_service_that_never_becomes_healthy_stops_with_the_health_timeout(self):
+        docker = FakeDocker(config=compose_config({}), ups=[(1, ABORT), (0, "")],
+                            ps=[[ps_row("mas", "unhealthy")]])
+        _out, raised = self.run_it(docker, timeout=0)
         self.assertIsNotNone(raised)
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(raised.code, EXIT_HEALTH_TIMEOUT)
+        self.assertIn("mas", raised.detail)
+        self.assertEqual(len(docker.started()), 1)
+
+    def test_the_retry_happens_at_most_once(self):
+        docker = FakeDocker(config=compose_config({}),
+                            ups=[(1, ABORT), (1, ABORT), (1, ABORT)])
+        _out, raised = self.run_it(docker)
+        self.assertIsNotNone(raised)
+        self.assertEqual(raised.code, EXIT_COMPOSE_UP_FAILED)
+        self.assertEqual(len(docker.started()), 2)
 
     def test_a_failure_that_is_not_a_dependency_abort_is_not_retried(self):
-        calls, _out, raised = self.run_it([(0, ""), (1, "no space left on device")])
+        docker = FakeDocker(config=compose_config({}), ups=[(1, "no space left on device")])
+        _out, raised = self.run_it(docker)
         self.assertIsNotNone(raised)
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(docker.started()), 1)
+        self.assertNotIn("ps", docker.history)
 
     def test_the_final_message_names_the_recovery_command(self):
-        _calls, _out, raised = self.run_it([
-            (0, ""),
-            (1, "dependency failed to start: container mas is unhealthy"),
-            (1, "dependency failed to start: container mas is unhealthy"),
-        ])
+        docker = FakeDocker(config=compose_config({}), ups=[(1, ABORT), (1, ABORT)])
+        _out, raised = self.run_it(docker)
         self.assertIsNotNone(raised)
         self.assertIn("--start", raised.fix)
         self.assertIn("retried once", raised.fix)
+
+class FirstInstallTime(FakeDockerCase):
+
+    DOCUMENTS = (
+        "packaging/README-FIRST.txt",
+        "packaging/RELEASE-NOTES.md",
+        "README.md",
+        "docs/getting-started.md",
+    )
+    STALE = ("10-30 minutes", "10-15 minutes", "10–15 minutes", "30–60 minutes",
+             "30-60 minutes", "under 30 minutes")
+
+    def test_the_figure_is_the_one_the_beta_testers_measured(self):
+        self.assertEqual(horus_install.FIRST_INSTALL_TIME, "1.5 to 2 hours")
+
+    def test_the_installer_states_it_before_the_long_part(self):
+        out, raised = self.run_it(FakeDocker(config=compose_config({})))
+        self.assertIsNone(raised)
+        self.assertIn(horus_install.FIRST_INSTALL_TIME, out)
+
+    def test_the_cpu_warning_uses_the_same_figure(self):
+        lines = []
+        log = type("Cap", (), {"say": lambda self, msg="": lines.append(msg)})()
+        horus_install.warn_cpu_expectations(log)
+        joined = " ".join(lines)
+        self.assertIn(horus_install.FIRST_INSTALL_TIME, joined)
+        self.assertNotIn("an hour", joined)
+
+    def test_every_document_gives_the_same_figure(self):
+        for relative in self.DOCUMENTS:
+            with self.subTest(document=relative):
+                text = (REPO_ROOT / relative).read_text(encoding="utf-8")
+                self.assertIn(horus_install.FIRST_INSTALL_TIME, text)
+                for stale in self.STALE:
+                    self.assertNotIn(stale, text)
 
 
 class ReclaimBuildCache(unittest.TestCase):

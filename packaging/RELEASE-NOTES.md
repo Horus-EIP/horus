@@ -9,7 +9,7 @@ leaves it.
 | **Python 3.11+** | only used to run the installer |
 | **NVIDIA GPU** | strongly recommended — see Known limitations |
 | **Free disk** | 150 GB while installing (125 GB with an NVIDIA GPU), settling to 130 GB / 110 GB |
-| **Time** | 30–60 minutes for the first install |
+| **Time** | 1.5 to 2 hours for the first install |
 
 ## Install
 

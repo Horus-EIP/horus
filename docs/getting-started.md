@@ -8,14 +8,14 @@ This chapter covers everything you need to go from a fresh clone to a running st
 
 This guide helps you set up a local environment for the Horus multi-agent system.
 
-### Quick setup (under 30 minutes)
+### Quick setup
 
 **Typical timing**
 
 - Prerequisites: 2–5 minutes  
 - Clone repository: 1–2 minutes  
 - Environment file: 2–3 minutes  
-- First Docker build: 10–15 minutes  
+- First install (image downloads, build, model download): 1.5 to 2 hours  
 - Verification: 2–3 minutes  
 
 ---
@@ -94,7 +94,7 @@ cd src/infra
 docker compose up --build
 ```
 
-First run builds images and can take several minutes. The stack includes PostgreSQL, Redis, RabbitMQ, MAS, Agent, Knowledge Store, Web Client, PgAdmin, RedisInsight, and the observability backends Prometheus, Loki, and Tempo (all internal). Logs, metrics, and traces are viewed from the admin-only observability pages in the web client (`/admin/logs`, `/admin/metrics`, `/admin/traces`). See **`src/infra/docker-compose.yml`** for the authoritative list.
+The first run downloads and builds the images, then the language models download on first start: expect 1.5 to 2 hours in all. The stack includes PostgreSQL, Redis, RabbitMQ, MAS, Agent, Knowledge Store, Web Client, PgAdmin, RedisInsight, and the observability backends Prometheus, Loki, and Tempo (all internal). Logs, metrics, and traces are viewed from the admin-only observability pages in the web client (`/admin/logs`, `/admin/metrics`, `/admin/traces`). See **`src/infra/docker-compose.yml`** for the authoritative list.
 
 #### Step 4: Verify containers
 

@@ -86,7 +86,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-First build takes 10-15 minutes. Subsequent starts are much faster.
+A first install takes 1.5 to 2 hours: the images download and build, then the language models download on first start. Subsequent starts are much faster.
 
 ## Service Ports
 
