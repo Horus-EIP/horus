@@ -730,6 +730,32 @@ class TestStreamingNormalization:
         assert agent._last_gen_tokens == 5
 
 
+class TestSpiralEarlyStop:
+    PROMPT_LEN = 10
+
+    def _stops(self, decoded: str, generated: int = dma._EARLY_STOP_MIN_TOKENS) -> bool:
+        tokenizer = MagicMock()
+        tokenizer.decode.return_value = decoded
+        input_ids = MagicMock()
+        input_ids.shape = (1, self.PROMPT_LEN + generated)
+        return dma._generated_tail_spirals(tokenizer, input_ids, self.PROMPT_LEN)
+
+    def test_waits_for_enough_generated_tokens(self):
+        assert not self._stops("wait, actually, " * 20, generated=dma._EARLY_STOP_MIN_TOKENS - 1)
+
+    def test_stops_on_a_spiral_written_with_full_width_punctuation(self):
+        assert self._stops("revenue " * 30 + "wait， actually， " * 5)
+
+    def test_stops_on_a_spiral_written_in_full_width_letters(self):
+        assert self._stops("revenue " * 30 + "ｗａｉｔ， ａｃｔｕａｌｌｙ， " * 5)
+
+    def test_stops_on_an_ascii_spiral(self):
+        assert self._stops("revenue " * 30 + "wait, actually, " * 5)
+
+    def test_keeps_generating_a_clean_full_width_answer(self):
+        assert not self._stops("Ｑ４ ２０２５ revenue was $4。2M. " * 20)
+
+
 # ===========================================================================
 # decision_making_agent: decide()
 # ===========================================================================

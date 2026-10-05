@@ -232,6 +232,18 @@ def _fit_vllm_prompt(system_content: str, user_content: str) -> tuple[str, int]:
     return user_content, max_tokens
 
 
+def _generated_tail_spirals(tokenizer: Any, input_ids: Any, prompt_len: int) -> bool:
+    gen_len = int(input_ids.shape[1]) - prompt_len
+    if gen_len < _EARLY_STOP_MIN_TOKENS or gen_len % _EARLY_STOP_INTERVAL != 0:
+        return False
+    text = tokenizer.decode(
+        input_ids[0, prompt_len:],
+        skip_special_tokens=True,
+        clean_up_tokenization_spaces=False,
+    )
+    return _is_degenerate_output(_normalize_model_text(text))
+
+
 if _TRANSFORMERS_AVAILABLE and StoppingCriteria is not None:
 
     class _SpiralStoppingCriteria(StoppingCriteria):  # type: ignore[misc]
@@ -252,16 +264,7 @@ if _TRANSFORMERS_AVAILABLE and StoppingCriteria is not None:
             self.triggered = False
 
         def __call__(self, input_ids: Any, scores: Any = None, **kwargs: Any) -> bool:
-            gen_len = int(input_ids.shape[1]) - self._prompt_len
-            if gen_len < _EARLY_STOP_MIN_TOKENS or gen_len % _EARLY_STOP_INTERVAL != 0:
-                return False
-            gen_ids = input_ids[0, self._prompt_len :]
-            text = self._tok.decode(
-                gen_ids,
-                skip_special_tokens=True,
-                clean_up_tokenization_spaces=False,
-            )
-            if _is_degenerate_output(text):
+            if _generated_tail_spirals(self._tok, input_ids, self._prompt_len):
                 self.triggered = True
                 return True
             return False
