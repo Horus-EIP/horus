@@ -133,6 +133,27 @@ class TestFoldEvents:
         observation = fold_events([(2.0, {"type": "agent", "content": "Hello!"})])
         assert observation.done and observation.answer == "Hello!"
 
+    def test_heartbeats_and_status_frames_do_not_count_as_task_events(self):
+        observation = fold_events(
+            [
+                (0.1, {"type": "task_status", "status": "queued", "seq": 1}),
+                (5.0, {"type": "heartbeat", "elapsed_s": 5.0, "seq": 2}),
+                (6.0, step("retrieval.start")),
+            ]
+        )
+        assert observation.events == 1
+        assert observation.first_event_s == 6.0
+
+    def test_the_route_of_the_final_answer_is_kept(self):
+        observation = fold_events(
+            [(1.0, {"type": "agent", "content": "4", "event": "result", "route": "direct_answer"})]
+        )
+        assert observation.route == "direct_answer"
+
+    def test_an_answer_without_a_route_leaves_it_unknown(self):
+        observation = fold_events([(1.0, answer("Revenue grew 12%."))])
+        assert observation.route is None
+
     def test_stream_without_an_answer_is_not_done(self):
         observation = fold_events([(1.0, step("retrieval.start")), (2.0, {"type": "pong"})])
         assert not observation.done

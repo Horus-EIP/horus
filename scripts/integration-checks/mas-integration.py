@@ -112,7 +112,7 @@ async def test_agent_registration_and_task_flow(authenticated_client):
         "skills_required": ["math", "translation"],
     }
     resp = await client.post("/tasks/new_task/", json=task_payload)
-    assert resp.status_code == 200
+    assert resp.status_code == 202
     initial_task_id = resp.json()["task_id"]
 
     # 4. Submit Task Result (Agent 1)

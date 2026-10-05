@@ -160,34 +160,15 @@ export default function NewTaskPage() {
         inline_files: attachments.inline,
       });
 
-      // Always leave the create-task form once the user dispatches. The
-      // destination depends on how the orchestrator handled the demand:
-      //   - dispatched to an agent → /tasks/[id] detail page (live status)
-      //   - direct answer / decomposition failed → /tasks list with a toast
-      //   - HTTP error → /tasks list with an error toast
-      if (!result.ok) {
+      const taskId = result.ok ? result.data?.task_id : undefined;
+      if (!taskId) {
         notifyError(result.error || 'Failed to dispatch task');
         router.push('/tasks');
         return;
       }
 
-      const taskId = result.data?.task_id;
-      const message = result.data?.message;
-      const directResult = result.data?.result;
-
-      if (taskId) {
-        notifySuccess('Task dispatched.');
-        router.push(`/tasks/${taskId}`);
-      } else if (directResult) {
-        // Orchestrator answered without dispatching to an agent.
-        notifySuccess(message || 'Orchestrator answered directly.');
-        router.push('/tasks');
-      } else {
-        // Decomposition gave up or no agent matched. Surface the backend's
-        // own message so the user knows what happened.
-        notifyError(message || 'No agent was assigned to this task.');
-        router.push('/tasks');
-      }
+      notifySuccess('Task queued. Routing runs in the background.');
+      router.push(`/tasks/${taskId}`);
     } finally {
       setSubmitting(false);
     }

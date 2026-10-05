@@ -51,6 +51,7 @@ NEGATIVE_RE = re.compile(r"\blima\b", re.IGNORECASE)
 
 MANAGER_NAMES = {"manager"}
 PLANNING_SKILLS = {"planning", "orchestration"}
+TASK_ACCEPTED_STATUSES = (200, 202)
 
 def _sanitise_filename(name: str) -> str:
     return name.replace("\r", "").replace("\n", "").replace('"', "%22")
@@ -866,6 +867,12 @@ def _is_answer_frame(event: dict) -> bool:
         return False
     return bool((event.get("content") or "").strip())
 
+def _failed_task_note(event: dict) -> str | None:
+    if event.get("event") != "error":
+        return None
+    reason = (event.get("content") or event.get("detail") or "").strip()
+    return f"the task ended without an answer: {reason}" if reason else "the task ended without an answer"
+
 def _poll_task(mas: str, token: str, task_id, timeout: float) -> str:
     try:
         resp = _auth_get(f"{mas}/tasks/{urllib.parse.quote(str(task_id))}", token, timeout)
@@ -914,7 +921,7 @@ def ask(
             )
         except Unreachable as exc:
             return "", f"the API stopped answering while submitting the task: {exc}"
-        if resp.status != 200:
+        if resp.status not in TASK_ACCEPTED_STATUSES:
             return "", f"the task was rejected: HTTP {resp.status} {resp.text(200)}"
 
         body = resp.json() or {}
@@ -960,6 +967,9 @@ def ask(
                     "ws frame: type=%s agent=%s skill=%s"
                     % (event.get("type"), event.get("agent_name"), event.get("skill_used"))
                 )
+                failure = _failed_task_note(event)
+                if failure:
+                    return "", failure
                 if _is_answer_frame(event):
                     return event["content"].strip(), "answered over the chat socket"
                 continue

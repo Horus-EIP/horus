@@ -145,6 +145,47 @@ class TestAsk:
         assert outcome["observed_route"] == ROUTE_NONE
         assert outcome["answer"].startswith("No agents")
 
+    def test_queued_task_answer_arrives_over_the_websocket(self, runner, mas):
+        mas["new_task"] = {"_status": 202, "task_id": "t-1", "status": "queued", "conversation_id": 7}
+        events = [
+            {"type": "task_status", "status": "queued", "task_id": "t-1", "seq": 1, "event": "progress"},
+            {"type": "heartbeat", "elapsed_s": 5.0, "task_id": "t-1", "seq": 2, "event": "heartbeat"},
+            *AGENT_EVENTS[:-1],
+            {**AGENT_EVENTS[-1], "event": "result", "route": "agent"},
+        ]
+        client = make_client(runner, FakeSocket(events), [])
+        outcome = asyncio.run(client.ask("What is the hotel limit per night in the US?", "eval-x"))
+        assert outcome["status"] == "ok"
+        assert outcome["task_id"] == "t-1"
+        assert outcome["observed_route"] == ROUTE_AGENT
+        assert outcome["answer"] == "$250 per night."
+        assert outcome["timing_source"] == "websocket"
+
+    def test_direct_answer_of_a_queued_task_comes_over_the_websocket(self, runner, mas):
+        mas["new_task"] = {"_status": 202, "task_id": "t-1", "status": "queued", "conversation_id": 7}
+        events = [{"type": "agent", "content": "4", "event": "result", "route": "direct_answer"}]
+        client = make_client(runner, FakeSocket(events), [])
+        outcome = asyncio.run(client.ask("What is 2 + 2?", "eval-x"))
+        assert outcome["status"] == "ok"
+        assert outcome["observed_route"] == ROUTE_DIRECT
+        assert outcome["answer"] == "4"
+
+    def test_unroutable_queued_task_is_recorded_as_no_route(self, runner, mas):
+        mas["new_task"] = {"_status": 202, "task_id": "t-1", "status": "queued", "conversation_id": 7}
+        events = [
+            {
+                "type": "agent",
+                "content": "No agents are currently registered with the orchestrator.",
+                "event": "error",
+                "status": "failed",
+                "route": "none",
+            }
+        ]
+        client = make_client(runner, FakeSocket(events), [])
+        outcome = asyncio.run(client.ask("What is FinCorp's CEO?", "eval-x"))
+        assert outcome["observed_route"] == ROUTE_NONE
+        assert outcome["answer"].startswith("No agents")
+
     def test_dropped_websocket_falls_back_to_polling_the_task(self, runner, mas):
         mas["task"] = {"status": "completed", "result": "$250 per night."}
         client = make_client(runner, FakeSocket(TITLED_AGENT_EVENTS[:2]), [])

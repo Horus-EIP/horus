@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import type { Message } from "@/components/message-list";
 import type { TaskDetails } from "@/lib/chat/api";
 import {
+  CANCELLED_TASK_TEXT,
+  FAILED_TASK_TEXT,
   appendAgentAnswer,
   finishedTaskAnswer,
   isFinishedTask,
@@ -69,6 +71,38 @@ describe("appendAgentAnswer", () => {
     expect(delivered).toBe(resynced);
   });
 
+  it("does not repeat a stored message that the history already shows", () => {
+    const fromHistory: Message = {
+      id: "h-2",
+      text: "Here's the plan: Finance-Analyst first.",
+      sender: "agent",
+      timestamp: new Date("2026-10-05T09:31:00Z"),
+      messageId: 12,
+    };
+    const later = appendAgentAnswer([question, fromHistory], answer);
+
+    const replayed = appendAgentAnswer(later, {
+      ...answer,
+      content: "Here's the plan: Finance-Analyst first.",
+      messageId: 12,
+    });
+
+    expect(replayed).toBe(later);
+  });
+
+  it("keeps the stored message id on the appended answer", () => {
+    const messages = appendAgentAnswer([question], { ...answer, messageId: 31 });
+
+    expect(messages[1].messageId).toBe(31);
+  });
+
+  it("gives every appended answer its own id", () => {
+    const first = appendAgentAnswer([question], { ...answer, content: "one" });
+    const second = appendAgentAnswer(first, { ...answer, content: "two" });
+
+    expect(second[1].id).not.toBe(second[2].id);
+  });
+
   it("ignores an empty answer", () => {
     const messages = [question];
 
@@ -110,8 +144,16 @@ describe("finishedTaskAnswer", () => {
     });
   });
 
-  it("has no answer text for a failed or cancelled task", () => {
-    expect(finishedTaskAnswer(task({ status: "failed", result: "Traceback" })).content).toBe("");
-    expect(finishedTaskAnswer(task({ status: "cancelled" })).content).toBe("");
+  it("explains why a failed or cancelled task has no answer", () => {
+    expect(finishedTaskAnswer(task({ status: "failed", result: "Traceback" })).content).toBe(
+      FAILED_TASK_TEXT
+    );
+    expect(finishedTaskAnswer(task({ status: "cancelled" })).content).toBe(CANCELLED_TASK_TEXT);
+  });
+
+  it("shows the timeout notice stored on a timed-out task", () => {
+    const notice = "This request exceeded the maximum processing time (1800s) and was stopped.";
+
+    expect(finishedTaskAnswer(task({ status: "cancelled", result: notice })).content).toBe(notice);
   });
 });

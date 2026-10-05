@@ -111,7 +111,7 @@ export default function DashboardPage() {
   const updateMetrics = useCallback(() => {
     const activeAgentsCount = agents.filter(a => a.status === 'Online').length;
     const runningTasksCount = taskStats?.running || 0;
-    const pendingTasksCount = taskStats?.pending || 0;
+    const pendingTasksCount = (taskStats?.pending || 0) + (taskStats?.queued || 0);
 
     setMetrics(prev => {
       const newMetric: SystemMetric = {
@@ -384,7 +384,7 @@ export default function DashboardPage() {
           />
           <Card
             title="Pending Tasks"
-            number={taskStats?.pending || 0}
+            number={(taskStats?.pending || 0) + (taskStats?.queued || 0)}
           />
           <Card
             title="Completed Tasks"

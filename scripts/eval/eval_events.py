@@ -5,6 +5,7 @@ from typing import Any
 
 MANAGER_SKILLS = frozenset({"planning", "review", "orchestration"})
 ANSWER_EVENT_TYPES = frozenset({"task_complete", "agent"})
+LIVENESS_EVENT_TYPES = frozenset({"heartbeat", "task_status"})
 
 
 @dataclass
@@ -23,6 +24,7 @@ class Observation:
     cited_sources: list[str] | None = None
     models: list[str] = field(default_factory=list)
     devices: list[str] = field(default_factory=list)
+    route: str | None = None
     done: bool = False
 
     @property
@@ -62,6 +64,8 @@ def _record_retrieval(observation: Observation, metadata: dict[str, Any]) -> Non
 
 
 def apply_event(observation: Observation, event: dict[str, Any], offset_s: float) -> Observation:
+    if event.get("type") in LIVENESS_EVENT_TYPES:
+        return observation
     observation.events += 1
     if observation.first_event_s is None:
         observation.first_event_s = offset_s
@@ -85,6 +89,7 @@ def apply_event(observation: Observation, event: dict[str, Any], offset_s: float
         observation.answer = event.get("content") or ""
         observation.answered_by = event.get("agent_name")
         observation.total_s = offset_s
+        observation.route = event.get("route") if isinstance(event.get("route"), str) else None
         observation.done = True
         if isinstance(event.get("sources"), list):
             observation.cited_sources = _source_titles(event["sources"])

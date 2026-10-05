@@ -467,7 +467,7 @@ class PipelineBench:
                     )
                     m.submit_http_ms = round((time.perf_counter() - ht0) * 1000, 2)
 
-                if r.status_code != 200:
+                if r.status_code not in (200, 202):
                     m.error = f"new_task HTTP {r.status_code}: {r.text[:200]}"
                     return m
                 body = r.json()

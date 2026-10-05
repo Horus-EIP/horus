@@ -472,7 +472,7 @@ async def test_f9_send_message(runner: TestRunner) -> TestResult:
                 end_time = time.time()
                 latency = end_time - start_time
 
-                if response.status_code == 200:
+                if response.status_code == 202:
                     resp_json = response.json()
                     passed += 1
                     if "task_id" in resp_json:
@@ -533,7 +533,7 @@ async def test_f10_ai_response(runner: TestRunner) -> TestResult:
                         "skills_required": ["nlp", "knowledge"],
                     },
                 )
-                if response.status_code == 200:
+                if response.status_code == 202:
                     passed += 1
                 else:
                     if failed == 0:  # Print first error only
@@ -782,7 +782,7 @@ async def test_f19_create_task(runner: TestRunner) -> TestResult:
                     },
                 )
                 print(f"    [Debug] Received response: {response.status_code}")
-                if response.status_code == 200:
+                if response.status_code == 202:
                     passed += 1
                 else:
                     if failed == 0:  # Print first error only

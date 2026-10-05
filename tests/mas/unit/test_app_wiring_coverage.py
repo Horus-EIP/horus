@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -81,6 +81,11 @@ def patched_lifespan_side_effects():
         patch.object(app_module, "init_db") as init_db,
         patch.object(app_module, "check_agent_heartbeat", new=_noop_coro),
         patch.object(app_module, "check_task_timeout", new=_noop_coro),
+        patch.object(app_module, "run_task_heartbeats") as task_heartbeats,
+        patch.object(
+            app_module, "fail_interrupted_routing", new_callable=AsyncMock
+        ) as fail_interrupted_routing,
+        patch.object(app_module, "task_jobs", new_callable=AsyncMock) as task_jobs,
         patch.object(app_module, "rabbitmq_instance") as rabbitmq_instance,
         patch.object(app_module, "start_llm_preload_background_thread") as llm_preload,
         patch.object(
@@ -94,6 +99,9 @@ def patched_lifespan_side_effects():
             "llm_preload": llm_preload,
             "emb_preload": emb_preload,
             "engine": engine,
+            "task_heartbeats": task_heartbeats,
+            "fail_interrupted_routing": fail_interrupted_routing,
+            "task_jobs": task_jobs,
         }
 
 
@@ -200,8 +208,11 @@ class TestLifespan:
             mocks["rabbitmq_instance"].connect.assert_called_once()
             mocks["llm_preload"].assert_called_once()
             mocks["emb_preload"].assert_called_once()
+            mocks["fail_interrupted_routing"].assert_awaited_once()
+            mocks["task_heartbeats"].assert_called_once_with()
 
         # shutdown hooks fire when the context manager exits.
+        mocks["task_jobs"].shutdown.assert_awaited_once()
         mocks["rabbitmq_instance"].close.assert_called_once()
         mocks["engine"].dispose.assert_called_once()
 

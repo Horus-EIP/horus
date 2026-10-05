@@ -9,7 +9,8 @@ import json
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -17,20 +18,28 @@ from starlette.concurrency import run_in_threadpool
 
 from agents.registry_tool_functions import create_agent
 from auth.auth_tool_functions import PermissionChecker, verify_agent_api_key
-from auth.permissions import Permission
-from chat.chat_tool_functions import send_messages_via_websockets, send_task_step_via_websockets
+from auth.permissions import Permission, Role
 from conversations.conversation_tool_functions import add_messages
 from core.logger import get_logger, log_agent_operation
 from core.memory_usage import peak_rss_mb
 from core.metrics import TASK_ERRORS, TASK_QUEUE_DEPTH, observe_task_processing_time
 from core.rabbitmq_tool import rabbitmq_instance
 from core.skill_cache import rank_skills
+from core.task_events import (
+    TaskEventType,
+    TaskStage,
+    publish_agent_message,
+    publish_task_status,
+    publish_task_step,
+    read_task_events,
+)
 from core.work_queues import agent_may_submit_task_result, resolve_work_queue_for_agent_id
-from db.database import get_db
-from db.models import Agents, Task, TaskResult
+from db.database import SessionLocal, get_db
+from db.models import Agents, Conversations, Task, TaskResult
 from db.models.agent_types import AgentTypes
 from schemas.schemas import TaskForm, TaskResultForm, TaskStepForm
 from tasks.decomposition import get_manager_agent, manager_announce_plan, manager_review_step
+from tasks.idempotency import IDEMPOTENCY_KEY_MAX_LENGTH, claim_task_id, release_task_id
 from tasks.openapi_docs import (
     CANCEL_TASK_RESPONSES,
     CREATE_TASK_OPENAPI_EXTRA,
@@ -39,11 +48,13 @@ from tasks.openapi_docs import (
     SHARE_RESULT_OPENAPI_EXTRA,
     SHARE_RESULT_RESPONSES,
 )
-from tasks.status import TaskStatus
+from tasks.status import IN_PROGRESS_STATUSES, TaskStatus, is_final_status
+from tasks.task_jobs import task_jobs
 from tasks.task_tool_functions import (
     aggregate_results,
     decompose_task,
     insert_new_task,
+    insert_queued_task,
     interrupt_task,
     select_agent_by_mode,
     select_agent_for_task,
@@ -53,6 +64,14 @@ from tasks.task_tool_functions import (
 logger = get_logger("task_routes")
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
+
+QUEUED_TASK_AGENT_ID = "unassigned"
+ROUTE_DIRECT_ANSWER = "direct_answer"
+ROUTE_AGENT = "agent"
+ROUTE_NONE = "none"
+TASK_EVENTS_PAGE_DEFAULT = 1000
+TASK_EVENTS_PAGE_MAX = 10_000
+CANCELLED_TASK_TEXT = "This request was cancelled before it finished."
 
 
 def _next_specialist_name(skills: list[str], db: Session) -> str:
@@ -92,6 +111,8 @@ async def _broadcast_manager_message(
     text: str,
     db: Session,
     skill_used: str = "orchestration",
+    *,
+    task_id: str,
 ) -> None:
     """Persist + broadcast a chat message attributed to the Manager agent.
 
@@ -108,7 +129,7 @@ async def _broadcast_manager_message(
     # Persist attribution so a chat reload still renders this row with the
     # Manager's violet bubble + chip; otherwise loaded history is stripped of
     # everything but role+content and styling regresses to plain agent.
-    add_messages(
+    message = add_messages(
         "assistant",
         text,
         int(conversation_id),
@@ -117,12 +138,15 @@ async def _broadcast_manager_message(
         agent_name=_agent_name,
         skill_used=skill_used,
     )
-    await send_messages_via_websockets(
-        str(conversation_id),
+    await publish_agent_message(
+        task_id,
+        conversation_id,
         text,
+        stage=TaskStage.ROUTING,
         agent_id=_agent_id,
         agent_name=_agent_name,
         skill_used=skill_used,
+        message_id=_message_id(message),
     )
 
 
@@ -222,71 +246,24 @@ def _build_chain_transcript(current_task: "Task", db: Session) -> tuple[str, str
     return "\n".join(lines), original_demand
 
 
-def _create_chain_root(
-    user_demand: str,
-    conversation_id: int | None,
-    db: Session,
-    skills_required: list[str] | None = None,
-) -> "Task":
-    """Create the Manager-owned root task that holds a multi-agent chain.
-
-    The root carries the user's original demand verbatim in ``query``, is
-    attributed to the Manager agent (so the UI surfaces who orchestrated the
-    work), and starts in ``RUNNING`` until the last sibling subtask completes
-    and the aggregated result is written back into it. All chained subtasks
-    of this user demand share ``parent_task_id == root.id``.
-
-    Returns ``None`` if the Manager agent is missing from the directory —
-    callers should treat that as "skip the tree refactor, fall back to a
-    linked-list chain for this dispatch" rather than crashing.
-    """
-    from db.models import Agents as _Agents
-
-    manager = (
-        db.query(_Agents).filter(_Agents.name == "Manager").first()
-    )
-    if manager is None:
+def _promote_to_chain_root(root: "Task", db: Session) -> None:
+    manager = get_manager_agent(db)
+    if manager is not None:
+        root.agent_id = manager.id
+    else:
         logger.warning(
-            "_create_chain_root: Manager agent not found in directory; "
-            "skipping root creation. Run migration b5d2e1f3a9c7 and restart MAS "
+            "Manager agent not found in directory; the chain root keeps its "
+            "placeholder owner. Run migration b5d2e1f3a9c7 and restart MAS "
             "so the seed inserts the Manager row."
         )
-        return None
-    manager_id = manager.id
-
-    # Defensive: log the exact demand we're about to write so it's easy to
-    # diff against `task.demand` in the API request when something looks off.
-    preview = (user_demand or "")[:120]
+    root.status = TaskStatus.RUNNING.value
+    root.order = 0
+    db.commit()
     logger.info(
-        "Creating chain root: agent_id=%s conv=%s demand_preview=%r",
-        manager_id,
-        conversation_id,
-        preview,
+        "Chain root ready: id=%s query=%r",
+        root.id,
+        (root.query or "")[:120],
     )
-
-    # Build a one-line "user role" history entry so downstream paths that
-    # read history (e.g. ``aggregate_results``) see the original demand.
-    history = [{"role": "user", "message": user_demand}]
-    root_id = insert_new_task(
-        conversation_id,
-        manager_id,
-        user_demand,
-        history,
-        [],  # planner output lives on subtasks, not root
-        db,
-        skills_required=skills_required,
-    )
-    root = db.query(Task).filter(Task.id == root_id).first()
-    if root is not None:
-        root.status = TaskStatus.RUNNING.value
-        root.order = 0
-        db.commit()
-        logger.info(
-            "Chain root created: id=%s query=%r",
-            root.id,
-            (root.query or "")[:120],
-        )
-    return root
 
 
 # RabbitMQ messages are kept small; reject huge inline payloads at the API
@@ -363,6 +340,7 @@ def get_task_queue_stats(db: Session) -> dict[str, Any]:
         .all()
     )
     counts = {
+        "queued": 0,
         "pending": 0,
         "running": 0,
         "completed": 0,
@@ -372,6 +350,7 @@ def get_task_queue_stats(db: Session) -> dict[str, Any]:
     for status, n in rows:
         sv = status.value if isinstance(status, TaskStatus) else str(status)
         key = {
+            TaskStatus.QUEUED.value: "queued",
             TaskStatus.PENDING.value: "pending",
             TaskStatus.RUNNING.value: "running",
             TaskStatus.COMPLETED.value: "completed",
@@ -414,7 +393,7 @@ def list_tasks(db: Session = Depends(get_db)):
     "/stats/queue",
     summary="Get task queue statistics",
     description=(
-        "Retrieve task counts by status (pending, running, completed, failed, "
+        "Retrieve task counts by status (queued, pending, running, completed, failed, "
         "cancelled) and their total. Counts top-level tasks only, like "
         "``/tasks/list``: subtasks of a chain are excluded. Requires "
         "VIEW_ANALYTICS permission."
@@ -454,7 +433,7 @@ def _isoformat_or_none(moment) -> str | None:
     summary="List in-flight root tasks for a conversation",
     description=(
         "Returns root-level tasks in this conversation whose status is not "
-        "yet terminal (RUNNING or PENDING). The chat page calls this on "
+        "yet terminal (QUEUED, PENDING or RUNNING). The chat page calls this on "
         "mount so a user who navigates away and back still sees the "
         "in-progress spinner + working-agents bar instead of a stale chat "
         "that looks finished. Subtasks (rows with parent_task_id) are "
@@ -471,7 +450,7 @@ def list_running_tasks_for_conversation(
         .filter(
             Task.conversation_id == conversation_id,
             Task.parent_task_id.is_(None),
-            Task.status.in_([TaskStatus.RUNNING.value, TaskStatus.PENDING.value]),
+            Task.status.in_(sorted(IN_PROGRESS_STATUSES)),
         )
         .order_by(Task.created_at.desc())
         .all()
@@ -589,12 +568,47 @@ def suggest_skills_for_demand(
     return {"suggestions": suggestions}
 
 
-@router.post("/new_task", include_in_schema=False)
+def _accepted(
+    task_id: str,
+    status: str,
+    conversation_id: int | None,
+    *,
+    replayed: bool = False,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=202,
+        content={
+            "task_id": task_id,
+            "status": status,
+            "conversation_id": conversation_id,
+        },
+        headers={"Idempotent-Replayed": "true"} if replayed else None,
+    )
+
+
+def _queued_task_agent_id(db: Session) -> str:
+    manager = get_manager_agent(db)
+    return manager.id if manager is not None else QUEUED_TASK_AGENT_ID
+
+
+def _message_id(message: Any) -> int | None:
+    return message.get("id") if isinstance(message, dict) else None
+
+
+@router.post("/new_task", include_in_schema=False, status_code=202)
 @router.post(
     "/new_task/",
-    summary="Create and dispatch a new task",
-    description="Attribute a task to the best agent based on the skills required. Publishes the request to the RabbitMQ queue and returns confirmation with task and conversation IDs. Requires TASK_CREATE permission.",
-    status_code=200,
+    summary="Queue a new task",
+    description=(
+        "Stores the task with status ``queued`` and returns ``202 {task_id}`` "
+        "at once. Routing, planning and dispatch to the agents run in a "
+        "background job; follow them on the conversation WebSocket or with "
+        "``GET /tasks/{task_id}/events``. An ``Idempotency-Key`` header makes "
+        "retries safe: the same key from the same user returns the same "
+        "task_id for 24 h and never creates a second task. Requires "
+        "TASK_CREATE permission."
+    ),
+    status_code=202,
     tags=["Tasks"],
     dependencies=[Depends(PermissionChecker(Permission.TASK_CREATE))],
     responses=CREATE_TASK_RESPONSES,
@@ -604,26 +618,112 @@ async def create_new_task(
     task: TaskForm,
     user: Annotated[dict, Depends(PermissionChecker(Permission.TASK_CREATE))],
     db: Session = Depends(get_db),
+    idempotency_key: Annotated[
+        str | None,
+        Header(
+            alias="Idempotency-Key",
+            min_length=1,
+            max_length=IDEMPOTENCY_KEY_MAX_LENGTH,
+        ),
+    ] = None,
 ):
-    """Create and dispatch a new task.
-
-    Selects an agent for ``task.demand``, either returns a direct answer or
-    creates a ``Task`` row and publishes to RabbitMQ.
-
-    Raises:
-        HTTPException: 401 if unauthenticated, 500 on DB/messaging failure.
-    """
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
 
+    files_payload = _build_files_payload(task)
+    task_id = str(uuid.uuid4())
+    if idempotency_key:
+        claimed_id = claim_task_id(user.get("id"), idempotency_key, task_id)
+        if claimed_id != task_id:
+            existing = db.query(Task).filter(Task.id == claimed_id).first()
+            logger.info("Replaying an idempotent new_task", task_id=claimed_id)
+            return _accepted(
+                claimed_id,
+                _task_status_value(existing.status)
+                if existing is not None
+                else TaskStatus.QUEUED.value,
+                existing.conversation_id if existing is not None else task.conversation_id,
+                replayed=True,
+            )
+
+    try:
+        insert_queued_task(
+            task_id,
+            task.conversation_id,
+            _queued_task_agent_id(db),
+            task.demand,
+            user.get("username"),
+            db,
+            skills_required=task.skills_required,
+        )
+    except Exception as exc:
+        if idempotency_key:
+            release_task_id(user.get("id"), idempotency_key, task_id)
+        logger.exception("Could not store the queued task")
+        raise HTTPException(status_code=500, detail="Failed to create task") from exc
+
+    if task.conversation_id is not None:
+        add_messages("user", task.demand, task.conversation_id, db)
+    await publish_task_status(
+        task_id, task.conversation_id, TaskStatus.QUEUED.value, stage=TaskStage.QUEUED
+    )
+    task_jobs.submit(task_id, run_routing_job(task_id, task, files_payload))
+    logger.info(
+        "Task queued for routing",
+        task_id=task_id,
+        conversation_id=task.conversation_id,
+        mode=task.mode or "auto",
+    )
+    return _accepted(task_id, TaskStatus.QUEUED.value, task.conversation_id)
+
+
+async def run_routing_job(
+    task_id: str, task: TaskForm, files_payload: list[dict]
+) -> dict:
+    db = SessionLocal()
+    try:
+        return await _route_queued_task(task_id, task, files_payload, db)
+    except Exception as exc:
+        logger.exception("Routing failed for task %s", task_id)
+        db.rollback()
+        detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        return await _fail_unrouted_task(
+            task_id,
+            task,
+            f"The orchestrator could not route this request: {detail}",
+            db,
+        )
+    finally:
+        db.close()
+
+
+async def _route_queued_task(
+    task_id: str, task: TaskForm, files_payload: list[dict], db: Session
+) -> dict:
+    queued = db.query(Task).filter(Task.id == task_id).first()
+    if queued is None or is_final_status(queued.status):
+        logger.info("Task %s was stopped before routing started", task_id)
+        return _stopped_outcome(task_id)
+
     logger.info(
         "Starting agent selection process for new task",
+        task_id=task_id,
         demand=task.demand[:50],
         conversation_id=task.conversation_id,
         mode=task.mode or "auto",
         explicit_agent_id=task.agent_id,
     )
+    await publish_task_status(
+        task_id, task.conversation_id, "routing", stage=TaskStage.ROUTING
+    )
+    if task.mode == "decompose":
+        return await _route_by_forced_decomposition(queued, task, files_payload, db)
+    return await _route_by_selection(queued, task, files_payload, db)
 
+
+async def _route_by_forced_decomposition(
+    queued: Task, task: TaskForm, files_payload: list[dict], db: Session
+) -> dict:
     # Force-decomposition mode: skip the single-agent router/skill/auto-create
     # path entirely and jump straight to the planner. Without this short-cut,
     # cross-domain demands almost always land on a single specialist (or get
@@ -631,117 +731,64 @@ async def create_new_task(
     # skill-match catches them before decomposition can fire. With ``mode=
     # "decompose"`` we let the planner break the demand into per-domain
     # subtasks and dispatch each to the matching agent.
-    if task.mode == "decompose":
-        logger.info("Force-decompose mode: jumping straight to planner")
-        first_action, actions_list = await run_in_threadpool(
-            decompose_task, task.demand, db
+    logger.info("Force-decompose mode: jumping straight to planner")
+    first_action, actions_list = await run_in_threadpool(
+        decompose_task, task.demand, db
+    )
+    if _routing_was_stopped(queued, db):
+        return _stopped_outcome(queued.id)
+    if not first_action:
+        # Surface the actual reason so the user can fix it (vs. blaming
+        # their prompt). The two real failure modes are: (a) zero
+        # non-Manager agents in the directory, and (b) the skill cache
+        # never warmed (embedder still loading on container boot).
+        non_manager = (
+            db.query(Agents)
+            .filter(Agents.name != "Manager")
+            .count()
         )
-        if not first_action:
-            # Surface the actual reason so the user can fix it (vs. blaming
-            # their prompt). The two real failure modes are: (a) zero
-            # non-Manager agents in the directory, and (b) the skill cache
-            # never warmed (embedder still loading on container boot).
-            non_manager = (
-                db.query(Agents)
-                .filter(Agents.name != "Manager")
-                .count()
+        if non_manager == 0:
+            fallback = (
+                "Decomposition produced no plan — there are no specialist "
+                "agents registered in the directory yet. Start the agent "
+                "worker container (or wait for it to register) and retry."
             )
-            if non_manager == 0:
-                fallback = (
-                    "Decomposition produced no plan — there are no specialist "
-                    "agents registered in the directory yet. Start the agent "
-                    "worker container (or wait for it to register) and retry."
-                )
-            elif non_manager < 2:
-                fallback = (
-                    "Decomposition produced no plan — only one non-Manager "
-                    "agent is registered, so there's nothing to decompose "
-                    "across. Bring more specialists online (the default seed "
-                    "registers five) or use auto mode for single-agent dispatch."
-                )
-            else:
-                fallback = (
-                    "Decomposition produced no plan — the planner LLM and the "
-                    "skill-embedding fallback both returned nothing. Try a "
-                    "more explicit multi-domain demand, or check MAS logs for "
-                    "planner JSON parse errors."
-                )
-            if task.conversation_id is not None:
-                add_messages("assistant", fallback, task.conversation_id, db)
-                await send_messages_via_websockets(
-                    str(task.conversation_id), fallback
-                )
-            return {"message": fallback}
+        elif non_manager < 2:
+            fallback = (
+                "Decomposition produced no plan — only one non-Manager "
+                "agent is registered, so there's nothing to decompose "
+                "across. Bring more specialists online (the default seed "
+                "registers five) or use auto mode for single-agent dispatch."
+            )
+        else:
+            fallback = (
+                "Decomposition produced no plan — the planner LLM and the "
+                "skill-embedding fallback both returned nothing. Try a "
+                "more explicit multi-domain demand, or check MAS logs for "
+                "planner JSON parse errors."
+            )
+        return await _fail_routing(queued, task, fallback, db)
 
-        agent_id, user_demand = first_action
+    agent_id, user_demand = first_action
+    return await _dispatch_chain(
+        queued,
+        task,
+        files_payload,
+        agent_id,
+        user_demand,
+        actions_list,
+        db,
+        message=(
+            f"Task '{task.demand}' decomposed into "
+            f"{len(actions_list) + 1} subtask(s); first dispatched to agent {agent_id}"
+        ),
+        announce_plan=True,
+    )
 
-        # Tree model: every subtask of this user demand is a child of one
-        # Manager-owned root task. ``/tasks/{root.id}`` is the canonical entry
-        # point users navigate to — they see the whole multi-agent
-        # collaboration in one place, not N separate Task rows in their list.
-        root = _create_chain_root(
-            task.demand, task.conversation_id, db, skills_required=task.skills_required
-        )
-        if root is None:
-            logger.warning(
-                "Force-decompose: Manager missing, falling back to linked-list chain"
-            )
-        history = [{"role": "user", "message": task.demand}]
-        task_id = insert_new_task(
-            task.conversation_id,
-            agent_id,
-            user_demand,
-            history,
-            actions_list,
-            db,
-            skills_required=task.skills_required,
-        )
-        subtask_row = db.query(Task).filter(Task.id == task_id).first()
-        if subtask_row is not None and root is not None:
-            subtask_row.parent_task_id = root.id
-            subtask_row.order = 1
-            db.commit()
-        files_payload = _build_files_payload(task)
-        decomp_payload = {
-            "conversation_id": task.conversation_id,
-            "task_id": task_id,
-            "demand": user_demand,
-            "skill_used": (
-                task.skills_required[0] if task.skills_required else None
-            ),
-            "files": files_payload,
-        }
-        _publish_task_to_work_queue(db, agent_id, decomp_payload)
-        TASK_QUEUE_DEPTH.inc()
-        log_agent_operation(
-            agent_id,
-            "TASK",
-            f"Force-decomposed task {task_id} under root {root.id if root else '?'}: {task.demand[:50]}...",
-        )
-        if task.conversation_id is not None:
-            add_messages("user", task.demand, task.conversation_id, db)
-            # Manager announces the plan to chat BEFORE the first specialist
-            # runs, so the user sees the orchestration. Synchronous: the LLM
-            # call is small (max 256 tokens on the router model) and the
-            # user is already waiting on the first specialist anyway.
-            full_plan = [(agent_id, user_demand)] + list(actions_list)
-            announcement = await run_in_threadpool(
-                manager_announce_plan, task.demand, full_plan, db
-            )
-            await _broadcast_manager_message(
-                task.conversation_id, announcement, db, skill_used="planning"
-            )
-        # Return the ROOT id — that's the page the user should land on. They
-        # see the whole chain (all subtasks) under one task, not just step 1.
-        return {
-            "message": (
-                f"Task '{task.demand}' decomposed into "
-                f"{len(actions_list) + 1} subtask(s); first dispatched to agent {agent_id}"
-            ),
-            "conversation_id": task.conversation_id,
-            "task_id": root.id if root else task_id,
-        }
 
+async def _route_by_selection(
+    queued: Task, task: TaskForm, files_payload: list[dict], db: Session
+) -> dict:
     # 1. Selection Phase
     # Try the explicit-mode dispatcher first; if it returns no agent (e.g. mode=auto
     # or unresolvable) fall through to the LLM router. This keeps the legacy chat
@@ -756,6 +803,8 @@ async def create_new_task(
         agent_id, user_demand, direct_response, future_actions = (
             await run_in_threadpool(select_agent_for_task, task.demand, db)
         )
+        if _routing_was_stopped(queued, db):
+            return _stopped_outcome(queued.id)
 
     # Skill-based fallback. The LLM router can fail (bad JSON, picked an
     # unknown agent name, classified as COMPLEX) even when there *is* an
@@ -879,111 +928,49 @@ async def create_new_task(
 
     # 2. Direct Answer Handling
     if direct_response:
-        if task.conversation_id is not None:
-            add_messages("user", task.demand, task.conversation_id, db)
-            add_messages("assistant", direct_response, task.conversation_id, db)
-            # Push to chat WebSocket clients (same as agent task-result path); otherwise UI stays "loading".
-            await send_messages_via_websockets(str(task.conversation_id), direct_response)
-        # We don't create a task, just return the answer
-        return {
-            "message": "Processing complete",
-            "conversation_id": task.conversation_id,
-            "result": direct_response,
-        }
+        return await _answer_directly(queued, task, direct_response, db)
+
+    credentials = _auto_created_credentials(
+        auto_created_api_key, auto_created_name, task
+    )
 
     # 3. Single Agent Assignment
     if agent_id:
         logger.info("Agent selected for task", agent_id=agent_id)
-
-        history = [{"role": "user", "message": task.demand}]
-
-        # Multi-step plan from the inline decomposer → spin up a Manager-owned
-        # root and parent every subtask under it. Single-agent dispatch keeps
-        # the legacy one-row shape (no root, the task IS the root).
-        root_task = None
+        message = f"Task '{task.demand}' assigned to agent {agent_id}"
         if future_actions:
-            root_task = _create_chain_root(
-                task.demand,
-                task.conversation_id,
+            return await _dispatch_chain(
+                queued,
+                task,
+                files_payload,
+                agent_id,
+                user_demand,
+                future_actions,
                 db,
-                skills_required=task.skills_required,
+                message=message,
+                announce_plan=True,
+                extra_payload=credentials,
             )
-
-        task_id = insert_new_task(
-            task.conversation_id,
+        return await _dispatch_single_agent(
+            queued,
+            task,
+            files_payload,
             agent_id,
             user_demand,
-            history,
-            future_actions,
             db,
-            skills_required=task.skills_required,
+            message=message,
+            extra_payload=credentials,
         )
-
-        if not task_id:
-            raise HTTPException(status_code=500, detail="Failed to create task")
-
-        if root_task is not None:
-            subtask_row = db.query(Task).filter(Task.id == task_id).first()
-            if subtask_row is not None:
-                subtask_row.parent_task_id = root_task.id
-                subtask_row.order = 1
-                db.commit()
-
-        files_payload = _build_files_payload(task)
-        dispatch_payload = {
-            "conversation_id": task.conversation_id,
-            "task_id": task_id,
-            "demand": user_demand,
-            "skill_used": (
-                task.skills_required[0] if task.skills_required else None
-            ),
-            "files": files_payload,
-        }
-        # Auto-created specialist: the worker doesn't know this identity yet,
-        # so we ship its credentials inside the task message. The worker reads
-        # them, adds the profile to its registry, and authenticates as the
-        # new agent for the result POST (and from then on for heartbeats).
-        if auto_created_api_key:
-            dispatch_payload["assigned_agent_api_key"] = auto_created_api_key
-            dispatch_payload["assigned_agent_name"] = auto_created_name
-            dispatch_payload["assigned_agent_skills"] = task.skills_required or []
-            dispatch_payload["assigned_agent_type"] = "general"
-        _publish_task_to_work_queue(db, agent_id, dispatch_payload)
-        TASK_QUEUE_DEPTH.inc()
-        log_agent_operation(
-            agent_id, "TASK", f"Assigned task {task_id}: {task.demand[:50]}..."
-        )
-
-        if task.conversation_id is not None:
-            add_messages("user", task.demand, task.conversation_id, db)
-            # When ``select_agent_for_task`` ran inline decomposition, it
-            # returned the first agent + the rest of the chain in
-            # ``future_actions``. Surface the Manager's plan to chat so the
-            # user sees the orchestration, not just the eventual final answer.
-            if future_actions:
-                full_plan = [(agent_id, user_demand)] + list(future_actions)
-                announcement = await run_in_threadpool(
-                    manager_announce_plan, task.demand, full_plan, db
-                )
-                await _broadcast_manager_message(
-                    task.conversation_id, announcement, db, skill_used="planning"
-                )
-        # Return the root id when a chain was set up (so the UI lands on the
-        # task tree page), otherwise return the single-agent task id verbatim.
-        return {
-            "message": f"Task '{task.demand}' assigned to agent {agent_id}",
-            "conversation_id": task.conversation_id,
-            "task_id": root_task.id if root_task is not None else task_id,
-        }
 
     # 4. Decomposition Fallback
     logger.info(
         "No single agent found or COMPLEX_TASK classified. Attempting decomposition."
     )
-
     first_action, actions_list = await run_in_threadpool(
         decompose_task, task.demand, db
     )
+    if _routing_was_stopped(queued, db):
+        return _stopped_outcome(queued.id)
 
     if not first_action:
         # Distinguish "absolutely zero agents in the directory" from "agents
@@ -1011,52 +998,314 @@ async def create_new_task(
                 "this. Try rephrasing the task, or pick a specific skill from "
                 "the dropdown so routing has more to go on."
             )
-        if task.conversation_id is not None:
-            add_messages("assistant", fallback, task.conversation_id, db)
-            await send_messages_via_websockets(str(task.conversation_id), fallback)
-        return {"message": fallback}
+        return await _fail_routing(queued, task, fallback, db)
 
     agent_id, user_demand = first_action
-
-    history = [{"role": "user", "message": task.demand}]
-
-    task_id = insert_new_task(
-        task.conversation_id,
+    message = f"Task '{task.demand}' decomposed and assigned to agent {agent_id}"
+    if actions_list:
+        return await _dispatch_chain(
+            queued,
+            task,
+            files_payload,
+            agent_id,
+            user_demand,
+            actions_list,
+            db,
+            message=message,
+            announce_plan=False,
+            extra_payload=credentials,
+        )
+    return await _dispatch_single_agent(
+        queued,
+        task,
+        files_payload,
         agent_id,
         user_demand,
+        db,
+        message=message,
+        extra_payload=credentials,
+    )
+
+
+def _routing_was_stopped(queued: Task, db: Session) -> bool:
+    db.refresh(queued)
+    return is_final_status(queued.status)
+
+
+def _stopped_outcome(task_id: str) -> dict:
+    return {"message": "Task was stopped before it was dispatched", "task_id": task_id}
+
+
+def _auto_created_credentials(
+    api_key: str | None, agent_name: str | None, task: TaskForm
+) -> dict | None:
+    if not api_key:
+        return None
+    # Auto-created specialist: the worker doesn't know this identity yet,
+    # so we ship its credentials inside the task message. The worker reads
+    # them, adds the profile to its registry, and authenticates as the
+    # new agent for the result POST (and from then on for heartbeats).
+    return {
+        "assigned_agent_api_key": api_key,
+        "assigned_agent_name": agent_name,
+        "assigned_agent_skills": task.skills_required or [],
+        "assigned_agent_type": "general",
+    }
+
+
+def _dispatch_payload(
+    task: TaskForm,
+    task_id: str,
+    demand: str,
+    files_payload: list[dict],
+    extra_payload: dict | None,
+) -> dict:
+    payload = {
+        "conversation_id": task.conversation_id,
+        "task_id": task_id,
+        "demand": demand,
+        "skill_used": task.skills_required[0] if task.skills_required else None,
+        "files": files_payload,
+    }
+    payload.update(extra_payload or {})
+    return payload
+
+
+def _finish_queued_task(
+    queued: Task, status: TaskStatus, text: str, db: Session
+) -> None:
+    queued.status = status.value
+    if queued.result is not None:
+        queued.result.result_data = text
+        if status == TaskStatus.COMPLETED:
+            queued.result.history = [
+                *(queued.result.history or []),
+                {"role": "assistant", "message": text},
+            ]
+    db.commit()
+
+
+async def _answer_directly(
+    queued: Task, task: TaskForm, direct_response: str, db: Session
+) -> dict:
+    message = None
+    if task.conversation_id is not None:
+        message = add_messages(
+            "assistant", direct_response, task.conversation_id, db
+        )
+    _finish_queued_task(queued, TaskStatus.COMPLETED, direct_response, db)
+    await publish_agent_message(
+        queued.id,
+        task.conversation_id,
+        direct_response,
+        event_type=TaskEventType.RESULT,
+        stage=TaskStage.ROUTING,
+        status=TaskStatus.COMPLETED.value,
+        route=ROUTE_DIRECT_ANSWER,
+        message_id=_message_id(message),
+    )
+    return {
+        "message": "Processing complete",
+        "conversation_id": task.conversation_id,
+        "task_id": queued.id,
+        "result": direct_response,
+    }
+
+
+async def _fail_routing(queued: Task, task: TaskForm, text: str, db: Session) -> dict:
+    message = None
+    if task.conversation_id is not None:
+        message = add_messages("assistant", text, task.conversation_id, db)
+    _finish_queued_task(queued, TaskStatus.FAILED, text, db)
+    await publish_agent_message(
+        queued.id,
+        task.conversation_id,
+        text,
+        event_type=TaskEventType.ERROR,
+        stage=TaskStage.ROUTING,
+        status=TaskStatus.FAILED.value,
+        route=ROUTE_NONE,
+        message_id=_message_id(message),
+    )
+    return {"message": text, "task_id": queued.id}
+
+
+async def _fail_unrouted_task(
+    task_id: str, task: TaskForm, text: str, db: Session
+) -> dict:
+    queued = db.query(Task).filter(Task.id == task_id).first()
+    if queued is None or is_final_status(queued.status):
+        return _stopped_outcome(task_id)
+    return await _fail_routing(queued, task, text, db)
+
+
+async def _announce_dispatch(
+    root: Task, task: TaskForm, agent_id: str, db: Session
+) -> None:
+    agent_row = db.query(Agents).filter(Agents.id == agent_id).first()
+    agent_name = agent_row.name if agent_row is not None else agent_id
+    await publish_task_status(
+        root.id,
+        task.conversation_id,
+        TaskStatus.RUNNING.value,
+        stage=TaskStage.RETRIEVAL,
+        detail=f"Assigned to {agent_name}",
+        agent_id=agent_id,
+        agent_name=agent_name,
+    )
+
+
+async def _dispatch_single_agent(
+    queued: Task,
+    task: TaskForm,
+    files_payload: list[dict],
+    agent_id: str,
+    user_demand: str | None,
+    db: Session,
+    *,
+    message: str,
+    extra_payload: dict | None = None,
+) -> dict:
+    demand = user_demand or task.demand
+    queued.agent_id = agent_id
+    queued.query = demand
+    queued.status = TaskStatus.RUNNING.value
+    db.commit()
+    await _announce_dispatch(queued, task, agent_id, db)
+    _publish_task_to_work_queue(
+        db,
+        agent_id,
+        _dispatch_payload(task, queued.id, demand, files_payload, extra_payload),
+    )
+    TASK_QUEUE_DEPTH.inc()
+    log_agent_operation(
+        agent_id, "TASK", f"Assigned task {queued.id}: {task.demand[:50]}..."
+    )
+    return {
+        "message": message,
+        "conversation_id": task.conversation_id,
+        "task_id": queued.id,
+    }
+
+
+async def _dispatch_chain(
+    queued: Task,
+    task: TaskForm,
+    files_payload: list[dict],
+    agent_id: str,
+    user_demand: str | None,
+    future_actions: list,
+    db: Session,
+    *,
+    message: str,
+    announce_plan: bool,
+    extra_payload: dict | None = None,
+) -> dict:
+    demand = user_demand or task.demand
+    _promote_to_chain_root(queued, db)
+    history = [{"role": "user", "message": task.demand}]
+    subtask_id = insert_new_task(
+        task.conversation_id,
+        agent_id,
+        demand,
         history,
-        actions_list,
+        list(future_actions),
         db,
         skills_required=task.skills_required,
     )
-    files_payload = _build_files_payload(task)
-    decomp_payload = {
-        "conversation_id": task.conversation_id,
-        "task_id": task_id,
-        "demand": user_demand,
-        "skill_used": (
-            task.skills_required[0] if task.skills_required else None
-        ),
-        "files": files_payload,
-    }
-    if auto_created_api_key:
-        decomp_payload["assigned_agent_api_key"] = auto_created_api_key
-        decomp_payload["assigned_agent_name"] = auto_created_name
-        decomp_payload["assigned_agent_skills"] = task.skills_required or []
-        decomp_payload["assigned_agent_type"] = "general"
-    _publish_task_to_work_queue(db, agent_id, decomp_payload)
+    if not subtask_id:
+        raise HTTPException(status_code=500, detail="Failed to create task")
+    subtask = db.query(Task).filter(Task.id == subtask_id).first()
+    subtask.parent_task_id = queued.id
+    subtask.order = 1
+    db.commit()
 
+    await _announce_dispatch(queued, task, agent_id, db)
+    _publish_task_to_work_queue(
+        db,
+        agent_id,
+        _dispatch_payload(task, subtask_id, demand, files_payload, extra_payload),
+    )
     TASK_QUEUE_DEPTH.inc()
     log_agent_operation(
-        agent_id, "TASK", f"Assigned task {task_id}: {task.demand[:50]}..."
+        agent_id,
+        "TASK",
+        f"Assigned task {subtask_id} under root {queued.id}: {task.demand[:50]}...",
     )
-
-    if task.conversation_id is not None:
-        add_messages("user", task.demand, task.conversation_id, db)
+    if announce_plan and task.conversation_id is not None:
+        full_plan = [(agent_id, demand)] + list(future_actions)
+        announcement = await run_in_threadpool(
+            manager_announce_plan, task.demand, full_plan, db
+        )
+        await _broadcast_manager_message(
+            task.conversation_id,
+            announcement,
+            db,
+            skill_used="planning",
+            task_id=queued.id,
+        )
     return {
-        "message": f"Task '{task.demand}' decomposed and assigned to agent {agent_id}",
+        "message": message,
         "conversation_id": task.conversation_id,
+        "task_id": queued.id,
+    }
+
+
+def _may_read_task_events(user: dict, task: Task, db: Session) -> bool:
+    if user.get("role") == Role.ADMIN.value:
+        return True
+    owner = task.owner_username
+    if owner is None and task.conversation_id is not None:
+        conversation = (
+            db.query(Conversations)
+            .filter(Conversations.id == task.conversation_id)
+            .first()
+        )
+        owner = conversation.owner_username if conversation is not None else None
+    return owner is not None and owner == user.get("username")
+
+
+@router.get(
+    "/{task_id}/events",
+    summary="Replay the stored events of a task",
+    description=(
+        "Returns the events stored for the task with ``seq`` greater than "
+        "``since``, oldest first. Every per-task WebSocket frame is stored "
+        "for 24 h, so a client that was disconnected can call this with the "
+        "last ``seq`` it saw and replay what it missed. Allowed only for the "
+        "task's owner or an admin."
+    ),
+    status_code=200,
+    dependencies=[Depends(PermissionChecker(Permission.TASK_READ))],
+)
+async def get_task_events(
+    task_id: str,
+    user: Annotated[dict, Depends(PermissionChecker(Permission.TASK_READ))],
+    since: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=TASK_EVENTS_PAGE_MAX)] = TASK_EVENTS_PAGE_DEFAULT,
+    db: Session = Depends(get_db),
+):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if not _may_read_task_events(user, task, db):
+        raise HTTPException(
+            status_code=403, detail="Only the task's owner or an admin can read its events"
+        )
+    try:
+        events = await run_in_threadpool(read_task_events, task_id, since, limit)
+    except Exception as exc:
+        logger.warning("Task event store unavailable for task %s", task_id, exc_info=True)
+        raise HTTPException(
+            status_code=503, detail="The task event store is unavailable"
+        ) from exc
+    return {
         "task_id": task_id,
+        "status": _task_status_value(task.status),
+        "since": since,
+        "events": events,
+        "last_seq": events[-1]["seq"] if events else since,
+        "has_more": len(events) >= limit,
     }
 
 
@@ -1122,6 +1371,7 @@ async def sharing_agent_result(
 
         action_list = current_task_result.future_actions or []
         history = current_task_result.history or []
+        chain_root_id = task.parent_task_id or task.id
 
         task.status = TaskStatus.COMPLETED.value
 
@@ -1158,6 +1408,7 @@ async def sharing_agent_result(
                     "completing cleanly. Returning the best result so far.",
                     db,
                     skill_used="review",
+                    task_id=chain_root_id,
                 )
             action_list = []
             current_task_result.future_actions = []
@@ -1201,6 +1452,7 @@ async def sharing_agent_result(
                         ).strip(),
                         db,
                         skill_used="review",
+                        task_id=chain_root_id,
                     )
                 action_list = []
                 # Persist the truncated action list so any subsequent inspection
@@ -1258,6 +1510,7 @@ async def sharing_agent_result(
                             ).strip(),
                             db,
                             skill_used="review",
+                            task_id=chain_root_id,
                         )
                 else:
                     logger.warning(
@@ -1381,7 +1634,11 @@ async def sharing_agent_result(
                     f"Now routing to **{next_name}** for step {next_step}."
                 )
                 await _broadcast_manager_message(
-                    task.conversation_id, progress_text, db, skill_used="orchestration"
+                    task.conversation_id,
+                    progress_text,
+                    db,
+                    skill_used="orchestration",
+                    task_id=chain_root_id,
                 )
 
             return {"message": f"Result received from agent {task_result.agent_id}"}
@@ -1395,6 +1652,12 @@ async def sharing_agent_result(
         if task.parent_task_id is None:
             final_answer = (task_result.result or "").strip()
         else:
+            await publish_task_status(
+                chain_root_id,
+                task.conversation_id,
+                "aggregating",
+                stage=TaskStage.AGGREGATION,
+            )
             try:
                 final_answer = await run_in_threadpool(
                     aggregate_results, history, task_result.result
@@ -1450,10 +1713,11 @@ async def sharing_agent_result(
         # task.conversation_id is None — skip chat-side effects and let the UI
         # fetch the result from /tasks/{id}.
         conv_id = task.conversation_id
+        attribution_name = task_result.agent_name
+        message = None
         if conv_id is not None:
             # Look up agent_name from the directory if the agent didn't send one
             # (older worker images, or HTTP /task path without metadata).
-            attribution_name = task_result.agent_name
             if not attribution_name:
                 agent_row = (
                     db.query(Agents).filter(Agents.id == task.agent_id).first()
@@ -1464,7 +1728,7 @@ async def sharing_agent_result(
             # endpoint can return it on reload. Without it, the user
             # navigates back later and every assistant turn shows up as a
             # bare bubble — no attribution chip, no Manager violet styling.
-            add_messages(
+            message = add_messages(
                 "assistant",
                 final_answer,
                 conv_id,
@@ -1474,13 +1738,20 @@ async def sharing_agent_result(
                 skill_used=task_result.skill_used,
             )
 
-            await send_messages_via_websockets(
-                str(conv_id),
-                final_answer,
-                agent_id=task.agent_id,
-                agent_name=attribution_name,
-                skill_used=task_result.skill_used,
-            )
+        await publish_agent_message(
+            chain_root_id,
+            conv_id,
+            final_answer,
+            event_type=TaskEventType.RESULT,
+            stage=TaskStage.AGGREGATION if task.parent_task_id else TaskStage.GENERATION,
+            agent_id=task.agent_id,
+            agent_name=attribution_name,
+            skill_used=task_result.skill_used,
+            status=TaskStatus.COMPLETED.value,
+            route=ROUTE_AGENT,
+            message_id=_message_id(message),
+            **({"sources": task_result.sources} if task_result.sources is not None else {}),
+        )
         return {"message": f"Result received from agent {task_result.agent_id}"}
     except HTTPException:
         raise
@@ -1514,8 +1785,8 @@ async def ingest_task_step(
 ):
     """Ingest a step event and rebroadcast it over the conversation's WS.
 
-    Steps are not persisted — they're a fire-and-forget telemetry channel.
-    The endpoint verifies the agent's API key (same auth dependency as
+    Steps are stored as events of the root task for 24 h, so a client that
+    reconnects can replay them, then broadcast. The endpoint verifies the agent's API key (same auth dependency as
     ``task-result/``) so untrusted clients can't inject "thought" events.
 
     Args:
@@ -1525,52 +1796,49 @@ async def ingest_task_step(
     """
     verified_agent_id, _ = verified_agent
 
+    if not step.task_id:
+        return {"message": "ignored"}
+
     # Cross-check the body against the task and the authenticated agent so a
     # compromised agent can't squirt fake "thought process" events into
     # another conversation's chat stream.
-    conversation_id = step.conversation_id
     broadcast_task_id = step.task_id
-    if step.task_id:
-        task = db.query(Task).filter(Task.id == step.task_id).first()
-        if task is None:
-            # Unknown task — silently accept and drop. Avoids tripping older
-            # agents that race the task row's INSERT, while still preventing
-            # any broadcast to nonexistent conversations.
-            logger.debug("Step for unknown task %s ignored", step.task_id)
-            return {"message": "ignored"}
-        if step.agent_id and step.agent_id != task.agent_id:
-            raise HTTPException(
-                status_code=403,
-                detail="agent_id in step body must match the task's assigned agent",
-            )
-        if not agent_may_submit_task_result(verified_agent_id, task.agent_id, db):
-            raise HTTPException(
-                status_code=403,
-                detail="Authenticated agent is not allowed to emit steps for this task",
-            )
-        # Trust the DB's view of the conversation over whatever the agent
-        # sent — the agent only forwards what MAS originally dispatched.
-        conversation_id = (
-            str(task.conversation_id)
-            if task.conversation_id is not None
-            else None
+    task = db.query(Task).filter(Task.id == step.task_id).first()
+    if task is None:
+        # Unknown task — silently accept and drop. Avoids tripping older
+        # agents that race the task row's INSERT, while still preventing
+        # any broadcast to nonexistent conversations.
+        logger.debug("Step for unknown task %s ignored", step.task_id)
+        return {"message": "ignored"}
+    if step.agent_id and step.agent_id != task.agent_id:
+        raise HTTPException(
+            status_code=403,
+            detail="agent_id in step body must match the task's assigned agent",
         )
+    if not agent_may_submit_task_result(verified_agent_id, task.agent_id, db):
+        raise HTTPException(
+            status_code=403,
+            detail="Authenticated agent is not allowed to emit steps for this task",
+        )
+    # Trust the DB's view of the conversation over whatever the agent
+    # sent — the agent only forwards what MAS originally dispatched.
+    conversation_id = (
+        str(task.conversation_id)
+        if task.conversation_id is not None
+        else None
+    )
 
-        # Translate to the chain's ROOT task_id when one exists. The chat
-        # frontend keys ``stepsByTaskId`` by the message's task_id, which is
-        # the root for multi-agent chains. Without this translation, steps
-        # emitted by subtask 2, 3, … would be stored under their own ids and
-        # never render in the user message's thought-process card.
-        if task.parent_task_id:
-            root_task = (
-                db.query(Task).filter(Task.id == task.parent_task_id).first()
-            )
-            if root_task is not None:
-                broadcast_task_id = root_task.id
-
-    if conversation_id is None:
-        # Standalone task with no chat — nothing to broadcast.
-        return {"message": "no conversation"}
+    # Translate to the chain's ROOT task_id when one exists. The chat
+    # frontend keys ``stepsByTaskId`` by the message's task_id, which is
+    # the root for multi-agent chains. Without this translation, steps
+    # emitted by subtask 2, 3, … would be stored under their own ids and
+    # never render in the user message's thought-process card.
+    if task.parent_task_id:
+        root_task = (
+            db.query(Task).filter(Task.id == task.parent_task_id).first()
+        )
+        if root_task is not None:
+            broadcast_task_id = root_task.id
 
     # Reliably resolve the owning agent's NAME. The worker only forwards an
     # ``agent_id`` (and inconsistently a name), which is why the chat's
@@ -1609,8 +1877,24 @@ async def ingest_task_step(
         step.step_type,
         step.agent_name or step.agent_id,
     )
-    await send_task_step_via_websockets(conversation_id, payload)
+    await publish_task_step(broadcast_task_id, conversation_id, payload)
+    if conversation_id is None:
+        return {"message": "no conversation"}
     return {"message": "ok"}
+
+
+async def _publish_cancellation(task_id: str, db: Session) -> None:
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if task is None or task.parent_task_id is not None:
+        return
+    await publish_agent_message(
+        task.id,
+        task.conversation_id,
+        CANCELLED_TASK_TEXT,
+        event_type=TaskEventType.ERROR,
+        status="cancelled",
+        reason="user",
+    )
 
 
 @router.patch(
@@ -1653,6 +1937,7 @@ async def cancel_task(
                 "TASK_CANCEL",
                 f"User {user.get('username')} canceled task {task_id}",
             )
+            await _publish_cancellation(task_id, db)
             return {"message": f"Task {task_id} has been canceled successfully."}
     except HTTPException:
         raise

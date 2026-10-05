@@ -1,4 +1,4 @@
-export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type TaskStatus = 'queued' | 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type MessageType = 'instruction' | 'result' | 'question' | 'answer';
 
 export interface Subtask {

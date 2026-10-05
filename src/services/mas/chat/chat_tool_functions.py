@@ -15,37 +15,16 @@ logger = get_logger("chat")
 active_connections: dict[str, list[WebSocket]] = {}
 
 
-async def send_messages_via_websockets(
-    conversation_id: str,
+def agent_message_payload(
     message: str,
     *,
     agent_id: str | None = None,
     agent_name: str | None = None,
     skill_used: str | None = None,
-):
-    """Broadcast a message to all WebSocket clients on this conversation.
-
-    When agent metadata is provided, emits ``type=task_complete`` so the chat
-    UI can render an attribution chip; otherwise falls back to the legacy
-    ``type=agent`` shape used by direct-answer / pre-attribution paths.
-
-    Args:
-        conversation_id: Target conversation.
-        message: Text content to broadcast.
-        agent_id: Originating agent's UUID (optional).
-        agent_name: Human-readable agent name for the chip (optional).
-        skill_used: Skill that produced the answer (optional).
-    """
-    conv_key = str(conversation_id)
-    conns = active_connections.get(conv_key, [])
-    if not conns:
-        return
-
+) -> dict:
     has_attribution = bool(agent_id or agent_name or skill_used)
-    msg_type = "task_complete" if has_attribution else "agent"
-
     payload: dict = {
-        "type": msg_type,
+        "type": "task_complete" if has_attribution else "agent",
         "content": message,
         "timestamp": datetime.datetime.now().isoformat(),
     }
@@ -53,33 +32,11 @@ async def send_messages_via_websockets(
         payload["agent_id"] = agent_id
         payload["agent_name"] = agent_name
         payload["skill_used"] = skill_used
-
-    for ws in list(conns):
-        try:
-            await ws.send_json(payload)
-        except Exception:
-            try:
-                conns.remove(ws)
-            except ValueError:
-                pass
+    return payload
 
 
-async def send_task_step_via_websockets(
-    conversation_id: str,
-    step: dict,
-) -> None:
-    """Broadcast a ``task_step`` "thought process" event to the conversation.
-
-    Older chat clients ignore unknown WS message types, so this is safe to
-    fan out without coordination. Drops dead sockets the same way the
-    ``agent_message`` path does.
-    """
-    conv_key = str(conversation_id)
-    conns = active_connections.get(conv_key, [])
-    if not conns:
-        return
-
-    payload = {
+def task_step_payload(step: dict) -> dict:
+    return {
         "type": "task_step",
         "task_id": step.get("task_id"),
         "subtask_id": step.get("subtask_id"),
@@ -92,6 +49,13 @@ async def send_task_step_via_websockets(
         "metadata": step.get("metadata") or {},
     }
 
+
+def connected_conversation_ids() -> list[str]:
+    return [conv_id for conv_id, conns in active_connections.items() if conns]
+
+
+async def broadcast_to_conversation(conversation_id: str, payload: dict) -> None:
+    conns = active_connections.get(str(conversation_id), [])
     for ws in list(conns):
         try:
             await ws.send_json(payload)

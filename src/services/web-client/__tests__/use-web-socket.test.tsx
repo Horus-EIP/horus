@@ -19,6 +19,7 @@ const { notification, chatApiMock } = vi.hoisted(() => ({
   chatApiMock: {
     getRunningTasksForConversation: vi.fn(),
     getTask: vi.fn(),
+    getTaskEvents: vi.fn(),
   },
 }));
 
@@ -88,6 +89,65 @@ describe("useWebSocket", () => {
     await waitForOpenSockets(2);
     expect(onReconnect).not.toHaveBeenCalled();
   });
+
+  it("gives up after maxRetries failed attempts when no task is running", async () => {
+    notification.error.mockClear();
+    MockWebSocket.refuseConnections = true;
+    const { result } = renderHook(() =>
+      useWebSocket({ url: "ws://example.com", backoffBaseMs: 1, maxRetries: 2 })
+    );
+
+    await waitFor(() =>
+      expect(notification.error).toHaveBeenCalledWith("Connection lost. Please refresh the page.")
+    );
+    expect(MockWebSocket.instances).toHaveLength(3);
+    expect(result.current.status).toBe("disconnected");
+  });
+
+  it("keeps reconnecting with a capped backoff while a task runs", async () => {
+    notification.error.mockClear();
+    MockWebSocket.refuseConnections = true;
+    const onReconnect = vi.fn();
+    const { result } = renderHook(() =>
+      useWebSocket({
+        url: "ws://example.com",
+        backoffBaseMs: 1,
+        maxBackoffMs: 4,
+        maxRetries: 2,
+        keepReconnecting: true,
+        onReconnect,
+      })
+    );
+    await waitFor(() => expect(MockWebSocket.instances.length).toBeGreaterThanOrEqual(8));
+
+    expect(result.current.status).toBe("reconnecting");
+    expect(notification.error).not.toHaveBeenCalled();
+
+    MockWebSocket.refuseConnections = false;
+    await waitFor(() => expect(result.current.status).toBe("connected"));
+  });
+
+  it("resumes reconnecting when a task starts after it gave up", async () => {
+    MockWebSocket.refuseConnections = true;
+    const { result, rerender } = renderHook(
+      ({ keepReconnecting }) =>
+        useWebSocket({
+          url: "ws://example.com",
+          backoffBaseMs: 1,
+          maxRetries: 1,
+          keepReconnecting,
+        }),
+      { initialProps: { keepReconnecting: false } }
+    );
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(2));
+    await waitFor(() => expect(result.current.status).toBe("disconnected"));
+
+    MockWebSocket.refuseConnections = false;
+    rerender({ keepReconnecting: true });
+
+    await waitFor(() => expect(result.current.status).toBe("connected"));
+    expect(MockWebSocket.instances).toHaveLength(3);
+  });
 });
 
 describe("task re-fetch on reconnect", () => {
@@ -113,6 +173,11 @@ describe("task re-fetch on reconnect", () => {
     installMockWebSocket();
     chatApiMock.getRunningTasksForConversation.mockReset();
     chatApiMock.getTask.mockReset();
+    chatApiMock.getTaskEvents.mockReset();
+    chatApiMock.getTaskEvents.mockResolvedValue({
+      ok: true,
+      data: { task_id: "root-7", status: "completed", since: 0, events: [], last_seq: 0, has_more: false },
+    });
     chatApiMock.getRunningTasksForConversation.mockResolvedValue({
       ok: true,
       data: [runningTask],
@@ -122,10 +187,11 @@ describe("task re-fetch on reconnect", () => {
 
   function renderChatSocket(
     openTaskId: string | null,
-    onResync: (resync: TaskResync) => void
+    onResync: (resync: TaskResync) => void,
+    sinceFor?: (taskId: string) => number
   ) {
     return renderHook(() => {
-      const resyncTasks = useTaskResync({ conversationId: "42", openTaskId, onResync });
+      const resyncTasks = useTaskResync({ conversationId: "42", openTaskId, sinceFor, onResync });
       return useWebSocket({
         url: "ws://example.com/chat/42/",
         backoffBaseMs: 1,
@@ -149,7 +215,50 @@ describe("task re-fetch on reconnect", () => {
     expect(onResync).toHaveBeenCalledWith({
       runningTasks: [runningTask],
       openTask: finishedTask,
+      missedFrames: [],
     });
+  });
+
+  it("fetches the open task's events missed since the last seq it saw", async () => {
+    chatApiMock.getTaskEvents.mockResolvedValue({
+      ok: true,
+      data: {
+        task_id: "root-7",
+        status: "completed",
+        since: 3,
+        events: [
+          {
+            task_id: "root-7",
+            seq: 4,
+            type: "result",
+            stage: "generation",
+            data: { type: "task_complete", content: "Revenue grew 12%." },
+            ts: "2026-10-05T09:33:00Z",
+          },
+        ],
+        last_seq: 4,
+        has_more: false,
+      },
+    });
+    const onResync = vi.fn();
+    renderChatSocket("root-7", onResync, () => 3);
+    await waitForOpenSockets(1);
+
+    latestSocket().dropFromServer();
+
+    await waitFor(() => expect(onResync).toHaveBeenCalledTimes(1));
+    expect(chatApiMock.getTaskEvents).toHaveBeenCalledWith("root-7", 3);
+    expect(onResync.mock.calls[0][0].missedFrames).toEqual([
+      {
+        type: "task_complete",
+        content: "Revenue grew 12%.",
+        task_id: "root-7",
+        seq: 4,
+        event: "result",
+        stage: "generation",
+        ts: "2026-10-05T09:33:00Z",
+      },
+    ]);
   });
 
   it("only lists the running tasks when no task is open", async () => {
@@ -161,14 +270,17 @@ describe("task re-fetch on reconnect", () => {
 
     await waitFor(() => expect(onResync).toHaveBeenCalledTimes(1));
     expect(chatApiMock.getTask).not.toHaveBeenCalled();
+    expect(chatApiMock.getTaskEvents).not.toHaveBeenCalled();
     expect(onResync).toHaveBeenCalledWith({
       runningTasks: [runningTask],
       openTask: null,
+      missedFrames: [],
     });
   });
 
   it("reports no open task when its re-fetch fails", async () => {
     chatApiMock.getTask.mockResolvedValue({ ok: false, error: "Request aborted" });
+    chatApiMock.getTaskEvents.mockResolvedValue({ ok: false, error: "Request aborted" });
     const onResync = vi.fn();
     renderChatSocket("root-7", onResync);
     await waitForOpenSockets(1);
@@ -179,6 +291,7 @@ describe("task re-fetch on reconnect", () => {
     expect(onResync).toHaveBeenCalledWith({
       runningTasks: [runningTask],
       openTask: null,
+      missedFrames: [],
     });
   });
 });

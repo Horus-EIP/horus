@@ -17,6 +17,7 @@ interface RequestOptions {
   signal?: AbortSignal;
   /** Abort the request after this many ms (combined with ``signal``). 0 disables. */
   timeoutMs?: number;
+  headers?: Record<string, string>;
 }
 
 function stripBodyHeaders(headers: HeadersInit | undefined): HeadersInit {
@@ -341,6 +342,7 @@ class ApiClient {
         this.requestOnce<T>(endpoint, {
           method: "POST",
           body: body ? JSON.stringify(body) : undefined,
+          headers: options?.headers,
           signal,
         }),
       retry

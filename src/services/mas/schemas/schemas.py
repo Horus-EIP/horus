@@ -132,6 +132,7 @@ class TaskResultForm(BaseModel):
     task_id: str
     agent_name: str | None = None
     skill_used: str | None = None
+    sources: list[dict[str, Any]] | None = None
 
 
 class CreateUserRequest(BaseModel):

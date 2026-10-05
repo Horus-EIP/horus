@@ -4,6 +4,7 @@ import { Subtask, TaskStatus } from '@/lib/tasks/types';
 import { formatTaskDuration } from '@/lib/tasks/timing';
 
 const STATUS_CONFIG: Record<TaskStatus, { label: string; dot: string; text: string }> = {
+  queued:    { label: 'Queued',    dot: 'bg-white/20 animate-pulse', text: 'text-[var(--textSoft)]' },
   completed: { label: 'Completed', dot: 'bg-emerald-400', text: 'text-emerald-400' },
   running:   { label: 'Running',   dot: 'bg-amber-400 animate-pulse', text: 'text-amber-400' },
   pending:   { label: 'Pending',   dot: 'bg-white/20', text: 'text-[var(--textSoft)]' },

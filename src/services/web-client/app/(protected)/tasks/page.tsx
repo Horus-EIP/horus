@@ -5,6 +5,7 @@ import { chatApi, TaskQueueStats, type TaskSummary } from "@/lib/chat/api";
 import Card from "@/components/ui/card";
 import { useNotification } from "@/contexts/notification-context";
 import { useAuth } from "@/components/auth/auth-provider";
+import { isTaskInProgress } from "@/lib/tasks/agent-activity";
 import Link from 'next/link';
 import {
   IconClock,
@@ -43,6 +44,7 @@ const STATUS_PILL: Record<string, string> = {
   completed: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30',
   running: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30',
   pending: 'bg-white/10 text-[var(--textSoft)] ring-1 ring-white/10',
+  queued: 'bg-white/10 text-[var(--textSoft)] ring-1 ring-white/10',
   failed: 'bg-red-500/20 text-red-300 ring-1 ring-red-500/30',
   cancelled: 'bg-gray-500/20 text-gray-300 ring-1 ring-gray-500/30',
   canceled: 'bg-gray-500/20 text-gray-300 ring-1 ring-gray-500/30',
@@ -184,7 +186,7 @@ export default function TasksPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             <StatCard
               title="Pending"
-              value={stats.pending}
+              value={stats.pending + (stats.queued ?? 0)}
               icon={<IconClock className="w-6 h-6 text-yellow-400" />}
               color="bg-yellow-500/20"
               bgColor="bg-[var(--bgSoft)]/70"
@@ -238,7 +240,7 @@ export default function TasksPage() {
                 <div className="text-center">
                   <p className="text-[var(--textSoft)] text-xs">Active</p>
                   <p className="text-blue-400 text-xl font-bold">
-                    {stats.pending + stats.running}
+                    {stats.pending + (stats.queued ?? 0) + stats.running}
                   </p>
                 </div>
               </div>
@@ -356,7 +358,7 @@ export default function TasksPage() {
                         {formatRelative(t.created_at)} · agent {t.agent_id.slice(0, 8)}…
                       </p>
                     </div>
-                    {(t.status === 'running' || t.status === 'pending') && (
+                    {isTaskInProgress(t.status) && (
                       <button
                         type="button"
                         onClick={(e) => {

@@ -28,6 +28,7 @@ export interface Message {
   skillUsed?: string;
   /** Task ID the message dispatched, used to attach a thought-process card. */
   taskId?: string;
+  messageId?: number;
 }
 
 interface MessageListProps {

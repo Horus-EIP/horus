@@ -292,7 +292,7 @@ class TestFinalStatusTransitions:
         with (
             patch.object(controller, "SessionLocal", return_value=task_db),
             patch.object(controller.settings, "task_timeout", -1),
-            patch.object(controller, "send_messages_via_websockets"),
+            patch.object(controller, "publish_agent_message"),
             patch.object(controller.asyncio, "sleep", side_effect=StopWatchdog),
             patch("tasks.task_crud.rabbitmq_instance"),
             pytest.raises(StopWatchdog),
@@ -329,52 +329,51 @@ class TestFinalStatusTransitions:
         assert _stored_task(task_db, "t1").completed_at is None
 
 
+@patch("tasks.routes.add_messages", return_value={"id": 1})
 @patch("tasks.routes._publish_task_to_work_queue")
 class TestNewTaskStoresSkills:
     @patch(
         "tasks.routes.select_agent_by_mode",
         return_value=("agent-7", "Summarise the Q4 2025 financial report", None, []),
     )
-    def test_single_agent_task_stores_requested_skills(
-        self, _by_mode, _publish, make_db_client, task_db, as_user
+    async def test_single_agent_task_stores_requested_skills(
+        self, _by_mode, _publish, _add, submit_task, routing_db, as_user
     ):
-        client = make_db_client(current_user=as_user)
-
-        r = client.post(
-            "/tasks/new_task/",
-            json={
+        submitted = await submit_task(
+            {
                 "demand": "Summarise the Q4 2025 financial report",
                 "skills_required": ["financial_analysis"],
                 "mode": "any_with_skill",
             },
+            user=as_user,
         )
 
-        assert r.status_code == 200
-        task = _stored_task(task_db, r.json()["task_id"])
+        assert submitted.response.status_code == 202
+        task = _stored_task(routing_db, submitted.response.json()["task_id"])
         assert task.skills_required == ["financial_analysis"]
 
     @patch(
         "tasks.routes.decompose_task",
         return_value=(("agent-2", "Find the Q4 figures"), [("agent-3", "Write the summary")]),
     )
-    def test_decomposed_task_stores_requested_skills_on_root_and_first_step(
-        self, _decompose, _publish, make_db_client, task_db, as_user
+    async def test_decomposed_task_stores_requested_skills_on_root_and_first_step(
+        self, _decompose, _publish, _add, submit_task, routing_db, as_user
     ):
-        task_db.add(Agents(id="manager-id", name="Manager", skills=[], api_key="manager-key"))
-        task_db.commit()
-        client = make_db_client(current_user=as_user)
+        routing_db.add(Agents(id="manager-id", name="Manager", skills=[], api_key="manager-key"))
+        routing_db.commit()
 
-        r = client.post(
-            "/tasks/new_task/",
-            json={
+        submitted = await submit_task(
+            {
                 "demand": "Compare Q4 revenue with the expense policy",
                 "skills_required": ["financial_analysis", "writing"],
                 "mode": "decompose",
             },
+            user=as_user,
         )
 
-        assert r.status_code == 200
-        root = _stored_task(task_db, r.json()["task_id"])
-        (first_step,) = task_db.query(Task).filter(Task.parent_task_id == root.id).all()
+        assert submitted.response.status_code == 202
+        root = _stored_task(routing_db, submitted.response.json()["task_id"])
+        (first_step,) = routing_db.query(Task).filter(Task.parent_task_id == root.id).all()
+        assert root.agent_id == "manager-id"
         assert root.skills_required == ["financial_analysis", "writing"]
         assert first_step.skills_required == ["financial_analysis", "writing"]

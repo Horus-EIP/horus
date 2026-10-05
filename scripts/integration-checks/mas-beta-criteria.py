@@ -571,7 +571,7 @@ class TestF9SendMessage:
                     end_time = time.time()
                     latency = end_time - start_time
 
-                    if response.status_code == 200 and latency < 1.0:
+                    if response.status_code == 202 and latency < 1.0:
                         passed += 1
                     else:
                         failed += 1
@@ -629,7 +629,7 @@ class TestF10AIResponse:
                                 },
                             )
 
-                            if response.status_code == 200:
+                            if response.status_code == 202:
                                 passed += 1
                             else:
                                 failed += 1
@@ -927,7 +927,7 @@ class TestF19CreateTask:
                                 },
                             )
 
-                            if response.status_code == 200:
+                            if response.status_code == 202:
                                 data = response.json()
                                 if "task_id" in data:
                                     passed += 1

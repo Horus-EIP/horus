@@ -50,7 +50,7 @@ const statusClass = (val: string) => {
   if (['busy', 'processing'].includes(v)) {
     return 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/30';
   }
-  if (v === 'pending') {
+  if (v === 'pending' || v === 'queued') {
     return 'bg-gray-500/20 text-gray-300 ring-1 ring-gray-500/30';
   }
   if (v === 'offline'){

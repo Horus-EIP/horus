@@ -401,7 +401,7 @@ Retrieve all tasks stored in the database.
 
 #### GET /tasks/stats/queue
 
-Retrieve task counts by status (pending, running, completed, failed, cancelled) and their total. Only top-level tasks are counted, like `GET /tasks/list`: the subtasks of a multi-agent chain are excluded.
+Retrieve task counts by status (queued, pending, running, completed, failed, cancelled) and their total. Only top-level tasks are counted, like `GET /tasks/list`: the subtasks of a multi-agent chain are excluded.
 
 **Auth:** JWT Bearer (requires `analytics:view` permission)
 
@@ -411,12 +411,13 @@ Retrieve task counts by status (pending, running, completed, failed, cancelled) 
 
 ```json
 {
+  "queued": 1,
   "pending": 5,
   "running": 2,
   "completed": 150,
   "failed": 1,
   "cancelled": 0,
-  "total": 158
+  "total": 159
 }
 ```
 
@@ -430,54 +431,131 @@ Retrieve task counts by status (pending, running, completed, failed, cancelled) 
 
 #### POST /tasks/new_task/
 
-Create a new task and dispatch it to the best matching agent based on required skills. Uses LLM-based agent selection. If no single agent matches, the system attempts to decompose the task into sub-tasks.
+Queue a new task. The task is stored with status `queued` and the call answers `202` at once; it no longer waits for routing. A background job in MAS then routes the demand (direct answer, one agent, or a multi-agent chain planned by the Manager) and dispatches it. The job uses its own database session and runs the blocking router and planner calls in a thread pool, so it keeps going after the HTTP request has ended. Follow the outcome on the conversation WebSocket, with `GET /tasks/{task_id}/events`, or with `GET /tasks/{task_id}`.
+
+The `task_id` returned here is the one to follow for the whole request: a single-agent task keeps it, and a multi-agent chain uses it as the Manager-owned root of its subtasks.
 
 **Auth:** JWT Bearer (requires `task:create` permission)
+
+**Headers:**
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Idempotency-Key` | No (the web client always sends one) | 1 to 200 characters. Keys are scoped to the user and kept for 24 h in Redis (`horus:idempotency:{user_id}:{key}`). A request that reuses a key gets the task created by the first request, with the header `Idempotent-Replayed: true`, and never creates a second task. The web client generates one key per submit and reuses it on its automatic retries. If the task cannot be stored, the key is released so a retry can create it. |
 
 **Request:** `application/json`
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | demand | string | Yes | The task description / user question. |
-| conversation_id | integer | Yes | ID of the conversation this task belongs to. |
-| skills_required | string[] | Yes | Skill tags for agent matching (min 1). |
+| conversation_id | integer | No | Conversation this task belongs to. Omit it for a standalone task. |
+| skills_required | string[] | Yes | Skill tags for agent matching (may be empty in `auto` mode). |
+| mode | string | No | `auto` (default), `specific_agent`, `any_with_skill` or `decompose`. |
+| agent_id | string | No | Required with `mode=specific_agent`. |
+| attached_files | object[] | No | Knowledge-store documents (`filename`, optional `doc_id`). |
+| inline_files | object[] | No | One-shot files (`filename`, `mime`, `content_b64`), 2 MB each, 8 MB in total. |
 
-**Response 200 (assigned):**
-
-```json
-{
-  "message": "Task 'Summarize this text' assigned to agent 8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
-  "conversation_id": 1,
-  "task_id": "task-uuid-1234"
-}
-```
-
-**Response 200 (direct answer from LLM):**
+**Response 202:**
 
 ```json
 {
-  "message": "Processing complete",
-  "conversation_id": 1,
-  "result": "The answer is 42."
+  "task_id": "3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13",
+  "status": "queued",
+  "conversation_id": 1
 }
 ```
 
-**Response 200 (no agent available):**
+A replayed `Idempotency-Key` returns the same body shape with the task's current status (for example `running`).
 
-```json
-{
-  "message": "No agent registered to assign a task"
-}
-```
+**What the background job does:**
+
+| Outcome | Task status | Event |
+|---------|-------------|-------|
+| Direct answer (greeting, small talk, arithmetic) | `completed`, the answer is the task result | `result` with `route: "direct_answer"` |
+| One agent | `running`, then `completed` when the agent posts its result | `progress` (`status: "running"`), later `result` with `route: "agent"` |
+| Chain | the task becomes the chain root (`running`); its subtasks are dispatched one by one | Manager messages as `progress`, later `result` |
+| Nothing can handle the demand (no agents, no plan) | `failed`, the reason is the task result | `error` with `route: "none"` |
+| The router or the dispatch crashes | `failed` | `error` |
+| The task was cancelled while it was routed | stays `canceled`, nothing is dispatched | `error` with `status: "cancelled"` |
+
+At start-up MAS marks the tasks still `queued` (their routing job died with the previous process) as `failed` and stores an `error` event saying so. The `TASK_TIMEOUT` watchdog watches `queued` tasks as well as `running` ones.
+
+The user message is saved to the conversation when the task is queued, before routing.
 
 **Errors:**
 
 | Code | Detail |
 |------|--------|
+| `400` | Invalid base64 in an inline file. Nothing is stored. |
 | `401` | `Authentication Failed` |
-| `404` | `Conversation not found` |
-| `422` | Request body validation error. |
-| `500` | Database or RabbitMQ error. |
+| `413` | Inline file too large. Nothing is stored. |
+| `422` | Request body or `Idempotency-Key` validation error. |
+| `500` | `Failed to create task` (the queued task could not be stored). |
+
+---
+
+#### GET /tasks/{task_id}/events
+
+Replay the events stored for a task. MAS sends every per-task WebSocket frame through one publish function, which gives it the next `seq` of the task (Redis `INCR horus:task:{task_id}:seq`), appends it to the Redis stream `horus:task:{task_id}:events` (kept 24 h after the last event, trimmed to about 10,000 entries) and only then sends it to the connected sockets. Events are therefore stored even when nobody is connected.
+
+**Auth:** JWT Bearer (requires `task:read` permission). Only the task's owner (the user who queued it, or for older tasks the owner of its conversation) or an admin can read the events; anyone else gets `403`.
+
+**Query parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| since | integer | 0 | Return the events with a `seq` greater than this. Pass the last `seq` you processed. |
+| limit | integer | 1000 | Page size, 1 to 10,000. Call again with `since=last_seq` while `has_more` is true. |
+
+**Response 200:**
+
+```json
+{
+  "task_id": "3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13",
+  "status": "running",
+  "since": 2,
+  "events": [
+    {
+      "task_id": "3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13",
+      "seq": 3,
+      "type": "progress",
+      "stage": "retrieval",
+      "data": {"type": "task_status", "status": "running", "detail": "Assigned to Finance-Analyst", "agent_id": "8b9f…", "agent_name": "Finance-Analyst"},
+      "ts": "2026-10-05T09:30:12Z"
+    },
+    {
+      "task_id": "3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13",
+      "seq": 4,
+      "type": "heartbeat",
+      "stage": "retrieval",
+      "data": {"type": "heartbeat", "elapsed_s": 10.0},
+      "ts": "2026-10-05T09:30:17Z"
+    }
+  ],
+  "last_seq": 4,
+  "has_more": false
+}
+```
+
+**Event fields:**
+
+| Field | Description |
+|-------|-------------|
+| `seq` | Per task, starts at 1 and increases by 1. Use it to deduplicate and to ask for what you missed. |
+| `type` | `progress`, `token`, `heartbeat`, `result` or `error`. `result` and `error` end the task. |
+| `stage` | `queued`, `routing`, `retrieval`, `generation`, `aggregation`, or `null` when the event does not change the stage. |
+| `data` | The WebSocket frame as it was sent (see the WebSocket section). |
+| `ts` | UTC time the event was stored. |
+
+Token deltas (`reasoning.delta` steps) are stored as `token` events. The agent already coalesces them into at most one step every `AGENT_STREAM_FLUSH_INTERVAL` seconds (0.5 s by default), so a streamed answer adds about two events per second, the same order as heartbeats. Storing them lets a client that reconnects mid-answer rebuild the typing preview exactly; the stream length cap bounds a runaway task.
+
+**Errors:**
+
+| Code | Detail |
+|------|--------|
+| `403` | `Only the task's owner or an admin can read its events` |
+| `404` | `Task not found` |
+| `503` | `The task event store is unavailable` (Redis is down). |
 
 ---
 
@@ -494,6 +572,7 @@ Submit a completed task result from an agent. Updates the task status to COMPLET
 | task_id | string | Yes | ID of the completed task. |
 | result | string | Yes | The result / output text. |
 | conversation_id | string | Yes | Conversation this task belongs to. |
+| sources | object[] | No | Sources of the answer. Carried as-is in the task's `result` event; agents do not send them yet (B-98). |
 | agent_id | string | Yes | **Task assignee** UUID (must match `Task.agent_id`). Pooled workers authenticate with their own `X-API-Key` / `Agent-ID` but set this field to the orchestrator-chosen assignee (see task message `assigned_agent_id`). |
 
 **Response 200:**
@@ -517,7 +596,7 @@ Submit a completed task result from an agent. Updates the task status to COMPLET
 
 #### PATCH /tasks/task-cancel/{task_id}
 
-Cancel a running task. Updates its status to CANCELED and sends a high-priority cancellation signal to the assigned agent via RabbitMQ.
+Cancel a queued or running task. Updates its status to CANCELED and sends a high-priority cancellation signal to the assigned agent via RabbitMQ. For a top-level task an `error` event (`status: "cancelled"`) is stored and sent to the conversation. A task cancelled while it is still being routed is never dispatched.
 
 **Auth:** JWT Bearer (requires `task:delete` permission)
 
@@ -746,30 +825,7 @@ ws://<host>:8000/chat/{conversation_id}/?token=<jwt_token>
 }
 ```
 
-**Outgoing messages (server to client):**
-
-Agent response:
-
-```json
-{
-  "type": "agent_response",
-  "agent_id": "agent-001",
-  "content": "Processing result",
-  "status": "completed",
-  "timestamp": "2025-09-25T15:30:00Z"
-}
-```
-
-Task status update:
-
-```json
-{
-  "type": "task_update",
-  "task_id": "task-001",
-  "status": "executing",
-  "progress": "45%"
-}
-```
+**Outgoing messages (server to client):** every frame about a task is one of its stored events (see `GET /tasks/{task_id}/events`), sent as the event's `data` with the event fields added: `task_id`, `seq`, `event` (the event type), `stage` and `ts`. The frame types are listed in the WebSocket API reference below.
 
 **WebSocket close codes:**
 
@@ -1917,59 +1973,108 @@ The server listens for text messages from the client via `receive_text()`. The c
 
 #### Server to Client (Outgoing)
 
-The server pushes messages to connected clients when agents complete tasks. Messages are broadcast to all WebSocket clients connected to the relevant conversation.
+Every frame about a task is an event of that task. MAS stores the event first (see `GET /tasks/{task_id}/events`) and then sends its `data` to the sockets of the conversation, with these fields added:
 
-**Agent response:**
+| Field | Description |
+|-------|-------------|
+| `task_id` | The task to follow: the root of a chain, the task itself otherwise. |
+| `seq` | Per-task sequence number. `null` only if Redis was down when the event was sent. |
+| `event` | `progress`, `token`, `heartbeat`, `result` or `error`. |
+| `stage` | `queued`, `routing`, `retrieval`, `generation`, `aggregation` or `null`. |
+| `ts` | UTC time of the event. |
+
+**Task status** (`event: progress`): the task was queued, its routing started, it was dispatched to an agent, or a chain is being aggregated.
 
 ```json
 {
-  "type": "agent_response",
+  "type": "task_status",
+  "status": "running",
+  "detail": "Assigned to Finance-Analyst",
   "agent_id": "8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
-  "content": "Here is the analysis result...",
+  "agent_name": "Finance-Analyst",
+  "task_id": "3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13",
+  "seq": 3,
+  "event": "progress",
+  "stage": "retrieval",
+  "ts": "2026-10-05T09:30:12Z"
+}
+```
+
+`status` is `queued`, `routing`, `running` or `aggregating`. Clients should show `detail` for a status they do not know: B-94 adds a "busy, position N" status this way.
+
+**Heartbeat** (`event: heartbeat`): every 5 s for each queued or running top-level task whose conversation has a connected socket, with the current stage and the seconds since the task was created.
+
+```json
+{"type": "heartbeat", "elapsed_s": 65.0, "task_id": "3f6c…", "seq": 9, "event": "heartbeat", "stage": "generation", "ts": "2026-10-05T09:31:17Z"}
+```
+
+**Thought-process step** (`event: progress`, or `token` for `step_type: "reasoning.delta"`, whose `metadata.chunk` is the next piece of the streamed answer):
+
+```json
+{
+  "type": "task_step",
+  "task_id": "3f6c…",
+  "subtask_id": "9d21…",
+  "agent_id": "8b9f…",
+  "agent_name": "Finance-Analyst",
+  "step_type": "retrieval.results",
+  "title": "Found 4 passages",
+  "detail": null,
+  "timestamp": "2026-10-05T09:30:20",
+  "metadata": {"chunk_count": 4},
+  "seq": 5,
+  "event": "progress",
+  "stage": "retrieval",
+  "ts": "2026-10-05T09:30:20Z"
+}
+```
+
+**Agent message** (`type: "task_complete"` with attribution, `type: "agent"` without): a Manager message (`event: progress`), the final answer (`event: result`) or the reason the task ended without one (`event: error`). Messages also saved to the conversation history carry their `message_id`, so a client that replays events after loading the history can skip them.
+
+```json
+{
+  "type": "task_complete",
+  "content": "Q4 2025 revenue was $4.2M.",
+  "agent_id": "8b9f…",
+  "agent_name": "Finance-Analyst",
+  "skill_used": "financial_analysis",
+  "timestamp": "2026-10-05T09:33:00",
   "status": "completed",
-  "timestamp": "2025-09-25T15:30:00Z"
+  "route": "agent",
+  "message_id": 412,
+  "task_id": "3f6c…",
+  "seq": 21,
+  "event": "result",
+  "stage": "generation",
+  "ts": "2026-10-05T09:33:00Z"
 }
 ```
 
-**Task status update:**
-
-```json
-{
-  "type": "task_update",
-  "task_id": "task-001",
-  "status": "executing",
-  "progress": "45%"
-}
-```
-
-**System notification:**
-
-```json
-{
-  "type": "system_notification",
-  "content": "Agent DocumentAnalyzer is now processing your request"
-}
-```
-
-**Connection status:**
-
-```json
-{
-  "type": "connection_status",
-  "status": "connected",
-  "session_id": "sess-uuid-1234"
-}
-```
+| Final frame | `event` | `status` | Other fields |
+|-------------|---------|----------|--------------|
+| Agent or chain answer | `result` | `completed` | `route: "agent"`, `sources` when the agent sent them |
+| Direct answer | `result` | `completed` | `route: "direct_answer"` |
+| No agent could take the demand | `error` | `failed` | `route: "none"`; `content` says why |
+| Cancelled by a user | `error` | `cancelled` | `reason: "user"` |
+| Stopped by `TASK_TIMEOUT` | `error` | `cancelled` | `reason: "timeout"`; the notice is also the task result |
 
 #### Message Types Summary
 
-| Type                  | Direction        | Description                              |
-|-----------------------|------------------|------------------------------------------|
-| `message`             | Client to Server | User sending a query                     |
-| `agent_response`      | Server to Client | Agent returning a processing result      |
-| `task_update`         | Server to Client | Task execution status change             |
-| `system_notification` | Server to Client | System-level notification                |
-| `connection_status`   | Server to Client | Connection health and status messages    |
+| Type          | Direction        | Description                                            |
+|---------------|------------------|--------------------------------------------------------|
+| `task_status` | Server to Client | Queued, routing, dispatched, aggregating               |
+| `heartbeat`   | Server to Client | Liveness of a running task, every 5 s                  |
+| `task_step`   | Server to Client | Agent thought-process step or streamed answer chunk    |
+| `task_complete` | Server to Client | Attributed message: Manager update or final answer   |
+| `agent`       | Server to Client | Unattributed message: direct answer or failure reason  |
+
+#### Reconnecting without losing anything
+
+1. Keep the highest `seq` you processed for each task (in the web client: the last unbroken `seq`).
+2. When the socket reopens, call `GET /tasks/{task_id}/events?since=<seq>` for the task you are waiting on and process the returned frames with the same handler as live frames, skipping any `seq` you already saw.
+3. If the events are gone (more than 24 h, or Redis was down), `GET /tasks/{task_id}` gives the status and the result.
+
+The web client keeps reconnecting with a capped backoff (1 s doubling to 10 s) for as long as a task is running and shows a "reconnecting" notice; it only gives up after five failed attempts when nothing is running.
 
 ---
 
@@ -2009,7 +2114,7 @@ On successful authentication:
 #### 4. Active Communication
 
 - The server enters a read loop (`while True: await websocket.receive_text()`), keeping the connection alive.
-- Agent responses and task updates are pushed to the client asynchronously via `send_messages_via_websockets()` when tasks complete.
+- Task events (status, heartbeats, steps, Manager messages, answers, failures) are pushed to the client by `publish_task_event()` in `core/task_events.py`, after being stored.
 - The client remains connected and receives real-time updates.
 
 #### 5. Disconnect
@@ -2090,17 +2195,21 @@ ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
 
     switch (data.type) {
-        case "agent_response":
-            console.log("Agent response:", data.content);
-            if (data.status === "completed") {
-                console.log("Task finished");
+        case "task_status":
+            console.log("Task", data.task_id, data.status, data.detail ?? "");
+            break;
+        case "heartbeat":
+            console.log("Still working:", data.stage, data.elapsed_s, "s");
+            break;
+        case "task_step":
+            console.log("Step:", data.step_type, data.title ?? "");
+            break;
+        case "task_complete":
+        case "agent":
+            console.log(data.agent_name ?? "Horus", ":", data.content);
+            if (data.event === "result" || data.event === "error") {
+                console.log("Task finished:", data.status);
             }
-            break;
-        case "task_update":
-            console.log("Task status:", data.status, data.progress);
-            break;
-        case "system_notification":
-            console.log("System:", data.content);
             break;
     }
 };

@@ -8,7 +8,7 @@ import { DelegationChain } from '@/components/tasks/delegation-chain';
 import { CollaborationView } from '@/components/agents/collaboration-view';
 import { TaskFacts } from '@/components/tasks/task-facts';
 import type { TaskDetail, TaskStatus, Subtask, AgentMessage, DelegationStep } from '@/lib/tasks/types';
-import { taskStatusByAgentId } from '@/lib/tasks/agent-activity';
+import { isTaskInProgress, taskStatusByAgentId } from '@/lib/tasks/agent-activity';
 import { chatApi, type TaskDetails } from '@/lib/chat/api';
 import { agentApi, type Agent } from '@/lib/agents/api';
 import { useNotification } from '@/contexts/notification-context';
@@ -17,13 +17,14 @@ const STATUS_COLORS: Record<string, string> = {
   completed: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30',
   running: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30',
   pending: 'bg-white/10 text-[var(--textSoft)] ring-1 ring-white/10',
+  queued: 'bg-white/10 text-[var(--textSoft)] ring-1 ring-white/10',
   failed: 'bg-red-500/20 text-red-300 ring-1 ring-red-500/30',
   cancelled: 'bg-gray-500/20 text-gray-300 ring-1 ring-gray-500/30',
 };
 
 function normalizeStatus(s: string): TaskStatus {
   if (s === 'canceled') return 'cancelled';
-  const allowed: TaskStatus[] = ['pending', 'running', 'completed', 'failed', 'cancelled'];
+  const allowed: TaskStatus[] = ['queued', 'pending', 'running', 'completed', 'failed', 'cancelled'];
   return (allowed.includes(s as TaskStatus) ? s : 'pending') as TaskStatus;
 }
 
@@ -216,7 +217,7 @@ export default function TaskDetailPage() {
           <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusClass}`}>
             {task.status}
           </span>
-          {(task.status === 'running' || task.status === 'pending') && (
+          {isTaskInProgress(task.status) && (
             <button
               type="button"
               onClick={handleCancel}
@@ -261,16 +262,25 @@ export default function TaskDetailPage() {
         </div>
       )}
 
-      {(task.status === 'running' || task.status === 'pending') && (
+      {isTaskInProgress(task.status) && (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-200">
-          Task is still {task.status}. The page auto-refreshes every few
-          seconds — the result will appear here once the agent finishes.
+          {task.status === 'queued'
+            ? 'Task is queued: the orchestrator is choosing the agents. '
+            : `Task is still ${task.status}. `}
+          The page auto-refreshes every few seconds — the result will appear
+          here once the agent finishes.
         </div>
       )}
 
       {task.status === 'failed' && (
         <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-200">
-          Task failed. See the agent logs for details.
+          {finalAnswer ? `Task failed: ${finalAnswer}` : 'Task failed. See the agent logs for details.'}
+        </div>
+      )}
+
+      {task.status === 'cancelled' && (
+        <div className="rounded-2xl border border-gray-500/30 bg-gray-500/5 p-4 text-sm text-gray-200">
+          {finalAnswer || 'Task was cancelled before it finished.'}
         </div>
       )}
 

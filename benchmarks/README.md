@@ -43,7 +43,7 @@ On the CPU stack the GGUF lives in the `llm_models` volume, not on the host. Its
 | `--mode retrieval` | Only queries the knowledge store (`GET /?query=...&n_results=--top-k`) for the 84 in-corpus questions and scores the source by rank (see [Source checking](#source-checking)). No LLM, takes seconds. `--top-k` counts passages, not documents: the knowledge store returns chunks of at most 1,000 characters, and the five `demo_assets/` files make 22 of them. The passages are mapped to their documents, each ranked by its best passage. Keep `--top-k` (default 50) at least the number of stored passages so `source_ranks` shows where a missed document landed. |
 | `--ids`, `--category`, `--limit` | Run part of the set (comma-separated). |
 | `--event-timeout` | Seconds to wait for each final answer (default 1800). |
-| `--submit-timeout` | Seconds for the `new_task` request itself, which stays open during routing (default 900). |
+| `--submit-timeout` | Seconds for the `new_task` request itself (default 900). Since B-93 MAS answers `202` with the queued task at once and routes in the background; servers older than B-93 kept the request open during routing. |
 | `--no-warmup` | Skip the unscored warmup question that loads the model. The warmup question is fixed and not in the test set, so a response or prompt cache cannot make a scored answer faster. |
 | `--sample-resources` | Sample `docker stats` and swap every `--sample-interval` seconds (default 10) and keep the peaks. |
 | `--llama-cpp-build`, `--model-*` | Copied into the report as given. `--model-sha256` must be 64 hex characters. |
@@ -105,12 +105,12 @@ One entry per question, in test set order.
 |---|---|
 | `id`, `category`, `difficulty`, `question`, `expected_answer` | Copied from the test set. |
 | `expected_source` | List of document file names, or `null` for greetings, arithmetic and questions the corpus cannot answer. |
-| `expected_route`, `observed_route` | `DIRECT_ANSWER` (MAS answered in the HTTP response), `AGENT` (a task was dispatched) or `NONE` (MAS replied with a message and no task). |
+| `expected_route`, `observed_route` | `DIRECT_ANSWER` (MAS answered without an agent), `AGENT` (a task was dispatched) or `NONE` (MAS could not route the question and replied with a message). Read from the `route` of the final WebSocket event; servers older than B-93 gave it in the HTTP response. |
 | `status` | `ok`, `error` or `timeout`. `error` holds the reason. `timeout` also covers a task stopped by the MAS `TASK_TIMEOUT` watchdog: its notice arrives as the answer over the WebSocket, or polling finds the task `canceled`. |
 | `conversation_id`, `task_id`, `answered_by` | Where to look the run up in the UI or the database. |
 | `timing_source` | `websocket`, `poll` (the socket dropped and the result came from `GET /tasks/{id}`, so `total_s` is accurate to `--poll-interval`) or `http`. |
-| `submit_http_s` | Time until `POST /tasks/new_task/` returned (includes routing today). |
-| `first_event_s`, `retrieval_s`, `reasoning_start_s` | Time to the first WebSocket event, the first `retrieval.results` step, the first `reasoning.start` step. |
+| `submit_http_s` | Time until `POST /tasks/new_task/` returned. Since B-93 this is only the time to queue the task; routing time is part of `first_event_s` and `total_s`. |
+| `first_event_s`, `retrieval_s`, `reasoning_start_s` | Time to the first WebSocket event (heartbeats and `task_status` frames are not counted), the first `retrieval.results` step, the first `reasoning.start` step. |
 | `ttft_s` | Time to the first `reasoning.delta` step, i.e. the first streamed token. `null` when token streaming is off (`AGENT_STREAM_TOKENS`) or the backend does not stream. |
 | `total_s` | Time from submitting the question to the final answer. |
 | `answer` | The final answer as received. |

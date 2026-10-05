@@ -79,6 +79,29 @@ class TestInsertNewTask:
         db.rollback.assert_called_once()
 
 
+class TestInsertQueuedTask:
+    def test_stores_a_queued_task_owned_by_the_submitter(self):
+        db = MagicMock()
+        task = task_crud.insert_queued_task(
+            "task-1", 7, "manager-id", "Summarise Q4", "alice", db, skills_required=["analysis"]
+        )
+        (stored_task,), (stored_result,) = (call.args for call in db.add.call_args_list)
+        assert stored_task is task
+        assert task.status == TaskRunStatus.QUEUED
+        assert task.owner_username == "alice"
+        assert task.skills_required == ["analysis"]
+        assert stored_result.history == [{"role": "user", "message": "Summarise Q4"}]
+        assert stored_result.future_actions == []
+        db.commit.assert_called_once()
+
+    def test_failure_rolls_back_and_raises(self):
+        db = MagicMock()
+        db.commit.side_effect = RuntimeError("db down")
+        with pytest.raises(RuntimeError):
+            task_crud.insert_queued_task("task-1", None, "manager-id", "q", "alice", db)
+        db.rollback.assert_called_once()
+
+
 class TestValidatingTaskResults:
     def test_success_marks_completed_and_appends_history(self):
         task = MagicMock()
@@ -222,6 +245,16 @@ class TestGetAllTasksInternal:
         assert out is filtered
         db.query.return_value.filter.assert_called_once()
 
+    def test_status_list_filter_applies_filter(self):
+        db = MagicMock()
+        filtered = [MagicMock()]
+        db.query.return_value.filter.return_value.all.return_value = filtered
+        out = task_crud._get_all_tasks_internal(
+            db, status_in=[TaskRunStatus.QUEUED, TaskRunStatus.RUNNING]
+        )
+        assert out is filtered
+        db.query.return_value.filter.assert_called_once()
+
     def test_error_raises_500(self):
         db = MagicMock()
         db.query.side_effect = RuntimeError("db gone")
@@ -231,14 +264,17 @@ class TestGetAllTasksInternal:
 
 
 class TestGetTasksInProgress:
-    def test_success_delegates_with_running_filter(self):
+    def test_success_delegates_with_queued_and_running_filter(self):
         running = [MagicMock()]
         with patch.object(
             task_crud, "_get_all_tasks_internal", return_value=running
         ) as inner:
             out = task_crud.get_tasks_in_progress(MagicMock())
         assert out is running
-        assert inner.call_args.kwargs["status_filter"] == TaskRunStatus.RUNNING
+        assert inner.call_args.kwargs["status_in"] == [
+            TaskRunStatus.QUEUED,
+            TaskRunStatus.RUNNING,
+        ]
 
     def test_inner_httpexception_is_rewrapped_as_500(self):
         # _get_all_tasks_internal raises HTTPException(500); the outer handler

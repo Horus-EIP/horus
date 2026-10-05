@@ -31,6 +31,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from tasks.routes import router
 from tasks.status import TaskStatus
@@ -405,472 +406,386 @@ class TestCreateNewTaskValidation:
         assert r.status_code == 401
 
 
-@patch("tasks.routes._publish_task_to_work_queue")
-@patch("tasks.routes.send_messages_via_websockets")
-@patch("tasks.routes.add_messages")
+@pytest.fixture
+def dispatch():
+    with (
+        patch("tasks.routes._publish_task_to_work_queue") as publish,
+        patch("tasks.routes.add_messages", return_value={"id": 1}) as add_messages,
+    ):
+        yield SimpleNamespace(publish=publish, add_messages=add_messages)
+
+
+def _stored(db, task_id):
+    from db.models import Task  # noqa: PLC0415
+
+    db.expire_all()
+    return db.get(Task, task_id)
+
+
+def _subtasks_of(db, root_id):
+    from db.models import Task  # noqa: PLC0415
+
+    db.expire_all()
+    return db.query(Task).filter(Task.parent_task_id == root_id).all()
+
+
+def _add_agent(db, agent_id, name, *, status="active", type_value="general", skills=None):
+    from db.models import Agents  # noqa: PLC0415
+
+    db.add(
+        Agents(
+            id=agent_id,
+            name=name,
+            skills=skills or [],
+            status=status,
+            type=type_value,
+            api_key=f"{agent_id}-key",
+        )
+    )
+    db.commit()
+
+
+def _dispatched(dispatch):
+    _db, agent_id, payload = dispatch.publish.call_args.args
+    return agent_id, payload
+
+
+def _published_texts(task_id):
+    from core.task_events import read_task_events  # noqa: PLC0415
+
+    return [event["data"].get("content") for event in read_task_events(task_id)]
+
+
 class TestCreateNewTaskSingleAgent:
     """``mode`` unset → select_agent_by_mode/-for_task path."""
 
-    @patch("tasks.routes.select_agent_for_task")
+    @patch(
+        "tasks.routes.select_agent_for_task",
+        return_value=(None, None, "Here is your direct answer", []),
+    )
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
-    @patch("tasks.routes.insert_new_task", return_value="new-task-id")
-    def test_direct_answer_short_circuits_without_dispatch(
-        self,
-        _insert,
-        _by_mode,
-        mock_for_task,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+    async def test_direct_answer_short_circuits_without_dispatch(
+        self, _by_mode, _for_task, dispatch, submit_task, routing_db, as_user
     ):
-        mock_for_task.return_value = (None, None, "Here is your direct answer", [])
-        fake = _FakeSession()
-        client = make_fake_client(fake, current_user=as_user)
-        r = client.post("/tasks/new_task/", json=_task_form(conversation_id=5))
-        assert r.status_code == 200
-        body = r.json()
-        assert body["result"] == "Here is your direct answer"
-        assert body["message"] == "Processing complete"
-        # Direct-answer path persists user+assistant turns, never dispatches.
-        assert mock_add.call_count == 2
-        mock_publish.assert_not_called()
+        submitted = await submit_task(_task_form(conversation_id=7), user=as_user)
+
+        assert submitted.response.status_code == 202
+        assert submitted.outcome["result"] == "Here is your direct answer"
+        assert submitted.outcome["message"] == "Processing complete"
+        roles = [call.args[0] for call in dispatch.add_messages.call_args_list]
+        assert roles == ["user", "assistant"]
+        dispatch.publish.assert_not_called()
+        assert _stored(routing_db, submitted.outcome["task_id"]).status == "completed"
 
     @patch("tasks.routes.select_agent_for_task")
     @patch(
         "tasks.routes.select_agent_by_mode",
         return_value=("agent-77", "rewritten demand", None, []),
     )
-    @patch("tasks.routes.insert_new_task", return_value="task-123")
-    def test_single_agent_dispatch_publishes_and_returns_task_id(
-        self,
-        _insert,
-        _by_mode,
-        _for_task,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+    async def test_single_agent_dispatch_publishes_and_returns_task_id(
+        self, _by_mode, for_task, dispatch, submit_task, routing_db, as_user
     ):
-        fake = _FakeSession()
-        client = make_fake_client(fake, current_user=as_user)
-        r = client.post("/tasks/new_task/", json=_task_form(conversation_id=9))
-        assert r.status_code == 200
-        body = r.json()
-        assert body["task_id"] == "task-123"
-        assert "agent-77" in body["message"]
-        mock_publish.assert_called_once()
+        submitted = await submit_task(_task_form(conversation_id=7), user=as_user)
 
-    @patch("tasks.routes.select_agent_for_task")
+        task_id = submitted.response.json()["task_id"]
+        assert submitted.outcome["task_id"] == task_id
+        assert "agent-77" in submitted.outcome["message"]
+        for_task.assert_not_called()
+        agent_id, payload = _dispatched(dispatch)
+        assert agent_id == "agent-77"
+        assert payload["task_id"] == task_id
+        assert payload["demand"] == "rewritten demand"
+        task = _stored(routing_db, task_id)
+        assert task.status == TaskStatus.RUNNING.value
+        assert task.agent_id == "agent-77"
+        assert task.query == "rewritten demand"
+        assert task.parent_task_id is None
+
+    async def test_queued_insert_failure_returns_500(self, dispatch, submit_task, as_user):
+        with patch("tasks.routes.insert_queued_task", side_effect=RuntimeError("db down")):
+            submitted = await submit_task(_task_form(), user=as_user)
+
+        assert submitted.response.status_code == 500
+        assert submitted.outcome is None
+        dispatch.publish.assert_not_called()
+
     @patch(
         "tasks.routes.select_agent_by_mode",
         return_value=("agent-1", "demand", None, []),
     )
-    @patch("tasks.routes.insert_new_task", return_value=None)
-    def test_insert_failure_returns_500(
-        self,
-        _insert,
-        _by_mode,
-        _for_task,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+    async def test_unresolvable_work_queue_fails_the_task(
+        self, _by_mode, dispatch, submit_task, routing_db, as_user
     ):
-        fake = _FakeSession()
-        client = make_fake_client(fake, current_user=as_user)
-        r = client.post("/tasks/new_task/", json=_task_form())
-        assert r.status_code == 500
+        dispatch.publish.side_effect = HTTPException(
+            status_code=500,
+            detail="Could not resolve RabbitMQ work queue for assigned agent",
+        )
+
+        submitted = await submit_task(_task_form(conversation_id=7), user=as_user)
+
+        task = _stored(routing_db, submitted.response.json()["task_id"])
+        assert task.status == TaskStatus.FAILED.value
+        assert "Could not resolve RabbitMQ work queue" in task.result.result_data
 
     @patch("tasks.routes.manager_announce_plan", return_value="Here's the plan")
-    @patch("tasks.routes._create_chain_root")
     @patch("tasks.routes.select_agent_for_task")
-    @patch("tasks.routes.select_agent_by_mode")
-    @patch("tasks.routes.insert_new_task", return_value="sub-1")
-    def test_single_agent_with_future_actions_builds_chain_root(
-        self,
-        _insert,
-        mock_by_mode,
-        _for_task,
-        mock_root,
-        mock_announce,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+    @patch(
+        "tasks.routes.select_agent_by_mode",
+        return_value=("agent-1", "demand", None, [("agent-2", "second step")]),
+    )
+    async def test_single_agent_with_future_actions_builds_chain_root(
+        self, _by_mode, _for_task, announce, dispatch, submit_task, routing_db, as_user
     ):
-        # by_mode returns an agent plus a future-action chain → root created.
-        mock_by_mode.return_value = (
-            "agent-1",
-            "demand",
-            None,
-            [("agent-2", "second step")],
-        )
-        root = _task(id="root-99")
-        mock_root.return_value = root
-        # The subtask lookup after insert returns a mutable namespace row.
-        subtask_row = _task(id="sub-1")
-        fake = _FakeSession(first_map={"Task": subtask_row})
-        client = make_fake_client(fake, current_user=as_user)
-        r = client.post("/tasks/new_task/", json=_task_form(conversation_id=4))
-        assert r.status_code == 200
-        # Chain set up → root id surfaced to the UI, not the subtask id.
-        assert r.json()["task_id"] == "root-99"
-        mock_announce.assert_called_once()
-        assert subtask_row.parent_task_id == "root-99"
+        _add_agent(routing_db, "manager-id", "Manager", type_value="manager")
+
+        submitted = await submit_task(_task_form(conversation_id=7), user=as_user)
+
+        root_id = submitted.response.json()["task_id"]
+        root = _stored(routing_db, root_id)
+        assert root.agent_id == "manager-id"
+        assert root.status == TaskStatus.RUNNING.value
+        (subtask,) = _subtasks_of(routing_db, root_id)
+        assert subtask.agent_id == "agent-1"
+        assert subtask.order == 1
+        assert _dispatched(dispatch)[1]["task_id"] == subtask.id
+        announce.assert_called_once()
+        assert "Here's the plan" in _published_texts(root_id)
 
     @patch("tasks.routes.select_agent_for_task")
     @patch("tasks.routes.select_agent_by_mode")
-    @patch("tasks.routes.insert_new_task", return_value="att-task")
-    def test_attachments_discard_direct_answer_and_dispatch(
-        self,
-        _insert,
-        mock_by_mode,
-        mock_for_task,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+    async def test_attachments_discard_direct_answer_and_dispatch(
+        self, by_mode, for_task, dispatch, submit_task, as_user
     ):
-        # Router would answer directly, but attachments force agent dispatch.
-        mock_by_mode.return_value = (None, None, None, [])
-        mock_for_task.return_value = ("agent-1", "demand", "direct text", [])
-        fake = _FakeSession()
-        client = make_fake_client(fake, current_user=as_user)
-        body = _task_form(
-            conversation_id=2,
-            attached_files=[{"filename": "report.pdf"}],
+        by_mode.return_value = (None, None, None, [])
+        for_task.return_value = ("agent-1", "demand", "direct text", [])
+
+        submitted = await submit_task(
+            _task_form(conversation_id=7, attached_files=[{"filename": "report.pdf"}]),
+            user=as_user,
         )
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 200
-        # direct answer suppressed → went through dispatch.
-        mock_publish.assert_called_once()
-        assert "assigned to agent" in r.json()["message"]
+
+        dispatch.publish.assert_called_once()
+        assert "assigned to agent" in submitted.outcome["message"]
 
 
-@patch("tasks.routes._publish_task_to_work_queue")
-@patch("tasks.routes.send_messages_via_websockets")
-@patch("tasks.routes.add_messages")
 class TestCreateNewTaskAutoCreateAndCatchAll:
     @patch("tasks.routes.create_agent", return_value=("auto-id", "auto-key"))
     @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
-    @patch("tasks.routes.insert_new_task", return_value="auto-task")
-    def test_auto_creates_specialist_for_missing_skill(
-        self,
-        _insert,
-        _by_mode,
-        _for_task,
-        mock_create,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+    async def test_auto_creates_specialist_for_missing_skill(
+        self, _by_mode, _for_task, create, dispatch, submit_task, routing_db, as_user
     ):
-        # No active agent advertises "rare_skill" → auto-create fires.
-        existing = _agent(id="a-existing")
-        existing.skills = ["other"]
-        subtask_row = _task(id="auto-task")
-        fake = _FakeSession(
-            first_map={"Task": subtask_row, "Agents": None},
-            all_map={"Agents": [existing]},
+        _add_agent(routing_db, "a-existing", "Researcher", skills=["other"])
+
+        submitted = await submit_task(
+            _task_form(skills_required=["rare_skill"], conversation_id=7), user=as_user
         )
-        client = make_fake_client(fake, current_user=as_user)
-        body = _task_form(skills_required=["rare_skill"], conversation_id=1)
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 200
-        mock_create.assert_called_once()
-        # Auto-created credentials must ride along in the dispatch payload.
-        _, _, payload = mock_publish.call_args.args
+
+        create.assert_called_once()
+        agent_id, payload = _dispatched(dispatch)
+        assert agent_id == "auto-id"
         assert payload["assigned_agent_api_key"] == "auto-key"
         assert payload["assigned_agent_type"] == "general"
+        assert payload["task_id"] == submitted.response.json()["task_id"]
 
-    @patch(
-        "tasks.routes.create_agent", side_effect=RuntimeError("registry down")
-    )
+    @patch("tasks.routes.create_agent", side_effect=RuntimeError("registry down"))
     @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
-    @patch("tasks.routes.insert_new_task", return_value="fallback-task")
-    def test_auto_create_failure_falls_back_to_catch_all_agent(
-        self,
-        _insert,
-        _by_mode,
-        _for_task,
-        _create,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+    async def test_auto_create_failure_falls_back_to_catch_all_agent(
+        self, _by_mode, _for_task, _create, dispatch, submit_task, routing_db, as_user
     ):
-        existing = _agent(id="a-existing")
-        existing.skills = ["other"]
-        catch_all = _agent(id="catch-all", type_value="general")
-        subtask_row = _task(id="fallback-task")
+        _add_agent(routing_db, "catch-all", "General-Assistant", skills=["other"])
 
-        # Agents.first() is used for the catch-all lookup → return catch_all.
-        fake = _FakeSession(
-            first_map={"Task": subtask_row, "Agents": catch_all},
-            all_map={"Agents": [existing]},
+        submitted = await submit_task(
+            _task_form(skills_required=["rare_skill"], conversation_id=7), user=as_user
         )
-        client = make_fake_client(fake, current_user=as_user)
-        body = _task_form(skills_required=["rare_skill"], conversation_id=1)
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 200
-        assert "catch-all" in r.json()["message"]
-        mock_publish.assert_called_once()
+
+        assert "catch-all" in submitted.outcome["message"]
+        assert _dispatched(dispatch)[0] == "catch-all"
 
     @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode")
-    @patch("tasks.routes.insert_new_task", return_value="skill-task")
-    def test_skill_match_fallback_selects_agent(
-        self,
-        _insert,
-        mock_by_mode,
-        _for_task,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+    async def test_skill_match_fallback_selects_agent(
+        self, by_mode, _for_task, dispatch, submit_task, as_user
     ):
-        # First call (explicit mode) misses; the per-skill fallback hits.
-        mock_by_mode.side_effect = [
-            (None, None, None, []),  # initial select_agent_by_mode
-            ("skill-agent", "demand", None, []),  # any_with_skill fallback
+        by_mode.side_effect = [
+            (None, None, None, []),
+            ("skill-agent", "demand", None, []),
         ]
-        fake = _FakeSession()
-        client = make_fake_client(fake, current_user=as_user)
-        body = _task_form(skills_required=["analysis"])
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 200
-        assert "skill-agent" in r.json()["message"]
-        mock_publish.assert_called_once()
+
+        submitted = await submit_task(_task_form(skills_required=["analysis"]), user=as_user)
+
+        assert "skill-agent" in submitted.outcome["message"]
+        dispatch.publish.assert_called_once()
 
 
-@patch("tasks.routes._publish_task_to_work_queue")
-@patch("tasks.routes.send_messages_via_websockets")
-@patch("tasks.routes.add_messages")
 class TestCreateNewTaskDecompositionFallback:
+    @patch("tasks.routes.manager_announce_plan")
     @patch("tasks.routes.decompose_task")
     @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
-    @patch("tasks.routes.insert_new_task", return_value="decomp-task")
-    def test_decomposition_fallback_dispatches_first_action(
+    async def test_decomposition_fallback_dispatches_first_action(
         self,
-        _insert,
         _by_mode,
         _for_task,
-        mock_decompose,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
+        decompose,
+        announce,
+        dispatch,
+        submit_task,
+        routing_db,
         as_user,
     ):
-        mock_decompose.return_value = (
-            ("dagent", "first sub-demand"),
-            [("dagent2", "second")],
+        decompose.return_value = (("dagent", "first sub-demand"), [("dagent2", "second")])
+
+        submitted = await submit_task(
+            _task_form(skills_required=[], conversation_id=7), user=as_user
         )
-        # No skills → skip auto-create; catch-all lookup returns None so we
-        # fall straight into decomposition.
-        fake = _FakeSession(
-            first_map={"Agents": None}, count_map={"Agents": 3}
-        )
-        client = make_fake_client(fake, current_user=as_user)
-        body = _task_form(skills_required=[], conversation_id=8)
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 200
-        assert "decomposed and assigned" in r.json()["message"]
-        mock_publish.assert_called_once()
+
+        root_id = submitted.response.json()["task_id"]
+        assert "decomposed and assigned" in submitted.outcome["message"]
+        (subtask,) = _subtasks_of(routing_db, root_id)
+        assert subtask.agent_id == "dagent"
+        assert subtask.result.future_actions == [["dagent2", "second"]]
+        assert _dispatched(dispatch)[1]["task_id"] == subtask.id
+        announce.assert_not_called()
+
+    @patch("tasks.routes.decompose_task", return_value=(("dagent", "only step"), []))
+    @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
+    @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
+    async def test_one_step_decomposition_dispatches_the_queued_task_itself(
+        self, _by_mode, _for_task, _decompose, dispatch, submit_task, routing_db, as_user
+    ):
+        submitted = await submit_task(_task_form(skills_required=[]), user=as_user)
+
+        task_id = submitted.response.json()["task_id"]
+        assert _subtasks_of(routing_db, task_id) == []
+        assert _stored(routing_db, task_id).agent_id == "dagent"
+        assert _dispatched(dispatch)[1]["task_id"] == task_id
 
     @patch("tasks.routes.create_agent", return_value=("auto-id", "auto-key"))
     @patch("tasks.routes.decompose_task")
     @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
-    @patch("tasks.routes.insert_new_task", return_value="decomp-auto")
-    def test_auto_created_credentials_ride_along_in_dispatch_payload(
+    async def test_auto_created_credentials_ride_along_in_dispatch_payload(
         self,
-        _insert,
         _by_mode,
         _for_task,
-        mock_decompose,
+        decompose,
         _create,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
+        dispatch,
+        submit_task,
+        routing_db,
         as_user,
     ):
-        # A missing skill auto-creates a specialist; the new agent_id then
-        # drives single-agent dispatch, and the worker-bound credentials must
-        # be embedded in the dispatch payload so it can authenticate later.
-        mock_decompose.return_value = (("auto-id", "sub demand"), [])
-        existing = _agent(id="a-existing")
-        existing.skills = ["other"]
-        subtask_row = _task(id="decomp-auto")
-        fake = _FakeSession(
-            first_map={"Agents": None, "Task": subtask_row},
-            all_map={"Agents": [existing]},
-            count_map={"Agents": 3},
+        _add_agent(routing_db, "a-existing", "Researcher", skills=["other"])
+
+        await submit_task(
+            _task_form(skills_required=["rare_skill"], conversation_id=7), user=as_user
         )
-        client = make_fake_client(fake, current_user=as_user)
-        body = _task_form(skills_required=["rare_skill"], conversation_id=2)
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 200
-        _, _, payload = mock_publish.call_args.args
+
+        decompose.assert_not_called()
+        _agent_id, payload = _dispatched(dispatch)
         assert payload["assigned_agent_api_key"] == "auto-key"
         assert payload["assigned_agent_type"] == "general"
 
     @patch("tasks.routes.decompose_task", return_value=(None, []))
     @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
-    def test_no_plan_no_agents_registered_message(
-        self,
-        _by_mode,
-        _for_task,
-        _decompose,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+    async def test_no_plan_no_agents_registered_message(
+        self, _by_mode, _for_task, _decompose, dispatch, submit_task, routing_db, as_user
     ):
-        # Zero agents in the directory → "no agents registered" fallback.
-        fake = _FakeSession(first_map={"Agents": None}, count_map={"Agents": 0})
-        client = make_fake_client(fake, current_user=as_user)
-        body = _task_form(skills_required=[], conversation_id=3)
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 200
-        assert "No agents are currently registered" in r.json()["message"]
-        mock_publish.assert_not_called()
+        submitted = await submit_task(
+            _task_form(skills_required=[], conversation_id=7), user=as_user
+        )
 
+        assert "No agents are currently registered" in submitted.outcome["message"]
+        dispatch.publish.assert_not_called()
+        task = _stored(routing_db, submitted.outcome["task_id"])
+        assert task.status == TaskStatus.FAILED.value
+        roles = [call.args[0] for call in dispatch.add_messages.call_args_list]
+        assert roles == ["user", "assistant"]
+
+    @patch("tasks.routes.create_agent", side_effect=RuntimeError("registry down"))
     @patch("tasks.routes.decompose_task", return_value=(None, []))
     @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
-    def test_no_plan_with_requested_skills_message(
+    async def test_no_plan_with_requested_skills_message(
         self,
         _by_mode,
         _for_task,
         _decompose,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
+        _create,
+        dispatch,
+        submit_task,
+        routing_db,
         as_user,
     ):
-        # Agents exist (count>0) and skills were requested → skill-specific msg.
-        # Active-agents .all() is empty so missing_skills stays empty and
-        # auto-create is skipped; catch-all first() returns None.
-        fake = _FakeSession(
-            first_map={"Agents": None},
-            all_map={"Agents": []},
-            count_map={"Agents": 5},
+        _add_agent(routing_db, "sleeping", "Researcher", status="inactive")
+
+        submitted = await submit_task(
+            _task_form(skills_required=["nonexistent"], conversation_id=7), user=as_user
         )
-        client = make_fake_client(fake, current_user=as_user)
-        body = _task_form(skills_required=["nonexistent"], conversation_id=3)
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 200
-        assert "aren't advertised by any agent" in r.json()["message"]
+
+        assert "aren't advertised by any agent" in submitted.outcome["message"]
 
 
-@patch("tasks.routes._publish_task_to_work_queue")
-@patch("tasks.routes.send_messages_via_websockets")
-@patch("tasks.routes.add_messages")
 class TestCreateNewTaskDecomposeMode:
     @patch("tasks.routes.manager_announce_plan", return_value="The plan")
-    @patch("tasks.routes._create_chain_root")
     @patch("tasks.routes.decompose_task")
-    @patch("tasks.routes.insert_new_task", return_value="sub-decomp")
-    def test_force_decompose_creates_root_and_dispatches(
-        self,
-        _insert,
-        mock_decompose,
-        mock_root,
-        mock_announce,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+    async def test_force_decompose_creates_root_and_dispatches(
+        self, decompose, announce, dispatch, submit_task, routing_db, as_user
     ):
-        mock_decompose.return_value = (
+        decompose.return_value = (
             ("first-agent", "first action"),
             [("second-agent", "second action")],
         )
-        root = _task(id="droot")
-        mock_root.return_value = root
-        subtask_row = _task(id="sub-decomp")
-        fake = _FakeSession(first_map={"Task": subtask_row})
-        client = make_fake_client(fake, current_user=as_user)
-        body = _task_form(mode="decompose", conversation_id=6)
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 200
-        b = r.json()
-        assert b["task_id"] == "droot"
-        assert "decomposed into 2 subtask" in b["message"]
-        mock_announce.assert_called_once()
-        assert subtask_row.parent_task_id == "droot"
+        _add_agent(routing_db, "manager-id", "Manager", type_value="manager")
+
+        submitted = await submit_task(
+            _task_form(mode="decompose", conversation_id=7), user=as_user
+        )
+
+        root_id = submitted.response.json()["task_id"]
+        assert submitted.outcome["task_id"] == root_id
+        assert "decomposed into 2 subtask" in submitted.outcome["message"]
+        announce.assert_called_once()
+        (subtask,) = _subtasks_of(routing_db, root_id)
+        assert subtask.agent_id == "first-agent"
+        assert _stored(routing_db, root_id).agent_id == "manager-id"
 
     @patch("tasks.routes.decompose_task", return_value=(None, []))
-    def test_force_decompose_no_specialists_message(
-        self,
-        _decompose,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+    async def test_force_decompose_no_specialists_message(
+        self, _decompose, dispatch, submit_task, as_user
     ):
-        # decompose mode + zero non-Manager agents → setup-error message.
-        fake = _FakeSession(count_map={"Agents": 0})
-        client = make_fake_client(fake, current_user=as_user)
-        body = _task_form(mode="decompose", conversation_id=6)
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 200
-        assert "no specialist" in r.json()["message"]
+        submitted = await submit_task(
+            _task_form(mode="decompose", conversation_id=7), user=as_user
+        )
+
+        assert "no specialist" in submitted.outcome["message"]
 
     @patch("tasks.routes.decompose_task", return_value=(None, []))
-    def test_force_decompose_single_agent_message(
-        self,
-        _decompose,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+    async def test_force_decompose_single_agent_message(
+        self, _decompose, dispatch, submit_task, routing_db, as_user
     ):
-        # Exactly one non-Manager agent → "nothing to decompose across".
-        fake = _FakeSession(count_map={"Agents": 1})
-        client = make_fake_client(fake, current_user=as_user)
-        body = _task_form(mode="decompose", conversation_id=6)
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 200
-        assert "only one non-Manager" in r.json()["message"]
+        _add_agent(routing_db, "only-one", "Researcher")
+
+        submitted = await submit_task(
+            _task_form(mode="decompose", conversation_id=7), user=as_user
+        )
+
+        assert "only one non-Manager" in submitted.outcome["message"]
 
     @patch("tasks.routes.decompose_task", return_value=(None, []))
-    def test_force_decompose_many_agents_planner_failed_message(
-        self,
-        _decompose,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+    async def test_force_decompose_many_agents_planner_failed_message(
+        self, _decompose, dispatch, submit_task, routing_db, as_user
     ):
-        # Plenty of agents but the planner still produced nothing.
-        fake = _FakeSession(count_map={"Agents": 5})
-        client = make_fake_client(fake, current_user=as_user)
-        body = _task_form(mode="decompose")  # no conversation_id branch
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 200
-        assert "planner LLM" in r.json()["message"]
+        for index in range(5):
+            _add_agent(routing_db, f"agent-{index}", f"Specialist-{index}")
+
+        submitted = await submit_task(_task_form(mode="decompose"), user=as_user)
+
+        assert "planner LLM" in submitted.outcome["message"]
+        dispatch.add_messages.assert_not_called()
 
 
 # --------------------------------------------------------------------------- #
@@ -878,139 +793,91 @@ class TestCreateNewTaskDecomposeMode:
 # --------------------------------------------------------------------------- #
 
 
-@patch("tasks.routes._publish_task_to_work_queue")
-@patch("tasks.routes.send_messages_via_websockets")
-@patch("tasks.routes.add_messages")
 @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
 @patch(
     "tasks.routes.select_agent_by_mode",
     return_value=("agent-1", "demand", None, []),
 )
-@patch("tasks.routes.insert_new_task", return_value="file-task")
 class TestInlineFileValidation:
-    def test_invalid_base64_returns_400(
-        self,
-        _insert,
-        _by_mode,
-        _for_task,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+    async def test_invalid_base64_returns_400(
+        self, _by_mode, _for_task, dispatch, submit_task, as_user
     ):
-        fake = _FakeSession()
-        client = make_fake_client(fake, current_user=as_user)
         body = _task_form(
             inline_files=[{"filename": "bad.bin", "content_b64": "!!!not base64!!!"}],
         )
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 400
-        assert "Invalid base64" in r.json()["detail"]
 
-    def test_oversize_inline_file_returns_413(
-        self,
-        _insert,
-        _by_mode,
-        _for_task,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+        submitted = await submit_task(body, user=as_user)
+
+        assert submitted.response.status_code == 400
+        assert "Invalid base64" in submitted.response.json()["detail"]
+
+    async def test_oversize_inline_file_returns_413(
+        self, _by_mode, _for_task, dispatch, submit_task, as_user
     ):
         big = base64.b64encode(b"x" * (2 * 1024 * 1024 + 10)).decode()
-        fake = _FakeSession()
-        client = make_fake_client(fake, current_user=as_user)
         body = _task_form(
             inline_files=[{"filename": "big.bin", "content_b64": big}],
         )
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 413
-        assert "exceeds" in r.json()["detail"]
 
-    def test_valid_inline_file_is_forwarded(
-        self,
-        _insert,
-        _by_mode,
-        _for_task,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+        submitted = await submit_task(body, user=as_user)
+
+        assert submitted.response.status_code == 413
+        assert "exceeds" in submitted.response.json()["detail"]
+
+    async def test_valid_inline_file_is_forwarded(
+        self, _by_mode, _for_task, dispatch, submit_task, as_user
     ):
         small = base64.b64encode(b"hello world").decode()
-        fake = _FakeSession()
-        client = make_fake_client(fake, current_user=as_user)
         body = _task_form(
             inline_files=[
                 {"filename": "ok.txt", "mime": "text/plain", "content_b64": small}
             ],
         )
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 200
-        _, _, payload = mock_publish.call_args.args
+
+        submitted = await submit_task(body, user=as_user)
+
+        assert submitted.response.status_code == 202
+        _agent_id, payload = _dispatched(dispatch)
         assert any(f["source"] == "inline" for f in payload["files"])
 
 
-@patch("tasks.routes._publish_task_to_work_queue")
-@patch("tasks.routes.send_messages_via_websockets")
-@patch("tasks.routes.add_messages")
 @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
 @patch(
     "tasks.routes.select_agent_by_mode",
     return_value=("agent-1", "demand", None, []),
 )
-@patch("tasks.routes.insert_new_task", return_value="file-task")
 class TestAttachedKnowledgeStoreRefs:
     @pytest.mark.regression
-    def test_f25_same_name_documents_dispatch_with_their_doc_ids(
-        self,
-        _insert,
-        _by_mode,
-        _for_task,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+    async def test_f25_same_name_documents_dispatch_with_their_doc_ids(
+        self, _by_mode, _for_task, dispatch, submit_task, as_user
     ):
         title = "1_Q4_2025_Financial_Report.md"
-        fake = _FakeSession()
-        client = make_fake_client(fake, current_user=as_user)
         body = _task_form(
             attached_files=[
                 {"filename": title, "doc_id": "older-copy"},
                 {"filename": title, "doc_id": "newer-copy"},
             ],
         )
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 200
-        _, _, payload = mock_publish.call_args.args
+
+        submitted = await submit_task(body, user=as_user)
+
+        assert submitted.response.status_code == 202
+        _agent_id, payload = _dispatched(dispatch)
         assert payload["files"] == [
             {"source": "knowledge_store", "filename": title, "doc_id": "older-copy"},
             {"source": "knowledge_store", "filename": title, "doc_id": "newer-copy"},
         ]
 
     @pytest.mark.regression
-    def test_f25_filename_only_ref_still_dispatches(
-        self,
-        _insert,
-        _by_mode,
-        _for_task,
-        mock_add,
-        mock_ws,
-        mock_publish,
-        make_fake_client,
-        as_user,
+    async def test_f25_filename_only_ref_still_dispatches(
+        self, _by_mode, _for_task, dispatch, submit_task, as_user
     ):
-        fake = _FakeSession()
-        client = make_fake_client(fake, current_user=as_user)
         body = _task_form(attached_files=[{"filename": "report.pdf"}])
-        r = client.post("/tasks/new_task/", json=body)
-        assert r.status_code == 200
-        _, _, payload = mock_publish.call_args.args
+
+        submitted = await submit_task(body, user=as_user)
+
+        assert submitted.response.status_code == 202
+        _agent_id, payload = _dispatched(dispatch)
         assert payload["files"] == [
             {"source": "knowledge_store", "filename": "report.pdf"}
         ]
@@ -1063,7 +930,7 @@ class TestTaskResultAuthAndLookup:
         assert r.status_code == 422
 
 
-@patch("tasks.routes.send_messages_via_websockets")
+@patch("tasks.routes.publish_agent_message")
 @patch("tasks.routes.add_messages")
 @patch("tasks.routes.agent_may_submit_task_result", return_value=True)
 @patch("tasks.routes.validating_task_results")
@@ -1089,10 +956,9 @@ class TestTaskResultCompletion:
         assert mock_ws.await_count == 1 or mock_ws.call_count == 1
         assert "the output" in mock_ws.call_args.args
 
-    def test_standalone_task_skips_chat_side_effects(
+    def test_standalone_task_stores_the_result_without_chat_side_effects(
         self, _validate, _allowed, mock_add, mock_ws, make_fake_client
     ):
-        # conversation_id None → no add_messages / websocket broadcast.
         tr = _result(future_actions=[])
         task = _task(id="t1", agent_id="agent-1", conversation_id=None, result=tr)
         fake = _FakeSession(first_map={"Task": task})
@@ -1101,7 +967,32 @@ class TestTaskResultCompletion:
             r = client.post("/tasks/task-result/", json=_result_body())
         assert r.status_code == 200
         mock_add.assert_not_called()
-        mock_ws.assert_not_called()
+        assert mock_ws.call_args.args == ("t1", None, "the output")
+        assert mock_ws.call_args.kwargs["event_type"] == "result"
+
+    def test_result_event_carries_the_agent_sources_when_given(
+        self, _validate, _allowed, mock_add, mock_ws, make_fake_client
+    ):
+        tr = _result(future_actions=[])
+        task = _task(id="t1", agent_id="agent-1", conversation_id=12, result=tr)
+        fake = _FakeSession(first_map={"Task": task, "Agents": _agent()})
+        sources = [{"doc_id": "doc-4", "title": "4_Expense_Policy.md"}]
+        client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
+        r = client.post("/tasks/task-result/", json=_result_body(sources=sources))
+        assert r.status_code == 200
+        assert mock_ws.call_args.kwargs["sources"] == sources
+        assert mock_ws.call_args.kwargs["route"] == "agent"
+        assert mock_ws.call_args.kwargs["status"] == "completed"
+
+    def test_result_event_has_no_sources_when_the_agent_sent_none(
+        self, _validate, _allowed, mock_add, mock_ws, make_fake_client
+    ):
+        tr = _result(future_actions=[])
+        task = _task(id="t1", agent_id="agent-1", conversation_id=12, result=tr)
+        fake = _FakeSession(first_map={"Task": task, "Agents": _agent()})
+        client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
+        client.post("/tasks/task-result/", json=_result_body())
+        assert "sources" not in mock_ws.call_args.kwargs
 
     def test_aggregate_failure_falls_back_to_raw_result(
         self, _validate, _allowed, mock_add, mock_ws, make_fake_client
@@ -1160,7 +1051,7 @@ class TestTaskResultCompletion:
 
 
 @patch("tasks.routes._publish_task_to_work_queue")
-@patch("tasks.routes.send_messages_via_websockets")
+@patch("tasks.routes.publish_agent_message")
 @patch("tasks.routes.add_messages")
 @patch("tasks.routes.agent_may_submit_task_result", return_value=True)
 @patch("tasks.routes.validating_task_results")
@@ -1418,6 +1309,7 @@ class TestTaskResultChaining:
         assert r.status_code == 200
         assert root.status == TaskStatus.COMPLETED.value
         assert root_result.result_data == "ROOT ANSWER"
+        assert mock_ws.call_args.args == ("root-1", None, "ROOT ANSWER")
         # Empty seed history → user-demand turn synthesized, then the answer.
         assert root_result.history[0]["role"] == "user"
         assert root_result.history[-1]["message"] == "ROOT ANSWER"
@@ -1530,8 +1422,15 @@ def _step_body(**over):
     return body
 
 
-@patch("tasks.routes.send_task_step_via_websockets")
+@patch("tasks.routes.publish_task_step")
 class TestTaskStep:
+    def test_step_without_a_task_id_is_ignored(self, mock_ws, make_fake_client):
+        fake = _FakeSession()
+        client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
+        r = client.post("/tasks/task-step/", json=_step_body(task_id=""))
+        assert r.json()["message"] == "ignored"
+        mock_ws.assert_not_called()
+
     def test_unknown_task_is_ignored(self, mock_ws, make_fake_client):
         fake = _FakeSession(first_map={"Task": None})
         client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
@@ -1557,7 +1456,7 @@ class TestTaskStep:
         assert r.status_code == 403
 
     @patch("tasks.routes.agent_may_submit_task_result", return_value=True)
-    def test_standalone_task_has_no_conversation(
+    def test_standalone_task_step_is_stored_without_a_conversation(
         self, _allowed, mock_ws, make_fake_client
     ):
         task = _task(id="t1", agent_id="agent-1", conversation_id=None)
@@ -1566,7 +1465,7 @@ class TestTaskStep:
         r = client.post("/tasks/task-step/", json=_step_body())
         assert r.status_code == 200
         assert r.json()["message"] == "no conversation"
-        mock_ws.assert_not_called()
+        assert mock_ws.call_args.args[:2] == ("t1", None)
 
     @patch("tasks.routes.agent_may_submit_task_result", return_value=True)
     def test_step_broadcasts_under_root_task_id(
@@ -1590,7 +1489,8 @@ class TestTaskStep:
         assert r.status_code == 200
         assert r.json()["message"] == "ok"
         # Broadcast happened with the root id as the outer task_id.
-        conv_arg, payload = mock_ws.call_args.args
+        task_arg, conv_arg, payload = mock_ws.call_args.args
+        assert task_arg == "root-x"
         assert conv_arg == "30"
         assert payload["task_id"] == "root-x"
         assert payload["subtask_id"] == "t1"
@@ -1825,26 +1725,27 @@ class TestBuildChainTranscript:
         assert "remaining earlier steps omitted" in transcript
 
 
-class TestCreateChainRoot:
-    @patch("tasks.routes.insert_new_task", return_value="new-root")
-    def test_creates_and_marks_running(self, _insert):
-        from tasks.routes import _create_chain_root
+class TestPromoteToChainRoot:
+    def test_root_is_attributed_to_the_manager_and_marked_running(self):
+        from tasks.routes import _promote_to_chain_root
 
-        manager = _agent(id="mgr", name="Manager")
-        created_root = _task(id="new-root", status=TaskStatus.PENDING.value)
-        # Agents.first() → Manager; Task.first() → the freshly inserted root.
-        fake = _FakeSession(first_map={"Agents": manager, "Task": created_root})
-        root = _create_chain_root("the demand", 5, fake)
-        assert root is created_root
+        root = _task(
+            id="root-1", status=TaskStatus.QUEUED.value, agent_id="unassigned", order=None
+        )
+        fake = _FakeSession(first_map={"Agents": _agent(id="mgr", name="Manager")})
+        _promote_to_chain_root(root, fake)
+        assert root.agent_id == "mgr"
         assert root.status == TaskStatus.RUNNING.value
         assert root.order == 0
         fake.commit.assert_called()
 
-    def test_returns_none_when_manager_missing(self):
-        from tasks.routes import _create_chain_root
+    def test_missing_manager_keeps_the_placeholder_owner(self):
+        from tasks.routes import _promote_to_chain_root
 
-        fake = _FakeSession(first_map={"Agents": None})
-        assert _create_chain_root("demand", None, fake) is None
+        root = _task(id="root-1", status=TaskStatus.QUEUED.value, agent_id="unassigned")
+        _promote_to_chain_root(root, _FakeSession(first_map={"Agents": None}))
+        assert root.agent_id == "unassigned"
+        assert root.status == TaskStatus.RUNNING.value
 
 
 class TestBroadcastManagerMessage:
@@ -1852,9 +1753,9 @@ class TestBroadcastManagerMessage:
         from tasks.routes import _broadcast_manager_message
 
         with patch("tasks.routes.add_messages") as mock_add, patch(
-            "tasks.routes.send_messages_via_websockets"
+            "tasks.routes.publish_agent_message"
         ) as mock_ws:
-            await _broadcast_manager_message(None, "text", _FakeSession())
+            await _broadcast_manager_message(None, "text", _FakeSession(), task_id="root-1")
         mock_add.assert_not_called()
         mock_ws.assert_not_called()
 
@@ -1862,9 +1763,9 @@ class TestBroadcastManagerMessage:
         from tasks.routes import _broadcast_manager_message
 
         with patch("tasks.routes.add_messages") as mock_add, patch(
-            "tasks.routes.send_messages_via_websockets"
+            "tasks.routes.publish_agent_message"
         ) as mock_ws:
-            await _broadcast_manager_message(5, "", _FakeSession())
+            await _broadcast_manager_message(5, "", _FakeSession(), task_id="root-1")
         mock_add.assert_not_called()
         mock_ws.assert_not_called()
 
@@ -1875,11 +1776,12 @@ class TestBroadcastManagerMessage:
         with patch(
             "tasks.routes.get_manager_agent", return_value=manager
         ), patch("tasks.routes.add_messages") as mock_add, patch(
-            "tasks.routes.send_messages_via_websockets"
+            "tasks.routes.publish_agent_message"
         ) as mock_ws:
-            await _broadcast_manager_message(7, "hello", _FakeSession())
+            await _broadcast_manager_message(7, "hello", _FakeSession(), task_id="root-1")
         mock_add.assert_called_once()
         mock_ws.assert_called_once()
+        assert mock_ws.call_args.args[:3] == ("root-1", 7, "hello")
         # Manager id/name flow into the WS attribution kwargs.
         assert mock_ws.call_args.kwargs["agent_id"] == "mgr"
         assert mock_ws.call_args.kwargs["agent_name"] == "Manager"
@@ -1890,9 +1792,9 @@ class TestBroadcastManagerMessage:
         with patch(
             "tasks.routes.get_manager_agent", return_value=None
         ), patch("tasks.routes.add_messages") as mock_add, patch(
-            "tasks.routes.send_messages_via_websockets"
+            "tasks.routes.publish_agent_message"
         ) as mock_ws:
-            await _broadcast_manager_message(7, "hello", _FakeSession())
+            await _broadcast_manager_message(7, "hello", _FakeSession(), task_id="root-1")
         mock_add.assert_called_once()
         # Falls back to a literal "Manager" name with no id.
         assert mock_ws.call_args.kwargs["agent_id"] is None
@@ -1936,6 +1838,7 @@ class TestQueueStatsHelper:
         assert stats["completed"] == 2
         assert stats["total"] == 3
         assert set(stats) == {
+            "queued",
             "pending",
             "running",
             "completed",

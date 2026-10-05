@@ -4,7 +4,18 @@ import {
   NewTaskPayload,
   NewTaskResponse,
   PaginatedHistory,
+  TaskEventsPage,
 } from "@/lib/types";
+
+export const IDEMPOTENCY_HEADER = "Idempotency-Key";
+
+export function newIdempotencyKey(): string {
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi && typeof cryptoApi.randomUUID === "function") {
+    return cryptoApi.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
 
 export interface ChatResponse<T = void> {
   ok: boolean;
@@ -30,6 +41,7 @@ export interface SuggestedSkill {
 }
 
 export interface TaskQueueStats {
+  queued?: number;
   pending: number;
   running: number;
   completed: number;
@@ -144,6 +156,7 @@ export const chatApi = {
           agentId: typeof msg.agent_id === 'string' ? msg.agent_id : undefined,
           agentName: typeof msg.agent_name === 'string' ? msg.agent_name : undefined,
           skillUsed: typeof msg.skill_used === 'string' ? msg.skill_used : undefined,
+          messageId: typeof msg.id === 'number' ? msg.id : undefined,
         })),
         nextCursor: null,
       };
@@ -162,12 +175,13 @@ export const chatApi = {
   },
 
   async createTask(
-    payload: NewTaskPayload
+    payload: NewTaskPayload,
+    idempotencyKey: string = newIdempotencyKey()
   ): Promise<ChatResponse<NewTaskResponse | void>> {
     const response = await apiClient.post<NewTaskResponse>(
       "/tasks/new_task",
       payload,
-      { retry: 2 }
+      { retry: 2, headers: { [IDEMPOTENCY_HEADER]: idempotencyKey } }
     );
 
     if (!response.ok) {
@@ -337,6 +351,24 @@ export const chatApi = {
       ok: true,
       data: response.data,
     };
+  },
+
+  async getTaskEvents(
+    taskId: string,
+    since: number
+  ): Promise<ChatResponse<TaskEventsPage>> {
+    const response = await apiClient.get<TaskEventsPage>(
+      `/tasks/${taskId}/events?since=${since}`,
+      { retry: 1 }
+    );
+    if (!response.ok || !response.data || !Array.isArray(response.data.events)) {
+      return {
+        ok: false,
+        error: response.error || "Failed to fetch task events",
+        aborted: response.aborted,
+      };
+    }
+    return { ok: true, data: response.data };
   },
 
   async cancelTask(taskId: string, reason?: string): Promise<ChatResponse<void>> {

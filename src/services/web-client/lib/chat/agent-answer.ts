@@ -7,33 +7,56 @@ export type AgentAnswer = {
   agentId?: string;
   agentName?: string;
   skillUsed?: string;
+  messageId?: number;
 };
 
 const FINISHED_TASK_STATUSES = ["completed", "failed", "cancelled"];
 
+export const FAILED_TASK_TEXT = "This request failed before an answer was produced.";
+export const CANCELLED_TASK_TEXT = "This request was cancelled before it finished.";
+
+let answersAppended = 0;
+
 export function isFinishedTask(task: TaskDetails | null): task is TaskDetails {
   return task !== null && FINISHED_TASK_STATUSES.includes(task.status);
+}
+
+function finishedTaskText(task: TaskDetails): string {
+  if (task.status === "completed") return task.result ?? "";
+  if (task.status === "cancelled") return task.result?.trim() || CANCELLED_TASK_TEXT;
+  return FAILED_TASK_TEXT;
 }
 
 export function finishedTaskAnswer(task: TaskDetails): { content: string; agentId: string } {
   const subtasks = task.subtasks ?? [];
   const answeringAgentId = subtasks[subtasks.length - 1]?.assignedAgent || task.agent_id;
   return {
-    content: task.status === "completed" ? task.result ?? "" : "",
+    content: finishedTaskText(task),
     agentId: answeringAgentId,
   };
 }
 
+function isAlreadyShown(messages: Message[], answer: AgentAnswer, text: string): boolean {
+  if (
+    answer.messageId !== undefined &&
+    messages.some((message) => message.messageId === answer.messageId)
+  ) {
+    return true;
+  }
+  const last = messages[messages.length - 1];
+  return last?.sender === "agent" && last.text.trim() === text;
+}
+
 export function appendAgentAnswer(messages: Message[], answer: AgentAnswer): Message[] {
   const text = answer.content.trim();
-  const last = messages[messages.length - 1];
-  if (!text || (last?.sender === "agent" && last.text.trim() === text)) {
+  if (!text || isAlreadyShown(messages, answer, text)) {
     return messages;
   }
+  answersAppended += 1;
   return [
     ...messages,
     {
-      id: Date.now().toString(),
+      id: `${Date.now()}-${answersAppended}`,
       text: answer.content,
       sender: "agent",
       timestamp: answer.timestamp,
@@ -41,6 +64,7 @@ export function appendAgentAnswer(messages: Message[], answer: AgentAnswer): Mes
       agentId: answer.agentId,
       agentName: answer.agentName,
       skillUsed: answer.skillUsed,
+      messageId: answer.messageId,
     },
   ];
 }

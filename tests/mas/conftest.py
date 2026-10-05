@@ -87,6 +87,25 @@ def configure_structlog_for_testing():
     yield
 
 
+@pytest.fixture(autouse=True)
+def task_event_store(monkeypatch):
+    try:
+        import fakeredis  # noqa: PLC0415
+    except ImportError:
+        yield None
+        return
+
+    import core.task_events as task_events  # noqa: PLC0415
+    import tasks.idempotency as idempotency  # noqa: PLC0415
+
+    store = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(task_events, "redis_db", store)
+    monkeypatch.setattr(idempotency, "redis_db", store)
+    task_events._publish_locks.clear()
+    yield store
+    task_events._publish_locks.clear()
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_load_initial_conftests(early_config, parser, args):
     """Belt-and-braces: re-assert no LLM autoinit before anything imports."""

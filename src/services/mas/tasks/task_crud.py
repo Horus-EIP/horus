@@ -60,6 +60,44 @@ def insert_new_task(
         return None
 
 
+def insert_queued_task(
+    task_id: str,
+    conversation_id: int | None,
+    agent_id: str,
+    query: str,
+    owner_username: str | None,
+    db: Session,
+    skills_required: list[str] | None = None,
+) -> Task:
+    task = Task(
+        id=task_id,
+        conversation_id=conversation_id,
+        agent_id=agent_id,
+        status=TaskStatus.QUEUED,
+        query=query,
+        parent_task_id=None,
+        order=0,
+        skills_required=list(skills_required or []),
+        owner_username=owner_username,
+    )
+    try:
+        db.add(task)
+        db.add(
+            TaskResult(
+                id=str(uuid4()),
+                task_id=task_id,
+                result_data=None,
+                history=[{"role": "user", "message": query}],
+                future_actions=[],
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return task
+
+
 def record_skill_used(task: Task, skill_used: str | None) -> None:
     known_skills = list(task.skills_required or [])
     if skill_used and skill_used not in known_skills:
@@ -138,12 +176,18 @@ def interrupt_task(task_id: str, db: Session, reason: str | None = None):
     return True
 
 
-def _get_all_tasks_internal(db: Session, status_filter: TaskStatus = None):
+def _get_all_tasks_internal(
+    db: Session,
+    status_filter: TaskStatus = None,
+    status_in: list[TaskStatus] | None = None,
+):
     """Return every task, optionally filtered by status."""
     try:
         query = db.query(Task)
         if status_filter:
             query = query.filter(Task.status == status_filter)
+        if status_in:
+            query = query.filter(Task.status.in_(status_in))
         tasks = query.all()
         return tasks
     except Exception as e:
@@ -152,10 +196,10 @@ def _get_all_tasks_internal(db: Session, status_filter: TaskStatus = None):
 
 
 def get_tasks_in_progress(db: Session):
-    """Return tasks currently in ``RUNNING`` state."""
+    """Return tasks that are still queued or running."""
     try:
         tasks_in_progress = _get_all_tasks_internal(
-            db, status_filter=TaskStatus.RUNNING
+            db, status_in=[TaskStatus.QUEUED, TaskStatus.RUNNING]
         )
         return tasks_in_progress
     except Exception as e:

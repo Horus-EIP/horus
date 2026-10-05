@@ -32,6 +32,7 @@ class Task(Base):
     query = Column(String, nullable=False)
     order = Column(Integer, nullable=True)
     skills_required = Column(JSON, nullable=True)
+    owner_username = Column(String, nullable=True, index=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

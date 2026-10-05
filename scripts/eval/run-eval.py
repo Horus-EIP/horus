@@ -46,6 +46,8 @@ from eval_testset import (
 PERF_DIR = Path(__file__).resolve().parent.parent / "perf"
 DEFAULT_OUT_DIR = REPO_ROOT / "benchmarks"
 TERMINAL_TASK_STATUSES = frozenset({"completed", "failed", "cancelled", "canceled"})
+ACCEPTED_SUBMIT_STATUSES = frozenset({200, 202})
+ROUTES_BY_EVENT_ROUTE = {"direct_answer": ROUTE_DIRECT, "agent": ROUTE_AGENT, "none": ROUTE_NONE}
 CANCELED_TASK_STATUSES = frozenset({"cancelled", "canceled"})
 WARMUP_QUESTION = "In one sentence, what kinds of documents are in the knowledge store?"
 LATE_EVENT_GRACE_S = 3.0
@@ -134,6 +136,8 @@ class EvalClient(pipeline.PipelineBench):
         except Exception as exc:  # noqa: BLE001
             if not outcome.get("task_id") and not outcome.get("error"):
                 outcome["error"] = f"websocket failed: {type(exc).__name__}: {exc}"
+        if observation.route in ROUTES_BY_EVENT_ROUTE:
+            outcome["observed_route"] = ROUTES_BY_EVENT_ROUTE[observation.route]
         if outcome.get("task_id"):
             if observation.done:
                 outcome.update(
@@ -195,7 +199,7 @@ class EvalClient(pipeline.PipelineBench):
                 timeout=self.submit_timeout,
             )
         outcome["submit_http_s"] = round(time.perf_counter() - started, 3)
-        if response.status_code != 200:
+        if response.status_code not in ACCEPTED_SUBMIT_STATUSES:
             raise RuntimeError(f"HTTP {response.status_code}: {response.text[:200]}")
         body = response.json()
         if not isinstance(body, dict):

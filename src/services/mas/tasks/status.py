@@ -2,6 +2,7 @@ from enum import Enum
 
 
 class TaskStatus(str, Enum):
+    QUEUED = "queued"
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -11,6 +12,10 @@ class TaskStatus(str, Enum):
 
 FINAL_STATUSES = frozenset(
     {TaskStatus.COMPLETED.value, TaskStatus.CANCELED.value, TaskStatus.FAILED.value}
+)
+
+IN_PROGRESS_STATUSES = frozenset(
+    {TaskStatus.QUEUED.value, TaskStatus.PENDING.value, TaskStatus.RUNNING.value}
 )
 
 

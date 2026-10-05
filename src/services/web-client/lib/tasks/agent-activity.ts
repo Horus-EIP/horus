@@ -1,8 +1,8 @@
 import type { TaskDetail, TaskStatus } from "./types";
 
-const IN_PROGRESS_STATUSES: readonly TaskStatus[] = ["pending", "running"];
+const IN_PROGRESS_STATUSES: readonly string[] = ["queued", "pending", "running"];
 
-export function isTaskInProgress(status: TaskStatus | undefined): boolean {
+export function isTaskInProgress(status: TaskStatus | string | undefined): boolean {
   return status !== undefined && IN_PROGRESS_STATUSES.includes(status);
 }
 

@@ -30,7 +30,8 @@ from core.tracing import init_tracing
 from core.version import HORUS_VERSION
 from db.database import engine
 from db.init_setup import init_db
-from tasks.controller import check_task_timeout
+from tasks.controller import check_task_timeout, fail_interrupted_routing, run_task_heartbeats
+from tasks.task_jobs import task_jobs
 
 instrumentator = None
 
@@ -146,6 +147,8 @@ async def lifespan(app: FastAPI):
         log_error("lifespan", f"Failed to initialize database: {str(e)}", exc_info=True)
         raise
 
+    await fail_interrupted_routing()
+
     task = asyncio.create_task(check_agent_heartbeat())
     log_success("lifespan", "Agent heartbeat monitoring started")
 
@@ -168,10 +171,15 @@ async def lifespan(app: FastAPI):
         "Sentence-embedding model background preload started (warms skill cache)",
     )
 
+    task_heartbeats = asyncio.create_task(run_task_heartbeats())
+    log_success("lifespan", "Task heartbeats started")
+
     yield
     logger.info("Shutting down application...")
     task.cancel()
     task_timeout_checker.cancel()
+    task_heartbeats.cancel()
+    await task_jobs.shutdown()
     try:
         await task
     except asyncio.CancelledError:
