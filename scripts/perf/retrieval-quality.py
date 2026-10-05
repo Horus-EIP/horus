@@ -1,40 +1,68 @@
-"""
-This script tests the retrieval quality of the knowledge store by running a set of queries and printing the retrieved documents along with their similarity scores.
-
-Usage:
-    python scripts/perf/retrieval-quality.py
-"""
-
+import argparse
 import sys
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src/services/knowledge-store"))
-sys.path.insert(0, str(Path(__file__).parent.parent / "src/services/knowledge-store/app"))
-
-from chroma_db.setup import BGE_QUERY_PREFIX, knowledge_collection, model
-
-TEST_QUERIES = [
+KNOWLEDGE_STORE_ROOT = Path(__file__).resolve().parents[2] / "src" / "services" / "knowledge-store"
+DEFAULT_QUERIES = (
     "how to setup docker for ethereum?",
     "live block explorer ethereum network transactions",
     "What is the MGMT 451 course about?",
-]
+)
+DEFAULT_TOP = 5
+PREVIEW_CHARS = 100
 
-print(f"Model: {model._modules}\n")
 
-for query in TEST_QUERIES:
-    prefixed = BGE_QUERY_PREFIX + query
-    embedding = model.encode(prefixed, normalize_embeddings=True).tolist()
+def knowledge_store_setup():
+    if str(KNOWLEDGE_STORE_ROOT) not in sys.path:
+        sys.path.insert(0, str(KNOWLEDGE_STORE_ROOT))
+    from app.chroma_db import setup
 
-    results = knowledge_collection.query(
-        query_embeddings=[embedding],
-        n_results=5,
-        include=["documents", "distances"]
+    return setup
+
+
+def ranked_passages(
+    query: str, collection, embed: Callable[..., list[float]], top: int
+) -> list[tuple[float, str, str]]:
+    results = collection.query(
+        query_embeddings=[embed(query, is_query=True)],
+        n_results=top,
+        include=["documents", "distances"],
     )
+    return [
+        (1 - distance, passage_id, document)
+        for passage_id, document, distance in zip(
+            results["ids"][0], results["documents"][0], results["distances"][0], strict=True
+        )
+    ]
 
-    print(f"Query: {query}")
 
-    for doc, dist in zip(results["documents"][0], results["distances"][0], strict=False):
-        score = 1 - dist
-        print(f"\t(Score: {score:.4f}) {doc[:100]}...")
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="python scripts/perf/retrieval-quality.py",
+        description=(
+            "Embed each query with the knowledge store's own embedder (FastEmbed BGE, "
+            "query prefix included) and print the closest passages with their scores."
+        ),
+    )
+    parser.add_argument("queries", nargs="*", help="Queries to run (default: a fixed set).")
+    parser.add_argument("--top", type=int, default=DEFAULT_TOP, help="Passages per query.")
+    return parser
 
-    print()
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    setup = knowledge_store_setup()
+    print(f"Model: {setup.EMBED_MODEL}\n")
+    for query in args.queries or DEFAULT_QUERIES:
+        print(f"Query: {query}")
+        for score, passage_id, document in ranked_passages(
+            query, setup.knowledge_collection, setup.get_embedding, args.top
+        ):
+            print(f"\t(Score: {score:.4f}) {passage_id} {document[:PREVIEW_CHARS]}...")
+        print()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
