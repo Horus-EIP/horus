@@ -12,7 +12,6 @@ import {
   Text,
 } from '@mantine/core';
 import {
-  IconAlertTriangle,
   IconCloudUpload,
   IconDatabase,
   IconPaperclip,
@@ -28,6 +27,8 @@ import {
   type UploadProgress as UploadProgressData,
 } from '@/lib/knowledge-store/api';
 import { UploadProgress } from '@/components/knowledge-store/upload-progress';
+import { AlreadyStoredWarning } from '@/components/knowledge-store/already-stored-warning';
+import { namesAlreadyStored } from '@/lib/knowledge-store/stored-names';
 import type {
   InlineTaskFile,
   KnowledgeStoreFileRef,
@@ -85,10 +86,6 @@ function buildDocumentOptions(docs: KnowledgeStoreDocument[]) {
         ? `${labels[i]} · id ${d.id.slice(0, 8)}`
         : labels[i],
   }));
-}
-
-function normalizeTitle(name: string): string {
-  return name.trim().toLowerCase();
 }
 
 function sameAttachment(a: KnowledgeStoreFileRef, b: KnowledgeStoreFileRef) {
@@ -161,17 +158,13 @@ export function FileAttachments({
     });
   };
 
-  const storedTitles = useMemo(
-    () => new Set(docs.map((d) => normalizeTitle(d.title))),
-    [docs]
-  );
-
   const alreadyStoredNames = useMemo(
     () =>
-      pendingUploads
-        .map((p) => p.file.name)
-        .filter((name) => storedTitles.has(normalizeTitle(name))),
-    [pendingUploads, storedTitles]
+      namesAlreadyStored(
+        pendingUploads.map((p) => p.file.name),
+        docs.map((d) => d.title)
+      ),
+    [pendingUploads, docs]
   );
 
   const removeInline = (filename: string) => {
@@ -452,20 +445,10 @@ function SaveToKsModal({
             </li>
           ))}
         </ul>
-        {alreadyStoredNames.length > 0 && (
-          <div
-            role="alert"
-            className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200"
-          >
-            <IconAlertTriangle size={16} className="mt-0.5 shrink-0" />
-            <p>
-              Already in the knowledge store:{' '}
-              <strong>{alreadyStoredNames.join(', ')}</strong>. Saving adds
-              another copy with the same name; pick the copy you need by its
-              upload date.
-            </p>
-          </div>
-        )}
+        <AlreadyStoredWarning names={alreadyStoredNames}>
+          Saving adds another copy with the same name; pick the copy you need
+          by its upload date.
+        </AlreadyStoredWarning>
         {progress && <UploadProgress progress={progress} errorDetail={errorDetail} />}
         <Group justify="flex-end">
           <Button variant="default" onClick={onCancel} disabled={uploading}>

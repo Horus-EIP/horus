@@ -152,23 +152,25 @@ async function chooseCategory(category: string) {
   await userEvent.selectOptions(select, category);
 }
 
-describe("KnowledgeStorePage search and category filter", () => {
-  beforeAll(() => {
-    Object.defineProperty(window, "matchMedia", {
-      writable: true,
-      configurable: true,
-      value: (query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      }),
-    });
+function stubMatchMedia() {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    configurable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }),
   });
+}
+
+describe("KnowledgeStorePage search and category filter", () => {
+  beforeAll(stubMatchMedia);
 
   beforeEach(() => {
     localStorage.clear();
@@ -298,5 +300,99 @@ describe("KnowledgeStorePage search and category filter", () => {
         expect.objectContaining({ method: "DELETE" })
       )
     );
+  });
+});
+
+describe("KnowledgeStorePage delete and duplicate upload", () => {
+  let stored: StoredDocument[];
+
+  beforeAll(() => {
+    stubMatchMedia();
+    window.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+  });
+
+  beforeEach(() => {
+    localStorage.clear();
+    stored = [...storedDocuments];
+  });
+
+  function storeFetch(deleteStatus: number) {
+    return vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (method === "GET" && url.endsWith("/file")) {
+        return Promise.resolve(jsonResponse(200, { documents: stored }));
+      }
+      if (method === "DELETE") {
+        stored = stored.filter((doc) => !url.endsWith(`/${doc.id}`));
+        return Promise.resolve(jsonResponse(deleteStatus, { detail: "deleted" }));
+      }
+      return knowledgeStoreFetch(input, init);
+    }) as typeof fetch;
+  }
+
+  async function deleteRow(title: string) {
+    const row = within(screen.getByRole("table"))
+      .getAllByRole("row")
+      .find((candidate) => within(candidate).queryByText(title));
+    await userEvent.click(within(row!).getByRole("button", { name: "Delete file" }));
+  }
+
+  async function queueUpload(name: string) {
+    await userEvent.click(screen.getByRole("button", { name: "Add files" }));
+    await screen.findByText("Files to Upload");
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    await userEvent.upload(input!, new File(["body"], name, { type: "text/markdown" }));
+    await screen.findAllByText(name);
+  }
+
+  it("refreshes the list after a delete", async () => {
+    global.fetch = storeFetch(200);
+    renderPage();
+    await waitForFullList();
+
+    await deleteRow(securityPolicy.title);
+
+    await waitFor(() =>
+      expect(listedTitles()).toEqual([expensePolicy.title, handbook.title])
+    );
+  });
+
+  it("refreshes the list when the row was already deleted in another tab", async () => {
+    global.fetch = storeFetch(404);
+    renderPage();
+    await waitForFullList();
+
+    await deleteRow(securityPolicy.title);
+
+    await waitFor(() =>
+      expect(listedTitles()).toEqual([expensePolicy.title, handbook.title])
+    );
+  });
+
+  it("warns before upload when a file with the same name is already stored", async () => {
+    global.fetch = storeFetch(200);
+    renderPage();
+    await waitForFullList();
+
+    await queueUpload(expensePolicy.title);
+
+    const warning = await screen.findByRole("alert");
+    expect(warning).toHaveTextContent(expensePolicy.title);
+    expect(warning).toHaveTextContent(/already in the knowledge store/i);
+  });
+
+  it("does not warn when the queued file name is new", async () => {
+    global.fetch = storeFetch(200);
+    renderPage();
+    await waitForFullList();
+
+    await queueUpload("Board_Minutes.md");
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

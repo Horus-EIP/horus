@@ -9,6 +9,8 @@ import { Modal } from '@mantine/core';
 import { config } from '@/utils/config';
 import { IconTrash } from '@tabler/icons-react';
 import { UploadProgress } from '@/components/knowledge-store/upload-progress';
+import { AlreadyStoredWarning } from '@/components/knowledge-store/already-stored-warning';
+import { namesAlreadyStored } from '@/lib/knowledge-store/stored-names';
 import {
   knowledgeStoreApi,
   type KnowledgeStoreCategory,
@@ -169,6 +171,15 @@ export default function KnowledgeStorePage() {
     })),
   ];
 
+  const alreadyStoredNames = useMemo(
+    () =>
+      namesAlreadyStored(
+        toUpload.map((doc) => doc[0]?.file?.name ?? ''),
+        documents.map((doc) => doc.title),
+      ),
+    [toUpload, documents],
+  );
+
   const deleteLocalDocument = (index: number) => {
     setToUpload(toUpload.filter((_, i) => i !== index));
   };
@@ -216,7 +227,7 @@ export default function KnowledgeStorePage() {
     const response = await fetch(ksUrl(`/${visibleDocuments[index].id}`), {
       method: 'DELETE',
     });
-    if (response.ok) {
+    if (response.ok || response.status === 404) {
       getDocuments();
     }
   };
@@ -325,6 +336,9 @@ export default function KnowledgeStorePage() {
             button={isUploading ? undefined : 'Upload'}
             onButton={isUploading ? undefined : uploadDocuments}
           />
+          <AlreadyStoredWarning names={alreadyStoredNames} className="mt-3">
+            Uploading adds another copy with the same name.
+          </AlreadyStoredWarning>
           {uploadProgress && (
             <div className="mt-3">
               <UploadProgress
