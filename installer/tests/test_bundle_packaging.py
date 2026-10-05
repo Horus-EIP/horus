@@ -419,5 +419,30 @@ class ComposeHealthchecks(unittest.TestCase):
                 with self.subTest(f"{name} -> {dependency}"):
                     self.assertEqual(condition, "service_healthy")
 
+def cpu_overlay_services() -> dict:
+    loader = type("ComposeOverlayLoader", (yaml.SafeLoader,), {})
+    loader.add_constructor("!reset", lambda _loader, _node: None)
+    text = (INFRA / "docker-compose.cpu.yml").read_text(encoding="utf-8")
+    return yaml.load(text, Loader=loader)["services"]
+
+@needs_yaml
+class ComposeAgentWaitsForVllm(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.vllm_rule = (compose_services()["agent"].get("depends_on") or {}).get("vllm")
+
+    def test_on_gpu_the_agent_starts_once_vllm_is_healthy(self):
+        self.assertIsNotNone(self.vllm_rule, "the agent does not wait for vllm")
+        self.assertEqual(self.vllm_rule.get("condition"), "service_healthy")
+
+    def test_the_dependency_is_optional_so_the_cpu_overlay_still_starts(self):
+        self.assertIsNotNone(self.vllm_rule, "the agent does not wait for vllm")
+        self.assertIs(self.vllm_rule.get("required"), False)
+
+    def test_the_cpu_overlay_keeps_vllm_out_of_the_stack(self):
+        vllm = cpu_overlay_services()["vllm"]
+        self.assertEqual(vllm.get("profiles"), ["gpu"])
+        self.assertEqual(vllm["deploy"]["replicas"], 0)
+
 if __name__ == "__main__":
     unittest.main()
