@@ -205,7 +205,7 @@ class GpuSampler(threading.Thread):
     def __init__(self, interval: float = 0.5):
         super().__init__(daemon=True)
         self.interval = interval
-        self._stop = threading.Event()
+        self._stop_requested = threading.Event()
         self.mem: list[float] = []
         self.util: list[float] = []
         self.power: list[float] = []
@@ -224,7 +224,7 @@ class GpuSampler(threading.Thread):
     def run(self) -> None:
         if not self.available:
             return
-        while not self._stop.is_set():
+        while not self._stop_requested.is_set():
             try:
                 out = subprocess.run(
                     [
@@ -245,10 +245,10 @@ class GpuSampler(threading.Thread):
                     pass
             except Exception:  # noqa: BLE001
                 pass
-            self._stop.wait(self.interval)
+            self._stop_requested.wait(self.interval)
 
     def stop(self) -> dict:
-        self._stop.set()
+        self._stop_requested.set()
         self.join(timeout=2)
         return self.summary()
 
