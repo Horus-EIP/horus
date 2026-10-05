@@ -34,15 +34,26 @@ DOCKER_DOWNLOAD = {
     "linux": "https://docs.docker.com/engine/install/",
 }
 
-REGISTRIES = [
+RUNTIME_HOSTS = [
     ("Docker registry", "https://registry-1.docker.io/v2/"),
     ("Docker auth", "https://auth.docker.io/token?service=registry.docker.io"),
     ("Hugging Face (model weights)", "https://huggingface.co/"),
+]
+
+SOURCE_BUILD_HOSTS = [
     ("PyPI (Python deps)", "https://pypi.org/simple/"),
     ("PyPI files", "https://files.pythonhosted.org/"),
     ("npm (web client deps)", "https://registry.npmjs.org/"),
     ("Debian apt (image packages)", "https://deb.debian.org/"),
 ]
+
+REGISTRIES = RUNTIME_HOSTS + SOURCE_BUILD_HOSTS
+
+def network_hosts(image_registry: str | None) -> list[tuple[str, str]]:
+    if not image_registry:
+        return list(REGISTRIES)
+    host = image_registry.split("/", 1)[0]
+    return [*RUNTIME_HOSTS, ("Horus images", f"https://{host}/v2/")]
 
 PORTS = [
     (3000, "web-client", None, None),
@@ -259,10 +270,14 @@ def _reachable(url: str, timeout: float = 8.0) -> tuple[bool, str]:
     except Exception as exc:  # noqa: BLE001 - report anything else verbatim
         return False, str(exc)
 
-def check_network(log: Log) -> dict:
+def check_network(log: Log, hosts: list[tuple[str, str]] | None = None) -> dict:
     log.step("5/6  Network")
+    hosts = list(REGISTRIES) if hosts is None else hosts
+    downloads = ("container images, Python and npm packages,\nand model weights"
+                 if any(entry in hosts for entry in SOURCE_BUILD_HOSTS)
+                 else "container images and model\nweights")
     results, failed = {}, []
-    for label, url in REGISTRIES:
+    for label, url in hosts:
         ok, detail = _reachable(url)
         results[label] = {"url": url, "ok": ok, "detail": detail}
         if ok:
@@ -274,9 +289,8 @@ def check_network(log: Log) -> dict:
     if failed:
         raise InstallError(
             EXIT_NETWORK,
-            f"Cannot reach {len(failed)} of {len(REGISTRIES)} required hosts.",
-            "The installer downloads container images, Python and npm packages,\n"
-            "and model weights. All of these have to be reachable:\n\n  "
+            f"Cannot reach {len(failed)} of {len(hosts)} required hosts.",
+            f"The installer downloads {downloads}. All of these have to be reachable:\n\n  "
             + "\n  ".join(failed),
             "Check your internet connection.\n"
             "On a corporate network you may need a proxy. Set it before running:\n"
@@ -406,7 +420,7 @@ def check_ports(log: Log, infra: Path, want_admin_profile: bool = False) -> dict
     return report
 
 def run_all(log: Log, infra: Path, want_admin_profile: bool = False,
-            skip_disk_check: bool = False) -> dict:
+            skip_disk_check: bool = False, image_registry: str | None = None) -> dict:
     summary: dict = {}
     check_python(log)
     summary["docker_version"] = check_docker(log)
@@ -419,7 +433,7 @@ def run_all(log: Log, infra: Path, want_admin_profile: bool = False,
                            "free_bytes": None, "skipped": True}
     else:
         summary["disk"] = check_disk(log)
-    summary["network"] = check_network(log)
+    summary["network"] = check_network(log, network_hosts(image_registry))
     summary["ports"] = check_ports(log, infra, want_admin_profile)
     log.say("")
     log.say("  " + "Preflight passed.")

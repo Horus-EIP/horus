@@ -4,6 +4,7 @@ import sys
 from dataclasses import dataclass, field
 
 from common import EXIT_PROFILE_UNKNOWN, InstallError
+from images import IMAGE_ENV_KEYS, flavor_for
 from model_manager import MODEL_ENV_KEYS
 
 MEASURED = "measured"
@@ -515,7 +516,7 @@ _add(Profile(
 ))
 
 MANAGED_KEYS: tuple[str, ...] = tuple(sorted(
-    {"COMPOSE_FILE", *THREAD_KEYS, *MODEL_ENV_KEYS}
+    {"COMPOSE_FILE", *THREAD_KEYS, *MODEL_ENV_KEYS, *IMAGE_ENV_KEYS}
     | {k for p in PROFILES.values() for k in p.settings}
 ))
 
@@ -528,6 +529,9 @@ def is_cpu_profile(name: str) -> bool:
 
 def model_server(name: str) -> str:
     return GPU_MODEL_SERVER if get(name).runs_vllm else CPU_MODEL_SERVER
+
+def image_flavor(name: str) -> str:
+    return flavor_for(is_cpu_profile(get(name).name))
 
 def model_server_for_compose_file(compose_file: str) -> str:
     return CPU_MODEL_SERVER if CPU_OVERLAY in compose_file else GPU_MODEL_SERVER

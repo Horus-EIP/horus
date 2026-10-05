@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import consent  # noqa: E402
 import hardware  # noqa: E402
+import images  # noqa: E402
 import model_manager  # noqa: E402
 import preflight  # noqa: E402
 import profiles  # noqa: E402
@@ -340,11 +341,12 @@ FIRST_INSTALL_TIME = "1.5 to 2 hours"
 PULL_ATTEMPTS = 3
 PULL_BACKOFF_SECONDS = 15
 ONE_IMAGE_AT_A_TIME = {"COMPOSE_PARALLEL_LIMIT": "1"}
+NO_BUILD = "--no-build"
 
 def compose(args: list[str]) -> list[str]:
     return ["docker", "compose"] + args
 
-def pullable_images(log: Log, infra: Path) -> dict[str, str] | None:
+def compose_config(log: Log, infra: Path) -> tuple[str, dict[str, dict]] | None:
     res = run(compose(["config", "--format", "json"]), log, timeout=90, cwd=infra,
               log_output=False)
     if not res.ok:
@@ -357,49 +359,124 @@ def pullable_images(log: Log, infra: Path) -> dict[str, str] | None:
     services = config.get("services") if isinstance(config, dict) else None
     if not isinstance(services, dict):
         return None
-    return {
-        name: str(spec["image"])
-        for name, spec in services.items()
-        if isinstance(spec, dict) and spec.get("image") and not spec.get("build")
-    }
+    project = str(config.get("name") or "")
+    return project, {name: spec for name, spec in services.items() if isinstance(spec, dict)}
 
-def _pull_with_retries(log: Log, infra: Path, label: str, args: list[str]) -> bool:
+def ours(spec: dict) -> bool:
+    return bool(spec.get("build"))
+
+def images_built_here_before(log: Log, project: str, services: dict[str, dict]) -> list[str]:
+    if not project:
+        return []
+    local = [f"{project}-{name}" for name, spec in services.items() if ours(spec)]
+    return [image for image in local if _image_on_this_machine(log, image)]
+
+def point_out_unused_local_images(log: Log, leftovers: list[str]) -> None:
+    if not leftovers:
+        return
+    log.say("")
+    log.say("  An earlier install built these images here. The stack no longer uses")
+    log.say("  them, and they take a lot of disk. Free the space with:")
+    log.say("    docker image rm " + " ".join(leftovers))
+
+def pullable_images(services: dict[str, dict], from_source: bool) -> dict[str, str]:
+    named = {name: str(spec["image"]) for name, spec in services.items() if spec.get("image")}
+    first = [name for name in named if ours(services[name]) and not from_source]
+    rest = [name for name in named if not ours(services[name])]
+    return {name: named[name] for name in [*first, *rest]}
+
+PULLED = "pulled"
+REFUSED = "refused"
+FAILED = "failed"
+
+def _pull_with_retries(log: Log, infra: Path, label: str, args: list[str],
+                       landed=None) -> str:
     cmd = compose(["pull"] + args)
     for attempt in range(1, PULL_ATTEMPTS + 1):
         suffix = "" if attempt == 1 else f" (attempt {attempt} of {PULL_ATTEMPTS})"
-        if _stream(cmd, log, infra, label + suffix, env=ONE_IMAGE_AT_A_TIME) == 0:
-            return True
+        refusals: set[str] = set()
+        code = _stream(cmd, log, infra, label + suffix, env=ONE_IMAGE_AT_A_TIME,
+                       watch_for=images.REFUSALS, found=refusals)
+        if code == 0 and (landed is None or landed()):
+            return PULLED
+        if refusals:
+            log.warn(f"The registry refused `{' '.join(cmd)}` "
+                     f"({', '.join(sorted(refusals))}); not trying again")
+            return REFUSED
+        if code == 0:
+            log.warn(f"`{' '.join(cmd)}` exited 0 but the image is not on this machine")
         if attempt < PULL_ATTEMPTS:
             pause = PULL_BACKOFF_SECONDS * attempt
             log.warn(f"`{' '.join(cmd)}` failed (attempt {attempt} of {PULL_ATTEMPTS}); "
                      f"trying again in {pause}s")
             time.sleep(pause)
-    return False
+    return FAILED
 
 def _image_on_this_machine(log: Log, image: str) -> bool:
     return run(["docker", "image", "inspect", "--format", "{{.Id}}", image],
                log, timeout=60).ok
 
-def pull_images(log: Log, infra: Path) -> None:
-    images = pullable_images(log, infra)
-    if images is None:
+def _unnamed_error(unnamed: list[str], infra: Path) -> InstallError:
+    return InstallError(
+        EXIT_COMPOSE_PULL_FAILED,
+        "Compose gives Horus's own images no name to download.",
+        f"{', '.join(unnamed)} would be built here, because {images.REGISTRY_KEY} is not\n"
+        f"set in {infra / '.env'}. The installer writes it on every install.",
+        "Run START-HERE again so it writes the registry, or build the images\n"
+        "on this machine instead (contributors):  --build-from-source",
+    )
+
+def _refused_error(service: str, image: str, infra: Path) -> InstallError:
+    host = images.registry_host(image)
+    return InstallError(
+        EXIT_COMPOSE_PULL_FAILED,
+        f"{host} refused to send Horus's own images.",
+        f"Refused: {service}  ({image})\n"
+        "The images are private: the registry needs the access token you were\n"
+        "given, or that release was never published there.",
+        f"Give the installer the token, as one line  USERNAME:TOKEN :\n"
+        f"  - save it as {images.TOKEN_FILE_NAME} next to START-HERE, or\n"
+        f"  - set {images.TOKEN_KEY} (and {images.USERNAME_KEY}), or\n"
+        "  - pass --registry-token-file PATH\n"
+        "then run START-HERE again. Never put the token itself on the command line.\n"
+        "Contributors with the source can build the images instead:  --build-from-source\n"
+        f"To see Docker's own error:  cd {infra}  then  docker compose pull {service}\n"
+        f"Full log: {LOG_PATH}",
+    )
+
+def pull_images(log: Log, infra: Path, from_source: bool = False) -> list[str]:
+    config = compose_config(log, infra)
+    if config is None:
         log.info("`docker compose config` gave no service list; pulling every image "
                  "in one call, still one image at a time")
-        if not _pull_with_retries(log, infra, "pull", ["--ignore-buildable"]):
+        args = ["--ignore-buildable"] if from_source else []
+        if _pull_with_retries(log, infra, "pull", args) != PULLED:
             log.warn(f"`docker compose pull` still failed after {PULL_ATTEMPTS} tries; "
-                     "continuing to the build step, which will surface anything "
-                     "genuinely missing")
-        return
+                     "continuing: the next step surfaces anything genuinely missing")
+        return []
+    project, services = config
 
+    if not from_source:
+        unnamed = [name for name, spec in services.items()
+                   if ours(spec) and not spec.get("image")]
+        if unnamed:
+            raise _unnamed_error(unnamed, infra)
+
+    wanted = pullable_images(services, from_source)
     missing: list[tuple[str, str]] = []
-    for index, (service, image) in enumerate(images.items(), start=1):
-        log.say(f"  [{index}/{len(images)}] {service}  " + dim(image))
-        if _pull_with_retries(log, infra, f"pull {service}", [service]):
+    for index, (service, image) in enumerate(wanted.items(), start=1):
+        prebuilt = ours(services[service])
+        log.say(f"  [{index}/{len(wanted)}] {service}  " + dim(image)
+                + ("  (prebuilt, signed)" if prebuilt else ""))
+        landed = (lambda image=image: _image_on_this_machine(log, image)) if prebuilt else None
+        outcome = _pull_with_retries(log, infra, f"pull {service}", [service], landed)
+        if outcome == PULLED:
             continue
         if _image_on_this_machine(log, image):
-            log.warn(f"Could not download {image} after {PULL_ATTEMPTS} tries; "
-                     "using the copy already on this machine")
+            log.warn(f"Could not download {image}; using the copy already on this machine")
             continue
+        if outcome == REFUSED and prebuilt:
+            raise _refused_error(service, image, infra)
         missing.append((service, image))
 
     if missing:
@@ -419,8 +496,13 @@ def pull_images(log: Log, infra: Path) -> None:
             "  3. Run your START-HERE file again. It resumes where it stopped.\n"
             "If Docker says 'toomanyrequests', Docker Hub is limiting this\n"
             "connection: wait a while, or sign in with  docker login  first.\n"
+            "If it says 'manifest unknown' for a horus-* image, that release was\n"
+            "never published to the registry: check --registry and the version.\n"
+            "If it says 'no matching manifest', the prebuilt images are not built\n"
+            "for this processor: run START-HERE again with  --build-from-source\n"
             f"Full log: {LOG_PATH}",
         )
+    return [] if from_source else images_built_here_before(log, project, services)
 
 def services_still_starting(log: Log, infra: Path) -> list[str]:
     starting: list[str] = []
@@ -450,7 +532,7 @@ def up_waiting_out_a_dependency_abort(log: Log, infra: Path, up: list[str],
             wait_for_health(log, infra, starting, timeout=timeout)
         else:
             log.info("no service is still starting; starting the rest straight away")
-        up = ["up", "-d"]
+        up = ["up", "-d"] + [flag for flag in up if flag == NO_BUILD]
         seen.clear()
         code = _stream(compose(up), log, infra, "up (second attempt)",
                        watch_for=(DEPENDENCY_ABORT,), found=seen)
@@ -475,21 +557,29 @@ def build_images(log: Log, infra: Path) -> None:
         )
 
 def pull_and_build(log: Log, infra: Path, no_build: bool = False,
-                   timeout: int = 1800, before_start=None) -> None:
+                   timeout: int = 1800, before_start=None, from_source: bool = False) -> None:
     log.step("Downloading container images")
-    log.say(f"  This is the long part. A first install takes {FIRST_INSTALL_TIME}:")
-    log.say("  the images download one at a time, the containers build, then the")
-    log.say("  language model downloads. It is not frozen.")
+    if from_source:
+        log.say(f"  This is the long part. A first install takes {FIRST_INSTALL_TIME}:")
+        log.say("  the images download one at a time, the containers build, then the")
+        log.say("  language model downloads. It is not frozen.")
+    else:
+        log.say("  This is the long part. Horus's own images come prebuilt and signed,")
+        log.say("  so nothing is built here: the images download one at a time, then")
+        log.say("  the language model downloads. It is not frozen. A first install that")
+        log.say(f"  built the images here took {FIRST_INSTALL_TIME}; downloading them")
+        log.say("  instead has not been timed yet.")
     log.say("")
 
-    pull_images(log, infra)
-    if not no_build:
+    leftovers = pull_images(log, infra, from_source)
+    if from_source and not no_build:
         build_images(log, infra)
     if before_start is not None:
         before_start()
 
     log.step("Starting the stack")
-    up, code = up_waiting_out_a_dependency_abort(log, infra, ["up", "-d"], timeout)
+    first_up = ["up", "-d"] if from_source else ["up", "-d", NO_BUILD]
+    up, code = up_waiting_out_a_dependency_abort(log, infra, first_up, timeout)
     if code != 0:
         raise InstallError(
             EXIT_COMPOSE_UP_FAILED,
@@ -516,6 +606,7 @@ def pull_and_build(log: Log, infra: Path, no_build: bool = False,
             "  START-HERE (your platform) --start\n"
             f"Full log: {LOG_PATH}",
         )
+    point_out_unused_local_images(log, leftovers)
 
 def _ps(log: Log, infra: Path) -> list[dict]:
     res = run(compose(["ps", "--format", "json", "--all"]), log, timeout=90, cwd=infra)
@@ -605,6 +696,43 @@ def wait_for_health(log: Log, infra: Path, expect: list[str],
         f"Full log: {LOG_PATH}",
     )
 
+ARM_MACHINES = frozenset({"arm64", "aarch64"})
+
+def image_source(args, infra: Path) -> str | None:
+    if images.build_from_source_requested(args.build_from_source):
+        return None
+    configured = smoke.read_env(infra / ".env").get(images.REGISTRY_KEY, "")
+    return images.registry_to_use(args.registry, os.environ, configured)
+
+def describe_images(registry: str | None, profile_name: str) -> str:
+    if registry is None:
+        return "built from source on this machine (--build-from-source)"
+    names = ",".join(images.image_repository(service).removeprefix("horus-")
+                     for service in images.APP_SERVICES)
+    flavor = profiles.image_flavor(profile_name)
+    return f"{registry}/horus-{{{names}}}:{VERSION}-{flavor}, prebuilt and signed"
+
+def sign_in_to_registry(log: Log, args, registry: str) -> None:
+    credentials = images.read_credentials(
+        args.registry_token_file, args.registry_user, os.environ,
+        BUNDLE_DIR / images.TOKEN_FILE_NAME,
+    )
+    if credentials is None:
+        log.info("no registry token given; pulling with the credentials Docker "
+                 "already has, if any")
+        return
+    images.sign_in(log, registry, credentials)
+
+def warn_if_images_are_emulated(log: Log, probe: dict | None) -> None:
+    machine = str(((probe or {}).get("os") or {}).get("machine") or "").lower()
+    if machine not in ARM_MACHINES:
+        return
+    log.warn("This machine has an ARM processor. Horus's prebuilt images are built "
+             "for x86-64 (linux/amd64) only, so Docker runs them through emulation: "
+             "slower, and not tested yet.")
+    log.say("  If the download or the start fails, run START-HERE again with")
+    log.say(f"  --build-from-source to build them for this processor ({FIRST_INSTALL_TIME}).")
+
 def warn_cpu_expectations(log: Log) -> None:
     log.say("")
     log.say(yellow("=" * 72))
@@ -691,6 +819,14 @@ def ensure_installed_model(log: Log, infra: Path) -> None:
         return
     download_model_for_the_stack(log, plan, infra, "Checking the language model")
 
+def installed_from_registry(infra: Path) -> bool:
+    return bool(smoke.read_env(infra / ".env").get(images.REGISTRY_KEY, "").strip())
+
+def start_command(infra: Path, build: bool = False) -> list[str]:
+    if build:
+        return ["up", "-d", "--build"]
+    return ["up", "-d", NO_BUILD] if installed_from_registry(infra) else ["up", "-d"]
+
 def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
     require_installed(infra)
     _require_docker(log)
@@ -703,7 +839,7 @@ def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
                else "  (CPU profile: llama-server runs as llm instead of vllm)"))
 
     up, code = up_waiting_out_a_dependency_abort(
-        log, infra, ["up", "-d"] + (["--build"] if build else []), timeout)
+        log, infra, start_command(infra, build), timeout)
     if code != 0:
         raise InstallError(
             EXIT_COMPOSE_UP_FAILED,
@@ -717,7 +853,7 @@ def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
             "replacing mas with whichever container Docker named above.\n"
             "\n"
             "If a container is missing or its image was removed, re-run the full\n"
-            "installer - it rebuilds what is missing and keeps your documents.\n"
+            "installer - it downloads what is missing and keeps your documents.\n"
             f"Full log: {LOG_PATH}",
         )
 
@@ -736,7 +872,7 @@ def do_restart(log: Log, infra: Path, timeout: int) -> int:
     code = _stream(compose(["restart"]), log, infra, "restart")
     if code != 0:
         log.warn("`docker compose restart` reported errors; trying `up -d` instead")
-        code = _stream(compose(["up", "-d"]), log, infra, "up")
+        code = _stream(compose(start_command(infra)), log, infra, "up")
         if code != 0:
             raise InstallError(
                 EXIT_COMPOSE_UP_FAILED,
@@ -818,6 +954,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="horus-install",
         description="Install and run Horus locally. Everything stays on this machine.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
         epilog="Examples:\n"
                "  horus_install.py                       normal install\n"
                "  horus_install.py --dry-run             show what would happen\n"
@@ -827,6 +964,7 @@ def build_parser() -> argparse.ArgumentParser:
                "  horus_install.py --restart             restart it in place\n"
                "  horus_install.py --stop                stop the stack, keep data\n"
                "  horus_install.py --download-model      fetch the CPU model only\n"
+               "  horus_install.py --build-from-source   build the images here (contributors)\n"
                "  horus_install.py --uninstall           remove everything, DELETES DATA\n",
     )
     p.add_argument("--version", action="version", version=f"Horus beta installer {VERSION}")
@@ -851,8 +989,23 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--reset-env", action="store_true",
                    help="regenerate src/infra/.env from the template, rotating the JWT "
                         "secret (signs everyone out). A backup is always kept.")
+    p.add_argument("--build-from-source", action="store_true",
+                   help="build Horus's own images on this machine instead of downloading "
+                        "the prebuilt, signed ones (contributors; same as "
+                        f"{images.BUILD_FROM_SOURCE_KEY}=1)")
     p.add_argument("--no-build", action="store_true",
-                   help="start without rebuilding images (faster re-run)")
+                   help="with --build-from-source, start without rebuilding the images "
+                        "(faster re-run)")
+    p.add_argument("--registry", metavar="HOST/PATH",
+                   help="where the prebuilt images are (default: the registry a previous "
+                        f"install used, else {images.DEFAULT_REGISTRY}; or set "
+                        f"{images.REGISTRY_KEY})")
+    p.add_argument("--registry-user", metavar="NAME",
+                   help=f"user name for the image registry (or set {images.USERNAME_KEY})")
+    p.add_argument("--registry-token-file", metavar="PATH",
+                   help="file holding the registry access token as USERNAME:TOKEN or TOKEN "
+                        f"(default: {images.TOKEN_FILE_NAME} next to START-HERE, or set "
+                        f"{images.TOKEN_KEY}). The token itself is never a flag.")
     p.add_argument("--models-dir", metavar="PATH",
                    help="where the CPU profiles keep their language model "
                         "(default: the folder a previous install chose, else the "
@@ -905,6 +1058,7 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
         probes = [("this machine", hardware.probe(log, allow_docker_gpu_test=False))]
         probes += [(name, dict(spec)) for name, spec in SIMULATIONS.items()]
 
+    registry = image_source(args, infra_dir(repo))
     manifest = None
     models_dir = None
     for label, probe in probes:
@@ -925,6 +1079,8 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
             plan = model_manager.plan_for_profile(repo, name, models_dir, manifest)
             if plan is not None:
                 env.update(plan.env(repo))
+        if registry is not None:
+            env[images.REGISTRY_KEY] = registry
         log.say("")
         log.say(rule(label))
         osi = probe.get("os") or {}
@@ -944,6 +1100,10 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
         log.say(f"  profile  : {bold(name)}")
         for reason in reasons:
             log.say(f"             - {reason}")
+        log.say(f"  images   : {describe_images(registry, name)}")
+        if registry is not None and str(osi.get("machine") or "").lower() in ARM_MACHINES:
+            log.say("             ! built for x86-64 only: Docker emulates them on this "
+                    "processor; --build-from-source builds them for it")
         if plan is not None:
             log.say(f"  model    : {plan.entry.id}, {human_bytes(plan.entry.size_bytes)}, "
                     f"into {plan.models_dir}")
@@ -1027,8 +1187,14 @@ def _dispatch(log: Log, args) -> int:
     if args.download_model:
         return do_download_model(log, args, repo)
 
+    registry = image_source(args, infra)
     preflight.run_all(log, infra, want_admin_profile=args.admin_profile,
-                      skip_disk_check=args.skip_disk_check)
+                      skip_disk_check=args.skip_disk_check, image_registry=registry)
+    if registry is not None:
+        sign_in_to_registry(log, args, registry)
+        if args.no_build:
+            log.warn("--no-build only matters with --build-from-source; "
+                     "the prebuilt images are never built here")
 
     choice = consent.choose(
         log, repo,
@@ -1052,6 +1218,9 @@ def _dispatch(log: Log, args) -> int:
     log.ok(f"profile: {bold(name)}")
     for reason in reasons:
         log.say(f"           {reason}")
+    log.say(f"  images:  {describe_images(registry, name)}")
+    if registry is not None:
+        warn_if_images_are_emulated(log, probe)
 
     if profiles.is_cpu_profile(name):
         warn_cpu_expectations(log)
@@ -1063,6 +1232,8 @@ def _dispatch(log: Log, args) -> int:
     env["HORUS_CORPUS_DIR"] = choice["corpus_dir"]
     env["CORPUS_SCAN_TOKEN"] = corpus_scan_token(log, infra)
     env["HORUS_VERSION"] = VERSION
+    if registry is not None:
+        env[images.REGISTRY_KEY] = registry
 
     hardware.write_profile_json(PROFILE_JSON, probe, name, env, reasons)
     log.ok(f"wrote {PROFILE_JSON.name}")
@@ -1074,6 +1245,7 @@ def _dispatch(log: Log, args) -> int:
         log, infra, no_build=args.no_build, timeout=args.timeout,
         before_start=None if model_plan is None
         else lambda: download_model_for_the_stack(log, model_plan, infra),
+        from_source=registry is None,
     )
 
     expect = [*CORE_SERVICES, profiles.model_server(name)]
@@ -1100,7 +1272,7 @@ def _dispatch(log: Log, args) -> int:
         )
 
     _success(log, infra, name, choice,
-             non_interactive=args.non_interactive)
+             non_interactive=args.non_interactive, built_here=registry is None)
     return EXIT_OK
 
 def main(argv: list[str] | None = None) -> int:
@@ -1125,7 +1297,7 @@ def main(argv: list[str] | None = None) -> int:
     return code
 
 def _success(log: Log, infra: Path, profile_name: str, choice: dict,
-             non_interactive: bool = False) -> None:
+             non_interactive: bool = False, built_here: bool = False) -> None:
     creds = _read_admin_credentials(infra)
     log.say("")
     log.say(green("=" * 72))
@@ -1159,8 +1331,9 @@ def _success(log: Log, infra: Path, profile_name: str, choice: dict,
     log.say("  To stop:       START-HERE (your platform) --stop")
     log.say("  To remove:     START-HERE (your platform) --uninstall")
     log.say("")
-    offer_to_reclaim(log, non_interactive=non_interactive)
-    log.say("")
+    if built_here:
+        offer_to_reclaim(log, non_interactive=non_interactive)
+        log.say("")
 
 def reclaimable_build_cache(log: Log) -> int:
     res = run(["docker", "system", "df", "--format", "{{json .}}"], log, timeout=60)

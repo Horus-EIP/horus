@@ -52,6 +52,7 @@ PRUNE_GLOBS = [
     ".DS_Store", "Thumbs.db", "*.sqlite3", "*.db",
     "install-log.txt", "horus-profile.json",
     "*.gguf", "*.part", "*.gguf.sha256",
+    "registry-token.txt",
 ]
 
 PRUNE_PATHS = (

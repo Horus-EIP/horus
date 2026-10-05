@@ -94,7 +94,7 @@ cd src/infra
 docker compose up --build
 ```
 
-The first run downloads and builds the images, then the language models download on first start: expect 1.5 to 2 hours in all. The stack includes PostgreSQL, Redis, RabbitMQ, MAS, Agent, Knowledge Store, Web Client, PgAdmin, RedisInsight, and the observability backends Prometheus, Loki, and Tempo (all internal). Logs, metrics, and traces are viewed from the admin-only observability pages in the web client (`/admin/logs`, `/admin/metrics`, `/admin/traces`). See **`src/infra/docker-compose.yml`** for the authoritative list.
+The first run downloads and builds the images, then the language models download on first start: expect 1.5 to 2 hours in all. The beta installer does not build: it pulls the prebuilt, signed images of the release instead (see [Prebuilt images](operations.md#prebuilt-images)), unless it runs with `--build-from-source`. Builds from this folder keep local image names as long as `HORUS_REGISTRY` stays unset in `.env`. The stack includes PostgreSQL, Redis, RabbitMQ, MAS, Agent, Knowledge Store, Web Client, PgAdmin, RedisInsight, and the observability backends Prometheus, Loki, and Tempo (all internal). Logs, metrics, and traces are viewed from the admin-only observability pages in the web client (`/admin/logs`, `/admin/metrics`, `/admin/traces`). See **`src/infra/docker-compose.yml`** for the authoritative list.
 
 #### Step 4: Verify containers
 

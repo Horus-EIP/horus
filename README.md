@@ -88,6 +88,8 @@ docker compose up --build
 
 A first install takes 1.5 to 2 hours: the images download and build, then the language models download on first start. Subsequent starts are much faster.
 
+That is the contributors' path. The beta installer (`START-HERE` in the ZIP, `installer/horus_install.py` here) builds nothing: it pulls the prebuilt, signed images that [`.github/workflows/images.yml`](.github/workflows/images.yml) publishes to a private registry, signing Docker in with the access token a tester was given. `--build-from-source` makes it build like the commands above. See [docs/operations.md](docs/operations.md#prebuilt-images).
+
 ## Service Ports
 
 | Service | URL | Notes |

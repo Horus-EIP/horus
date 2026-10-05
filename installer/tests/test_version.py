@@ -67,6 +67,7 @@ class InstallWritesTheVersion(unittest.TestCase):
             patch(mock.patch.object(horus_install, "find_repo", return_value=self.repo))
             patch(mock.patch.object(horus_install, "banner"))
             patch(mock.patch.object(horus_install, "preflight"))
+            patch(mock.patch.object(horus_install, "sign_in_to_registry"))
             consent = patch(mock.patch.object(horus_install, "consent"))
             consent.choose.return_value = {"corpus_dir": "../../demo_assets"}
             hardware = patch(mock.patch.object(horus_install, "hardware"))

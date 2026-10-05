@@ -45,6 +45,7 @@ EXIT_HEALTH_TIMEOUT = 43
 EXIT_MODEL_DOWNLOAD_FAILED = 44
 EXIT_MODEL_HASH_MISMATCH = 45
 EXIT_MODEL_MANIFEST_INVALID = 46
+EXIT_REGISTRY_LOGIN_FAILED = 47
 
 EXIT_SMOKE_FAILED = 50
 
@@ -273,6 +274,7 @@ def run(
     cwd: Path | None = None,
     env: dict | None = None,
     log_output: bool = True,
+    stdin_text: str | None = None,
 ) -> Result:
     log.debug(f"$ {' '.join(cmd)}" + (f"   (cwd={cwd})" if cwd else ""))
     merged = None
@@ -289,6 +291,7 @@ def run(
             timeout=timeout,
             cwd=str(cwd) if cwd else None,
             env=merged,
+            input=stdin_text,
         )
     except FileNotFoundError:
         log.debug(f"  -> executable not found: {cmd[0]}")

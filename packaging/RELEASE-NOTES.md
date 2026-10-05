@@ -9,18 +9,21 @@ leaves it.
 | **Python 3.11+** | only used to run the installer |
 | **NVIDIA GPU** | strongly recommended — see Known limitations |
 | **Free disk** | 150 GB while installing (125 GB with an NVIDIA GPU), settling to 130 GB / 110 GB |
-| **Time** | 1.5 to 2 hours for the first install |
+| **Time** | 1.5 to 2 hours for the first install when testers built the containers; downloading the prebuilt ones has not been timed yet |
+| **Access token** | the one we sent you, saved as `registry-token.txt` next to `START-HERE`, on one line: `USERNAME:TOKEN` |
 
 ## Install
 
 1. Download `Horus-Beta-<version>.zip` below and extract **all** of it
-2. From inside the extracted folder:
+2. Save your access token as `registry-token.txt` in the extracted folder
+3. From inside the extracted folder:
    - **Windows** — double-click `START-HERE-Windows.bat`
    - **macOS** — right-click `START-HERE-macOS.command` → Open
    - **Linux** — `./START-HERE-Linux.sh`
-3. It asks two or three questions, then downloads and builds everything.
+4. It asks two or three questions, then downloads everything. Horus's own
+   containers come prebuilt and signed, so nothing is built on your machine.
    It is not frozen — leave it running.
-4. When it finishes, open Horus from the `app/` folder:
+5. When it finishes, open Horus from the `app/` folder:
    - Windows: `app/Horus.exe`
    - macOS: `app/Horus.app`
    - Linux: install `app/Horus_<version>_amd64.deb`, then launch Horus
@@ -52,6 +55,13 @@ Would rather not bypass an OS warning? Fair. Use the browser at
   file and a 0.3 GB model server came in. The install needs 150 GB / 125 GB
   of free disk while it builds, settling to 130 GB / 110 GB afterwards
   (measured before that change).
+- All of those figures were measured when testers built the containers. The
+  containers now come prebuilt and signed; the download size, the time and
+  the disk they need have not been measured yet, so the installer still asks
+  for the same free space.
+- The prebuilt containers are built for x86-64 processors. On an Apple
+  Silicon Mac Docker runs them through emulation; if that fails, run your
+  `START-HERE` file with `--build-from-source` to build them on the Mac.
 - On the CPU the installer downloads the language model itself, shows its
   size, speed and time left, resumes an interrupted download and checks its
   SHA-256. It is kept in `horus/models`, also after `--uninstall`.

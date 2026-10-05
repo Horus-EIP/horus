@@ -1,5 +1,6 @@
 services:
   mas:
+    image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-mas:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-cpu}
     build:
       args:
         TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
@@ -11,6 +12,7 @@ services:
         condition: service_healthy
 
   agent:
+    image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-agent:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-cpu}
     build:
       args:
         TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
@@ -22,10 +24,14 @@ services:
         condition: service_healthy
 
   knowledge_store:
+    image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-knowledge-store:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-cpu}
     build:
       args:
         TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
     gpus: !reset null
+
+  web-client:
+    image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-web-client:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-cpu}
 
   vllm:
     gpus: !reset null

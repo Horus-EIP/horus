@@ -36,6 +36,7 @@ services:
       - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
 
   mas:
+    image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-mas:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-gpu}
     build:
       context: ../services/mas
       dockerfile: Dockerfile
@@ -118,6 +119,7 @@ services:
       - mas_model_cache:/app/models/llm
 
   web-client:
+    image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-web-client:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-gpu}
     build:
       context: ../services/web-client
       dockerfile: Dockerfile
@@ -159,6 +161,7 @@ services:
       - NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX=${NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX:-}
 
   agent:
+    image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-agent:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-gpu}
     build:
       context: ../services/agent
       dockerfile: Dockerfile
@@ -298,6 +301,7 @@ services:
       start_period: ${VLLM_HC_START_PERIOD:-300s}
 
   knowledge_store:
+    image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-knowledge-store:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-gpu}
     build:
       context: ../services/knowledge-store
       dockerfile: Dockerfile

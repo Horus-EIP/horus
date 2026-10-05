@@ -40,6 +40,51 @@ For exact steps and env overrides (e.g. `DB_HOST=localhost`), read the workflow 
 
 The **`cpu-images`** job builds the mas, agent and knowledge-store images through the CPU overlay (one runner per image). It fails if `pip list` in an image shows any `nvidia-*`, `cuda-*` or `triton` package, or a torch other than the pinned `+cpu` build (`scripts/ci/check-cpu-image.py`). It writes each image's size and build time to the job summary. The **`cpu-build-wiring`** job runs first: `tests/ci/test_cpu_torch_build.py` checks the torch pin, the Dockerfiles, the overlay and the `cpu-images` job without building anything.
 
+The release images are built by a separate workflow, **`.github/workflows/images.yml`**, described under [Prebuilt images](#prebuilt-images).
+
+---
+
+### Prebuilt images
+
+Testers and customers do not build the four Horus images. `.github/workflows/images.yml` builds them, signs them and pushes them to a private registry, and the installer pulls them.
+
+**Names.** `<registry>/horus-<service>:<version>-<flavor>` for `mas`, `agent`, `knowledge-store` and `web-client`. `<version>` is `VERSION`; `<flavor>` is `cpu` for the `cpu-*` profiles and `gpu` for the others. Compose builds each name from `HORUS_REGISTRY`, `HORUS_VERSION` and the compose files: `docker-compose.yml` ends the tag in `-gpu`, and `docker-compose.cpu.yml`, which also sets the CPU torch index, ends it in `-cpu`. When `HORUS_REGISTRY` is unset, as in `.env.example`, the `image:` fields resolve to nothing and Compose keeps its local build names (`<project>-mas` and so on), so `docker compose up --build`, `stack-up.sh` and the `cpu-images` CI job build exactly as before. Every build also gets a commit tag, `sha-<12 hex digits>-<flavor>`.
+
+**Workflow.** It runs on a `v*` tag and by hand. The `plan` job runs `tests/ci/test_release_images.py` and the installer tests, checks the version numbers and that the tag is `v` followed by `VERSION`, then picks the registry: the repository variable `HORUS_REGISTRY`, else the installer's default `ghcr.io/epitechpromo2027`. The `image` job builds each of the 4 services in both flavors on its own runner, through the same compose files the profiles use. It rejects a CPU image that contains a CUDA package, pushes the commit tag and, only when the run's ref is the tag `v<VERSION>`, the version tag, then signs the digest and checks the signature. A run started by hand from a branch publishes commit tags only, so it can never replace a release.
+
+| Setting (Settings > Secrets and variables > Actions) | Kind | Default |
+|---|---|---|
+| `HORUS_REGISTRY` | variable | `ghcr.io/epitechpromo2027`, the installer's default. Change it only together with the installer's `--registry`; the workflow warns when they differ. |
+| `HORUS_REGISTRY_USERNAME` | variable | the account that started the run |
+| `HORUS_REGISTRY_TOKEN` | secret | the run's `GITHUB_TOKEN` with `packages: write`, which is enough for GHCR |
+
+On GHCR, check after the first release that each `horus-*` package under the organisation's Packages tab is **Private** and gives this repository write access.
+
+**Signing.** cosign signs each digest keyless, with the workflow's GitHub OIDC identity: Fulcio issues a short-lived certificate for `https://github.com/<owner>/<repo>/.github/workflows/images.yml@<ref>` and Rekor records the signature. Keyless was chosen because there is no private key to store, rotate or leak: a stolen repository secret cannot sign an image, and each signature says which workflow, ref and commit produced the digest. The cost is that Rekor is a public log: the repository name, the workflow path, the ref, the commit SHA and the image digests become public, though no code or image content does. If that matters more than key management one day, switch to a key pair (`cosign generate-key-pair`, a `COSIGN_PRIVATE_KEY` secret, `--tlog-upload=false`) and ship the public key with the installer. To check an image by hand:
+
+```bash
+cosign verify \
+  --certificate-identity "https://github.com/EpitechPromo2027/G-EIP-600-BAR-6-1-eip-loup.marquez/.github/workflows/images.yml@refs/tags/v0.1.2" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/epitechpromo2027/horus-mas:0.1.2-cpu
+```
+
+**Installer.** By default it never builds:
+
+1. It writes `HORUS_REGISTRY` (from `--registry`, the `HORUS_REGISTRY` variable, the previous install, or the default) and `HORUS_VERSION` to `.env`. Preflight checks that registry's host instead of PyPI, npm and Debian.
+2. If it is given a token, it signs Docker in with `docker login <host> --username <user> --password-stdin`, the token on stdin. The token comes from `--registry-token-file PATH`, from `HORUS_REGISTRY_TOKEN` (with `HORUS_REGISTRY_USERNAME` or `--registry-user`), or from `registry-token.txt` next to START-HERE, written as `USERNAME:TOKEN` on one line. It never reaches `install-log.txt`, `.env` or `horus-profile.json`, and no flag takes the token itself, so it stays out of shell history and process lists. The bundle builder never archives a `registry-token.txt`. Docker keeps the sign-in in its credential store like any `docker login`; `docker logout ghcr.io` removes it. On GHCR the token is a personal access token (classic) with `read:packages`. A refused sign-in stops with exit code 47.
+3. It pulls the Horus images first, then the third-party ones, one at a time with 3 tries each. It checks that each Horus image is really on the machine afterwards (`docker image inspect`), because `docker compose pull` can report success for a service that also has a `build:` section. When the registry refuses an image it stops at once with exit code 41 and says how to give it the token.
+4. It starts the stack with `docker compose up -d --no-build`. `--start` and `--restart` also pass `--no-build` while `.env` has `HORUS_REGISTRY`. If an earlier install built images here (`<project>-mas` and so on), it prints the `docker image rm` command that frees their space; it removes nothing itself.
+
+**Building from source.** `--build-from-source`, or `HORUS_BUILD_FROM_SOURCE=1`, is the contributors' path: the installer writes no `HORUS_REGISTRY` (and deactivates one left by a previous install), pulls only the third-party images, builds, and offers to prune the build cache at the end. `--no-build` skips the rebuild on a re-run. `stack-up.sh` always builds from source and ignores `HORUS_REGISTRY`, so a local build never takes the name of a release image.
+
+**Not done yet.**
+
+- The images are linux/amd64 only. On Apple Silicon Docker runs them through emulation; the installer warns and suggests `--build-from-source`.
+- The beta ZIP still ships the service source, which `--build-from-source` needs, and the agent service still bind-mounts `src/services/agent/app` over `/app`. On an installed stack the agent therefore runs the ZIP's copy of its code, which is the same commit as its image. Dropping both is step 1 of ADR-004's technical protection. The mount needs another home first: the repository's `.gitignore` keeps `docker-compose.override.yml` for personal overrides.
+- The installer does not verify signatures itself; testers do not have cosign.
+- Install time and peak disk with prebuilt images are not measured yet; the installer still asks for the 150 GB measured when the images were built locally.
+
 ---
 
 ### Local deployment with Docker
@@ -66,7 +111,7 @@ The overlay sets the build argument `TORCH_INDEX_URL=https://download.pytorch.or
 
 The overlay also adds `llm`: one llama-server (`ghcr.io/ggml-org/llama.cpp:server-b11382`) that serves Qwen3-4B-Instruct-2507 Q4_K_M to MAS and to every agent. The `cpu-*` profiles point both clients at it with `LLM_BACKEND=vllm` (the OpenAI-compatible client mode), `LLM_VLLM_URL=http://llm:8080/v1`, `LLM_VLLM_MODEL=qwen3-4b`, `LLM_VLLM_MAX_MODEL_LEN=8192` and `LLM_VLLM_TIMEOUT=900`. With that backend MAS and the agent load no model in-process and their entrypoints download none; MAS still loads its MiniLM skill embedder. The GPU profiles keep the `vllm` service.
 
-- **Model file.** `models/manifest.json` lists it: id, version, file, size, SHA-256, minimum RAM, profiles and mirrors. The installer downloads the chosen profile's default model into `models/` (or `--models-dir`, which later runs read back from `.env`) after the images are built and before the first start, and checks it again on every `--start` and `--restart`: it resumes a `.part` file with HTTP `Range`, retries with a growing pause, moves to the next mirror after 3 failures in a row (6 on the last mirror), verifies the SHA-256 and renames the file in one step. A bad hash deletes the file and stops with exit code 45. The installer writes `HORUS_MODELS_DIR` and `LLM_GGUF_FILE`, `LLM_GGUF_URL`, `LLM_GGUF_SHA256`, `LLM_GGUF_SIZE` to `.env`; compose mounts `HORUS_MODELS_DIR` (default `../../models`) read-only into `llm` at `/models`. Details and the download size are in `scripts/models/README.md`.
+- **Model file.** `models/manifest.json` lists it: id, version, file, size, SHA-256, minimum RAM, profiles and mirrors. The installer downloads the chosen profile's default model into `models/` (or `--models-dir`, which later runs read back from `.env`) after the images are pulled (or built) and before the first start, and checks it again on every `--start` and `--restart`: it resumes a `.part` file with HTTP `Range`, retries with a growing pause, moves to the next mirror after 3 failures in a row (6 on the last mirror), verifies the SHA-256 and renames the file in one step. A bad hash deletes the file and stops with exit code 45. The installer writes `HORUS_MODELS_DIR` and `LLM_GGUF_FILE`, `LLM_GGUF_URL`, `LLM_GGUF_SHA256`, `LLM_GGUF_SIZE` to `.env`; compose mounts `HORUS_MODELS_DIR` (default `../../models`) read-only into `llm` at `/models`. Details and the download size are in `scripts/models/README.md`.
 - **Start order.** The one-shot service `llm-model` runs first (`src/infra/llm/fetch-model.sh`). It finds the file the installer verified and exits at once; without the installer it downloads the file into the same folder, resuming and checking the SHA-256. `llm` starts once it has exited successfully, and `mas` and `agent` wait for `llm` to be healthy (`GET /health`, 10 minute start window).
 - **Server flags.** `--ctx-size` and `--alias` come from `LLM_VLLM_MAX_MODEL_LEN` and `LLM_VLLM_MODEL`, so server and clients cannot disagree. One slot (`--parallel 1`; other requests wait in its queue), `--load-mode mmap`, `--cache-ram 1024`, `--metrics`, f16 KV cache.
 - **Resources.** `LLM_SERVER_THREADS` (default 4) is `--threads`; the installer writes the physical core count and gives MAS and the agent one torch thread each. `LLM_SERVER_MEM_LIMIT` (default `6g`) is the memory ceiling, and the swap ceiling follows it unless `LLM_SERVER_MEMSWAP_LIMIT` is set. On the CPU, MAS defaults to `3g` and the agent to `4g`.
