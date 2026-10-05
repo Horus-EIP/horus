@@ -50,6 +50,8 @@ Each row = one technology we evaluated. Status meanings:
 | **vLLM** | LLM serving | 2026-04 | HF blog | Watching | Promising for throughput; would replace direct `transformers` calls in Agent. Revisit when GPU budget allows. |
 | **Outlines / Instructor** | Structured LLM output | 2026-05 | Latent Space podcast | Watching | Would replace hand-rolled JSON-mode handling. Spike planned post-greenlight. |
 | **DSPy** | LLM programming | 2026-05 | Stanford NLP Discord | Watching | Interesting paradigm but maturity vs. our timeline doesn't fit yet. |
+| **llama.cpp Vulkan backend** (`server-vulkan` image) | LLM serving on integrated GPUs | 2026-10 | llama.cpp discussion #10879 + docs | Watching | [iGPU and NPU note](../tech-watch/IGPU_NPU_RESEARCH.md) (B-101): one measured spike on a Linux laptop before any profile; no container route on Windows |
+| **llama.cpp OpenVINO backend** | LLM serving on Intel iGPUs and NPUs | 2026-10 | llama.cpp `docs/backend/OPENVINO.md` | Watching | [iGPU and NPU note](../tech-watch/IGPU_NPU_RESEARCH.md) (B-101): work in progress, Intel only, validated on Core Ultra Series 1 and 2 only; do not build yet |
 
 ---
 
@@ -64,6 +66,7 @@ Internal deep-dives produced by the team, beyond per-tool watch entries:
 | Observability strategy | [assets/research/mas/Observability.pdf](../assets/research/mas/Observability.pdf) | ✅ |
 | Orchestrator infrastructure | [assets/research/mas/Orchestrator_infrastructure.pdf](../assets/research/mas/Orchestrator_infrastructure.pdf) | ✅ |
 | Security process | [assets/research/mas/Security_Process.pdf](../assets/research/mas/Security_Process.pdf) | ✅ |
+| Integrated GPUs and NPUs for the CPU profiles (B-101) | [tech-watch/IGPU_NPU_RESEARCH.md](../tech-watch/IGPU_NPU_RESEARCH.md) | Note done; spike not run |
 | Comparative tech brief (jury-facing) | [../greenlight/track-objectives-report/Comparative_Tech_Brief.docx](../../greenlight/track-objectives-report/Comparative_Tech_Brief.docx) | ✅ |
 
 ---
