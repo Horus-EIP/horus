@@ -6,13 +6,13 @@ EIP Tech 4 — Objective D. This page declares the project's performance indicat
 
 ## Chosen KPIs
 
-We track **three** indicators (per the guide's recommendation of 2–3). Each has a numeric target, a measurement script, and a Grafana panel.
+We track **three** indicators (per the guide's recommendation of 2–3). Each has a numeric target, a measurement script, and, where Prometheus has the data, a panel or query on the in-app admin metrics page (`/admin/metrics`, which replaced the Grafana dashboard).
 
 | # | KPI | Target | What it answers | Measured by | Dashboard panel |
 |---|-----|--------|-----------------|-------------|-----------------|
-| **K1** | **End-to-end chat latency (p95)** | **< 2 000 ms** under 20 concurrent users | "How long does a user wait between sending a message and seeing the first agent token?" | [`scripts/perf/load-locust.py`](../../scripts/perf/load-locust.py) + Prometheus histogram `mas_task_processing_time_seconds_bucket` | Grafana → MAS Overview → "Task processing time (p95)" |
+| **K1** | **End-to-end chat latency (p95)** | **< 2 000 ms** under 20 concurrent users | "How long does a user wait between sending a message and seeing the first agent token?" | [`scripts/perf/load-locust.py`](../../scripts/perf/load-locust.py) + Prometheus histogram `mas_task_processing_seconds` (task creation to completed result, buckets up to 1 800 s) | Admin → Metrics (`/admin/metrics`) → "MAS Task Processing Time" (p50 and p95 from `mas_task_processing_seconds_bucket`) |
 | **K2** | **RAG retrieval quality (keyword-match precision @ top-5)** | **≥ 0.80** on the standard query set in [`scripts/perf/quality-benchmark.py`](../../scripts/perf/quality-benchmark.py) | "When the user asks about topic X, do the retrieved chunks actually mention X?" | [`scripts/perf/quality-benchmark.py`](../../scripts/perf/quality-benchmark.py) (new) + [`retrieval-quality.py`](../../scripts/perf/retrieval-quality.py) | N/A — JSON output committed to `scripts/perf/results-archive/` |
-| **K3** | **Read-endpoint throughput (req/s)** | **≥ 200 req/s** sustained on `/conversations` + `/agents/details` with cache warm | "Does the API survive a dashboard polling burst?" | [`scripts/perf/throughput-locust.py`](../../scripts/perf/throughput-locust.py) (zero think-time, pre-injected token) + [`benchmark-mas.py`](../../scripts/perf/benchmark-mas.py) for the cache A/B | Grafana → MAS Overview → "HTTP requests/sec" |
+| **K3** | **Read-endpoint throughput (req/s)** | **≥ 200 req/s** sustained on `/conversations` + `/agents/details` with cache warm | "Does the API survive a dashboard polling burst?" | [`scripts/perf/throughput-locust.py`](../../scripts/perf/throughput-locust.py) (zero think-time, pre-injected token) + [`benchmark-mas.py`](../../scripts/perf/benchmark-mas.py) for the cache A/B | Admin → Metrics (`/admin/metrics`) → Custom query `sum(rate(http_requests_total{job="mas-api"}[1m]))` |
 
 Why these three: K1 = user-perceived performance, K2 = product-perceived quality (latency without quality is meaningless for RAG), K3 = system-perceived headroom under realistic dashboard polling.
 
