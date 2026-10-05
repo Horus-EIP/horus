@@ -9,9 +9,12 @@ transformers are mocked at the conftest level.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+
+RELEASE_VERSION = (Path(__file__).resolve().parents[3] / "VERSION").read_text(encoding="utf-8").strip()
 
 
 class TestMainApp:
@@ -23,7 +26,16 @@ class TestMainApp:
         with TestClient(app) as client:
             r = client.get("/health")
             assert r.status_code == 200
-            assert r.json() == {"status": "healthy", "service": "knowledge-store"}
+            assert r.json() == {
+                "status": "healthy",
+                "service": "knowledge-store",
+                "version": RELEASE_VERSION,
+            }
+
+    def test_openapi_reports_the_release_version(self):
+        from app.main import app  # noqa: PLC0415
+
+        assert app.version == RELEASE_VERSION
 
     def test_http_exception_handler_shapes_body(self):
         from app.main import handle_http_exception  # noqa: PLC0415

@@ -242,6 +242,58 @@ class ExecutableBitGuard(unittest.TestCase):
             self.assertFalse(list((tmp / "dist").glob("*.zip")),
                              "a broken archive was written anyway")
 
+class BundleShipsTheVersion(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.tmp = Path(cls._tmp.name)
+        cls.result = subprocess.run(
+            [sys.executable, str(BUNDLER), "--out", str(cls.tmp / "dist")],
+            capture_output=True, text=True, cwd=str(REPO), timeout=300,
+        )
+        cls.zip_path = next((cls.tmp / "dist").glob("*.zip"), None)
+        cls.version = (REPO / "VERSION").read_text(encoding="utf-8").strip()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
+
+    def setUp(self) -> None:
+        if self.zip_path is None:
+            self.fail(f"no archive was produced:\n{self.result.stdout}\n{self.result.stderr}")
+
+    def test_the_archive_is_named_after_the_version_file(self):
+        self.assertEqual(self.zip_path.name, f"Horus-Beta-{self.version}.zip")
+
+    def test_the_version_file_ships_next_to_the_installer(self):
+        with zipfile.ZipFile(self.zip_path) as zf:
+            names = set(zf.namelist())
+            self.assertIn("VERSION", names)
+            self.assertIn("installer/common.py", names)
+            self.assertEqual(zf.read("VERSION").decode("utf-8").strip(), self.version)
+
+    def test_the_unpacked_installer_reports_the_shipped_version(self):
+        dest = self.tmp / "unpacked"
+        with zipfile.ZipFile(self.zip_path) as zf:
+            for name in ("VERSION", "installer/common.py"):
+                target = dest / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(zf.read(name))
+        proc = subprocess.run(
+            [sys.executable, "-c", "import common; print(common.VERSION)"],
+            capture_output=True, text=True, cwd=str(dest / "installer"), timeout=60,
+        )
+        self.assertEqual(proc.stdout.strip(), self.version, proc.stderr)
+
+@needs_yaml
+class ComposeReleaseVersion(unittest.TestCase):
+    def test_every_python_service_receives_the_release_version(self):
+        services = compose_services()
+        for name in ("mas", "agent", "knowledge_store"):
+            with self.subTest(name):
+                self.assertIn("HORUS_VERSION=${HORUS_VERSION:-}",
+                              services[name].get("environment", []))
+
 @needs_yaml
 class ComposeHealthchecks(unittest.TestCase):
     @classmethod

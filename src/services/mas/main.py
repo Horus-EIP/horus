@@ -1,7 +1,7 @@
 """MAS service ASGI entry point.
 
-Wires ``core.app.create_app_environment()`` and exposes a single
-authenticated ``/`` health endpoint. Run with
+Wires ``core.app.create_app_environment()`` and exposes the public
+``/health`` probe and the authenticated ``/`` endpoint. Run with
 ``uvicorn main:app --host 0.0.0.0 --port 8000`` (or Docker Compose).
 """
 
@@ -12,6 +12,7 @@ from fastapi import Depends, HTTPException, status
 from auth.auth_tool_functions import get_current_user
 from core.app import create_app_environment
 from core.logger import get_logger, log_error, log_startup, log_success
+from core.version import HORUS_VERSION
 from db.dependency import db_dependency as db_dependency
 
 logger = get_logger("main")
@@ -78,3 +79,14 @@ async def user(user: user_dependency, db: db_dependency):
     logger.info(f"Home endpoint accessed by user: {username}")
     log_success("main", f"Authentication successful for user: {username}")
     return {"User": user, "message": "Authentification succeed"}
+
+
+@app.get(
+    "/health",
+    status_code=status.HTTP_200_OK,
+    summary="Liveness probe",
+    description="Unauthenticated: reports the service name and the Horus release it runs.",
+    tags=["Health"],
+)
+async def health():
+    return {"status": "healthy", "service": "mas", "version": HORUS_VERSION}

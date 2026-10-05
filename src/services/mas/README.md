@@ -88,6 +88,7 @@ Pytest suites and client scripts live under `tests/mas/` at the repository root 
 | `/conversations`  | Conversation CRUD and message history                 |
 | `/users`          | User administration (admin-only role management)      |
 | `/rabbitmq`       | RabbitMQ health check, inter-agent delegation         |
+| `/health`         | Public liveness probe with the release `version`      |
 | `/`               | Health check / authenticated user info                |
 
 Interactive API documentation is available at `/docs` (Swagger UI) when the server is running.

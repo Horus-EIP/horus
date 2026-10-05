@@ -1,5 +1,12 @@
+import { readFileSync } from "fs";
+import path from "path";
 import { describe, it, expect } from "vitest";
 import { GET } from "@/app/api/health/route";
+
+const releaseVersion = readFileSync(
+  path.resolve(__dirname, "../../../../VERSION"),
+  "utf-8"
+).trim();
 
 describe("GET /api/health", () => {
   it("answers 200 with the web client's health payload", async () => {
@@ -10,5 +17,11 @@ describe("GET /api/health", () => {
       status: "healthy",
       service: "web-client",
     });
+  });
+
+  it("reports the release version from the repository VERSION file", async () => {
+    const body = await GET().json();
+
+    expect(body.version).toBe(releaseVersion);
   });
 });

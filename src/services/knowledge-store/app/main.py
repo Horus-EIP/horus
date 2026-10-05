@@ -9,6 +9,7 @@ from app.api.routes import ROUTERS
 from app.core.logging import get_logger
 from app.core.metrics import set_system_info
 from app.core.middleware import CorrelationIDMiddleware
+from app.core.version import HORUS_VERSION
 
 logger = get_logger("main")
 
@@ -20,7 +21,7 @@ async def lifespan(app: FastAPI):
         "Knowledge Store starting up",
         extra={
             "type": "startup",
-            "version": "1.0.0",
+            "version": HORUS_VERSION,
         },
     )
     yield
@@ -59,7 +60,7 @@ app = FastAPI(
     title="Horus Knowledge Store",
     description=description,
     summary="Vector database and document retrieval service",
-    version="1.0.0",
+    version=HORUS_VERSION,
     contact={
         "name": "Horus",
     },
@@ -97,13 +98,13 @@ app.add_middleware(
 )
 
 # Set system info for metrics
-set_system_info(version="1.0.0", embedding_model="BAAI/bge-base-en-v1.5")
+set_system_info(version=HORUS_VERSION, embedding_model="BAAI/bge-base-en-v1.5")
 
 
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "service": "knowledge-store"}
+    return {"status": "healthy", "service": "knowledge-store", "version": HORUS_VERSION}
 
 
 @app.exception_handler(HTTPException)

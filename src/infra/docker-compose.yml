@@ -50,6 +50,7 @@ services:
     env_file:
       - .env
     environment:
+      - HORUS_VERSION=${HORUS_VERSION:-}
       # Must be the Docker service name, not localhost (compose passes .env which may use localhost for host-side tools).
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=${RABBITMQ_USER}
@@ -168,6 +169,7 @@ services:
     env_file:
       - .env
     environment:
+      - HORUS_VERSION=${HORUS_VERSION:-}
       # Overrides host-oriented .env (localhost) with Docker network hosts.
       - ORCHESTRATOR_URL=http://mas:8000
       - ORCHESTRATOR_USERNAME=${SUPER_USER_USERNAME}
@@ -296,6 +298,7 @@ services:
     restart: unless-stopped
     gpus: all
     environment:
+      - HORUS_VERSION=${HORUS_VERSION:-}
       - CHROMA_TELEMETRY_ENABLED=0
       - POSTHOG_DISABLED=true
       - SENTENCE_TRANSFORMERS_NO_TELEMETRY=1

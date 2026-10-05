@@ -59,6 +59,7 @@ from core.metrics import (
     task_processing_duration,
     task_processing_total,
 )
+from core.version import HORUS_VERSION
 from specialized.analyst_agent import AnalystAgent
 from specialized.researcher_agent import ResearcherAgent
 from specialized.writer_agent import WriterAgent
@@ -514,7 +515,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Horus Agent Service", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Horus Agent Service", version=HORUS_VERSION, lifespan=lifespan)
 
 # OpenTelemetry auto-instrumentation is handled by opentelemetry-instrument wrapper
 # See Dockerfile CMD for details
@@ -532,7 +533,7 @@ app.add_middleware(CorrelationIDMiddleware)
     tags=["Health"],
 )
 async def health_check():
-    return {"status": "healthy", "service": "agent"}
+    return {"status": "healthy", "service": "agent", "version": HORUS_VERSION}
 
 
 @app.get(

@@ -816,6 +816,7 @@ def _dispatch(log: Log, args) -> int:
     env = profiles.env_for(name, probe)
     env["HORUS_CORPUS_DIR"] = choice["corpus_dir"]
     env["CORPUS_SCAN_TOKEN"] = corpus_scan_token(log, infra)
+    env["HORUS_VERSION"] = VERSION
 
     hardware.write_profile_json(PROFILE_JSON, probe, name, env, reasons)
     log.ok(f"wrote {PROFILE_JSON.name}")

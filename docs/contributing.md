@@ -131,6 +131,27 @@ Open a GitHub Issue with the `enhancement` label describing:
 - Your proposed approach (if any)
 - Any relevant context or mockups
 
+### Version Number
+
+`VERSION` at the repository root holds the release number (`MAJOR.MINOR.PATCH`) and is the only place it is decided. Everything else reads it or copies it:
+
+| Consumer | How it gets the number |
+|----------|------------------------|
+| Installer (`installer/common.py`), bundle name, `--version` | Reads `VERSION`; the bundle ships it next to `installer/` |
+| MAS, agent, knowledge store (`FastAPI(version=…)`, `GET /health`, trace `service.version`) | `HORUS_VERSION` from Compose, which the installer writes into `src/infra/.env`; outside Docker, the nearest `VERSION` file above the service |
+| `src/infra/.env.example` | Copy (`HORUS_VERSION=`), for stacks started with `stack-up.sh` |
+| Web client `package.json` and the root entries of `package-lock.json`; `GET /api/health` | Copy |
+| Desktop `package.json`, `package-lock.json`, `tauri.conf.json`, `Cargo.toml`, the `horus-desktop` entry of `Cargo.lock`, the placeholder in `ui/index.html` | Copy |
+| `CHANGELOG.md` | Its newest release heading |
+
+To release, change `VERSION`, update every copy, add the `CHANGELOG.md` section, then run:
+
+```bash
+python scripts/ci/check-versions.py
+```
+
+CI runs the same check (job `versions` in `.github/workflows/ci.yml`) and fails when any copy differs from `VERSION`.
+
 ---
 
 ## Contribution workflow

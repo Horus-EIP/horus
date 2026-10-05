@@ -63,6 +63,22 @@ jobs:
       - name: Run ruff
         run: ruff check src tests scripts installer packaging
 
+  versions:
+    name: Version numbers match VERSION
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Test the version check
+        run: python -m unittest discover -s tests/ci -v
+
+      - name: Check every version number against VERSION
+        run: python scripts/ci/check-versions.py
+
   # ----------------------------------------------------------------------- #
   # MAS unit tests with coverage
   # ----------------------------------------------------------------------- #

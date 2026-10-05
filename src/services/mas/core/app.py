@@ -27,6 +27,7 @@ from core.logger import get_logger, log_error, log_startup, log_success
 from core.middleware import LoggingMiddleware
 from core.rabbitmq_tool import rabbitmq_instance
 from core.tracing import init_tracing
+from core.version import HORUS_VERSION
 from db.database import engine
 from db.init_setup import init_db
 from tasks.controller import check_task_timeout
@@ -59,7 +60,7 @@ def create_app_environment():
         - **Conversations**: History and management
         - **Users**: User administration
         """,
-        version="1.0.0",
+        version=HORUS_VERSION,
         openapi_tags=[
             {
                 "name": "Health",

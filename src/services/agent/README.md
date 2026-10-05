@@ -88,7 +88,7 @@ Pytest suite: `tests/agent/` at the repository root (`tests/agent/pytest.ini`).
 | Method | Path            | Description                                  |
 |--------|-----------------|----------------------------------------------|
 | `POST` | `/task`         | Receive and process a task from MAS           |
-| `GET`  | `/health`       | Liveness probe used by the Compose healthcheck; no auth, no model or downstream call |
+| `GET`  | `/health`       | Liveness probe used by the Compose healthcheck, with the release `version`; no auth, no model or downstream call |
 | `GET`  | `/capabilities` | Return agent skills and capabilities          |
 | `GET`  | `/metrics`      | Prometheus metrics                            |
 

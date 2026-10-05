@@ -37,6 +37,26 @@ Complete REST and WebSocket API reference for the Multi-Agent System orchestrato
 
 ### 1. Health
 
+#### GET /health
+
+Liveness probe. Reports the service and the Horus release it runs (from `VERSION`, passed in as `HORUS_VERSION`). Calls no other service.
+
+**Auth:** None
+
+**Response 200:**
+
+```json
+{
+  "status": "healthy",
+  "service": "mas",
+  "version": "0.1.2"
+}
+```
+
+The Compose healthcheck of `mas` uses `POST /rabbitmq/heartbeat` instead, because it also proves the broker connection.
+
+---
+
 #### GET /
 
 Verify the application is running and test JWT authentication. Returns the authenticated user's identity.
@@ -1308,7 +1328,7 @@ Authentication is not enforced on these endpoints in the default configuration (
 
 #### GET /health
 
-Return service health status.
+Return service health status and the Horus release it runs. The Compose healthcheck of `knowledge_store` probes this route.
 
 **Auth:** None
 
@@ -1317,7 +1337,8 @@ Return service health status.
 ```json
 {
   "status": "healthy",
-  "service": "knowledge-store"
+  "service": "knowledge-store",
+  "version": "0.1.2"
 }
 ```
 

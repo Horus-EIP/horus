@@ -31,6 +31,8 @@ from fastapi.testclient import TestClient
 import core.app as app_module
 from core.structured_logging import get_correlation_id
 
+RELEASE_VERSION = (Path(__file__).resolve().parents[3] / "VERSION").read_text(encoding="utf-8").strip()
+
 # --------------------------------------------------------------------------- #
 # Shared helpers
 # --------------------------------------------------------------------------- #
@@ -107,7 +109,7 @@ class TestCreateAppEnvironment:
 
         assert isinstance(app, FastAPI)
         assert app.title == "MAS - Multi-Agent System"
-        assert app.version == "1.0.0"
+        assert app.version == RELEASE_VERSION
         # A lifespan context is wired in (FastAPI/Instrumentator wrap ours, so
         # we assert presence rather than identity; TestLifespan proves it runs
         # our boot/teardown hooks).
@@ -521,6 +523,16 @@ class TestMainEntrypoint:
         assert isinstance(main_module.app, FastAPI)
         paths = _collect_route_paths(main_module.app)
         assert "/" in paths
+
+    def test_public_health_reports_the_release_version(self, main_module):
+        response = TestClient(main_module.app).get("/health")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "healthy",
+            "service": "mas",
+            "version": RELEASE_VERSION,
+        }
 
     def test_health_endpoint_authenticated(self, main_module):
         """An authenticated user receives their claims and the success message."""

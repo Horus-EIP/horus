@@ -18,8 +18,60 @@ Major tech integrations and milestones across the project life cycle:
 - **2026-04**: Observability stack consolidation — Loki + Promtail + Tempo + Prometheus + Grafana, shared RabbitMQ work queues, demo guide & cheatsheet, ADRs for RabbitMQ / ChromaDB / FastAPI, code-quality review for greenlight.
 - **2026-05**: Pre-release fixes — environment + Docker tuning, agent seeding, consumer queue routing.
 - **2026-06**: Grafana removed — logs, metrics, and traces now viewed in the web client's admin pages (Loki, Prometheus, Tempo backends, admin-only); `src/infra/grafana` renamed to `src/infra/observability`.
+- **2026-09**: First tagged beta releases — 0.1.0 (beta installer, Tauri desktop shell, in-stack vLLM) and 0.1.1 (installer retries, CPU profiles).
+
+Releases from 0.1.0 on have their own section, named after the tag. The monthly sections below them are the history before the first tag.
 
 ---
+
+## 0.1.2 (unreleased)
+
+
+## 0.1.1 - 2026-09-07
+
+Tag `v0.1.1` (`0fc5378`). The installer of this release still reported `0.1.0`: the bump commit only changed a document.
+
+### Added
+
+- Installer retries `docker compose up` once when a service aborts while still starting, offers to reclaim the Docker build cache, and takes `--skip-disk-check`; the free-disk requirement is raised to 150 GB (125 GB with a GPU) and the MAS start period is longer (`39acd3d`)
+- `.gitattributes` line-ending rules, and the bundle builder normalises line endings on the way into the archive, with tests (`39acd3d`)
+
+### Changed
+
+- CPU profiles: the installer warns before a CPU install, and the smoke test warns instead of failing when the CPU answer is slow or wrong (`fb12a0e`)
+- Stronger password policy on the server and in the web client; Hugging Face and transformers dependencies pinned; ruff pinned in CI and a `.env` provided for the MAS tests (`39acd3d`)
+- Refresh `docs/eip/code-vs-docs-audit.md` (`0fc5378`)
+
+
+## 0.1.0 - 2026-09-02
+
+Tag `v0.1.0` (`18704c0`), the first tagged beta. Covers the commits after the May 2026 entries below.
+
+### Added
+
+- Tauri desktop shell and its release workflow; beta installer with preflight checks, a file-access consent flow, hardware profiles, start/restart/stop/uninstall commands and an end-to-end smoke test; token-gated corpus scanning in the knowledge store (`b59fe65`)
+- Bundle builder `--stage` review folder; desktop releases drafted with the gh CLI on tags (`4e62673`, `8783ce0`)
+- In-stack vLLM service (`vllm/vllm-openai:v0.23.0`) with a healthcheck, and vLLM token streaming in the agent (`c46243c`, `cafd6f3`)
+- Task cancellation in the chat, task detail and task list pages; restart policies on every service; RabbitMQ consumer reconnection with backoff (`eb5510f`)
+- Agent API key regeneration, backend and web client (`e1fd512`)
+- End-to-end LLM pipeline benchmark with a baseline, and server-side generation parameters in its report (`76b0d94`, `2415eea`)
+- EIP Tech 4 deliverables, performance tooling and security scan (`7aa328a`, `66c12ed`)
+
+### Changed
+
+- Remove Grafana; logs, metrics and traces are viewed in the web client's admin pages (`4b92d11`)
+- vLLM token budgeting and anti-looping; agent telemetry in the thought-process card (`ef1755b`)
+- Retrieval query separated from the LLM context; request timeouts and abort signals in the web client; agent API key caching (`a0ec4a6`)
+- Installer errors explain how to read a container's own log; `COMPOSE_PROJECT_NAME=horus_betatest` keeps installs apart; release notes and first-run README refreshed (`18704c0`, `d69297d`)
+- Docs and scripts consolidated into per-topic files; Python 3.13 and always-on observability (`04ba999`, `71a4d84`)
+- Hermetic test suites; CI rewritten with branch coverage gates (`6f8e919`, `a149653`, `c8dde07`, `4582fed`)
+
+### Fixed
+
+- MANAGER role gets `TASK_READ`, so chat works for managers (`4179981`)
+- Knowledge store volumes mounted at the paths the app writes to, so a rebuild no longer wipes the documents (`eb5510f`)
+- Knowledge-store circular import, API test imports and patch targets; 4534 ruff errors cleared (`07c6d0f`, `84fcda5`, `a51a32a`, `743e6a7`, `e62ce2b`, `6e4c086`)
+
 
 ## June 2026
 

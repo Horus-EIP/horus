@@ -8,7 +8,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-VERSION = "0.1.0"
+VERSION_FILE = Path(__file__).resolve().parent.parent / "VERSION"
+UNKNOWN_VERSION = "0.0.0"
+
+def read_version(path: Path = VERSION_FILE) -> str:
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return UNKNOWN_VERSION
+    return text or UNKNOWN_VERSION
+
+VERSION = read_version()
 
 EXIT_OK = 0
 EXIT_USAGE = 2

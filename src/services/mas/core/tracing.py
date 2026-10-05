@@ -8,6 +8,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from core.config import settings
+from core.version import HORUS_VERSION
 
 
 def init_tracing(app) -> bool:
@@ -16,7 +17,7 @@ def init_tracing(app) -> bool:
         return False
 
     resource = Resource.create(
-        attributes={"service.name": "mas-service", "service.version": "1.0.0"}
+        attributes={"service.name": "mas-service", "service.version": HORUS_VERSION}
     )
 
     tracer_provider = TracerProvider(resource=resource)
