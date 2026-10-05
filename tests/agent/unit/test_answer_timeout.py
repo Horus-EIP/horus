@@ -32,6 +32,10 @@ def _pipeline():
     return RAGPipeline(retrieval, decision, tool_registry=MagicMock()), decision
 
 
+def _contract(answer: str) -> str:
+    return json.dumps({"status": "ok", "answer": answer, "sources": []})
+
+
 def _remote_agent() -> DecisionMakingAgent:
     agent = DecisionMakingAgent.__new__(DecisionMakingAgent)
     agent.model_name = "Qwen/Qwen3-4B-Instruct-2507"
@@ -69,7 +73,9 @@ async def test_a_timed_out_answer_fails_instead_of_passing_for_an_answer(monkeyp
     monkeypatch.setenv("REACT_TIMEOUT_SECONDS", "0.05")
     release = threading.Event()
     pipeline, decision = _pipeline()
-    decision.decide.side_effect = lambda **_kwargs: release.wait(5) and "late answer"
+    decision.complete.side_effect = lambda *_args, **_kwargs: (
+        release.wait(5) and _contract("late answer")
+    )
 
     try:
         with pytest.raises(TimeoutError):
@@ -84,14 +90,14 @@ async def test_the_timeout_asks_the_running_generation_to_stop(monkeypatch):
     seen: dict = {}
     stopped = threading.Event()
 
-    def generate(**_kwargs):
+    def generate(*_args, **_kwargs):
         stop = generation_stop_event()
         seen["stop"] = stop
         if stop.wait(5):
             stopped.set()
-        return "late answer"
+        return _contract("late answer")
 
-    decision.decide.side_effect = generate
+    decision.complete.side_effect = generate
 
     with pytest.raises(GenerationTimedOut) as raised:
         await pipeline.generate_response("What was Q4 revenue?")
@@ -111,11 +117,13 @@ def test_the_timeout_message_keeps_the_phrase_the_eval_runner_detects():
 
 async def test_an_answer_in_time_leaves_no_stop_request_behind():
     pipeline, decision = _pipeline()
-    decision.decide.side_effect = lambda **_kwargs: (
+    decision.complete.side_effect = lambda *_args, **_kwargs: _contract(
         "on time" if not generation_stop_event().is_set() else "stopped"
     )
 
-    assert await pipeline.generate_response("What was Q4 revenue?") == "on time"
+    answer = await pipeline.generate_response("What was Q4 revenue?")
+
+    assert answer.answer == "on time"
     assert generation_stop_event() is None
 
 

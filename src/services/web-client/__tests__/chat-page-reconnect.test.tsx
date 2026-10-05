@@ -61,6 +61,12 @@ vi.mock("@/lib/agents/api", () => ({
 }));
 
 const ANSWER = "Q4 revenue grew 12% year on year.";
+const Q4_SOURCE = {
+  doc_id: "doc-q4",
+  chunk_id: "doc-q4:3",
+  title: "1_Q4_2025_Financial_Report.md",
+  page: 2,
+};
 const TIMEOUT_NOTICE =
   "This request exceeded the maximum processing time (1800s) and was stopped.";
 
@@ -324,6 +330,82 @@ describe("chat page after a WebSocket reconnect", () => {
     );
     expect(screen.getByLabelText("Stop generating")).toBeInTheDocument();
     expect(notification.error).not.toHaveBeenCalledWith("Connection lost. Please refresh the page.");
+  });
+
+  it("shows the sources of a live answer under it", async () => {
+    await renderWaitingChat();
+
+    latestSocket().deliver({
+      type: "task_complete",
+      content: ANSWER,
+      timestamp: "2026-10-05T09:33:00",
+      agent_id: "agent-finance",
+      agent_name: "Finance-Analyst",
+      task_id: "root-7",
+      seq: 5,
+      event: "result",
+      sources: [Q4_SOURCE],
+    });
+
+    await screen.findByText(ANSWER);
+    expect(
+      screen.getByRole("link", { name: /1_Q4_2025_Financial_Report\.md, page 2/ })
+    ).toHaveAttribute("href", "/knowledge-store?doc=doc-q4");
+  });
+
+  it("shows the sources of an answer found on reconnect", async () => {
+    await renderWaitingChat();
+    chatApiMock.getRunningTasksForConversation.mockResolvedValue({ ok: true, data: [] });
+    chatApiMock.getTask.mockResolvedValue({
+      ok: true,
+      data: { ...rootDetail("completed", ANSWER), sources: [Q4_SOURCE] },
+    });
+
+    latestSocket().dropFromServer();
+
+    await screen.findByText(ANSWER, {}, { timeout: 3000 });
+    expect(
+      screen.getByRole("link", { name: /1_Q4_2025_Financial_Report\.md, page 2/ })
+    ).toBeInTheDocument();
+  });
+
+  it("clears the live preview when the orchestrator asks the agent once more", async () => {
+    await renderWaitingChat();
+    const delta = (chunk: string, index: number, seq: number) => ({
+      type: "task_step",
+      step_type: "reasoning.delta",
+      task_id: "root-7",
+      subtask_id: "root-7",
+      metadata: { chunk, index },
+      seq,
+      event: "token",
+    });
+
+    latestSocket().deliver(delta("The documents do not say.", 0, 3));
+    await screen.findByText("The documents do not say.");
+
+    latestSocket().deliver({
+      type: "task_status",
+      status: "retrying",
+      detail: "The documents found did not answer it; searching again with another query.",
+      attempt: 2,
+      task_id: "root-7",
+      seq: 4,
+      event: "progress",
+      stage: "retrieval",
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByText("The documents do not say.")).not.toBeInTheDocument()
+    );
+    expect(
+      screen.getByText(
+        "The documents found did not answer it; searching again with another query."
+      )
+    ).toBeInTheDocument();
+
+    latestSocket().deliver(delta("Revenue grew 12%.", 0, 5));
+    await screen.findByText("Revenue grew 12%.");
   });
 });
 

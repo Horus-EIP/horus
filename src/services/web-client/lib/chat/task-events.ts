@@ -1,5 +1,6 @@
 import { chatApi } from "@/lib/chat/api";
 import type { AgentAnswer } from "@/lib/chat/agent-answer";
+import { answerSourcesOf } from "@/lib/chat/answer-sources";
 import type { TaskEvent, TaskStepEvent } from "@/lib/types";
 
 export type TaskFrame = Record<string, unknown>;
@@ -15,7 +16,7 @@ export type TaskProgress = {
 
 export type TaskFrameHandlers = {
   onStep: (step: TaskStepEvent) => void;
-  onStreamChunk: (taskId: string, subtaskId: string, chunk: string) => void;
+  onStreamChunk: (taskId: string, subtaskId: string, chunk: string, index?: number) => void;
   onAnswer: (answer: AgentAnswer, endsTurn: boolean) => void;
   onProgress: (progress: TaskProgress) => void;
 };
@@ -25,6 +26,7 @@ const PROGRESS_FRAME_TYPES = new Set(["task_status", "heartbeat"]);
 const MAX_REPLAY_PAGES = 20;
 const BUSY_STATUS = "busy";
 const FAILED_STATUS = "failed";
+export const RETRYING_STATUS = "retrying";
 
 const STAGE_LABELS: Record<string, string> = {
   queued: "Queued, waiting for the orchestrator",
@@ -155,6 +157,7 @@ function answerOf(frame: TaskFrame): AgentAnswer {
     skillUsed: textOf(frame.skill_used),
     messageId: numberOf(frame.message_id),
     failed: frame.event === "error" && frame.status === FAILED_STATUS,
+    sources: answerSourcesOf(frame.sources),
   };
 }
 
@@ -168,8 +171,16 @@ export function routeTaskFrame(frame: TaskFrame, handlers: TaskFrameHandlers): v
   if (frame.type === "task_step") {
     if (!taskId) return;
     if (frame.step_type === "reasoning.delta") {
-      const chunk = textOf(metadataOf(frame).chunk) ?? "";
-      if (chunk) handlers.onStreamChunk(taskId, textOf(frame.subtask_id) ?? taskId, chunk);
+      const metadata = metadataOf(frame);
+      const chunk = textOf(metadata.chunk) ?? "";
+      if (chunk) {
+        handlers.onStreamChunk(
+          taskId,
+          textOf(frame.subtask_id) ?? taskId,
+          chunk,
+          numberOf(metadata.index)
+        );
+      }
       return;
     }
     handlers.onStep(stepOf(frame, taskId));

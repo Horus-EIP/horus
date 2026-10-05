@@ -23,7 +23,27 @@ The default (`general`) agent type uses `RAGPipeline`, which chains:
 
 The pipeline also supports a **ReAct** reasoning mode (`ReactAgent`) that performs multi-step THOUGHT, ACTION, OBSERVATION loops for complex queries.
 
-When one answer takes longer than `REACT_TIMEOUT_SECONDS` (default 900 s on CPU, 120 s on GPU), the pipeline asks the generation to stop and the task is reported to MAS with `status: "failed"` and `reason: "timeout"`, not as an answer. On the OpenAI-compatible backend (llama-server, vLLM) the answer is then read as a stream, which is closed at the next chunk so the server cancels the generation; on the transformers backend a stopping criterion ends it at the next token. Any other pipeline error is reported as `failed` with `reason: "error"`.
+### Answer contract
+
+Every RAG answer is one JSON object (`ai_agents/answer_contract.py`):
+
+```json
+{"status": "ok | not_found | failed", "answer": "...", "sources": [{"doc_id": "...", "chunk_id": "...:12", "title": "...", "page": 3}], "reason": "only when status is not ok"}
+```
+
+The retrieved passages are shown to the model with short labels (`[S1] title, page 3`); attached files are labelled first, in the order they were attached. The model only writes `status` (`ok` or `not_found`), `answer` and the labels it used. On the OpenAI-compatible backend (llama-server, vLLM) the request carries `response_format: {"type": "json_schema", ...}` whose `sources` items are an enum of the labels it was given, so the model can only cite retrieved passages; with no passage to cite the schema has no `sources`. The in-process transformers backend (and an injected model) is asked for the same JSON in the prompt and read leniently: a code fence, text around the object, trailing commas, a status such as `"found"`, or a source given by its `chunk_id` are accepted. The agent then turns each label into the passage's `doc_id`, `chunk_id`, `title` and `page`, and drops a cited label or id that was not retrieved. The answer text is NFKC-normalised (full-width digits, `。`), an answer that is a self-correction spiral fails, and an `ok` answer that cites nothing and reads like a refusal (the phrases the response cache already refuses to store, such as "does not contain this information") counts as `not_found`.
+
+| `status` | Sent to MAS as | `reason` |
+|---|---|---|
+| `ok` | `completed`, with `sources` | -- |
+| `not_found` | `not_found`, `sources: []` | `not_in_documents` |
+| `failed` | `failed` | `invalid_output` (no readable JSON, a truncated object, an unknown status, an empty answer), `degenerate_output` (a spiral), `retrieval_error` (the knowledge store could not be searched; the model is not asked), `timeout`, `error` |
+
+The agent answers only the request it was given and never asks the model twice; MAS decides what to try next (see "Agent answers" in the MAS README). A specialist that runs a tool sends its output as `completed` with no sources. The response cache stores only `ok` answers, with their sources, keyed on the labelled passages, so a hit cites what the first answer cited.
+
+With `AGENT_STREAM_TOKENS=1` the model writes the JSON as a stream; `reasoning.delta` steps carry only the decoded text of the `answer` field (escapes and `\uXXXX` split across chunks are put back together), after the same 500-character check for a spiral. Each answer's steps count `index` from 0, so a client can tell a second attempt from the rest of the first.
+
+When one answer takes longer than `REACT_TIMEOUT_SECONDS` (default 900 s on CPU, 120 s on GPU), the pipeline asks the generation to stop and the task is reported to MAS with `status: "failed"` and `reason: "timeout"`, not as an answer. On the OpenAI-compatible backend (llama-server, vLLM) the answer is then read as a stream, which is closed at the next chunk so the server cancels the generation; on the transformers backend a stopping criterion ends it at the next token. Any other pipeline error is reported as `failed` with `reason: "error"`. A message for a second attempt of a task (`attempt: 2` in its payload) is run even when this worker already ran the first one.
 
 ## Agent Types
 

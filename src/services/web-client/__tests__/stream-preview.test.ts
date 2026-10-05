@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { appendStreamChunk, type StreamPreviews } from "@/lib/chat/stream-preview";
+import {
+  appendStreamChunk,
+  dropStreamPreview,
+  type StreamPreviews,
+} from "@/lib/chat/stream-preview";
 
 describe("appendStreamChunk", () => {
   it("appends the chunks of one task in the order they arrive", () => {
@@ -22,6 +26,24 @@ describe("appendStreamChunk", () => {
     previews = appendStreamChunk(previews, "task-2", "task-2", "two");
     expect(previews["task-1"].text).toBe("one");
     expect(previews["task-2"].text).toBe("two");
+  });
+
+  it("starts over when the same task streams a new answer from its first chunk", () => {
+    let previews = appendStreamChunk({}, "task-1", "task-1", "The documents ", 0);
+    previews = appendStreamChunk(previews, "task-1", "task-1", "do not say.", 1);
+    previews = appendStreamChunk(previews, "task-1", "task-1", "Revenue was ", 0);
+    previews = appendStreamChunk(previews, "task-1", "task-1", "$4.2M.", 1);
+    expect(previews["task-1"].text).toBe("Revenue was $4.2M.");
+  });
+
+  it("drops the preview of one task only", () => {
+    let previews = appendStreamChunk({}, "task-1", "task-1", "one");
+    previews = appendStreamChunk(previews, "task-2", "task-2", "two");
+
+    const dropped = dropStreamPreview(previews, "task-1");
+
+    expect(dropped).toEqual({ "task-2": { subtaskId: "task-2", text: "two" } });
+    expect(dropStreamPreview(dropped, "task-1")).toBe(dropped);
   });
 
   it("returns a new object so React sees the change", () => {

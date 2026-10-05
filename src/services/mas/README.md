@@ -168,6 +168,12 @@ docker compose exec mas python -m tasks.router_eval --testset /tmp/router_testse
 
 Measured on 2026-10-05 (AMD Ryzen AI 9 HX 370, Windows 11, rules and embeddings, no LLM): the same 116 decisions with sentence-transformers and with FastEmbed (98.7% correct without the LLM, 33.6% sent to it); embedding-stage latency p50 9.0 ms and p95 16.1 ms before, 3.3 ms and 7.5 ms after.
 
+## Agent answers
+
+An agent reports `completed` (with the `sources` it cites), `not_found` (the passages did not contain the answer) or `failed` with a `reason` on `POST /tasks/task-result/` (see "Answer contract" in the agent README). MAS keeps the dispatch payload of every task it publishes in Redis (`horus:task:{task_id}:dispatch`, 24 h, without an auto-created agent's API key; a task with inline files keeps none, since their content is not kept). On a first `not_found` or `failed` MAS asks the same agent once more, under the same task id, with `attempt: 2` and another retrieval query: the user's own question for a step of a chain, otherwise the request without its filler words ("What was the Q4 2025 revenue?" becomes "Q4 2025 revenue"). It clears the task's claim, adds the first answer to the task's history with its status, and sends a `task_status` event `retrying` whose `detail` says why. A `failed` answer with no other query is tried once more as it was; a `not_found` one is not. A timeout is never tried again (it would wait as long a second time), and neither is a task whose request was cancelled.
+
+When the second attempt is `not_found` too, or there is nothing to try, the task completes with "The documents don't contain this information." and no sources; when it fails again, the task fails as before. The answer's sources are stored in `task_results.sources` and `messages.sources` (migration `c3f9a7e1d5b2`), sent in the `result` event and returned by `GET /tasks/{task_id}` and the conversation history. A chain's final answer keeps every source of its steps, each `chunk_id` once (a source without one, such as an attached file, once per document), in the order they were first cited.
+
 ## Local Development
 
 ### Prerequisites

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import threading
 from unittest.mock import AsyncMock, MagicMock
 
@@ -8,6 +9,7 @@ import pytest
 
 import ai_agents.decision_making_agent as dma
 import ai_agents.response_cache as response_cache
+from ai_agents.answer_contract import AnswerStatus
 from ai_agents.generation_stop import GenerationTimedOut
 from ai_agents.rag_pipeline import RAGPipeline
 
@@ -79,19 +81,28 @@ def redis(monkeypatch, knowledge_store):
     return fake
 
 
-def _pipeline(*answers: str):
+def _contract(answer: str, status: str = "ok", sources=()) -> str:
+    return json.dumps({"status": status, "answer": answer, "sources": list(sources)})
+
+
+def _stored_answers(redis) -> list[str]:
+    return [json.loads(entry)["answer"] for entry in redis.entries.values()]
+
+
+def _pipeline(*answers: str, retrieved=None):
     remaining = list(answers)
 
-    def decide(**_kwargs):
+    def complete(*_args, **_kwargs):
         if not remaining:
             raise AssertionError("the model was asked more often than the test expected")
-        return remaining.pop(0)
+        answer = remaining.pop(0)
+        return answer if answer.startswith("{") else _contract(answer)
 
     retrieval = MagicMock()
-    retrieval.fetch = AsyncMock(return_value={"data": CONTEXT})
+    retrieval.fetch = AsyncMock(return_value=retrieved or {"data": CONTEXT})
     decision = MagicMock()
     decision.device = "cuda"
-    decision.decide.side_effect = decide
+    decision.complete.side_effect = complete
     return RAGPipeline(retrieval, decision, tool_registry=MagicMock()), decision
 
 
@@ -102,24 +113,25 @@ class TestCacheHits:
         first = await pipeline.generate_response(QUESTION)
         second = await pipeline.generate_response(QUESTION)
 
-        assert first == second == "Q4 2025 revenue was $4.2M."
-        assert decision.decide.call_count == 1
+        assert first.answer == second.answer == "Q4 2025 revenue was $4.2M."
+        assert second.status is AnswerStatus.OK
+        assert decision.complete.call_count == 1
 
     async def test_full_width_and_ascii_questions_share_one_entry(self, redis):
         pipeline, decision = _pipeline("Q4 2025 revenue was $4.2M.")
 
         await pipeline.generate_response("What was Ｑ４ ２０２５ revenue?")
-        assert await pipeline.generate_response(QUESTION) == "Q4 2025 revenue was $4.2M."
+        assert (await pipeline.generate_response(QUESTION)).answer == "Q4 2025 revenue was $4.2M."
 
-        assert decision.decide.call_count == 1
+        assert decision.complete.call_count == 1
 
     async def test_answers_are_stored_nfkc_normalised(self, redis):
         pipeline, _ = _pipeline("Ｑ４ ２０２５ revenue was $4。2M")
 
         await pipeline.generate_response(QUESTION)
 
-        assert list(redis.entries.values()) == ["Q4 2025 revenue was $4.2M"]
-        assert await pipeline.generate_response(QUESTION) == "Q4 2025 revenue was $4.2M"
+        assert _stored_answers(redis) == ["Q4 2025 revenue was $4.2M"]
+        assert (await pipeline.generate_response(QUESTION)).answer == "Q4 2025 revenue was $4.2M"
 
     async def test_an_answer_about_what_a_policy_does_not_cover_is_cached(self, redis):
         pipeline, decision = _pipeline("Alcohol is not covered by the Expense Policy.")
@@ -127,18 +139,18 @@ class TestCacheHits:
         await pipeline.generate_response("Can I expense wine?")
         await pipeline.generate_response("Can I expense wine?")
 
-        assert decision.decide.call_count == 1
+        assert decision.complete.call_count == 1
 
 
 class TestCorpusVersion:
     async def test_after_an_upload_the_cache_misses(self, redis, knowledge_store):
         pipeline, decision = _pipeline("Revenue was $4.2M.", "Revenue was $4.3M.")
 
-        assert await pipeline.generate_response(QUESTION) == "Revenue was $4.2M."
+        assert (await pipeline.generate_response(QUESTION)).answer == "Revenue was $4.2M."
         knowledge_store.upload()
 
-        assert await pipeline.generate_response(QUESTION) == "Revenue was $4.3M."
-        assert decision.decide.call_count == 2
+        assert (await pipeline.generate_response(QUESTION)).answer == "Revenue was $4.3M."
+        assert decision.complete.call_count == 2
 
     async def test_an_upload_during_generation_does_not_keep_the_older_answer(
         self, redis, knowledge_store
@@ -146,18 +158,18 @@ class TestCorpusVersion:
         pipeline, decision = _pipeline()
         answers = iter(["Revenue was $4.2M.", "Revenue was $4.3M."])
 
-        def answer_while_a_document_is_uploaded(**_kwargs):
+        def answer_while_a_document_is_uploaded(*_args, **_kwargs):
             answer = next(answers)
             if knowledge_store.uploads == 0:
                 knowledge_store.upload()
-            return answer
+            return _contract(answer)
 
-        decision.decide.side_effect = answer_while_a_document_is_uploaded
+        decision.complete.side_effect = answer_while_a_document_is_uploaded
 
         await pipeline.generate_response(QUESTION)
 
-        assert await pipeline.generate_response(QUESTION) == "Revenue was $4.3M."
-        assert decision.decide.call_count == 2
+        assert (await pipeline.generate_response(QUESTION)).answer == "Revenue was $4.3M."
+        assert decision.complete.call_count == 2
 
     async def test_the_version_is_read_from_the_knowledge_store(self, redis, knowledge_store):
         pipeline, _ = _pipeline("Revenue was $4.2M.")
@@ -194,10 +206,10 @@ class TestCorpusVersion:
         knowledge_store.failure = failure
         pipeline, decision = _pipeline("Revenue was $4.2M.", "Revenue was $4.2M.")
 
-        assert await pipeline.generate_response(QUESTION) == "Revenue was $4.2M."
-        assert await pipeline.generate_response(QUESTION) == "Revenue was $4.2M."
+        assert (await pipeline.generate_response(QUESTION)).answer == "Revenue was $4.2M."
+        assert (await pipeline.generate_response(QUESTION)).answer == "Revenue was $4.2M."
 
-        assert decision.decide.call_count == 2
+        assert decision.complete.call_count == 2
         assert redis.entries == {}
 
     async def test_a_disabled_cache_never_asks_for_the_version(
@@ -206,10 +218,10 @@ class TestCorpusVersion:
         monkeypatch.setenv("AGENT_RESPONSE_CACHE", "0")
         pipeline, decision = _pipeline("Revenue was $4.2M.")
 
-        assert await pipeline.generate_response(QUESTION) == "Revenue was $4.2M."
+        assert (await pipeline.generate_response(QUESTION)).answer == "Revenue was $4.2M."
 
         assert knowledge_store.version_reads == 0
-        assert decision.decide.call_count == 1
+        assert decision.complete.call_count == 1
 
 
 class TestGenerationSettings:
@@ -221,7 +233,7 @@ class TestGenerationSettings:
         monkeypatch.setenv("AGENT_MAX_CONTEXT_CHARS", "6000")
         await pipeline.generate_response(QUESTION)
 
-        assert decision.decide.call_count == 2
+        assert decision.complete.call_count == 2
         assert len(redis.entries) == 2
 
     async def test_an_unset_cap_shares_the_entry_of_the_default_cap(self, redis, monkeypatch):
@@ -232,7 +244,7 @@ class TestGenerationSettings:
         monkeypatch.setenv("AGENT_MAX_CONTEXT_CHARS", str(dma.DEFAULT_MAX_CONTEXT_CHARS))
         await pipeline.generate_response(QUESTION)
 
-        assert decision.decide.call_count == 1
+        assert decision.complete.call_count == 1
 
 
 class TestOnlyValidatedAnswersAreCached:
@@ -244,7 +256,7 @@ class TestOnlyValidatedAnswersAreCached:
         await pipeline.generate_response(QUESTION)
 
         assert redis.entries == {}
-        assert decision.decide.call_count == 2
+        assert decision.complete.call_count == 2
 
     async def test_the_spiral_fallback_answer_is_never_cached(self, redis):
         fallback = dma.DEGENERATE_OUTPUT_FALLBACK
@@ -254,7 +266,7 @@ class TestOnlyValidatedAnswersAreCached:
         await pipeline.generate_response(QUESTION)
 
         assert redis.entries == {}
-        assert decision.decide.call_count == 2
+        assert decision.complete.call_count == 2
 
     @pytest.mark.parametrize(
         "refusal",
@@ -277,7 +289,7 @@ class TestOnlyValidatedAnswersAreCached:
         await pipeline.generate_response(QUESTION)
 
         assert redis.entries == {}
-        assert decision.decide.call_count == 2
+        assert decision.complete.call_count == 2
 
     async def test_an_empty_answer_is_never_cached(self, redis):
         pipeline, decision = _pipeline("", "")
@@ -286,13 +298,15 @@ class TestOnlyValidatedAnswersAreCached:
         await pipeline.generate_response(QUESTION)
 
         assert redis.entries == {}
-        assert decision.decide.call_count == 2
+        assert decision.complete.call_count == 2
 
     async def test_the_timeout_answer_is_never_cached(self, redis, monkeypatch):
         monkeypatch.setenv("REACT_TIMEOUT_SECONDS", "0.05")
         release = threading.Event()
         pipeline, decision = _pipeline()
-        decision.decide.side_effect = lambda **_kwargs: release.wait(5) and "late answer"
+        decision.complete.side_effect = lambda *_args, **_kwargs: (
+            release.wait(5) and _contract("late answer")
+        )
 
         try:
             with pytest.raises(GenerationTimedOut):
@@ -306,10 +320,60 @@ class TestOnlyValidatedAnswersAreCached:
         pipeline, decision = _pipeline("Revenue was $4.2M.", "Revenue was $4.2M.")
         await pipeline.generate_response(QUESTION)
         (key,) = redis.entries
-        redis.entries[key] = SPIRAL
+        redis.entries[key] = json.dumps({"answer": SPIRAL, "sources": []})
 
-        assert await pipeline.generate_response(QUESTION) == "Revenue was $4.2M."
-        assert decision.decide.call_count == 2
+        assert (await pipeline.generate_response(QUESTION)).answer == "Revenue was $4.2M."
+        assert decision.complete.call_count == 2
+
+    async def test_an_entry_from_the_previous_cache_format_is_not_served(self, redis):
+        pipeline, decision = _pipeline("Revenue was $4.2M.", "Revenue was $4.2M.")
+        await pipeline.generate_response(QUESTION)
+        (key,) = redis.entries
+        redis.entries[key] = "Revenue was $4.2M."
+
+        assert (await pipeline.generate_response(QUESTION)).status is AnswerStatus.OK
+        assert decision.complete.call_count == 2
+
+    async def test_an_answer_the_documents_do_not_contain_is_never_cached(self, redis):
+        not_found = _contract("The documents don't say.", status="not_found")
+        pipeline, decision = _pipeline(not_found, not_found)
+
+        first = await pipeline.generate_response(QUESTION)
+        await pipeline.generate_response(QUESTION)
+
+        assert first.status is AnswerStatus.NOT_FOUND
+        assert redis.entries == {}
+        assert decision.complete.call_count == 2
+
+    async def test_a_cache_hit_keeps_the_sources_the_answer_cited(self, redis):
+        retrieved = {
+            "data": CONTEXT,
+            "passages": [
+                {
+                    "chunk_id": "doc-q4:2",
+                    "doc_id": "doc-q4",
+                    "title": "1_Q4_2025_Financial_Report.md",
+                    "page": None,
+                    "text": CONTEXT,
+                }
+            ],
+        }
+        pipeline, decision = _pipeline(
+            _contract("Q4 2025 revenue was $4.2M.", sources=["S1"]), retrieved=retrieved
+        )
+
+        first = await pipeline.generate_response(QUESTION)
+        second = await pipeline.generate_response(QUESTION)
+
+        assert decision.complete.call_count == 1
+        assert second.sources == first.sources == [
+            {
+                "doc_id": "doc-q4",
+                "chunk_id": "doc-q4:2",
+                "title": "1_Q4_2025_Financial_Report.md",
+                "page": None,
+            }
+        ]
 
 
 class TestWithTheDecisionAgent:
@@ -326,16 +390,19 @@ class TestWithTheDecisionAgent:
         first = await pipeline.generate_response(QUESTION)
         await pipeline.generate_response(QUESTION)
 
-        assert first == dma.DEGENERATE_OUTPUT_FALLBACK
+        assert first.status is AnswerStatus.FAILED
+        assert first.answer == dma.DEGENERATE_OUTPUT_FALLBACK
         assert redis.entries == {}
         assert model.call_count == 2
 
     async def test_a_full_width_answer_is_cached_in_ascii(self, redis):
-        pipeline, model = self._pipeline_over("Ｑ４ ２０２５ revenue was $4。2M")
+        pipeline, model = self._pipeline_over(
+            '{"status": "ok", "answer": "Ｑ４ ２０２５ revenue was $4。2M"}'
+        )
 
         await pipeline.generate_response(QUESTION)
         second = await pipeline.generate_response(QUESTION)
 
-        assert second == "Q4 2025 revenue was $4.2M"
-        assert list(redis.entries.values()) == ["Q4 2025 revenue was $4.2M"]
+        assert second.answer == "Q4 2025 revenue was $4.2M"
+        assert _stored_answers(redis) == ["Q4 2025 revenue was $4.2M"]
         assert model.call_count == 1

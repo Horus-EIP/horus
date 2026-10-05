@@ -31,7 +31,12 @@ import requests
 from fastapi import FastAPI, Request
 from prometheus_client import make_asgi_app
 
-from agent_server.consumers import TaskClaim, _consume_agent_messages, _consume_messages
+from agent_server.consumers import (
+    RESULT_STATUS_BY_ANSWER,
+    TaskClaim,
+    _consume_agent_messages,
+    _consume_messages,
+)
 from agent_server.middleware import CorrelationIDMiddleware
 from agent_server.models import Result, Task
 from agent_server.profiles import (
@@ -39,6 +44,7 @@ from agent_server.profiles import (
     get_primary_profile,
     get_profile_by_agent_id,
 )
+from ai_agents.answer_contract import answer_of
 from ai_agents.decision_making_agent import DecisionMakingAgent
 from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
 from ai_agents.knowledge_store_client import KnowledgeStoreClient
@@ -502,6 +508,7 @@ def send_result(
     skill_used: str | None = None,
     status: str = "completed",
     reason: str | None = None,
+    sources: list[dict] | None = None,
 ):
     """
     Sends the processed task result to the MAS Orchestrator using the /tasks/task-result/ endpoint.
@@ -536,6 +543,8 @@ def send_result(
     }
     if reason:
         payload["reason"] = reason
+    if sources is not None:
+        payload["sources"] = [dict(source) for source in sources]
     try:
         response = requests.post(
             url,
@@ -703,13 +712,14 @@ async def receive_task(task: Task, request: Request):
         primary_type = get_primary_profile().type
         primary_pipeline = get_pipeline_for_type(primary_type)
         if primary_type == "general":
-            result_pipeline = await primary_pipeline.process_task(task_dict)
-            final_result_text = result_pipeline["response"]
+            answer = answer_of(await primary_pipeline.process_task(task_dict))
         elif primary_type in ("researcher", "analyst", "writer"):
-            final_result_text = await primary_pipeline.process_request(
-                task_type=task_dict.get("operation"),
-                data=task_dict.get("query"),
-                extra_parameters=task_dict,
+            answer = answer_of(
+                await primary_pipeline.process_request(
+                    task_type=task_dict.get("operation"),
+                    data=task_dict.get("query"),
+                    extra_parameters=task_dict,
+                )
             )
         else:
             raise ValueError(f"Unsupported primary type: {primary_type}")
@@ -726,17 +736,20 @@ async def receive_task(task: Task, request: Request):
 
         # Send the result back to the orchestrator.
         send_result(
-            final_result_text,
+            answer.answer,
             task.conversation_id,
             task.task_id,
             assigned_agent_id=task_dict.get("assigned_agent_id"),
             skill_used=task_dict.get("skill_used") or task_dict.get("operation"),
+            status=RESULT_STATUS_BY_ANSWER[answer.status],
+            reason=answer.reason,
+            sources=answer.sources,
         )
 
         # Return the result in the format expected by the response_model
         return Result(
             agent_id=AGENT_ID if AGENT_ID else "unknown",
-            result=final_result_text
+            result=answer.answer
         )
     except Exception as e:
         processing_duration = time_module.time() - start_time

@@ -46,7 +46,7 @@ The service is a **FastAPI** application (port 8080) backed by:
 | ---------- | -------------------- | ------------------------------------------------- |
 | `POST`   | `/file`            | Upload multiple files (PDF, DOCX, TXT)            |
 | `GET`    | `/file`            | List all indexed documents (one entry each) and metadata |
-| `GET`    | `/file/resolve`    | Full text of the document(s) whose title matches a filename |
+| `GET`    | `/file/resolve`    | Full text of the document(s) whose title matches a filename; `documents` lists each match's `doc_id`, `title` and `text` so an answer can cite the one it used |
 | `GET`    | `/file/{doc_id}/text` | Full text of one document, by its id          |
 | `DELETE` | `/file/{filename}` | Delete a file from storage                        |
 | `POST`   | `/file/{type}`     | Upload a single file by type with text conversion |

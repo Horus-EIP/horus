@@ -11,6 +11,7 @@ import { IconTrash } from '@tabler/icons-react';
 import { UploadProgress } from '@/components/knowledge-store/upload-progress';
 import { AlreadyStoredWarning } from '@/components/knowledge-store/already-stored-warning';
 import { namesAlreadyStored } from '@/lib/knowledge-store/stored-names';
+import { requestedDocumentId } from '@/lib/chat/answer-sources';
 import {
   knowledgeStoreApi,
   type KnowledgeStoreCategory,
@@ -72,6 +73,7 @@ export default function KnowledgeStorePage() {
     uploadProgress?.phase === 'processing';
 
   const latestDocumentsRequest = React.useRef(0);
+  const requestedDocumentShown = React.useRef(false);
 
   const getDocuments = useCallback(async () => {
     const request = ++latestDocumentsRequest.current;
@@ -110,6 +112,16 @@ export default function KnowledgeStorePage() {
       localStorage.setItem('knowledgeStoreDocuments', JSON.stringify(toUpload));
     }
   }, [toUpload, isMounted]);
+
+  useEffect(() => {
+    if (requestedDocumentShown.current) return;
+    const wanted = requestedDocumentId(window.location.search);
+    const doc = wanted ? documents.find((candidate) => candidate.id === wanted) : undefined;
+    if (!doc) return;
+    requestedDocumentShown.current = true;
+    setDetailDoc(doc);
+    openDetail();
+  }, [documents, openDetail]);
 
   const getFileExtension = (fileName: string) => {
     const parts = fileName?.split('.');

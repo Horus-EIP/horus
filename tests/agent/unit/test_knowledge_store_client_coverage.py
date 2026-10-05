@@ -333,6 +333,7 @@ class TestQuery:
         assert result == {
             "query": "oops",
             "data": "Error: Invalid request - bad query syntax",
+            "error": "Invalid request - bad query syntax",
         }
         assert len(patched_httpx.calls) == 1
 
@@ -346,6 +347,7 @@ class TestQuery:
         assert result == {
             "query": "oops",
             "data": "Error: Invalid request - plain failure",
+            "error": "Invalid request - plain failure",
         }
 
     async def test_500_retries_then_returns_error(self, patched_httpx):
@@ -356,6 +358,7 @@ class TestQuery:
 
         assert result["query"] == "boom"
         assert result["data"].startswith("Error: Failed to query knowledge store after 3 attempts")
+        assert result["error"].startswith("Failed to query knowledge store after 3 attempts")
         assert len(patched_httpx.calls) == 3
 
     async def test_timeout_retries_then_returns_error(self, patched_httpx):
@@ -539,6 +542,52 @@ class TestResolveByFilename:
         method, url, kwargs = patched_httpx.calls[0]
         assert url == "http://ks.test/file/resolve"
         assert kwargs["params"] == {"name": "Doc.txt"}
+
+    async def test_each_matched_document_becomes_a_citable_passage(self, patched_httpx):
+        client = make_client()
+        patched_httpx.handler = lambda m, u, k: FakeResponse(
+            json_data={
+                "text": "first body\n\n---\n\nsecond body",
+                "matched_titles": ["Doc.txt", "Doc.txt"],
+                "doc_ids": ["id1", "id2"],
+                "documents": [
+                    {"doc_id": "id1", "title": "Doc.txt", "text": "first body"},
+                    {"doc_id": "id2", "title": "Doc.txt", "text": "second body"},
+                ],
+            }
+        )
+
+        result = await client.resolve_by_filename("Doc.txt")
+
+        assert [(p["doc_id"], p["title"], p["text"]) for p in result["passages"]] == [
+            ("id1", "Doc.txt", "first body"),
+            ("id2", "Doc.txt", "second body"),
+        ]
+        assert all(p["chunk_id"] is None and p["page"] is None for p in result["passages"])
+
+    async def test_an_older_store_still_gives_its_single_match_as_a_passage(
+        self, patched_httpx
+    ):
+        client = make_client()
+        patched_httpx.handler = lambda m, u, k: FakeResponse(
+            json_data={"text": "only body", "matched_titles": ["One.md"], "doc_ids": ["id9"]}
+        )
+
+        result = await client.resolve_by_filename("One.md")
+
+        assert result["passages"] == [
+            {"chunk_id": None, "doc_id": "id9", "title": "One.md", "page": None, "text": "only body"}
+        ]
+
+    async def test_an_older_store_with_several_matches_gives_no_passages(self, patched_httpx):
+        client = make_client()
+        patched_httpx.handler = lambda m, u, k: FakeResponse(
+            json_data={"text": "a\n\n---\n\nb", "matched_titles": ["A", "B"], "doc_ids": ["a", "b"]}
+        )
+
+        result = await client.resolve_by_filename("A")
+
+        assert result["passages"] == []
 
     async def test_404_status_code_returns_empty(self, patched_httpx):
         client = make_client()

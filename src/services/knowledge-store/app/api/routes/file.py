@@ -81,7 +81,9 @@ def _match_stored_title(requested: str, stored_title: str) -> bool:
     summary="Resolve document by filename",
     description=(
         "Return full indexed text for stored document(s) whose title matches the given "
-        "filename or basename (case-insensitive). Used by agents when the user names a file."
+        "filename or basename (case-insensitive). Used by agents when the user names a file. "
+        "`documents` gives each matched document's id, title and text apart, so an answer "
+        "can cite the one it used."
     ),
     responses={
         200: {
@@ -93,6 +95,13 @@ def _match_stored_title(requested: str, stored_title: str) -> bool:
                         "matched_titles": ["notes.txt"],
                         "doc_ids": ["abc123"],
                         "text": "Full document body...",
+                        "documents": [
+                            {
+                                "doc_id": "abc123",
+                                "title": "notes.txt",
+                                "text": "Full document body...",
+                            }
+                        ],
                     }
                 }
             },
@@ -132,6 +141,10 @@ async def resolve_document_by_name(
         "matched_titles": [document.title for document in found],
         "doc_ids": [document.doc_id for document in found],
         "text": "\n\n---\n\n".join(document.text for document in found),
+        "documents": [
+            {"doc_id": document.doc_id, "title": document.title, "text": document.text}
+            for document in found
+        ],
     }
 
 

@@ -18,13 +18,14 @@ on any error, so the cache can never break the pipeline.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
-import re
 import time
 
 import httpx
 
+from ai_agents.answer_contract import AgentAnswer, AnswerStatus, looks_like_refusal
 from ai_agents.decision_making_agent import (
     DEGENERATE_OUTPUT_FALLBACK,
     _is_degenerate_output,
@@ -44,21 +45,9 @@ except Exception:  # redis not installed (e.g. before the dependency lands)
     _REDIS_AVAILABLE = False
 
 # Bump to invalidate every existing entry when the keying scheme changes.
-_CACHE_VERSION = "v2"
+_CACHE_VERSION = "v3"
 _KEY_PREFIX = "agent:respcache:"
 _CORPUS_VERSION_TIMEOUT_SECONDS = 1.0
-_REFUSAL = re.compile(
-    "|".join(
-        (
-            r"\b(?:does|do)(?: not|n't) (?:contain|include|have|mention|provide) "
-            r"(?:this|that|the requested|any|enough) information\b",
-            r"\b(?:is|are)(?: not|n't) covered in the (?:current|retrieved|provided)\b",
-            r"\bno (?:relevant )?information (?:about|on|regarding)\b",
-            r"\bi(?: cannot| can't| am unable to|'m unable to) (?:answer|find|provide|determine)\b",
-            r"^(?:i'm|i am) sorry\b",
-        )
-    )
-)
 
 _corpus_version_memo: tuple[str, float] | None = None
 
@@ -134,15 +123,11 @@ async def current_corpus_version() -> str | None:
     return version
 
 
-def _looks_like_refusal(text: str) -> bool:
-    return _REFUSAL.search(text.lower().replace("\u2019", "'")) is not None
-
-
 def is_cacheable_answer(answer: str | None) -> bool:
     text = _normalize_model_text(answer or "").strip()
     if not text or text == DEGENERATE_OUTPUT_FALLBACK:
         return False
-    return not _is_degenerate_output(text) and not _looks_like_refusal(text)
+    return not _is_degenerate_output(text) and not looks_like_refusal(text)
 
 
 def _key(query: str, context: str, corpus_version: str) -> str:
@@ -184,36 +169,54 @@ async def _close(client) -> None:
         pass
 
 
-async def get_cached(query: str, context: str, corpus_version: str | None) -> str | None:
+def _cached_answer(entry: str) -> AgentAnswer | None:
+    try:
+        stored = json.loads(entry)
+        answer = AgentAnswer.ok(stored["answer"], stored.get("sources") or [])
+    except (TypeError, ValueError, KeyError, AttributeError):
+        return None
+    return answer if is_cacheable_answer(answer.answer) else None
+
+
+async def get_cached(
+    query: str, context: str, corpus_version: str | None
+) -> AgentAnswer | None:
     """Return a cached answer for this exact (query, context), or None."""
     if corpus_version is None or not cache_enabled():
         return None
     client = _new_client()
     try:
-        answer = await client.get(_key(query, context, corpus_version))
+        entry = await client.get(_key(query, context, corpus_version))
     except Exception:  # network/redis hiccup → just generate
         logger.debug("response cache GET failed; generating", exc_info=True)
         return None
     finally:
         await _close(client)
-    return answer if answer is not None and is_cacheable_answer(answer) else None
+    return _cached_answer(entry) if entry is not None else None
 
 
 async def set_cached(
-    query: str, context: str, corpus_version: str | None, answer: str
+    query: str, context: str, corpus_version: str | None, answer: AgentAnswer
 ) -> None:
     """Store an answer for this exact (query, context). Best-effort."""
-    if corpus_version is None or not cache_enabled() or not is_cacheable_answer(answer):
+    if (
+        corpus_version is None
+        or not cache_enabled()
+        or answer.status is not AnswerStatus.OK
+        or not is_cacheable_answer(answer.answer)
+    ):
         return
     key = _key(query, context, corpus_version)
-    answer = _normalize_model_text(answer)
+    entry = json.dumps(
+        {"answer": _normalize_model_text(answer.answer), "sources": answer.sources}
+    )
     client = _new_client()
     try:
         ttl = _ttl_seconds()
         if ttl > 0:
-            await client.set(key, answer, ex=ttl)
+            await client.set(key, entry, ex=ttl)
         else:
-            await client.set(key, answer)
+            await client.set(key, entry)
     except Exception:
         logger.debug("response cache SET failed; ignoring", exc_info=True)
     finally:

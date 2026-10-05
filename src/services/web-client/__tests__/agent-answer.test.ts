@@ -109,6 +109,14 @@ describe("appendAgentAnswer", () => {
     expect(appendAgentAnswer(messages, { ...answer, content: "   " })).toBe(messages);
   });
 
+  it("keeps the sources of the answer on the message", () => {
+    const sources = [{ doc_id: "doc-q4", chunk_id: "doc-q4:3", title: "q4.md", page: 2 }];
+
+    const messages = appendAgentAnswer([question], { ...answer, sources });
+
+    expect(messages[1].sources).toEqual(sources);
+  });
+
   it("marks the message of a failed task as failed", () => {
     const messages = appendAgentAnswer([question], {
       ...answer,
@@ -154,6 +162,15 @@ describe("finishedTaskAnswer", () => {
       agentId: "agent-writer",
       failed: false,
     });
+  });
+
+  it("gives a completed task's sources to its answer", () => {
+    const sources = [{ doc_id: "doc-q4", chunk_id: "doc-q4:3", title: "q4.md", page: 2 }];
+
+    expect(
+      finishedTaskAnswer(task({ status: "completed", result: "Revenue grew 12%.", sources })).sources
+    ).toEqual(sources);
+    expect(finishedTaskAnswer(task({ status: "failed", sources })).sources).toBeUndefined();
   });
 
   it("explains why a failed or cancelled task has no answer", () => {

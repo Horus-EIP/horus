@@ -15,7 +15,7 @@ import time
 import unicodedata
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from ai_agents.generation_stop import GenerationStopped, generation_stop_event
 
@@ -273,6 +273,16 @@ if _TRANSFORMERS_AVAILABLE and StoppingCriteria is not None:
 
 else:  # transformers unavailable — generation path is never reached in this case
     _SpiralStoppingCriteria = None  # type: ignore
+
+
+class StreamView(Protocol):
+    def feed(self, piece: str) -> str: ...
+
+
+def _visible_piece(piece: str, stream_view: StreamView | None) -> str:
+    if stream_view is None:
+        return _normalize_model_text(piece)
+    return _normalize_model_text(stream_view.feed(piece))
 
 
 class _StopRequestedCriteria:
@@ -659,7 +669,16 @@ class DecisionMakingAgent:
             return str(result[0]["generated_text"]).strip()
         return str(result).strip()
 
-    def _generate_causal(self, user_content: str, system_content: str) -> str:
+    @property
+    def constrains_output(self) -> bool:
+        return self.decision_model is None and _llm_backend() == "vllm"
+
+    def _generate_causal(
+        self,
+        user_content: str,
+        system_content: str,
+        stream_view: StreamView | None = None,
+    ) -> str:
         assert self._causal_tokenizer is not None and self._causal_model is not None
         tok = self._causal_tokenizer
         model = self._causal_model
@@ -747,7 +766,7 @@ class DecisionMakingAgent:
             # Streams confirmed-clean tokens to the client as reasoning.delta
             # steps; returns the same return_dict_in_generate output as below so
             # token telemetry and the degeneracy guard are unchanged.
-            out = self._generate_streaming(model, tok, gen_kwargs)
+            out = self._generate_streaming(model, tok, gen_kwargs, stream_view)
         else:
             with torch.no_grad():
                 out = model.generate(**gen_kwargs)
@@ -775,7 +794,13 @@ class DecisionMakingAgent:
             clean_up_tokenization_spaces=False,
         ).strip()
 
-    def _generate_streaming(self, model: Any, tok: Any, gen_kwargs: dict) -> Any:
+    def _generate_streaming(
+        self,
+        model: Any,
+        tok: Any,
+        gen_kwargs: dict,
+        stream_view: StreamView | None = None,
+    ) -> Any:
         """Run ``model.generate`` in a background thread with a
         ``TextIteratorStreamer`` and emit confirmed-clean tokens to the client as
         coalesced ``reasoning.delta`` steps.
@@ -830,10 +855,12 @@ class DecisionMakingAgent:
             last_flush = time.monotonic()
 
         try:
-            for piece in streamer:
-                if not piece or suppressed:
+            for raw_piece in streamer:
+                if not raw_piece or suppressed:
                     continue
-                piece = _normalize_model_text(piece)
+                piece = _visible_piece(raw_piece, stream_view)
+                if not piece:
+                    continue
                 if streaming:
                     pending.append(piece)
                     _flush()
@@ -865,7 +892,13 @@ class DecisionMakingAgent:
             raise holder["error"]
         return holder["out"]
 
-    def _generate_vllm(self, user_content: str, system_content: str) -> str:
+    def _generate_vllm(
+        self,
+        user_content: str,
+        system_content: str,
+        response_format: dict | None = None,
+        stream_view: StreamView | None = None,
+    ) -> str:
         """Generate via the external vLLM OpenAI-compatible server (Phase 4).
 
         Mirrors the local path's contract: returns the answer text and sets
@@ -887,7 +920,11 @@ class DecisionMakingAgent:
         ]
         if _stream_tokens_enabled() or generation_stop_event() is not None:
             return self._generate_vllm_streaming(
-                messages, max_tokens, emit_tokens=_stream_tokens_enabled()
+                messages,
+                max_tokens,
+                emit_tokens=_stream_tokens_enabled(),
+                response_format=response_format,
+                stream_view=stream_view,
             )
 
         url = _vllm_base_url().rstrip("/") + "/chat/completions"
@@ -898,6 +935,8 @@ class DecisionMakingAgent:
             "temperature": 0.0,
             "stream": False,
         }
+        if response_format is not None:
+            payload["response_format"] = response_format
         resp = requests.post(url, json=payload, timeout=_vllm_timeout())
         resp.raise_for_status()
         data = resp.json()
@@ -908,7 +947,12 @@ class DecisionMakingAgent:
         return text
 
     def _generate_vllm_streaming(
-        self, messages: list, max_tokens: int, emit_tokens: bool = True
+        self,
+        messages: list,
+        max_tokens: int,
+        emit_tokens: bool = True,
+        response_format: dict | None = None,
+        stream_view: StreamView | None = None,
     ) -> str:
         """Stream a vLLM chat completion (SSE) and emit confirmed-clean tokens as
         batched ``reasoning.delta`` steps — the Phase-1 streaming UX on the vLLM
@@ -942,6 +986,8 @@ class DecisionMakingAgent:
             "stream": True,
             "stream_options": {"include_usage": True},
         }
+        if response_format is not None:
+            payload["response_format"] = response_format
 
         full: list[str] = []
         held: list[str] = []
@@ -994,13 +1040,12 @@ class DecisionMakingAgent:
                 choices = chunk.get("choices") or []
                 if not choices:
                     continue
-                piece = _normalize_model_text(
-                    (choices[0].get("delta") or {}).get("content") or ""
-                )
-                if not piece:
+                content = (choices[0].get("delta") or {}).get("content") or ""
+                if not content:
                     continue
-                full.append(piece)
-                if suppressed:
+                piece = _visible_piece(content, stream_view)
+                full.append(content if stream_view is not None else piece)
+                if suppressed or not piece:
                     continue
                 if streaming:
                     pending.append(piece)
@@ -1035,19 +1080,6 @@ class DecisionMakingAgent:
         message so the specialist's domain instructions shape the response
         without changing every helper's signature.
         """
-        if _llm_backend() != "vllm":
-            self._ensure_causal_loaded()
-
-        try:
-            from core.metrics import (
-                model_inference_duration,
-                model_inference_total,
-            )
-
-            _METRICS_AVAILABLE = True
-        except ImportError:
-            _METRICS_AVAILABLE = False
-
         if context is None:
             user_content = query
             system_content = (
@@ -1102,6 +1134,86 @@ class DecisionMakingAgent:
                 "question and stop."
             )
 
+        callable_prompt = None
+        if context is not None:
+            callable_prompt = (
+                "You are a helpful assistant. Answer using ONLY the provided context. "
+                "Format the answer in Markdown (## heading when helpful, **bold** labels, "
+                "bullet lists for multiple items, short paragraphs). "
+                "If the user asked for a summary, cover the main points without inventing facts. "
+                "If the answer is not present in the context, say: "
+                "'I don't have that information yet.'\n\n"
+                f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"
+            )
+        text = _normalize_model_text(
+            self._infer(
+                query,
+                user_content,
+                system_content,
+                on_context=context is not None,
+                callable_prompt=callable_prompt,
+            )
+        )
+        # Final guard: if the model produced a self-correction spiral
+        # despite the anti-loop prompt + bad_words_ids, replace the
+        # output with a clean fallback. The raw text is logged so the
+        # task detail page still has it for debugging, but the user
+        # never sees pages of "→ no → wait → actually $265K — no" in
+        # chat. Detection is a simple density-of-contradiction-markers
+        # check; well-formed answers virtually never trip it.
+        if _is_degenerate_output(text):
+            logger.warning(
+                "Degenerate self-correction loop detected in model output "
+                "(length=%d); replacing with clean fallback. Raw output "
+                "preview: %r",
+                len(text),
+                text[:400],
+            )
+            text = DEGENERATE_OUTPUT_FALLBACK
+        return text
+
+    def complete(
+        self,
+        query: str,
+        user_content: str,
+        system_content: str,
+        *,
+        response_format: dict | None = None,
+        stream_view: StreamView | None = None,
+    ) -> str:
+        return self._infer(
+            query,
+            user_content,
+            system_content,
+            on_context=True,
+            response_format=response_format,
+            stream_view=stream_view,
+        )
+
+    def _infer(
+        self,
+        query: str,
+        user_content: str,
+        system_content: str,
+        *,
+        on_context: bool,
+        callable_prompt: str | None = None,
+        response_format: dict | None = None,
+        stream_view: StreamView | None = None,
+    ) -> str:
+        if _llm_backend() != "vllm":
+            self._ensure_causal_loaded()
+
+        try:
+            from core.metrics import (
+                model_inference_duration,
+                model_inference_total,
+            )
+
+            _METRICS_AVAILABLE = True
+        except ImportError:
+            _METRICS_AVAILABLE = False
+
         # Per-task persona override. Set by the consumer thread based on which
         # specialist agent owns this task. Prepended so the specialist's
         # domain instructions take precedence over the generic system message.
@@ -1136,7 +1248,7 @@ class DecisionMakingAgent:
             "Reasoning over retrieved content",
             (
                 "Running the language model on the retrieved context."
-                if context is not None
+                if on_context
                 else "Running the language model on the user's request."
             ),
             model=self.model_name,
@@ -1153,25 +1265,20 @@ class DecisionMakingAgent:
 
         try:
             if self.decision_model is not None:
-                prompt = (
-                    f"{system_content}\n\n{user_content}"
-                    if context is None
-                else (
-                    "You are a helpful assistant. Answer using ONLY the provided context. "
-                    "Format the answer in Markdown (## heading when helpful, **bold** labels, "
-                    "bullet lists for multiple items, short paragraphs). "
-                    "If the user asked for a summary, cover the main points without inventing facts. "
-                    "If the answer is not present in the context, say: "
-                    "'I don't have that information yet.'\n\n"
-                    f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"
-                )
-                )
+                prompt = callable_prompt or f"{system_content}\n\n{user_content}"
                 result = self.decision_model(prompt)
                 text = self._coerce_callable_output(result)
             elif _llm_backend() == "vllm":
-                text = self._generate_vllm(user_content, system_content)
+                text = self._generate_vllm(
+                    user_content,
+                    system_content,
+                    response_format=response_format,
+                    stream_view=stream_view,
+                )
             else:
-                text = self._generate_causal(user_content, system_content)
+                text = self._generate_causal(
+                    user_content, system_content, stream_view=stream_view
+                )
 
             inference_duration = time.time() - start_time
             if _METRICS_AVAILABLE:
@@ -1193,25 +1300,6 @@ class DecisionMakingAgent:
                 prompt_tokens=self._last_prompt_tokens,
                 model=self.model_name,
             )
-
-            text = _normalize_model_text(text)
-            # Final guard: if the model produced a self-correction spiral
-            # despite the anti-loop prompt + bad_words_ids, replace the
-            # output with a clean fallback. The raw text is logged so the
-            # task detail page still has it for debugging, but the user
-            # never sees pages of "→ no → wait → actually $265K — no" in
-            # chat. Detection is a simple density-of-contradiction-markers
-            # check; well-formed answers virtually never trip it.
-            if _is_degenerate_output(text):
-                logger.warning(
-                    "Degenerate self-correction loop detected in model output "
-                    "(length=%d); replacing with clean fallback. Raw output "
-                    "preview: %r",
-                    len(text),
-                    text[:400],
-                )
-                text = DEGENERATE_OUTPUT_FALLBACK
-
             return text
         except GenerationStopped:
             logger.info(

@@ -1,5 +1,7 @@
 import { apiClient } from "@/lib/api-client";
+import { answerSourcesOf } from "@/lib/chat/answer-sources";
 import {
+  AnswerSource,
   CreateConversationResponse,
   NewTaskPayload,
   NewTaskResponse,
@@ -82,6 +84,7 @@ export interface TaskDetails {
   created_at: string;
   completed_at?: string | null;
   result?: string;
+  sources?: AnswerSource[];
   history?: unknown[];
   future_actions?: unknown[];
   subtasks?: TaskSubtaskRow[];
@@ -157,6 +160,7 @@ export const chatApi = {
           agentName: typeof msg.agent_name === 'string' ? msg.agent_name : undefined,
           skillUsed: typeof msg.skill_used === 'string' ? msg.skill_used : undefined,
           messageId: typeof msg.id === 'number' ? msg.id : undefined,
+          sources: answerSourcesOf(msg.sources),
         })),
         nextCursor: null,
       };

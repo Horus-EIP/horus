@@ -49,6 +49,14 @@ from schemas.schemas import (
     TaskStepForm,
     WorkerRunForm,
 )
+from tasks.agent_answers import (
+    NOT_IN_DOCUMENTS_TEXT,
+    RETRYING_STATUS,
+    merge_sources,
+    recall_dispatch,
+    remember_dispatch,
+    retry_plan,
+)
 from tasks.decomposition import get_manager_agent, manager_announce_plan, manager_review_step
 from tasks.idempotency import IDEMPOTENCY_KEY_MAX_LENGTH, claim_task_id, release_task_id
 from tasks.openapi_docs import (
@@ -194,6 +202,7 @@ async def _report_busy(dispatch: _WorkDispatch, position: int) -> None:
 
 
 async def _publish_unless_full(db: Session, dispatch: _WorkDispatch) -> bool:
+    remember_dispatch(dispatch.task_id, dispatch.payload)
     queue = _work_queue_key(db, dispatch.agent_id)
     if work_queue_line.has_waiting(queue):
         depth = work_queue_line.depth(queue)
@@ -738,6 +747,7 @@ def get_task_detail(task_id: str, db: Session = Depends(get_db)):
         "created_at": task.created_at.isoformat() if task.created_at else "",
         "completed_at": _isoformat_or_none(task.completed_at),
         "result": result_str,
+        "sources": getattr(tr, "sources", None) or [],
         "history": tr.history if tr else [],
         "future_actions": tr.future_actions if tr else [],
         "subtasks": subtasks_out,
@@ -1577,9 +1587,16 @@ async def sharing_agent_result(
             detail="Authenticated agent is not allowed to complete this task",
         )
 
-    if task_result.status == TaskResultStatus.FAILED:
-        return await _record_agent_failure(task, task_result, db)
+    if task_result.status != TaskResultStatus.COMPLETED:
+        if await _answer_again(task, task_result, db):
+            return {"message": f"Task {task.id} is answered once more"}
+        if task_result.status == TaskResultStatus.FAILED:
+            return await _record_agent_failure(task, task_result, db)
+        task_result = task_result.model_copy(
+            update={"result": NOT_IN_DOCUMENTS_TEXT, "sources": []}
+        )
 
+    step_sources = _sources_of(task_result)
     try:
         validating_task_results(
             task_result.task_id,
@@ -1604,6 +1621,7 @@ async def sharing_agent_result(
 
         current_task_result.result_data = task_result.result
         current_task_result.history = history
+        current_task_result.sources = step_sources
         db.commit()
 
         TASK_QUEUE_DEPTH.dec()
@@ -1880,7 +1898,9 @@ async def sharing_agent_result(
         # for the common single-agent path. See scripts/perf measurements.
         if task.parent_task_id is None:
             final_answer = (task_result.result or "").strip()
+            final_sources = step_sources
         else:
+            final_sources = _chain_sources(db, chain_root_id, step_sources)
             await publish_task_status(
                 chain_root_id,
                 task.conversation_id,
@@ -1924,6 +1944,7 @@ async def sharing_agent_result(
                 root_task.status = TaskStatus.COMPLETED.value
                 if root_task.result is not None:
                     root_task.result.result_data = final_answer
+                    root_task.result.sources = final_sources
                     # Merge the final history onto the root so the result page
                     # shows the full conversation, not an empty seed.
                     root_history = list(root_task.result.history or [])
@@ -1965,6 +1986,7 @@ async def sharing_agent_result(
                 agent_id=task.agent_id,
                 agent_name=attribution_name,
                 skill_used=task_result.skill_used,
+                sources=final_sources,
             )
 
         await publish_agent_message(
@@ -1979,7 +2001,7 @@ async def sharing_agent_result(
             status=TaskStatus.COMPLETED.value,
             route=ROUTE_AGENT,
             message_id=_message_id(message),
-            **({"sources": task_result.sources} if task_result.sources is not None else {}),
+            **({"sources": final_sources} if final_sources is not None else {}),
         )
         return {"message": f"Result received from agent {task_result.agent_id}"}
     except HTTPException:
@@ -1992,6 +2014,94 @@ async def sharing_agent_result(
         raise HTTPException(
             status_code=500, detail=f"Error processing task result: {str(e)}"
         )
+
+
+def _sources_of(task_result: TaskResultForm) -> list[dict] | None:
+    if task_result.sources is None:
+        return None
+    return [source.model_dump() for source in task_result.sources]
+
+
+def _chain_sources(
+    db: Session, root_id: str, step_sources: list[dict] | None
+) -> list[dict] | None:
+    steps = (
+        db.query(Task)
+        .filter(Task.parent_task_id == root_id)
+        .order_by(Task.order.asc(), Task.created_at.asc())
+        .all()
+    )
+    earlier = [getattr(step.result, "sources", None) for step in steps if step.result is not None]
+    return merge_sources([*earlier, step_sources])
+
+
+async def _answer_again(task: Task, task_result: TaskResultForm, db: Session) -> bool:
+    if is_final_status(task.status):
+        return False
+    root = (
+        db.query(Task).filter(Task.id == task.parent_task_id).first()
+        if task.parent_task_id
+        else None
+    )
+    if root is not None and is_final_status(root.status):
+        return False
+    plan = retry_plan(
+        recall_dispatch(task.id),
+        task_result.status,
+        task_result.reason,
+        root.query if root is not None else None,
+    )
+    if plan is None:
+        return False
+    if task.result is not None:
+        task.result.history = [
+            *(task.result.history or []),
+            {
+                "role": "assistant",
+                "message": task_result.result,
+                "status": task_result.status.value,
+                "reason": task_result.reason,
+                "attempt": plan.attempt - 1,
+            },
+        ]
+    task.claimed_by = None
+    task.claim_run = None
+    task.started_at = None
+    db.commit()
+    root_id = task.parent_task_id or task.id
+    logger.info(
+        "Answer asked for once more",
+        task_id=task.id,
+        status=task_result.status.value,
+        reason=task_result.reason,
+        attempt=plan.attempt,
+        retrieval_query=plan.payload.get("retrieval_query"),
+    )
+    await publish_task_status(
+        root_id,
+        task.conversation_id,
+        RETRYING_STATUS,
+        stage=TaskStage.RETRIEVAL,
+        detail=plan.detail,
+        attempt=plan.attempt,
+    )
+    dispatch = _WorkDispatch(task.agent_id, plan.payload, task.id, root_id, task.conversation_id)
+    try:
+        if not await _publish_unless_full(db, dispatch):
+            task_jobs.submit(task.id, _wait_for_room_job(dispatch))
+    except Exception as exc:
+        logger.exception("Could not hand task %s to an agent once more", task.id)
+        db.rollback()
+        detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        await _fail_task_tree(
+            db,
+            task,
+            f"The orchestrator could not hand this request to an agent: {detail}",
+            reason="dispatch_failed",
+            agent_id=task.agent_id,
+            agent_name=task_result.agent_name,
+        )
+    return True
 
 
 def _agent_is_registered(db: Session, agent_id: str) -> bool:

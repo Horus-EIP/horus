@@ -66,6 +66,7 @@ class TaskResult(Base):
     result_data = Column(JSON, nullable=True)
     history = Column(JSON, nullable=True)
     future_actions = Column(JSON, nullable=True)
+    sources = Column(JSON, nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

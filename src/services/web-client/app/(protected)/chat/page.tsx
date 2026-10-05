@@ -20,7 +20,11 @@ import {
   type TaskDetails,
   type TaskSummary,
 } from '@/lib/chat/api';
-import { appendStreamChunk, type StreamPreviews } from '@/lib/chat/stream-preview';
+import {
+  appendStreamChunk,
+  dropStreamPreview,
+  type StreamPreviews,
+} from '@/lib/chat/stream-preview';
 import {
   appendAgentAnswer,
   finishedTaskAnswer,
@@ -28,6 +32,7 @@ import {
   type AgentAnswer,
 } from '@/lib/chat/agent-answer';
 import {
+  RETRYING_STATUS,
   TaskEventLog,
   applyTaskFrame,
   fetchMissedTaskFrames,
@@ -187,6 +192,7 @@ function ChatPageContent() {
         agentName: msg.agentName,
         skillUsed: msg.skillUsed,
         messageId: msg.messageId,
+        sources: msg.sources,
       }));
 
       if (cursor) {
@@ -218,10 +224,15 @@ function ChatPageContent() {
             ...prev,
             [step.taskId]: [...(prev[step.taskId] ?? []), step],
           })),
-        onStreamChunk: (taskId, subtaskId, chunk) =>
-          setStreamingByTaskId((prev) => appendStreamChunk(prev, taskId, subtaskId, chunk)),
+        onStreamChunk: (taskId, subtaskId, chunk, index) =>
+          setStreamingByTaskId((prev) => appendStreamChunk(prev, taskId, subtaskId, chunk, index)),
         onAnswer: commitAgentAnswer,
-        onProgress: (progress) => setTaskProgress((prev) => mergeTaskProgress(prev, progress)),
+        onProgress: (progress) => {
+          setTaskProgress((prev) => mergeTaskProgress(prev, progress));
+          if (progress.status === RETRYING_STATUS) {
+            setStreamingByTaskId((prev) => dropStreamPreview(prev, progress.taskId));
+          }
+        },
       });
     },
     [commitAgentAnswer]

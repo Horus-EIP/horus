@@ -96,11 +96,13 @@ def task_event_store(monkeypatch):
         return
 
     import core.task_events as task_events  # noqa: PLC0415
+    import tasks.agent_answers as agent_answers  # noqa: PLC0415
     import tasks.idempotency as idempotency  # noqa: PLC0415
 
     store = fakeredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr(task_events, "redis_db", store)
     monkeypatch.setattr(idempotency, "redis_db", store)
+    monkeypatch.setattr(agent_answers, "redis_db", store)
     task_events._publish_locks.clear()
     yield store
     task_events._publish_locks.clear()

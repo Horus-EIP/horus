@@ -177,6 +177,26 @@ describe("KnowledgeStorePage search and category filter", () => {
     global.fetch = vi.fn(knowledgeStoreFetch) as typeof fetch;
   });
 
+  it("opens the document a source link asks for", async () => {
+    window.history.replaceState({}, "", "/knowledge-store?doc=doc-handbook");
+    try {
+      renderPage();
+
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText("2_Employee_Handbook.md")).toBeInTheDocument();
+      expect(within(dialog).getByText("Handbook")).toBeInTheDocument();
+    } finally {
+      window.history.replaceState({}, "", "/");
+    }
+  });
+
+  it("opens no document without a request for one", async () => {
+    renderPage();
+
+    await waitForFullList();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("shows every stored document while the search field is empty", async () => {
     renderPage();
 

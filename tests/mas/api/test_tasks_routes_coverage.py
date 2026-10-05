@@ -981,7 +981,11 @@ class TestTaskResultCompletion:
         client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
         r = client.post("/tasks/task-result/", json=_result_body(sources=sources))
         assert r.status_code == 200
-        assert mock_ws.call_args.kwargs["sources"] == sources
+        assert mock_ws.call_args.kwargs["sources"] == [
+            {"doc_id": "doc-4", "chunk_id": None, "title": "4_Expense_Policy.md", "page": None}
+        ]
+        assert tr.sources == mock_ws.call_args.kwargs["sources"]
+        assert mock_add.call_args.kwargs["sources"] == mock_ws.call_args.kwargs["sources"]
         assert mock_ws.call_args.kwargs["route"] == "agent"
         assert mock_ws.call_args.kwargs["status"] == "completed"
 

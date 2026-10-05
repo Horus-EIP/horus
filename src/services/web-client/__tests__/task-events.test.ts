@@ -98,7 +98,7 @@ describe("replaying task events", () => {
     expect(live.onStep).toHaveBeenCalledWith(
       expect.objectContaining({ taskId: "root-7", stepType: "retrieval.start", title: "Searching" })
     );
-    expect(live.onStreamChunk).toHaveBeenCalledWith("root-7", "sub-1", "Revenue ");
+    expect(live.onStreamChunk).toHaveBeenCalledWith("root-7", "sub-1", "Revenue ", undefined);
     expect(live.onAnswer).toHaveBeenCalledWith(
       expect.objectContaining({
         content: "Revenue grew 12%.",
@@ -236,6 +236,71 @@ describe("routing task frames", () => {
       { taskId: "root-7", status: "queued", stage: "queued", detail: undefined, elapsedS: undefined },
       { taskId: "root-7", status: undefined, stage: "retrieval", detail: undefined, elapsedS: 65 },
     ]);
+  });
+});
+
+describe("answer contract frames", () => {
+  const source = { doc_id: "doc-q4", chunk_id: "doc-q4:3", title: "q4.md", page: 2 };
+
+  it("passes the sources of the final answer on", () => {
+    const sink = handlers();
+
+    routeTaskFrame(
+      { ...RESULT.data, sources: [source, "not a source"], task_id: "root-7", seq: 3, event: "result" },
+      sink
+    );
+
+    expect(sink.onAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({ content: "Revenue grew 12%.", sources: [source] }),
+      true
+    );
+  });
+
+  it("leaves the sources out when the agent sent none", () => {
+    const sink = handlers();
+
+    routeTaskFrame({ ...RESULT.data, task_id: "root-7", seq: 3, event: "result" }, sink);
+
+    expect(sink.onAnswer.mock.calls[0][0].sources).toBeUndefined();
+  });
+
+  it("passes the index of each streamed chunk on", () => {
+    const sink = handlers();
+
+    routeTaskFrame(
+      {
+        type: "task_step",
+        step_type: "reasoning.delta",
+        task_id: "root-7",
+        subtask_id: "sub-1",
+        metadata: { chunk: "Revenue ", index: 0 },
+      },
+      sink
+    );
+
+    expect(sink.onStreamChunk).toHaveBeenCalledWith("root-7", "sub-1", "Revenue ", 0);
+  });
+
+  it("explains a second attempt in the progress line", () => {
+    const sink = handlers();
+
+    routeTaskFrame(
+      {
+        type: "task_status",
+        status: "retrying",
+        detail: "The documents found did not answer it; searching again with another query.",
+        attempt: 2,
+        task_id: "root-7",
+        stage: "retrieval",
+      },
+      sink
+    );
+
+    const progress = sink.onProgress.mock.calls[0][0];
+    expect(progress.status).toBe("retrying");
+    expect(taskProgressLabel(progress)).toBe(
+      "The documents found did not answer it; searching again with another query."
+    );
   });
 });
 

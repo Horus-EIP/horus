@@ -386,6 +386,39 @@ SHARE_RESULT_OPENAPI_EXTRA = {
                             "type": "string",
                             "description": "ID of the agent that executed the task",
                         },
+                        "status": {
+                            "type": "string",
+                            "enum": ["completed", "not_found", "failed"],
+                            "default": "completed",
+                            "description": (
+                                "completed: an answer. not_found: the documents do not "
+                                "contain it. failed: no answer. A first not_found or failed "
+                                "answer is asked for once more (not after a timeout)."
+                            ),
+                        },
+                        "reason": {
+                            "type": ["string", "null"],
+                            "maxLength": 64,
+                            "description": (
+                                "Why the answer is not completed: not_in_documents, "
+                                "invalid_output, degenerate_output, retrieval_error, "
+                                "timeout or error"
+                            ),
+                        },
+                        "sources": {
+                            "type": ["array", "null"],
+                            "maxItems": 100,
+                            "description": "The retrieved passages the answer cites",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "doc_id": {"type": ["string", "null"]},
+                                    "chunk_id": {"type": ["string", "null"]},
+                                    "title": {"type": ["string", "null"]},
+                                    "page": {"type": ["integer", "null"]},
+                                },
+                            },
+                        },
                         "history": {
                             "type": "array",
                             "description": "Message history for context (optional)",
@@ -402,6 +435,36 @@ SHARE_RESULT_OPENAPI_EXTRA = {
                     ],
                 },
                 "examples": {
+                    "answer_with_sources": {
+                        "summary": "Answer citing the passages it used",
+                        "value": {
+                            "task_id": "task_004",
+                            "result": "Q4 2025 revenue was $4.2M.",
+                            "conversation_id": "1",
+                            "agent_id": "8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
+                            "status": "completed",
+                            "sources": [
+                                {
+                                    "doc_id": "6d0e2f1a",
+                                    "chunk_id": "6d0e2f1a:3",
+                                    "title": "1_Q4_2025_Financial_Report.md",
+                                    "page": None,
+                                }
+                            ],
+                        },
+                    },
+                    "not_found": {
+                        "summary": "The documents do not contain the answer",
+                        "value": {
+                            "task_id": "task_005",
+                            "result": "The documents do not give the 2027 budget.",
+                            "conversation_id": "1",
+                            "agent_id": "8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
+                            "status": "not_found",
+                            "reason": "not_in_documents",
+                            "sources": [],
+                        },
+                    },
                     "simple_result": {
                         "summary": "Simple task result",
                         "value": {

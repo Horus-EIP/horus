@@ -1194,6 +1194,101 @@ class TestTimedOutAnswer:
         assert step["title"] == "Answer timed out"
 
 
+SOURCE = {"doc_id": "doc-q4", "chunk_id": "doc-q4:3", "title": "q4.md", "page": 2}
+
+
+def _contract_result(status, answer, sources=(), reason=None):
+    return {
+        "response": answer,
+        "status": "completed",
+        "agent_answer": {
+            "status": status,
+            "answer": answer,
+            "sources": list(sources),
+            "reason": reason,
+        },
+    }
+
+
+class TestAnswerContract:
+    def test_an_answer_carries_the_sources_it_cites(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        _general_pipeline(srv, return_value=_contract_result("ok", "Revenue was $4.2M.", [SOURCE]))
+
+        cb(MagicMock(), _make_method(9), _make_props(), _task_body())
+
+        sent = srv.send_result.call_args
+        assert sent.args[:3] == ("Revenue was $4.2M.", "conv-1", "task-1")
+        assert sent.kwargs["status"] == "completed"
+        assert sent.kwargs["sources"] == [SOURCE]
+        assert sent.kwargs["reason"] is None
+
+    def test_an_answer_the_documents_do_not_contain_is_reported_as_not_found(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        _general_pipeline(
+            srv,
+            return_value=_contract_result(
+                "not_found", "The documents don't say.", reason="not_in_documents"
+            ),
+        )
+
+        cb(MagicMock(), _make_method(9), _make_props(), _task_body())
+
+        sent = srv.send_result.call_args
+        assert sent.kwargs["status"] == "not_found"
+        assert sent.kwargs["reason"] == "not_in_documents"
+        assert sent.kwargs["sources"] == []
+
+    def test_an_unreadable_answer_is_reported_as_failed(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        _general_pipeline(
+            srv,
+            return_value=_contract_result(
+                "failed", "The model's answer could not be read.", reason="invalid_output"
+            ),
+        )
+
+        class _InlineThread:
+            def __init__(self, target=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        with patch.object(consumers.threading, "Thread", _InlineThread):
+            cb(MagicMock(), _make_method(9), _make_props(), _task_body())
+
+        sent = srv.send_result.call_args
+        assert sent.args[0] == "The model's answer could not be read."
+        assert sent.kwargs["status"] == "failed"
+        assert sent.kwargs["reason"] == "invalid_output"
+        step = srv.send_step.call_args.args[0]
+        assert (step["step_type"], step["title"]) == ("error", "Answer failed")
+
+    def test_a_specialist_answer_has_no_sources(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika, types=["writer"])
+        specialist = MagicMock()
+        specialist.process_request = AsyncMock(return_value="Draft memo")
+        srv.get_pipeline_for_type.return_value = specialist
+
+        cb(MagicMock(), _make_method(9), _make_props(), _task_body(operation="write"))
+
+        sent = srv.send_result.call_args
+        assert sent.args[0] == "Draft memo"
+        assert (sent.kwargs["status"], sent.kwargs["sources"]) == ("completed", [])
+
+
+class TestDeliveryKey:
+    def test_the_first_attempt_is_keyed_by_the_task_id(self):
+        assert consumers._delivery_key("t1", None) == "t1"
+        assert consumers._delivery_key("t1", 1) == "t1"
+        assert consumers._delivery_key("t1", "not a number") == "t1"
+
+    def test_a_later_attempt_has_its_own_key(self):
+        assert consumers._delivery_key("t1", 2) == "t1#attempt-2"
+        assert consumers._delivery_key("t1", "2") == "t1#attempt-2"
+
+
 class TestPullLoop:
     def _deliver(self, fake_pika, queue, tag, body):
         fake_pika.deliveries.append((queue, (_make_method(tag), _make_props(), body)))

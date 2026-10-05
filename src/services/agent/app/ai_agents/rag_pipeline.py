@@ -13,12 +13,21 @@ import os
 import threading
 from typing import Any
 
+from ai_agents.answer_contract import (
+    REASON_RETRIEVAL_ERROR,
+    AgentAnswer,
+    AnswerFieldStream,
+    AnswerStatus,
+    SourceCatalog,
+    answer_prompt,
+    answer_response_format,
+    parse_answer,
+)
 from ai_agents.calculator_tool import CalculatorTool
 from ai_agents.decision_making_agent import DecisionMakingAgent, _max_context_chars
 from ai_agents.file_parser_tool import FileParserTool
 from ai_agents.generation_stop import GenerationTimedOut, current_generation_stop
 from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
-from ai_agents.knowledge_store_client import format_passages
 from ai_agents.step_emitter import emit_step
 from ai_agents.summarizer_tool import SummarizerTool
 from ai_agents.tool_registry import ToolRegistry
@@ -54,6 +63,18 @@ def _react_timeout(device: object) -> float:
             logger.warning("Ignoring non-numeric REACT_TIMEOUT_SECONDS=%r", raw)
     on_cpu = str(device or "").lower().startswith("cpu")
     return _REACT_TIMEOUT_CPU_DEFAULT if on_cpu else _REACT_TIMEOUT_GPU_DEFAULT
+
+
+def _retrieval_error(data: object) -> str | None:
+    if not isinstance(data, dict) or data.get("passages"):
+        return None
+    error = data.get("error")
+    return str(error) if error else None
+
+
+def _passages_of(data: object) -> list:
+    passages = data.get("passages") if isinstance(data, dict) else None
+    return passages if isinstance(passages, list) else []
 
 
 class RAGPipeline:
@@ -116,7 +137,7 @@ class RAGPipeline:
         retrieval_query: str | None = None,
         attached_context: str | None = None,
         attached_files: list[dict[str, Any]] | None = None,
-    ) -> str:
+    ) -> AgentAnswer:
         """
         Generate a response by retrieving and processing data (async).
 
@@ -128,7 +149,7 @@ class RAGPipeline:
                 full transcript for grounding.
 
         Returns:
-            A formatted response string with insights.
+            The agent answer: status, answer text, cited sources and reason.
         """
         import asyncio
 
@@ -140,9 +161,13 @@ class RAGPipeline:
         rquery = retrieval_query or query
         if len(rquery) > _RETRIEVAL_QUERY_CHAR_CAP:
             rquery = rquery[:_RETRIEVAL_QUERY_CHAR_CAP]
+        catalog = SourceCatalog()
         if attached_context:
             attached = attached_files or []
-            others = await self._passages_beside_attachments(rquery, attached_context, attached)
+            catalog.add_attached_files(attached)
+            others = await self._passages_beside_attachments(
+                rquery, attached_context, attached, catalog
+            )
             emit_step(
                 "retrieval.results",
                 "Using the attached files",
@@ -159,7 +184,19 @@ class RAGPipeline:
             context_text = f"{attached_context}\n{others}" if others else attached_context
         else:
             data = await self.retrieval_agent.fetch(rquery)
-            context_text = data.get("data", "")
+            error = _retrieval_error(data)
+            if error:
+                logger.warning("Retrieval failed, so the request is not answered: %s", error)
+                return AgentAnswer.failed(
+                    REASON_RETRIEVAL_ERROR,
+                    f"The knowledge store could not be searched: {error}",
+                )
+            passages = _passages_of(data)
+            context_text = (
+                catalog.format_passages(passages, _max_context_chars())
+                if passages
+                else data.get("data", "")
+            )
 
         # Phase 3: exact-match response cache. Keyed on (query + retrieved
         # context + generation params), so a hit is safe across users and
@@ -179,12 +216,8 @@ class RAGPipeline:
         stop = threading.Event()
         stop_binding = current_generation_stop.set(stop)
         try:
-            insight = await asyncio.wait_for(
-                asyncio.to_thread(
-                    self.decision_agent.decide,
-                    query=query,
-                    context=context_text,
-                ),
+            answer = await asyncio.wait_for(
+                asyncio.to_thread(self._answer, query, context_text, catalog),
                 timeout=timeout,
             )
         except TimeoutError:
@@ -198,13 +231,37 @@ class RAGPipeline:
         finally:
             current_generation_stop.reset(stop_binding)
 
-        await set_cached(query, context_text, corpus_version, insight)
-        return insight
+        await set_cached(query, context_text, corpus_version, answer)
+        return answer
+
+    def _answer(self, query: str, context: str, catalog: SourceCatalog) -> AgentAnswer:
+        system_content, user_content = answer_prompt(query, context, catalog.labels)
+        raw = self.decision_agent.complete(
+            query,
+            user_content,
+            system_content,
+            response_format=answer_response_format(catalog.labels),
+            stream_view=AnswerFieldStream(),
+        )
+        strict = bool(getattr(self.decision_agent, "constrains_output", False))
+        answer = parse_answer(raw, catalog, strict=strict)
+        if answer.status is AnswerStatus.FAILED:
+            logger.warning(
+                "The model's answer was rejected (%s). Raw output preview: %r",
+                answer.reason,
+                str(raw or "")[:400],
+            )
+        return answer
 
     async def _passages_beside_attachments(
-        self, query: str, attached_context: str, attached_files: list[dict[str, Any]]
+        self,
+        query: str,
+        attached_context: str,
+        attached_files: list[dict[str, Any]],
+        catalog: SourceCatalog,
     ) -> str:
-        if _max_context_chars() - len(attached_context) < _ONE_PASSAGE_CHARS:
+        room = _max_context_chars() - len(attached_context)
+        if room < _ONE_PASSAGE_CHARS:
             return ""
         try:
             data = await self.retrieval_agent.fetch(query)
@@ -222,7 +279,8 @@ class RAGPipeline:
         ]
         if not others:
             return ""
-        return f"{_OTHER_PASSAGES_HEADER}\n{format_passages(others)}"
+        budget = room - len(_OTHER_PASSAGES_HEADER) - 2
+        return f"{_OTHER_PASSAGES_HEADER}\n{catalog.format_passages(others, budget)}"
 
     async def generate_response_react(self, query: str) -> dict[str, Any]:
         """
@@ -299,20 +357,19 @@ class RAGPipeline:
         attached_context = task.get("attached_context")
         if attached_context:
             demand = task.get("demand") or query
-            response_text = await self.generate_response(
+            answer = await self.generate_response(
                 demand,
                 retrieval_query=task.get("retrieval_query") or demand,
                 attached_context=attached_context,
                 attached_files=task.get("files") or [],
             )
         else:
-            response_text = await self.generate_response(
-                query, retrieval_query=retrieval_query
-            )
+            answer = await self.generate_response(query, retrieval_query=retrieval_query)
         return {
             "task_id": task.get("task_id"),
-            "response": response_text,
+            "response": answer.answer,
             "status": "completed",
+            "agent_answer": answer.as_dict(),
         }
 
     def _build_default_registry(self) -> ToolRegistry:

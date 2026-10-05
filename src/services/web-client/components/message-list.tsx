@@ -12,7 +12,8 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { formatTimestamp } from "@/utils/format";
 import { ThoughtProcessCard } from "@/components/chat/thought-process-card";
-import type { TaskStepEvent } from "@/lib/types";
+import { AnswerSources } from "@/components/chat/answer-sources";
+import type { AnswerSource, TaskStepEvent } from "@/lib/types";
 
 export interface Message {
   id: string;
@@ -29,6 +30,7 @@ export interface Message {
   /** Task ID the message dispatched, used to attach a thought-process card. */
   taskId?: string;
   messageId?: number;
+  sources?: AnswerSource[];
 }
 
 interface MessageListProps {
@@ -199,6 +201,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                   <ReactMarkdown components={mdComponents}>
                     {message.text}
                   </ReactMarkdown>
+                  <AnswerSources sources={message.sources} />
                 </div>
               ) : (
                 <p className="whitespace-pre-wrap break-words">{message.text}</p>

@@ -121,7 +121,18 @@ class TaskStepForm(BaseModel):
 
 class TaskResultStatus(str, Enum):
     COMPLETED = "completed"
+    NOT_FOUND = "not_found"
     FAILED = "failed"
+
+
+MAX_ANSWER_SOURCES = 100
+
+
+class AnswerSource(BaseModel):
+    doc_id: str | None = None
+    chunk_id: str | None = None
+    title: str | None = None
+    page: int | None = None
 
 
 class TaskResultForm(BaseModel):
@@ -138,7 +149,7 @@ class TaskResultForm(BaseModel):
     task_id: str
     agent_name: str | None = None
     skill_used: str | None = None
-    sources: list[dict[str, Any]] | None = None
+    sources: list[AnswerSource] | None = Field(default=None, max_length=MAX_ANSWER_SOURCES)
     status: TaskResultStatus = TaskResultStatus.COMPLETED
     reason: str | None = Field(default=None, max_length=64)
 

@@ -498,6 +498,46 @@ The user message is saved to the conversation when the task is queued, before ro
 
 ---
 
+#### GET /tasks/{task_id}
+
+The task, its result and its subtasks. `result` is the final answer (the aggregated answer for the root of a chain) and `sources` the passages it cites; a chain's root keeps every source of its steps, each once.
+
+**Auth:** JWT Bearer (requires `task:read` permission)
+
+**Response 200:**
+
+```json
+{
+  "task_id": "3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13",
+  "status": "completed",
+  "agent_id": "8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
+  "conversation_id": 1,
+  "query": "What was the Q4 2025 revenue?",
+  "skills_required": [],
+  "created_at": "2026-10-05T09:30:00+00:00",
+  "completed_at": "2026-10-05T09:33:00+00:00",
+  "result": "Q4 2025 revenue was $4.2M.",
+  "sources": [
+    {"doc_id": "6d0e…", "chunk_id": "6d0e…:3", "title": "1_Q4_2025_Financial_Report.md", "page": null}
+  ],
+  "history": [
+    {"role": "user", "message": "What was the Q4 2025 revenue?"},
+    {"role": "assistant", "message": "The passages do not give it.", "status": "not_found", "reason": "not_in_documents", "attempt": 1},
+    {"role": "assistant", "message": "Q4 2025 revenue was $4.2M."}
+  ],
+  "future_actions": [],
+  "subtasks": []
+}
+```
+
+`sources` is `[]` when the answer cites nothing or the task has no agent answer. A `history` entry with a `status` is a first attempt MAS asked the agent to redo (see `POST /tasks/task-result/`).
+
+| Code | Detail |
+|------|--------|
+| `404` | `Task not found` |
+
+---
+
 #### GET /tasks/{task_id}/events
 
 Replay the events stored for a task. MAS sends every per-task WebSocket frame through one publish function, which gives it the next `seq` of the task (Redis `INCR horus:task:{task_id}:seq`), appends it to the Redis stream `horus:task:{task_id}:events` (kept 24 h after the last event, trimmed to about 10,000 entries) and only then sends it to the connected sockets. Events are therefore stored even when nobody is connected.
@@ -565,7 +605,9 @@ Token deltas (`reasoning.delta` steps) are stored as `token` events. The agent a
 
 #### POST /tasks/task-result/
 
-Submit the outcome of a task from an agent. With `status: "completed"` (the default) MAS marks the task COMPLETED, stores the result, handles sub-task chaining, and broadcasts the final answer via WebSocket. With `status: "failed"` MAS marks the task FAILED (and the root of its chain, whose remaining steps are dropped), stores the agent's message as the result and in the conversation, and stores an `error` event with `status: "failed"` and the `reason`. If the request already ended (cancelled or timed out by `TASK_TIMEOUT`), a late failure changes nothing and sends nothing.
+Submit the outcome of a task from an agent, following the agent answer contract (see "Answer contract" in `src/services/agent/README.md`). With `status: "completed"` (the default) MAS marks the task COMPLETED, stores the result and its `sources`, handles sub-task chaining, and broadcasts the final answer via WebSocket with its sources (a chain's final answer carries every source of its steps, each `chunk_id` once).
+
+The first `not_found` or `failed` answer of a task is not final: MAS asks the same agent once more, under the same task id, with `attempt: 2` in the task message and another retrieval query (the user's question for a step of a chain, otherwise the request without its filler words), clears the task's claim, adds the first answer to the task's `history` with its `status`, `reason` and `attempt`, and sends a `task_status` event with `status: "retrying"`. A `failed` answer with no other query is tried once more as it was; a `not_found` answer with no other query, a second `not_found`, an answer whose dispatch MAS no longer has (MAS restarted without Redis data, or the task had inline files) and any answer of a cancelled request are not tried again. A `failed` answer with `reason: "timeout"` is never tried again. A final `not_found` completes the task with "The documents don't contain this information." and `sources: []`. A final `failed` answer marks the task FAILED (and the root of its chain, whose remaining steps are dropped), stores the agent's message as the result and in the conversation, and stores an `error` event with `status: "failed"` and the `reason`. If the request already ended (cancelled or timed out by `TASK_TIMEOUT`), a late failure changes nothing and sends nothing.
 
 **Auth:** Agent API Key (`X-API-Key` + `Agent-ID` headers)
 
@@ -576,9 +618,9 @@ Submit the outcome of a task from an agent. With `status: "completed"` (the defa
 | task_id | string | Yes | ID of the completed task. |
 | result | string | Yes | The result / output text. |
 | conversation_id | string | Yes | Conversation this task belongs to. |
-| sources | object[] | No | Sources of the answer. Carried as-is in the task's `result` event; agents do not send them yet (B-98). |
-| status | string | No | `completed` (default) or `failed`. |
-| reason | string | No | Why a task failed, for example `timeout` (the answer took longer than `REACT_TIMEOUT_SECONDS` and its generation was stopped) or `error`. At most 64 characters. |
+| sources | object[] | No | The passages the answer cites, at most 100: `doc_id`, `chunk_id`, `title` (strings or null) and `page` (integer or null). Only passages the agent retrieved. Left out by older agents, in which case the `result` event has no `sources`. |
+| status | string | No | `completed` (default), `not_found` (the documents do not contain the answer) or `failed`. |
+| reason | string | No | Why the answer is not `completed`: `not_in_documents`, `invalid_output` (the model's JSON could not be read), `degenerate_output` (a self-correction spiral), `retrieval_error` (the knowledge store could not be searched), `timeout` (the answer took longer than `REACT_TIMEOUT_SECONDS` and its generation was stopped) or `error`. At most 64 characters. |
 | agent_id | string | Yes | **Task assignee** UUID (must match `Task.agent_id`). Pooled workers authenticate with their own `X-API-Key` / `Agent-ID` but set this field to the orchestrator-chosen assignee (see task message `assigned_agent_id`). |
 
 **Response 200:**
@@ -745,13 +787,19 @@ Retrieve the complete message history for a conversation. Only the owner or an a
   {
     "id": 2,
     "role": "assistant",
-    "content": "Hello! How can I help you?",
-    "created_at": "2025-09-25T10:30:05Z"
+    "content": "Q4 2025 revenue was $4.2M.",
+    "created_at": "2025-09-25T10:30:05Z",
+    "agent_id": "8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
+    "agent_name": "Finance-Analyst",
+    "skill_used": "financial_analysis",
+    "sources": [
+      {"doc_id": "6d0e…", "chunk_id": "6d0e…:3", "title": "1_Q4_2025_Financial_Report.md", "page": null}
+    ]
   }
 ]
 ```
 
-Returns an empty array `[]` if the conversation has no messages.
+`sources` is the list of passages an agent answer cites, `[]` when it cites nothing, and `null` for other messages and messages stored before answers had sources. Returns an empty array `[]` if the conversation has no messages.
 
 **Errors:**
 
@@ -1883,6 +1931,38 @@ Return the full text of one document by its id, rebuilt from its passages. The a
 
 ---
 
+#### GET /file/resolve
+
+Return the full text of the stored document(s) whose title matches a filename or its basename, case-insensitively. The agent calls it when a request names a file, and cites each matched document as a source of its own.
+
+**Auth:** None (internal service)
+
+**Query Parameters:**
+
+| Parameter | Type   | Description |
+|-----------|--------|-------------|
+| name      | string | Filename or basename, for example `report.pdf` |
+
+**Response:** `200 OK`
+
+```json
+{
+  "name": "notes.txt",
+  "matched_titles": ["notes.txt"],
+  "doc_ids": ["abc123"],
+  "text": "Full document body...",
+  "documents": [{"doc_id": "abc123", "title": "notes.txt", "text": "Full document body..."}]
+}
+```
+
+`text` joins the texts of all matched documents with `---` lines; `documents` keeps them apart, in the same order.
+
+**Errors:**
+
+- `404` -- No document matched that name
+
+---
+
 #### DELETE /file/{filename}
 
 Delete a file from the physical storage by its filename. Searches the `documents` directory recursively.
@@ -2078,7 +2158,7 @@ Every frame about a task is an event of that task. MAS stores the event first (s
 }
 ```
 
-`status` is `queued`, `routing`, `running`, `aggregating` or `busy`. Clients should show `detail` for a status they do not know. A `busy` frame means the agent type's work queue is full and the task waits in MAS's line; it carries `position` (N, defined under `POST /tasks/new_task/`) and `detail: "Busy, position N"`, comes right after the rejected publish and again whenever N changes:
+`status` is `queued`, `routing`, `running`, `aggregating`, `busy` or `retrying`. Clients should show `detail` for a status they do not know. A `retrying` frame (`stage: "retrieval"`) means the agent's first answer was `not_found` or `failed` and MAS asked it once more; it carries `attempt: 2` and a `detail` that says why. A client that shows the streamed answer should drop it, since the agent streams the second answer from `index` 0. A `busy` frame means the agent type's work queue is full and the task waits in MAS's line; it carries `position` (N, defined under `POST /tasks/new_task/`) and `detail: "Busy, position N"`, comes right after the rejected publish and again whenever N changes:
 
 ```json
 {"type": "task_status", "status": "busy", "detail": "Busy, position 11", "position": 11, "task_id": "3f6c…", "seq": 4, "event": "progress", "stage": "queued", "ts": "2026-10-05T09:30:14Z"}
@@ -2090,7 +2170,7 @@ Every frame about a task is an event of that task. MAS stores the event first (s
 {"type": "heartbeat", "elapsed_s": 65.0, "task_id": "3f6c…", "seq": 9, "event": "heartbeat", "stage": "generation", "ts": "2026-10-05T09:31:17Z"}
 ```
 
-**Thought-process step** (`event: progress`, or `token` for `step_type: "reasoning.delta"`, whose `metadata.chunk` is the next piece of the streamed answer):
+**Thought-process step** (`event: progress`, or `token` for `step_type: "reasoning.delta"`, whose `metadata.chunk` is the next piece of the streamed answer text and `metadata.index` its position, from 0 for each answer; the agent streams only the text of the answer, never the JSON around it):
 
 ```json
 {
@@ -2124,6 +2204,9 @@ Every frame about a task is an event of that task. MAS stores the event first (s
   "status": "completed",
   "route": "agent",
   "message_id": 412,
+  "sources": [
+    {"doc_id": "6d0e…", "chunk_id": "6d0e…:3", "title": "1_Q4_2025_Financial_Report.md", "page": null}
+  ],
   "task_id": "3f6c…",
   "seq": 21,
   "event": "result",
@@ -2134,13 +2217,14 @@ Every frame about a task is an event of that task. MAS stores the event first (s
 
 | Final frame | `event` | `status` | Other fields |
 |-------------|---------|----------|--------------|
-| Agent or chain answer | `result` | `completed` | `route: "agent"`, `sources` when the agent sent them |
+| Agent or chain answer | `result` | `completed` | `route: "agent"`, `sources` (the passages it cites, `[]` when none; left out when an older agent sent none) |
+| The documents do not contain the answer (after a second attempt, or when nothing else could be tried) | `result` | `completed` | `route: "agent"`, `content` "The documents don't contain this information.", `sources: []` |
 | Direct answer | `result` | `completed` | `route: "direct_answer"` |
 | No agent could take the demand | `error` | `failed` | `route: "none"`; `content` says why |
 | Cancelled by a user | `error` | `cancelled` | `reason: "user"` |
 | Stopped by `TASK_TIMEOUT` | `error` | `cancelled` | `reason: "timeout"`; the notice is also the task result |
 | The agent's answer took longer than `REACT_TIMEOUT_SECONDS` | `error` | `failed` | `reason: "timeout"`; the agent's notice is the task result and the chat shows it as failed |
-| The agent failed | `error` | `failed` | `reason: "error"` |
+| The agent failed (after a second attempt when one was possible) | `error` | `failed` | `reason`: `error`, `invalid_output`, `degenerate_output` or `retrieval_error` |
 | The agent restarted while it ran the task | `error` | `failed` | `reason: "agent_restarted"` |
 | The task's agent was no longer registered when a worker took the task | `error` | `failed` | `reason: "agent_unregistered"` |
 
@@ -2148,7 +2232,7 @@ Every frame about a task is an event of that task. MAS stores the event first (s
 
 | Type          | Direction        | Description                                            |
 |---------------|------------------|--------------------------------------------------------|
-| `task_status` | Server to Client | Queued, routing, busy (position N), dispatched, aggregating |
+| `task_status` | Server to Client | Queued, routing, busy (position N), dispatched, retrying, aggregating |
 | `heartbeat`   | Server to Client | Liveness of a running task, every 5 s                  |
 | `task_step`   | Server to Client | Agent thought-process step or streamed answer chunk    |
 | `task_complete` | Server to Client | Attributed message: Manager update or final answer   |

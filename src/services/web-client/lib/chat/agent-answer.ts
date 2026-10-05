@@ -1,5 +1,6 @@
 import type { Message } from "@/components/message-list";
 import type { TaskDetails } from "@/lib/chat/api";
+import type { AnswerSource } from "@/lib/types";
 
 export type AgentAnswer = {
   content: string;
@@ -9,6 +10,7 @@ export type AgentAnswer = {
   skillUsed?: string;
   messageId?: number;
   failed?: boolean;
+  sources?: AnswerSource[];
 };
 
 const FINISHED_TASK_STATUSES = ["completed", "failed", "cancelled"];
@@ -32,6 +34,7 @@ export function finishedTaskAnswer(task: TaskDetails): {
   content: string;
   agentId: string;
   failed: boolean;
+  sources?: AnswerSource[];
 } {
   const subtasks = task.subtasks ?? [];
   const answeringAgentId = subtasks[subtasks.length - 1]?.assignedAgent || task.agent_id;
@@ -39,6 +42,7 @@ export function finishedTaskAnswer(task: TaskDetails): {
     content: finishedTaskText(task),
     agentId: answeringAgentId,
     failed: task.status === "failed",
+    sources: task.status === "completed" ? task.sources : undefined,
   };
 }
 
@@ -71,6 +75,7 @@ export function appendAgentAnswer(messages: Message[], answer: AgentAnswer): Mes
       agentName: answer.agentName,
       skillUsed: answer.skillUsed,
       messageId: answer.messageId,
+      sources: answer.sources,
     },
   ];
 }

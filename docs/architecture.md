@@ -135,7 +135,7 @@ The Agent Service hosts the AI agents that perform the actual reasoning and docu
 - Running the RAG pipeline: knowledge retrieval, decision making, response generation
 - ReAct agent loop (Thought -> Action -> Observation) for multi-step reasoning
 - Tool execution: knowledge search, data extraction, file parsing, payment analysis, calculation, summarization
-- Source citation in every response
+- Answering in one JSON contract (`status`, `answer`, `sources`, `reason`), with sources taken only from the passages it retrieved
 - Posting task results back to the MAS orchestrator
 
 **Internal Architecture:**
@@ -144,6 +144,7 @@ The Agent Service hosts the AI agents that perform the actual reasoning and docu
 |---|---|
 | `agent_server/` | FastAPI app, task consumption endpoints, RabbitMQ listener |
 | `ai_agents/rag_pipeline.py` | Orchestrates the full RAG flow: retrieval, reasoning, response |
+| `ai_agents/answer_contract.py` | The answer contract: labelled passages, the `json_schema` response format, lenient and strict parsing, the streamed `answer` field |
 | `ai_agents/react_agent.py` | ReAct loop with configurable max steps and timeout |
 | `ai_agents/knowledge_retrieval_agent.py` | Queries the Knowledge Store for relevant document chunks |
 | `ai_agents/decision_making_agent.py` | LLM-based decision making using retrieved context |
@@ -239,19 +240,22 @@ sequenceDiagram
 
     User->>Web: Send message
     Web->>MAS: POST /tasks/new_task/
-    MAS->>DB: Create Task (status: pending)
-    MAS->>LLM: Analyze query, select agent
+    MAS->>DB: Create Task (status: queued)
+    MAS-->>Web: 202 {task_id}
+    MAS->>LLM: Route (rules, embeddings, then a constrained LLM call)
     LLM-->>MAS: Agent selection + plan
     MAS->>DB: Update Task (agent assigned)
     MAS->>RMQ: Publish task to agent queue
     RMQ->>Agent: Deliver task
-    Agent->>KS: Query relevant documents
-    KS-->>Agent: Document chunks + scores
-    Agent->>Agent: ReAct loop (reason + act)
-    Agent->>MAS: POST /tasks/task-result
-    MAS->>DB: Store TaskResult, update status
-    MAS->>WS: Push result to user
-    WS-->>User: Display response with citations
+    Agent->>MAS: POST /tasks/{id}/claim
+    Agent->>KS: Query passages
+    KS-->>Agent: Passages with ids, titles and pages
+    Agent->>LLM: Labelled passages, response_format json_schema
+    LLM-->>Agent: {status, answer, sources}
+    Agent->>MAS: POST /tasks/task-result/ (status, answer, sources)
+    MAS->>DB: Store TaskResult and its sources
+    MAS->>WS: result event with the sources
+    WS-->>User: Display the answer with its sources
 ```
 
 #### 4.2 RAG Pipeline
@@ -281,9 +285,9 @@ sequenceDiagram
     end
 
     Agent->>DM: Generate answer with context
-    DM->>LLM: Prompt with retrieved context
-    LLM-->>DM: Generated response
-    DM-->>Agent: Final answer + citations
+    DM->>LLM: Labelled passages + json_schema response format
+    LLM-->>DM: {status, answer, sources: [labels]}
+    DM-->>Agent: Answer contract with the cited passages' ids, titles and pages
 ```
 
 #### 4.3 Authentication Flow
@@ -456,6 +460,7 @@ erDiagram
 - **Full queue.** A rejected publish puts the task in MAS's first-in, first-out line for that queue (in memory, `tasks/work_queue_line.py`); its database status goes back to `queued` and a `busy` status event with `position` N is stored at once. MAS retries the head of the line every second, and gives its database connection back to the pool between tries, so a long line cannot exhaust the pool; a request that arrives while the line is not empty joins it without publishing. When a task leaves the line, MAS sends the `running` status ("Assigned to …"), which replaces the busy label in the chat. N = 1 + the ready count of the queue at the last rejection + the tasks ahead in MAS's line. A request cancelled or timed out while it waits leaves the line and is never published. If MAS restarts, the waiting tasks are `queued` and fail at start-up with a message asking the user to send them again.
 - **Agent worker.** The consumer thread pulls one message at a time with `basic.get`, and only when one of its `AGENT_MAX_CONCURRENT_TASKS` worker threads (default 1) is free. For each message it claims the task in MAS (`POST /tasks/{task_id}/claim`), then acknowledges the message, then hands the task to a worker thread. The claim is the task's state in the database: who runs it, which run of that worker, and since when. Only the first claim succeeds, so a message delivered again (for example after a connection drop between the claim and the acknowledgement) never runs the task on another worker or in another run, and a task cancelled while it waited in the queue is dropped. The same claim sent again by the same run is answered 200 again, so a claim whose answer was lost (MAS committed it, the reply timed out) can be retried instead of leaving the task claimed by nobody; the worker remembers the ids of the last 10,000 tasks it started in this run and drops a message for one of them. If MAS does not answer the claim (unreachable, 5xx, 401), the message goes back to the queue and the worker waits 5 s; a claim MAS will never accept (403, 422) is dropped so it cannot block the queue. A task whose assigned agent is no longer registered (the agent restarted and registered new ids while the task waited in the queue) fails at its claim, with a chat message asking the user to send it again, because MAS would refuse its result anyway. The consumer thread itself never runs a task, so it keeps servicing the connection (heartbeats) during a 15-minute CPU answer, and the broker's consumer timeout never applies because nothing stays unacknowledged.
 - **Agent restart.** A task that was acknowledged but not finished when the agent stopped is **failed, not run again**. The new process calls `POST /tasks/abandoned-claims` with its worker id (`AGENT_WORKER_ID`, or the container's host name, which survives a restart of the same container) and its new run id; MAS fails every task the older runs of that worker left unfinished, and every claimed task whose agent is no longer registered, with a chat message asking the user to send it again. Running it again automatically would be at-least-once delivery: the most likely cause of the restart on a 16 GB CPU host is an out-of-memory kill or a crash in that very task, which would then loop, and the user would get an answer to a question asked up to an hour earlier with no sign of the restart. A container that is recreated gets a new host name, but it registers its profiles again before the call and so replaces the agent rows of the old container: the tasks the old container had claimed have no registered agent any more and fail on the same call. Only when MAS is unreachable during that call are they left to `TASK_TIMEOUT`.
+- **Answer contract and a second attempt.** Every RAG answer is `{"status": "ok" | "not_found" | "failed", "answer", "sources": [{"doc_id", "chunk_id", "title", "page"}], "reason"}`. The passages are shown to the model with labels (`[S1]`); on the OpenAI-compatible backend `response_format: json_schema` constrains `status` to `ok` or `not_found` and the cited labels to those shown, on the transformers backend the JSON is asked for in the prompt and read leniently, and output that is not valid JSON fails with `reason: "invalid_output"`. The agent maps the labels back to the passages and drops any it was not given. A sub-agent never asks the model twice: on a first `not_found` or `failed` (except a timeout) MAS republishes the task with `attempt: 2` and another retrieval query from the dispatch payload it keeps in Redis (`horus:task:{task_id}:dispatch`, 24 h), clears its claim and sends a `retrying` status; the worker keys the started task by attempt, so it runs the second message. A second `not_found` completes with "The documents don't contain this information."; a second `failed` fails the task. MAS stores the sources with the result and the chat message and merges a chain's sources by `chunk_id`.
 - **Answer timeout.** When one answer takes longer than `REACT_TIMEOUT_SECONDS`, the RAG pipeline sets a stop flag and raises `GenerationTimedOut`; the worker reports the task with `status: "failed"`, `reason: "timeout"`. On the OpenAI-compatible backend (llama-server, vLLM) the answer is always read as a stream when it can be stopped, and the stream is closed at the next chunk after the flag is set, which makes the server cancel the generation. On the transformers backend a `StoppingCriteria` reads the flag at every token. A server still reading a long prompt sends no chunk, so the stop takes effect when the first token comes.
 
 ---
@@ -713,33 +718,52 @@ ws://host:port/chat/{conversation_id}/?token={jwt}
 
 #### Message protocol
 
-Client → Server:
+Client → Server: nothing is required. The socket is a notification channel; questions are sent with `POST /tasks/new_task/`, and anything the client sends is read and ignored.
 
-```json
-{"type": "message", "content": "User query", "conversation_id": 1}
-```
+Server → Client: every frame about a task is one stored event of that task (`core/task_events.py`). MAS gives the event the task's next `seq`, appends it to the Redis stream `horus:task:{task_id}:events` (24 h), and sends the event's `data` with five fields added:
 
-Server → Client:
+| Field | Description |
+|---|---|
+| `task_id` | The task to follow: the root of a chain, the task itself otherwise. |
+| `seq` | Per-task sequence number, from 1. `null` only if Redis was down. |
+| `event` | `progress`, `token`, `heartbeat`, `result` or `error`. |
+| `stage` | `queued`, `routing`, `retrieval`, `generation`, `aggregation` or `null`. |
+| `ts` | UTC time of the event. |
+
+| `type` | `event` | Content |
+|---|---|---|
+| `task_status` | `progress` | `status` (`queued`, `routing`, `running`, `busy`, `retrying`, `aggregating`) and an optional `detail`; `busy` carries `position`, `retrying` carries `attempt`. |
+| `heartbeat` | `heartbeat` | `elapsed_s`, every 5 s for each running top-level task of a connected conversation. |
+| `task_step` | `progress`, or `token` for `step_type: "reasoning.delta"` | An agent's thought-process step; a delta's `metadata.chunk` is the next piece of the streamed answer text and `metadata.index` its position from 0. |
+| `task_complete` (attributed) or `agent` | `progress`, `result` or `error` | `content`, `agent_id`, `agent_name`, `skill_used`, `status`, `route`, `message_id`. A Manager update is `progress`; the final answer is `result` and carries `sources` (`doc_id`, `chunk_id`, `title`, `page`); a task that ended without one is `error` with `status` and `reason`. |
 
 ```json
 {
-  "type": "agent_response",
-  "agent_id": "agent-001",
-  "content": "Processing result",
+  "type": "task_complete",
+  "content": "Q4 2025 revenue was $4.2M.",
+  "agent_id": "8b9f…",
+  "agent_name": "Finance-Analyst",
+  "skill_used": "financial_analysis",
   "status": "completed",
-  "timestamp": "2025-09-25T15:30:00Z"
+  "route": "agent",
+  "message_id": 412,
+  "sources": [{"doc_id": "6d0e…", "chunk_id": "6d0e…:3", "title": "1_Q4_2025_Financial_Report.md", "page": null}],
+  "task_id": "3f6c…",
+  "seq": 21,
+  "event": "result",
+  "stage": "generation",
+  "ts": "2026-10-05T09:33:00Z"
 }
 ```
 
-Additional server-side message types: `task_update`, `system_notification`,
-`connection_status`.
+A client that was disconnected calls `GET /tasks/{task_id}/events?since=<last seq>` and handles the returned frames like live ones. The full frame reference is in `docs/api-reference.md` ("Server to Client").
 
 #### Connection lifecycle
 
 1. Client opens WS with token.
 2. Server validates and accepts; session registered in Redis.
 3. Bidirectional messaging.
-4. Server broadcasts task updates, agent responses.
+4. Server sends the events of the conversation's tasks as they are stored.
 5. Either side closes; server cleans up Redis session.
 
 #### Error codes
@@ -1166,6 +1190,7 @@ Individual messages within a conversation, storing both user inputs and agent re
 | `content` | String | Not null | The message text. |
 | `created_at` | DateTime (tz) | Not null, server default `now()` | Timestamp of message creation. |
 | `conversation_id` | Integer | FK -> `conversations.id`, not null, indexed | Parent conversation. |
+| `sources` | JSON | Nullable | Passages an agent answer cites (`doc_id`, `chunk_id`, `title`, `page`); `null` for other messages. |
 
 **Relationships:**
 
@@ -1242,6 +1267,7 @@ Stores the output produced by a completed task, including the agent's answer, in
 | `result_data` | JSON | Nullable | The agent's final answer payload. |
 | `history` | JSON | Nullable | Record of intermediate ReAct reasoning steps (thoughts, actions, observations). |
 | `future_actions` | JSON | Nullable | List of suggested follow-up actions the user or system could take. |
+| `sources` | JSON | Nullable | Passages the answer cites; for the root of a chain, every source of its steps, each `chunk_id` once. |
 | `created_at` | DateTime (tz) | Not null, server default `now()` | Result creation timestamp. |
 
 **Relationships:**

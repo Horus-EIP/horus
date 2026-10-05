@@ -167,6 +167,20 @@ class TestDocumentLevelRoutes:
         assert body["matched_titles"] == [HANDBOOK_TITLE]
         assert body["text"] == HANDBOOK
 
+    def test_resolve_by_filename_keeps_each_matched_document_apart(self, client):
+        first_id = _upload(client, HANDBOOK_TITLE, HANDBOOK)
+        second_id = _upload(client, HANDBOOK_TITLE, "Second copy of the handbook.")
+
+        body = client.get("/file/resolve", params={"name": HANDBOOK_TITLE}).json()
+
+        assert sorted(document["doc_id"] for document in body["documents"]) == sorted(
+            [first_id, second_id]
+        )
+        texts = {document["doc_id"]: document["text"] for document in body["documents"]}
+        assert texts[first_id] == HANDBOOK
+        assert texts[second_id] == "Second copy of the handbook."
+        assert {document["title"] for document in body["documents"]} == {HANDBOOK_TITLE}
+
     def test_the_analysis_is_stored_once_per_document(self, client, fake_collection):
         handbook_id = _upload(client, HANDBOOK_TITLE, HANDBOOK)
 

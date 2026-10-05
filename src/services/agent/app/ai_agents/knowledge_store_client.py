@@ -79,13 +79,50 @@ def passages_from_query_result(result: dict[str, Any]) -> list[dict[str, Any]]:
     return passages
 
 
-def format_passage(passage: dict[str, Any]) -> str:
-    title = passage.get("title")
-    if not title:
-        return passage.get("text") or ""
+def _source_line(passage: dict[str, Any]) -> str:
+    title = passage.get("title") or ""
     page = passage.get("page")
-    label = f"{title}, page {page}" if page is not None else title
-    return f"[Source: {label}]\n{passage.get('text') or ''}"
+    return f"{title}, page {page}" if title and page is not None else title
+
+
+def format_passage(passage: dict[str, Any], label: str | None = None) -> str:
+    text = passage.get("text") or ""
+    source_line = _source_line(passage)
+    if label:
+        header = f"[{label}] {source_line}" if source_line else f"[{label}]"
+        return f"{header}\n{text}"
+    if not source_line:
+        return text
+    return f"[Source: {source_line}]\n{text}"
+
+
+def passages_from_resolved_documents(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    documents = payload.get("documents")
+    if isinstance(documents, list):
+        return [
+            {
+                "chunk_id": None,
+                "doc_id": str(document.get("doc_id") or ""),
+                "title": document.get("title") or "",
+                "page": None,
+                "text": document.get("text") or "",
+            }
+            for document in documents
+            if isinstance(document, dict) and (document.get("text") or "").strip()
+        ]
+    doc_ids = payload.get("doc_ids") or []
+    titles = payload.get("matched_titles") or []
+    if len(doc_ids) != 1:
+        return []
+    return [
+        {
+            "chunk_id": None,
+            "doc_id": str(doc_ids[0]),
+            "title": titles[0] if titles else "",
+            "page": None,
+            "text": (payload.get("text") or "").strip(),
+        }
+    ]
 
 
 def format_passages(passages: list[dict[str, Any]]) -> str:
@@ -250,6 +287,7 @@ class KnowledgeStoreClient:
                             return {
                                 "query": query,
                                 "data": f"Error: Invalid request - {error_detail}",
+                                "error": f"Invalid request - {error_detail}",
                             }
                     last_exception = e
                     logger.warning(
@@ -304,6 +342,7 @@ class KnowledgeStoreClient:
         return {
             "query": query,
             "data": f"Error: {error_msg}",
+            "error": error_msg,
         }
 
     async def fetch_document_inventory(
@@ -396,6 +435,7 @@ class KnowledgeStoreClient:
                     return {
                         "query": f"__file__:{name}",
                         "data": header + text,
+                        "passages": passages_from_resolved_documents(payload),
                     }
                 except httpx.HTTPStatusError as e:
                     if e.response.status_code == 404:

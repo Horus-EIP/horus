@@ -25,6 +25,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import ai_agents.decision_making_agent as dma
+from ai_agents.answer_contract import AnswerStatus
 from ai_agents.decision_making_agent import DecisionMakingAgent
 from ai_agents.generation_stop import GenerationTimedOut
 from ai_agents.knowledge_retrieval_agent import (
@@ -1177,6 +1178,21 @@ def _pipeline(use_react: bool = False, tool_registry=None):
     )
 
 
+def _answers(decision, answer: str, sources=None) -> None:
+    decision.complete.return_value = json.dumps(
+        {"status": "ok", "answer": answer, "sources": sources or []}
+    )
+
+
+def _request(decision) -> str:
+    return decision.complete.call_args.args[0]
+
+
+def _passages(decision) -> str:
+    user_content = decision.complete.call_args.args[1]
+    return user_content.split("Passages:\n", 1)[1].split("\n\nAnswer this request", 1)[0]
+
+
 class TestRAGPipelineConstruction:
     def test_builds_default_registry(self):
         pipe, _, _ = _pipeline()
@@ -1220,21 +1236,19 @@ class TestGenerateResponse:
     async def test_returns_decision_output(self):
         pipe, retrieval, decision = _pipeline()
         retrieval.fetch = AsyncMock(return_value={"data": "context text"})
-        decision.decide.return_value = "final insight"
+        _answers(decision, "final insight")
         out = await pipe.generate_response("what is x?")
-        assert out == "final insight"
-        # decide is invoked with the query and the retrieved context.
-        _, kwargs = decision.decide.call_args
-        assert kwargs["query"] == "what is x?"
-        assert kwargs["context"] == "context text"
+        assert out.status is AnswerStatus.OK
+        assert out.answer == "final insight"
+        assert _request(decision) == "what is x?"
+        assert _passages(decision) == "context text"
 
     async def test_missing_data_key_defaults_to_empty_context(self):
         pipe, retrieval, decision = _pipeline()
         retrieval.fetch = AsyncMock(return_value={})
-        decision.decide.return_value = "answer"
+        _answers(decision, "answer")
         await pipe.generate_response("q")
-        _, kwargs = decision.decide.call_args
-        assert kwargs["context"] == ""
+        assert _passages(decision) == "(no passages)"
 
     async def test_timeout_fails_with_the_limit_in_its_message(self):
         pipe, retrieval, decision = _pipeline()
@@ -1291,12 +1305,18 @@ class TestProcessTask:
         reg.has.return_value = False
         pipe, retrieval, decision = _pipeline(tool_registry=reg)
         retrieval.fetch = AsyncMock(return_value={"data": "ctx"})
-        decision.decide.return_value = "single shot answer"
+        _answers(decision, "single shot answer")
         result = await pipe.process_task({"task_id": "T2", "query": "hello"})
         assert result == {
             "task_id": "T2",
             "response": "single shot answer",
             "status": "completed",
+            "agent_answer": {
+                "status": "ok",
+                "answer": "single shot answer",
+                "sources": [],
+                "reason": None,
+            },
         }
 
     async def test_react_mode_via_task_flag(self):
@@ -1334,7 +1354,7 @@ class TestProcessTask:
         reg.has.return_value = False
         pipe, retrieval, decision = _pipeline(tool_registry=reg)
         retrieval.fetch = AsyncMock(return_value={"data": "ctx"})
-        decision.decide.return_value = "answer"
+        _answers(decision, "answer")
         # Empty operation string -> registry lookup is skipped entirely.
         result = await pipe.process_task(
             {"task_id": "T5", "operation": "", "query": "q"}
@@ -1355,8 +1375,8 @@ class TestProcessTask:
                 {"doc_id": "doc-budget", "title": "budget.md", "text": "2026 BUDGET 5M"},
             ],
         })
-        decision.decide.return_value = "4.2M"
-        block = "[file: q4.md (source=knowledge_store)]\nQ4 REVENUE 4.2M"
+        _answers(decision, "4.2M")
+        block = "[S1] [file: q4.md (source=knowledge_store)]\nQ4 REVENUE 4.2M"
         result = await pipe.process_task(
             {
                 "task_id": "T6",
@@ -1368,13 +1388,12 @@ class TestProcessTask:
         )
         assert result["response"] == "4.2M"
         retrieval.fetch.assert_awaited_once_with("what was the revenue?")
-        _, kwargs = decision.decide.call_args
-        assert kwargs["query"] == "what was the revenue?"
-        assert kwargs["context"] == (
+        assert _request(decision) == "what was the revenue?"
+        assert _passages(decision) == (
             f"{block}\n--- Other Knowledge Store Passages ---\n"
-            "[Source: budget.md]\n2026 BUDGET 5M"
+            "[S2] budget.md\n2026 BUDGET 5M"
         )
-        assert kwargs["context"].count("Q4 REVENUE 4.2M") == 1
+        assert _passages(decision).count("Q4 REVENUE 4.2M") == 1
 
     async def test_passages_of_an_attached_file_without_doc_id_are_dropped_by_title(self):
         reg = MagicMock()
@@ -1383,7 +1402,7 @@ class TestProcessTask:
         retrieval.fetch = AsyncMock(return_value={
             "passages": [{"doc_id": "doc-q4", "title": "q4.md", "text": "Q4 REVENUE 4.2M"}],
         })
-        decision.decide.return_value = "4.2M"
+        _answers(decision, "4.2M")
         block = "[file: q4.md (source=inline)]\nQ4 REVENUE 4.2M"
         await pipe.process_task(
             {
@@ -1394,15 +1413,14 @@ class TestProcessTask:
                 "files": [{"filename": "q4.md", "source": "inline"}],
             }
         )
-        _, kwargs = decision.decide.call_args
-        assert kwargs["context"] == block
+        assert _passages(decision) == block
 
     async def test_a_failing_retrieval_still_answers_from_the_attached_files(self):
         reg = MagicMock()
         reg.has.return_value = False
         pipe, retrieval, decision = _pipeline(tool_registry=reg)
         retrieval.fetch = AsyncMock(side_effect=RuntimeError("knowledge store down"))
-        decision.decide.return_value = "4.2M"
+        _answers(decision, "4.2M")
         block = "[file: q4.md (source=knowledge_store)]\nQ4 REVENUE 4.2M"
         result = await pipe.process_task(
             {
@@ -1414,8 +1432,7 @@ class TestProcessTask:
             }
         )
         assert result["response"] == "4.2M"
-        _, kwargs = decision.decide.call_args
-        assert kwargs["context"] == block
+        assert _passages(decision) == block
 
     async def test_attachments_that_fill_the_context_cap_are_not_joined_by_retrieval(
         self, monkeypatch
@@ -1425,7 +1442,7 @@ class TestProcessTask:
         reg.has.return_value = False
         pipe, retrieval, decision = _pipeline(tool_registry=reg)
         retrieval.fetch = AsyncMock(return_value={"data": "x", "passages": []})
-        decision.decide.return_value = "answer"
+        _answers(decision, "answer")
         block = "[file: big.md (source=knowledge_store)]\n" + "y" * 1000
         await pipe.process_task(
             {
@@ -1437,8 +1454,7 @@ class TestProcessTask:
             }
         )
         retrieval.fetch.assert_not_called()
-        _, kwargs = decision.decide.call_args
-        assert kwargs["context"] == block
+        assert _passages(decision) == block
 
     async def test_attached_file_text_appears_once_in_the_prompt(self):
         body = "Q4 REVENUE WAS 4.2M"
@@ -1448,9 +1464,9 @@ class TestProcessTask:
         )
         prompts = []
 
-        def served(_self, user_content, system_content):
+        def served(_self, user_content, system_content, **_kwargs):
             prompts.append(f"{system_content}\n\n{user_content}")
-            return "4.2M"
+            return json.dumps({"status": "ok", "answer": "4.2M"})
 
         retrieval = MagicMock()
         retrieval.fetch = AsyncMock(return_value={"data": body})
@@ -1475,10 +1491,9 @@ class TestProcessTask:
         reg.has.return_value = False
         pipe, retrieval, decision = _pipeline(tool_registry=reg)
         retrieval.fetch = AsyncMock(return_value={"data": "ctx"})
-        decision.decide.return_value = "answer"
+        _answers(decision, "answer")
         await pipe.process_task(
             {"task_id": "T8", "query": "full q", "demand": "q", "attached_context": None}
         )
         retrieval.fetch.assert_awaited_once_with("full q")
-        _, kwargs = decision.decide.call_args
-        assert kwargs["query"] == "full q"
+        assert _request(decision) == "full q"

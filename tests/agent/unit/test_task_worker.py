@@ -90,6 +90,38 @@ def test_a_task_this_run_already_started_is_never_started_again():
     server.claim_task.assert_called_once_with("t1", None)
 
 
+def test_a_second_attempt_the_orchestrator_asked_for_runs_the_task_again():
+    server = MagicMock()
+    server.claim_task.return_value = consumers.TaskClaim.CLAIMED
+    runs = []
+
+    async def run(task):
+        runs.append(task["task_id"])
+        return {"response": "ANSWER"}
+
+    server.get_pipeline_for_type.return_value = SimpleNamespace(process_task=run)
+    workers = consumers.TaskWorkerPool(1)
+    channel = MagicMock()
+
+    with patch("agent_server.server", server, create=True):
+        for tag, attempt in ((1, None), (2, 2), (3, 2)):
+            body = {"demand": "q", "task_id": "t1", "conversation_id": "c"}
+            if attempt:
+                body["attempt"] = attempt
+            consumers._handle_delivery(
+                channel,
+                SimpleNamespace(delivery_tag=tag),
+                SimpleNamespace(headers=None),
+                json.dumps(body).encode(),
+                "general",
+                workers,
+            )
+            assert _wait_until(workers.has_free_slot)
+
+    assert runs == ["t1", "t1"]
+    assert server.claim_task.call_count == 2
+
+
 def test_the_pool_remembers_only_its_most_recent_task_ids():
     workers = consumers.TaskWorkerPool(1, remembered_tasks=2)
     for task_id in ("t1", "t2", "t3"):

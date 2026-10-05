@@ -7,6 +7,8 @@ import { MessageFlow } from '@/components/tasks/message-flow';
 import { DelegationChain } from '@/components/tasks/delegation-chain';
 import { CollaborationView } from '@/components/agents/collaboration-view';
 import { TaskFacts } from '@/components/tasks/task-facts';
+import { AnswerSources } from '@/components/chat/answer-sources';
+import type { AnswerSource } from '@/lib/types';
 import type { TaskDetail, TaskStatus, Subtask, AgentMessage, DelegationStep } from '@/lib/tasks/types';
 import { isTaskInProgress, taskStatusByAgentId } from '@/lib/tasks/agent-activity';
 import { chatApi, type TaskDetails } from '@/lib/chat/api';
@@ -45,7 +47,9 @@ function historyToMessages(history: unknown[] | undefined): AgentMessage[] {
   });
 }
 
-function buildTaskDetail(data: TaskDetails): TaskDetail & { result?: string; query: string } {
+type TaskDetailView = TaskDetail & { result?: string; query: string; sources?: AnswerSource[] };
+
+function buildTaskDetail(data: TaskDetails): TaskDetailView {
   const subtasks: Subtask[] = (data.subtasks ?? []).map((st) => ({
     id: st.id,
     title: st.title,
@@ -92,6 +96,7 @@ function buildTaskDetail(data: TaskDetails): TaskDetail & { result?: string; que
     // Keep these so the page can render the final answer + original query.
     result: data.result,
     query: data.query,
+    sources: data.sources,
   };
 }
 
@@ -205,7 +210,7 @@ export default function TaskDetailPage() {
 
   const statusClass = STATUS_COLORS[task.status] ?? STATUS_COLORS.pending;
 
-  const taskWithExtras = task as TaskDetail & { result?: string; query?: string };
+  const taskWithExtras = task as Partial<TaskDetailView> & TaskDetail;
   const finalAnswer = taskWithExtras.result ?? '';
   const originalQuery = taskWithExtras.query ?? task.title;
 
@@ -250,9 +255,12 @@ export default function TaskDetailPage() {
             Result
           </p>
           {finalAnswer ? (
-            <pre className="whitespace-pre-wrap font-sans text-sm text-[var(--text)]">
-              {finalAnswer}
-            </pre>
+            <>
+              <pre className="whitespace-pre-wrap font-sans text-sm text-[var(--text)]">
+                {finalAnswer}
+              </pre>
+              <AnswerSources sources={taskWithExtras.sources} />
+            </>
           ) : (
             <p className="text-sm text-[var(--textSoft)]">
               Task is marked completed but no result body was returned by the

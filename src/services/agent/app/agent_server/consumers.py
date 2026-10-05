@@ -33,6 +33,7 @@ from enum import Enum
 import pika
 from pika.exceptions import AMQPError, ChannelClosedByBroker
 
+from ai_agents.answer_contract import AgentAnswer, AnswerStatus, answer_of, source_label
 from ai_agents.generation_stop import GenerationTimedOut
 from config.settings import RABBITMQ_PORT
 from core.logger import get_correlation_id, get_logger, set_correlation_id
@@ -48,6 +49,11 @@ DEFAULT_MAX_CONCURRENT_TASKS = 1
 _IDLE_POLL_SECONDS = 0.5
 _CLAIM_RETRY_SECONDS = 5.0
 REMEMBERED_TASK_IDS = 10_000
+RESULT_STATUS_BY_ANSWER = {
+    AnswerStatus.OK: "completed",
+    AnswerStatus.NOT_FOUND: "not_found",
+    AnswerStatus.FAILED: "failed",
+}
 
 
 class TaskClaim(str, Enum):
@@ -236,8 +242,8 @@ def _prepend_files_to_demand(demand: str, resolved: list[dict]) -> str:
 def _attached_files_block(resolved: list[dict]) -> str:
     pieces: list[str] = ["--- Attached Files ---"]
     total = 0
-    for r in resolved:
-        header = f"[file: {r['filename']} (source={r['source']})]"
+    for index, r in enumerate(resolved, start=1):
+        header = f"[{source_label(index)}] [file: {r['filename']} (source={r['source']})]"
         body = r["text"] or "(no content available)"
         budget = _MAX_TOTAL_CONTEXT_CHARS - total - len(header) - 2
         if budget <= 0:
@@ -387,6 +393,14 @@ def _pull_tasks(connection, channel, queue_to_type: dict[str, str], workers) -> 
             connection.process_data_events(time_limit=pause)
 
 
+def _delivery_key(task_id: str, attempt) -> str:
+    try:
+        number = int(attempt)
+    except (TypeError, ValueError):
+        number = 1
+    return task_id if number <= 1 else f"{task_id}#attempt-{number}"
+
+
 def _decode_payload(body) -> dict:
     try:
         return json.loads(body.decode("utf-8")) if body else {}
@@ -425,8 +439,9 @@ def _handle_delivery(channel, method, properties, body, queue_type: str, workers
         return 0.0
 
     _adopt_assigned_profile(payload, queue_type)
+    delivery = _delivery_key(task_id, payload.get("attempt")) if task_id else None
     if task_id:
-        if workers.has_started(task_id):
+        if workers.has_started(delivery):
             logger.info(
                 "Task %s was delivered again after this worker started it; its message is dropped",
                 task_id,
@@ -454,7 +469,7 @@ def _handle_delivery(channel, method, properties, body, queue_type: str, workers
     try:
         channel.basic_ack(delivery_tag=method.delivery_tag)
     finally:
-        workers.submit(lambda: _run_task(payload, queue_type, correlation_id), task_id)
+        workers.submit(lambda: _run_task(payload, queue_type, correlation_id), delivery)
     return 0.0
 
 
@@ -485,7 +500,7 @@ def _task_dict(task_id: str, demand: str, payload: dict, resolved_files: list[di
     }
 
 
-async def _answer(payload: dict, queue_type: str, task_id: str, demand: str) -> str:
+async def _answer(payload: dict, queue_type: str, task_id: str, demand: str) -> AgentAnswer:
     from agent_server import server
 
     resolved_files = await _resolve_attached_files(payload.get("files") or [])
@@ -503,13 +518,14 @@ async def _answer(payload: dict, queue_type: str, task_id: str, demand: str) -> 
         effective_type = "general"
         pipeline = server.get_pipeline_for_type("general")
     if effective_type == "general":
-        result_pipeline = await pipeline.process_task(task_dict)
-        return result_pipeline["response"]
+        return answer_of(await pipeline.process_task(task_dict))
     if effective_type in ("researcher", "analyst", "writer"):
-        return await pipeline.process_request(
-            task_type=op,
-            data=task_dict.get("query"),
-            extra_parameters=task_dict,
+        return answer_of(
+            await pipeline.process_request(
+                task_type=op,
+                data=task_dict.get("query"),
+                extra_parameters=task_dict,
+            )
         )
     raise ValueError(f"Unsupported queue type: {effective_type}")
 
@@ -588,11 +604,24 @@ def _run_task(payload: dict, queue_type: str, correlation_id: str | None) -> Non
     asyncio.set_event_loop(loop)
     start_time = time_module.time()
     try:
-        final_result_text = loop.run_until_complete(
-            _answer(payload, queue_type, task_id, demand)
-        )
+        answer = loop.run_until_complete(_answer(payload, queue_type, task_id, demand))
         processing_duration = time_module.time() - start_time
         task_processing_duration.observe(processing_duration)
+        if answer.status is AnswerStatus.FAILED:
+            task_processing_total.labels(status="error").inc()
+            agent_errors_total.labels(error_type=answer.reason or "error").inc()
+            logger.warning(
+                "Task answer failed: task_id=%s reason=%s duration=%.2fs peak_rss_mb=%s",
+                task_id,
+                answer.reason,
+                processing_duration,
+                peak_rss_mb(),
+            )
+            _report_failure(emit_step, "Answer failed", answer.answer, "generation")
+            _send_failed_result(
+                answer.answer, conversation_id, task_id, payload, answer.reason or "error"
+            )
+            return
         task_processing_total.labels(status="success").inc()
         logger.info(
             "Task processed (%s): task_id=%s duration=%.2fs peak_rss_mb=%s",
@@ -602,11 +631,14 @@ def _run_task(payload: dict, queue_type: str, correlation_id: str | None) -> Non
             peak_rss_mb(),
         )
         server.send_result(
-            final_result_text,
+            answer.answer,
             conversation_id,
             task_id,
             assigned_agent_id=assigned_agent_id,
             skill_used=payload.get("skill_used") or payload.get("operation"),
+            status=RESULT_STATUS_BY_ANSWER[answer.status],
+            reason=answer.reason,
+            sources=answer.sources,
         )
     except GenerationTimedOut as timed_out:
         task_processing_duration.observe(time_module.time() - start_time)

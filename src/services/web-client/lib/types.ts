@@ -16,6 +16,13 @@ export interface CreateConversationResponse {
   conversation_id: string;
 }
 
+export interface AnswerSource {
+  doc_id: string | null;
+  chunk_id: string | null;
+  title: string | null;
+  page: number | null;
+}
+
 export interface HistoryItem {
   role: HistoryItemRole;
   message: string;
@@ -27,6 +34,7 @@ export interface HistoryItem {
   /** Skill the agent exercised for this turn. */
   skillUsed?: string;
   messageId?: number;
+  sources?: AnswerSource[];
 }
 
 export type TaskMode =
