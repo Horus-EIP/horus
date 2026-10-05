@@ -170,13 +170,16 @@ CREATE_TASK_OPENAPI_EXTRA = {
                                 "type": "object",
                                 "properties": {
                                     "filename": {"type": "string"},
+                                    "doc_id": {"type": "string"},
                                 },
                                 "required": ["filename"],
                             },
                             "description": (
                                 "Files already stored in the knowledge store, "
-                                "referenced by filename. The worker resolves "
-                                "their text on demand."
+                                "referenced by filename and, optionally, by "
+                                "knowledge-store document id (doc_id), which "
+                                "tells apart documents that share a filename. "
+                                "The worker resolves their text on demand."
                             ),
                         },
                         "inline_files": {

@@ -36,6 +36,7 @@ export type TaskMode =
 
 export interface KnowledgeStoreFileRef {
   filename: string;
+  doc_id?: string;
 }
 
 export interface InlineTaskFile {

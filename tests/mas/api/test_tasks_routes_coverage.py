@@ -952,6 +952,68 @@ class TestInlineFileValidation:
         assert any(f["source"] == "inline" for f in payload["files"])
 
 
+@patch("tasks.routes._publish_task_to_work_queue")
+@patch("tasks.routes.send_messages_via_websockets")
+@patch("tasks.routes.add_messages")
+@patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
+@patch(
+    "tasks.routes.select_agent_by_mode",
+    return_value=("agent-1", "demand", None, []),
+)
+@patch("tasks.routes.insert_new_task", return_value="file-task")
+class TestAttachedKnowledgeStoreRefs:
+    @pytest.mark.regression
+    def test_f25_same_name_documents_dispatch_with_their_doc_ids(
+        self,
+        _insert,
+        _by_mode,
+        _for_task,
+        mock_add,
+        mock_ws,
+        mock_publish,
+        make_fake_client,
+        as_user,
+    ):
+        title = "1_Q4_2025_Financial_Report.md"
+        fake = _FakeSession()
+        client = make_fake_client(fake, current_user=as_user)
+        body = _task_form(
+            attached_files=[
+                {"filename": title, "doc_id": "older-copy"},
+                {"filename": title, "doc_id": "newer-copy"},
+            ],
+        )
+        r = client.post("/tasks/new_task/", json=body)
+        assert r.status_code == 200
+        _, _, payload = mock_publish.call_args.args
+        assert payload["files"] == [
+            {"source": "knowledge_store", "filename": title, "doc_id": "older-copy"},
+            {"source": "knowledge_store", "filename": title, "doc_id": "newer-copy"},
+        ]
+
+    @pytest.mark.regression
+    def test_f25_filename_only_ref_still_dispatches(
+        self,
+        _insert,
+        _by_mode,
+        _for_task,
+        mock_add,
+        mock_ws,
+        mock_publish,
+        make_fake_client,
+        as_user,
+    ):
+        fake = _FakeSession()
+        client = make_fake_client(fake, current_user=as_user)
+        body = _task_form(attached_files=[{"filename": "report.pdf"}])
+        r = client.post("/tasks/new_task/", json=body)
+        assert r.status_code == 200
+        _, _, payload = mock_publish.call_args.args
+        assert payload["files"] == [
+            {"source": "knowledge_store", "filename": "report.pdf"}
+        ]
+
+
 # --------------------------------------------------------------------------- #
 # POST /tasks/task-result/  — agent result ingestion
 # --------------------------------------------------------------------------- #
@@ -1885,6 +1947,24 @@ class TestBuildFilesPayload:
         files = _build_files_payload(form)
         # Blank-name ref dropped; the real one kept as a knowledge_store entry.
         assert files == [{"source": "knowledge_store", "filename": "doc.pdf"}]
+
+    @pytest.mark.regression
+    def test_f25_blank_doc_id_is_not_forwarded(self):
+        from schemas.schemas import TaskForm
+        from tasks.routes import _build_files_payload
+
+        form = TaskForm(
+            demand="d",
+            skills_required=[],
+            attached_files=[
+                {"filename": "doc.pdf", "doc_id": "  "},
+                {"filename": "doc.pdf", "doc_id": " abc123 "},
+            ],
+        )
+        assert _build_files_payload(form) == [
+            {"source": "knowledge_store", "filename": "doc.pdf"},
+            {"source": "knowledge_store", "filename": "doc.pdf", "doc_id": "abc123"},
+        ]
 
     def test_total_inline_cap_rejected_with_413(self):
         from fastapi import HTTPException

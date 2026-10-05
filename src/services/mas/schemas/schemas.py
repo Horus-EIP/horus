@@ -53,6 +53,7 @@ class KnowledgeStoreFileRef(BaseModel):
     """
 
     filename: str
+    doc_id: str | None = None
 
 
 class InlineFile(BaseModel):

@@ -306,7 +306,11 @@ def _build_files_payload(task: "TaskForm") -> list[dict]:
         name = (ref.filename or "").strip()
         if not name:
             continue
-        files.append({"source": "knowledge_store", "filename": name})
+        entry = {"source": "knowledge_store", "filename": name}
+        doc_id = (ref.doc_id or "").strip()
+        if doc_id:
+            entry["doc_id"] = doc_id
+        files.append(entry)
 
     total_inline = 0
     for inl in task.inline_files or []:

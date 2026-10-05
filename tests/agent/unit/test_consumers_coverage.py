@@ -133,6 +133,20 @@ class TestResolveAttachedFiles:
             {"filename": "report.pdf", "source": "knowledge_store", "text": "KS body"}
         ]
 
+    async def test_knowledge_store_ref_with_doc_id_still_resolves_by_filename(self):
+        files = [
+            {"source": "knowledge_store", "filename": "report.pdf", "doc_id": "abc123"}
+        ]
+        client = MagicMock()
+        client.resolve_by_filename = AsyncMock(return_value=None)
+        with patch(
+            "ai_agents.knowledge_store_client.KnowledgeStoreClient",
+            return_value=client,
+        ):
+            out = await consumers._resolve_attached_files(files)
+        client.resolve_by_filename.assert_awaited_once_with("report.pdf")
+        assert [r["filename"] for r in out] == ["report.pdf"]
+
     async def test_knowledge_store_none_hit_yields_empty_text(self):
         files = [{"source": "knowledge_store", "filename": "missing.pdf"}]
         client = MagicMock()
