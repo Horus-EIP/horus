@@ -358,7 +358,7 @@ export default function DashboardPage() {
         </div>
       </Modal>
 
-      <div className="flex-3 flex flex-col gap-5 p-0 w-full">
+      <div className="flex-3 flex flex-col gap-5 p-0 w-full min-w-0">
         {/* Real-time Analytics Graph */}
         <div className="rounded-2xl border border-white/10 bg-[var(--bgSoft)]/70 p-4 mx-3">
           <canvas
@@ -393,7 +393,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Agent Status Table */}
-        <div className="overflow-x-auto px-0 md:px-0 w-full max-w-[75vw] md:max-w-full mx-auto">
+        <div className="overflow-x-auto px-0 md:px-0 w-full mx-auto">
           <Info
             title="Agent Status"
             header={agentHeaders}

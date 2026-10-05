@@ -246,8 +246,8 @@ export default function KnowledgeStorePage() {
 
   return (
     <div className="flex gap-3 mt-5">
-      <div className="flex-3 flex flex-col gap-5">
-        <div className="gap-8 md:gap-10 ml-auto mr-auto grid grid-cols-2 md:flex md:grid-cols-4 md:gap-5 px-3 md:px-0 w-full md:w-200">
+      <div className="flex-3 flex flex-col gap-5 min-w-0">
+        <div className="gap-8 md:gap-10 ml-auto mr-auto grid grid-cols-2 md:flex md:grid-cols-4 md:gap-5 px-3 md:px-0 w-full md:max-w-200">
           <Card title="Total Documents" number={documents.length} />
           <Card
             title="Storage Used (bytes)"
@@ -258,7 +258,7 @@ export default function KnowledgeStorePage() {
           Upload runs automatic analysis in the knowledge store (category, entities, summary).
           The table shows that summary and a short excerpt, not the full file.
         </p>
-        <div className="overflow-x-auto px-0 md:px-0 w-full max-w-[75vw] md:max-w-full mx-auto">
+        <div className="overflow-x-auto px-0 md:px-0 w-full mx-auto">
           <Info
             title="Documents Stored"
             header={documentHeaders}

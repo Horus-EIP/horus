@@ -163,7 +163,7 @@ export const MessageList: React.FC<MessageListProps> = ({
             }`}
         >
           <div
-            className={`flex gap-2 max-w-[85%] sm:max-w-[75%]
+            className={`flex min-w-0 gap-2 max-w-[85%] sm:max-w-[75%]
               ${message.sender === "user"
                 ? "flex-row-reverse"
                 : "flex-row"
@@ -185,7 +185,7 @@ export const MessageList: React.FC<MessageListProps> = ({
             </div>
 
             <div
-              className={`rounded-2xl px-4 py-2 text-[var(--text)] text-base shadow-sm ${
+              className={`min-w-0 wrap-break-word rounded-2xl px-4 py-2 text-[var(--text)] text-base shadow-sm ${
                 message.sender === "user"
                   ? "bg-blue-500 text-white rounded-tr-none"
                   : isManager
@@ -269,11 +269,11 @@ export const MessageList: React.FC<MessageListProps> = ({
 
       {isLoading && !isHistoryLoading && (
         <div className="flex justify-start opacity-95 transition-opacity">
-          <div className="flex gap-2 max-w-[85%] sm:max-w-[75%]">
+          <div className="flex min-w-0 gap-2 max-w-[85%] sm:max-w-[75%]">
             <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--bgSoft)] border border-gray-200 dark:border-gray-700">
               <IconRobot className="w-5 h-5 text-blue-500" stroke={1.25} />
             </div>
-            <div className="bg-[var(--bgSoft)] border border-gray-200 dark:border-gray-700 rounded-2xl rounded-tl-none p-3 shadow-sm">
+            <div className="min-w-0 wrap-break-word bg-[var(--bgSoft)] border border-gray-200 dark:border-gray-700 rounded-2xl rounded-tl-none p-3 shadow-sm">
               {streamingText ? (
                 // Live "typing" preview — confirmed-clean tokens streamed from
                 // the agent. Replaced by the committed message on task_complete.
