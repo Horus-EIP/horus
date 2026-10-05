@@ -95,6 +95,16 @@ def _is_degenerate_output(text: str) -> bool:
     return score >= 5
 
 
+DEGENERATE_OUTPUT_FALLBACK = (
+    "I couldn't extract a consistent answer from the retrieved "
+    "content for this step. The chunks pulled from the knowledge "
+    "store appear fragmented or contradictory, and the model "
+    "spiraled trying to reconcile them. Please rephrase the demand "
+    "to focus on one specific question, or check the task detail "
+    "page for the raw retrieved context."
+)
+
+
 _IDEOGRAPHIC_FULL_STOP_TO_PERIOD = str.maketrans({"。": "."})
 
 
@@ -1154,14 +1164,7 @@ class DecisionMakingAgent:
                     len(text),
                     text[:400],
                 )
-                text = (
-                    "I couldn't extract a consistent answer from the retrieved "
-                    "content for this step. The chunks pulled from the knowledge "
-                    "store appear fragmented or contradictory, and the model "
-                    "spiraled trying to reconcile them. Please rephrase the demand "
-                    "to focus on one specific question, or check the task detail "
-                    "page for the raw retrieved context."
-                )
+                text = DEGENERATE_OUTPUT_FALLBACK
 
             return text
         except Exception as e:

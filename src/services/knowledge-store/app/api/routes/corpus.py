@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from app.api.routes.file import _content_analyzer, extract_text
 from app.chroma_db import DocumentModel, knowledge_collection, store_file
+from app.chroma_db.services.corpus_version import bump_corpus_version
 from app.chroma_db.services.deleted_sources import forget_deleted, was_deleted
 from app.core.logging import get_logger
 from app.services.content_analyzer import ContentAnalyzer
@@ -233,6 +234,7 @@ def _drop_previous_versions(rel: str, keep_id: str) -> int:
     except Exception as exc:  # noqa: BLE001
         logger.warning("corpus: stale delete failed for %s: %s", rel, exc)
         return 0
+    bump_corpus_version()
     return len(stale)
 
 _scan_slot = asyncio.Semaphore(1)

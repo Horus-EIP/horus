@@ -1577,6 +1577,25 @@ Categories are sorted by count in descending order. A document stored without a 
 
 ---
 
+#### GET /corpus-version
+
+Return an opaque version of the indexed corpus. It changes whenever an entry is added to or removed from the index: every upload (`POST /file`, `POST /file/{type}`, `POST /`), every delete (`DELETE /{id}`), and every `POST /corpus/scan` that ingests a file or replaces an older version of one. A scan that skips every file, a dry run, a query or a listing leaves it unchanged. The version lives in memory, so a restart of the service also changes it. Restart the service after a re-index done outside it, such as `scripts/migrate-embeddings.py`.
+
+The agent's response cache (`AGENT_RESPONSE_CACHE=1`) puts this version in its cache key, so an answer cached before a change is never served after it. The agent reads the version again after at most `AGENT_RESPONSE_CACHE_VERSION_TTL` seconds (default `5`). When the read fails, the agent answers without the cache.
+
+**Auth:** None (internal service). Unlike the `/corpus` routes, it needs no `X-Corpus-Token`.
+
+**Response:** `200 OK`
+
+```json
+{
+  "version": "3f9a2c1e7b4d-12",
+  "changed_at": "2026-10-05T09:30:12.000000+00:00"
+}
+```
+
+---
+
 #### POST /upload
 
 Upload a file (PDF, DOCX, TXT), extract its text content, run auto-analysis, and chunk the text for storage.

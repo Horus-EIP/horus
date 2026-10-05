@@ -129,6 +129,10 @@ class RAGPipeline:
         rquery = retrieval_query or query
         if len(rquery) > _RETRIEVAL_QUERY_CHAR_CAP:
             rquery = rquery[:_RETRIEVAL_QUERY_CHAR_CAP]
+
+        from ai_agents.response_cache import current_corpus_version, get_cached, set_cached
+
+        corpus_version = await current_corpus_version()
         data = await self.retrieval_agent.fetch(rquery)
         context_text = data.get("data", "")
 
@@ -136,9 +140,7 @@ class RAGPipeline:
         # context + generation params), so a hit is safe across users and
         # document versions — different retrieval yields a different key — and
         # skips the costly model generation. No-op unless AGENT_RESPONSE_CACHE.
-        from ai_agents.response_cache import get_cached, set_cached
-
-        cached = await get_cached(query, context_text)
+        cached = await get_cached(query, context_text, corpus_version)
         if cached is not None:
             emit_step(
                 "cache.hit",
@@ -173,7 +175,7 @@ class RAGPipeline:
                 "many times slower than on a GPU."
             )
 
-        await set_cached(query, context_text, insight)
+        await set_cached(query, context_text, corpus_version, insight)
         return insight
 
     async def generate_response_react(self, query: str) -> dict[str, Any]:

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.chroma_db.models import DocumentModel, SmartSearchRequest
+from app.chroma_db.services.corpus_version import bump_corpus_version
 from app.chroma_db.services.deleted_sources import remember_deleted
 from app.chroma_db.setup import get_embedding, knowledge_collection
 from app.core.logging import get_logger
@@ -78,6 +79,7 @@ async def store_file(
         metadatas=[metadata],
         embeddings=[embedding],
     )
+    bump_corpus_version()
 
 
 async def query_knowledge(query: str, n_results: int) -> dict:
@@ -196,6 +198,7 @@ async def delete_document(id: str) -> dict:
     remember_deleted({"doc_id": entry_id, **metadata} for entry_id, metadata in entries.items())
     deleted_ids = list(entries)
     knowledge_collection.delete(ids=deleted_ids)
+    bump_corpus_version()
     return {"deleted_ids": deleted_ids, "removed_files": _remove_unused_files(entries.values())}
 
 

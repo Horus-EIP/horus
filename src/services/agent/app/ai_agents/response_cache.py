@@ -1,16 +1,12 @@
 """Redis-backed exact-match response cache for the agent's RAG pipeline (Phase 3).
 
 The cache key is ``hash(normalized_query + sha256(retrieved_context) +
-generation_params)``. Hashing the *retrieved context* (not just the query) makes
-the cache safe by construction:
+corpus_version + generation_params)``. Hashing the *retrieved context* (not just
+the query) makes the cache safe by construction:
 
 * **Permission scoping is automatic** — two users who retrieve different
   documents (because of access controls) produce different context, hence
   different keys; one user's answer can never be served to another.
-* **Version invalidation is automatic** — editing a document changes the text it
-  retrieves into, which changes the context hash, which misses the cache. No
-  explicit upload/delete invalidation hooks (and no knowledge-store changes) are
-  needed.
 
 A hit therefore skips only the expensive generation step (seconds), never
 retrieval (~0.4s), which is exactly the part we can safely reuse. Disabled
@@ -24,6 +20,17 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
+import time
+
+import httpx
+
+from ai_agents.decision_making_agent import (
+    DEGENERATE_OUTPUT_FALLBACK,
+    _is_degenerate_output,
+    _normalize_model_text,
+)
+from config.settings import KNOWLEDGE_STORE_API_PREFIX, KNOWLEDGE_STORE_URL
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +43,23 @@ except Exception:  # redis not installed (e.g. before the dependency lands)
     _REDIS_AVAILABLE = False
 
 # Bump to invalidate every existing entry when the keying scheme changes.
-_CACHE_VERSION = "v1"
+_CACHE_VERSION = "v2"
 _KEY_PREFIX = "agent:respcache:"
+_CORPUS_VERSION_TIMEOUT_SECONDS = 1.0
+_REFUSAL = re.compile(
+    "|".join(
+        (
+            r"\b(?:does|do)(?: not|n't) (?:contain|include|have|mention|provide) "
+            r"(?:this|that|the requested|any|enough) information\b",
+            r"\b(?:is|are)(?: not|n't) covered in the (?:current|retrieved|provided)\b",
+            r"\bno (?:relevant )?information (?:about|on|regarding)\b",
+            r"\bi(?: cannot| can't| am unable to|'m unable to) (?:answer|find|provide|determine)\b",
+            r"^(?:i'm|i am) sorry\b",
+        )
+    )
+)
+
+_corpus_version_memo: tuple[str, float] | None = None
 
 
 def cache_enabled() -> bool:
@@ -72,11 +94,66 @@ def _gen_params_signature() -> str:
     )
 
 
-def _key(query: str, context: str) -> str:
-    normalized_query = " ".join((query or "").split()).lower()
+def _corpus_version_ttl_seconds() -> float:
+    try:
+        return max(0.0, float(os.getenv("AGENT_RESPONSE_CACHE_VERSION_TTL", "5")))
+    except ValueError:
+        return 5.0
+
+
+def _corpus_version_url() -> str:
+    return f"{KNOWLEDGE_STORE_URL.rstrip('/')}{KNOWLEDGE_STORE_API_PREFIX}/corpus-version"
+
+
+async def _fetch_corpus_version() -> str:
+    async with httpx.AsyncClient(timeout=_CORPUS_VERSION_TIMEOUT_SECONDS) as client:
+        response = await client.get(_corpus_version_url())
+        response.raise_for_status()
+        version = response.json()["version"]
+    if not isinstance(version, str) or not version:
+        raise ValueError(f"unusable corpus version {version!r}")
+    return version
+
+
+async def current_corpus_version() -> str | None:
+    global _corpus_version_memo
+    if not cache_enabled():
+        return None
+    now = time.monotonic()
+    memo = _corpus_version_memo
+    if memo is not None and now - memo[1] < _corpus_version_ttl_seconds():
+        return memo[0]
+    try:
+        version = await _fetch_corpus_version()
+    except Exception as exc:
+        logger.warning("response cache bypassed: corpus version unavailable (%r)", exc)
+        return None
+    _corpus_version_memo = (version, now)
+    return version
+
+
+def _looks_like_refusal(text: str) -> bool:
+    return _REFUSAL.search(text.lower().replace("\u2019", "'")) is not None
+
+
+def is_cacheable_answer(answer: str | None) -> bool:
+    text = _normalize_model_text(answer or "").strip()
+    if not text or text == DEGENERATE_OUTPUT_FALLBACK:
+        return False
+    return not _is_degenerate_output(text) and not _looks_like_refusal(text)
+
+
+def _key(query: str, context: str, corpus_version: str) -> str:
+    normalized_query = " ".join(_normalize_model_text(query or "").split()).lower()
     context_hash = hashlib.sha256((context or "").encode("utf-8")).hexdigest()
     raw = "\x00".join(
-        (_CACHE_VERSION, normalized_query, context_hash, _gen_params_signature())
+        (
+            _CACHE_VERSION,
+            corpus_version,
+            normalized_query,
+            context_hash,
+            _gen_params_signature(),
+        )
     )
     return _KEY_PREFIX + hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -105,31 +182,36 @@ async def _close(client) -> None:
         pass
 
 
-async def get_cached(query: str, context: str) -> str | None:
+async def get_cached(query: str, context: str, corpus_version: str | None) -> str | None:
     """Return a cached answer for this exact (query, context), or None."""
-    if not cache_enabled():
+    if corpus_version is None or not cache_enabled():
         return None
     client = _new_client()
     try:
-        return await client.get(_key(query, context))
+        answer = await client.get(_key(query, context, corpus_version))
     except Exception:  # network/redis hiccup → just generate
         logger.debug("response cache GET failed; generating", exc_info=True)
         return None
     finally:
         await _close(client)
+    return answer if answer is not None and is_cacheable_answer(answer) else None
 
 
-async def set_cached(query: str, context: str, answer: str) -> None:
+async def set_cached(
+    query: str, context: str, corpus_version: str | None, answer: str
+) -> None:
     """Store an answer for this exact (query, context). Best-effort."""
-    if not cache_enabled() or not answer:
+    if corpus_version is None or not cache_enabled() or not is_cacheable_answer(answer):
         return
+    key = _key(query, context, corpus_version)
+    answer = _normalize_model_text(answer)
     client = _new_client()
     try:
         ttl = _ttl_seconds()
         if ttl > 0:
-            await client.set(_key(query, context), answer, ex=ttl)
+            await client.set(key, answer, ex=ttl)
         else:
-            await client.set(_key(query, context), answer)
+            await client.set(key, answer)
     except Exception:
         logger.debug("response cache SET failed; ignoring", exc_info=True)
     finally:

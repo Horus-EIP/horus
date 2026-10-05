@@ -38,6 +38,7 @@ The service is a **FastAPI** application (port 8080) backed by:
 | `POST`   | `/smart-search`     | Search with metadata filters (category, entities) |
 | `GET`    | `/search-by-entity` | Search by entity type and value                   |
 | `GET`    | `/categories`       | List all document categories with counts          |
+| `GET`    | `/corpus-version`   | Version of the indexed corpus, changed by every add or delete |
 
 ### File routes (prefix: `/file`)
 

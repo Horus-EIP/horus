@@ -14,6 +14,7 @@ from app.chroma_db import (
     query_with_filters,
     store_file,
 )
+from app.chroma_db.services.corpus_version import current_corpus_version
 from app.core.logging import get_logger
 from app.services.content_analyzer import ContentAnalyzer
 from app.services.document_chunker import DocumentChunker
@@ -260,6 +261,33 @@ async def get_categories():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail="Error retrieving categories: " + str(e))
+
+
+@router.get(
+    "/corpus-version",
+    summary="Current corpus version",
+    description=(
+        "An opaque version of the indexed corpus. It changes on every upload, every delete, "
+        "every corpus scan that adds or removes an entry, and every restart of the service. "
+        "The agent puts it in its response cache key, so a cached answer is never served "
+        "after the corpus changed."
+    ),
+    responses={
+        200: {
+            "description": "Current corpus version",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "version": "3f9a2c1e7b4d-12",
+                        "changed_at": "2026-10-05T09:30:12.000000+00:00",
+                    }
+                }
+            },
+        }
+    },
+)
+async def get_corpus_version():
+    return current_corpus_version()
 
 
 @router.post(
