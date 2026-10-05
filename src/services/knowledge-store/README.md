@@ -10,8 +10,8 @@ The Knowledge Store is a document storage and vector search service that serves 
 The service is a **FastAPI** application (port 8080) backed by:
 
 - **ChromaDB** (persistent mode) for vector storage and similarity search.
-- **SentenceTransformers** with the `BAAI/bge-base-en-v1.5` embedding model (768-dimensional vectors, normalized).
-- **ContentAnalyzer** -- Automatic document analysis using spaCy NER, keyword-based classification, and optional LLM-powered summarization via HuggingFace transformers.
+- **FastEmbed** (ONNX Runtime, no torch) with the `BAAI/bge-base-en-v1.5` embedding model (768-dimensional vectors, normalized). A question is embedded with the BGE query prefix (`Represent this sentence for searching relevant passages: `), added once by the service: FastEmbed's own query path adds none. Passages are embedded without it.
+- **ContentAnalyzer** -- Automatic document analysis using spaCy NER (`en_core_web_trf` when installed, else `en_core_web_sm`, else regex only), keyword-based classification, and optional LLM-powered summarization via HuggingFace transformers (GPU image only).
 - **DocumentChunker** -- Splits every document at ingestion into passages of at most 1,000 characters, with about 200 characters of overlap, cut between sentences or lines. Each passage is one vector, so the end of a long document can be found (the embedder reads only the first 512 tokens of what it is given).
 - **Prometheus** metrics at `/metrics`.
 - **OpenTelemetry** instrumentation for distributed tracing.
@@ -70,13 +70,20 @@ A document is stored as passages, one Chroma entry each, with the id `{doc_id}:{
 
 ### Re-indexing existing data
 
-Documents indexed before passages existed are stored as one whole-file entry, of which only the first 512 tokens can be found. They keep working (listed, deleted, resolved) but should be re-indexed:
+Documents indexed before passages existed are stored as one whole-file entry, of which only the first 512 tokens can be found, and passages written before FastEmbed carry `embed_model` `sentence-transformers:BAAI/bge-base-en-v1.5`. Both keep working (listed, deleted, resolved, found) and are re-indexed once, by one job:
+
+- **At startup**, the service compares every stored entry with the running embedder. When it finds whole-file entries or passages with another `embed_model`, it logs `startup: re-index <job> started in the background for <n> documents ...` and starts the re-index job (`trigger: startup` in `GET /corpus/reindex`). `/health` and every other route answer while it runs; `POST /corpus/scan` answers `409` until it ends. When nothing needs it, it logs `startup: every stored passage is embedded with <embed_model>`. `KNOWLEDGE_STORE_REINDEX_ON_STARTUP=0` turns the job off and only logs how many documents need it.
+- **By hand**, for example after the startup job was turned off or failed:
 
 ```bash
 python scripts/reindex-knowledge-store.py --token "$CORPUS_SCAN_TOKEN"
 ```
 
-The script calls `POST /corpus/reindex` and follows `GET /corpus/reindex` until the job ends. The job splits every whole-file entry into passages (writing the passages first and removing the old entry last), and embeds again, in place, every passage whose `embed_model` is not the one the service runs. Documents already up to date are skipped, so the script is safe to run again, and a run that was interrupted continues where it stopped. Each changed document bumps the corpus version. It never runs together with a corpus scan (`409`). Changing the embedder (for example to FastEmbed) only needs a new `EMBED_MODEL` in `app/chroma_db/setup.py` for the next re-index to embed everything again; the vector size must stay 768.
+The script calls `POST /corpus/reindex` and follows `GET /corpus/reindex` until the job ends. The job splits every whole-file entry into passages (writing the passages first and removing the old entry last), and embeds again, in place, every passage whose `embed_model` is not the one the service runs. Documents already up to date are skipped, so the job is safe to run again, and a run that was interrupted continues where it stopped. Each changed document bumps the corpus version. It never runs together with a corpus scan (`409`). A job that ends with no failure writes the embedder into the collection metadata.
+
+`embed_model` names the runtime, its version and the model, for example `fastembed-0.8.1:BAAI/bge-base-en-v1.5`, so upgrading FastEmbed re-embeds everything once at the next start. The collection metadata records the same: `embedding_model` (`BAAI/bge-base-en-v1.5`), `embed_model`, `embedding_runtime` (`fastembed`), `embedding_runtime_version` and `dimensions` (768). Changing the model only needs a new `MODEL_NAME` in `app/chroma_db/setup.py`; the vector size must stay 768.
+
+The move from sentence-transformers to FastEmbed alone would not need a re-index: `scripts/compare-embeddings.py` embeds the demo corpus, chunked like the service chunks it, and the eval and router questions with both setups and reports the cosine similarity of each pair of vectors (re-index below 0.99). Measured on 2026-10-05 (AMD Ryzen AI 9 HX 370, Windows 11, 336 texts): BGE minimum 0.999989, mean 0.999993, the same top passage for all 84 graded eval questions; MiniLM minimum 1.000000. The startup job still re-embeds the old passages once, because their `embed_model` differs, and splits whole-file entries in the same pass.
 
 ### Deleting documents
 
@@ -86,7 +93,8 @@ The script calls `POST /corpus/reindex` and follows `GET /corpus/reindex` until 
 
 ```
 knowledge-store/
-  requirements.txt
+  requirements.txt          # CPU image: FastEmbed, no torch
+  requirements-gpu.txt      # GPU image: requirements.txt plus torch, transformers, en_core_web_trf
   app/
     main.py                 # FastAPI application setup
     __init__.py
@@ -123,8 +131,20 @@ The service reads environment variables directly. Defaults are suitable for loca
 | Variable                     | Description                | Default |
 | ---------------------------- | -------------------------- | ------- |
 | `CHROMA_TELEMETRY_ENABLED` | Disable ChromaDB telemetry | `0`   |
+| `KNOWLEDGE_STORE_EMBED_DEVICE` | `auto` (CUDA when onnxruntime offers it), `cpu`, or `cuda` (falls back to CPU with a warning when onnxruntime has no CUDA provider; the images ship the CPU onnxruntime) | `auto` |
+| `KNOWLEDGE_STORE_EMBED_THREADS` | Threads of the embedder's ONNX Runtime session; unset or not a positive number leaves the choice to onnxruntime | unset |
+| `KNOWLEDGE_STORE_REINDEX_ON_STARTUP` | `0`, `false`, `no` or `off` keeps the startup re-index from running; it then only logs how many documents need one | on |
+| `FASTEMBED_CACHE_PATH` | Where FastEmbed keeps the ONNX model. The image sets `/app/.cache/fastembed` and downloads the model there at build time | FastEmbed's default (a temp folder) |
 
 The embedding model (`BAAI/bge-base-en-v1.5`) is configured in `app/chroma_db/setup.py`. For deployment with other services, see `src/infra/.env.example`.
+
+### CPU and GPU images
+
+The Dockerfile installs `requirements.txt` when the build argument `TORCH_INDEX_URL` is the CPU wheel index (`https://download.pytorch.org/whl/cpu`, set by `docker-compose.cpu.yml`): a CPU image has FastEmbed and `en_core_web_sm`, and no torch, transformers or sentence-transformers. Any other index (the default `https://pypi.org/simple`) builds the GPU image from `requirements-gpu.txt`, which installs the pinned torch from that index first, then `requirements.txt`, transformers and `en_core_web_trf` for the content analyzer's optional pipelines. CI (`cpu-images` job, `scripts/ci/check-cpu-image.py`) fails when torch or sentence-transformers shows up in a CPU image.
+
+### Metrics
+
+Besides query and embedding latency, `/metrics` exposes `knowledge_store_document_operations_total{operation,status}` (`add` for every stored document, `delete` for every `DELETE /{id}`, `get` for `GET /file/{doc_id}/text` and `GET /file/resolve`; `status` is `success` or `error`, a document that is not found counts as `error`) and `knowledge_store_documents_total`, the number of documents stored as passages, set at startup, after every add or delete and when a re-index ends. A document still stored as one whole-file entry is counted once the re-index has split it.
 
 ## Local Development
 
@@ -140,7 +160,6 @@ cd src/services/knowledge-store
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-python -m spacy download en_core_web_trf
 ```
 
 ### Run

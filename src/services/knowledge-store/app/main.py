@@ -6,6 +6,8 @@ from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
 
 from app.api.routes import ROUTERS
+from app.api.routes.corpus import cancel_startup_check, schedule_startup_check
+from app.chroma_db.setup import EMBED_MODEL
 from app.core.logging import get_logger
 from app.core.metrics import set_system_info
 from app.core.middleware import CorrelationIDMiddleware
@@ -22,9 +24,12 @@ async def lifespan(app: FastAPI):
         extra={
             "type": "startup",
             "version": HORUS_VERSION,
+            "embed_model": EMBED_MODEL,
         },
     )
+    schedule_startup_check()
     yield
+    cancel_startup_check()
     logger.info(
         "Knowledge Store shutting down",
         extra={"type": "shutdown"},
@@ -98,7 +103,7 @@ app.add_middleware(
 )
 
 # Set system info for metrics
-set_system_info(version=HORUS_VERSION, embedding_model="BAAI/bge-base-en-v1.5")
+set_system_info(version=HORUS_VERSION, embedding_model=EMBED_MODEL)
 
 
 @app.get("/health", tags=["Health"])

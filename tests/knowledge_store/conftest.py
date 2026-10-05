@@ -17,7 +17,10 @@ import sys
 import types
 from unittest.mock import MagicMock
 
+import numpy as np
+
 os.environ.setdefault("TEST_MODE", "1")
+os.environ.setdefault("KNOWLEDGE_STORE_REINDEX_ON_STARTUP", "0")
 
 # --------------------------------------------------------------------------- #
 # spaCy — replace with a mock module that returns a doc with one sentence.
@@ -65,13 +68,18 @@ _chromadb_config = types.ModuleType("chromadb.config")
 _chromadb_config.Settings = MagicMock()
 sys.modules["chromadb.config"] = _chromadb_config
 
-# --------------------------------------------------------------------------- #
-# SentenceTransformers — replace so no model is downloaded at import time.
-# --------------------------------------------------------------------------- #
+UNSCORED_VECTOR_SIZE = 3
 
-_st = types.ModuleType("sentence_transformers")
-_st.SentenceTransformer = MagicMock()
-sys.modules["sentence_transformers"] = _st
+_fastembed = types.ModuleType("fastembed")
+_fastembed.TextEmbedding = MagicMock()
+_fastembed.TextEmbedding.return_value.embed.side_effect = lambda texts: [
+    np.zeros(UNSCORED_VECTOR_SIZE) for _ in texts
+]
+sys.modules["fastembed"] = _fastembed
+
+_onnxruntime = types.ModuleType("onnxruntime")
+_onnxruntime.get_available_providers = MagicMock(return_value=["CPUExecutionProvider"])
+sys.modules["onnxruntime"] = _onnxruntime
 
 # --------------------------------------------------------------------------- #
 # Lightweight client fixture for ``api/`` tests.
@@ -140,9 +148,15 @@ def _cosine(left: list[float] | None, right: list[float] | None) -> float:
 
 
 class FakeChromaCollection:
-    def __init__(self):
+    def __init__(self, metadata: dict | None = None):
         self.rows: dict[str, tuple[str, dict]] = {}
         self.vectors: dict[str, list[float]] = {}
+        self.metadata = metadata
+        self.metadata_updates: list[dict] = []
+
+    def modify(self, metadata=None):
+        self.metadata = dict(metadata)
+        self.metadata_updates.append(dict(metadata))
 
     def add(self, ids, documents, metadatas, embeddings=None):
         if len(set(ids)) != len(ids):

@@ -363,7 +363,7 @@ class TestDecisionAgentInit:
 
     def test_init_raises_without_transformers(self):
         with patch.object(dma, "_TRANSFORMERS_AVAILABLE", False):
-            with pytest.raises(RuntimeError, match="transformers/torch are required"):
+            with pytest.raises(RuntimeError, match="needs transformers/torch"):
                 DecisionMakingAgent(device="cpu")
 
     def test_init_lazy_defers_model_load(self, monkeypatch):

@@ -21,6 +21,7 @@ from app.chroma_db.services.file_service import (
     stored_documents,
 )
 from app.core.logging import get_logger
+from app.core.metrics import record_document_operation
 from app.services.content_analyzer import ContentAnalyzer
 
 router = APIRouter(tags=["File"])
@@ -115,9 +116,11 @@ async def resolve_document_by_name(
         texts = document_texts(matched)
     except Exception as e:
         logger.error("resolve_document_by_name: get failed: %s", e)
+        record_document_operation("get", success=False)
         raise HTTPException(status_code=404, detail=str(e))
 
     found = [texts[doc_id] for doc_id in matched if doc_id in texts]
+    record_document_operation("get", success=bool(found))
     if not found:
         raise HTTPException(
             status_code=404,
@@ -163,7 +166,9 @@ async def get_document_text(doc_id: str):
         found = document_texts([doc_id]).get(doc_id)
     except Exception as e:
         logger.error("get_document_text: get failed for %s: %s", doc_id, e)
+        record_document_operation("get", success=False)
         raise HTTPException(status_code=500, detail=str(e))
+    record_document_operation("get", success=found is not None)
     if found is None:
         raise HTTPException(status_code=404, detail=f"No document with id {doc_id!r}")
     return {

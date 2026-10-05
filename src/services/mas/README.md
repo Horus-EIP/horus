@@ -22,7 +22,9 @@ On startup the application creates database tables, seeds an initial admin user,
 ```
 mas/
   main.py                   # Application entry point (uvicorn main:app)
-  requirements.txt          # Python dependencies
+  requirements.txt          # Python dependencies of the CPU image: FastEmbed, no torch
+  requirements-gpu.txt      # GPU image: requirements.txt plus torch, transformers, accelerate
+  requirements-cpu.txt      # Same set as requirements.txt, kept for scripts that name it
   core/
     app.py                  # FastAPI application factory (lifespan, middleware, routers)
     config.py               # Pydantic-settings configuration loader
@@ -126,13 +128,21 @@ All configuration is loaded from environment variables. A reference file is loca
 | `ROUTER_MIN_SCORE`     | Embedding stage: lowest agent score that may decide a route | `0.40` |
 | `ROUTER_MIN_MARGIN`    | Embedding stage: lowest lead of the best agent over the next one | `0.10` |
 | `ROUTER_LLM_MAX_TOKENS` | Token budget of the constrained LLM routing call | `32` |
+| `MAS_EMBED_THREADS`    | Threads of the MiniLM embedder's ONNX Runtime session. Unset, the embedder takes `LLM_TORCH_INTRAOP_THREADS` (the installer's thread budget for MAS, 1 on the CPU profiles), and without either onnxruntime chooses | unset |
+| `FASTEMBED_CACHE_PATH` | Where FastEmbed keeps the ONNX model. The image sets `/app/models/fastembed` and downloads the model there at build time | FastEmbed's default (a temp folder) |
+
+The skill matcher (`core/skill_cache.py`) and the router's embedding stage share one embedder, `sentence-transformers/all-MiniLM-L6-v2` on FastEmbed (ONNX Runtime, CPU, no torch), loaded in the background at startup (`core/embedding_setup.py`). Its vectors match the old sentence-transformers ones (cosine 1.000000 on 336 texts, `scripts/compare-embeddings.py`) and the router report gives the same decisions with both.
+
+### CPU and GPU images
+
+The Dockerfile installs `requirements.txt` when the build argument `TORCH_INDEX_URL` is the CPU wheel index (`https://download.pytorch.org/whl/cpu`, set by `docker-compose.cpu.yml`), so a CPU image has no torch, transformers or sentence-transformers. On the CPU profiles MAS routes and plans through llama-server (`LLM_BACKEND=vllm`) and never needs them: `core/llm_setup.py` imports without them, and the in-process router (`LLM_BACKEND=transformers`) then fails with a message that names the missing packages. Any other index (the default `https://pypi.org/simple`) builds the GPU image from `requirements-gpu.txt`, which installs the pinned torch from that index first and keeps the in-process router available.
 
 ## Task Routing
 
 The background job of `POST /tasks/new_task` routes each `auto` task with `tasks/router.py` (`route_task`). Three stages run in order and the first confident one decides:
 
 1. **Rules** (`tasks/intent_rules.py`, no model). Greetings and small talk get a fixed reply (`tasks/direct_answers.py`); arithmetic is computed exactly by a small parser (`tasks/arithmetic.py`, no `eval`), never generated. A phone number or a dashed range such as `555-1234` or `2019-2020` is not arithmetic, and neither is any unspaced dash between two numbers of three or more digits or across three numbers (`1000-250`, `10-2-3`): those go to the next stages, so write `1000 - 250` to have it computed. A result above 10^100 or below 10^-100 is not answered by the rules either. "compare", "versus", "X vs Y" (not "VS Code"), "and also" or two questions of at least three words each go to `COMPLEX_TASK` and the planner.
-2. **Embeddings.** The question is embedded with the MiniLM model (`embed_for_routing`, the only embedder call) and compared with the labelled examples in `tasks/router_examples.yaml`, embedded once on first use (or by the preload thread). An agent's score is the mean similarity of its two closest examples. The best live agent wins when its score is at least `ROUTER_MIN_SCORE` and leads the next agent by at least `ROUTER_MIN_MARGIN`. A request made of sub-questions ("…, and who…", "…; how…") goes to `COMPLEX_TASK` when its parts confidently belong to different agents. Example groups follow the live roster: by agent name, else the live agent that shares most of the group's skills; groups of offline agents are ignored.
+2. **Embeddings.** The question is embedded with the MiniLM model on FastEmbed (`embed_for_routing`, the only embedder call) and compared with the labelled examples in `tasks/router_examples.yaml`, embedded once on first use (or by the preload thread). An agent's score is the mean similarity of its two closest examples. The best live agent wins when its score is at least `ROUTER_MIN_SCORE` and leads the next agent by at least `ROUTER_MIN_MARGIN`. A request made of sub-questions ("…, and who…", "…; how…") goes to `COMPLEX_TASK` when its parts confidently belong to different agents. Example groups follow the live roster: by agent name, else the live agent that shares most of the group's skills; groups of offline agents are ignored.
 3. **LLM.** With `LLM_BACKEND=vllm` (llama-server or vLLM) one short call with `response_format: json_schema` lets the model choose only `SINGLE_AGENT` or `COMPLEX_TASK` and a live agent name, with `ROUTER_LLM_MAX_TOKENS` tokens. `DIRECT_ANSWER` is not offered: only the rules may answer directly. With the in-process Transformers backend the full LLM router prompt (`choose_route_with_llm`, the routing call of `select_agent_for_task`) runs as before. If this stage fails, the task falls back to the skill match and the catch-all agent.
 
 Every decision is logged as `Routing decision` with `method` (`rules`, `embedding`, `llm`, `none`), `route`, `agent`, the top `scores` and `latency_ms`, and counted in `mas_routing_decisions_total{method,route}` and `mas_routing_decision_seconds{method}`. The latency is the time to the decision on every path: it never includes the planner that a `COMPLEX_TASK` then runs.
@@ -153,7 +163,9 @@ docker compose exec mas python -m tasks.router_eval --testset /tmp/router_testse
 docker compose exec mas python -m tasks.router_eval --testset /tmp/router_testset.yaml --llm --json /tmp/router-llm.json
 ```
 
-`--min-score` and `--min-margin` try other thresholds. `tests/mas/unit/test_router_model.py` (marker `requires_model`) runs the same report when the MiniLM model is on disk and is skipped otherwise.
+`--min-score` and `--min-margin` try other thresholds. `tests/mas/unit/test_router_model.py` (marker `requires_model`) runs the same report when FastEmbed's MiniLM model is on disk and is skipped otherwise.
+
+Measured on 2026-10-05 (AMD Ryzen AI 9 HX 370, Windows 11, rules and embeddings, no LLM): the same 116 decisions with sentence-transformers and with FastEmbed (98.7% correct without the LLM, 33.6% sent to it); embedding-stage latency p50 9.0 ms and p95 16.1 ms before, 3.3 ms and 7.5 ms after.
 
 ## Local Development
 

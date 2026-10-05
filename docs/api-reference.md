@@ -1365,7 +1365,7 @@ Vector database and document retrieval service.
 
 Prometheus metrics are exposed at **`GET /metrics`** (no trailing slash required).
 
-The service uses ChromaDB with the `BAAI/bge-base-en-v1.5` embedding model (see `main.py`). Every document is stored as passages of at most 1,000 characters (about 200 characters of overlap), one vector each, with the id `{doc_id}:{n}`. `GET /` returns passages; every other route works on documents.
+The service uses ChromaDB with the `BAAI/bge-base-en-v1.5` embedding model, run by FastEmbed on ONNX Runtime (see `app/chroma_db/setup.py`); a question gets the BGE query prefix once, a passage none. The collection metadata records the model (`embedding_model`, `embed_model`, `embedding_runtime`, `embedding_runtime_version`, `dimensions`). Every document is stored as passages of at most 1,000 characters (about 200 characters of overlap), one vector each, with the id `{doc_id}:{n}`. `GET /` returns passages; every other route works on documents.
 
 Authentication is not enforced on these endpoints in the default configuration (treat the service as internal to the Docker network).
 
@@ -1461,7 +1461,7 @@ Query the knowledge store for relevant passages using semantic search with optio
 | char_start, char_end | Where the passage sits in the extracted text |
 | page | PDFs only: the page the passage starts on |
 | category | Document category |
-| embed_model | Embedder that produced the passage's vector |
+| embed_model | Embedder that produced the passage's vector: runtime, its version and model, such as `fastembed-0.8.1:BAAI/bge-base-en-v1.5` |
 
 The passage with `chunk_index` 0 also carries the document-level data: `date`, `size`, `chunk_count` and the auto-analysis.
 
@@ -1482,8 +1482,8 @@ The passage with `chunk_index` 0 also carries the document-level data: `date`, `
   "ids": [["3f9a2c:4", "b71e09:0"]],
   "distances": [[0.1, 0.2]],
   "metadatas": [[
-    { "doc_id": "3f9a2c", "title": "Doc 1.pdf", "chunk_index": 4, "char_start": 3200, "char_end": 4180, "page": 2, "source_path": "", "category": "finance", "embed_model": "sentence-transformers:BAAI/bge-base-en-v1.5" },
-    { "doc_id": "b71e09", "title": "Doc 2.md", "chunk_index": 0, "char_start": 0, "char_end": 950, "source_path": "policies/doc2.md", "category": "hr", "embed_model": "sentence-transformers:BAAI/bge-base-en-v1.5" }
+    { "doc_id": "3f9a2c", "title": "Doc 1.pdf", "chunk_index": 4, "char_start": 3200, "char_end": 4180, "page": 2, "source_path": "", "category": "finance", "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5" },
+    { "doc_id": "b71e09", "title": "Doc 2.md", "chunk_index": 0, "char_start": 0, "char_end": 950, "source_path": "policies/doc2.md", "category": "hr", "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5" }
   ]],
   "documents": [[
     "Passage of Doc 1",
@@ -1651,7 +1651,7 @@ Categories are sorted by count in descending order. Counts are documents, not pa
 
 #### GET /corpus-version
 
-Return an opaque version of the indexed corpus. It changes whenever an entry is added to or removed from the index: every upload (`POST /file`, `POST /file/{type}`, `POST /`), every delete (`DELETE /{id}`), and every `POST /corpus/scan` that ingests a file or replaces an older version of one. A scan that skips every file, a dry run, a query or a listing leaves it unchanged. The version lives in memory, so a restart of the service also changes it. `POST /corpus/reindex` (run by `scripts/reindex-knowledge-store.py`) changes it for every document it re-indexes. Restart the service after a re-index done outside it, such as `scripts/migrate-embeddings.py`.
+Return an opaque version of the indexed corpus. It changes whenever an entry is added to or removed from the index: every upload (`POST /file`, `POST /file/{type}`, `POST /`), every delete (`DELETE /{id}`), and every `POST /corpus/scan` that ingests a file or replaces an older version of one. A scan that skips every file, a dry run, a query or a listing leaves it unchanged. The version lives in memory, so a restart of the service also changes it. `POST /corpus/reindex` (run by `scripts/reindex-knowledge-store.py`) and the re-index the service starts by itself at startup, when it finds whole-file entries or passages embedded with another `embed_model`, change it for every document they re-index.
 
 The agent's response cache (`AGENT_RESPONSE_CACHE=1`) puts this version in its cache key, so an answer cached before a change is never served after it. The agent reads the version again after at most `AGENT_RESPONSE_CACHE_VERSION_TTL` seconds (default `5`). When the read fails, the agent answers without the cache.
 

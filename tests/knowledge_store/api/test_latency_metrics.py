@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -54,16 +55,14 @@ class Recorded:
 VECTOR = [0.1, 0.2, 0.3]
 
 
-def _encoded(texts, normalize_embeddings=True):
-    encoded = MagicMock()
-    encoded.tolist.return_value = [VECTOR for _ in texts] if isinstance(texts, list) else VECTOR
-    return encoded
+def _embedded(texts):
+    return [np.array(VECTOR) for _ in texts]
 
 
 @pytest.fixture
 def embedder(monkeypatch):
     model = MagicMock()
-    model.encode.side_effect = _encoded
+    model.embed.side_effect = _embedded
     monkeypatch.setattr(setup, "model", model)
     return model
 
@@ -159,9 +158,7 @@ class TestEmbeddingLatency:
 
         assert recorded.since(EMBEDDINGS, SUCCESS) == 1
         assert recorded.since(EMBEDDING_LATENCY_COUNT) == 1
-        embedder.encode.assert_called_once_with(
-            setup.BGE_QUERY_PREFIX + "revenue", normalize_embeddings=True
-        )
+        embedder.embed.assert_called_once_with([setup.BGE_QUERY_PREFIX + "revenue"])
 
     async def test_storing_a_document_times_its_embedding(self, fake_collection, embedder):
         recorded = Recorded()
@@ -175,7 +172,7 @@ class TestEmbeddingLatency:
         assert [metadata["doc_id"] for _, metadata in fake_collection.rows.values()] == ["notes"]
 
     def test_a_failed_embedding_is_recorded_as_an_error_and_raised(self, embedder):
-        embedder.encode.side_effect = RuntimeError("model unavailable")
+        embedder.embed.side_effect = RuntimeError("model unavailable")
         recorded = Recorded()
 
         with pytest.raises(RuntimeError, match="model unavailable"):

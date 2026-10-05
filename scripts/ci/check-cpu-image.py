@@ -9,6 +9,7 @@ from pathlib import Path
 
 CUDA_PREFIXES = ("nvidia-", "cuda-")
 CUDA_PACKAGES = {"triton"}
+TORCH_STACK = ("torch", "sentence-transformers")
 DISTRIBUTION = re.compile(r"([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:==\s*(\S+)|@\s*\S+)?")
 
 
@@ -43,11 +44,18 @@ def check(packages: dict[str, tuple[str, str]], pin: str | None, source: str) ->
         for key, (name, version) in sorted(packages.items())
         if key.startswith(CUDA_PREFIXES) or key in CUDA_PACKAGES
     ]
+    if not pin:
+        problems.extend(
+            f"{packages[key][0]}=={packages[key][1]} is in a CPU image, but {source} "
+            "pins no torch: nothing on the CPU path may need it"
+            for key in TORCH_STACK if key in packages
+        )
+        return problems
     torch = packages.get("torch", ("", ""))[1]
     public, _, local = torch.partition("+")
     if torch and local != "cpu":
         problems.append(f"torch {torch} is not the CPU build")
-    if pin and public != pin:
+    if public != pin:
         found = f"torch {torch} is installed" if torch else "torch is not installed"
         problems.append(f"{found}, but {source} pins torch=={pin}")
     return problems
@@ -55,8 +63,9 @@ def check(packages: dict[str, tuple[str, str]], pin: str | None, source: str) ->
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Fail when a CPU image ships CUDA packages or a torch other than "
-                    "the pinned CPU build."
+        description="Fail when a CPU image ships CUDA packages, or any torch when its "
+                    "requirements pin none, or a torch other than the pinned CPU build "
+                    "when they pin one."
     )
     parser.add_argument(
         "packages",
@@ -66,22 +75,27 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--requirements",
         type=Path,
-        help="The service's requirements file; its torch==X pin must be what is installed.",
+        help="The requirements file the image or environment was installed from. Without "
+             "a torch==X pin in it (or without this option), torch must be absent; with "
+             "one, that pin must be what is installed, as the CPU build.",
     )
     args = parser.parse_args(argv)
 
     packages = installed(args.packages.read_text(encoding="utf-8"))
     pin = None
+    source = "the image"
     if args.requirements is not None:
         pin = pinned_torch(args.requirements.read_text(encoding="utf-8"))
-    problems = check(packages, pin, str(args.requirements))
+        source = str(args.requirements)
+    problems = check(packages, pin, source)
     for problem in problems:
         print(problem)
     if problems:
         print(f"\n{len(problems)} problem(s): this is not a CPU-only image.")
         return 1
-    torch = packages.get("torch", ("", "not installed"))[1]
-    print(f"{len(packages)} packages, none from CUDA; torch {torch}.")
+    torch = packages.get("torch", ("", ""))[1]
+    print(f"{len(packages)} packages, none from CUDA; "
+          + (f"torch {torch}." if torch else "no torch."))
     return 0
 
 

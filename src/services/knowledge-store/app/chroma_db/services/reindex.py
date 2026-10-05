@@ -14,6 +14,7 @@ from app.chroma_db.services.file_service import (
     is_legacy_entry,
     write_entries,
 )
+from app.chroma_db.setup import COLLECTION_METADATA
 from app.core.logging import get_logger
 
 logger = get_logger("Reindex")
@@ -33,6 +34,17 @@ def documents_to_reindex(embed_model: str) -> list[str]:
         if is_legacy_entry(entry.metadata) or entry.metadata.get("embed_model") != embed_model:
             pending.setdefault(document_id_of(entry.id, entry.metadata), None)
     return list(pending)
+
+
+def record_embedder_in_collection() -> bool:
+    collection = file_service.knowledge_collection
+    stored = dict(collection.metadata or {})
+    if all(stored.get(key) == value for key, value in COLLECTION_METADATA.items()):
+        return False
+    collection.modify(metadata={**stored, **COLLECTION_METADATA})
+    logger.info("re-index: the collection now records the embedder %s",
+                COLLECTION_METADATA["embed_model"])
+    return True
 
 
 def reindex_document(doc_id: str, embed_passages: EmbedPassages, embed_model: str) -> str:

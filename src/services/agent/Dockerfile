@@ -2,19 +2,26 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
+COPY requirements.txt requirements-gpu.txt /app/
 
 ARG TORCH_INDEX_URL=https://pypi.org/simple
+RUN case "$TORCH_INDEX_URL" in \
+        https://download.pytorch.org/whl/cpu) cp /app/requirements.txt /app/requirements-image.txt ;; \
+        *) cp /app/requirements-gpu.txt /app/requirements-image.txt ;; \
+    esac
+
 RUN --mount=type=cache,target=/root/.cache/pip \
-    torch_pin="$(grep -oE '^torch==[0-9.]+' /app/requirements.txt)" \
-    && pip install --timeout=120 --retries=10 --index-url "$TORCH_INDEX_URL" "$torch_pin"
+    torch_pin="$(grep -oE '^torch==[0-9.]+' /app/requirements-image.txt || true)" \
+    && if [ -n "$torch_pin" ]; then \
+        pip install --timeout=120 --retries=10 --index-url "$TORCH_INDEX_URL" "$torch_pin"; \
+    fi
 
 # Cache pip downloads across builds (BuildKit cache mount — kept out of the final
 # image) and be patient on slow/flaky networks so a large wheel (torch ~500MB)
 # doesn't abort on pip's default 15s read timeout, and a completed download is
 # reused on the next rebuild instead of re-fetched.
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --timeout=120 --retries=10 -r /app/requirements.txt
+    pip install --timeout=120 --retries=10 -r /app/requirements-image.txt
 
 # Install OpenTelemetry auto-instrumentation
 RUN opentelemetry-bootstrap --action=install

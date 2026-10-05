@@ -1,20 +1,35 @@
+from __future__ import annotations
+
 import os
 import threading
 from pathlib import Path
 
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+try:
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+except ImportError:
+    torch = None
+    AutoModelForCausalLM = None
+    AutoTokenizer = None
+    BitsAndBytesConfig = None
 
 from core.config import settings
 from core.logger import get_logger
 
 logger = get_logger("llm_setup")
 
+IN_PROCESS_STACK_MISSING = (
+    "The in-process router LLM needs torch and transformers, which this image does not "
+    "ship: CPU images leave them out. Set LLM_BACKEND=vllm and LLM_VLLM_URL to use "
+    "llama-server or vLLM, or run the GPU image."
+)
+
 os.environ.setdefault(
     "PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True,max_split_size_mb:64"
 )
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-torch.backends.cuda.matmul.allow_tf32 = True
+if torch is not None:
+    torch.backends.cuda.matmul.allow_tf32 = True
 
 
 def _configure_llm_cpu_threads() -> None:
@@ -32,7 +47,13 @@ def _configure_llm_cpu_threads() -> None:
     logger.info("LLM CPU thread budget: OMP/torch intra-op=%s", n)
 
 
-_configure_llm_cpu_threads()
+if torch is not None:
+    _configure_llm_cpu_threads()
+
+
+def _require_in_process_stack() -> None:
+    if torch is None or AutoModelForCausalLM is None or AutoTokenizer is None:
+        raise RuntimeError(IN_PROCESS_STACK_MISSING)
 
 
 def _cpu_dtype() -> torch.dtype:
@@ -153,6 +174,7 @@ def _model_device(model: torch.nn.Module) -> torch.device:
 
 
 def get_llm():
+    _require_in_process_stack()
     use_gpu = _llm_use_gpu()
 
     if is_model_dir_exists():
@@ -344,6 +366,7 @@ def _ask_vllm(messages: list, max_new_tokens: int) -> str:
 def ask_llm(messages: list, max_new_tokens: int = 256):
     if _llm_backend() == "vllm":
         return _ask_vllm(messages, max_new_tokens)
+    _require_in_process_stack()
     logger.info("Entering ask_llm, checking model...")
     _ensure_llm_loaded()
     if tokenizer is None or model is None:

@@ -9,7 +9,6 @@ LLM that genuinely needs it.
 
 import os
 import threading
-from pathlib import Path
 
 import numpy as np
 
@@ -17,32 +16,40 @@ from core.logger import get_logger
 
 logger = get_logger("embedding_setup")
 
-BASE_DIR = Path(__file__).resolve().parent.parent
 EMBED_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
-EMBED_MODEL_DIR = BASE_DIR / "models/all-MiniLM-L6-v2"
+EMBED_THREADS_ENV = "MAS_EMBED_THREADS"
+SHARED_THREADS_ENV = "LLM_TORCH_INTRAOP_THREADS"
 
 _embedder = None
 _embedder_load_lock = threading.Lock()
 
 
-def _resolve_model_path() -> str:
-    """Prefer the baked-in local copy; fall back to the HF id (network at runtime)."""
-    if EMBED_MODEL_DIR.exists() and any(EMBED_MODEL_DIR.iterdir()):
-        return str(EMBED_MODEL_DIR)
-    return EMBED_MODEL_ID
+def embed_threads() -> int | None:
+    for name in (EMBED_THREADS_ENV, SHARED_THREADS_ENV):
+        raw = os.environ.get(name, "").strip()
+        if not raw:
+            continue
+        try:
+            threads = int(raw)
+        except ValueError:
+            logger.warning("Ignoring %s=%r: not a whole number of threads", name, raw)
+            continue
+        if threads > 0:
+            return threads
+    return None
 
 
 def _load_embedder():
-    from sentence_transformers import SentenceTransformer
+    from fastembed import TextEmbedding
 
-    path = _resolve_model_path()
-    logger.info("Loading sentence-embedding model from %s on CPU", path)
-    model = SentenceTransformer(path, device="cpu")
+    threads = embed_threads()
     logger.info(
-        "Sentence-embedding model ready: dim=%d, max_seq_len=%s",
-        model.get_sentence_embedding_dimension(),
-        getattr(model, "max_seq_length", "?"),
+        "Loading sentence-embedding model %s with FastEmbed on CPU (threads=%s)",
+        EMBED_MODEL_ID,
+        threads or "onnxruntime default",
     )
+    model = TextEmbedding(EMBED_MODEL_ID, threads=threads, cuda=False)
+    logger.info("Sentence-embedding model ready: dim=%d", model.embedding_size)
     return model
 
 
@@ -98,13 +105,10 @@ def embed_texts(texts: list[str]) -> np.ndarray:
         raise RuntimeError(
             "Embedding model is not loaded. Check container logs for load errors."
         )
-    vecs = _embedder.encode(
-        texts,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
-        show_progress_bar=False,
-    )
-    return vecs.astype(np.float32, copy=False)
+    vectors = list(_embedder.embed(list(texts)))
+    if not vectors:
+        return np.empty((0, _embedder.embedding_size), dtype=np.float32)
+    return np.stack(vectors).astype(np.float32, copy=False)
 
 
 def embed_text(text: str) -> np.ndarray:

@@ -30,11 +30,8 @@ spec.loader.exec_module(check_cpu_image)
 CPU_TORCH_INDEX = "https://download.pytorch.org/whl/cpu"
 DEFAULT_INDEX = "https://pypi.org/simple"
 CPU_IMAGE_JOB = "cpu-images"
-
-CPU_TORCH_TEST_JOBS = {
-    "test-agent": ("src/services/agent/requirements.txt", 90),
-    "test-knowledge-store": ("src/services/knowledge-store/requirements.txt", 85),
-}
+CPU_REQUIREMENTS = "requirements.txt"
+GPU_REQUIREMENTS = "requirements-gpu.txt"
 
 TORCH_SERVICES = {
     "mas": SERVICES / "mas",
@@ -42,12 +39,24 @@ TORCH_SERVICES = {
     "knowledge_store": SERVICES / "knowledge-store",
 }
 
-REQUIREMENT_FILES = (
-    SERVICES / "mas" / "requirements.txt",
+CPU_REQUIREMENT_FILES = (
+    *(context / CPU_REQUIREMENTS for context in TORCH_SERVICES.values()),
     SERVICES / "mas" / "requirements-cpu.txt",
-    SERVICES / "agent" / "requirements.txt",
-    SERVICES / "knowledge-store" / "requirements.txt",
 )
+GPU_REQUIREMENT_FILES = tuple(context / GPU_REQUIREMENTS for context in TORCH_SERVICES.values())
+
+NEEDS_TORCH = {
+    "torch", "sentence-transformers", "transformers", "accelerate", "bitsandbytes",
+    "en-core-web-trf", "spacy-curated-transformers",
+}
+
+FASTEMBED_SERVICES = ("mas", "knowledge_store")
+
+TEST_JOBS = {
+    "test-mas": ("src/services/mas/requirements.txt", 85, None),
+    "test-agent": ("src/services/agent/requirements-gpu.txt", 90, CPU_TORCH_INDEX),
+    "test-knowledge-store": ("src/services/knowledge-store/requirements.txt", 85, None),
+}
 
 EXACT_PUBLIC_TORCH_PIN = re.compile(r"torch==\d+(?:\.\d+)*")
 
@@ -55,6 +64,11 @@ REINSTALLING_PIP_OPTIONS = {
     "-U", "--upgrade", "--force-reinstall", "-I", "--ignore-installed",
     "-i", "--index-url", "--extra-index-url",
 }
+
+REQUIREMENTS_CHOICE = re.compile(
+    r'case "\$TORCH_INDEX_URL" in\s+(\S+)\)\s+cp\s+(\S+)\s+(\S+)\s*;;'
+    r"\s*\*\)\s+cp\s+(\S+)\s+(\S+)\s*;;\s*esac"
+)
 
 needs_yaml = unittest.skipUnless(yaml is not None, "needs PyYAML to read the compose and CI files")
 
@@ -64,13 +78,26 @@ def project_name(requirement: str) -> str:
     return re.sub(r"[-_.]+", "-", match.group(0)).lower() if match else ""
 
 
-def torch_requirements(path: Path) -> list[str]:
-    found = []
+def requirement_lines(path: Path) -> list[str]:
+    lines = []
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.split(" #", 1)[0].strip()
-        if line and not line.startswith(("#", "-")) and project_name(line) == "torch":
-            found.append(line.replace(" ", ""))
-    return found
+        if line and not line.startswith("#"):
+            lines.append(line)
+    return lines
+
+
+def projects(path: Path) -> set[str]:
+    return {project_name(line) for line in requirement_lines(path) if not line.startswith("-")}
+
+
+def included(path: Path) -> list[str]:
+    return [line.split(None, 1)[1] for line in requirement_lines(path) if line.startswith("-r ")]
+
+
+def torch_requirements(path: Path) -> list[str]:
+    return [line.replace(" ", "") for line in requirement_lines(path)
+            if not line.startswith("-") and project_name(line) == "torch"]
 
 
 def instructions(dockerfile: Path) -> list[tuple[int, str, str]]:
@@ -107,6 +134,14 @@ def torch_install(steps) -> tuple[int, int, str]:
     raise AssertionError("no `pip install` step reads TORCH_INDEX_URL")
 
 
+def requirements_choice(steps) -> tuple[int, int, re.Match]:
+    for index, (stage, keyword, rest) in enumerate(steps):
+        match = REQUIREMENTS_CHOICE.search(rest) if keyword == "RUN" else None
+        if match:
+            return index, stage, match
+    raise AssertionError("no step picks the requirement set from TORCH_INDEX_URL")
+
+
 def torch_index_default(steps, stage: int) -> tuple[int, str]:
     for index, (arg_stage, keyword, rest) in enumerate(steps):
         name, _, value = rest.partition("=")
@@ -117,6 +152,12 @@ def torch_index_default(steps, stage: int) -> tuple[int, str]:
 
 def requirements_path(install: str) -> str:
     return re.search(r"\s-r\s+(\S+)", install).group(1)
+
+
+def chosen_requirements(context: Path, index_url: str) -> str:
+    match = requirements_choice(instructions(context / "Dockerfile"))[2]
+    cpu_index, cpu_source, _, gpu_source, _ = match.groups()
+    return Path(cpu_source if index_url == cpu_index else gpu_source).name
 
 
 def build_args(spec: dict) -> dict[str, str]:
@@ -140,21 +181,37 @@ def load_yaml(path: Path) -> dict:
     return yaml.load(path.read_text(encoding="utf-8"), Loader=loader)
 
 
-def check(packages: str, pin: str = "torch==2.14.1\n") -> tuple[int, str]:
+def run_check(packages: str, requirements: str | None = "fastapi\ntorch==2.14.1\n") -> tuple[int, str]:
     with tempfile.TemporaryDirectory() as tmp:
         listing = Path(tmp) / "packages.txt"
         listing.write_text(packages, encoding="utf-8")
-        requirements = Path(tmp) / "requirements.txt"
-        requirements.write_text("fastapi\n" + pin, encoding="utf-8")
+        argv = [str(listing)]
+        if requirements is not None:
+            path = Path(tmp) / "requirements.txt"
+            path.write_text(requirements, encoding="utf-8")
+            argv += ["--requirements", str(path)]
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            code = check_cpu_image.main([str(listing), "--requirements", str(requirements)])
+            code = check_cpu_image.main(argv)
     return code, out.getvalue()
 
 
-class TorchPin(unittest.TestCase):
-    def test_every_requirement_file_pins_one_exact_public_torch_version(self):
-        for path in REQUIREMENT_FILES:
+def check(packages: str) -> tuple[int, str]:
+    return run_check(packages)
+
+
+def check_cpu_set(packages: str) -> tuple[int, str]:
+    return run_check(packages, "fastapi\nfastembed==0.8.1\n")
+
+
+class RequirementSets(unittest.TestCase):
+    def test_the_cpu_requirements_need_no_torch(self):
+        for path in CPU_REQUIREMENT_FILES:
+            with self.subTest(str(path.relative_to(REPO))):
+                self.assertEqual(projects(path) & NEEDS_TORCH, set())
+
+    def test_every_gpu_requirement_file_pins_one_exact_public_torch_version(self):
+        for path in GPU_REQUIREMENT_FILES:
             with self.subTest(str(path.relative_to(REPO))):
                 pins = torch_requirements(path)
                 self.assertEqual(len(pins), 1, pins)
@@ -162,16 +219,34 @@ class TorchPin(unittest.TestCase):
                                      f"{pins[0]} is not torch==X, which both indexes serve")
 
     def test_all_services_pin_the_same_torch_version(self):
-        pins = {str(path.relative_to(REPO)): torch_requirements(path) for path in REQUIREMENT_FILES}
+        pins = {str(path.relative_to(REPO)): torch_requirements(path)
+                for path in GPU_REQUIREMENT_FILES}
         self.assertEqual(len({tuple(found) for found in pins.values()}), 1, pins)
 
-    def test_the_cpu_requirements_file_reads_torch_from_the_cpu_index(self):
-        text = (SERVICES / "mas" / "requirements-cpu.txt").read_text(encoding="utf-8")
-        self.assertIn(f"--extra-index-url {CPU_TORCH_INDEX}", text.splitlines())
+    def test_a_gpu_image_installs_everything_a_cpu_image_does(self):
+        for path in GPU_REQUIREMENT_FILES:
+            with self.subTest(str(path.relative_to(REPO))):
+                self.assertEqual(included(path), [CPU_REQUIREMENTS])
+
+    def test_the_mas_cpu_requirements_are_the_cpu_set(self):
+        self.assertEqual(included(SERVICES / "mas" / "requirements-cpu.txt"), [CPU_REQUIREMENTS])
+
+    def test_no_image_installs_sentence_transformers(self):
+        for path in (*CPU_REQUIREMENT_FILES, *GPU_REQUIREMENT_FILES):
+            with self.subTest(str(path.relative_to(REPO))):
+                self.assertNotIn("sentence-transformers", projects(path))
+
+    def test_the_embedders_run_on_a_pinned_fastembed(self):
+        for name in FASTEMBED_SERVICES:
+            with self.subTest(name):
+                pins = [line for line in requirement_lines(TORCH_SERVICES[name] / CPU_REQUIREMENTS)
+                        if project_name(line) == "fastembed"]
+                self.assertEqual(len(pins), 1, pins)
+                self.assertRegex(pins[0], r"^fastembed==\d+(?:\.\d+)*$")
 
 
 @needs_yaml
-class CiTestJobsInstallCpuTorch(unittest.TestCase):
+class CiTestJobs(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.jobs = load_yaml(CI_WORKFLOW)["jobs"]
@@ -186,22 +261,25 @@ class CiTestJobsInstallCpuTorch(unittest.TestCase):
         raise AssertionError(f"{job} has no step running {text!r}")
 
     def requirements_install(self, job: str) -> str:
-        requirements, _ = CPU_TORCH_TEST_JOBS[job]
+        requirements, _, _ = TEST_JOBS[job]
         for run in self.runs(job):
             for line in run.splitlines():
                 if f"-r {requirements}" in line:
                     return line
         raise AssertionError(f"{job} does not install {requirements}")
 
-    def test_the_requirements_are_installed_with_the_cpu_torch_index_as_an_extra_index(self):
-        for job in CPU_TORCH_TEST_JOBS:
+    def test_only_the_jobs_that_need_torch_read_the_cpu_torch_index(self):
+        for job, (_, _, index) in TEST_JOBS.items():
             with self.subTest(job):
                 install = self.requirements_install(job)
-                self.assertIn(f"--extra-index-url {CPU_TORCH_INDEX}", install)
                 self.assertIsNone(re.search(r"\s(?:-i|--index-url)[\s=]", install), install)
+                if index is None:
+                    self.assertNotIn("--extra-index-url", install)
+                else:
+                    self.assertIn(f"--extra-index-url {index}", install)
 
-    def test_the_installed_torch_must_be_the_pinned_cpu_build_before_the_tests_run(self):
-        for job, (requirements, _) in CPU_TORCH_TEST_JOBS.items():
+    def test_the_installed_packages_are_checked_before_the_tests_run(self):
+        for job, (requirements, _, _) in TEST_JOBS.items():
             with self.subTest(job):
                 check = self.runs(job)[self.step_running(job, "scripts/ci/check-cpu-image.py")]
                 self.assertIn("pip list --format=freeze", check)
@@ -211,14 +289,25 @@ class CiTestJobsInstallCpuTorch(unittest.TestCase):
                 self.assertGreater(self.step_running(job, "scripts/ci/check-cpu-image.py"),
                                    self.step_running(job, f"-r {requirements}"))
 
+    def test_the_jobs_without_torch_check_against_a_set_that_pins_none(self):
+        for job, (requirements, _, index) in TEST_JOBS.items():
+            with self.subTest(job):
+                pins = torch_requirements(REPO / requirements)
+                self.assertEqual(bool(pins), index is not None, pins)
+
+    def test_the_knowledge_store_is_tested_on_the_python_of_its_image(self):
+        self.assertEqual(self.jobs["test-knowledge-store"]["env"]["PYTHON_VERSION"], "3.11")
+        self.assertIn("FROM python:3.11-slim",
+                      (TORCH_SERVICES["knowledge_store"] / "Dockerfile").read_text(encoding="utf-8"))
+
     def test_the_coverage_gates_are_kept(self):
-        for job, (_, gate) in CPU_TORCH_TEST_JOBS.items():
+        for job, (_, gate, _) in TEST_JOBS.items():
             with self.subTest(job):
                 tests = self.runs(job)[self.step_running(job, "pytest -c")]
                 self.assertIn(f"--cov-fail-under={gate}", tests)
 
 
-class DockerfileTorchInstall(unittest.TestCase):
+class DockerfileRequirementSets(unittest.TestCase):
     def test_each_image_declares_a_torch_index_build_arg_defaulting_to_pypi(self):
         for name, context in TORCH_SERVICES.items():
             with self.subTest(name):
@@ -226,24 +315,44 @@ class DockerfileTorchInstall(unittest.TestCase):
                 _, stage, _ = torch_install(steps)
                 self.assertEqual(torch_index_default(steps, stage)[1], DEFAULT_INDEX)
 
-    def test_torch_is_installed_from_that_index_before_the_requirements(self):
+    def test_both_requirement_sets_are_copied_into_the_build(self):
+        for name, context in TORCH_SERVICES.items():
+            with self.subTest(name):
+                copies = [rest for _, keyword, rest in instructions(context / "Dockerfile")
+                          if keyword == "COPY" and GPU_REQUIREMENTS in rest]
+                self.assertEqual(len(copies), 1, copies)
+                self.assertIn(CPU_REQUIREMENTS, copies[0].split())
+
+    def test_the_cpu_torch_index_picks_the_cpu_set_and_any_other_the_gpu_set(self):
+        for name, context in TORCH_SERVICES.items():
+            with self.subTest(name):
+                self.assertEqual(chosen_requirements(context, CPU_TORCH_INDEX), CPU_REQUIREMENTS)
+                self.assertEqual(chosen_requirements(context, DEFAULT_INDEX), GPU_REQUIREMENTS)
+                self.assertEqual(
+                    chosen_requirements(context, "https://download.pytorch.org/whl/cu128"),
+                    GPU_REQUIREMENTS,
+                )
+
+    def test_the_chosen_set_is_what_torch_and_the_requirements_are_installed_from(self):
         for name, context in TORCH_SERVICES.items():
             with self.subTest(name):
                 steps = instructions(context / "Dockerfile")
-                torch_at, torch_stage, _ = torch_install(steps)
-                reqs_at, reqs_stage, _ = requirements_install(steps)
-                arg_at, _ = torch_index_default(steps, torch_stage)
-                self.assertEqual(torch_stage, reqs_stage)
-                self.assertLess(arg_at, torch_at)
+                choice_at, choice_stage, match = requirements_choice(steps)
+                _, _, cpu_target, _, gpu_target = match.groups()
+                torch_at, torch_stage, torch_run = torch_install(steps)
+                reqs_at, reqs_stage, reqs_run = requirements_install(steps)
+                self.assertEqual(cpu_target, gpu_target)
+                self.assertEqual(requirements_path(reqs_run), cpu_target)
+                self.assertIn(f"grep -oE '^torch==[0-9.]+' {cpu_target}", torch_run)
+                self.assertEqual({choice_stage, torch_stage, reqs_stage}, {torch_stage})
+                self.assertLess(choice_at, torch_at)
                 self.assertLess(torch_at, reqs_at)
 
-    def test_the_torch_install_takes_its_version_from_the_service_requirements(self):
+    def test_torch_is_installed_from_the_index_only_when_the_set_pins_it(self):
         for name, context in TORCH_SERVICES.items():
             with self.subTest(name):
-                steps = instructions(context / "Dockerfile")
-                torch_run = torch_install(steps)[2]
-                path = requirements_path(requirements_install(steps)[2])
-                self.assertIn(f"torch_pin=\"$(grep -oE '^torch==[0-9.]+' {path})\"", torch_run)
+                torch_run = torch_install(instructions(context / "Dockerfile"))[2]
+                self.assertIn('if [ -n "$torch_pin" ]', torch_run)
                 self.assertRegex(torch_run, r'--index-url\s+"\$TORCH_INDEX_URL"\s+"\$torch_pin"')
 
     def test_the_requirements_install_keeps_the_torch_already_installed(self):
@@ -253,9 +362,17 @@ class DockerfileTorchInstall(unittest.TestCase):
                 options = {token.split("=", 1)[0] for token in install.split()}
                 self.assertFalse(options & REINSTALLING_PIP_OPTIONS, install)
 
+    def test_the_embedders_are_baked_in_with_fastembed(self):
+        for name in FASTEMBED_SERVICES:
+            with self.subTest(name):
+                dockerfile = (TORCH_SERVICES[name] / "Dockerfile").read_text(encoding="utf-8")
+                self.assertIn("ENV FASTEMBED_CACHE_PATH=", dockerfile)
+                self.assertIn("from fastembed import TextEmbedding", dockerfile)
+                self.assertNotIn("sentence_transformers", dockerfile)
+
 
 class CpuImageCheck(unittest.TestCase):
-    def test_a_cpu_only_image_passes(self):
+    def test_a_cpu_only_environment_with_its_pinned_torch_passes(self):
         code, out = check("fastapi==0.128.0\ntorch==2.14.1+cpu\nnumpy==1.26.4\n")
         self.assertEqual(code, 0, out)
         self.assertIn("torch 2.14.1+cpu", out)
@@ -302,6 +419,29 @@ class CpuImageCheck(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("no packages", out)
 
+    def test_a_cpu_image_without_torch_passes(self):
+        code, out = check_cpu_set("fastapi==0.128.0\nfastembed==0.8.1\nonnxruntime==1.30.0\n")
+        self.assertEqual(code, 0, out)
+        self.assertIn("no torch", out)
+
+    def test_any_torch_in_a_cpu_image_fails_even_the_cpu_build(self):
+        for torch in ("torch==2.14.1+cpu", "torch==2.14.1"):
+            with self.subTest(torch):
+                code, out = check_cpu_set(f"fastapi==0.128.0\n{torch}\n")
+                self.assertEqual(code, 1)
+                self.assertIn("is in a CPU image", out)
+                self.assertIn("pins no torch", out)
+
+    def test_sentence_transformers_in_a_cpu_image_fails(self):
+        code, out = check_cpu_set("fastapi==0.128.0\nsentence_transformers==3.4.1\n")
+        self.assertEqual(code, 1)
+        self.assertIn("sentence_transformers==3.4.1 is in a CPU image", out)
+
+    def test_without_a_requirements_file_torch_is_not_allowed(self):
+        code, out = run_check("fastapi==0.128.0\ntorch==2.14.1+cpu\n", requirements=None)
+        self.assertEqual(code, 1)
+        self.assertIn("is in a CPU image", out)
+
 
 @needs_yaml
 class ComposeCpuOverlay(unittest.TestCase):
@@ -326,23 +466,33 @@ class ComposeCpuOverlay(unittest.TestCase):
             with self.subTest(name):
                 self.assertNotIn("TORCH_INDEX_URL", build_args(self.base[name]))
 
-    def test_each_profile_builds_torch_from_the_index_its_hardware_needs(self):
+    def resolved_index(self, profile: str, name: str, context: Path) -> str:
         layers = {
             profiles.BASE_COMPOSE: self.base,
             profiles.CPU_OVERLAY: self.overlay,
         }
-        linux = {"os": {"platform": "linux"}}
+        files = profiles.env_for(profile, {"os": {"platform": "linux"}})["COMPOSE_FILE"].split(":")
+        steps = instructions(context / "Dockerfile")
+        index = torch_index_default(steps, torch_install(steps)[1])[1]
+        for file in files:
+            index = build_args(layers[file].get(name) or {}).get("TORCH_INDEX_URL", index)
+        return index
+
+    def test_each_profile_builds_torch_from_the_index_its_hardware_needs(self):
         for profile in profiles.PROFILE_ORDER:
-            files = profiles.env_for(profile, linux)["COMPOSE_FILE"].split(":")
             expected = CPU_TORCH_INDEX if profiles.is_cpu_profile(profile) else DEFAULT_INDEX
             for name, context in TORCH_SERVICES.items():
                 with self.subTest(f"{profile} {name}"):
-                    steps = instructions(context / "Dockerfile")
-                    index = torch_index_default(steps, torch_install(steps)[1])[1]
-                    for file in files:
-                        index = build_args(layers[file].get(name) or {}).get(
-                            "TORCH_INDEX_URL", index)
-                    self.assertEqual(index, expected)
+                    self.assertEqual(self.resolved_index(profile, name, context), expected)
+
+    def test_cpu_profiles_install_no_torch_and_gpu_profiles_keep_it(self):
+        for profile in profiles.PROFILE_ORDER:
+            cpu = profiles.is_cpu_profile(profile)
+            for name, context in TORCH_SERVICES.items():
+                with self.subTest(f"{profile} {name}"):
+                    chosen = chosen_requirements(context, self.resolved_index(profile, name, context))
+                    self.assertEqual(chosen, CPU_REQUIREMENTS if cpu else GPU_REQUIREMENTS)
+                    self.assertEqual(bool(torch_requirements(context / chosen)), not cpu)
 
 
 @needs_yaml
@@ -368,10 +518,15 @@ class CiCpuImageJob(unittest.TestCase):
             r"\s*\\?\s*build \$\{\{ matrix\.service \}\}",
         )
 
-    def test_every_built_image_is_checked_for_cuda_packages(self):
+    def test_every_built_image_is_checked_for_cuda_packages_and_torch(self):
         self.assertIn("pip list --format=freeze", self.script)
         self.assertIn("scripts/ci/check-cpu-image.py", self.script)
-        self.assertIn("src/services/${{ matrix.context }}/requirements.txt", self.script)
+        self.assertIn(f"src/services/${{{{ matrix.context }}}}/{CPU_REQUIREMENTS}", self.script)
+
+    def test_the_requirements_the_job_checks_against_pin_no_torch(self):
+        for entry in self.matrix:
+            with self.subTest(entry["service"]):
+                self.assertEqual(torch_requirements(SERVICES / entry["context"] / CPU_REQUIREMENTS), [])
 
     def test_the_job_waits_for_the_wiring_checks(self):
         self.assertIn("cpu-build-wiring", self.job.get("needs", []))

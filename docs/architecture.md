@@ -167,7 +167,7 @@ The Knowledge Store is the organization's private memory. It ingests documents (
 **Responsibilities:**
 
 - Document ingestion with automatic content analysis and chunking
-- Embedding generation using SentenceTransformers
+- Embedding generation using FastEmbed (BGE base on ONNX Runtime, no torch)
 - Vector similarity search via ChromaDB
 - File upload, storage, and lifecycle management
 - Content type detection and format-specific parsing
@@ -182,7 +182,7 @@ The Knowledge Store is the organization's private memory. It ingests documents (
 | `chroma_db/setup.py` | ChromaDB client initialization and collection management |
 | `chroma_db/models/` | Pydantic models for documents and search results |
 | `chroma_db/services/file_service.py` | File processing pipeline: one entry per passage (`{doc_id}:{n}`), document-level listing, search and delete |
-| `chroma_db/services/reindex.py` | Re-index of stored documents: whole-file entries to passages, re-embedding |
+| `chroma_db/services/reindex.py` | Re-index of stored documents: whole-file entries to passages, re-embedding; also started at startup when entries need it |
 | `services/content_analyzer.py` | Content type detection and metadata extraction |
 | `services/document_chunker.py` | Splits text into passages of at most 1,000 characters (200 overlap) with their character offsets |
 | `core/` | Logging, metrics, correlation ID middleware |
@@ -519,9 +519,9 @@ A complete example with all variables is available at `src/infra/.env.example`.
 
 | Technology | Purpose |
 |---|---|
-| Hugging Face Transformers | Model loading and inference |
-| SentenceTransformers | Embedding generation for RAG |
-| bitsandbytes | 4-bit model quantization for efficient GPU inference |
+| Hugging Face Transformers | In-process model loading and inference (GPU images only) |
+| FastEmbed (ONNX Runtime) | Embedding generation: BGE base for RAG in the knowledge store, MiniLM for routing and skill matching in MAS |
+| bitsandbytes | 4-bit model quantization for efficient GPU inference (GPU images only) |
 | ChromaDB | Vector database for document embeddings |
 
 #### Infrastructure
@@ -1624,8 +1624,8 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 | Service | Language | Framework | Key Libraries |
 |---------|----------|-----------|---------------|
 | MAS | Python 3.13 | FastAPI | SQLAlchemy, Pydantic, Pika |
-| Agent | Python 3.13 | FastAPI | Transformers, Torch, HTTPX |
-| Knowledge Store | Python 3.13 | FastAPI | ChromaDB, Sentence-Transformers |
+| Agent | Python 3.13 | FastAPI | HTTPX, spaCy; Transformers and Torch in the GPU image only |
+| Knowledge Store | Python 3.13 | FastAPI | ChromaDB, FastEmbed (ONNX Runtime) |
 
 #### 4.2 Frontend
 

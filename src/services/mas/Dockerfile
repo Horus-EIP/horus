@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
-COPY ./requirements.txt ./requirements.txt
+COPY requirements.txt requirements-gpu.txt ./
 
 # Install build dependencies for grpcio and other packages.
 # --no-install-recommends avoids manpages/man-db triggers that often yield apt exit 100 in slim images.
@@ -17,15 +17,22 @@ RUN apt-get update -o Acquire::Retries=5 \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 ARG TORCH_INDEX_URL=https://pypi.org/simple
+RUN case "$TORCH_INDEX_URL" in \
+        https://download.pytorch.org/whl/cpu) cp requirements.txt requirements-image.txt ;; \
+        *) cp requirements-gpu.txt requirements-image.txt ;; \
+    esac
+
 RUN --mount=type=cache,target=/root/.cache/pip \
-    torch_pin="$(grep -oE '^torch==[0-9.]+' requirements.txt)" \
-    && pip install --timeout=120 --retries=10 --index-url "$TORCH_INDEX_URL" "$torch_pin"
+    torch_pin="$(grep -oE '^torch==[0-9.]+' requirements-image.txt || true)" \
+    && if [ -n "$torch_pin" ]; then \
+        pip install --timeout=120 --retries=10 --index-url "$TORCH_INDEX_URL" "$torch_pin"; \
+    fi
 
 # Cache pip downloads across builds (BuildKit) + patient timeouts/retries so large
 # ML wheels (torch ~500MB) don't abort on a slow/flaky network read timeout, and a
 # completed download is reused on the next rebuild instead of re-fetched.
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --use-deprecated=legacy-resolver --timeout=120 --retries=10 -r requirements.txt
+    pip install --use-deprecated=legacy-resolver --timeout=120 --retries=10 -r requirements-image.txt
 
 # Install OpenTelemetry auto-instrumentation
 RUN opentelemetry-bootstrap --action=install
@@ -41,8 +48,8 @@ COPY . .
 # /tasks/suggest-skills. Small enough to bake in so the suggest endpoint works
 # the moment the container is up.
 ENV HF_HUB_DISABLE_TELEMETRY=1
-RUN mkdir -p models && \
-    python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='sentence-transformers/all-MiniLM-L6-v2', local_dir='models/all-MiniLM-L6-v2', local_dir_use_symlinks=False, allow_patterns=['*.json', '*.txt', 'model.safetensors', '*/*.json', '*/*.txt'])"
+ENV FASTEMBED_CACHE_PATH=/app/models/fastembed
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/all-MiniLM-L6-v2')"
 
 # Default to ONLINE for the first run so bootstrap_llm.py can pull the LLM.
 # Operators can flip both to 1 in their env once the cache volume is warm.

@@ -501,47 +501,53 @@ class TestCollaborativeTask:
 # =========================================================================== #
 
 
-class TestResolveModelPath:
-    # ``exists``/``iterdir`` are read-only C attributes on a Path *instance*, so
-    # we patch them on the ``pathlib.Path`` class and gate on the module's path.
+class TestEmbedThreads:
+    @pytest.fixture(autouse=True)
+    def _no_thread_settings(self, monkeypatch):
+        monkeypatch.delenv(embedding_setup.EMBED_THREADS_ENV, raising=False)
+        monkeypatch.delenv(embedding_setup.SHARED_THREADS_ENV, raising=False)
 
-    def test_prefers_local_dir_when_present_and_nonempty(self):
-        target = embedding_setup.EMBED_MODEL_DIR
-        with patch("pathlib.Path.exists", lambda self: self == target), \
-             patch("pathlib.Path.iterdir", lambda self: iter(["a_file"])):
-            assert embedding_setup._resolve_model_path() == str(target)
+    def test_onnxruntime_picks_the_threads_when_nothing_is_set(self):
+        assert embedding_setup.embed_threads() is None
 
-    def test_falls_back_to_hf_id_when_dir_missing(self):
-        with patch("pathlib.Path.exists", lambda self: False):
-            assert embedding_setup._resolve_model_path() == (
-                embedding_setup.EMBED_MODEL_ID
-            )
+    def test_the_embedder_setting_wins(self, monkeypatch):
+        monkeypatch.setenv(embedding_setup.EMBED_THREADS_ENV, "2")
+        monkeypatch.setenv(embedding_setup.SHARED_THREADS_ENV, "1")
 
-    def test_falls_back_to_hf_id_when_dir_empty(self):
-        target = embedding_setup.EMBED_MODEL_DIR
-        with patch("pathlib.Path.exists", lambda self: self == target), \
-             patch("pathlib.Path.iterdir", lambda self: iter([])):
-            assert embedding_setup._resolve_model_path() == (
-                embedding_setup.EMBED_MODEL_ID
-            )
+        assert embedding_setup.embed_threads() == 2
+
+    def test_the_installer_thread_budget_applies_without_an_embedder_setting(self, monkeypatch):
+        monkeypatch.setenv(embedding_setup.SHARED_THREADS_ENV, "1")
+
+        assert embedding_setup.embed_threads() == 1
+
+    @pytest.mark.parametrize("raw", ["0", "-2", "many"])
+    def test_a_value_that_is_not_a_positive_count_is_ignored(self, monkeypatch, raw):
+        monkeypatch.setenv(embedding_setup.EMBED_THREADS_ENV, raw)
+        monkeypatch.setenv(embedding_setup.SHARED_THREADS_ENV, "3")
+
+        assert embedding_setup.embed_threads() == 3
 
 
 class TestLoadEmbedder:
-    def test_load_embedder_uses_sentence_transformer_on_cpu(self):
-        fake_model = MagicMock()
-        fake_model.get_sentence_embedding_dimension.return_value = 384
-        fake_st_module = MagicMock()
-        fake_st_module.SentenceTransformer.return_value = fake_model
+    def test_load_embedder_uses_fastembed_on_cpu(self, monkeypatch):
+        monkeypatch.setenv(embedding_setup.EMBED_THREADS_ENV, "1")
+        fake_model = MagicMock(embedding_size=384)
+        fake_fastembed = MagicMock()
+        fake_fastembed.TextEmbedding.return_value = fake_model
 
-        with patch.dict("sys.modules", {"sentence_transformers": fake_st_module}), \
-             patch.object(embedding_setup, "_resolve_model_path",
-                          return_value="/some/path"):
+        with patch.dict("sys.modules", {"fastembed": fake_fastembed}):
             model = embedding_setup._load_embedder()
 
         assert model is fake_model
-        fake_st_module.SentenceTransformer.assert_called_once_with(
-            "/some/path", device="cpu"
+        fake_fastembed.TextEmbedding.assert_called_once_with(
+            "sentence-transformers/all-MiniLM-L6-v2", threads=1, cuda=False
         )
+
+    def test_sentence_transformers_and_torch_are_not_needed(self):
+        missing = {"sentence_transformers": None, "torch": None, "fastembed": MagicMock()}
+        with patch.dict("sys.modules", missing):
+            embedding_setup._load_embedder()
 
 
 class TestEnsureEmbedderLoaded:
@@ -705,15 +711,24 @@ class TestPreloadBackgroundThread:
 class TestEmbedTexts:
     def test_embed_texts_returns_float32_matrix(self):
         fake_model = MagicMock()
-        fake_model.encode.return_value = np.array(
-            [[1.0, 2.0], [3.0, 4.0]], dtype=np.float64
+        fake_model.embed.return_value = iter(
+            [np.array([1.0, 2.0]), np.array([3.0, 4.0])]
         )
         with patch.object(embedding_setup, "_embedder", fake_model), \
              patch.object(embedding_setup, "_ensure_embedder_loaded"):
             out = embedding_setup.embed_texts(["a", "b"])
         assert out.dtype == np.float32
         assert out.shape == (2, 2)
-        fake_model.encode.assert_called_once()
+        fake_model.embed.assert_called_once_with(["a", "b"])
+
+    def test_embed_texts_of_nothing_is_an_empty_matrix_of_the_model_width(self):
+        fake_model = MagicMock(embedding_size=384)
+        fake_model.embed.return_value = iter([])
+        with patch.object(embedding_setup, "_embedder", fake_model), \
+             patch.object(embedding_setup, "_ensure_embedder_loaded"):
+            out = embedding_setup.embed_texts([])
+        assert out.shape == (0, 384)
+        assert out.dtype == np.float32
 
     def test_embed_texts_raises_when_model_not_loaded(self):
         with patch.object(embedding_setup, "_embedder", None), \
@@ -723,7 +738,7 @@ class TestEmbedTexts:
 
     def test_embed_text_returns_single_vector(self):
         fake_model = MagicMock()
-        fake_model.encode.return_value = np.array([[5.0, 6.0, 7.0]], dtype=np.float64)
+        fake_model.embed.return_value = iter([np.array([5.0, 6.0, 7.0])])
         with patch.object(embedding_setup, "_embedder", fake_model), \
              patch.object(embedding_setup, "_ensure_embedder_loaded"):
             vec = embedding_setup.embed_text("hello")

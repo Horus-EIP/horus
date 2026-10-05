@@ -50,7 +50,8 @@ The RAG pipeline ships with a set of built-in tools that can be invoked by setti
 
 ```
 agent/
-  requirements.txt
+  requirements.txt              # CPU image: no torch, transformers or en_core_web_trf
+  requirements-gpu.txt          # GPU image: requirements.txt plus the in-process model stack
   app/
     main.py                     # Entry point (uvicorn agent_server.server:app)
     run_agent.sh                # Local development launcher
@@ -116,6 +117,10 @@ In practice, most tasks arrive through the RabbitMQ consumer rather than the HTT
 | `DELEGATION_TIMEOUT`      | Timeout for delegation requests (seconds)  | `30.0`                    |
 | `MAX_DELEGATION_DEPTH`    | Maximum inter-agent delegation chain depth | `5`                       |
 
+### CPU and GPU images
+
+The Dockerfile installs `requirements.txt` when the build argument `TORCH_INDEX_URL` is the CPU wheel index (`https://download.pytorch.org/whl/cpu`, set by `docker-compose.cpu.yml`): the CPU image has no torch, transformers, accelerate, bitsandbytes or `en_core_web_trf`, and the data extractor uses `en_core_web_sm`. On the CPU profiles the agent generates through llama-server (`LLM_BACKEND=vllm`), so it starts and answers without them; with `LLM_BACKEND=transformers` a CPU image stops at start with a message that names the missing packages and points at `LLM_BACKEND=vllm`. Any other index (the default `https://pypi.org/simple`) builds the GPU image from `requirements-gpu.txt`, which installs the pinned torch from that index first and keeps the in-process decision model as a fallback.
+
 ## Local Development
 
 ### Prerequisites
@@ -129,7 +134,7 @@ In practice, most tasks arrive through the RabbitMQ consumer rather than the HTT
 cd src/services/agent
 python -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-gpu.txt --extra-index-url https://download.pytorch.org/whl/cpu
 ```
 
 ### Run

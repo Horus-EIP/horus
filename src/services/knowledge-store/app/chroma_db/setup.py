@@ -4,12 +4,16 @@ os.environ.setdefault("POSTHOG_DISABLED", "true")
 os.environ.setdefault("CHROMA_TELEMETRY_ENABLED", "0")
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 
+from collections.abc import Iterable, Sequence
+from importlib import metadata
 from pathlib import Path
 
 import chromadb
+import onnxruntime
 from chromadb.config import Settings
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 
+from app.core.logging import get_logger
 from app.core.metrics import timed_embedding
 
 try:
@@ -31,6 +35,8 @@ try:
 except Exception:
     pass
 
+logger = get_logger("Embedder")
+
 CHROMA_DATA_DIR = Path(__file__).parent.parent.parent / "chroma_data"
 
 chroma_client = chromadb.PersistentClient(
@@ -39,42 +45,83 @@ chroma_client = chromadb.PersistentClient(
 )
 
 MODEL_NAME = "BAAI/bge-base-en-v1.5"
+EMBED_DIMENSIONS = 768
+EMBED_RUNTIME = "fastembed"
+CUDA_PROVIDER = "CUDAExecutionProvider"
 
-# Device selection for the BGE embedder. Default "auto" keeps the historical
-# behaviour (SentenceTransformer picks CUDA when available). Set
-# KNOWLEDGE_STORE_EMBED_DEVICE=cpu to keep the embedder OFF the shared 8 GB GPU
-# so it stops competing with the agent's 4B model and paging it out under load
-# (see scripts/perf/benchmark-pipeline.py contention scenario).
-_EMBED_DEVICE = os.getenv("KNOWLEDGE_STORE_EMBED_DEVICE", "auto").strip().lower()
-if _EMBED_DEVICE in ("", "auto"):
-    model = SentenceTransformer(MODEL_NAME)
-else:
-    model = SentenceTransformer(MODEL_NAME, device=_EMBED_DEVICE)
 
-# Log the resolved device so a silent CPU/GPU fallback is visible at startup.
-try:
-    _resolved_device = str(next(model.parameters()).device)
-except Exception:
-    _resolved_device = "unknown"
-print(
-    f"[knowledge-store] BGE embedder '{MODEL_NAME}' loaded on device="
-    f"{_resolved_device} (KNOWLEDGE_STORE_EMBED_DEVICE={_EMBED_DEVICE})",
-    flush=True,
-)
+def installed_version(distribution: str) -> str:
+    try:
+        return metadata.version(distribution)
+    except metadata.PackageNotFoundError:
+        return "unknown"
+
+
+EMBED_RUNTIME_VERSION = installed_version(EMBED_RUNTIME)
+EMBED_MODEL = f"{EMBED_RUNTIME}-{EMBED_RUNTIME_VERSION}:{MODEL_NAME}"
+
+COLLECTION_METADATA = {
+    "embedding_model": MODEL_NAME,
+    "embed_model": EMBED_MODEL,
+    "embedding_runtime": EMBED_RUNTIME,
+    "embedding_runtime_version": EMBED_RUNTIME_VERSION,
+    "dimensions": EMBED_DIMENSIONS,
+}
 
 BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 
-EMBED_MODEL = f"sentence-transformers:{MODEL_NAME}"
+
+def wants_cuda(requested: str, available_providers: Sequence[str]) -> bool:
+    device = (requested or "").strip().lower()
+    cuda_available = CUDA_PROVIDER in available_providers
+    if device in ("", "auto"):
+        return cuda_available
+    if not device.startswith("cuda"):
+        return False
+    if not cuda_available:
+        logger.warning(
+            "KNOWLEDGE_STORE_EMBED_DEVICE=%s, but this onnxruntime has no %s; embedding on CPU",
+            requested, CUDA_PROVIDER,
+        )
+    return cuda_available
+
+
+def embed_threads(raw: str | None) -> int | None:
+    try:
+        threads = int((raw or "").strip())
+    except ValueError:
+        return None
+    return threads if threads > 0 else None
+
+
+_EMBED_DEVICE = os.getenv("KNOWLEDGE_STORE_EMBED_DEVICE", "auto")
+_USE_CUDA = wants_cuda(_EMBED_DEVICE, onnxruntime.get_available_providers())
+_EMBED_THREADS = embed_threads(os.getenv("KNOWLEDGE_STORE_EMBED_THREADS"))
+
+model = TextEmbedding(MODEL_NAME, threads=_EMBED_THREADS, cuda=_USE_CUDA)
+
+logger.info(
+    "BGE embedder %s loaded with %s %s on %s (KNOWLEDGE_STORE_EMBED_DEVICE=%s, threads=%s)",
+    MODEL_NAME, EMBED_RUNTIME, EMBED_RUNTIME_VERSION, "cuda" if _USE_CUDA else "cpu",
+    _EMBED_DEVICE, _EMBED_THREADS or "onnxruntime default",
+)
+
+
+def _vectors(texts: Iterable[str]) -> list[list[float]]:
+    return [vector.tolist() for vector in model.embed(list(texts))]
+
 
 @timed_embedding
 def get_embedding(text: str, is_query: bool = False) -> list[float]:
     if is_query:
         text = BGE_QUERY_PREFIX + text
-    return model.encode(text, normalize_embeddings=True).tolist()
+    return _vectors([text])[0]
+
 
 @timed_embedding
 def get_embeddings(texts: list[str]) -> list[list[float]]:
-    return model.encode(list(texts), normalize_embeddings=True).tolist()
+    return _vectors(texts)
+
 
 COLLECTION_NAME = "knowledge_collection"
 
@@ -83,5 +130,5 @@ try:
 except Exception:
     knowledge_collection = chroma_client.create_collection(
         name=COLLECTION_NAME,
-        metadata={"embedding_model": MODEL_NAME, "dimensions": 768}
+        metadata=dict(COLLECTION_METADATA),
     )

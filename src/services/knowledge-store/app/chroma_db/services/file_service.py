@@ -11,7 +11,7 @@ from app.chroma_db.services.corpus_version import bump_corpus_version
 from app.chroma_db.services.deleted_sources import remember_deleted
 from app.chroma_db.setup import EMBED_MODEL, get_embedding, get_embeddings, knowledge_collection
 from app.core.logging import get_logger
-from app.core.metrics import timed_query
+from app.core.metrics import record_document_operation, set_document_count, timed_query
 from app.services.document_chunker import DocumentChunker, TextChunk, page_of
 
 logger = get_logger("FileService")
@@ -183,11 +183,17 @@ async def store_file(
         **extra,
     }
     try:
-        return await asyncio.to_thread(
+        written = await asyncio.to_thread(
             _replace_document, doc.id, doc.content, per_chunk, document_level, page_starts
         )
+    except Exception:
+        record_document_operation("add", success=False)
+        raise
     finally:
         bump_corpus_version()
+    record_document_operation("add", success=True)
+    await asyncio.to_thread(refresh_document_count)
+    return written
 
 
 def _replace_document(
@@ -276,6 +282,18 @@ def entries_of(doc_id: str, with_text: bool = False) -> list[StoredEntry]:
         )
     }
     return list(found.values())
+
+
+def count_documents() -> int:
+    heads = knowledge_collection.get(where={"chunk_index": 0}, include=[]) or {}
+    return len(heads.get("ids") or [])
+
+
+def refresh_document_count() -> None:
+    try:
+        set_document_count(count_documents())
+    except Exception as exc:
+        logger.warning("could not count the stored documents: %s", exc)
 
 
 def stored_documents() -> list[StoredDocument]:
@@ -541,6 +559,17 @@ def _remove_unused_files(metadatas: Iterable[Mapping[str, Any]]) -> list[str]:
 
 
 async def delete_document(id: str) -> dict:
+    try:
+        outcome = _delete_entries(id)
+    except Exception:
+        record_document_operation("delete", success=False)
+        raise
+    record_document_operation("delete", success=True)
+    refresh_document_count()
+    return outcome
+
+
+def _delete_entries(id: str) -> dict:
     entries = _entries_of_document(id)
     if not entries:
         raise DocumentNotFoundError(f"No document with id {id!r} in the knowledge store")

@@ -9,22 +9,30 @@ from pathlib import Path
 
 import pytest
 
-from core.embedding_setup import EMBED_MODEL_DIR, EMBED_MODEL_ID
+from core.embedding_setup import EMBED_MODEL_ID
 
 MAS_DIR = Path(__file__).resolve().parents[3] / "src" / "services" / "mas"
 REPORT_TIMEOUT_SECONDS = 900
 
 
 def minilm_on_disk() -> bool:
-    if importlib.util.find_spec("sentence_transformers") is None:
+    if importlib.util.find_spec("fastembed") is None:
         return False
-    if EMBED_MODEL_DIR.is_dir() and any(EMBED_MODEL_DIR.iterdir()):
-        return True
-    try:
-        from huggingface_hub import try_to_load_from_cache
-    except ImportError:
+    from fastembed import TextEmbedding
+    from fastembed.common.utils import define_cache_dir
+    from huggingface_hub import try_to_load_from_cache
+
+    described = next(
+        (model for model in TextEmbedding.list_supported_models()
+         if model["model"] == EMBED_MODEL_ID),
+        None,
+    )
+    if described is None or not described["sources"].get("hf"):
         return False
-    return isinstance(try_to_load_from_cache(EMBED_MODEL_ID, "config.json"), str)
+    found = try_to_load_from_cache(
+        described["sources"]["hf"], described["model_file"], cache_dir=str(define_cache_dir())
+    )
+    return isinstance(found, str)
 
 
 pytestmark = [
@@ -33,7 +41,7 @@ pytestmark = [
 ]
 
 
-def test_router_report_on_the_test_set_with_the_minilm_embedder(tmp_path):
+def test_router_report_on_the_test_set_with_the_fastembed_minilm_embedder(tmp_path):
     report_path = tmp_path / "router-report.json"
     env = {name: value for name, value in os.environ.items() if name != "TEST_MODE"}
     env.update(

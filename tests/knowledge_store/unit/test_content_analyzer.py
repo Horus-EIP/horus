@@ -222,3 +222,37 @@ class TestReturnFormat:
         analyzer = ContentAnalyzer(init_llm=False)
         result = analyzer.analyze("Invoice content", title="Invoice #123")
         assert result["auto_type"] == "invoice"
+
+
+class TestSpacyModelChoice:
+    def test_the_transformer_model_is_used_when_installed(self, monkeypatch):
+        import spacy
+
+        import app.services.content_analyzer as ca_mod
+
+        monkeypatch.setattr(spacy, "load", MagicMock(side_effect=lambda name: f"nlp:{name}"))
+
+        assert ca_mod._load_spacy_model() == "nlp:en_core_web_trf"
+
+    def test_a_cpu_image_without_the_transformer_model_uses_the_small_one(self, monkeypatch):
+        import spacy
+
+        import app.services.content_analyzer as ca_mod
+
+        def installed_models(name):
+            if name == "en_core_web_trf":
+                raise OSError(f"[E050] Can't find model '{name}'")
+            return f"nlp:{name}"
+
+        monkeypatch.setattr(spacy, "load", MagicMock(side_effect=installed_models))
+
+        assert ca_mod._load_spacy_model() == "nlp:en_core_web_sm"
+
+    def test_without_any_model_entities_come_from_the_regex_fallback(self, monkeypatch):
+        import spacy
+
+        import app.services.content_analyzer as ca_mod
+
+        monkeypatch.setattr(spacy, "load", MagicMock(side_effect=OSError("[E050] no model")))
+
+        assert ca_mod._load_spacy_model() is False

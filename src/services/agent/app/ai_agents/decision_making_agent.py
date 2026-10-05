@@ -484,10 +484,20 @@ class DecisionMakingAgent:
             )
             return
 
+        if _llm_backend() == "vllm" and not _TRANSFORMERS_AVAILABLE:
+            logger.info(
+                "LLM_BACKEND=vllm: generation is served by %s (model=%s); this image has "
+                "no in-process model stack.",
+                _vllm_base_url(),
+                _vllm_model_name(),
+            )
+            return
+
         if not _TRANSFORMERS_AVAILABLE:
             raise RuntimeError(
-                "transformers/torch are required for DecisionMakingAgent. "
-                "Install dependencies and rebuild the agent image."
+                "The in-process decision model needs transformers/torch, which this image "
+                "does not ship: CPU images leave them out. Set LLM_BACKEND=vllm and "
+                "LLM_VLLM_URL to use llama-server or vLLM, or run the GPU image."
             )
 
         OFFLOAD_DIR.mkdir(parents=True, exist_ok=True)

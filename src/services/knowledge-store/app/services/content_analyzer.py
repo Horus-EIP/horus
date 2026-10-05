@@ -123,8 +123,29 @@ DOC_TYPE_KEYWORDS = {
 }
 
 CONFIDENCE_THRESHOLD = 0.6
+SPACY_MODELS = ("en_core_web_trf", "en_core_web_sm")
 
 _nlp_model = None
+
+
+def _load_spacy_model() -> Any:
+    try:
+        import spacy
+    except ImportError:
+        logger.warning("spaCy is not installed; entity extraction will use regex fallback")
+        return False
+    for name in SPACY_MODELS:
+        try:
+            nlp = spacy.load(name)
+        except (OSError, ImportError, ValueError):
+            continue
+        logger.info("spaCy model %s loaded successfully", name)
+        return nlp
+    logger.warning(
+        "no spaCy model of %s is installed; entity extraction will use regex fallback",
+        ", ".join(SPACY_MODELS),
+    )
+    return False
 
 
 def _try_import_transformers() -> tuple[bool, Any]:
@@ -153,16 +174,7 @@ class ContentAnalyzer:
     ):
         global _nlp_model
         if _nlp_model is None:
-            try:
-                import spacy
-                _nlp_model = spacy.load("en_core_web_trf")
-                logger.info("spaCy model en_core_web_trf loaded successfully")
-            except (OSError, ImportError):
-                logger.warning(
-                    "spaCy model en_core_web_trf not available; "
-                    "entity extraction will use regex fallback"
-                )
-                _nlp_model = False
+            _nlp_model = _load_spacy_model()
 
         self.nlp = _nlp_model if _nlp_model is not False else None
         self.category_keywords = CATEGORY_KEYWORDS

@@ -25,6 +25,10 @@ logger = get_logger("CorpusRouter")
 
 CORPUS_TOKEN_ENV = "CORPUS_SCAN_TOKEN"
 CORPUS_TOKEN_HEADER = "X-Corpus-Token"
+STARTUP_REINDEX_ENV = "KNOWLEDGE_STORE_REINDEX_ON_STARTUP"
+DISABLED_VALUES = frozenset({"0", "false", "no", "off"})
+REQUESTED = "request"
+STARTUP = "startup"
 
 async def require_corpus_token(
     presented: str | None = Header(default=None, alias=CORPUS_TOKEN_HEADER),
@@ -255,6 +259,7 @@ _job: dict[str, Any] | None = None
 _scan_task: asyncio.Task | None = None
 _reindex_job: dict[str, Any] | None = None
 _reindex_task: asyncio.Task | None = None
+_startup_check: asyncio.Task | None = None
 
 def _busy_detail() -> str:
     if (_reindex_job or {}).get("state") == "running":
@@ -523,10 +528,11 @@ async def corpus_status():
         }
     return _job
 
-def _new_reindex_job() -> dict[str, Any]:
+def _new_reindex_job(trigger: str = REQUESTED) -> dict[str, Any]:
     return {
         "job_id": uuid.uuid4().hex,
         "state": "running",
+        "trigger": trigger,
         "embed_model": file_service.EMBED_MODEL,
         "started_at": datetime.now(UTC).isoformat(),
         "finished_at": None,
@@ -562,6 +568,9 @@ async def _run_reindex(job: dict[str, Any]) -> None:
             job["totals"][outcome] += 1
         job["state"] = "completed"
         logger.info("re-index %s complete: %s", job["job_id"], job["totals"])
+        if not job["totals"]["failed"]:
+            await asyncio.to_thread(reindex.record_embedder_in_collection)
+        await asyncio.to_thread(file_service.refresh_document_count)
     except Exception as exc:
         job["state"] = "failed"
         job["error"] = f"{type(exc).__name__}: {exc}"
@@ -569,6 +578,56 @@ async def _run_reindex(job: dict[str, Any]) -> None:
     finally:
         job["finished_at"] = datetime.now(UTC).isoformat()
         _scan_slot.release()
+
+def reindex_on_startup_enabled() -> bool:
+    return os.getenv(STARTUP_REINDEX_ENV, "1").strip().lower() not in DISABLED_VALUES
+
+def _start_reindex(trigger: str) -> dict[str, Any]:
+    global _reindex_job, _reindex_task
+    _reindex_job = _new_reindex_job(trigger)
+    _reindex_task = asyncio.create_task(_run_reindex(_reindex_job))
+    return _reindex_job
+
+async def check_index_on_startup() -> dict[str, Any] | None:
+    embed_model = file_service.EMBED_MODEL
+    try:
+        await asyncio.to_thread(file_service.refresh_document_count)
+        pending = await asyncio.to_thread(reindex.documents_to_reindex, embed_model)
+        if not pending:
+            await asyncio.to_thread(reindex.record_embedder_in_collection)
+            logger.info("startup: every stored passage is embedded with %s", embed_model)
+            return None
+    except Exception as exc:
+        logger.warning("startup: could not check the index against %s: %s", embed_model, exc)
+        return None
+    if not reindex_on_startup_enabled():
+        logger.warning(
+            "startup: %d documents are stored as whole files or with another embedder than "
+            "%s, and %s is off; run scripts/reindex-knowledge-store.py",
+            len(pending), embed_model, STARTUP_REINDEX_ENV,
+        )
+        return None
+    if _scan_slot.locked():
+        logger.warning("startup: %d documents need a re-index, but %s",
+                       len(pending), _busy_detail())
+        return None
+    await _scan_slot.acquire()
+    job = _start_reindex(STARTUP)
+    logger.info(
+        "startup: re-index %s started in the background for %d documents stored as whole "
+        "files or with another embedder than %s",
+        job["job_id"], len(pending), embed_model,
+    )
+    return job
+
+def schedule_startup_check() -> asyncio.Task:
+    global _startup_check
+    _startup_check = asyncio.create_task(check_index_on_startup())
+    return _startup_check
+
+def cancel_startup_check() -> None:
+    if _startup_check is not None and not _startup_check.done():
+        _startup_check.cancel()
 
 @router.post(
     "/reindex",
@@ -581,7 +640,9 @@ async def _run_reindex(job: dict[str, Any]) -> None:
         "Documents already up to date are left alone, so running it twice is a no-op, "
         "and an interrupted run picks up where it stopped. Each changed document bumps "
         "the corpus version. Returns immediately; poll GET /corpus/reindex. Never runs "
-        "together with a corpus scan. Requires the X-Corpus-Token header."
+        "together with a corpus scan. The service also starts this job by itself at "
+        "startup when it finds such passages or whole-file entries (trigger startup), "
+        "unless KNOWLEDGE_STORE_REINDEX_ON_STARTUP=0. Requires the X-Corpus-Token header."
     ),
     responses={
         202: {
@@ -590,7 +651,7 @@ async def _run_reindex(job: dict[str, Any]) -> None:
                 "application/json": {
                     "example": {
                         "job_id": "9f2c...", "state": "running",
-                        "embed_model": "sentence-transformers:BAAI/bge-base-en-v1.5",
+                        "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5",
                     }
                 }
             },
@@ -601,19 +662,14 @@ async def _run_reindex(job: dict[str, Any]) -> None:
     },
 )
 async def reindex_corpus():
-    global _reindex_job, _reindex_task
-
     if _scan_slot.locked():
         raise HTTPException(status_code=409, detail=_busy_detail())
     await _scan_slot.acquire()
 
-    _reindex_job = _new_reindex_job()
-    logger.info("re-index %s starting with %s", _reindex_job["job_id"],
-                _reindex_job["embed_model"])
-    _reindex_task = asyncio.create_task(_run_reindex(_reindex_job))
+    job = _start_reindex(REQUESTED)
+    logger.info("re-index %s starting with %s", job["job_id"], job["embed_model"])
 
-    return {"job_id": _reindex_job["job_id"], "state": "running",
-            "embed_model": _reindex_job["embed_model"]}
+    return {"job_id": job["job_id"], "state": "running", "embed_model": job["embed_model"]}
 
 @router.get(
     "/reindex",
@@ -621,7 +677,8 @@ async def reindex_corpus():
     description=(
         "Totals of the latest re-index: pending documents, and how many were migrated "
         "from whole-file entries, re-embedded, already up to date, or failed. state is "
-        "one of idle, running, completed, failed. Requires the X-Corpus-Token header."
+        "one of idle, running, completed, failed; trigger is request or startup. "
+        "Requires the X-Corpus-Token header."
     ),
     responses={
         200: {
@@ -631,7 +688,8 @@ async def reindex_corpus():
                     "example": {
                         "job_id": "9f2c...",
                         "state": "completed",
-                        "embed_model": "sentence-transformers:BAAI/bge-base-en-v1.5",
+                        "trigger": "startup",
+                        "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5",
                         "totals": {
                             "pending": 5, "migrated": 5, "reembedded": 0,
                             "unchanged": 0, "failed": 0,

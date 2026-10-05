@@ -138,7 +138,7 @@ jobs:
       - name: List the installed packages
         run: docker run --rm --entrypoint python "$IMAGE" -m pip list --format=freeze > packages.txt
 
-      - name: Fail on CUDA packages or a torch other than the pinned CPU build
+      - name: Fail on CUDA packages or any torch in the CPU image
         run: |
           python scripts/ci/check-cpu-image.py packages.txt \
             --requirements src/services/${{ matrix.context }}/requirements.txt
@@ -170,13 +170,19 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: src/services/mas/requirements-cpu.txt
+          cache-dependency-path: src/services/mas/requirements.txt
 
       - name: Install MAS dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r src/services/mas/requirements-cpu.txt
+          pip install -r src/services/mas/requirements.txt
           pip install pytest-cov fakeredis
+
+      - name: Fail on CUDA packages or any torch in the CPU requirements
+        run: |
+          pip list --format=freeze > packages.txt
+          python scripts/ci/check-cpu-image.py packages.txt \
+            --requirements src/services/mas/requirements.txt
 
       - name: Provide test configuration (workaround, see docs/eip/post-beta.md)
         run: cp src/infra/.env.example src/infra/.env
@@ -219,19 +225,19 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: src/services/agent/requirements.txt
+          cache-dependency-path: src/services/agent/requirements-gpu.txt
 
       - name: Install Agent dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r src/services/agent/requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+          pip install -r src/services/agent/requirements-gpu.txt --extra-index-url https://download.pytorch.org/whl/cpu
           pip install pytest-cov
 
       - name: Fail on CUDA packages or a torch other than the pinned CPU build
         run: |
           pip list --format=freeze > packages.txt
           python scripts/ci/check-cpu-image.py packages.txt \
-            --requirements src/services/agent/requirements.txt
+            --requirements src/services/agent/requirements-gpu.txt
 
       - name: Run Agent unit tests with coverage
         run: |
@@ -261,6 +267,8 @@ jobs:
   test-knowledge-store:
     name: Tests · Knowledge Store
     runs-on: ubuntu-latest
+    env:
+      PYTHON_VERSION: '3.11'
     steps:
       - uses: actions/checkout@v4
 
@@ -273,10 +281,10 @@ jobs:
       - name: Install Knowledge Store dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r src/services/knowledge-store/requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+          pip install -r src/services/knowledge-store/requirements.txt
           pip install pytest-cov
 
-      - name: Fail on CUDA packages or a torch other than the pinned CPU build
+      - name: Fail on CUDA packages or any torch in the CPU requirements
         run: |
           pip list --format=freeze > packages.txt
           python scripts/ci/check-cpu-image.py packages.txt \
