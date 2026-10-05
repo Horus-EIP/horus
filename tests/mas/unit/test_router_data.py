@@ -6,6 +6,7 @@ from collections import Counter
 from pathlib import Path
 
 import pytest
+import yaml
 
 from tasks.router import (
     ROUTER_EXAMPLES_PATH,
@@ -15,6 +16,8 @@ from tasks.router import (
     rule_decision,
 )
 from tasks.router_eval import load_router_testset
+
+from .requirement_sets import REQUIREMENT_FILES, has_upper_bound, requirement
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 AGENT_PROFILES = REPO_ROOT / "src" / "services" / "agent" / "app" / "agent_server" / "profiles.py"
@@ -93,6 +96,15 @@ class TestRouterTestset:
         per_document = Counter(item.source for item in document_items)
         assert all(count >= MIN_QUESTIONS_PER_DOCUMENT for count in per_document.values())
         assert set(per_document) == set(TESTSET.document_owners)
+
+
+class TestRouterDataLoader:
+    @pytest.mark.parametrize("file_name", REQUIREMENT_FILES)
+    def test_every_mas_requirement_set_installs_pyyaml_itself(self, file_name):
+        pyyaml = requirement(file_name, "PyYAML")
+
+        assert has_upper_bound(pyyaml), str(pyyaml.specifier)
+        assert pyyaml.specifier.contains(yaml.__version__), (str(pyyaml.specifier), yaml.__version__)
 
 
 class TestRouterExamples:

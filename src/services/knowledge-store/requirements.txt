@@ -19,6 +19,7 @@ opentelemetry-instrumentation-fastapi
 opentelemetry-instrumentation-logging
 
 # Testing
+PyYAML>=6.0.1,<7
 pytest
 pytest-cov
 pytest-asyncio

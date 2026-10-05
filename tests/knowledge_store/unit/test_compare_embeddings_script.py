@@ -7,8 +7,12 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
+from packaging.requirements import Requirement
 
-SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "compare-embeddings.py"
+REPO = Path(__file__).resolve().parents[3]
+SCRIPT = REPO / "scripts" / "compare-embeddings.py"
+KNOWLEDGE_STORE_REQUIREMENTS = REPO / "src" / "services" / "knowledge-store" / "requirements.txt"
 spec = importlib.util.spec_from_file_location("compare_embeddings", SCRIPT)
 compare_embeddings = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = compare_embeddings
@@ -82,6 +86,19 @@ def question_files(tmp_path):
 
 def paragraphs(text: str) -> list[str]:
     return [part for part in text.split("\n\n") if part]
+
+
+def listed_requirements(path: Path) -> dict[str, Requirement]:
+    lines = (raw.split(" #", 1)[0].strip() for raw in path.read_text(encoding="utf-8").splitlines())
+    parsed = (Requirement(line) for line in lines if line and not line.startswith(("#", "-")))
+    return {requirement.name.lower(): requirement for requirement in parsed}
+
+
+def test_the_knowledge_store_requirements_install_the_yaml_loader_of_this_script():
+    pyyaml = listed_requirements(KNOWLEDGE_STORE_REQUIREMENTS)["pyyaml"]
+
+    assert pyyaml.specifier.contains(yaml.__version__), (str(pyyaml.specifier), yaml.__version__)
+    assert any(spec.operator in ("<", "<=", "==", "~=") for spec in pyyaml.specifier)
 
 
 class TestSamples:

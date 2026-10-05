@@ -2,18 +2,16 @@ from __future__ import annotations
 
 import configparser
 import importlib.util
-from pathlib import Path
 
 import pytest
 import sqlalchemy
-from packaging.requirements import Requirement
 from sqlalchemy.engine import make_url
 
 from core import config
 
-MAS_ROOT = Path(__file__).resolve().parents[3] / "src" / "services" / "mas"
+from .requirement_sets import MAS_ROOT, REQUIREMENT_FILES, has_upper_bound, requirement
+
 PSYCOPG2_URL_SCHEME = "postgresql+psycopg2"
-REQUIREMENT_FILES = ("requirements.txt", "requirements-cpu.txt", "requirements-gpu.txt")
 
 POSTGRES_SETTINGS = {
     "postgres_user": "horus",
@@ -22,24 +20,6 @@ POSTGRES_SETTINGS = {
     "db_host": "postgres",
     "db_port": 5432,
 }
-
-
-def listed_requirements(file_name: str) -> list[Requirement]:
-    found: list[Requirement] = []
-    for raw in (MAS_ROOT / file_name).read_text(encoding="utf-8").splitlines():
-        line = raw.split(" #", 1)[0].strip()
-        if line.startswith("-r "):
-            found.extend(listed_requirements(line.split(None, 1)[1]))
-        elif line and not line.startswith(("#", "-")):
-            found.append(Requirement(line))
-    return found
-
-
-def requirement(file_name: str, project: str) -> Requirement:
-    for parsed in listed_requirements(file_name):
-        if parsed.name.lower() == project.lower():
-            return parsed
-    raise AssertionError(f"{file_name} does not list {project}")
 
 
 @pytest.fixture
@@ -88,9 +68,10 @@ def test_both_requirement_files_install_psycopg2(file_name):
 
 @pytest.mark.parametrize("file_name", REQUIREMENT_FILES)
 def test_sqlalchemy_is_held_to_the_release_range_the_suite_runs_on(file_name):
-    specifier = requirement(file_name, "SQLAlchemy").specifier
+    sqlalchemy_requirement = requirement(file_name, "SQLAlchemy")
+    specifier = sqlalchemy_requirement.specifier
 
-    assert any(spec.operator in ("<", "<=", "==", "~=") for spec in specifier), str(specifier)
+    assert has_upper_bound(sqlalchemy_requirement), str(specifier)
     assert specifier.contains(sqlalchemy.__version__), (str(specifier), sqlalchemy.__version__)
 
 
