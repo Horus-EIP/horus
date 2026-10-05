@@ -15,7 +15,7 @@ from eval_scoring import (
     route_correct,
     source_check,
 )
-from eval_stack import LLM_ROUTING_METHOD
+from eval_stack import LLM_PROCESS_NAME, LLM_ROUTING_METHOD
 from eval_testset import CATEGORIES
 
 REPORT_KIND = "horus-eval"
@@ -343,7 +343,9 @@ class ResourcePeaks:
         }
 
 
-def questions_peak_checks(resources: dict[str, Any], at_start: dict[str, Any] | None) -> dict[str, Any]:
+def questions_peak_checks(
+    resources: dict[str, Any], at_start: dict[str, Any] | None, questions_swap_peak: int | None
+) -> dict[str, Any]:
     if not at_start:
         return {
             "at_questions_start": None,
@@ -352,18 +354,44 @@ def questions_peak_checks(resources: dict[str, Any], at_start: dict[str, Any] | 
         }
     start_peaks = at_start.get("container_lifetime_peak_mem_bytes") or {}
     sampled = resources.get("container_peak_mem_bytes") or {}
-    excess = {}
+    memory_stats = resources.get("container_memory_stat") or {}
+    excess: dict[str, int | None] = {}
     for name, end_peak in (resources.get("container_lifetime_peak_mem_bytes") or {}).items():
         start_peak = start_peaks.get(name)
-        if name in sampled and start_peak is not None and end_peak > start_peak and end_peak > sampled[name]:
-            excess[name] = end_peak - sampled[name]
+        if name not in sampled or end_peak is None or start_peak is None or end_peak <= start_peak:
+            continue
+        inactive_file = (memory_stats.get(name) or {}).get("inactive_file")
+        if inactive_file is None:
+            excess[name] = None
+        elif end_peak - inactive_file > sampled[name]:
+            excess[name] = end_peak - inactive_file - sampled[name]
     swap_at_start = at_start.get("docker_host_swap_used_bytes")
-    swap_peak = resources.get("docker_host_swap_peak_used_bytes")
-    swap_known = swap_at_start is not None and swap_peak is not None
+    swap_known = swap_at_start is not None and questions_swap_peak is not None
     return {
         "at_questions_start": at_start,
         "unsampled_peak_excess_bytes": dict(sorted(excess.items())),
-        "docker_host_swap_growth_bytes": max(swap_peak - swap_at_start, 0) if swap_known else None,
+        "docker_host_swap_growth_bytes": max(questions_swap_peak - swap_at_start, 0) if swap_known else None,
+    }
+
+
+def llm_mapped_outside_docker_stats(
+    process: dict[str, Any] | None, memory_stat: dict[str, int] | None
+) -> int | None:
+    if not process or process.get("name") != LLM_PROCESS_NAME or process.get("rss_file_bytes") is None:
+        return None
+    if not memory_stat:
+        return None
+    counted_by_docker_stats = min(memory_stat["file_mapped"], memory_stat["active_file"])
+    return max(process["rss_file_bytes"] - counted_by_docker_stats, 0)
+
+
+def stack_peak_fields(resources: dict[str, Any], llm_container: str | None) -> dict[str, Any]:
+    memory_stat = (resources.get("container_memory_stat") or {}).get(llm_container) if llm_container else None
+    outside = llm_mapped_outside_docker_stats(resources.get("llm_process"), memory_stat)
+    total = resources.get("containers_sum_peak_mem_bytes")
+    return {
+        "llm_mapped_outside_docker_stats_bytes": outside,
+        "stack_peak_mem_bytes": None if total is None or outside is None else total + outside,
     }
 
 

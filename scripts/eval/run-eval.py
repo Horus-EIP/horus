@@ -24,6 +24,7 @@ from eval_report import (
     question_record,
     questions_peak_checks,
     resummarize,
+    stack_peak_fields,
     titles_from_query_result,
 )
 from eval_scoring import ROUTE_AGENT, ROUTE_DIRECT, ROUTE_NONE
@@ -32,13 +33,14 @@ from eval_stack import (
     LLM_PORT,
     build_tag,
     llm_usage,
-    parse_cgroup_bytes,
     parse_memory_events,
+    parse_memory_stat,
+    parse_process_status,
     parse_prometheus,
     parse_props,
-    parse_restart_counts,
     parse_routing_decisions,
     parse_server_args,
+    parse_whole_number,
     routing_decision,
 )
 from eval_testset import (
@@ -375,36 +377,44 @@ def docker_host_swap_used_bytes(container: str | None) -> int | None:
     return parse_meminfo_swap_used(docker_exec(container, "cat", "/proc/meminfo") or "")
 
 
-def container_cgroup_facts(names: list[str]) -> dict[str, dict[str, int]]:
-    peaks: dict[str, int] = {}
-    oom_kills: dict[str, int] = {}
-    for name in names:
-        peak = parse_cgroup_bytes(docker_exec(name, "cat", "/sys/fs/cgroup/memory.peak"))
-        if peak is not None:
-            peaks[name] = peak
+def container_cgroup_facts(names: list[str]) -> dict[str, dict[str, Any]]:
+    peaks: dict[str, int | None] = {}
+    oom_kills: dict[str, int | None] = {}
+    memory_stats: dict[str, dict[str, int] | None] = {}
+    for name in sorted(names):
+        peaks[name] = parse_whole_number(docker_exec(name, "cat", "/sys/fs/cgroup/memory.peak"))
         events = parse_memory_events(docker_exec(name, "cat", "/sys/fs/cgroup/memory.events"))
-        if "oom_kill" in events:
-            oom_kills[name] = events["oom_kill"]
+        oom_kills[name] = events.get("oom_kill")
+        memory_stats[name] = parse_memory_stat(docker_exec(name, "cat", "/sys/fs/cgroup/memory.stat"))
     return {
-        "container_lifetime_peak_mem_bytes": dict(sorted(peaks.items())),
-        "container_oom_kills": dict(sorted(oom_kills.items())),
+        "container_lifetime_peak_mem_bytes": peaks,
+        "container_oom_kills": oom_kills,
+        "container_memory_stat": memory_stats,
     }
 
 
-def container_restart_counts(names: list[str]) -> dict[str, int]:
-    if not names:
-        return {}
-    output = docker_text(["inspect", "--format", "{{.Name}} {{.RestartCount}}", *names])
-    return dict(sorted(parse_restart_counts(output).items()))
+def container_restart_counts(names: list[str]) -> dict[str, int | None]:
+    return {
+        name: parse_whole_number(docker_text(["inspect", "--format", "{{.RestartCount}}", name]))
+        for name in sorted(names)
+    }
+
+
+def llm_process_memory(container: str | None) -> dict[str, Any] | None:
+    return parse_process_status(docker_exec(container, "cat", "/proc/1/status")) if container else None
 
 
 class ResourceSampler(threading.Thread):
-    def __init__(self, interval: float, swap_container: str | None = None) -> None:
+    def __init__(
+        self, interval: float, swap_container: str | None = None, llm_container: str | None = None
+    ) -> None:
         super().__init__(daemon=True)
         self.interval = interval
         self.swap_container = swap_container
+        self.llm_container = llm_container
         self.peaks = ResourcePeaks()
         self.window: ResourcePeaks | None = None
+        self.since_questions_start: ResourcePeaks | None = None
         self.at_questions_start: dict[str, Any] | None = None
         self._lock = threading.Lock()
         self._stopping = threading.Event()
@@ -414,15 +424,18 @@ class ResourceSampler(threading.Thread):
         swap = swap_used_bytes()
         docker_host_swap = docker_host_swap_used_bytes(self.swap_container)
         with self._lock:
-            for peaks in (self.peaks, self.window):
+            for peaks in (self.peaks, self.window, self.since_questions_start):
                 if peaks is not None:
                     peaks.add(usage, swap, docker_host_swap)
         return usage, docker_host_swap
 
     def mark_questions_start(self) -> None:
+        with self._lock:
+            self.since_questions_start = ResourcePeaks()
         usage, docker_host_swap = self.sample()
         self.at_questions_start = {
             **container_cgroup_facts(sorted(usage)),
+            "llm_process": llm_process_memory(self.llm_container),
             "docker_host_swap_used_bytes": docker_host_swap,
         }
 
@@ -448,7 +461,11 @@ class ResourceSampler(threading.Thread):
         names = sorted(set(resources["container_peak_mem_bytes"]) | set(started))
         resources.update(container_cgroup_facts(names))
         resources["container_restarts"] = container_restart_counts(names)
-        resources.update(questions_peak_checks(resources, self.at_questions_start))
+        resources["llm_process"] = llm_process_memory(self.llm_container)
+        resources.update(stack_peak_fields(resources, self.llm_container))
+        questions = self.since_questions_start
+        questions_swap_peak = questions.docker_host_swap_peak if questions else None
+        resources.update(questions_peak_checks(resources, self.at_questions_start, questions_swap_peak))
         return resources
 
 
@@ -769,7 +786,7 @@ def main() -> int:
     out_path = report_path(args.out_dir, args.label, started_at.date())
     sampler = None
     if args.sample_resources:
-        sampler = ResourceSampler(args.sample_interval, args.swap_container or None)
+        sampler = ResourceSampler(args.sample_interval, args.swap_container or None, args.llm_container or None)
     llama_server = llama_server_facts(args.llm_container or None)
     if llama_server is None and args.llm_container:
         print(f"[info] no llama-server container {args.llm_container!r}: server metrics are not recorded")

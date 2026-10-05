@@ -16,7 +16,7 @@ The same folder tests the benchmark tooling of `scripts/benchmarks/` (`pytest.in
 | `test_bench_llama.py` | The plan's llama-bench command, the pinned image and model hashes against the CPU stack, parsing and the enriched report. |
 | `test_llama_bench_runner.py` | `run-llama-bench.py` end to end: run, fetch, missing models, `--from-json`, `--dry-run`. |
 | `test_bench_compare.py` | `compare-benchmarks.py`: the §10 table, changes, warnings, the 2026-09-01 baseline, llama-bench selection. |
-| `test_eval_stack.py` | llama-server `/metrics`, `/props` and command-line parsing, the MAS router histogram, cgroup files and restart counts. |
+| `test_eval_stack.py` | llama-server `/metrics`, `/props`, command-line and `/proc/1/status` parsing, the MAS router histogram, and the cgroup files (`memory.peak`, `memory.events`, `memory.stat`). |
 
 ## Contents
 

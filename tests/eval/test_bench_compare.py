@@ -25,7 +25,16 @@ GIB = 2**30
 
 
 def eval_report(
-    make_item, totals, *, kv="f16", testset_sha="a" * 64, label="eval-cpu16", reviewed=True, unsampled=None
+    make_item,
+    totals,
+    *,
+    kv="f16",
+    testset_sha="a" * 64,
+    label="eval-cpu16",
+    reviewed=True,
+    unsampled=None,
+    oom_kills=None,
+    restarts=None,
 ):
     item = make_item(id="exp-01")
     records = []
@@ -63,11 +72,13 @@ def eval_report(
             "samples": 40,
             "container_peak_mem_bytes": {"llm": 4 * GIB, "mas": GIB},
             "containers_sum_peak_mem_bytes": 9 * GIB,
+            "llm_mapped_outside_docker_stats_bytes": 2 * GIB + GIB // 2,
+            "stack_peak_mem_bytes": 11 * GIB + GIB // 2,
             "swap_peak_used_bytes": 0,
             "docker_host_swap_peak_used_bytes": GIB // 2,
             "container_lifetime_peak_mem_bytes": {"llm": 5 * GIB},
-            "container_oom_kills": {"llm": 0, "agent": 1},
-            "container_restarts": {"llm": 0, "agent": 0},
+            "container_oom_kills": {"llm": 0, "agent": 1} if oom_kills is None else oom_kills,
+            "container_restarts": {"llm": 0, "agent": 0} if restarts is None else restarts,
             "docker_host_swap_growth_bytes": GIB // 4,
             "unsampled_peak_excess_bytes": unsampled or {},
         },
@@ -127,7 +138,12 @@ class TestEndToEnd:
         assert table_row(markdown, "Routing decision without the LLM, p90")[2] == "12 ms (n=1)"
         assert table_row(markdown, "Routed by the LLM fallback")[2:] == ["50.0% (n=2)", "50.0% (n=2)", "+0.0 pts"]
         assert table_row(markdown, "Routing methods")[2:] == ["embedding 1, llm 1", "embedding 1, llm 1", "same"]
-        assert table_row(markdown, "Peak RAM, all containers at once")[1:3] == ["docker stats samples (ADR-005 P)", "9.00 GiB"]
+        assert table_row(markdown, "Peak RAM of the stack (ADR-005 P)")[1:3] == ["the next two rows added up", "11.50 GiB"]
+        assert table_row(markdown, "Peak RAM, all containers at once")[1:3] == ["docker stats samples", "9.00 GiB"]
+        assert table_row(markdown, "Model pages docker stats left out")[1:3] == [
+            "llama-server RssFile, memory.stat",
+            "2.50 GiB",
+        ]
         assert table_row(markdown, "Peak RAM, llm, since it started")[2] == "5.00 GiB"
         assert table_row(markdown, "Out-of-memory kills")[2] == "1"
         assert table_row(markdown, "Container restarts")[2] == "0"
@@ -153,14 +169,26 @@ class TestEndToEnd:
         assert "different test sets" in compare_markdown([before], [after], BenchSelection())
 
     def test_a_peak_missed_between_samples_asks_for_a_shorter_interval(self, tmp_path, make_item):
-        report = eval_report(make_item, [10.0], unsampled={"llm": GIB, "mas": GIB // 2})
+        report = eval_report(make_item, [10.0], unsampled={"llm": GIB, "mas": GIB // 2, "agent": None})
         markdown = compare_markdown([write(tmp_path, "a.json", report)], None, BenchSelection())
         assert (
-            "eval-cpu16: the cgroup memory.peak of llm rose 1.00 GiB above its docker stats peak during the "
-            "questions (a spike between samples, or page cache). Repeat the run with --sample-interval 2 before "
-            "taking ADR-005's P from it."
+            "eval-cpu16: the memory.peak of llm, less its inactive page cache, went 1.00 GiB above its docker "
+            "stats peak during the questions: a spike fell between two samples. Repeat the run with "
+            "--sample-interval 2 before taking ADR-005's P from it."
+        ) in markdown
+        assert (
+            "eval-cpu16: the memory.peak of agent rose during the questions, but its memory.stat could not be "
+            "read, so a spike between samples cannot be ruled out."
         ) in markdown
         assert "memory.peak of mas" not in markdown
+
+    def test_unread_oom_kills_or_restarts_leave_their_rows_empty(self, tmp_path, make_item):
+        report = eval_report(make_item, [10.0], oom_kills={"llm": 0, "agent": None, "mas": None}, restarts={})
+        markdown = compare_markdown([write(tmp_path, "a.json", report)], None, BenchSelection())
+        assert table_row(markdown, "Out-of-memory kills")[2] == "—"
+        assert table_row(markdown, "Container restarts")[2] == "—"
+        assert "eval-cpu16: the OOM kills of agent, mas could not be read, so its row stays empty." in markdown
+        assert "eval-cpu16: the restart count of every container could not be read, so its row stays empty." in markdown
 
     def test_pending_reviews_and_incomplete_runs_are_flagged(self, tmp_path, make_item):
         report = eval_report(make_item, [10.0], reviewed=False)

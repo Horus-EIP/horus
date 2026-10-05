@@ -19,6 +19,7 @@ from eval_report import (
     rate,
     resummarize,
     routing_summary,
+    stack_peak_fields,
     stats,
     titles_from_query_result,
 )
@@ -419,12 +420,23 @@ class TestResources:
         assert ResourcePeaks().window_dict() is None
 
 
+def memory_stat(inactive_file=0, active_file=0, file_mapped=0, anon=GIB):
+    return {
+        "anon": anon,
+        "file": inactive_file + active_file,
+        "active_file": active_file,
+        "inactive_file": inactive_file,
+        "file_mapped": file_mapped,
+    }
+
+
 class TestQuestionsPeakChecks:
     @staticmethod
-    def resources(lifetime, sampled, swap_peak=None):
+    def resources(lifetime, sampled, memory_stats=None, swap_peak=None):
         return {
             "container_peak_mem_bytes": sampled,
             "container_lifetime_peak_mem_bytes": lifetime,
+            "container_memory_stat": memory_stats or {},
             "docker_host_swap_peak_used_bytes": swap_peak,
         }
 
@@ -434,33 +446,110 @@ class TestQuestionsPeakChecks:
             "docker_host_swap_used_bytes": GIB // 4,
         }
         resources = self.resources(
-            lifetime={"knowledge_store": 5 * GIB, "llm": 4 * GIB, "mas": GIB + 100},
+            lifetime={"knowledge_store": 5 * GIB, "llm": 4 * GIB + GIB // 2, "mas": GIB + 100},
             sampled={"knowledge_store": 2 * GIB, "llm": 3 * GIB, "mas": GIB + 200},
-            swap_peak=GIB // 2,
+            memory_stats={
+                "knowledge_store": memory_stat(inactive_file=3 * GIB),
+                "llm": memory_stat(inactive_file=GIB // 2),
+                "mas": memory_stat(),
+            },
         )
-        checks = questions_peak_checks(resources, at_start)
+        checks = questions_peak_checks(resources, at_start, GIB // 2)
         assert checks["unsampled_peak_excess_bytes"] == {"llm": GIB}
         assert checks["docker_host_swap_growth_bytes"] == GIB // 4
         assert checks["at_questions_start"] is at_start
 
-    def test_a_container_missing_from_the_samples_or_the_start_is_not_judged(self):
-        at_start = {"container_lifetime_peak_mem_bytes": {"llm": GIB}}
-        resources = self.resources(lifetime={"llm": 2 * GIB, "web_client": GIB}, sampled={"web_client": 10})
-        checks = questions_peak_checks(resources, at_start)
+    def test_inactive_page_cache_that_stays_put_is_no_excess(self):
+        at_start = {"container_lifetime_peak_mem_bytes": {"knowledge_store": 5 * GIB, "llm": 3 * GIB}}
+        resources = self.resources(
+            lifetime={"knowledge_store": 5 * GIB + 2**20, "llm": 5 * GIB + 3 * GIB // 10},
+            sampled={"knowledge_store": 2 * GIB, "llm": 3 * GIB},
+            memory_stats={
+                "knowledge_store": memory_stat(inactive_file=3 * GIB + GIB // 10),
+                "llm": memory_stat(inactive_file=2 * GIB + 3 * GIB // 10, file_mapped=2 * GIB + 3 * GIB // 10),
+            },
+        )
+        assert questions_peak_checks(resources, at_start, None)["unsampled_peak_excess_bytes"] == {}
+
+    def test_an_unread_memory_stat_leaves_the_check_open(self):
+        at_start = {"container_lifetime_peak_mem_bytes": {"llm": 3 * GIB}}
+        resources = self.resources(
+            lifetime={"llm": 4 * GIB}, sampled={"llm": 3 * GIB}, memory_stats={"llm": None}
+        )
+        assert questions_peak_checks(resources, at_start, None)["unsampled_peak_excess_bytes"] == {"llm": None}
+
+    def test_a_container_missing_from_the_samples_or_the_start_or_unread_is_not_judged(self):
+        at_start = {"container_lifetime_peak_mem_bytes": {"llm": GIB, "agent": GIB}}
+        resources = self.resources(
+            lifetime={"llm": 2 * GIB, "web_client": GIB, "agent": None},
+            sampled={"web_client": 10, "agent": 5},
+        )
+        checks = questions_peak_checks(resources, at_start, None)
         assert checks["unsampled_peak_excess_bytes"] == {}
         assert checks["docker_host_swap_growth_bytes"] is None
 
+    def test_swap_growth_counts_only_from_the_first_question(self):
+        at_start = {"container_lifetime_peak_mem_bytes": {}, "docker_host_swap_used_bytes": GIB // 4}
+        resources = self.resources({}, {}, swap_peak=GIB)
+        assert questions_peak_checks(resources, at_start, GIB // 2)["docker_host_swap_growth_bytes"] == GIB // 4
+
     def test_swap_that_shrank_is_no_growth(self):
         at_start = {"container_lifetime_peak_mem_bytes": {}, "docker_host_swap_used_bytes": GIB}
-        checks = questions_peak_checks(self.resources({}, {}, swap_peak=GIB // 2), at_start)
+        checks = questions_peak_checks(self.resources({}, {}), at_start, GIB // 2)
         assert checks["docker_host_swap_growth_bytes"] == 0
 
     def test_without_a_start_snapshot_nothing_is_judged(self):
-        assert questions_peak_checks(self.resources({"llm": GIB}, {"llm": 1}), None) == {
+        assert questions_peak_checks(self.resources({"llm": GIB}, {"llm": 1}), None, GIB) == {
             "at_questions_start": None,
             "unsampled_peak_excess_bytes": None,
             "docker_host_swap_growth_bytes": None,
         }
+
+
+class TestStackPeak:
+    LLAMA_SERVER = {"name": "llama-server", "rss_file_bytes": 2 * GIB + 4 * GIB // 10}
+
+    @staticmethod
+    def resources(llm_stat, process=LLAMA_SERVER, total=9 * GIB):
+        return {
+            "containers_sum_peak_mem_bytes": total,
+            "container_memory_stat": {"llm": llm_stat, "mas": memory_stat(inactive_file=GIB)},
+            "llm_process": process,
+        }
+
+    def test_model_pages_on_the_inactive_list_are_added_to_p(self):
+        llm_stat = memory_stat(inactive_file=2 * GIB + 4 * GIB // 10, active_file=GIB // 20, file_mapped=2 * GIB + 4 * GIB // 10)
+        fields = stack_peak_fields(self.resources(llm_stat), "llm")
+        assert fields["llm_mapped_outside_docker_stats_bytes"] == 2 * GIB + 4 * GIB // 10 - GIB // 20
+        assert fields["stack_peak_mem_bytes"] == 11 * GIB + 4 * GIB // 10 - GIB // 20
+
+    def test_model_pages_charged_to_the_container_that_downloaded_them_are_added_to_p(self):
+        llm_stat = memory_stat(active_file=GIB // 5, file_mapped=GIB // 50)
+        fields = stack_peak_fields(self.resources(llm_stat), "llm")
+        assert fields["llm_mapped_outside_docker_stats_bytes"] == 2 * GIB + 4 * GIB // 10 - GIB // 50
+
+    def test_model_pages_on_the_active_list_are_already_in_docker_stats(self):
+        llm_stat = memory_stat(active_file=2 * GIB + GIB // 2, file_mapped=2 * GIB + GIB // 2)
+        fields = stack_peak_fields(self.resources(llm_stat), "llm")
+        assert fields == {"llm_mapped_outside_docker_stats_bytes": 0, "stack_peak_mem_bytes": 9 * GIB}
+
+    @pytest.mark.parametrize(
+        ("llm_stat", "process", "llm_container"),
+        [
+            (memory_stat(), {"name": "sh", "rss_file_bytes": GIB}, "llm"),
+            (memory_stat(), {"name": "llama-server", "rss_file_bytes": None}, "llm"),
+            (memory_stat(), None, "llm"),
+            (None, LLAMA_SERVER, "llm"),
+            (memory_stat(), LLAMA_SERVER, None),
+        ],
+    )
+    def test_without_the_llama_server_figures_p_is_unknown(self, llm_stat, process, llm_container):
+        fields = stack_peak_fields(self.resources(llm_stat, process), llm_container)
+        assert fields == {"llm_mapped_outside_docker_stats_bytes": None, "stack_peak_mem_bytes": None}
+
+    def test_without_samples_p_is_unknown(self):
+        fields = stack_peak_fields(self.resources(memory_stat(), total=None), "llm")
+        assert fields == {"llm_mapped_outside_docker_stats_bytes": 2 * GIB + 4 * GIB // 10, "stack_peak_mem_bytes": None}
 
 
 class TestServerSideSummary:

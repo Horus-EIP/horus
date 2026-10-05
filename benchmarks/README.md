@@ -136,7 +136,7 @@ In chat mode the runner also reads `GET /metrics` of MAS (`--mas-url`) before an
 | `--event-timeout` | Seconds to wait for each final answer (default 1800). |
 | `--submit-timeout` | Seconds for the `new_task` request itself (default 900). Since B-93 MAS answers `202` with the queued task at once and routes in the background; servers older than B-93 kept the request open during routing. |
 | `--no-warmup` | Skip the unscored warmup question that loads the model. The warmup question is fixed and not in the test set, so a response or prompt cache cannot make a scored answer faster. |
-| `--sample-resources` | Every `--sample-interval` seconds (default 10), sample `docker stats` and the swap in use, and keep the peaks for the run and for each question. Just before the first scored question and again at the end, read each container's cgroup `memory.peak` and OOM kills, and the Docker host's swap; at the end, also each container's restart count. |
+| `--sample-resources` | Every `--sample-interval` seconds (default 10), sample `docker stats` and the swap in use, and keep the peaks for the run, for each question and from the first scored question on. Just before the first scored question and again at the end, read each container's cgroup `memory.peak`, `memory.stat` and OOM kills, and llama-server's `/proc/1/status` in `--llm-container`; at the end, also each container's restart count. Needs cgroup v2. |
 | `--llm-container` | The llama-server container (default `llm`). Its facts are recorded, and its `/metrics` counters are read before and after each question. `""` turns this off. |
 | `--swap-container` | A running container whose `/proc/meminfo` gives the swap of the machine Docker runs on (default `mas`). On Linux that is the host; with Docker Desktop it is its VM, whose swap the host does not see. `""` turns it off. |
 | `--llama-cpp-build`, `--model-*` | Override the llama-server facts. `--model-sha256` must be 64 hex characters. |
@@ -154,7 +154,7 @@ python scripts/benchmarks/compare-benchmarks.py --before cpu16-2026-10-06.json e
 python scripts/benchmarks/compare-benchmarks.py eval-cpu16-standard-2026-10-06.json
 ```
 
-It prints Markdown, ready for a pull request: the machines, builds, models and test sets of both sides, warnings (different test sets, different machines, KV cache changed, unfinished runs, answers still waiting for review, recorded results, a memory peak the samples missed by more than 0.5 GiB), then the §10 table with a change column, then every llama-bench configuration side by side. Each side takes at most one llama-bench file and one evaluation or recorded file. One file alone prints its own table.
+It prints Markdown, ready for a pull request: the machines, builds, models and test sets of both sides, warnings (different test sets, different machines, KV cache changed, unfinished runs, answers still waiting for review, recorded results, a memory peak the samples missed by more than 0.5 GiB or could not check, OOM kills or restart counts that could not be read), then the §10 table with a change column, then every llama-bench configuration side by side. Each side takes at most one llama-bench file and one evaluation or recorded file. One file alone prints its own table.
 
 The llama-bench rows of the §10 table show one model (`--model`, a part of its file name; default the first in the file), one KV cache type for K and V (`--kv`, default `f16`) and the fastest thread count (`--threads` to fix one). Install time and peak disk are measured on a clean VM and are not in these files, so their rows stay empty.
 
@@ -164,7 +164,7 @@ The llama-bench rows of the §10 table show one model (`--model`, a part of its 
 | Time to first token, total time (s) | evaluation `summary.ttft_s`, `summary.total_s` |
 | Prompt reading per question, generation speed in the stack | evaluation `summary.llm` (llama-server `/metrics`) |
 | Routing time (ms) and method | evaluation `summary.routing` (the router's own time and method, from MAS `/metrics`); the separate "submit to dispatch" row is `summary.dispatch_s`, which includes the queue |
-| Peak RAM (GiB) and swap | evaluation `resources`: `containers_sum_peak_mem_bytes` (all containers at once, the `P` of ADR-005), the `llm` peaks, OOM kills, restarts, swap peak and swap growth during the questions |
+| Peak RAM (GiB) and swap | evaluation `resources`: `stack_peak_mem_bytes` (the `P` of ADR-005), which adds `containers_sum_peak_mem_bytes` (all containers at once) and `llm_mapped_outside_docker_stats_bytes`; the `llm` peaks, OOM kills, restarts, swap peak and swap growth during the questions |
 | Answer correct (%) | `summary.manual_review.answer_correct_pct` (two reviewers) and `summary.answer_correct_auto` |
 | Source correct (%) | `summary.source_correct_auto` |
 | Quality with a q8_0 KV cache | two evaluations whose `llama_cpp.server.settings` differ in KV cache type: the table marks the KV row as changed |
@@ -187,7 +187,7 @@ The llama-bench rows of the §10 table show one model (`--model`, a part of its 
 }
 ```
 
-Schema version 2 added `llama_cpp.server`, `model.sha256_source`, the detected `machine` fields, the per-question `dispatch_s`, `routing_decision`, `llm` and `resources`, the cgroup, restart, start-of-questions and Docker-host swap fields of `resources`, and `summary.dispatch_s`, `summary.routing` and `summary.llm`. Version 1 files still compare.
+Schema version 2 added `llama_cpp.server`, `model.sha256_source`, the detected `machine` fields, the per-question `dispatch_s`, `routing_decision`, `llm` and `resources`, the cgroup, page cache, llama-server, restart, start-of-questions, ADR-005 `P` and Docker-host swap fields of `resources`, and `summary.dispatch_s`, `summary.routing` and `summary.llm`. Version 1 files still compare.
 
 `llama_cpp.build` and every `model` field are `null` when neither the options nor a running `llm` container gave them (for example on the vLLM GPU path).
 
@@ -219,15 +219,19 @@ Schema version 2 added `llama_cpp.server`, `model.sha256_source`, the detected `
 | Field | Meaning |
 |---|---|
 | `samples` | Number of samples taken. |
-| `container_peak_mem_bytes` | Peak per container from `docker stats`, which reports the cgroup's memory minus its inactive page cache: files read once (model files at start, database files) do not count, the model pages llama-server reads for every token do. |
-| `containers_sum_peak_mem_bytes` | The largest total of one sample: memory in use by all containers at the same moment. ADR-005 sets its thresholds from this field. |
-| `container_lifetime_peak_mem_bytes` | Each container's cgroup `memory.peak` at the end (cgroup v2, Linux 5.19 or later): the peak since the container started, its start-up included, page cache included, between samples included. The peaks of different containers happen at different moments, so do not add them up. |
-| `container_oom_kills` | `oom_kill` of each container's cgroup `memory.events`, since the container last started. Anything above 0 means the kernel killed a process in that container. |
-| `container_restarts` | Each container's `RestartCount` (`docker inspect`). A container restarted after an out-of-memory kill starts a new cgroup, whose `memory.events` count from 0 again, so read both fields. |
-| `at_questions_start` | Read just before the first scored question: `container_lifetime_peak_mem_bytes`, `container_oom_kills` and `docker_host_swap_used_bytes`. `null` when the run stopped before its first question. |
-| `unsampled_peak_excess_bytes` | For each container whose `memory.peak` rose during the questions: how far above its `docker stats` peak it went. Above 0.5 GiB, a spike fell between two samples (or page cache grew): repeat with `--sample-interval 2`. |
-| `docker_host_swap_peak_used_bytes` | Peak swap in use on the machine Docker runs on, read inside `--swap-container`. |
-| `docker_host_swap_growth_bytes` | That peak minus the swap in use at `at_questions_start` (0 if it shrank). |
+| `container_peak_mem_bytes` | Peak per container from `docker stats`, which reports the cgroup's memory minus its inactive page cache (`inactive_file`): files read once (model files at start, database files) do not count, and the GGUF pages llama-server maps may not either (see `llm_mapped_outside_docker_stats_bytes`). |
+| `containers_sum_peak_mem_bytes` | The largest total of one sample: memory in use by all containers at the same moment. |
+| `llm_mapped_outside_docker_stats_bytes` | The model pages llama-server maps that `docker stats` can have left out: its `RssFile` minus the smaller of the `llm` cgroup's `file_mapped` and `active_file`, at the end. Mapped pages often stay on the inactive list while memory is plentiful, and on the first start after an install they are charged to the `llm-model` container that downloaded and hashed the GGUF. `null` without `--llm-container`, when the status or `memory.stat` could not be read, or when PID 1 of that container is not `llama-server`. |
+| `stack_peak_mem_bytes` | `containers_sum_peak_mem_bytes` + `llm_mapped_outside_docker_stats_bytes`: the `P` ADR-005 sets its thresholds from. `null` when either is. |
+| `container_lifetime_peak_mem_bytes` | Each container's cgroup `memory.peak` at the end (cgroup v2, Linux 5.19 or later): the peak since the container started, its start-up included, all page cache included, between samples included. The peaks of different containers happen at different moments, so do not add them up. `null` for a container whose file could not be read. |
+| `container_memory_stat` | Each container's `anon`, `file`, `active_file`, `inactive_file` and `file_mapped` from its cgroup `memory.stat` at the end, or `null` when it could not be read. |
+| `llm_process` | `name` and `rss_file_bytes` (`RssFile`: resident pages mapped from files, the GGUF included) from `/proc/1/status` in `--llm-container` at the end, or `null`. |
+| `container_oom_kills` | `oom_kill` of each container's cgroup `memory.events`, since the container last started. Anything above 0 means the kernel killed a process in that container. `null` for a container whose file could not be read: the comparison then leaves the row empty. |
+| `container_restarts` | Each container's `RestartCount` (one `docker inspect` per container). A container restarted after an out-of-memory kill starts a new cgroup, whose `memory.events` count from 0 again, so read both fields. `null` for a container that could not be inspected. |
+| `at_questions_start` | Read just before the first scored question: `container_lifetime_peak_mem_bytes`, `container_oom_kills`, `container_memory_stat`, `llm_process` and `docker_host_swap_used_bytes`. `null` when the run stopped before its first question. |
+| `unsampled_peak_excess_bytes` | For each container whose `memory.peak` rose during the questions: how far that `memory.peak`, less the container's `inactive_file` at the end, went above its `docker stats` peak. Page cache that stays put cancels out, so what is left is a spike between two samples. Above 0.5 GiB, repeat with `--sample-interval 2`. `null` for a container whose `memory.stat` could not be read. |
+| `docker_host_swap_peak_used_bytes` | Peak swap in use on the machine Docker runs on, read inside `--swap-container`, over the whole run. |
+| `docker_host_swap_growth_bytes` | The peak of the samples from `at_questions_start` on (the warmup and the corpus check left out), minus the swap in use at `at_questions_start` (0 if it shrank). |
 | `swap_peak_used_bytes` | Peak swap in use on the machine running the script. With Docker Desktop this is not the VM's swap; read the Docker host fields. |
 
 ### `questions[]`

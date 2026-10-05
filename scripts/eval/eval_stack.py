@@ -41,6 +41,8 @@ INTEGER_SETTINGS = frozenset({"port", "ctx_size", "cache_ram_mib", "threads", "p
 ROUTING_HISTOGRAM = "mas_routing_decision_seconds"
 ROUTING_HISTOGRAM_FIELDS = {f"{ROUTING_HISTOGRAM}_count": "count", f"{ROUTING_HISTOGRAM}_sum": "seconds"}
 LLM_ROUTING_METHOD = "llm"
+LLM_PROCESS_NAME = "llama-server"
+MEMORY_STAT_FIELDS = ("anon", "file", "active_file", "inactive_file", "file_mapped")
 
 _PROMETHEUS_LINE = re.compile(r"^([A-Za-z_:][A-Za-z0-9_:]*)(\{[^}]*\})?\s+(\S+)")
 _PROMETHEUS_LABEL = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)="((?:[^"\\]|\\.)*)"')
@@ -169,7 +171,7 @@ def build_tag(text: str | None) -> str | None:
     return f"b{match.group(1)}" if match else None
 
 
-def parse_cgroup_bytes(text: str | None) -> int | None:
+def parse_whole_number(text: str | None) -> int | None:
     value = (text or "").strip()
     return int(value) if value.isdigit() else None
 
@@ -187,5 +189,22 @@ def parse_memory_events(text: str | None) -> dict[str, int]:
     return _name_counts(text)
 
 
-def parse_restart_counts(text: str | None) -> dict[str, int]:
-    return {name.lstrip("/"): count for name, count in _name_counts(text).items()}
+def parse_memory_stat(text: str | None) -> dict[str, int] | None:
+    counts = _name_counts(text)
+    if any(field not in counts for field in MEMORY_STAT_FIELDS):
+        return None
+    return {field: counts[field] for field in MEMORY_STAT_FIELDS}
+
+
+def parse_process_status(text: str | None) -> dict[str, Any] | None:
+    fields = {}
+    for line in (text or "").splitlines():
+        key, _, rest = line.partition(":")
+        fields[key.strip()] = rest.split()
+    if not fields.get("Name"):
+        return None
+    rss_file = fields.get("RssFile") or []
+    return {
+        "name": " ".join(fields["Name"]),
+        "rss_file_bytes": int(rss_file[0]) * 1024 if rss_file and rss_file[0].isdigit() else None,
+    }

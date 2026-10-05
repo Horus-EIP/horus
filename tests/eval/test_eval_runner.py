@@ -589,26 +589,46 @@ class TestStackResources:
         assert runner.docker_host_swap_used_bytes("mas") == 1024 * 1024 * 1024
         assert runner.docker_host_swap_used_bytes(None) is None
 
-    def test_cgroup_peaks_and_oom_kills_per_container(self, runner, monkeypatch):
+    def test_cgroup_peaks_oom_kills_and_page_cache_per_container_with_null_when_unread(self, runner, monkeypatch):
+        memory_stat = "anon 100\nfile 300\nactive_file 50\ninactive_file 250\nfile_mapped 200\n"
         responses = [
             (["exec", "llm", "cat", "/sys/fs/cgroup/memory.peak"], "5368709120\n"),
             (["exec", "llm", "cat", "/sys/fs/cgroup/memory.events"], "oom 0\noom_kill 0\n"),
+            (["exec", "llm", "cat", "/sys/fs/cgroup/memory.stat"], memory_stat),
             (["exec", "agent", "cat", "/sys/fs/cgroup/memory.events"], "oom 2\noom_kill 1\n"),
         ]
         monkeypatch.setattr(runner, "docker_text", fake_docker(responses))
         assert runner.container_cgroup_facts(["llm", "agent", "web_client"]) == {
-            "container_lifetime_peak_mem_bytes": {"llm": 5368709120},
-            "container_oom_kills": {"agent": 1, "llm": 0},
+            "container_lifetime_peak_mem_bytes": {"agent": None, "llm": 5368709120, "web_client": None},
+            "container_oom_kills": {"agent": 1, "llm": 0, "web_client": None},
+            "container_memory_stat": {
+                "agent": None,
+                "llm": {"anon": 100, "file": 300, "active_file": 50, "inactive_file": 250, "file_mapped": 200},
+                "web_client": None,
+            },
         }
 
-    def test_restart_counts_come_from_docker_inspect(self, runner, monkeypatch):
+    def test_restart_counts_come_from_one_docker_inspect_per_container(self, runner, monkeypatch):
         calls = []
-        responses = [(["inspect", "--format", "{{.Name}} {{.RestartCount}}"], "/llm 0\n/agent 3\n")]
+        responses = [
+            (["inspect", "--format", "{{.RestartCount}}", "llm"], "0\n"),
+            (["inspect", "--format", "{{.RestartCount}}", "agent"], "3\n"),
+        ]
         monkeypatch.setattr(runner, "docker_text", fake_docker(responses, calls))
-        assert runner.container_restart_counts(["llm", "agent"]) == {"agent": 3, "llm": 0}
-        assert calls == [["inspect", "--format", "{{.Name}} {{.RestartCount}}", "llm", "agent"]]
+        assert runner.container_restart_counts(["llm", "agent", "web_client"]) == {
+            "agent": 3,
+            "llm": 0,
+            "web_client": None,
+        }
+        assert [call[-1] for call in calls] == ["agent", "llm", "web_client"]
         assert runner.container_restart_counts([]) == {}
-        assert len(calls) == 1
+
+    def test_llama_server_memory_is_read_from_pid_1_of_the_llm_container(self, runner, monkeypatch):
+        status = "Name:\tllama-server\nRssAnon:\t 1835008 kB\nRssFile:\t 2490368 kB\n"
+        monkeypatch.setattr(runner, "docker_text", fake_docker([(["exec", "llm", "cat", "/proc/1/status"], status)]))
+        assert runner.llm_process_memory("llm") == {"name": "llama-server", "rss_file_bytes": 2490368 * 1024}
+        assert runner.llm_process_memory("vllm") is None
+        assert runner.llm_process_memory(None) is None
 
     def test_sampler_windows_keep_the_peaks_of_one_question(self, runner, monkeypatch):
         usage = iter([{"llm": 100, "mas": 10}, {"llm": 300, "mas": 10}, {"llm": 200, "mas": 10}])
@@ -641,6 +661,7 @@ class TestStackResources:
             lambda names: {"container_lifetime_peak_mem_bytes": dict.fromkeys(names, 7), "container_oom_kills": {}},
         )
         monkeypatch.setattr(runner, "container_restart_counts", lambda names: dict.fromkeys(names, 0))
+        monkeypatch.setattr(runner, "llm_process_memory", lambda container: None)
         sampler = runner.ResourceSampler(60.0)
         sampler.start()
         resources = sampler.finish()
@@ -648,18 +669,30 @@ class TestStackResources:
         assert resources["container_lifetime_peak_mem_bytes"] == {"llm": 7}
         assert resources["container_oom_kills"] == {}
         assert resources["container_restarts"] == {"llm": 0}
+        assert resources["llm_process"] is None
+        assert resources["stack_peak_mem_bytes"] is None
         assert resources["at_questions_start"] is None
         assert resources["unsampled_peak_excess_bytes"] is None
 
-    def test_peaks_reached_during_the_questions_are_checked_against_the_samples(self, runner, monkeypatch):
+    def test_questions_are_checked_against_the_samples_and_p_adds_the_model_pages(self, runner, monkeypatch):
         gib = 2**30
         monkeypatch.setattr(runner, "docker_memory_usage", lambda: {"knowledge_store": 2 * gib, "llm": 3 * gib})
         monkeypatch.setattr(runner, "swap_used_bytes", lambda: None)
-        monkeypatch.setattr(runner, "docker_host_swap_used_bytes", lambda container: gib // 4)
+        swaps = iter([gib, gib // 4])
+        monkeypatch.setattr(runner, "docker_host_swap_used_bytes", lambda container: next(swaps, gib // 2))
+        llm_stat = {"anon": gib, "file": 3 * gib, "active_file": gib // 8, "inactive_file": 2 * gib, "file_mapped": 2 * gib}
         facts = iter(
             [
-                {"container_lifetime_peak_mem_bytes": {"knowledge_store": 5 * gib, "llm": 3 * gib}, "container_oom_kills": {}},
-                {"container_lifetime_peak_mem_bytes": {"knowledge_store": 5 * gib, "llm": 4 * gib}, "container_oom_kills": {}},
+                {
+                    "container_lifetime_peak_mem_bytes": {"knowledge_store": 5 * gib, "llm": 3 * gib},
+                    "container_oom_kills": {"knowledge_store": 0, "llm": 0},
+                    "container_memory_stat": {"knowledge_store": None, "llm": llm_stat},
+                },
+                {
+                    "container_lifetime_peak_mem_bytes": {"knowledge_store": 5 * gib, "llm": 6 * gib},
+                    "container_oom_kills": {"knowledge_store": 0, "llm": 0},
+                    "container_memory_stat": {"knowledge_store": None, "llm": llm_stat},
+                },
             ]
         )
         asked = []
@@ -668,18 +701,32 @@ class TestStackResources:
             asked.append(names)
             return next(facts)
 
+        processes = []
+
+        def llm_process(container):
+            processes.append(container)
+            return {"name": "llama-server", "rss_file_bytes": 2 * gib + gib // 8}
+
         monkeypatch.setattr(runner, "container_cgroup_facts", cgroup_facts)
         monkeypatch.setattr(runner, "container_restart_counts", lambda names: dict.fromkeys(names, 0))
-        sampler = runner.ResourceSampler(60.0, "mas")
+        monkeypatch.setattr(runner, "llm_process_memory", llm_process)
+        sampler = runner.ResourceSampler(60.0, "mas", "llm")
+        sampler.sample()
         sampler.mark_questions_start()
+        sampler.sample()
         sampler.start()
         resources = sampler.finish()
         assert asked == [["knowledge_store", "llm"], ["knowledge_store", "llm"]]
+        assert processes == ["llm", "llm"]
         assert resources["at_questions_start"]["container_lifetime_peak_mem_bytes"]["llm"] == 3 * gib
         assert resources["at_questions_start"]["docker_host_swap_used_bytes"] == gib // 4
+        assert resources["at_questions_start"]["llm_process"]["rss_file_bytes"] == 2 * gib + gib // 8
         assert resources["unsampled_peak_excess_bytes"] == {"llm": gib}
-        assert resources["docker_host_swap_growth_bytes"] == 0
+        assert resources["docker_host_swap_peak_used_bytes"] == gib
+        assert resources["docker_host_swap_growth_bytes"] == gib // 4
         assert resources["containers_sum_peak_mem_bytes"] == 5 * gib
+        assert resources["llm_mapped_outside_docker_stats_bytes"] == 2 * gib
+        assert resources["stack_peak_mem_bytes"] == 7 * gib
 
 
 class FakeSampler:
@@ -879,14 +926,34 @@ class TestMainAgainstAStack:
         monkeypatch.setattr(runner.pipeline, "gpu_info", lambda: {"error": "nvidia-smi not found"})
         monkeypatch.setattr(runner.pipeline, "git_commit", lambda: "abc1234")
         monkeypatch.setattr(runner.pipeline, "websockets", object())
+        samplers = []
+
+        class RecordingSampler(FakeSampler):
+            def __init__(self, interval, swap_container=None, llm_container=None):
+                super().__init__()
+                self.args = (interval, swap_container, llm_container)
+                samplers.append(self)
+
+            def start(self):
+                pass
+
+            def finish(self):
+                return {"stack_peak_mem_bytes": 7 * 2**30}
+
+        monkeypatch.setattr(runner, "ResourceSampler", RecordingSampler)
         argv = [
             "run-eval.py", "--label", "eval-cpu16", "--reference", "cpu16", "--skip-corpus-check",
             "--token", "jwt", "--ids", "fin-01,exp-01", "--no-warmup", "--out-dir", str(tmp_path),
+            "--sample-resources",
         ]
         monkeypatch.setattr(sys, "argv", argv)
         assert runner.main() == 0
         [saved] = list(tmp_path.iterdir())
         report = json.loads(saved.read_text(encoding="utf-8"))
+        [sampler] = samplers
+        assert sampler.args == (10.0, "mas", "llm")
+        assert (sampler.starts, sampler.windows) == (1, 2)
+        assert report["resources"] == {"stack_peak_mem_bytes": 7 * 2**30}
         assert report["schema_version"] == 2
         assert report["llama_cpp"]["build"] == "b11382"
         assert report["llama_cpp"]["server"]["settings"]["cache_type_v"] == "f16"

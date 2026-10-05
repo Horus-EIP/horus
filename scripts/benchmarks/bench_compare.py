@@ -17,6 +17,7 @@ GIB = 1024**3
 LLM_CONTAINER = "llm"
 ROUTER = "MAS /metrics, B-92 router"
 UNSAMPLED_PEAK_LIMIT_BYTES = GIB // 2
+CONTAINER_COUNTS = (("container_oom_kills", "OOM kills"), ("container_restarts", "restart count"))
 HEADLINE_TESTS = (
     ("pp512", 0),
     ("pp2048", 0),
@@ -105,7 +106,9 @@ SECTION_10_ROWS = (
     MetricRow("routing_llm_pct", "Routed by the LLM fallback", ROUTER, "%"),
     MetricRow("routing_methods", "Routing methods", ROUTER, "text"),
     MetricRow("dispatch_median_ms", "Submit to dispatch, median", "task events, queue wait included", "ms"),
-    MetricRow("peak_ram_gib", "Peak RAM, all containers at once", "docker stats samples (ADR-005 P)", "GiB"),
+    MetricRow("stack_peak_gib", "Peak RAM of the stack (ADR-005 P)", "the next two rows added up", "GiB"),
+    MetricRow("peak_ram_gib", "Peak RAM, all containers at once", "docker stats samples", "GiB"),
+    MetricRow("llm_mapped_outside_gib", "Model pages docker stats left out", "llama-server RssFile, memory.stat", "GiB"),
     MetricRow("peak_ram_llm_gib", "Peak RAM, llm container", "docker stats", "GiB"),
     MetricRow("lifetime_peak_llm_gib", "Peak RAM, llm, since it started", "cgroup memory.peak", "GiB"),
     MetricRow("oom_kills", "Out-of-memory kills", "cgroup memory.events", "count"),
@@ -152,6 +155,12 @@ def _total(values: Any) -> int | None:
     return sum(values.values()) if isinstance(values, dict) else None
 
 
+def _container_total(values: Any) -> int | None:
+    if not isinstance(values, dict) or not values or None in values.values():
+        return None
+    return sum(values.values())
+
+
 def _methods_text(methods: Any) -> str | None:
     if not isinstance(methods, dict) or not methods:
         return None
@@ -183,11 +192,13 @@ def eval_metrics(report: dict[str, Any]) -> dict[str, Metric]:
         "routing_llm_pct": Metric(routing.get("llm_pct"), routing.get("decided_once")),
         "routing_methods": Metric(_methods_text(routing.get("methods"))),
         "dispatch_median_ms": _stat(summary, "dispatch_s", "median", 1000.0),
+        "stack_peak_gib": Metric(_gib(resources.get("stack_peak_mem_bytes"))),
         "peak_ram_gib": Metric(_gib(resources.get("containers_sum_peak_mem_bytes"))),
+        "llm_mapped_outside_gib": Metric(_gib(resources.get("llm_mapped_outside_docker_stats_bytes"))),
         "peak_ram_llm_gib": Metric(_gib(peaks.get(LLM_CONTAINER))),
         "lifetime_peak_llm_gib": Metric(_gib(lifetime.get(LLM_CONTAINER))),
-        "oom_kills": Metric(_total(resources.get("container_oom_kills"))),
-        "restarts": Metric(_total(resources.get("container_restarts"))),
+        "oom_kills": Metric(_container_total(resources.get("container_oom_kills"))),
+        "restarts": Metric(_container_total(resources.get("container_restarts"))),
         "swap_peak_gib": Metric(_gib(swap)),
         "swap_growth_gib": Metric(_gib(resources.get("docker_host_swap_growth_bytes"))),
         "answer_correct_reviewed_pct": Metric(review.get("answer_correct_pct"), review.get("reviewed")),
@@ -398,13 +409,34 @@ def header_rows(sides: list[Side]) -> list[list[Any]]:
 
 def sampling_warnings(doc: dict[str, Any]) -> list[str]:
     excess = (doc.get("resources") or {}).get("unsampled_peak_excess_bytes") or {}
-    return [
-        f"{doc.get('label')}: the cgroup memory.peak of {name} rose {_gib(over):.2f} GiB above its docker stats "
-        "peak during the questions (a spike between samples, or page cache). Repeat the run with "
-        "--sample-interval 2 before taking ADR-005's P from it."
-        for name, over in sorted(excess.items())
-        if isinstance(over, (int, float)) and over > UNSAMPLED_PEAK_LIMIT_BYTES
-    ]
+    warnings = []
+    for name, over in sorted(excess.items()):
+        if over is None:
+            warnings.append(
+                f"{doc.get('label')}: the memory.peak of {name} rose during the questions, but its memory.stat "
+                "could not be read, so a spike between samples cannot be ruled out."
+            )
+        elif over > UNSAMPLED_PEAK_LIMIT_BYTES:
+            warnings.append(
+                f"{doc.get('label')}: the memory.peak of {name}, less its inactive page cache, went "
+                f"{_gib(over):.2f} GiB above its docker stats peak during the questions: a spike fell between "
+                "two samples. Repeat the run with --sample-interval 2 before taking ADR-005's P from it."
+            )
+    return warnings
+
+
+def unread_count_warnings(doc: dict[str, Any]) -> list[str]:
+    resources = doc.get("resources")
+    if not isinstance(resources, dict):
+        return []
+    warnings = []
+    for field_name, what in CONTAINER_COUNTS:
+        values = resources.get(field_name) or {}
+        unread = sorted(name for name, value in values.items() if value is None)
+        if unread or not values:
+            names = ", ".join(unread) or "every container"
+            warnings.append(f"{doc.get('label')}: the {what} of {names} could not be read, so its row stays empty.")
+    return warnings
 
 
 def comparison_warnings(sides: list[Side]) -> list[str]:
@@ -415,7 +447,7 @@ def comparison_warnings(sides: list[Side]) -> list[str]:
             if doc.get("kind") == EVAL_KIND and run.get("completed") is False:
                 warnings.append(f"{doc.get('label')}: the run did not complete.")
             if doc.get("kind") == EVAL_KIND:
-                warnings += sampling_warnings(doc)
+                warnings += sampling_warnings(doc) + unread_count_warnings(doc)
             pending = ((doc.get("summary") or {}).get("manual_review") or {}).get("pending")
             if doc.get("kind") == EVAL_KIND and pending:
                 warnings.append(f"{doc.get('label')}: {pending} answers still wait for the two reviewers.")

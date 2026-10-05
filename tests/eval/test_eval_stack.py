@@ -3,13 +3,14 @@ import json
 from eval_stack import (
     build_tag,
     llm_usage,
-    parse_cgroup_bytes,
     parse_memory_events,
+    parse_memory_stat,
+    parse_process_status,
     parse_prometheus,
     parse_props,
-    parse_restart_counts,
     parse_routing_decisions,
     parse_server_args,
+    parse_whole_number,
     routing_decision,
 )
 
@@ -53,6 +54,30 @@ mas_routing_decision_seconds_count{method="rules"} 1.0
 mas_routing_decision_seconds_sum{method="rules"} 0.0004
 mas_routing_decision_seconds_count{method="llm"} 1.0
 mas_routing_decision_seconds_sum{method="llm"} 2.4
+"""
+
+LLM_MEMORY_STAT = """anon 1879048192
+file 2621440000
+kernel 41943040
+shmem 0
+file_mapped 2550136832
+file_dirty 0
+active_anon 1879048192
+inactive_anon 0
+active_file 52428800
+inactive_file 2569011200
+unevictable 0
+"""
+
+LLAMA_SERVER_STATUS = """Name:\tllama-server
+Umask:\t0022
+State:\tS (sleeping)
+Pid:\t1
+VmRSS:\t 4329984 kB
+RssAnon:\t 1835008 kB
+RssFile:\t 2490368 kB
+RssShmem:\t    4608 kB
+Threads:\t8
 """
 
 COMPOSE_CPU_COMMAND = [
@@ -211,17 +236,42 @@ class TestProps:
 
 
 class TestCgroup:
-    def test_memory_peak_in_bytes(self):
-        assert parse_cgroup_bytes("4294967296\n") == 4294967296
-        assert parse_cgroup_bytes("max") is None
-        assert parse_cgroup_bytes(None) is None
+    def test_memory_peak_and_restart_count_are_whole_numbers(self):
+        assert parse_whole_number("4294967296\n") == 4294967296
+        assert parse_whole_number("3\n") == 3
+        assert parse_whole_number("max") is None
+        assert parse_whole_number("") is None
+        assert parse_whole_number(None) is None
 
     def test_memory_events_count_oom_kills(self):
         events = "low 0\nhigh 0\nmax 12\noom 1\noom_kill 1\noom_group_kill 0\n"
         assert parse_memory_events(events)["oom_kill"] == 1
         assert parse_memory_events(None) == {}
 
-    def test_restart_counts_from_docker_inspect(self):
-        output = "/llm 0\n/knowledge_store 2\nError: No such object: web_client\n"
-        assert parse_restart_counts(output) == {"llm": 0, "knowledge_store": 2}
-        assert parse_restart_counts(None) == {}
+    def test_memory_stat_keeps_the_page_cache_split(self):
+        assert parse_memory_stat(LLM_MEMORY_STAT) == {
+            "anon": 1879048192,
+            "file": 2621440000,
+            "active_file": 52428800,
+            "inactive_file": 2569011200,
+            "file_mapped": 2550136832,
+        }
+
+    def test_memory_stat_without_the_page_cache_split_is_unread(self):
+        assert parse_memory_stat("total_cache 100\ntotal_rss 200\n") is None
+        assert parse_memory_stat(None) is None
+
+
+class TestProcessStatus:
+    def test_resident_mapped_file_pages_of_llama_server(self):
+        assert parse_process_status(LLAMA_SERVER_STATUS) == {"name": "llama-server", "rss_file_bytes": 2490368 * 1024}
+
+    def test_a_kernel_without_rss_file_gives_no_figure(self):
+        assert parse_process_status("Name:\tllama-server\nVmRSS:\t 100 kB\n") == {
+            "name": "llama-server",
+            "rss_file_bytes": None,
+        }
+
+    def test_an_unread_status_gives_nothing(self):
+        assert parse_process_status(None) is None
+        assert parse_process_status("") is None
