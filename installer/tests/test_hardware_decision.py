@@ -133,14 +133,16 @@ class TempDir(unittest.TestCase):
 
 class EightGigabyteMachineIsToldFirst(TempDir):
 
-    def run_installer(self, machine: FakeMachine, *argv: str) -> tuple[int, str, list[dict]]:
+    def run_installer(self, machine: FakeMachine, *argv: str,
+                      install_checks: Exception | None = None) -> tuple[int, str, list[dict]]:
         out, err = io.StringIO(), io.StringIO()
         with contextlib.ExitStack() as stack:
             patch = stack.enter_context
             machine.install(stack)
             patch(mock.patch.object(horus_install, "find_repo", return_value=self.repo))
             preflight = patch(mock.patch.object(horus_install, "preflight"))
-            preflight.run_install_checks.side_effect = slow("the disk, network and port checks")
+            preflight.run_install_checks.side_effect = (
+                install_checks or slow("the disk, network and port checks"))
             patch(mock.patch.object(horus_install, "sign_in_to_registry",
                                     side_effect=slow("the registry sign-in")))
             consent = patch(mock.patch.object(horus_install, "consent"))
@@ -238,7 +240,27 @@ class EightGigabyteMachineIsToldFirst(TempDir):
             with self.assertRaises(SlowStepRan):
                 horus_install._dispatch(self.log(), horus_install.build_parser().parse_args(
                     ["--non-interactive"]))
-        self.assertFalse(self.record.exists())
+        document = hardware.read_profile_json(self.record)
+        self.assertEqual(document["profile"]["name"], "cpu-standard")
+        self.assertNotIn("refusal", document)
+        self.assertEqual(document["env_written"], {})
+
+    def test_a_refusal_is_forgotten_once_the_decision_passes_even_if_a_later_step_fails(self):
+        code, _, _ = self.run_installer(FakeMachine("Windows", ram=15.8, docker=7.9))
+        self.assertEqual(code, EXIT_HARDWARE_NOT_SUPPORTED)
+        disk_full = common.InstallError(common.EXIT_DISK_SPACE, "Not enough free disk space.",
+                                        "fake disk check", "Free some space.")
+        code, _, events = self.run_installer(FakeMachine("Windows", ram=15.8, docker=15.6),
+                                             install_checks=disk_full)
+        self.assertEqual(code, common.EXIT_DISK_SPACE)
+        self.assertNotIn(unsupported.EVENT, [event["event"] for event in events])
+        document = hardware.read_profile_json(self.record)
+        self.assertNotIn("refusal", document)
+        self.assertEqual(document["profile"]["name"], "cpu-standard")
+        with self.assertRaises(common.InstallError) as caught:
+            horus_install.require_installed(self.repo / "src" / "infra", self.record)
+        self.assertNotIsInstance(caught.exception, unsupported.NotSupported)
+        self.assertEqual(caught.exception.code, common.EXIT_NOT_INSTALLED)
 
 
 class MemoryDecision(unittest.TestCase):
@@ -504,15 +526,24 @@ class Fingerprint(TempDir):
         self.assertFalse(probe["docker_gpu_test"].get("reused_from"))
 
     def test_the_installer_hands_the_previous_record_to_the_probe(self):
-        machine = FakeMachine(ram=31.8, docker=15.6, cards=self.RTX)
-        self.recorded(machine)
+        previous = self.recorded(FakeMachine(ram=31.8, docker=15.6, cards=self.RTX))
         with mock.patch.object(horus_install.hardware, "probe",
                                return_value=probe_of(docker=16)) as probe, \
                 contextlib.redirect_stdout(io.StringIO()):
             horus_install.decide_profile(self.log(), horus_install.build_parser().parse_args(
                 ["--profile", "gpu-16g"]), None)
         self.assertEqual(probe.call_args.kwargs["previous"]["hardware_fingerprint"],
-                         hardware.read_profile_json(self.record)["hardware_fingerprint"])
+                         previous["hardware_fingerprint"])
+
+    def test_a_passed_decision_is_recorded_before_the_slow_steps(self):
+        machine = FakeMachine(ram=31.8, docker=15.6, cards=self.RTX)
+        probe, _ = self.probe(machine, None)
+        with mock.patch.object(horus_install.hardware, "probe", return_value=probe), \
+                contextlib.redirect_stdout(io.StringIO()):
+            horus_install.decide_profile(self.log(), horus_install.build_parser().parse_args(
+                []), None)
+        _, gpu_test = self.probe(machine, hardware.read_profile_json(self.record))
+        gpu_test.assert_not_called()
 
     def test_profile_still_overrides_a_reused_decision(self):
         machine = FakeMachine(ram=31.8, docker=15.6, cards=self.RTX)
@@ -665,11 +696,20 @@ class DryRun(TempDir):
         self.assertIn(".wslconfig", text)
         self.assertNotIn("would write", text)
 
-    def test_the_dry_run_of_this_machine_does_not_ask_docker(self):
-        with mock.patch.object(horus_install.hardware, "probe",
-                               return_value=probe_of(docker=None)) as probe:
-            self.dry_run("--profile", "cpu-standard")
-        self.assertIs(probe.call_args.kwargs["ask_docker"], False)
+    def test_the_dry_run_of_this_machine_decides_on_the_memory_docker_can_use(self):
+        with contextlib.ExitStack() as stack:
+            FakeMachine("Windows", ram=15.8, docker=7.9).install(stack)
+            text = self.dry_run()
+        first_simulation = f"-- {next(iter(horus_install.SIMULATIONS))} -"
+        this_machine = text.split("-- this machine")[1].split(first_simulation)[0]
+        self.assertIn("docker : 7.9 GiB of memory", this_machine)
+        self.assertIn("profile : not supported", this_machine)
+        self.assertIn("Docker was only asked how much memory it can use", text)
+
+    def test_a_simulated_dry_run_does_not_contact_docker(self):
+        with mock.patch.object(hardware, "run", side_effect=slow("a Docker command")):
+            text = self.dry_run("--simulate", "linux-cpu-16gb")
+        self.assertIn("Docker was not contacted", text)
 
 
 if __name__ == "__main__":

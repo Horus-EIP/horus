@@ -299,11 +299,6 @@ def detect_memory(log: Log) -> dict:
         "detail": detail,
     }
 
-DOCKER_NOT_ASKED = {
-    "mem_total_bytes": None, "mem_total_gib": None, "source": "not asked",
-    "detail": "a dry run does not contact Docker",
-}
-
 def detect_docker_memory(log: Log) -> dict:
     res = run(["docker", "info", "--format", "{{.MemTotal}}"], log, timeout=45)
     raw = res.out.strip() if res.ok else ""
@@ -649,10 +644,9 @@ def reusable_gpu_test(previous: dict | None, current: dict) -> dict | None:
         return None
     return {**test, "reused_from": str(previous.get("generated_utc") or "an earlier run")}
 
-def probe(log: Log, allow_docker_gpu_test: bool = True, ask_docker: bool = True,
-          previous: dict | None = None) -> dict:
+def probe(log: Log, allow_docker_gpu_test: bool = True, previous: dict | None = None) -> dict:
     try:
-        return _probe_machine(log, allow_docker_gpu_test, ask_docker, previous)
+        return _probe_machine(log, allow_docker_gpu_test, previous)
     except Exception as exc:  # noqa: BLE001 - the promise is the point
         reason = f"{type(exc).__name__}: {exc}"
         log.debug(f"hardware probe raised: {reason}")
@@ -660,8 +654,7 @@ def probe(log: Log, allow_docker_gpu_test: bool = True, ask_docker: bool = True,
                  "unknown hardware and the cautious CPU profile.")
         return _partial_probe(reason)
 
-def _probe_machine(log: Log, allow_docker_gpu_test: bool, ask_docker: bool,
-                   previous: dict | None) -> dict:
+def _probe_machine(log: Log, allow_docker_gpu_test: bool, previous: dict | None) -> dict:
     log.step("Hardware")
 
     osinfo = detect_os(log)
@@ -670,7 +663,7 @@ def _probe_machine(log: Log, allow_docker_gpu_test: bool, ask_docker: bool,
     memory = detect_memory(log)
     disk = detect_disk(log)
     gpu = detect_gpu_host(log, osinfo)
-    docker = detect_docker_memory(log) if ask_docker else dict(DOCKER_NOT_ASKED)
+    docker = detect_docker_memory(log)
     current = fingerprint({"memory": memory, "docker": docker, "gpu": gpu})
     reused = reusable_gpu_test(previous, current) if allow_docker_gpu_test else None
     if reused is not None:

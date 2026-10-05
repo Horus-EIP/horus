@@ -421,6 +421,7 @@ function wire() {
   on("python-retry", () => bootstrap());
   on("docker-retry", () => startStack());
   on("installed-retry", () => bootstrap());
+  on("unsupported-retry", () => bootstrap());
   on("failed-retry", () => startStack());
   on("stopped-start", () => startStack());
 

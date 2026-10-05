@@ -61,6 +61,12 @@ adds `download` events (phase, bytes done and total, percent, speed, time left
 and a ready-made line of text) twice a second while it downloads, then one each
 for `verifying` and `verified` or `failed`.
 
+A machine the installer refuses gets one `unsupported` event (what the machine
+has, what Horus needs, what to do) and exit code 32, which the app shows on its
+own screen. The refusal stays in `horus-profile.json`, so `bootstrap` reports
+`refused` while nothing is installed and the app runs `--start`, which repeats
+it. A later install run that gets past the hardware decision clears it.
+
 ## Two windows, and why the client is not bundled
 
 The status screen is a local page; the Horus client is a remote one. They cannot

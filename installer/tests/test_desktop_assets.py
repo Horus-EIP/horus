@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import re
 import subprocess
@@ -11,6 +13,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import common  # noqa: E402
+import hardware  # noqa: E402
+import profiles  # noqa: E402
+import unsupported  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent.parent
 DESKTOP = REPO / "desktop"
@@ -244,6 +249,59 @@ class ExitCodeMapping(unittest.TestCase):
             common.EXIT_HARDWARE_NOT_SUPPORTED: "unsupported",
         }
         self.assertEqual(self.mapping(), expected)
+
+@skip_without_desktop
+class RefusalScreen(unittest.TestCase):
+
+    SMALL_MACHINE = {"os": {"system": "Linux"}, "memory": {"total_bytes": 8 * 1024 ** 3},
+                     "docker": {"mem_total_bytes": 8 * 1024 ** 3}, "gpu": {}}
+
+    def setUp(self) -> None:
+        self.app_js = read(UI / "app.js")
+        self.rust = rust_sources()
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp = Path(self._tmp.name)
+
+    def function(self, name: str) -> str:
+        body = re.search(rf"function {name}\(.*?\n\}}\n", self.app_js, re.DOTALL)
+        self.assertIsNotNone(body, f"app.js has no function {name}")
+        return body.group(0)
+
+    def test_the_app_reads_the_refusal_where_the_installer_records_it(self):
+        key = re.search(r'fn was_refused\(.*?document\.get\("([a-z_]+)"\)', self.rust, re.DOTALL)
+        self.assertIsNotNone(key, "discovery.rs has no was_refused reading a key")
+        record = self.tmp / "horus-profile.json"
+        hardware.write_profile_json(record, self.SMALL_MACHINE, profiles.NOT_SUPPORTED, {}, [],
+                                    refusal=unsupported.refusal(self.SMALL_MACHINE).record())
+        document = json.loads(record.read_text(encoding="utf-8"))
+        self.assertIsInstance(document.get(key.group(1)), dict)
+        self.assertIsNotNone(unsupported.from_record(document))
+
+    def test_a_refused_machine_is_sent_to_start_which_explains_the_refusal(self):
+        self.assertRegex(self.rust, r'"refused":\s*!installed && layout\.was_refused\(\)')
+        self.assertRegex(self.rust, r'(?s)fn start_stack\(.*?&\["--start", "--json-events"\]')
+        self.assertRegex(self.function("bootstrap"),
+                         r'info\.state === "not-installed"\) \{\s*'
+                         r'if \(info\.refused\) \{\s*await startStack\(\);')
+
+    def test_the_unsupported_event_fills_the_refusal_view(self):
+        self.assertRegex(self.function("handleInstallerEvent"),
+                         rf'case "{unsupported.EVENT}":\s*renderUnsupported\(data\);')
+        stream = io.StringIO()
+        log = common.Log(self.tmp / "log.txt", events=common.Events(True, stream))
+        self.addCleanup(log.close, 0)
+        with contextlib.redirect_stdout(io.StringIO()):
+            unsupported.refusal(self.SMALL_MACHINE).report(log)
+        event = json.loads(stream.getvalue().splitlines()[0][len(common.EVENT_PREFIX):])
+        self.assertEqual(event["event"], unsupported.EVENT)
+        shown = set(re.findall(r"data\.([a-z_]+)", self.function("renderUnsupported")))
+        self.assertEqual(shown, {"headline", "checked_utc", "have", "need", "alternatives"})
+        self.assertEqual(shown - set(event), set())
+
+    def test_the_refusal_view_can_look_again_after_start_here_ran(self):
+        self.assertIn('id="unsupported-retry"', read(UI / "index.html"))
+        self.assertRegex(self.app_js, r'on\("unsupported-retry", \(\) => bootstrap\(\)\);')
 
 @skip_without_desktop
 class IconMaster(unittest.TestCase):

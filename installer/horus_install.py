@@ -1018,7 +1018,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="force a tuning profile: " + ", ".join(profiles.PROFILES))
     p.add_argument("--dry-run", action="store_true",
                    help="print the chosen profile and the config it would write, "
-                        "then exit without touching Docker or any file")
+                        "then exit without writing any file; Docker is only asked "
+                        "how much memory it can use")
     p.add_argument("--simulate", metavar="NAME",
                    help="with --dry-run, pretend to be a different machine: "
                         + ", ".join(SIMULATIONS))
@@ -1129,8 +1130,7 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
             return EXIT_PROFILE_UNKNOWN
         probes = [(args.simulate, dict(SIMULATIONS[args.simulate]))]
     else:
-        probes = [("this machine", hardware.probe(log, allow_docker_gpu_test=False,
-                                                  ask_docker=False))]
+        probes = [("this machine", hardware.probe(log, allow_docker_gpu_test=False))]
         if not args.profile:
             probes += [(name, dict(spec)) for name, spec in SIMULATIONS.items()]
 
@@ -1187,7 +1187,11 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
 
     log.say("")
     log.say(rule())
-    log.say("  Dry run complete. No files were written and Docker was not contacted.")
+    if args.simulate:
+        log.say("  Dry run complete. No files were written and Docker was not contacted.")
+    else:
+        log.say("  Dry run complete. No files were written; Docker was only asked how much "
+                "memory it can use.")
     return EXIT_OK
 
 def models_dir_to_use(log: Log, repo: Path, requested: str | None) -> str | Path | None:
@@ -1266,6 +1270,7 @@ def decide_profile(log: Log, args, registry: str | None) -> tuple[dict, str, lis
     log.ok(f"profile: {bold(name)}")
     for reason in reasons:
         log.say(f"           {reason}")
+    hardware.write_profile_json(PROFILE_JSON, probe, name, {}, reasons, log=log)
     log.say(f"  images:  {describe_images(registry, name)}")
     if registry is not None:
         warn_if_images_are_emulated(log, probe)
