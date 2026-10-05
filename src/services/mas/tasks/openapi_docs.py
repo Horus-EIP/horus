@@ -19,6 +19,7 @@ QUEUE_STATS_RESPONSES = {
                             "running": 2,
                             "completed": 150,
                             "failed": 1,
+                            "cancelled": 0,
                             "total": 158,
                         },
                     }

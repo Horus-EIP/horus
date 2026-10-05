@@ -401,7 +401,7 @@ Retrieve all tasks stored in the database.
 
 #### GET /tasks/stats/queue
 
-Retrieve current task queue statistics (pending, running, completed, failed counts).
+Retrieve task counts by status (pending, running, completed, failed, cancelled) and their total. Only top-level tasks are counted, like `GET /tasks/list`: the subtasks of a multi-agent chain are excluded.
 
 **Auth:** JWT Bearer (requires `analytics:view` permission)
 
@@ -416,7 +416,6 @@ Retrieve current task queue statistics (pending, running, completed, failed coun
   "completed": 150,
   "failed": 1,
   "cancelled": 0,
-  "timeout": 0,
   "total": 158
 }
 ```

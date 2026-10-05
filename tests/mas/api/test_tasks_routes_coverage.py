@@ -1780,6 +1780,29 @@ class TestBroadcastManagerMessage:
         assert mock_ws.call_args.kwargs["agent_name"] == "Manager"
 
 
+@pytest.fixture
+def sqlite_session():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    import db.models  # noqa: F401
+    from db.database import Base
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    session = sessionmaker(bind=engine)()
+    try:
+        yield session
+    finally:
+        session.close()
+        engine.dispose()
+
+
 class TestQueueStatsHelper:
     def test_get_task_queue_stats_counts_and_totals(self):
         from tasks.routes import get_task_queue_stats
@@ -1793,6 +1816,53 @@ class TestQueueStatsHelper:
         assert stats["pending"] == 1
         assert stats["completed"] == 2
         assert stats["total"] == 3
+        assert set(stats) == {
+            "pending",
+            "running",
+            "completed",
+            "failed",
+            "cancelled",
+            "total",
+        }
+
+    @pytest.mark.regression
+    def test_f28_queue_stats_count_root_tasks_not_subtasks(self, sqlite_session):
+        from db.models import Task
+        from tasks.routes import get_task_queue_stats
+
+        sqlite_session.add_all(
+            [
+                Task(
+                    id="root",
+                    agent_id="manager",
+                    status=TaskStatus.COMPLETED.value,
+                    query="compare the Q4 reports",
+                ),
+                Task(
+                    id="sub-1",
+                    parent_task_id="root",
+                    agent_id="agent-1",
+                    status=TaskStatus.COMPLETED.value,
+                    query="summarise report A",
+                    order=0,
+                ),
+                Task(
+                    id="sub-2",
+                    parent_task_id="root",
+                    agent_id="agent-2",
+                    status=TaskStatus.RUNNING.value,
+                    query="summarise report B",
+                    order=1,
+                ),
+            ]
+        )
+        sqlite_session.commit()
+
+        stats = get_task_queue_stats(sqlite_session)
+
+        assert stats["total"] == 1
+        assert stats["completed"] == 1
+        assert stats["running"] == 0
 
     def test_update_task_queue_depth_sets_gauge(self):
         from tasks.routes import update_task_queue_depth

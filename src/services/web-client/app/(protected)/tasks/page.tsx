@@ -12,7 +12,6 @@ import {
   IconCheck,
   IconX,
   IconBan,
-  IconAlertTriangle,
   IconPlus,
   IconRefresh,
   IconChevronRight,
@@ -182,7 +181,7 @@ export default function TasksPage() {
       ) : stats ? (
         <>
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             <StatCard
               title="Pending"
               value={stats.pending}
@@ -216,13 +215,6 @@ export default function TasksPage() {
               value={stats.cancelled}
               icon={<IconBan className="w-6 h-6 text-gray-400" />}
               color="bg-gray-500/20"
-              bgColor="bg-[var(--bgSoft)]/70"
-            />
-            <StatCard
-              title="Timeout"
-              value={stats.timeout}
-              icon={<IconAlertTriangle className="w-6 h-6 text-orange-400" />}
-              color="bg-orange-500/20"
               bgColor="bg-[var(--bgSoft)]/70"
             />
           </div>
@@ -290,13 +282,6 @@ export default function TasksPage() {
                     title={`Cancelled: ${stats.cancelled}`}
                   />
                 )}
-                {stats.timeout > 0 && (
-                  <div 
-                    className="bg-orange-500 transition-all duration-500"
-                    style={{ width: `${(stats.timeout / stats.total) * 100}%` }}
-                    title={`Timeout: ${stats.timeout}`}
-                  />
-                )}
               </div>
               <div className="flex justify-between mt-2 text-xs text-[var(--textSoft)]">
                 <div className="flex gap-4">
@@ -316,9 +301,6 @@ export default function TasksPage() {
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-gray-500"></span> Cancelled
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-orange-500"></span> Timeout
                   </span>
                 </div>
               </div>

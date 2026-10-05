@@ -35,7 +35,6 @@ export interface TaskQueueStats {
   completed: number;
   failed: number;
   cancelled: number;
-  timeout: number;
   total: number;
 }
 

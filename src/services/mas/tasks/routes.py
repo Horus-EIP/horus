@@ -349,14 +349,18 @@ def _build_files_payload(task: "TaskForm") -> list[dict]:
 
 def get_task_queue_stats(db: Session) -> dict[str, Any]:
     """Aggregate task counts by status from the database."""
-    rows = db.query(Task.status, func.count(Task.id)).group_by(Task.status).all()
+    rows = (
+        db.query(Task.status, func.count(Task.id))
+        .filter(Task.parent_task_id.is_(None))
+        .group_by(Task.status)
+        .all()
+    )
     counts = {
         "pending": 0,
         "running": 0,
         "completed": 0,
         "failed": 0,
         "cancelled": 0,
-        "timeout": 0,
     }
     for status, n in rows:
         sv = status.value if isinstance(status, TaskStatus) else str(status)
@@ -402,7 +406,12 @@ def list_tasks(db: Session = Depends(get_db)):
 @router.get(
     "/stats/queue",
     summary="Get task queue statistics",
-    description="Retrieve current statistics about the task queue including pending, running, and completed tasks. Requires VIEW_ANALYTICS permission.",
+    description=(
+        "Retrieve task counts by status (pending, running, completed, failed, "
+        "cancelled) and their total. Counts top-level tasks only, like "
+        "``/tasks/list``: subtasks of a chain are excluded. Requires "
+        "VIEW_ANALYTICS permission."
+    ),
     status_code=200,
     dependencies=[Depends(PermissionChecker(Permission.VIEW_ANALYTICS))],
     responses=QUEUE_STATS_RESPONSES,

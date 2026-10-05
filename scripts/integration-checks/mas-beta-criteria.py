@@ -967,7 +967,6 @@ class TestF20TaskQueue:
                 "completed": 100,
                 "failed": 2,
                 "cancelled": 1,
-                "timeout": 0,
                 "total": 111,
             }
 
