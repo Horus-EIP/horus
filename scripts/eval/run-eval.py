@@ -6,8 +6,6 @@ import asyncio
 import importlib.util
 import json
 import os
-import platform
-import subprocess
 import sys
 import threading
 import time
@@ -17,19 +15,28 @@ from typing import Any
 
 import httpx
 from eval_events import Observation, apply_event
+from eval_files import is_sha256, report_path, safe_label, write_json
 from eval_report import (
     ResourcePeaks,
     build_report,
-    is_sha256,
     parse_docker_stats,
     parse_meminfo_swap_used,
     question_record,
-    report_path,
     resummarize,
-    safe_label,
     titles_from_query_result,
 )
 from eval_scoring import ROUTE_AGENT, ROUTE_DIRECT, ROUTE_NONE
+from eval_stack import (
+    LLM_CONTAINER,
+    LLM_PORT,
+    build_tag,
+    llm_usage,
+    parse_cgroup_bytes,
+    parse_memory_events,
+    parse_prometheus,
+    parse_props,
+    parse_server_args,
+)
 from eval_testset import (
     CATEGORIES,
     DEFAULT_TESTSET_PATH,
@@ -44,7 +51,10 @@ from eval_testset import (
 )
 
 PERF_DIR = Path(__file__).resolve().parent.parent / "perf"
+BENCHMARKS_DIR = Path(__file__).resolve().parent.parent / "benchmarks"
 DEFAULT_OUT_DIR = REPO_ROOT / "benchmarks"
+DEFAULT_SWAP_CONTAINER = "mas"
+DOCKER_TIMEOUT_S = 30.0
 TERMINAL_TASK_STATUSES = frozenset({"completed", "failed", "cancelled", "canceled"})
 ACCEPTED_SUBMIT_STATUSES = frozenset({200, 202})
 ROUTES_BY_EVENT_ROUTE = {"direct_answer": ROUTE_DIRECT, "agent": ROUTE_AGENT, "none": ROUTE_NONE}
@@ -67,16 +77,17 @@ SERVER_SETTINGS = (
 )
 
 
-def load_perf_script(filename: str, module_name: str) -> Any:
-    spec = importlib.util.spec_from_file_location(module_name, PERF_DIR / filename)
+def load_script(path: Path, module_name: str) -> Any:
+    spec = importlib.util.spec_from_file_location(module_name, path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
 
 
-pipeline = load_perf_script("benchmark-pipeline.py", "benchmark_pipeline")
-quality = load_perf_script("quality-benchmark.py", "quality_benchmark")
+pipeline = load_script(PERF_DIR / "benchmark-pipeline.py", "benchmark_pipeline")
+quality = load_script(PERF_DIR / "quality-benchmark.py", "quality_benchmark")
+host = sys.modules.get("bench_host") or load_script(BENCHMARKS_DIR / "bench_host.py", "bench_host")
 
 
 def now_utc() -> str:
@@ -86,6 +97,7 @@ def now_utc() -> str:
 def observation_fields(observation: Observation) -> dict[str, Any]:
     return {
         "first_event_s": observation.first_event_s,
+        "routing_s": observation.routing_s,
         "retrieval_s": observation.retrieval_s,
         "reasoning_start_s": observation.reasoning_start_s,
         "ttft_s": observation.ttft_s,
@@ -327,17 +339,17 @@ def retrieve(ks_url: str, question: str, top_k: int) -> dict[str, Any]:
     return outcome
 
 
+def docker_text(argv: list[str], timeout: float = DOCKER_TIMEOUT_S) -> str | None:
+    return host.run_text(["docker", *argv], timeout=timeout)
+
+
+def docker_exec(container: str, *command: str) -> str | None:
+    return docker_text(["exec", container, *command])
+
+
 def docker_memory_usage() -> dict[str, int]:
-    try:
-        completed = subprocess.run(
-            ["docker", "stats", "--no-stream", "--format", "{{.Name}}\t{{.MemUsage}}"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return {}
-    return parse_docker_stats(completed.stdout)
+    output = docker_text(["stats", "--no-stream", "--format", "{{.Name}}\t{{.MemUsage}}"], timeout=60)
+    return parse_docker_stats(output or "")
 
 
 def swap_used_bytes() -> int | None:
@@ -353,35 +365,155 @@ def swap_used_bytes() -> int | None:
         return None
 
 
+def docker_host_swap_used_bytes(container: str | None) -> int | None:
+    if not container:
+        return None
+    return parse_meminfo_swap_used(docker_exec(container, "cat", "/proc/meminfo") or "")
+
+
+def container_cgroup_facts(names: list[str]) -> dict[str, dict[str, int]]:
+    peaks: dict[str, int] = {}
+    oom_kills: dict[str, int] = {}
+    for name in names:
+        peak = parse_cgroup_bytes(docker_exec(name, "cat", "/sys/fs/cgroup/memory.peak"))
+        if peak is not None:
+            peaks[name] = peak
+        events = parse_memory_events(docker_exec(name, "cat", "/sys/fs/cgroup/memory.events"))
+        if "oom_kill" in events:
+            oom_kills[name] = events["oom_kill"]
+    return {
+        "container_lifetime_peak_mem_bytes": dict(sorted(peaks.items())),
+        "container_oom_kills": dict(sorted(oom_kills.items())),
+    }
+
+
 class ResourceSampler(threading.Thread):
-    def __init__(self, interval: float) -> None:
+    def __init__(self, interval: float, swap_container: str | None = None) -> None:
         super().__init__(daemon=True)
         self.interval = interval
+        self.swap_container = swap_container
         self.peaks = ResourcePeaks()
+        self.window: ResourcePeaks | None = None
+        self._lock = threading.Lock()
         self._stopping = threading.Event()
+
+    def sample(self) -> None:
+        usage = docker_memory_usage()
+        swap = swap_used_bytes()
+        docker_host_swap = docker_host_swap_used_bytes(self.swap_container)
+        with self._lock:
+            for peaks in (self.peaks, self.window):
+                if peaks is not None:
+                    peaks.add(usage, swap, docker_host_swap)
 
     def run(self) -> None:
         while not self._stopping.is_set():
-            self.peaks.add(docker_memory_usage(), swap_used_bytes())
+            self.sample()
             self._stopping.wait(self.interval)
+
+    def begin_window(self) -> None:
+        with self._lock:
+            self.window = ResourcePeaks()
+
+    def end_window(self) -> dict[str, Any] | None:
+        with self._lock:
+            window, self.window = self.window, None
+        return window.window_dict() if window else None
 
     def finish(self) -> dict[str, Any]:
         self._stopping.set()
         self.join(timeout=90)
-        return self.peaks.as_dict()
+        resources = self.peaks.as_dict()
+        resources.update(container_cgroup_facts(list(resources["container_peak_mem_bytes"])))
+        return resources
 
 
-def machine_info(args: argparse.Namespace) -> dict[str, Any]:
-    gpu = pipeline.gpu_info()
+def read_llm_counters(container: str, port: int) -> dict[str, float]:
+    url = f"http://localhost:{port}/metrics"
+    return parse_prometheus(docker_exec(container, "curl", "-fsS", "-m", "10", url))
+
+
+def llama_server_facts(container: str | None) -> dict[str, Any] | None:
+    if not container:
+        return None
+    try:
+        config = json.loads(docker_text(["inspect", "--format", "{{json .Config}}", container]) or "")
+    except ValueError:
+        return None
+    if not isinstance(config, dict):
+        return None
+    args = [str(arg) for arg in config.get("Cmd") or []]
+    settings = parse_server_args(args)
+    port = settings.get("port") or LLM_PORT
+    props = parse_props(docker_exec(container, "curl", "-fsS", "-m", "10", f"http://localhost:{port}/props"))
+    model_path = props.get("model_path") or settings.get("model")
+    verified = docker_exec(container, "cat", f"{model_path}.sha256") if model_path else None
+    image = config.get("Image")
     return {
-        "reference": args.reference,
-        "cpu_model": args.cpu_model or platform.processor() or None,
+        "container": container,
+        "image": image,
+        "args": args,
+        "settings": settings,
+        "port": port,
+        "build_info": props.get("build_info"),
+        "build": build_tag(props.get("build_info")) or build_tag(str(image or "").rsplit(":", 1)[-1]),
+        "n_ctx": props.get("n_ctx"),
+        "model_path": model_path,
+        "model_sha256": (verified or "").strip().lower() if is_sha256(verified) else None,
+    }
+
+
+class QuestionProbes:
+    def __init__(self, sampler: ResourceSampler | None, llama_server: dict[str, Any] | None) -> None:
+        self.sampler = sampler
+        self.llama_server = llama_server
+        self.counters: dict[str, float] | None = None
+
+    def read_counters(self) -> dict[str, float] | None:
+        if not self.llama_server:
+            return None
+        return read_llm_counters(self.llama_server["container"], self.llama_server["port"])
+
+    async def before(self) -> None:
+        if self.sampler:
+            self.sampler.begin_window()
+        self.counters = await asyncio.to_thread(self.read_counters)
+
+    async def after(self, outcome: dict[str, Any]) -> None:
+        if self.llama_server:
+            outcome["llm"] = llm_usage(self.counters, await asyncio.to_thread(self.read_counters))
+        if self.sampler:
+            outcome["resources"] = self.sampler.end_window()
+
+
+def machine_info(args: argparse.Namespace, docker: dict[str, Any] | None) -> dict[str, Any]:
+    overrides = {
+        "cpu_model": args.cpu_model,
         "ram": args.ram,
         "ram_speed": args.ram_speed,
         "disk_type": args.disk_type,
-        "os": platform.platform(),
-        "logical_cpus": os.cpu_count(),
-        "gpu": None if "error" in gpu else gpu,
+    }
+    collected = host.collect_host(host.docker_data_path(docker))
+    machine = host.machine_section(args.reference, collected, overrides, docker)
+    gpu = pipeline.gpu_info()
+    machine["gpu"] = None if "error" in gpu else gpu
+    return machine
+
+
+def model_info(args: argparse.Namespace, llama_server: dict[str, Any] | None) -> dict[str, Any]:
+    server = llama_server or {}
+    sha256 = args.model_sha256.lower() if args.model_sha256 else server.get("model_sha256")
+    if args.model_sha256:
+        sha256_source = "given"
+    elif sha256:
+        sha256_source = "llm container: the .sha256 that llm-model wrote after verifying the download"
+    else:
+        sha256_source = None
+    return {
+        "name": args.model_name or (server.get("settings") or {}).get("alias"),
+        "file": args.model_file or (Path(server["model_path"]).name if server.get("model_path") else None),
+        "sha256": sha256,
+        "sha256_source": sha256_source,
     }
 
 
@@ -400,13 +532,6 @@ def testset_info(args: argparse.Namespace, testset: dict[str, Any], items: list[
         "items_run": len(items),
         "filters": {"ids": args.ids, "categories": args.category, "limit": args.limit},
     }
-
-
-def write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".json.part")
-    temporary.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.replace(temporary, path)
 
 
 def progress_line(index: int, total: int, record: dict[str, Any]) -> str:
@@ -452,6 +577,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--corpus-token", default=os.environ.get("CORPUS_SCAN_TOKEN"))
     parser.add_argument("--sample-resources", action="store_true")
     parser.add_argument("--sample-interval", type=float, default=10.0)
+    parser.add_argument("--swap-container", default=DEFAULT_SWAP_CONTAINER)
+    parser.add_argument("--llm-container", default=LLM_CONTAINER)
     parser.add_argument("--llama-cpp-build")
     parser.add_argument("--model-name")
     parser.add_argument("--model-file")
@@ -505,6 +632,7 @@ async def run_questions(
     testset: dict[str, Any],
     items: list[dict[str, Any]],
     on_record: Any,
+    probes: QuestionProbes | None = None,
 ) -> list[dict[str, Any]] | None:
     if not args.skip_corpus_check and not await ensure_corpus(
         args.ks_url, testset, args.corpus_token
@@ -526,11 +654,15 @@ async def run_questions(
             await client.ask(WARMUP_QUESTION, f"eval-warmup-{safe_label(args.label)}")
     records: list[dict[str, Any]] = []
     for index, item in enumerate(items, 1):
+        if probes:
+            await probes.before()
         if client is not None:
             name = f"eval-{safe_label(args.label)}-{item['id']}"
             outcome = await client.ask(item["question"], name)
         else:
             outcome = await asyncio.to_thread(retrieve, args.ks_url, item["question"], args.top_k)
+        if probes:
+            await probes.after(outcome)
         record = question_record(item, outcome)
         records.append(record)
         print(progress_line(index, len(items), record))
@@ -582,7 +714,13 @@ def main() -> int:
 
     started_at = datetime.now(UTC)
     out_path = report_path(args.out_dir, args.label, started_at.date())
-    sampler = ResourceSampler(args.sample_interval) if args.sample_resources else None
+    sampler = None
+    if args.sample_resources:
+        sampler = ResourceSampler(args.sample_interval, args.swap_container or None)
+    llama_server = llama_server_facts(args.llm_container or None)
+    if llama_server is None and args.llm_container:
+        print(f"[info] no llama-server container {args.llm_container!r}: server metrics are not recorded")
+    docker = host.docker_facts()
     run = {
         "mode": args.mode,
         "started_at": started_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -602,14 +740,13 @@ def main() -> int:
     static = {
         "label": args.label,
         "testset": testset_info(args, testset, items),
-        "llama_cpp_build": args.llama_cpp_build,
-        "model": {
-            "name": args.model_name,
-            "file": args.model_file,
-            "sha256": args.model_sha256.lower() if args.model_sha256 else None,
-        },
-        "machine": machine_info(args),
+        "llama_cpp_build": args.llama_cpp_build or (llama_server or {}).get("build"),
+        "llama_server": llama_server,
+        "model": model_info(args, llama_server),
+        "machine": machine_info(args, docker),
     }
+    for missing in host.missing_fields(static["machine"]):
+        print(f"[warn] machine {missing}")
 
     def save(records: list[dict[str, Any]], resources: dict[str, Any] | None = None) -> None:
         run["observed_models"] = observed_values(records, "models")
@@ -619,7 +756,8 @@ def main() -> int:
     print(f"[info] {len(items)} question(s), writing {out_path}")
     if sampler:
         sampler.start()
-    records = asyncio.run(run_questions(args, testset, items, save))
+    probes = QuestionProbes(sampler, llama_server if args.mode == "chat" else None)
+    records = asyncio.run(run_questions(args, testset, items, save, probes))
     resources = sampler.finish() if sampler else None
     if records is None:
         return 1
@@ -634,6 +772,8 @@ def main() -> int:
         "route_correct",
         "total_s",
         "ttft_s",
+        "routing_s",
+        "llm",
     )
     print(json.dumps({key: summary[key] for key in headline}, indent=2))
     print(f"[done] wrote {out_path}")

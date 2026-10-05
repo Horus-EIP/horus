@@ -3,8 +3,6 @@ from __future__ import annotations
 import re
 import statistics
 from collections import Counter
-from datetime import date
-from pathlib import Path
 from typing import Any
 
 from eval_scoring import (
@@ -20,12 +18,10 @@ from eval_scoring import (
 from eval_testset import CATEGORIES
 
 REPORT_KIND = "horus-eval"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 REVIEWER_SLOTS = 2
 COMPLETE_TIMING_SOURCES = frozenset({"websocket", "http"})
 
-_SHA256 = re.compile(r"^[0-9a-f]{64}$")
-_UNSAFE_LABEL_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
 _DOCKER_SIZE = re.compile(r"^\s*([0-9]*\.?[0-9]+)\s*([KMGT]?i?B)\s*$", re.IGNORECASE)
 _DOCKER_UNITS = {
     "B": 1,
@@ -75,10 +71,13 @@ def question_record(item: dict[str, Any], outcome: dict[str, Any]) -> dict[str, 
         "timing_source": outcome.get("timing_source"),
         "submit_http_s": outcome.get("submit_http_s"),
         "first_event_s": outcome.get("first_event_s"),
+        "routing_s": outcome.get("routing_s"),
         "retrieval_s": outcome.get("retrieval_s"),
         "reasoning_start_s": outcome.get("reasoning_start_s"),
         "ttft_s": outcome.get("ttft_s"),
         "total_s": outcome.get("total_s"),
+        "llm": outcome.get("llm"),
+        "resources": outcome.get("resources"),
         "answer": answer,
         "retrieval_steps": outcome.get("retrieval_steps"),
         "retrieved_sources": outcome.get("retrieved_sources"),
@@ -150,6 +149,33 @@ def rank_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _throughput(tokens: float, seconds: float) -> float | None:
+    return round(tokens / seconds, 2) if seconds > 0 else None
+
+
+def llm_summary(records: list[dict[str, Any]]) -> dict[str, Any] | None:
+    usages = [
+        r["llm"] for r in records if isinstance(r.get("llm"), dict) and "prompt_s" in r["llm"]
+    ]
+    restarts = sum(1 for r in records if isinstance(r.get("llm"), dict) and r["llm"].get("restarted"))
+    if not usages and not restarts:
+        return None
+
+    def total(key: str) -> float:
+        return sum(usage.get(key) or 0 for usage in usages)
+
+    return {
+        "questions": len(usages),
+        "server_restarts": restarts,
+        "prompt_s": stats([usage.get("prompt_s") for usage in usages]),
+        "prompt_tokens": stats([usage.get("prompt_tokens") for usage in usages]),
+        "generation_s": stats([usage.get("generation_s") for usage in usages]),
+        "generated_tokens": stats([usage.get("generated_tokens") for usage in usages]),
+        "prompt_tps": _throughput(total("prompt_tokens"), total("prompt_s")),
+        "generation_tps": _throughput(total("generated_tokens"), total("generation_s")),
+    }
+
+
 def _group_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "questions": len(records),
@@ -173,6 +199,8 @@ def build_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
         )
     )
     summary["ttft_s"] = stats([r.get("ttft_s") for r in records])
+    summary["routing_s"] = stats([r.get("routing_s") for r in records])
+    summary["llm"] = llm_summary(records)
     summary["manual_review"] = manual_review_summary(records)
     summary["by_category"] = {
         category: _group_summary([r for r in records if r.get("category") == category])
@@ -189,6 +217,7 @@ def build_report(
     testset: dict[str, Any],
     records: list[dict[str, Any]],
     llama_cpp_build: str | None = None,
+    llama_server: dict[str, Any] | None = None,
     model: dict[str, Any] | None = None,
     machine: dict[str, Any] | None = None,
     resources: dict[str, Any] | None = None,
@@ -199,7 +228,7 @@ def build_report(
         "label": label,
         "run": run,
         "testset": testset,
-        "llama_cpp": {"build": llama_cpp_build},
+        "llama_cpp": {"build": llama_cpp_build, "server": llama_server},
         "model": {"name": None, "file": None, "sha256": None, **(model or {})},
         "machine": machine or {},
         "resources": resources,
@@ -212,27 +241,6 @@ def resummarize(report: dict[str, Any]) -> dict[str, Any]:
     if report.get("kind") != REPORT_KIND:
         raise ValueError(f"not a {REPORT_KIND} report (kind={report.get('kind')!r})")
     return {**report, "summary": build_summary(report.get("questions") or [])}
-
-
-def safe_label(label: str) -> str:
-    cleaned = _UNSAFE_LABEL_CHARS.sub("-", label.strip()).strip("-.")
-    if not cleaned:
-        raise ValueError("label must contain at least one letter or digit")
-    return cleaned
-
-
-def report_path(out_dir: Path | str, label: str, run_date: date) -> Path:
-    stem = f"{safe_label(label)}-{run_date.isoformat()}"
-    candidate = Path(out_dir) / f"{stem}.json"
-    suffix = 2
-    while candidate.exists():
-        candidate = Path(out_dir) / f"{stem}-{suffix}.json"
-        suffix += 1
-    return candidate
-
-
-def is_sha256(value: str | None) -> bool:
-    return bool(value) and bool(_SHA256.match(value.strip().lower()))
 
 
 def parse_docker_size(text: str) -> int | None:
@@ -271,8 +279,14 @@ class ResourcePeaks:
         self.container_peaks: dict[str, int] = {}
         self.containers_sum_peak: int | None = None
         self.swap_peak: int | None = None
+        self.docker_host_swap_peak: int | None = None
 
-    def add(self, container_usage: dict[str, int], swap_used: int | None = None) -> None:
+    def add(
+        self,
+        container_usage: dict[str, int],
+        swap_used: int | None = None,
+        docker_host_swap_used: int | None = None,
+    ) -> None:
         self.samples += 1
         for name, used in container_usage.items():
             self.container_peaks[name] = max(used, self.container_peaks.get(name, 0))
@@ -281,6 +295,8 @@ class ResourcePeaks:
             self.containers_sum_peak = max(total, self.containers_sum_peak or 0)
         if swap_used is not None:
             self.swap_peak = max(swap_used, self.swap_peak or 0)
+        if docker_host_swap_used is not None:
+            self.docker_host_swap_peak = max(docker_host_swap_used, self.docker_host_swap_peak or 0)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -288,6 +304,17 @@ class ResourcePeaks:
             "container_peak_mem_bytes": dict(sorted(self.container_peaks.items())),
             "containers_sum_peak_mem_bytes": self.containers_sum_peak,
             "swap_peak_used_bytes": self.swap_peak,
+            "docker_host_swap_peak_used_bytes": self.docker_host_swap_peak,
+        }
+
+    def window_dict(self) -> dict[str, Any] | None:
+        if not self.samples:
+            return None
+        return {
+            "samples": self.samples,
+            "containers_sum_peak_mem_bytes": self.containers_sum_peak,
+            "swap_peak_used_bytes": self.swap_peak,
+            "docker_host_swap_peak_used_bytes": self.docker_host_swap_peak,
         }
 
 

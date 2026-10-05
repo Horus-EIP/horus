@@ -161,6 +161,43 @@ class TestFoldEvents:
         assert observation.answer is None
 
 
+class TestRoutingTime:
+    def test_routing_ends_with_the_first_frame_past_the_routing_stage(self):
+        observation = fold_events(
+            [
+                (0.1, {"type": "task_status", "status": "queued", "stage": "queued"}),
+                (0.2, {"type": "task_status", "status": "routing", "stage": "routing"}),
+                (5.0, {"type": "heartbeat", "elapsed_s": 5.0, "stage": "routing"}),
+                (7.4, {"type": "task_status", "status": "running", "stage": "retrieval"}),
+                (8.0, {**step("retrieval.start"), "stage": "retrieval"}),
+                (30.0, {**answer("Q4 revenue was $4.2M."), "stage": "generation"}),
+            ]
+        )
+        assert observation.routing_s == 7.4
+
+    def test_heartbeat_past_routing_ends_it_when_the_status_frame_was_missed(self):
+        observation = fold_events(
+            [
+                (0.2, {"type": "task_status", "status": "routing", "stage": "routing"}),
+                (10.0, {"type": "heartbeat", "elapsed_s": 10.0, "stage": "generation"}),
+            ]
+        )
+        assert observation.routing_s == 10.0
+
+    def test_direct_answer_ends_routing_with_the_answer(self):
+        observation = fold_events(
+            [
+                (0.2, {"type": "task_status", "status": "routing", "stage": "routing"}),
+                (0.9, {"type": "agent", "content": "Hello!", "event": "result", "stage": "routing"}),
+            ]
+        )
+        assert observation.routing_s == 0.9
+
+    def test_frames_without_a_stage_leave_routing_time_unknown(self):
+        observation = fold_events([(1.0, step("retrieval.start")), (9.0, answer("$250."))])
+        assert observation.routing_s is None
+
+
 class TestEventHelpers:
     def test_is_final_answer_skips_steps_and_manager_skills(self):
         assert is_final_answer(answer("x", skill_used="research"))

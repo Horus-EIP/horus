@@ -57,6 +57,27 @@ This section records every optimization we shipped, with measured impact. Empty 
 
 ---
 
+## CPU-only machines (dev plan B-91)
+
+The CPU path is measured with the 100-question test set and llama-bench on the reference machine `cpu16` (16 GB of RAM, CPU only, AVX2). Results go to [`benchmarks/`](../../benchmarks/README.md); [ADR-005](../adr/ADR-005-low-ram-machines.md) uses them to decide what happens under 16 GB.
+
+| Measurement | Date | Result | File |
+|---|---|---|---|
+| Old CPU profile (Qwen2.5-1.5B router in MAS, Qwen3-4B in bf16 in the agent, both with Transformers), one grounded question, 12-core laptop with 64 GB of RAM | 2026-09-01 | **14 min 14 s**, wrong answer (the anti-spiral guard replaced it). Retrieval ranked the right document first. | [`cpu-transformers-2026-09-01.json`](../../benchmarks/cpu-transformers-2026-09-01.json) |
+| llama-bench, Qwen3-4B Q4_K_M and Q5_K_M, build b11382, `cpu16` | not run yet | | `benchmarks/cpu16-<date>.json` |
+| 100 questions, `cpu-standard` on llama-server, `cpu16` | not run yet | | `benchmarks/eval-cpu16-standard-<date>.json` |
+| 100 questions, the 4B with a 4,096 context and a q8_0 KV cache (ADR-005 option B), `cpu16` | not run yet | | `benchmarks/eval-cpu16-lean-<date>.json` |
+
+```bash
+python scripts/benchmarks/run-llama-bench.py --models-dir <folder> --fetch
+python scripts/eval/run-eval.py --label eval-cpu16-standard --reference cpu16 --sample-resources
+python scripts/benchmarks/compare-benchmarks.py benchmarks/cpu-transformers-2026-09-01.json benchmarks/eval-cpu16-standard-<date>.json
+```
+
+The comparison prints the dev plan's §10 table (tokens per second, time to first token, total time, routing time, peak RAM and swap, answer and source correctness) in Markdown, ready for a pull request.
+
+---
+
 ## Test types we run
 
 | Test type | Script | What it stresses | When we run it |
@@ -68,6 +89,8 @@ This section records every optimization we shipped, with measured impact. Empty 
 | Resilience / chaos | [`resilience.py`](../../scripts/perf/resilience.py) | RabbitMQ death, ChromaDB restart, Postgres failover | Once per sprint |
 | Retrieval quality | [`retrieval-quality.py`](../../scripts/perf/retrieval-quality.py) | Recall on a curated query set | Whenever the embedding model or chunker changes |
 | Quality benchmark (keyword + output assertions) | [`quality-benchmark.py`](../../scripts/perf/quality-benchmark.py) | Keyword-match precision, answer-contains assertions | Each release + after any RAG pipeline change |
+| Test set evaluation (100 questions) | [`run-eval.py`](../../scripts/eval/run-eval.py) | Time to first token, total time, routing time, peak RAM and swap, answer and source correctness | Before and after every dev plan task of phases 1 to 8 |
+| Model speed | [`run-llama-bench.py`](../../scripts/benchmarks/run-llama-bench.py) | llama-bench prompt processing and generation, KV cache types, thread counts | When the llama.cpp build, the model or the reference machine changes |
 
 ---
 

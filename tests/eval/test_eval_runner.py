@@ -487,3 +487,311 @@ class TestProgressLine:
         assert line.startswith("[  1/100] fin-01")
         assert "12.50s" in line
         assert "answer=yes source=no route=-" in line
+
+
+VERIFIED_SHA256 = "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597"
+LLM_CONFIG = {
+    "Image": "ghcr.io/ggml-org/llama.cpp:server-b11382",
+    "Cmd": [
+        "--model", "/models/qwen3-4b-instruct-2507-Q4_K_M.gguf",
+        "--alias", "qwen3-4b",
+        "--port", "8080",
+        "--ctx-size", "4096",
+        "-ctk", "q8_0",
+        "-ctv", "q8_0",
+        "--metrics",
+    ],
+}
+LLM_PROPS = {
+    "build_info": "b11382-11fe0215",
+    "model_path": "/models/qwen3-4b-instruct-2507-Q4_K_M.gguf",
+    "default_generation_settings": {"n_ctx": 4096},
+}
+
+
+def fake_docker(responses, calls=None):
+    def docker_text(argv, timeout=30.0):
+        if calls is not None:
+            calls.append(list(argv))
+        for prefix, reply in responses:
+            if list(argv[: len(prefix)]) == list(prefix):
+                return reply
+        return None
+
+    return docker_text
+
+
+class TestLlamaServerFacts:
+    def test_facts_come_from_the_container_config_props_and_verified_hash(self, runner, monkeypatch):
+        calls = []
+        responses = [
+            (["inspect"], json.dumps(LLM_CONFIG)),
+            (["exec", "llm", "curl"], json.dumps(LLM_PROPS)),
+            (["exec", "llm", "cat"], VERIFIED_SHA256 + "\n"),
+        ]
+        monkeypatch.setattr(runner, "docker_text", fake_docker(responses, calls))
+        facts = runner.llama_server_facts("llm")
+        assert facts["build"] == "b11382"
+        assert facts["port"] == 8080
+        assert facts["n_ctx"] == 4096
+        assert facts["settings"]["cache_type_k"] == "q8_0"
+        assert facts["settings"]["cache_type_v"] == "q8_0"
+        assert facts["model_sha256"] == VERIFIED_SHA256
+        assert ["exec", "llm", "cat", "/models/qwen3-4b-instruct-2507-Q4_K_M.gguf.sha256"] in calls
+        assert ["exec", "llm", "curl", "-fsS", "-m", "10", "http://localhost:8080/props"] in calls
+
+    def test_build_falls_back_to_the_image_tag_when_props_are_unreadable(self, runner, monkeypatch):
+        monkeypatch.setattr(runner, "docker_text", fake_docker([(["inspect"], json.dumps(LLM_CONFIG))]))
+        facts = runner.llama_server_facts("llm")
+        assert facts["build"] == "b11382"
+        assert facts["model_sha256"] is None
+        assert facts["model_path"] == "/models/qwen3-4b-instruct-2507-Q4_K_M.gguf"
+
+    def test_no_llm_container_means_no_facts(self, runner, monkeypatch):
+        monkeypatch.setattr(runner, "docker_text", fake_docker([]))
+        assert runner.llama_server_facts("llm") is None
+        assert runner.llama_server_facts(None) is None
+
+
+class TestModelInfo:
+    def parse(self, runner, *argv):
+        return runner.build_parser().parse_args(["--label", "x", *argv])
+
+    def test_the_running_server_fills_the_model_fields(self, runner):
+        server = {"settings": {"alias": "qwen3-4b"}, "model_path": "/models/q4.gguf", "model_sha256": VERIFIED_SHA256}
+        model = runner.model_info(self.parse(runner), server)
+        assert model["name"] == "qwen3-4b"
+        assert model["file"] == "q4.gguf"
+        assert model["sha256"] == VERIFIED_SHA256
+        assert model["sha256_source"].startswith("llm container")
+
+    def test_given_values_win_over_the_server(self, runner):
+        args = self.parse(runner, "--model-file", "own.gguf", "--model-sha256", "AB" * 32)
+        model = runner.model_info(args, {"model_path": "/models/q4.gguf", "model_sha256": VERIFIED_SHA256})
+        assert model["file"] == "own.gguf"
+        assert model["sha256"] == "ab" * 32
+        assert model["sha256_source"] == "given"
+
+    def test_without_server_or_options_the_model_is_unknown(self, runner):
+        model = runner.model_info(self.parse(runner), None)
+        assert model == {"name": None, "file": None, "sha256": None, "sha256_source": None}
+
+    def test_new_options_default_to_the_compose_container_names(self, runner):
+        args = self.parse(runner)
+        assert args.llm_container == "llm"
+        assert args.swap_container == "mas"
+
+
+class TestStackResources:
+    def test_docker_host_swap_is_read_inside_a_container(self, runner, monkeypatch):
+        meminfo = "SwapTotal: 4194304 kB\nSwapFree: 3145728 kB\n"
+        monkeypatch.setattr(runner, "docker_text", fake_docker([(["exec", "mas", "cat", "/proc/meminfo"], meminfo)]))
+        assert runner.docker_host_swap_used_bytes("mas") == 1024 * 1024 * 1024
+        assert runner.docker_host_swap_used_bytes(None) is None
+
+    def test_cgroup_peaks_and_oom_kills_per_container(self, runner, monkeypatch):
+        responses = [
+            (["exec", "llm", "cat", "/sys/fs/cgroup/memory.peak"], "5368709120\n"),
+            (["exec", "llm", "cat", "/sys/fs/cgroup/memory.events"], "oom 0\noom_kill 0\n"),
+            (["exec", "agent", "cat", "/sys/fs/cgroup/memory.events"], "oom 2\noom_kill 1\n"),
+        ]
+        monkeypatch.setattr(runner, "docker_text", fake_docker(responses))
+        assert runner.container_cgroup_facts(["llm", "agent", "web_client"]) == {
+            "container_lifetime_peak_mem_bytes": {"llm": 5368709120},
+            "container_oom_kills": {"agent": 1, "llm": 0},
+        }
+
+    def test_sampler_windows_keep_the_peaks_of_one_question(self, runner, monkeypatch):
+        usage = iter([{"llm": 100, "mas": 10}, {"llm": 300, "mas": 10}, {"llm": 200, "mas": 10}])
+        monkeypatch.setattr(runner, "docker_memory_usage", lambda: next(usage))
+        monkeypatch.setattr(runner, "swap_used_bytes", lambda: 0)
+        monkeypatch.setattr(runner, "docker_host_swap_used_bytes", lambda container: 4096)
+        sampler = runner.ResourceSampler(10.0, "mas")
+        sampler.sample()
+        sampler.begin_window()
+        sampler.sample()
+        window = sampler.end_window()
+        sampler.sample()
+        assert window == {
+            "samples": 1,
+            "containers_sum_peak_mem_bytes": 310,
+            "swap_peak_used_bytes": 0,
+            "docker_host_swap_peak_used_bytes": 4096,
+        }
+        assert sampler.peaks.samples == 3
+        assert sampler.peaks.as_dict()["container_peak_mem_bytes"] == {"llm": 300, "mas": 10}
+        assert sampler.end_window() is None
+
+    def test_finished_sampler_adds_the_cgroup_facts(self, runner, monkeypatch):
+        monkeypatch.setattr(runner, "docker_memory_usage", lambda: {"llm": 100})
+        monkeypatch.setattr(runner, "swap_used_bytes", lambda: None)
+        monkeypatch.setattr(runner, "docker_host_swap_used_bytes", lambda container: None)
+        monkeypatch.setattr(
+            runner,
+            "container_cgroup_facts",
+            lambda names: {"container_lifetime_peak_mem_bytes": dict.fromkeys(names, 7), "container_oom_kills": {}},
+        )
+        sampler = runner.ResourceSampler(60.0)
+        sampler.start()
+        resources = sampler.finish()
+        assert resources["container_peak_mem_bytes"] == {"llm": 100}
+        assert resources["container_lifetime_peak_mem_bytes"] == {"llm": 7}
+        assert resources["container_oom_kills"] == {}
+
+
+class FakeSampler:
+    def __init__(self):
+        self.windows = 0
+
+    def begin_window(self):
+        self.windows += 1
+
+    def end_window(self):
+        return {"samples": 2, "containers_sum_peak_mem_bytes": 8 * 2**30}
+
+
+class TestQuestionProbes:
+    def test_probes_record_server_usage_and_question_resources(self, runner, monkeypatch):
+        scrapes = iter(
+            [
+                {"llamacpp:prompt_tokens_total": 100.0, "llamacpp:prompt_seconds_total": 2.0},
+                {"llamacpp:prompt_tokens_total": 1100.0, "llamacpp:prompt_seconds_total": 22.0},
+            ]
+        )
+        monkeypatch.setattr(runner, "read_llm_counters", lambda container, port: next(scrapes))
+        sampler = FakeSampler()
+        probes = runner.QuestionProbes(sampler, {"container": "llm", "port": 8080})
+        outcome = {}
+        asyncio.run(probes.before())
+        asyncio.run(probes.after(outcome))
+        assert outcome["llm"]["prompt_tokens"] == 1000
+        assert outcome["llm"]["prompt_s"] == 20.0
+        assert outcome["llm"]["prompt_tps"] == 50.0
+        assert outcome["resources"]["samples"] == 2
+        assert sampler.windows == 1
+
+    def test_probes_without_a_server_or_sampler_add_nothing(self, runner):
+        probes = runner.QuestionProbes(None, None)
+        outcome = {}
+        asyncio.run(probes.before())
+        asyncio.run(probes.after(outcome))
+        assert outcome == {}
+
+    def test_every_scored_question_goes_through_the_probes(self, runner, testset, monkeypatch):
+        class FakeEvalClient:
+            def __init__(self, *_args, **_kwargs):
+                self.token = None
+
+            async def wait_for_agent(self, timeout):
+                return "agent-1"
+
+            async def ask(self, question, conversation_name):
+                return {"mode": "chat", "status": "ok", "answer": "$250", "timing_source": "websocket"}
+
+        class CountingProbes:
+            def __init__(self):
+                self.calls = []
+
+            async def before(self):
+                self.calls.append("before")
+
+            async def after(self, outcome):
+                self.calls.append("after")
+                outcome["llm"] = {"prompt_s": 1.0}
+
+        monkeypatch.setattr(runner, "EvalClient", FakeEvalClient)
+        args = runner.build_parser().parse_args(
+            ["--label", "x", "--skip-corpus-check", "--token", "jwt", "--ids", "fin-01,exp-01", "--no-warmup"]
+        )
+        probes = CountingProbes()
+        items = runner.chosen_items(args, testset)
+        records = asyncio.run(runner.run_questions(args, testset, items, lambda _records: None, probes))
+        assert probes.calls == ["before", "after", "before", "after"]
+        assert [record["llm"] for record in records] == [{"prompt_s": 1.0}, {"prompt_s": 1.0}]
+
+
+class TestMachineInfo:
+    def test_host_facts_overrides_docker_and_gpu(self, runner, monkeypatch):
+        collected = {
+            "cpu_model": ("AMD Ryzen 5 5600U", "/proc/cpuinfo"),
+            "physical_cores": (6, "/proc/cpuinfo"),
+            "ram_total_bytes": (16 * 2**30, "/proc/meminfo"),
+            "disk_type": ("NVMe SSD", "lsblk"),
+        }
+        monkeypatch.setattr(runner.host, "collect_host", lambda path: collected)
+        monkeypatch.setattr(runner.pipeline, "gpu_info", lambda: {"error": "nvidia-smi not found"})
+        args = runner.build_parser().parse_args(["--label", "x", "--reference", "cpu16", "--ram-speed", "3200 MT/s"])
+        machine = runner.machine_info(args, {"mem_total_bytes": 16 * 2**30})
+        assert machine["reference"] == "cpu16"
+        assert machine["cpu_model"] == "AMD Ryzen 5 5600U"
+        assert machine["ram_speed"] == "3200 MT/s"
+        assert machine["sources"]["ram_speed"] == "given"
+        assert machine["docker"] == {"mem_total_bytes": 16 * 2**30}
+        assert machine["gpu"] is None
+
+
+class TestMainAgainstAStack:
+    def test_chat_run_records_server_facts_usage_and_machine(self, runner, monkeypatch, tmp_path):
+        facts = {
+            "container": "llm",
+            "port": 8080,
+            "build": "b11382",
+            "settings": {"alias": "qwen3-4b", "cache_type_k": "f16", "cache_type_v": "f16"},
+            "model_path": "/models/qwen3-4b-instruct-2507-Q4_K_M.gguf",
+            "model_sha256": VERIFIED_SHA256,
+        }
+        scrapes = iter(
+            [
+                {"llamacpp:prompt_tokens_total": 0.0, "llamacpp:prompt_seconds_total": 0.0},
+                {"llamacpp:prompt_tokens_total": 900.0, "llamacpp:prompt_seconds_total": 18.0},
+                {"llamacpp:prompt_tokens_total": 900.0, "llamacpp:prompt_seconds_total": 18.0},
+                {"llamacpp:prompt_tokens_total": 2100.0, "llamacpp:prompt_seconds_total": 42.0},
+            ]
+        )
+
+        class FakeEvalClient:
+            def __init__(self, *_args, **_kwargs):
+                self.token = None
+
+            async def wait_for_agent(self, timeout):
+                return "agent-1"
+
+            async def ask(self, question, conversation_name):
+                return {
+                    "mode": "chat",
+                    "status": "ok",
+                    "answer": "$250",
+                    "timing_source": "websocket",
+                    "total_s": 30.0,
+                    "routing_s": 0.3,
+                }
+
+        collected = {"cpu_model": ("AMD Ryzen 5 5600U", "/proc/cpuinfo"), "ram_total_bytes": (16 * 2**30, "/proc/meminfo")}
+        monkeypatch.setattr(runner, "EvalClient", FakeEvalClient)
+        monkeypatch.setattr(runner, "llama_server_facts", lambda container: facts if container == "llm" else None)
+        monkeypatch.setattr(runner, "read_llm_counters", lambda container, port: next(scrapes))
+        monkeypatch.setattr(runner.host, "docker_facts", lambda: {"mem_total_bytes": 15 * 2**30})
+        monkeypatch.setattr(runner.host, "collect_host", lambda path: collected)
+        monkeypatch.setattr(runner.pipeline, "gpu_info", lambda: {"error": "nvidia-smi not found"})
+        monkeypatch.setattr(runner.pipeline, "git_commit", lambda: "abc1234")
+        monkeypatch.setattr(runner.pipeline, "websockets", object())
+        argv = [
+            "run-eval.py", "--label", "eval-cpu16", "--reference", "cpu16", "--skip-corpus-check",
+            "--token", "jwt", "--ids", "fin-01,exp-01", "--no-warmup", "--out-dir", str(tmp_path),
+        ]
+        monkeypatch.setattr(sys, "argv", argv)
+        assert runner.main() == 0
+        [saved] = list(tmp_path.iterdir())
+        report = json.loads(saved.read_text(encoding="utf-8"))
+        assert report["schema_version"] == 2
+        assert report["llama_cpp"]["build"] == "b11382"
+        assert report["llama_cpp"]["server"]["settings"]["cache_type_v"] == "f16"
+        assert report["model"]["file"] == "qwen3-4b-instruct-2507-Q4_K_M.gguf"
+        assert report["model"]["sha256"] == VERIFIED_SHA256
+        assert report["machine"]["reference"] == "cpu16"
+        assert report["machine"]["docker"] == {"mem_total_bytes": 15 * 2**30}
+        assert [question["llm"]["prompt_tokens"] for question in report["questions"]] == [900, 1200]
+        assert [question["routing_s"] for question in report["questions"]] == [0.3, 0.3]
+        assert report["summary"]["llm"]["prompt_tps"] == 50.0
+        assert report["summary"]["routing_s"]["median"] == 0.3
+        assert report["run"]["completed"] is True

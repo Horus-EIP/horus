@@ -2,22 +2,21 @@ import json
 from datetime import date
 
 import pytest
+from eval_files import is_sha256, report_path, safe_label, write_json
 from eval_report import (
     REPORT_KIND,
     ResourcePeaks,
     blank_review,
     build_report,
     build_summary,
-    is_sha256,
+    llm_summary,
     manual_review_summary,
     parse_docker_size,
     parse_docker_stats,
     parse_meminfo_swap_used,
     question_record,
     rate,
-    report_path,
     resummarize,
-    safe_label,
     stats,
     titles_from_query_result,
 )
@@ -91,6 +90,20 @@ class TestQuestionRecord:
         assert record["total_s"] == 12.0
         assert record["ttft_s"] == 3.5
         assert record["fallback"] is None
+
+    def test_record_keeps_routing_time_server_metrics_and_question_resources(self, lookup_item):
+        llm = {"prompt_s": 41.5, "prompt_tokens": 2100, "generation_s": 30.2, "generated_tokens": 160}
+        resources = {"samples": 4, "containers_sum_peak_mem_bytes": 9 * 2**30}
+        record = question_record(lookup_item, chat_outcome(routing_s=0.8, llm=llm, resources=resources))
+        assert record["routing_s"] == 0.8
+        assert record["llm"] == llm
+        assert record["resources"] == resources
+
+    def test_record_without_probes_has_null_server_metrics(self, lookup_item):
+        record = question_record(lookup_item, chat_outcome())
+        assert record["routing_s"] is None
+        assert record["llm"] is None
+        assert record["resources"] is None
 
     def test_record_keeps_empty_slots_for_two_reviewers(self, lookup_item):
         record = question_record(lookup_item, chat_outcome())
@@ -307,8 +320,8 @@ class TestBuildReport:
             machine={"reference": "cpu16"},
         )
         assert report["kind"] == REPORT_KIND
-        assert report["schema_version"] == 1
-        assert report["llama_cpp"] == {"build": "b6500"}
+        assert report["schema_version"] == 2
+        assert report["llama_cpp"] == {"build": "b6500", "server": None}
         assert report["model"] == {"name": "qwen3-4b", "file": None, "sha256": "ab" * 32}
         assert report["machine"] == {"reference": "cpu16"}
         assert report["summary"]["questions"] == 1
@@ -317,7 +330,7 @@ class TestBuildReport:
 
     def test_missing_build_and_model_stay_as_empty_fields(self):
         report = build_report(label="x", run={}, testset={}, records=[])
-        assert report["llama_cpp"] == {"build": None}
+        assert report["llama_cpp"] == {"build": None, "server": None}
         assert report["model"] == {"name": None, "file": None, "sha256": None}
 
 
@@ -368,15 +381,85 @@ class TestResources:
 
     def test_peaks_keep_the_maximum_of_each_container_and_of_the_sum(self):
         peaks = ResourcePeaks()
-        peaks.add({"mas": 100, "agent": 500}, swap_used=0)
-        peaks.add({"mas": 300, "agent": 200}, swap_used=50)
+        peaks.add({"mas": 100, "agent": 500}, swap_used=0, docker_host_swap_used=10)
+        peaks.add({"mas": 300, "agent": 200}, swap_used=50, docker_host_swap_used=70)
         peaks.add({}, swap_used=None)
         assert peaks.as_dict() == {
             "samples": 3,
             "container_peak_mem_bytes": {"agent": 500, "mas": 300},
             "containers_sum_peak_mem_bytes": 600,
             "swap_peak_used_bytes": 50,
+            "docker_host_swap_peak_used_bytes": 70,
         }
+
+    def test_docker_host_swap_stays_unknown_when_never_read(self):
+        peaks = ResourcePeaks()
+        peaks.add({"llm": 4 * 2**30}, swap_used=0)
+        assert peaks.as_dict()["docker_host_swap_peak_used_bytes"] is None
+
+    def test_question_window_keeps_the_sum_and_swap_peaks(self):
+        window = ResourcePeaks()
+        window.add({"llm": 400, "mas": 100}, swap_used=5, docker_host_swap_used=7)
+        window.add({"llm": 450, "mas": 100}, swap_used=5, docker_host_swap_used=9)
+        assert window.window_dict() == {
+            "samples": 2,
+            "containers_sum_peak_mem_bytes": 550,
+            "swap_peak_used_bytes": 5,
+            "docker_host_swap_peak_used_bytes": 9,
+        }
+
+    def test_question_window_without_a_sample_is_null(self):
+        assert ResourcePeaks().window_dict() is None
+
+
+class TestServerSideSummary:
+    @staticmethod
+    def record(llm=None, routing_s=None, **outcome):
+        return {"llm": llm, "routing_s": routing_s, **outcome}
+
+    def test_totals_give_the_throughput_over_all_questions(self):
+        records = [
+            self.record({"prompt_s": 10.0, "prompt_tokens": 1000, "generation_s": 20.0, "generated_tokens": 200}),
+            self.record({"prompt_s": 30.0, "prompt_tokens": 2000, "generation_s": 20.0, "generated_tokens": 200}),
+        ]
+        summary = llm_summary(records)
+        assert summary["questions"] == 2
+        assert summary["server_restarts"] == 0
+        assert summary["prompt_tps"] == 75.0
+        assert summary["generation_tps"] == 10.0
+        assert summary["prompt_s"]["median"] == 20.0
+        assert summary["generated_tokens"]["sum"] == 400
+
+    def test_a_restarted_server_is_counted_and_left_out_of_the_rates(self):
+        records = [
+            self.record({"prompt_s": 4.0, "prompt_tokens": 400, "generation_s": 2.0, "generated_tokens": 20}),
+            self.record({"restarted": True}),
+        ]
+        summary = llm_summary(records)
+        assert summary["questions"] == 1
+        assert summary["server_restarts"] == 1
+        assert summary["prompt_tps"] == 100.0
+
+    def test_no_server_metrics_give_no_llm_summary(self):
+        assert llm_summary([self.record(), self.record()]) is None
+
+    def test_summary_has_routing_time_and_llm_blocks(self, lookup_item):
+        records = [
+            question_record(lookup_item, chat_outcome(routing_s=0.2, llm={"prompt_s": 1.0, "prompt_tokens": 50})),
+            question_record(lookup_item, chat_outcome(routing_s=0.4)),
+        ]
+        summary = build_summary(records)
+        assert summary["routing_s"]["n"] == 2
+        assert summary["routing_s"]["max"] == 0.4
+        assert summary["llm"]["questions"] == 1
+
+
+class TestFiles:
+    def test_json_is_written_whole_and_no_part_file_is_left(self, tmp_path):
+        path = tmp_path / "nested" / "cpu16-2026-10-05.json"
+        write_json(path, {"kind": "horus-eval", "label": "café"})
+        assert json.loads(path.read_text(encoding="utf-8")) == {"kind": "horus-eval", "label": "café"}
+        assert list(path.parent.iterdir()) == [path]
 
 
 class TestQueryResultTitles:
