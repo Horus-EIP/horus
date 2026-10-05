@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -97,6 +98,58 @@ class ThreadBudget(unittest.TestCase):
         for key in ("LLM_TORCH_INTRAOP_THREADS", "AGENT_TORCH_INTRAOP_THREADS"):
             with self.subTest(key):
                 self.assertIn("llama-server", provenance[key]["why"])
+
+KNOWLEDGE_STORE = REPO / "src" / "services" / "knowledge-store"
+MAS_EMBEDDER = REPO / "src" / "services" / "mas" / "core" / "embedding_setup.py"
+CUDA_ONNXRUNTIME = "onnxruntime-gpu"
+
+def requirement_projects(path: Path) -> set[str]:
+    projects = set()
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        match = re.match(r"[A-Za-z0-9][A-Za-z0-9._-]*", line)
+        if match and not line.startswith("-"):
+            projects.add(re.sub(r"[-_.]+", "-", match.group(0)).lower())
+    return projects
+
+def knowledge_store_images_can_embed_on_cuda() -> bool:
+    return any(CUDA_ONNXRUNTIME in requirement_projects(path)
+               for path in KNOWLEDGE_STORE.glob("requirements*.txt"))
+
+class Embedders(unittest.TestCase):
+    def test_no_profile_asks_for_a_cuda_embedder_the_knowledge_store_image_cannot_run(self):
+        can_embed_on_cuda = knowledge_store_images_can_embed_on_cuda()
+        for name in profiles.PROFILE_ORDER:
+            with self.subTest(name):
+                device = profiles.env_for(name).get("KNOWLEDGE_STORE_EMBED_DEVICE", "auto")
+                self.assertFalse(device.startswith("cuda") and not can_embed_on_cuda)
+
+    def test_the_8_gb_card_keeps_the_embedder_off_the_shared_card(self):
+        self.assertEqual(profiles.env_for("gpu-8g")["KNOWLEDGE_STORE_EMBED_DEVICE"], "cpu")
+        self.assertEqual(profiles.get("gpu-8g").confidence, profiles.MEASURED)
+
+    def test_no_gpu_profile_says_the_embedder_is_on_the_card(self):
+        for name in GPU_PROFILES:
+            with self.subTest(name):
+                self.assertNotIn("embedder back on the card", profiles.get(name).summary)
+
+    def test_the_mas_thread_setting_is_explained_as_the_onnx_embedder_budget(self):
+        source = MAS_EMBEDDER.read_text(encoding="utf-8")
+        self.assertLess(source.index('"MAS_EMBED_THREADS"'),
+                        source.index('"LLM_TORCH_INTRAOP_THREADS"'))
+        for name in CPU_PROFILES:
+            why = profiles.provenance_for(name)["LLM_TORCH_INTRAOP_THREADS"]["why"]
+            with self.subTest(name):
+                self.assertIn("MAS_EMBED_THREADS", why)
+                self.assertIn("ONNX Runtime", why)
+                self.assertNotIn("Its torch", why)
+
+    def test_no_cpu_reason_puts_torch_in_mas_or_the_agent(self):
+        for name in CPU_PROFILES:
+            provenance = profiles.provenance_for(name)
+            for key in ("MAS_MEM_LIMIT", "AGENT_MEM_LIMIT", "AGENT_TORCH_INTRAOP_THREADS"):
+                with self.subTest(f"{name} {key}"):
+                    self.assertIn("no torch", provenance[key]["why"])
 
 class CpuModelServer(unittest.TestCase):
     def test_cpu_profiles_point_both_clients_at_llama_server(self):

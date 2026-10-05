@@ -125,28 +125,32 @@ def _memory_settings() -> dict[str, Setting]:
         "MAS_MEM_LIMIT": Setting(
             _CPU_MAS_MEMORY, DERIVED,
             "MAS holds no model on the CPU: routing and aggregation run in "
-            "llama-server. What is left is Python, torch, transformers and the "
-            "90 MB MiniLM skill embedder, about 1 to 1.5 GB by estimate, so 3g "
-            "is about twice that. MAS logs its peak RSS on every 'Completed "
-            "task' line; read it before going lower. "
+            "llama-server, and a CPU MAS image has no torch or transformers. "
+            "What is left is Python and the 90 MB MiniLM embedder on ONNX "
+            "Runtime. 3g is about twice the 1 to 1.5 GB estimated when the "
+            "image still had torch, so it is on the generous side now. MAS "
+            "logs its peak RSS on every 'Completed task' line; read it before "
+            "going lower. "
             + _no_swap_why("MAS_MEMSWAP_LIMIT"),
         ),
         "AGENT_MEM_LIMIT": Setting(
             _CPU_AGENT_MEMORY, DERIVED,
             "The agent holds no decision model on the CPU: it calls "
-            "llama-server. Python, torch, transformers and spaCy "
-            "en_core_web_sm come to about 1 to 1.5 GB by estimate. The ReAct "
-            "summarize tool, which chat does not use, would load "
-            "distilbart-cnn-12-6 (about 1.2 GB in fp32) on first use, and 4g "
-            "holds both. The agent logs its peak RSS on every 'Task processed' "
-            "line. " + _no_swap_why("AGENT_MEMSWAP_LIMIT"),
+            "llama-server, and a CPU agent image has no torch or transformers. "
+            "What is left is Python, LangChain and spaCy en_core_web_sm. 4g was "
+            "sized for torch, transformers and the ReAct summarize tool's "
+            "distilbart-cnn-12-6 (about 1.2 GB in fp32), which a CPU image can "
+            "no longer load, so it is generous now. The agent logs its peak RSS "
+            "on every 'Task processed' line. " + _no_swap_why("AGENT_MEMSWAP_LIMIT"),
         ),
         "KNOWLEDGE_STORE_MEM_LIMIT": Setting(
             _KNOWLEDGE_STORE_MEMORY, DERIVED,
-            "The knowledge store holds the BGE base embedder, spaCy "
-            "en_core_web_trf, t5-small and distilbart-cnn-6-6 in fp32, about "
-            "2.1 GB of weights, plus torch, Chroma and the working set of an "
-            "ingestion. Sized from those weights, not measured. "
+            "On the CPU the knowledge store holds the BGE base embedder on ONNX "
+            "Runtime (about 110 million parameters, 0.44 GB in fp32), spaCy "
+            "en_core_web_sm, Chroma and the working set of an ingestion. 6g was "
+            "sized for the GPU image's extras too, en_core_web_trf, t5-small "
+            "and distilbart-cnn-6-6 with torch, about 2.1 GB of weights, which "
+            "a CPU image does not install. Not measured. "
             + _no_swap_why("KNOWLEDGE_STORE_MEMSWAP_LIMIT"),
         ),
         "LLM_SERVER_MEM_LIMIT": Setting(
@@ -200,15 +204,19 @@ def _thread_settings(probe: dict | None) -> dict[str, Setting]:
         ),
         "LLM_TORCH_INTRAOP_THREADS": Setting(
             str(TORCH_THREADS_WITHOUT_A_MODEL), DERIVED,
-            "MAS loads no model in-process on the CPU. Its torch only runs the "
-            "small MiniLM skill embedder on short texts, outside generation, "
-            "so one thread is enough and never competes with llama-server.",
+            "MAS loads no model in-process on the CPU, and a CPU MAS image has "
+            "no torch. The name is historical: MAS's MiniLM embedder, which "
+            "runs on ONNX Runtime for the router and skill matching, takes this "
+            "as its thread count unless MAS_EMBED_THREADS is set. It embeds "
+            "short texts outside generation, so one thread is enough and never "
+            "competes with llama-server.",
         ),
         "AGENT_TORCH_INTRAOP_THREADS": Setting(
             str(TORCH_THREADS_WITHOUT_A_MODEL), DERIVED,
-            "The agent loads no decision model on the CPU, so its torch has "
-            "no generation to run. One thread, so nothing it does competes "
-            "with llama-server.",
+            "The agent loads no decision model on the CPU and a CPU agent image "
+            "has no torch, so nothing reads this today: every answer comes "
+            "from llama-server. One thread, so an agent image that brings "
+            "torch back still never competes with llama-server.",
         ),
     }
 
@@ -368,7 +376,9 @@ def _cpu_common() -> dict[str, Setting]:
             "CPU-only host.",
         ),
         "LLM_FORCE_CPU": Setting(
-            "1", MEASURED, "No CUDA to find; say so instead of letting torch probe and fail.",
+            "1", MEASURED,
+            "No CUDA to find; say so instead of letting an image with torch "
+            "probe for it and fail. A CPU MAS image has no torch at all.",
         ),
         "MODEL_DEVICE": Setting("cpu", MEASURED, "Same, for the agent worker."),
         "KNOWLEDGE_STORE_EMBED_DEVICE": Setting(
@@ -433,7 +443,8 @@ def _cpu_memory_note(llm_ceiling: str, llm_use: str) -> str:
         "the machine has. They stop one runaway container from pushing the "
         f"host into swap. Expected use is lower: about {llm_use} for llm, 2 to "
         "3 GB for the knowledge store and 1 to 1.5 GB each for MAS and the "
-        "agent, by estimate."
+        "agent, by estimates made when those three images still had torch, "
+        "which the CPU images no longer install."
     )
 
 def cpu_floor_gib() -> float:
@@ -519,9 +530,12 @@ _add(Profile(
         ),
         "KNOWLEDGE_STORE_EMBED_DEVICE": Setting(
             "cpu", MEASURED,
-            "Keeps the BGE embedder OFF the shared card. On GPU its ingestion "
-            "bursts page out the 4B model and generation stalls afterwards - "
-            "this was measured, not assumed.",
+            "Keeps the BGE embedder OFF the shared card. When it ran on torch "
+            "on the GPU, its ingestion bursts paged out the 4B model and "
+            "generation stalled afterwards - this was measured, not assumed. "
+            "It now runs on FastEmbed, whose onnxruntime in the knowledge-store "
+            "image has no CUDA provider, so it embeds on the CPU anyway; cpu "
+            "keeps it there if a CUDA onnxruntime is ever installed.",
         ),
     },
     notes=(
@@ -535,7 +549,7 @@ _add(Profile(
     name="gpu-16g",
     trigger=_vram_trigger("gpu-16g"),
     runs_vllm=True,
-    summary="Longer context, embedder back on the card.",
+    summary="Longer context.",
     settings={
         **_vllm_common(),
         "VLLM_MAX_MODEL_LEN": Setting(
@@ -546,13 +560,8 @@ _add(Profile(
         "VLLM_GPU_MEMORY_UTILIZATION": Setting(
             "0.80", DERIVED,
             "The card has headroom the 8 GB one does not, so vLLM can claim more "
-            "and still leave room for the embedder. Not benchmarked.",
-        ),
-        "KNOWLEDGE_STORE_EMBED_DEVICE": Setting(
-            "cuda", DERIVED,
-            "The eviction problem that forced the embedder to CPU on 8 GB should "
-            "not occur here. Untested: if ingestion makes chat stall, set this "
-            "back to cpu.",
+            "and still leave room for the other three services that request "
+            "the card. Not benchmarked.",
         ),
     },
     notes=(
@@ -579,9 +588,6 @@ _add(Profile(
             "Higher still, leaving ~15% for the other three GPU services. "
             "Not benchmarked.",
         ),
-        "KNOWLEDGE_STORE_EMBED_DEVICE": Setting(
-            "cuda", DERIVED, "Plenty of room for the embedder alongside vLLM. Untested.",
-        ),
     },
     notes=(
         "Scaled from the 8 GB configuration, not benchmarked.",
@@ -605,9 +611,6 @@ _add(Profile(
             "0.85", DERIVED,
             "Deliberately NOT raised further: on a large card 0.85 already "
             "reserves far more than the 4B model needs.",
-        ),
-        "KNOWLEDGE_STORE_EMBED_DEVICE": Setting(
-            "cuda", DERIVED, "Ample room for the embedder. Untested.",
         ),
     },
     notes=(
