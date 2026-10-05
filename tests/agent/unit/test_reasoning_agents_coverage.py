@@ -19,6 +19,7 @@ so the assertions stay meaningful rather than asserting "a mock returned a mock"
 from __future__ import annotations
 
 import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -117,6 +118,16 @@ class TestDecisionHelpers:
         )
         assert len(spiral) >= 200
         assert dma._is_degenerate_output(spiral) is True
+
+    def test_normalize_model_text_folds_full_width_digits_and_ideographic_full_stop(self):
+        assert dma._normalize_model_text("Ｑ４ ２０２５ $4。2M") == "Q4 2025 $4.2M"
+
+    def test_normalize_model_text_folds_halfwidth_ideographic_full_stop(self):
+        assert dma._normalize_model_text("$4｡2M") == "$4.2M"
+
+    def test_normalize_model_text_leaves_plain_markdown_unchanged(self):
+        text = "## Q4 2025\n- **Revenue:** $4.2M — up 12% → ahead of plan"
+        assert dma._normalize_model_text(text) == text
 
     def test_max_new_tokens_default(self, monkeypatch):
         monkeypatch.delenv("AGENT_MAX_NEW_TOKENS", raising=False)
@@ -658,6 +669,67 @@ class TestGenerateCausal:
         assert model.generate.call_args.kwargs["bad_words_ids"] is None
 
 
+def _capture_delta_chunks():
+    chunks: list[str] = []
+
+    def fake_emit(step_type, title, detail="", **md):
+        if step_type == "reasoning.delta":
+            chunks.append(md["chunk"])
+
+    return chunks, fake_emit
+
+
+def _sse_line(payload: dict) -> bytes:
+    return ("data: " + json.dumps(payload)).encode("utf-8")
+
+
+class TestStreamingNormalization:
+    def _stream_causal(self, pieces: list[str]) -> list[str]:
+        agent = _causal_agent()
+        chunks, fake_emit = _capture_delta_chunks()
+        with patch.object(
+            dma, "TextIteratorStreamer", MagicMock(return_value=pieces)
+        ), patch("ai_agents.step_emitter.emit_step", fake_emit):
+            out = agent._generate_streaming(
+                agent._causal_model, agent._causal_tokenizer, {}
+            )
+        assert out is agent._causal_model.generate.return_value
+        return chunks
+
+    def test_short_streamed_answer_is_emitted_normalized(self):
+        chunks = self._stream_causal(["Ｑ４ ", "２０２５ ", "$4。2M"])
+        assert chunks == ["Q4 2025 $4.2M"]
+
+    def test_long_streamed_answer_is_emitted_normalized_in_every_flush(self):
+        held = "Ｑ４ ２０２５ revenue " * 40
+        chunks = self._stream_causal([held, "$4。2M"])
+        assert chunks == ["Q4 2025 revenue " * 40, "$4.2M"]
+
+    def test_vllm_streamed_answer_is_emitted_and_returned_normalized(self):
+        agent = _causal_agent()
+        resp = MagicMock()
+        resp.iter_lines.return_value = [
+            _sse_line({"choices": [{"delta": {"content": "Ｑ４ ２０２５ "}}]}),
+            _sse_line({"choices": [{"delta": {"content": "$4。2M"}}]}),
+            _sse_line(
+                {"choices": [], "usage": {"completion_tokens": 5, "prompt_tokens": 9}}
+            ),
+            b"data: [DONE]",
+        ]
+        post = MagicMock()
+        post.return_value.__enter__.return_value = resp
+        chunks, fake_emit = _capture_delta_chunks()
+        with patch("requests.post", post), patch(
+            "ai_agents.step_emitter.emit_step", fake_emit
+        ):
+            out = agent._generate_vllm_streaming(
+                [{"role": "user", "content": "Q?"}], 64
+            )
+        assert out == "Q4 2025 $4.2M"
+        assert chunks == ["Q4 2025 $4.2M"]
+        assert agent._last_gen_tokens == 5
+
+
 # ===========================================================================
 # decision_making_agent: decide()
 # ===========================================================================
@@ -723,6 +795,20 @@ class TestDecide:
         out = agent.decide("Q?", context="ctx")
         # Spiral detected -> replaced by the clean fallback message.
         assert out != spiral
+        assert "couldn't extract a consistent answer" in out
+
+    def test_decide_normalizes_full_width_digits_and_ideographic_full_stop(self):
+        model = MagicMock(return_value="Ｑ４ ２０２５ $4。2M")
+        agent = DecisionMakingAgent(decision_model=model, device="cpu")
+        out = agent.decide("What was Q4 2025 revenue?", context="Revenue was $4.2M.")
+        assert out == "Q4 2025 $4.2M"
+
+    def test_decide_detects_spiral_written_with_full_width_punctuation(self):
+        spiral = "padding " * 30 + "wait， wait， wait， actually， actually，"
+        assert dma._is_degenerate_output(spiral) is False
+        model = MagicMock(return_value=spiral)
+        agent = DecisionMakingAgent(decision_model=model, device="cpu")
+        out = agent.decide("Q?", context="ctx")
         assert "couldn't extract a consistent answer" in out
 
     def test_decide_truncates_long_context_in_causal_path(self):

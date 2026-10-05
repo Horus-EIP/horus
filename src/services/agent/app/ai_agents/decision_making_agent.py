@@ -12,6 +12,7 @@ import logging
 import os
 import threading
 import time
+import unicodedata
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -92,6 +93,13 @@ def _is_degenerate_output(text: str) -> bool:
     lowered = text.lower()
     score = sum(lowered.count(m) for m in _SPIRAL_MARKERS)
     return score >= 5
+
+
+_IDEOGRAPHIC_FULL_STOP_TO_PERIOD = str.maketrans({"。": "."})
+
+
+def _normalize_model_text(text: str) -> str:
+    return unicodedata.normalize("NFKC", text).translate(_IDEOGRAPHIC_FULL_STOP_TO_PERIOD)
 
 
 def _early_stop_enabled() -> bool:
@@ -774,6 +782,7 @@ class DecisionMakingAgent:
             for piece in streamer:
                 if not piece or suppressed:
                     continue
+                piece = _normalize_model_text(piece)
                 if streaming:
                     pending.append(piece)
                     _flush()
@@ -917,7 +926,9 @@ class DecisionMakingAgent:
                 choices = chunk.get("choices") or []
                 if not choices:
                     continue
-                piece = (choices[0].get("delta") or {}).get("content") or ""
+                piece = _normalize_model_text(
+                    (choices[0].get("delta") or {}).get("content") or ""
+                )
                 if not piece:
                     continue
                 full.append(piece)
@@ -1115,6 +1126,7 @@ class DecisionMakingAgent:
                 model=self.model_name,
             )
 
+            text = _normalize_model_text(text)
             # Final guard: if the model produced a self-correction spiral
             # despite the anti-loop prompt + bad_words_ids, replace the
             # output with a clean fallback. The raw text is logged so the
