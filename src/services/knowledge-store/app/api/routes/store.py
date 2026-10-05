@@ -233,7 +233,7 @@ async def get_categories():
 
         counts: dict = {}
         for meta in metadatas:
-            category = meta.get("auto_category", "") or "uncategorized"
+            category = ((meta or {}).get("auto_category") or "").strip() or "general"
             counts[category] = counts.get(category, 0) + 1
 
         categories = [

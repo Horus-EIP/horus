@@ -91,3 +91,46 @@ class TestCategories:
         # conftest level via the ChromaDB mock — returns an empty/mock result.
         r = client.get("/categories")
         assert r.status_code in (200, 500)
+
+    @patch("app.api.routes.store.knowledge_collection")
+    def test_documents_without_category_are_counted_as_general(self, collection, client):
+        collection.get.return_value = {"metadatas": [
+            {"auto_category": "finance"}, {"auto_category": ""}, {"auto_category": "  "}, {}, None,
+        ]}
+        r = client.get("/categories")
+        assert r.status_code == 200
+        assert r.json() == {
+            "total_documents": 5,
+            "categories": [
+                {"category": "general", "count": 4},
+                {"category": "finance", "count": 1},
+            ],
+        }
+
+    @patch("app.api.routes.file.knowledge_collection")
+    @patch("app.api.routes.store.knowledge_collection")
+    def test_empty_category_label_matches_file_listing(self, store_collection, file_collection):
+        from app.api.routes.file import router as file_router  # noqa: PLC0415
+        from app.api.routes.store import router as store_router  # noqa: PLC0415
+
+        app = FastAPI()
+        app.include_router(file_router, prefix="/file")
+        app.include_router(store_router)
+        file_and_store_client = TestClient(app)
+        stored = {
+            "ids": ["a", "b", "c"],
+            "documents": ["body a", "body b", "body c"],
+            "metadatas": [
+                {"title": "a.md", "auto_category": ""},
+                {"title": "b.md", "auto_category": " "},
+                {"title": "c.md"},
+            ],
+        }
+        store_collection.get.return_value = stored
+        file_collection.get.return_value = stored
+
+        listed = file_and_store_client.get("/file").json()["documents"]
+        counted = file_and_store_client.get("/categories").json()["categories"]
+
+        assert {doc["category"] for doc in listed} == {"general"}
+        assert counted == [{"category": "general", "count": 3}]

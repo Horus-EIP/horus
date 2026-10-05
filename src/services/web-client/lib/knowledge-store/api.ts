@@ -18,6 +18,45 @@ export interface KSResponse<T> {
   error?: string;
 }
 
+export interface KnowledgeStoreCategory {
+  category: string;
+  count: number;
+}
+
+export interface SmartSearchRequest {
+  query: string;
+  n_results?: number;
+  categories?: string[];
+  entities?: string[];
+  min_confidence?: number;
+  entity_type?: string;
+}
+
+export interface SmartSearchMetadata {
+  title?: string;
+  date?: string;
+  size?: number;
+  auto_category?: string;
+  auto_type?: string;
+  auto_summary?: string;
+  confidence_score?: number;
+  [key: string]: unknown;
+}
+
+export interface SmartSearchHit {
+  content: string;
+  metadata: SmartSearchMetadata;
+  distance: number | null;
+}
+
+interface SmartSearchResponse {
+  results?: {
+    documents?: string[];
+    metadatas?: (SmartSearchMetadata | null)[];
+    distances?: number[];
+  };
+}
+
 function ksUrl(path: string): string {
   const base = config.knowledgeStoreUrl.replace(/\/$/, "");
   return `${base}${config.knowledgeStoreApiPrefix}${path}`;
@@ -32,6 +71,56 @@ export const knowledgeStoreApi = {
       }
       const json = (await res.json()) as { documents?: KnowledgeStoreDocument[] };
       return { ok: true, data: json.documents ?? [] };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : "Network error",
+      };
+    }
+  },
+
+  async smartSearch(
+    request: SmartSearchRequest
+  ): Promise<KSResponse<SmartSearchHit[]>> {
+    try {
+      const res = await fetch(ksUrl("/smart-search"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      });
+      if (res.status === 404) {
+        return { ok: true, data: [] };
+      }
+      if (!res.ok) {
+        return { ok: false, error: `Knowledge store responded ${res.status}` };
+      }
+      const json = (await res.json()) as SmartSearchResponse;
+      const metadatas = json.results?.metadatas ?? [];
+      const distances = json.results?.distances ?? [];
+      return {
+        ok: true,
+        data: (json.results?.documents ?? []).map((content, index) => ({
+          content,
+          metadata: metadatas[index] ?? {},
+          distance: distances[index] ?? null,
+        })),
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : "Network error",
+      };
+    }
+  },
+
+  async getCategories(): Promise<KSResponse<KnowledgeStoreCategory[]>> {
+    try {
+      const res = await fetch(ksUrl("/categories"), { method: "GET" });
+      if (!res.ok) {
+        return { ok: false, error: `Knowledge store responded ${res.status}` };
+      }
+      const json = (await res.json()) as { categories?: KnowledgeStoreCategory[] };
+      return { ok: true, data: json.categories ?? [] };
     } catch (err) {
       return {
         ok: false,

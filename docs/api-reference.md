@@ -1554,12 +1554,12 @@ Get all document categories in the knowledge store with document counts.
     { "category": "finance", "count": 15 },
     { "category": "technical", "count": 12 },
     { "category": "legal", "count": 8 },
-    { "category": "uncategorized", "count": 7 }
+    { "category": "general", "count": 7 }
   ]
 }
 ```
 
-Categories are sorted by count in descending order.
+Categories are sorted by count in descending order. A document stored without a category is counted as `general`, the same label `GET /file` shows for it.
 
 **Errors:**
 

@@ -1,18 +1,24 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Card from '@/components/ui/card';
 import Info from '@/components/ui/info';
 import { FileUpload } from '@/components/ui/file-upload';
-import { useDisclosure } from '@mantine/hooks';
+import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
 import { Modal } from '@mantine/core';
 import { config } from '@/utils/config';
 import { IconTrash } from '@tabler/icons-react';
 import { UploadProgress } from '@/components/knowledge-store/upload-progress';
 import {
   knowledgeStoreApi,
+  type KnowledgeStoreCategory,
+  type SmartSearchHit,
   type UploadProgress as UploadProgressData,
 } from '@/lib/knowledge-store/api';
+
+const ALL_CATEGORIES = '';
+const SEARCH_RESULT_LIMIT = 10;
+const SEARCH_DEBOUNCE_MS = 300;
 
 interface ToUpload {
   file: File;
@@ -38,6 +44,10 @@ function ksUrl(path: string): string {
   return `${base}${prefix}${path}`;
 }
 
+function isSearchHitFor(hit: SmartSearchHit, doc: Document): boolean {
+  return hit.metadata.title === doc.title && hit.metadata.date === doc.date;
+}
+
 export default function KnowledgeStorePage() {
   const [toUpload, setToUpload] = useState<ToUpload[][]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -48,6 +58,12 @@ export default function KnowledgeStorePage() {
   const [uploadProgress, setUploadProgress] =
     useState<UploadProgressData | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm] = useDebouncedValue(searchTerm.trim(), SEARCH_DEBOUNCE_MS);
+  const [searchHits, setSearchHits] = useState<SmartSearchHit[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<KnowledgeStoreCategory[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState(ALL_CATEGORIES);
   const isUploading =
     uploadProgress?.phase === 'uploading' ||
     uploadProgress?.phase === 'processing';
@@ -94,6 +110,61 @@ export default function KnowledgeStorePage() {
     return parts?.length > 1 ? parts?.pop()!.toLowerCase() : 'unknown';
   };
 
+  const getCategories = useCallback(async () => {
+    const result = await knowledgeStoreApi.getCategories();
+    if (!result.ok) return;
+    const loaded = result.data ?? [];
+    setCategories(loaded);
+    setCategoryFilter((current) =>
+      loaded.some((entry) => entry.category === current) ? current : ALL_CATEGORIES,
+    );
+  }, []);
+
+  useEffect(() => {
+    getCategories();
+  }, [documents, getCategories]);
+
+  useEffect(() => {
+    if (!debouncedSearchTerm) {
+      setSearchHits([]);
+      setSearchError(null);
+      return;
+    }
+    let cancelled = false;
+    knowledgeStoreApi
+      .smartSearch({
+        query: debouncedSearchTerm,
+        n_results: SEARCH_RESULT_LIMIT,
+        categories: categoryFilter === ALL_CATEGORIES ? undefined : [categoryFilter],
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setSearchHits(result.ok ? (result.data ?? []) : []);
+        setSearchError(result.ok ? null : `Search failed: ${result.error}`);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearchTerm, categoryFilter, documents]);
+
+  const visibleDocuments = useMemo(() => {
+    const candidates = debouncedSearchTerm
+      ? searchHits
+          .map((hit) => documents.find((doc) => isSearchHitFor(hit, doc)))
+          .filter((doc): doc is Document => doc !== undefined)
+      : documents;
+    if (categoryFilter === ALL_CATEGORIES) return candidates;
+    return candidates.filter((doc) => doc.category === categoryFilter);
+  }, [debouncedSearchTerm, searchHits, documents, categoryFilter]);
+
+  const categoryOptions = [
+    { value: ALL_CATEGORIES, label: 'All categories' },
+    ...categories.map((entry) => ({
+      value: entry.category,
+      label: `${entry.category} (${entry.count})`,
+    })),
+  ];
+
   const deleteLocalDocument = (index: number) => {
     setToUpload(toUpload.filter((_, i) => i !== index));
   };
@@ -138,7 +209,7 @@ export default function KnowledgeStorePage() {
   };
 
   const deleteDocument = async (index: number) => {
-    const response = await fetch(ksUrl(`/${documents[index].id}`), {
+    const response = await fetch(ksUrl(`/${visibleDocuments[index].id}`), {
       method: 'DELETE',
     });
     if (response.ok) {
@@ -188,7 +259,7 @@ export default function KnowledgeStorePage() {
           <Info
             title="Documents Stored"
             header={documentHeaders}
-            body={documents.map((doc) => [
+            body={visibleDocuments.map((doc) => [
               doc.title,
               doc.category,
               doc.summary.length > 180 ? `${doc.summary.slice(0, 180)}...` : doc.summary,
@@ -206,7 +277,20 @@ export default function KnowledgeStorePage() {
             actions={actions}
             button="Add files"
             onButton={openUpload}
+            searchConfig={{
+              placeholder: 'Search documents...',
+              value: searchTerm,
+              onChange: setSearchTerm,
+            }}
+            selectConfig={{
+              value: categoryFilter,
+              onChange: setCategoryFilter,
+              options: categoryOptions,
+            }}
           />
+          {searchError && (
+            <p className="mt-2 px-3 text-sm text-rose-300">{searchError}</p>
+          )}
         </div>
         <Modal
           opened={uploadOpened}
