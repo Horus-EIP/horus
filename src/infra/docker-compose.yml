@@ -42,7 +42,7 @@ services:
     container_name: mas
     restart: unless-stopped
     mem_limit: ${MAS_MEM_LIMIT:-14g}
-    memswap_limit: ${MAS_MEMSWAP_LIMIT:-16g}
+    memswap_limit: ${MAS_MEMSWAP_LIMIT:-${MAS_MEM_LIMIT:-14g}}
     gpus: all
     # Reach the vLLM server on the host/WSL for orchestration LLM calls (Lever #3).
     extra_hosts:

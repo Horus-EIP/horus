@@ -331,20 +331,28 @@ class ComposeMemoryCeilings(unittest.TestCase):
                 for limit in self.limits(name, {}):
                     self.assertRegex(limit, r"^\d+g$")
 
-    def test_agent_and_knowledge_store_default_to_no_swap(self):
-        for name in ("agent", "knowledge_store"):
+    def test_each_python_service_defaults_to_no_swap(self):
+        for name in ("mas", "agent", "knowledge_store"):
             with self.subTest(name):
                 limit, swap = self.limits(name, {})
                 self.assertEqual(limit, swap)
 
     def test_raising_only_the_memory_limit_raises_the_swap_limit_with_it(self):
-        for name in ("agent", "knowledge_store"):
+        for name in ("mas", "agent", "knowledge_store"):
             with self.subTest(name):
                 key = MEMORY_REFERENCE.match(self.services[name]["mem_limit"]).group(1)
                 self.assertEqual(self.limits(name, {key: "20g"}), ("20g", "20g"))
 
+    def test_no_memory_limit_alone_leaves_the_swap_limit_below_it(self):
+        for name in ("mas", "agent", "knowledge_store"):
+            key = MEMORY_REFERENCE.match(self.services[name]["mem_limit"]).group(1)
+            for gigabytes in (4, 8, 16, 17, 24, 32, 64):
+                with self.subTest(f"{name} {key}={gigabytes}g"):
+                    limit, swap = self.limits(name, {key: f"{gigabytes}g"})
+                    self.assertGreaterEqual(int(swap.rstrip("g")), int(limit.rstrip("g")))
+
     def test_a_swap_limit_set_in_the_env_still_wins(self):
-        for name in ("agent", "knowledge_store"):
+        for name in ("mas", "agent", "knowledge_store"):
             with self.subTest(name):
                 spec = self.services[name]
                 key = MEMORY_REFERENCE.match(spec["mem_limit"]).group(1)
