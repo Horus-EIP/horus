@@ -16,6 +16,7 @@ type UseWebSocketOptions = {
   maxRetries?: number;
   backoffBaseMs?: number;
   onMessage?: (event: MessageEvent) => void;
+  onReconnect?: () => void;
 };
 
 type UseWebSocketReturn = {
@@ -32,6 +33,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
     maxRetries = 5,
     backoffBaseMs = 1000,
     onMessage,
+    onReconnect,
   } = options;
 
   const { error: notifyError } = useNotification();
@@ -44,11 +46,17 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
   const attemptsRef = useRef(0);
   const queueRef = useRef<string[]>([]);
   const onMessageRef = useRef(onMessage);
+  const onReconnectRef = useRef(onReconnect);
+  const lastOpenedUrlRef = useRef<string | null>(null);
   const intentionalCloseRef = useRef(false);  // Track intentional closes
 
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
+
+  useEffect(() => {
+    onReconnectRef.current = onReconnect;
+  }, [onReconnect]);
 
   const clearReconnectTimeout = () => {
     if (reconnectTimeoutRef.current !== null) {
@@ -92,6 +100,8 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
     wsRef.current = ws;
 
     ws.onopen = () => {
+      const isReconnect = lastOpenedUrlRef.current === url;
+      lastOpenedUrlRef.current = url;
       setStatus("connected");
       setError(null);
       attemptsRef.current = 0;
@@ -99,6 +109,10 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
       if (queueRef.current.length > 0) {
         queueRef.current.forEach((msg) => ws.send(msg));
         queueRef.current = [];
+      }
+
+      if (isReconnect) {
+        onReconnectRef.current?.();
       }
     };
 

@@ -1354,7 +1354,9 @@ async def sharing_agent_result(
             final_answer = (task_result.result or "").strip()
         else:
             try:
-                final_answer = aggregate_results(history, task_result.result)
+                final_answer = await run_in_threadpool(
+                    aggregate_results, history, task_result.result
+                )
             except Exception as exc:
                 logger.warning(
                     "aggregate_results raised (%s) — falling back to last subtask result.",

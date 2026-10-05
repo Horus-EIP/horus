@@ -14,12 +14,24 @@ import { IconRobot, IconSend, IconPlayerStopFilled } from '@tabler/icons-react';
 import { Modal, Button, Group, Text, Textarea, TextInput } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { config } from '@/utils/config';
-import { chatApi, type Conversation, type TaskDetails } from '@/lib/chat/api';
+import {
+  chatApi,
+  type Conversation,
+  type TaskDetails,
+  type TaskSummary,
+} from '@/lib/chat/api';
 import { appendStreamChunk, type StreamPreviews } from '@/lib/chat/stream-preview';
+import {
+  appendAgentAnswer,
+  finishedTaskAnswer,
+  isFinishedTask,
+  type AgentAnswer,
+} from '@/lib/chat/agent-answer';
 import { agentApi, type Agent } from '@/lib/agents/api';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { useNotification } from '@/contexts/notification-context';
 import { useWebSocket } from '@/hooks/use-web-socket';
+import { useTaskResync, type TaskResync } from '@/hooks/use-task-resync';
 import { MessageList, type Message } from '@/components/message-list';
 import type { TaskStepEvent } from '@/lib/types';
 import { ConversationSidebar } from '@/components/chat/conversation-sidebar';
@@ -177,6 +189,61 @@ function ChatPageContent() {
     [conversationId, notifyError]
   );
 
+  const commitAgentAnswer = useCallback((answer: AgentAnswer, endsTurn: boolean) => {
+    setMessages((prev) => appendAgentAnswer(prev, answer));
+    if (endsTurn) {
+      setIsLoading(false);
+      setStreamingByTaskId({});
+    }
+  }, []);
+
+  const adoptRunningTask = useCallback((running: TaskSummary) => {
+    setWorkingTaskId(running.id);
+    setIsLoading(true);
+    // Attach the root task id to the most recent USER message so the
+    // thought-process card pinned to it can pick up incoming step events.
+    // Best-effort: the message exists because loadHistory ran first.
+    setMessages((prev) => {
+      // Walk from the end to find the latest user message without an
+      // attached taskId — that's the demand that kicked off this chain.
+      for (let i = prev.length - 1; i >= 0; i--) {
+        if (prev[i].sender === 'user' && !prev[i].taskId) {
+          const updated = [...prev];
+          updated[i] = { ...updated[i], taskId: running.id };
+          return updated;
+        }
+      }
+      return prev;
+    });
+  }, []);
+
+  const applyTaskResync = useCallback(
+    ({ runningTasks, openTask }: TaskResync) => {
+      if (isFinishedTask(openTask)) {
+        const answer = finishedTaskAnswer(openTask);
+        commitAgentAnswer(
+          {
+            ...answer,
+            agentName: agentsById.get(answer.agentId)?.name,
+            timestamp: new Date(),
+          },
+          true
+        );
+        return;
+      }
+      if (!workingTaskId && runningTasks.length > 0) {
+        adoptRunningTask(runningTasks[0]);
+      }
+    },
+    [adoptRunningTask, agentsById, commitAgentAnswer, workingTaskId]
+  );
+
+  const resyncTasks = useTaskResync({
+    conversationId: conversationId || null,
+    openTaskId: workingTaskId,
+    onResync: applyTaskResync,
+  });
+
   const wsUrl =
     conversationId && authToken
       ? `${config.wsUrl}/chat/${conversationId}/?token=${authToken}`
@@ -250,7 +317,6 @@ function ChatPageContent() {
       // 'agent' = legacy bare-text broadcast (direct-answer / pre-attribution path)
       // 'task_complete' = answer with agent attribution metadata for the chip
       if (message.type === 'agent' || message.type === 'task_complete') {
-        const text = String(message.content ?? '').trim();
         // Manager messages are intermediate orchestration updates (plan
         // announcement, per-step "routing to X" progress, review decisions).
         // They should NOT clear the loading state — the chain is still
@@ -259,23 +325,10 @@ function ChatPageContent() {
         const isManagerMessage =
           typeof message.agent_name === 'string' &&
           message.agent_name === 'Manager';
-        if (!text) {
-          if (!isManagerMessage) {
-            setIsLoading(false);
-          }
-          return;
-        }
-        setMessages((prev) => {
-          const last = prev[prev.length - 1];
-          if (last?.sender === 'agent' && last.text === text) {
-            return prev;
-          }
-          const agentMessage: Message = {
-            id: Date.now().toString(),
-            text: message.content,
-            sender: 'agent',
+        commitAgentAnswer(
+          {
+            content: String(message.content ?? ''),
             timestamp: new Date(message.timestamp),
-            status: 'sent',
             agentId:
               typeof message.agent_id === 'string' ? message.agent_id : undefined,
             agentName:
@@ -286,18 +339,12 @@ function ChatPageContent() {
               typeof message.skill_used === 'string'
                 ? message.skill_used
                 : undefined,
-          };
-          return [...prev, agentMessage];
-        });
-        if (!isManagerMessage) {
-          // Only a real specialist's terminal answer clears the spinner.
-          // The chain is still running while Manager messages flow.
-          setIsLoading(false);
-          // The committed message now owns the text; drop the live preview.
-          setStreamingByTaskId({});
-        }
+          },
+          !isManagerMessage
+        );
       }
     },
+    onReconnect: resyncTasks,
   });
 
   useEffect(() => {
@@ -336,29 +383,12 @@ function ChatPageContent() {
       const r = await chatApi.getRunningTasksForConversation(conversationId);
       if (cancelled || !r.ok || !r.data || r.data.length === 0) return;
       // Most recent running root task — the one the user is waiting on.
-      const running = r.data[0];
-      setWorkingTaskId(running.id);
-      setIsLoading(true);
-      // Attach the root task id to the most recent USER message so the
-      // thought-process card pinned to it can pick up incoming step events.
-      // Best-effort: the message exists because loadHistory ran first.
-      setMessages((prev) => {
-        // Walk from the end to find the latest user message without an
-        // attached taskId — that's the demand that kicked off this chain.
-        for (let i = prev.length - 1; i >= 0; i--) {
-          if (prev[i].sender === 'user' && !prev[i].taskId) {
-            const updated = [...prev];
-            updated[i] = { ...updated[i], taskId: running.id };
-            return updated;
-          }
-        }
-        return prev;
-      });
+      adoptRunningTask(r.data[0]);
     })();
     return () => {
       cancelled = true;
     };
-  }, [conversationId]);
+  }, [conversationId, adoptRunningTask]);
 
   useEffect(() => {
     if (!isLoading) {

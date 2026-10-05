@@ -28,7 +28,7 @@ from __future__ import annotations
 import base64
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -1457,6 +1457,45 @@ class TestTaskResultChaining:
         assert r.status_code == 200
         assert root_result.history[0]["message"] == "prior"
         assert root_result.history[-1]["message"] == "FRESH ANSWER"
+
+    def test_chain_closeout_aggregates_in_the_threadpool_not_on_the_event_loop(
+        self,
+        _insert,
+        _validate,
+        _allowed,
+        mock_add,
+        mock_ws,
+        mock_publish,
+        make_fake_client,
+    ):
+        root_result = _result(result_data=None, history=[])
+        root = _task(id="root-1", query="user demand", result=root_result)
+        tr = _result(future_actions=[], history=[{"role": "user", "message": "demand"}])
+        task = _task(
+            id="t1",
+            agent_id="agent-1",
+            conversation_id=None,
+            result=tr,
+            parent_task_id="root-1",
+        )
+        calls = {"n": 0}
+
+        def task_first():
+            calls["n"] += 1
+            return root if calls["n"] >= 3 else task
+
+        fake = _FakeSession(first_map={"Task": task_first, "Agents": _agent()})
+        threadpool = AsyncMock(return_value="THREADPOOL ANSWER")
+        with patch("tasks.routes.aggregate_results") as mock_aggregate, patch(
+            "tasks.routes.run_in_threadpool", threadpool
+        ):
+            client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
+            r = client.post("/tasks/task-result/", json=_result_body())
+
+        assert r.status_code == 200
+        threadpool.assert_awaited_once_with(mock_aggregate, tr.history, "the output")
+        mock_aggregate.assert_not_called()
+        assert root_result.result_data == "THREADPOOL ANSWER"
 
     def test_aggregate_empty_falls_back_to_default_text(
         self,

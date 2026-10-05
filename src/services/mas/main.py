@@ -2,7 +2,8 @@
 
 Wires ``core.app.create_app_environment()`` and exposes the public
 ``/health`` probe and the authenticated ``/`` endpoint. Run with
-``uvicorn main:app --host 0.0.0.0 --port 8000`` (or Docker Compose).
+``uvicorn main:app --host 0.0.0.0 --port 8000 --ws-ping-interval 20 --ws-ping-timeout 120``
+(or Docker Compose).
 """
 
 from typing import Annotated
