@@ -598,6 +598,99 @@ class DependencyAbort(FakeDockerCase):
         self.assertIn("--start", raised.fix)
         self.assertIn("retried once", raised.fix)
 
+class FullInstallPassesTheTimeoutOn(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.repo = Path(self._tmp.name)
+        (self.repo / "src" / "infra").mkdir(parents=True)
+        self.log = Log(self.repo / "install-log.txt")
+        self.addCleanup(self.log.close, 0)
+
+    def test_the_wait_after_a_dependency_abort_uses_the_users_timeout(self):
+        args = horus_install.build_parser().parse_args(
+            ["--profile", "gpu-8g", "--non-interactive", "--skip-smoke", "--timeout", "4200"]
+        )
+        with contextlib.ExitStack() as stack:
+            patch = stack.enter_context
+            patch(mock.patch.object(horus_install, "find_repo", return_value=self.repo))
+            patch(mock.patch.object(horus_install, "banner"))
+            patch(mock.patch.object(horus_install, "preflight"))
+            consent = patch(mock.patch.object(horus_install, "consent"))
+            consent.choose.return_value = {"corpus_dir": "../../demo_assets"}
+            hardware = patch(mock.patch.object(horus_install, "hardware"))
+            hardware.probe.return_value = dict(horus_install.SIMULATIONS["nvidia-8gb"])
+            patch(mock.patch.object(horus_install, "apply_env"))
+            pull_and_build = patch(mock.patch.object(horus_install, "pull_and_build"))
+            patch(mock.patch.object(horus_install, "wait_for_health"))
+            patch(mock.patch.object(horus_install, "_success"))
+            patch(contextlib.redirect_stdout(io.StringIO()))
+            code = horus_install._dispatch(self.log, args)
+        self.assertEqual(code, horus_install.EXIT_OK)
+        self.assertEqual(pull_and_build.call_args.kwargs["timeout"], 4200)
+
+class StartWaitsOutADependencyAbort(FakeDockerCase):
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.infra = write_env(self.tmp, "COMPOSE_FILE=docker-compose.yml\n")
+        for name in ("_require_docker", "wait_for_health"):
+            patcher = mock.patch.object(horus_install, name)
+            setattr(self, name.strip("_"), patcher.start())
+            self.addCleanup(patcher.stop)
+
+    def start_it(self, docker, timeout=1800, build=False):
+        horus_install._stream = docker.stream
+        horus_install.run = docker.run
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            try:
+                code = horus_install.do_start(self.log, self.infra, timeout=timeout, build=build)
+                raised = None
+            except InstallError as exc:
+                code, raised = exc.code, exc
+        return code, buf.getvalue(), raised
+
+    def test_start_waits_for_the_starting_service_then_starts_the_rest(self):
+        docker = FakeDocker(
+            ups=[(1, ABORT), (0, "")],
+            ps=[[ps_row("mas", "starting"), ps_row("postgres", "healthy"),
+                 ps_row("agent", "", state="created")]],
+        )
+        code, out, raised = self.start_it(docker, timeout=2400)
+        self.assertIsNone(raised)
+        self.assertEqual(code, horus_install.EXIT_OK)
+        self.assertEqual(docker.started(), ["up -d", "up -d"])
+        self.assertIn("second attempt", docker.labels[-1])
+        self.assertIn("still starting", out)
+        first_wait, last_wait = self.wait_for_health.call_args_list
+        self.assertEqual(first_wait.args[2], ["mas"])
+        self.assertEqual(first_wait.kwargs["timeout"], 2400)
+        self.assertEqual(last_wait.args[2], horus_install.expected_services(self.infra))
+        self.assertLess(docker.history.index("ps"), len(docker.history) - 1)
+
+    def test_start_retries_a_dependency_abort_at_most_once(self):
+        docker = FakeDocker(ups=[(1, ABORT), (1, ABORT), (1, ABORT)])
+        code, _out, raised = self.start_it(docker)
+        self.assertIsNotNone(raised)
+        self.assertEqual(code, EXIT_COMPOSE_UP_FAILED)
+        self.assertEqual(len(docker.started()), 2)
+
+    def test_start_does_not_retry_a_failure_that_is_not_a_dependency_abort(self):
+        docker = FakeDocker(ups=[(1, "no space left on device")])
+        code, _out, raised = self.start_it(docker)
+        self.assertEqual(code, EXIT_COMPOSE_UP_FAILED)
+        self.assertEqual(len(docker.started()), 1)
+        self.assertNotIn("ps", docker.history)
+        self.wait_for_health.assert_not_called()
+
+    def test_a_start_with_build_does_not_rebuild_on_the_second_attempt(self):
+        docker = FakeDocker(ups=[(1, ABORT), (0, "")])
+        code, _out, raised = self.start_it(docker, build=True)
+        self.assertIsNone(raised)
+        self.assertEqual(docker.started(), ["up -d --build", "up -d"])
+
 class FirstInstallTime(FakeDockerCase):
 
     DOCUMENTS = (

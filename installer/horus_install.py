@@ -431,18 +431,8 @@ def services_still_starting(log: Log, infra: Path) -> list[str]:
             starting.append(name)
     return starting
 
-def pull_and_build(log: Log, infra: Path, no_build: bool = False,
-                   timeout: int = 1800) -> None:
-    log.step("Downloading container images")
-    log.say(f"  This is the long part. A first install takes {FIRST_INSTALL_TIME}:")
-    log.say("  the images download one at a time, the containers build, then the")
-    log.say("  language models download in the background. It is not frozen.")
-    log.say("")
-
-    pull_images(log, infra)
-
-    log.step("Building and starting the stack")
-    up = ["up", "-d"] + ([] if no_build else ["--build"])
+def up_waiting_out_a_dependency_abort(log: Log, infra: Path, up: list[str],
+                                      timeout: int) -> tuple[list[str], int]:
     seen: set[str] = set()
     code = _stream(compose(up), log, infra, "up",
                    watch_for=(DEPENDENCY_ABORT,), found=seen)
@@ -466,6 +456,21 @@ def pull_and_build(log: Log, infra: Path, no_build: bool = False,
                        watch_for=(DEPENDENCY_ABORT,), found=seen)
         if code == 0:
             log.ok("Started on the second attempt.")
+    return up, code
+
+def pull_and_build(log: Log, infra: Path, no_build: bool = False,
+                   timeout: int = 1800) -> None:
+    log.step("Downloading container images")
+    log.say(f"  This is the long part. A first install takes {FIRST_INSTALL_TIME}:")
+    log.say("  the images download one at a time, the containers build, then the")
+    log.say("  language models download in the background. It is not frozen.")
+    log.say("")
+
+    pull_images(log, infra)
+
+    log.step("Building and starting the stack")
+    up, code = up_waiting_out_a_dependency_abort(
+        log, infra, ["up", "-d"] + ([] if no_build else ["--build"]), timeout)
     if code != 0:
         raise InstallError(
             EXIT_COMPOSE_UP_FAILED,
@@ -631,8 +636,8 @@ def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
     log.say(f"  {len(expect)} services"
             + ("" if "vllm" in expect else "  (CPU profile: vllm is not started)"))
 
-    up = ["up", "-d"] + (["--build"] if build else [])
-    code = _stream(compose(up), log, infra, "up")
+    up, code = up_waiting_out_a_dependency_abort(
+        log, infra, ["up", "-d"] + (["--build"] if build else []), timeout)
     if code != 0:
         raise InstallError(
             EXIT_COMPOSE_UP_FAILED,
@@ -924,7 +929,7 @@ def _dispatch(log: Log, args) -> int:
     log.step("Writing configuration")
     apply_env(log, infra, env, reset=args.reset_env)
 
-    pull_and_build(log, infra, no_build=args.no_build)
+    pull_and_build(log, infra, no_build=args.no_build, timeout=args.timeout)
 
     expect = list(CORE_SERVICES)
     if profiles.PROFILES[name].runs_vllm:
