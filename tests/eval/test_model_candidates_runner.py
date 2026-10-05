@@ -11,6 +11,11 @@ from model_candidates import CANDIDATE_CONTAINER, Variant, load_catalog
 
 BENCH_DIR = Path(__file__).resolve().parents[2] / "scripts" / "benchmarks"
 STACK_ARGS = ["--model", "/models/qwen3-4b-instruct-2507-Q4_K_M.gguf", "--alias", "qwen3-4b", "--host", "0.0.0.0", "--port", "8080", "--threads", "4", "--metrics"]
+AGENT_ENV = ("PATH=/usr/local/bin:/usr/bin:/bin", "LLM_BACKEND=vllm", "LLM_VLLM_MODEL=qwen3-4b")
+CACHE_REFUSAL = (
+    ". Set AGENT_RESPONSE_CACHE=0 in src/infra/.env, recreate the agent (cd src/infra && docker compose up -d agent) "
+    "and run again, or pass --allow-response-cache"
+)
 
 
 @pytest.fixture(scope="module")
@@ -31,14 +36,14 @@ def run_main(runner, monkeypatch, *argv):
     return runner.main()
 
 
-def inspect_json(name, *, running=True, args=STACK_ARGS, networks=("infra_horus-net",), memory=6 * 2**30, oom=False):
+def inspect_json(name, *, running=True, args=STACK_ARGS, networks=("infra_horus-net",), memory=6 * 2**30, oom=False, env=()):
     return json.dumps(
         [
             {
                 "Name": f"/{name}",
                 "RestartCount": 0,
                 "State": {"Running": running, "OOMKilled": oom},
-                "Config": {"Image": "ghcr.io/ggml-org/llama.cpp:server-b11382", "Cmd": list(args)},
+                "Config": {"Image": "ghcr.io/ggml-org/llama.cpp:server-b11382", "Cmd": list(args), "Env": list(env)},
                 "HostConfig": {"Memory": memory},
                 "NetworkSettings": {"Networks": {network: {} for network in networks}},
                 "Mounts": [],
@@ -48,11 +53,15 @@ def inspect_json(name, *, running=True, args=STACK_ARGS, networks=("infra_horus-
 
 
 class FakeStack:
-    def __init__(self, tmp_path, *, stack=True, healthy=True, probe_ids=None):
+    def __init__(self, tmp_path, *, stack=True, healthy=True, probe_ids=None, agent_env=AGENT_ENV, stop_fails=False, start_fails=False):
         self.tmp_path = tmp_path
         self.stack = stack
         self.healthy = healthy
         self.probe_ids = probe_ids
+        self.agent_env = agent_env
+        self.stop_fails = stop_fails
+        self.start_fails = start_fails
+        self.llm_running = stack
         self.docker_calls = []
         self.commands = []
         self.candidate_running = False
@@ -62,13 +71,21 @@ class FakeStack:
         self.docker_calls.append(list(argv))
         verb = argv[0]
         if verb == "inspect" and argv[1] == "llm":
-            return inspect_json("llm") if self.stack else None
+            return inspect_json("llm", running=self.llm_running) if self.stack else None
+        if verb == "inspect" and argv[1] == "agent":
+            return None if self.agent_env is None else inspect_json("agent", env=self.agent_env)
         if verb == "inspect" and argv[1] == CANDIDATE_CONTAINER:
             return inspect_json(CANDIDATE_CONTAINER, running=self.candidate_running) if self.candidate_running or not self.healthy else None
         if verb == "rm":
             self.candidate_running = False
             return ""
-        if verb in ("stop", "start", "cp"):
+        if verb == "stop":
+            self.llm_running = self.llm_running and self.stop_fails
+            return None if self.stop_fails else ""
+        if verb == "start":
+            self.llm_running = self.llm_running or not self.start_fails
+            return None if self.start_fails else ""
+        if verb == "cp":
             return ""
         if verb == "exec":
             command = argv[2:]
@@ -280,8 +297,10 @@ class TestRun:
         assert downloads[1].mirrors == ("https://huggingface.co/TokenRhythm/NeoHorse-1-4B-GGUF/resolve/3c5d58ca82e580b5b0b3ce6eeffd34ac7d0fd95a/NeoHorse-1-4B-Q4_K_M.gguf",)
 
         verbs = [call[0] for call in stack.docker_calls]
+        assert stack.docker_calls.index(["inspect", "agent"]) < verbs.index("stop")
         assert verbs.index("stop") < next(i for i, c in enumerate(stack.docker_calls) if c[0] == "cp")
         assert stack.docker_calls[-1] == ["start", "llm"]
+        assert stack.llm_running
         runs = [c for c in stack.commands if c[:3] == ["docker", "run", "-d"]]
         assert len(runs) == 2
         assert runs[1][runs[1].index("--network") + 1] == "infra_horus-net"
@@ -341,7 +360,7 @@ class TestRun:
         assert not [c for c in stack.docker_calls if c[0] in ("stop", "start")]
         _path, summary = summary_files(out_dir)
         assert summary["variants"][0]["problems"] == [
-            "no running llama-server container 'llm': start the CPU stack first "
+            "not served: no running llama-server container 'llm': start the CPU stack first "
             "(after an interrupted run: docker rm -f llm-candidate && docker start llm)"
         ]
         assert summary["variants"][0]["fetch"] is None
@@ -382,6 +401,98 @@ class TestRun:
         assert variant["problems"] == ["the contract probe answered 1 of 2 questions (exit 0)"]
         assert variant["contract"]["replies"] == 1
 
+    @pytest.mark.parametrize(
+        ("agent_env", "finding"),
+        [
+            (
+                ["AGENT_RESPONSE_CACHE=1"],
+                "the agent's response cache is on (AGENT_RESPONSE_CACHE=1): its key does not change with the model, "
+                "so the evaluation could score answers cached for another model",
+            ),
+            (
+                ["AGENT_RESPONSE_CACHE= True"],
+                "the agent's response cache is on (AGENT_RESPONSE_CACHE= True): its key does not change with the model, "
+                "so the evaluation could score answers cached for another model",
+            ),
+            (None, "could not read the environment of the 'agent' container to see whether its response cache is off"),
+        ],
+    )
+    def test_the_eval_is_refused_before_the_stack_is_touched_unless_the_response_cache_is_off(
+        self, runner, monkeypatch, tmp_path, quiet_host, agent_env, finding
+    ):
+        stack = FakeStack(tmp_path, agent_env=agent_env)
+        install_fakes(runner, monkeypatch, stack)
+        out_dir = tmp_path / "benchmarks"
+        models = models_with(tmp_path, "qwen3-4b-instruct-2507-Q4_K_M.gguf")
+        run_main(runner, monkeypatch, "--only", "qwen3-4b-q4km", "--steps", "probe,eval", "--models-dir", models, "--out-dir", str(out_dir))
+        assert stack.commands == []
+        assert not [c for c in stack.docker_calls if c[0] in ("stop", "start", "rm")]
+        summary_path, summary = summary_files(out_dir)
+        assert summary["variants"][0]["problems"] == ["not served: " + finding + CACHE_REFUSAL]
+        assert not any(summary["variants"][0]["reports"].values())
+
+        stack.agent_env = AGENT_ENV
+        assert run_main(runner, monkeypatch, "--resume", str(summary_path), "--steps", "probe,eval", "--models-dir", models) == 0
+        _same_path, resumed = summary_files(out_dir)
+        assert resumed["variants"][0]["problems"] == []
+        assert all(resumed["variants"][0]["reports"][kind] for kind in ("contract", "eval"))
+
+    def test_a_response_cache_that_is_off_or_a_probe_alone_runs(self, runner, monkeypatch, tmp_path, quiet_host):
+        out_dir = tmp_path / "benchmarks"
+        models = models_with(tmp_path, "qwen3-4b-instruct-2507-Q4_K_M.gguf")
+        for steps, agent_env in (("eval", ["AGENT_RESPONSE_CACHE=0"]), ("probe", ["AGENT_RESPONSE_CACHE=1"])):
+            stack = FakeStack(tmp_path, agent_env=agent_env)
+            install_fakes(runner, monkeypatch, stack)
+            run_main(runner, monkeypatch, "--only", "qwen3-4b-q4km", "--steps", steps, "--models-dir", models, "--out-dir", str(out_dir / steps))
+            _path, summary = summary_files(out_dir / steps)
+            assert summary["variants"][0]["problems"] == []
+            written = {kind for kind, path in summary["variants"][0]["reports"].items() if path}
+            assert written == {"eval" if steps == "eval" else "contract"}
+
+    def test_allow_response_cache_runs_the_eval_and_flags_every_model(self, runner, monkeypatch, tmp_path, quiet_host):
+        stack = FakeStack(tmp_path, agent_env=["AGENT_RESPONSE_CACHE=1"])
+        install_fakes(runner, monkeypatch, stack)
+        out_dir = tmp_path / "benchmarks"
+        models = models_with(tmp_path, "qwen3-4b-instruct-2507-Q4_K_M.gguf", "neohorse-1-4b-Q4_K_M.gguf")
+        run_main(
+            runner, monkeypatch,
+            "--only", "qwen3-4b-q4km,neohorse-1-4b", "--steps", "eval", "--allow-response-cache",
+            "--models-dir", models, "--out-dir", str(out_dir),
+        )
+        summary_path, _first = summary_files(out_dir)
+        run_main(runner, monkeypatch, "--resume", str(summary_path), "--steps", "eval", "--allow-response-cache", "--models-dir", models)
+        assert len([c for c in stack.commands if "run-eval.py" in " ".join(c)]) == 4
+        _same_path, summary = summary_files(out_dir)
+        for variant in summary["variants"]:
+            assert variant["problems"] == [
+                "the agent's response cache is on (AGENT_RESPONSE_CACHE=1): its key does not change with the model, "
+                "so the evaluation could score answers cached for another model (--allow-response-cache)"
+            ]
+            assert variant["eval"]["answer_correct_auto"]["pct"] == 50.0
+
+    def test_an_llm_that_does_not_stop_never_shares_its_alias_with_a_candidate(self, runner, monkeypatch, tmp_path, quiet_host):
+        stack = FakeStack(tmp_path, stop_fails=True)
+        install_fakes(runner, monkeypatch, stack)
+        out_dir = tmp_path / "benchmarks"
+        models = models_with(tmp_path, "qwen3-4b-instruct-2507-Q4_K_M.gguf")
+        run_main(runner, monkeypatch, "--only", "qwen3-4b-q4km", "--steps", "probe,eval", "--models-dir", models, "--out-dir", str(out_dir))
+        assert stack.commands == []
+        assert stack.jobs == []
+        assert stack.llm_running
+        _path, summary = summary_files(out_dir)
+        assert summary["variants"][0]["problems"] == [
+            "not served: could not stop 'llm': a candidate started next to it under the alias 'llm' would split the requests between two models"
+        ]
+
+    def test_an_llm_that_does_not_start_again_is_reported(self, runner, monkeypatch, tmp_path, quiet_host, capsys):
+        stack = FakeStack(tmp_path, start_fails=True)
+        install_fakes(runner, monkeypatch, stack)
+        out_dir = tmp_path / "benchmarks"
+        models = models_with(tmp_path, "qwen3-4b-instruct-2507-Q4_K_M.gguf")
+        run_main(runner, monkeypatch, "--only", "qwen3-4b-q4km", "--steps", "probe", "--models-dir", models, "--out-dir", str(out_dir))
+        assert not stack.llm_running
+        assert "[error] could not start 'llm' again: the stack has no llama-server until `docker start llm`" in capsys.readouterr().out
+
 
 def test_resume_adds_the_serving_steps_to_the_benchmark_summary(runner, monkeypatch, tmp_path, quiet_host):
     stack = FakeStack(tmp_path)
@@ -404,6 +515,24 @@ def test_resume_adds_the_serving_steps_to_the_benchmark_summary(runner, monkeypa
         assert set(variant["reports"]) == {"llama_bench", "contract", "eval"}
         assert all(variant["reports"].values())
     assert len(stack.jobs) == 2
+
+
+def test_resume_retries_a_download_that_failed(runner, monkeypatch, tmp_path, quiet_host):
+    stack = FakeStack(tmp_path)
+    install_fakes(runner, monkeypatch, stack, fake_installer(fail_for={"neohorse-1-4b-Q4_K_M.gguf"}))
+    out_dir = tmp_path / "benchmarks"
+    common = ["--models-dir", str(tmp_path / "models"), "--steps", "fetch"]
+    run_main(runner, monkeypatch, "--only", "qwen3-4b-q4km,neohorse-1-4b", "--out-dir", str(out_dir), *common)
+    summary_path, first = summary_files(out_dir)
+    assert [v["fetch"]["status"] for v in first["variants"]] == ["verified", "failed"]
+    assert first["variants"][1]["problems"] == ["download failed: The language model could not be downloaded. HTTP 404 Not Found"]
+
+    downloads = install_fakes(runner, monkeypatch, stack)
+    assert run_main(runner, monkeypatch, "--resume", str(summary_path), *common) == 0
+    _same_path, resumed = summary_files(out_dir)
+    assert [entry.file for entry in downloads] == ["qwen3-4b-instruct-2507-Q4_K_M.gguf", "neohorse-1-4b-Q4_K_M.gguf"]
+    assert [v["fetch"]["status"] for v in resumed["variants"]] == ["verified", "verified"]
+    assert [v["problems"] for v in resumed["variants"]] == [[], []]
 
 
 def test_resume_refuses_a_file_that_is_not_a_summary(runner, monkeypatch, tmp_path, capsys):

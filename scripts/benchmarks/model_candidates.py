@@ -18,6 +18,8 @@ CANDIDATE_CONTAINER = "llm-candidate"
 STACK_LLM_CONTAINER = "llm"
 AGENT_CONTAINER = "agent"
 LLM_NETWORK_ALIAS = "llm"
+RESPONSE_CACHE_SETTING = "AGENT_RESPONSE_CACHE"
+ENABLED_SETTING_VALUES = frozenset({"1", "true", "yes", "on"})
 STEPS = ("fetch", "bench", "probe", "eval")
 SERVING_STEPS = frozenset({"probe", "eval"})
 REASONING_MODES = ("off", "on", "auto")
@@ -329,14 +331,47 @@ def server_args(stack_args: list[str], model_file: str, reasoning: str) -> list[
     return [*result, "--reasoning", reasoning]
 
 
-def parse_container_inspect(text: str | None) -> dict[str, Any] | None:
+def _inspected_container(text: str | None) -> dict[str, Any] | None:
     try:
         data = json.loads(text or "")
     except ValueError:
         return None
     if isinstance(data, list):
         data = data[0] if data else None
-    if not isinstance(data, dict):
+    return data if isinstance(data, dict) else None
+
+
+def parse_container_env(text: str | None) -> dict[str, str] | None:
+    data = _inspected_container(text)
+    if data is None:
+        return None
+    env: dict[str, str] = {}
+    for entry in (data.get("Config") or {}).get("Env") or []:
+        name, separator, value = str(entry).partition("=")
+        if separator:
+            env[name] = value
+    return env
+
+
+def setting_enabled(value: str | None) -> bool:
+    return str(value or "").strip().lower() in ENABLED_SETTING_VALUES
+
+
+def response_cache_finding(env: dict[str, str] | None, container: str) -> str | None:
+    if env is None:
+        return f"could not read the environment of the {container!r} container to see whether its response cache is off"
+    value = env.get(RESPONSE_CACHE_SETTING)
+    if not setting_enabled(value):
+        return None
+    return (
+        f"the agent's response cache is on ({RESPONSE_CACHE_SETTING}={value}): its key does not change with the "
+        "model, so the evaluation could score answers cached for another model"
+    )
+
+
+def parse_container_inspect(text: str | None) -> dict[str, Any] | None:
+    data = _inspected_container(text)
+    if data is None:
         return None
     config = data.get("Config") or {}
     host = data.get("HostConfig") or {}
@@ -694,7 +729,8 @@ def markdown_summary(report: dict[str, Any]) -> str:
         "## Speed and memory",
         "",
         "llama-bench tokens per second with an f16 KV cache, best thread count, depth 0 unless named. "
-        "Medians in seconds. llm VmHWM and cgroup peak: the candidate llama-server; stack peak: the evaluation's P.",
+        "Medians in seconds. llm VmHWM and cgroup peak: the candidate llama-server; stack peak: the evaluation's "
+        "`stack_peak_mem_bytes`, the ADR-005 `P`: the peak memory of the whole stack, model pages included.",
         "",
         "| Model | GGUF | File | pp512 | pp2048 | tg128 | tg128 @ 4096 | Probe reply | Chat answer | "
         "Chat first token | llm VmHWM | llm cgroup peak | Stack peak | OOM kills |",

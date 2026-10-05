@@ -21,11 +21,14 @@ from model_candidates import (
     eval_headline,
     load_catalog,
     markdown_summary,
+    parse_container_env,
     parse_container_inspect,
     parse_memory_limit,
     parse_process_memory,
+    response_cache_finding,
     select_variants,
     server_args,
+    setting_enabled,
     variant_gate,
     variant_summary,
     written_report,
@@ -277,6 +280,39 @@ def test_parse_container_inspect_reads_what_the_runner_reuses():
     assert parse_container_inspect(json.dumps([{"HostConfig": {"Memory": 0}}]))["memory_bytes"] is None
 
 
+def test_parse_container_env_reads_the_variables_the_container_was_given():
+    text = json.dumps([{"Config": {"Env": ["PATH=/usr/bin", "AGENT_RESPONSE_CACHE=1", "EMPTY=", "LLM_VLLM_URL=http://llm:8080/v1?a=b", "BARE"]}}])
+    assert parse_container_env(text) == {
+        "PATH": "/usr/bin",
+        "AGENT_RESPONSE_CACHE": "1",
+        "EMPTY": "",
+        "LLM_VLLM_URL": "http://llm:8080/v1?a=b",
+    }
+    assert parse_container_env(json.dumps([{"Config": {"Env": None}}])) == {}
+    assert parse_container_env("[]") is None
+    assert parse_container_env(None) is None
+
+
+@pytest.mark.parametrize(
+    ("value", "enabled"),
+    [("1", True), ("true", True), (" Yes ", True), ("ON", True), ("0", False), ("false", False), ("", False), (None, False), ("2", False)],
+)
+def test_setting_enabled_reads_a_flag_as_the_agent_does(value, enabled):
+    assert setting_enabled(value) is enabled
+
+
+def test_response_cache_finding_names_a_cache_that_is_on_or_cannot_be_checked():
+    assert response_cache_finding({}, "agent") is None
+    assert response_cache_finding({"AGENT_RESPONSE_CACHE": "0"}, "agent") is None
+    assert response_cache_finding({"AGENT_RESPONSE_CACHE": "on"}, "agent") == (
+        "the agent's response cache is on (AGENT_RESPONSE_CACHE=on): its key does not change with the model, "
+        "so the evaluation could score answers cached for another model"
+    )
+    assert response_cache_finding(None, "horus-agent") == (
+        "could not read the environment of the 'horus-agent' container to see whether its response cache is off"
+    )
+
+
 def test_parse_process_memory_reads_the_peak_and_the_mapped_model():
     status = "Name:\tllama-server\nVmHWM:\t 5242880 kB\nVmRSS:\t 4194304 kB\nRssAnon:\t 1048576 kB\nRssFile:\t 3145728 kB\n"
     assert parse_process_memory(status) == {
@@ -463,6 +499,7 @@ class TestMarkdown:
         failed = [line for line in lines if line.startswith("| Agents-A1-4B")]
         assert failed[0].count("–") == 8
         assert "- `agents-a1-4b-q4km`: download failed: HTTP 404" in lines
+        assert "stack peak: the evaluation's `stack_peak_mem_bytes`, the ADR-005 `P`: the peak memory of the whole stack" in text
         assert any(line.startswith("- Agents-A1-4B: The licence is only in the card metadata") for line in lines)
 
     def test_licence_flags_are_listed_once_per_candidate(self, catalog):

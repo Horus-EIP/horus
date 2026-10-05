@@ -57,6 +57,7 @@ from model_candidates import (  # noqa: E402
     DEFAULT_CATALOG,
     REASONING_MODES,
     REPORT_KIND,
+    RESPONSE_CACHE_SETTING,
     SERVING_STEPS,
     STACK_LLM_CONTAINER,
     STEPS,
@@ -68,9 +69,11 @@ from model_candidates import (  # noqa: E402
     catalog_problems,
     load_catalog,
     markdown_summary,
+    parse_container_env,
     parse_container_inspect,
     parse_memory_limit,
     parse_process_memory,
+    response_cache_finding,
     select_variants,
     server_args,
     variant_gate,
@@ -88,6 +91,8 @@ DEFAULT_MODELS_DIR = REPO_ROOT / "models"
 DEFAULT_OUT_DIR = REPO_ROOT / "benchmarks"
 DEFAULT_REFERENCE = "cpu16"
 DOWNLOAD_LOG = "model-candidates-download.log"
+DOWNLOAD_FAILED = "download failed: "
+NOT_SERVED = "not served: "
 HEALTH_POLL_S = 5.0
 DEFAULT_START_TIMEOUT_S = 900.0
 DOCKER_STOP_TIMEOUT_S = 120.0
@@ -121,6 +126,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--server-image", help="Default: the catalog's pinned server image.")
     parser.add_argument("--stack-llm-container", default=STACK_LLM_CONTAINER)
     parser.add_argument("--agent-container", default=AGENT_CONTAINER)
+    parser.add_argument(
+        "--allow-response-cache",
+        action="store_true",
+        help="Run the eval step although the agent's response cache is on or cannot be checked.",
+    )
     parser.add_argument("--start-timeout", type=float, default=DEFAULT_START_TIMEOUT_S)
     parser.add_argument("--testset", default=str(DEFAULT_TESTSET_PATH))
     parser.add_argument("--ids", type=comma_list)
@@ -475,8 +485,10 @@ class CandidateRun:
         if modules is None:
             print("[warn] the installer's model downloader is not importable: fetching with fetch-model.sh in Docker")
         for variant in self.variants:
-            if not self.runnable(variant):
+            state = self.state[variant.id]
+            if state["skipped"]:
                 continue
+            state["problems"] = [text for text in state["problems"] if not text.startswith(DOWNLOAD_FAILED)]
             print(f"[info] {variant.id}: {variant.file} ({variant.gguf['size_bytes']:,} bytes) from {variant.url}")
             if modules is not None:
                 outcome = fetch_with_installer(
@@ -484,9 +496,9 @@ class CandidateRun:
                 )
             else:
                 outcome = fetch_with_docker(variant, self.models_dir, self.server_image)
-            self.state[variant.id]["fetch"] = outcome
+            state["fetch"] = outcome
             if outcome["status"] != "verified":
-                self.problem(variant, f"download failed: {outcome.get('error')}")
+                self.problem(variant, f"{DOWNLOAD_FAILED}{outcome.get('error')}")
             self.save()
 
     def bench_command(self, variant: Variant) -> list[str]:
@@ -530,23 +542,66 @@ class CandidateRun:
             return
         stack_name = self.args.stack_llm_container
         self.stack = parse_container_inspect(docker_text(["inspect", stack_name]))
-        trouble = stack_trouble(self.stack, stack_name)
+        trouble = stack_trouble(self.stack, stack_name) or self.response_cache_trouble(serving)
         if trouble:
-            for variant in serving:
-                self.problem(variant, trouble)
-            self.save()
+            self.refuse(serving, trouble)
             return
         network = candidate_network(self.stack["networks"])
         print(f"[info] stopping {stack_name}; each candidate answers as 'llm' on {network}")
-        docker_text(["stop", stack_name], timeout=DOCKER_STOP_TIMEOUT_S)
         try:
+            trouble = self.stop_stack_llm(stack_name)
+            if trouble:
+                self.refuse(serving, trouble)
+                return
             for variant in serving:
+                self.forget_refusals(variant)
                 self.serve(variant)
                 self.save()
         finally:
             self.remove_candidate()
-            print(f"[info] starting {stack_name} again")
-            docker_text(["start", stack_name], timeout=DOCKER_STOP_TIMEOUT_S)
+            self.start_stack_llm(stack_name)
+
+    def refuse(self, variants: list[Variant], text: str) -> None:
+        for variant in variants:
+            self.problem(variant, f"{NOT_SERVED}{text}")
+        self.save()
+
+    def forget_refusals(self, variant: Variant) -> None:
+        state = self.state[variant.id]
+        state["problems"] = [text for text in state["problems"] if not text.startswith(NOT_SERVED)]
+
+    def response_cache_trouble(self, serving: list[Variant]) -> str | None:
+        if "eval" not in self.args.steps:
+            return None
+        agent = self.args.agent_container
+        finding = response_cache_finding(parse_container_env(docker_text(["inspect", agent])), agent)
+        if finding is None:
+            return None
+        if self.args.allow_response_cache:
+            caveat = f"{finding} (--allow-response-cache)"
+            for variant in serving:
+                if caveat not in self.state[variant.id]["problems"]:
+                    self.problem(variant, caveat)
+            return None
+        return (
+            f"{finding}. Set {RESPONSE_CACHE_SETTING}=0 in src/infra/.env, recreate the agent "
+            "(cd src/infra && docker compose up -d agent) and run again, or pass --allow-response-cache"
+        )
+
+    def stop_stack_llm(self, name: str) -> str | None:
+        docker_text(["stop", name], timeout=DOCKER_STOP_TIMEOUT_S)
+        state = parse_container_inspect(docker_text(["inspect", name]))
+        if state and not state["running"]:
+            return None
+        return (
+            f"could not stop {name!r}: a candidate started next to it under the alias 'llm' "
+            "would split the requests between two models"
+        )
+
+    def start_stack_llm(self, name: str) -> None:
+        print(f"[info] starting {name} again")
+        if docker_text(["start", name], timeout=DOCKER_STOP_TIMEOUT_S) is None:
+            print(f"[error] could not start {name!r} again: the stack has no llama-server until `docker start {name}`")
 
     def remove_candidate(self) -> None:
         docker_text(["rm", "-f", CANDIDATE_CONTAINER], timeout=DOCKER_STOP_TIMEOUT_S)

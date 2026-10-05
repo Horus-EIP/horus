@@ -118,7 +118,7 @@ Both kinds of run collect the same `machine` block on the host that runs the scr
 
 ## Running an evaluation
 
-The stack must be up, and the five files of `demo_assets/` must each be in the knowledge store exactly once. The runner checks this first and stops otherwise. Pass `--corpus-token` (the `CORPUS_SCAN_TOKEN` of `src/infra/.env`) to let it run `POST /corpus/scan` on the default `demo_assets` mount. Set `AGENT_RESPONSE_CACHE=0` for timing runs.
+The stack must be up, and the five files of `demo_assets/` must each be in the knowledge store exactly once. The runner checks this first and stops otherwise. Pass `--corpus-token` (the `CORPUS_SCAN_TOKEN` of `src/infra/.env`) to let it run `POST /corpus/scan` on the default `demo_assets` mount. Set `AGENT_RESPONSE_CACHE=0` for timing runs, and whenever the GGUF changes between runs: the cache key does not hold the model file, so a run could score answers cached for another model.
 
 ```bash
 pip install httpx websockets pyyaml
@@ -319,6 +319,8 @@ cd src/infra && docker compose start && cd ../..
 python scripts/benchmarks/run-model-candidates.py --resume benchmarks/model-candidates-<date>.json --steps probe,eval
 ```
 
+The agent's response cache must be off for the `eval` step. Its key is made of the question, the retrieved passages, the corpus version and the agent's own settings (`LLM_BACKEND`, `LLM_VLLM_MODEL`, ...), and none of them change when the runner swaps the model behind the alias `llm`. With the cache on, a candidate would be handed the answers the model before it gave, for up to `AGENT_RESPONSE_CACHE_TTL` (an hour by default), and its answers, sources and timings would not be its own. Before it stops `llm`, the runner reads `AGENT_RESPONSE_CACHE` from the `agent` container (`docker inspect`). When it is on, or cannot be read, the runner refuses the serving steps (a `not served:` problem on every model) and leaves the stack as it is: set `AGENT_RESPONSE_CACHE=0` in `src/infra/.env`, recreate the agent with `cd src/infra && docker compose up -d agent` (`docker compose start` keeps the old environment) and run the second pass again. `--allow-response-cache` runs anyway and records the reason as a problem of every model. The `probe` step alone does not go through the cache.
+
 | Step | What it does |
 |---|---|
 | `fetch` | Downloads each GGUF into `--models-dir` (default `models/`, where the stack reads its model) with the installer's B-95 downloader (`installer/model_manager.py`): resumable `.part` file, retries, SHA-256 check, then the `.sha256` marker the stack and `run-eval.py` read. When the installer cannot be imported it uses `src/infra/llm/fetch-model.sh` in the server image instead. |
@@ -326,7 +328,7 @@ python scripts/benchmarks/run-model-candidates.py --resume benchmarks/model-cand
 | `probe` | The B-98 request, sent straight to llama-server for the 94 questions that are not greetings or arithmetic. `scripts/eval/agent-contract-probe.py` is copied into the `agent` container and run with the agent's own code and settings: its knowledge-store retrieval, `SourceCatalog`, `answer_prompt`, `answer_response_format` and `_fit_vllm_prompt` build the request the agent sends (one call, temperature 0, `response_format` `json_schema`, not streamed). The raw reply is kept and checked on the host. One unscored warmup question goes first. It asks as the General-Assistant identity: the persona the agent puts before the system prompt of Finance-Analyst, Compliance-Officer and HR-Assistant is left out, and the `eval` step covers the routed identities. |
 | `eval` | `run-eval.py` with `--llm-container llm-candidate --sample-resources`: the 100 questions through MAS and the agents, as a user asks them. |
 
-For `probe` and `eval` the runner stops the stack's `llm` container and starts `llm-candidate` in its place: the same image (the catalog's pinned `server-b11382`), the same arguments with `--model` replaced and `--reasoning off` added, the same memory limit, on the same Docker network under the alias `llm`, so MAS and the agents reach the candidate at `http://llm:8080` unchanged. It waits for `/health` (up to `--start-timeout`, 900 s), runs the steps, reads llama-server's `/proc/1/status` and the container's cgroup `memory.peak` and `memory.events` after each step, removes the container and goes to the next model. At the end, even after an error or Ctrl-C, it starts `llm` again. A model whose architecture llama-server does not know stops while loading; the summary keeps the last lines of its log.
+For `probe` and `eval` the runner stops the stack's `llm` container, checks that it stopped (otherwise two models would answer under the alias `llm`, and it gives up), and starts `llm-candidate` in its place: the same image (the catalog's pinned `server-b11382`), the same arguments with `--model` replaced and `--reasoning off` added, the same memory limit, on the same Docker network under the alias `llm`, so MAS and the agents reach the candidate at `http://llm:8080` unchanged. It waits for `/health` (up to `--start-timeout`, 900 s), runs the steps, reads llama-server's `/proc/1/status` and the container's cgroup `memory.peak` and `memory.events` after each step, removes the container and goes to the next model. At the end, even after an error or Ctrl-C, it starts `llm` again, and says so when that fails. A model whose architecture llama-server does not know stops while loading; the summary keeps the last lines of its log.
 
 `--reasoning off` is the default because Spark-X2.5, NeoHorse, Agents-A1 and Ling open a thinking block unless told not to, and the stack's `llm` service passes no reasoning flag (llama-server's default is `auto`). Run once more with `--reasoning auto` to measure them as the stack is configured today; every run records which it used.
 
@@ -334,9 +336,10 @@ For `probe` and `eval` the runner stops the stack's `llm` container and starts `
 |---|---|
 | `--steps` | Among `fetch,bench,probe,eval` (default all four). |
 | `--only` | Candidate ids (their default files) or GGUF ids from the catalog, comma-separated. `--all-quants` adds the optional files. |
-| `--resume FILE` | Run more steps into an earlier summary: the models it holds (or `--only`), the reports it points at, its downloads and problems are kept, and `run.sessions` lists each pass. Also how to finish an interrupted run. |
+| `--resume FILE` | Run more steps into an earlier summary: the models it holds (or `--only`), the reports it points at, its downloads and problems are kept, and `run.sessions` lists each pass. Also how to finish an interrupted run: with `--steps fetch` it tries a failed download again, and a pass that serves a model drops the `not served:` problems an earlier pass left on it. |
 | `--reasoning` | `off` (default), `on` or `auto`, passed to the candidate llama-server. |
 | `--llm-mem-limit` | Memory limit of `llm-candidate`, e.g. `8g`. Default: the stack `llm` container's. |
+| `--allow-response-cache` | Run the `eval` step although the agent's response cache is on or could not be checked. Every model gets a problem saying so. |
 | `--ids`, `--category`, `--limit` | Run part of the test set, for the probe and the evaluation alike. |
 | `--bench-arg`, `--eval-arg` | One more argument for `run-llama-bench.py` or `run-eval.py`; repeat it, e.g. `--eval-arg=--no-warmup`. |
 | `--models-dir`, `--out-dir`, `--catalog`, `--testset`, `--server-image`, `--stack-llm-container`, `--agent-container`, `--start-timeout` | Locations and names; the defaults fit a CPU install from this repository. |
