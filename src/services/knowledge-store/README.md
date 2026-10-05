@@ -85,6 +85,16 @@ The script calls `POST /corpus/reindex` and follows `GET /corpus/reindex` until 
 
 The move from sentence-transformers to FastEmbed alone would not need a re-index: `scripts/compare-embeddings.py` embeds the demo corpus, chunked like the service chunks it, and the eval and router questions with both setups and reports the cosine similarity of each pair of vectors (re-index below 0.99). Measured on 2026-10-05 (AMD Ryzen AI 9 HX 370, Windows 11, 336 texts): BGE minimum 0.999989, mean 0.999993, the same top passage for all 84 graded eval questions; MiniLM minimum 1.000000. The startup job still re-embeds the old passages once, because their `embed_model` differs, and splits whole-file entries in the same pass.
 
+### Checking retrieval
+
+`scripts/perf/retrieval-quality.py` embeds questions with the service's own embedder (`app.chroma_db.setup.get_embedding(query, is_query=True)`, so the BGE prefix is added once, as for a real query) and prints the closest passages of the collection in `src/services/knowledge-store/chroma_data/` (the one a service started from this checkout uses) with their ids and scores. Run it with the knowledge store's Python environment:
+
+```bash
+python scripts/perf/retrieval-quality.py "What was the Q4 2025 revenue?" --top 5
+```
+
+Without a question it runs a fixed set.
+
 ### Deleting documents
 
 `DELETE /{id}` (the trash icon in the UI) removes the Chroma entries with that ID or `doc_id` (every passage of the document), the other entries indexed from the same corpus path, and the uploaded file in `documents/` once no entry uses it. A deleted corpus file is written to `chroma_data/deleted_sources.json`, so `POST /corpus/scan` skips it (`skipped_deleted`) even after an edit. `POST /corpus/scan?include_deleted=true` indexes such files again and takes them off the list. `DELETE /file/{filename}` only removes the file on disk.
@@ -99,11 +109,13 @@ knowledge-store/
     main.py                 # FastAPI application setup
     __init__.py
     api/
-      __init__.py           # Router registry (ROUTERS dict)
+      __init__.py           # Re-exports of the extraction helpers
       utils.py              # File I/O helpers (save, PDF/DOCX/image extraction)
       routes/
+        __init__.py         # Router registry (ROUTERS dict: /file, /corpus, /)
         store.py            # Store CRUD and search endpoints
         file.py             # File upload, list, delete endpoints
+        corpus.py           # Corpus scan and re-index jobs, the startup re-index check
     chroma_db/
       setup.py              # ChromaDB client, embedding model, collection init
       __init__.py            # Re-exports for convenience
@@ -113,6 +125,8 @@ knowledge-store/
       services/
         file_service.py     # Store passages, query, document listing, delete, filters
         reindex.py          # Whole-file entries to passages, re-embedding
+        corpus_version.py   # In-memory corpus version, bumped by every add, delete or re-index
+        deleted_sources.py  # Deleted corpus files that a scan must skip
     services/
       content_analyzer.py   # Category, entity, topic, summary extraction
       document_chunker.py   # Passages of at most 1,000 characters, with offsets
@@ -150,7 +164,7 @@ Besides query and embedding latency, `/metrics` exposes `knowledge_store_documen
 
 ### Prerequisites
 
-- Python 3.13+
+- Python 3.11, the image's Python (on 3.13 FastEmbed needs numpy 2.1 or later, and the service pins numpy below 2)
 - Tesseract OCR installed (for image/scanned-PDF support)
 
 ### Setup

@@ -10,7 +10,7 @@ The MAS service is the central orchestrator of the Horus AI platform. It manages
 MAS is a **FastAPI** application backed by:
 
 - **PostgreSQL** (via SQLAlchemy 2.x + Alembic migrations) for persistent storage of users, agents, conversations, tasks, and messages.
-- **Redis** for session caching and token management.
+- **Redis** for session caching and token management, the per-task event streams (`horus:task:{task_id}:events`, 24 h), `Idempotency-Key` records and the dispatch payload of every published task (`horus:task:{task_id}:dispatch`, for a second attempt).
 - **RabbitMQ** for asynchronous task dispatch and inter-agent delegation messaging. Tasks go to bounded `horus.work.{type}` queues (`x-max-length`, `x-overflow: reject-publish`) with publisher confirms; when a queue is full the task waits in MAS's line and the user sees "Busy, position N" (see "Bounded work queues and the agent worker" in `docs/architecture.md`).
 - **Prometheus** metrics exposed at `/metrics` via `prometheus-fastapi-instrumentator`.
 - **OpenTelemetry** tracing exported over OTLP to Tempo (viewable in Grafana).
@@ -35,6 +35,10 @@ mas/
     rabbitmq_tool.py        # RabbitMQ router (delegation, health)
     agent_communication.py  # Inter-agent messaging via RabbitMQ
     llm_setup.py            # Optional LLM auto-initialization
+    embedding_setup.py      # MiniLM embedder on FastEmbed (router and skill matching)
+    skill_cache.py          # Agent-skill embeddings for skill suggestions
+    task_events.py          # Per-task event store (Redis stream) and the publish function
+    work_queues.py          # horus.work.{type} queue names and result permissions
     metrics.py              # Prometheus metric definitions
     metrics_middleware.py    # Metrics collection middleware
     tracing.py              # OpenTelemetry tracing setup
@@ -42,7 +46,7 @@ mas/
     hybrid_logging.py       # Hybrid console + structured logging
   db/
     database.py             # SQLAlchemy engine and session factory
-    models.py               # ORM models (User, Agent, Task, Conversation, Message)
+    models/                 # ORM models (User, Agent, Task, TaskResult, Conversation, Message, CriticalLog)
     dependency.py           # FastAPI database session dependency
     init_setup.py           # Admin user seeding on first run
     pool_monitor.py         # Connection pool monitoring
@@ -58,13 +62,20 @@ mas/
     controller.py           # Agent heartbeat background checker
     registry_tool_functions.py
   tasks/
-    routes.py               # /tasks endpoints (new_task, task-result, cancel, status)
+    routes.py               # /tasks endpoints (new_task, events, claim, task-result, cancel, status) and the routing job
     router.py               # Task router: rules, then embeddings, then a constrained LLM call
     router_examples.yaml    # Labelled routing examples per agent identity (versioned)
     router_eval.py          # Router report on the labelled test set (python -m tasks.router_eval)
     intent_rules.py         # Greeting, small talk, arithmetic and multi-question cues
     direct_answers.py       # Fixed replies and computed arithmetic for direct answers
     arithmetic.py           # Exact arithmetic parser (no eval)
+    decomposition.py        # Planner, full LLM router of the in-process backend, explicit modes
+    prompts.py              # Orchestrator prompts: fixed system message, request last
+    agent_answers.py        # Second attempt on not_found/failed answers, source merging
+    work_queue_line.py      # MAS's first-in, first-out line for a full work queue
+    task_jobs.py            # Background routing jobs
+    idempotency.py          # Idempotency-Key records in Redis
+    task_crud.py            # Task rows: insert, results, interrupt
     controller.py           # Task timeout background checker
     collaborative_task.py   # Multi-agent collaborative task orchestration
     task_tool_functions.py
@@ -91,7 +102,8 @@ Pytest suites and client scripts live under `tests/mas/` at the repository root 
 |-------------------|------------------------------------------------------|
 | `/auth`           | User registration, JWT token issuance, logout        |
 | `/agents`         | Agent registration, unregistration, details, heartbeat |
-| `/tasks`          | Task creation, result submission, cancellation, status |
+| `/tasks`          | Task creation, events, claims, result submission, cancellation, status |
+| `/analytics`      | Overview figures for the dashboard                    |
 | `/chat`           | WebSocket real-time chat per conversation             |
 | `/conversations`  | Conversation CRUD and message history                 |
 | `/users`          | User administration (admin-only role management)      |
@@ -146,6 +158,8 @@ The background job of `POST /tasks/new_task` routes each `auto` task with `tasks
 1. **Rules** (`tasks/intent_rules.py`, no model). Greetings and small talk get a fixed reply (`tasks/direct_answers.py`); arithmetic is computed exactly by a small parser (`tasks/arithmetic.py`, no `eval`), never generated. A phone number or a dashed range such as `555-1234` or `2019-2020` is not arithmetic, and neither is any unspaced dash between two numbers of three or more digits or across three numbers (`1000-250`, `10-2-3`): those go to the next stages, so write `1000 - 250` to have it computed. A result above 10^100 or below 10^-100 is not answered by the rules either. "compare", "versus", "X vs Y" (not "VS Code"), "and also" or two questions of at least three words each go to `COMPLEX_TASK` and the planner.
 2. **Embeddings.** The question is embedded with the MiniLM model on FastEmbed (`embed_for_routing`, the only embedder call) and compared with the labelled examples in `tasks/router_examples.yaml`, embedded once on first use (or by the preload thread). An agent's score is the mean similarity of its two closest examples. The best live agent wins when its score is at least `ROUTER_MIN_SCORE` and leads the next agent by at least `ROUTER_MIN_MARGIN`. A request made of sub-questions ("…, and who…", "…; how…") goes to `COMPLEX_TASK` when its parts confidently belong to different agents. Example groups follow the live roster: by agent name, else the live agent that shares most of the group's skills; groups of offline agents are ignored.
 3. **LLM.** With `LLM_BACKEND=vllm` (llama-server or vLLM) one short call with `response_format: json_schema` lets the model choose only `SINGLE_AGENT` or `COMPLEX_TASK` and a live agent name, with `ROUTER_LLM_MAX_TOKENS` tokens. `DIRECT_ANSWER` is not offered: only the rules may answer directly. With the in-process Transformers backend the full LLM router prompt (`choose_route_with_llm`, the routing call of `select_agent_for_task`) runs as before. If this stage fails, the task falls back to the skill match and the catch-all agent.
+
+A task with attached files (`attached_files` or `inline_files`) never gets a direct answer: MAS does not read files, so the routing job drops the rules' reply and the requested skill's agent, an auto-created specialist or the catch-all agent takes the task and reads them.
 
 Every decision is logged as `Routing decision` with `method` (`rules`, `embedding`, `llm`, `none`), `route`, `agent`, the top `scores` and `latency_ms`, and counted in `mas_routing_decisions_total{method,route}` and `mas_routing_decision_seconds{method}`. The latency is the time to the decision on every path: it never includes the planner that a `COMPLEX_TASK` then runs.
 

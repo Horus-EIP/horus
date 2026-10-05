@@ -19,7 +19,7 @@ The service is a **FastAPI** application (port 8001) with background threads for
 The default (`general`) agent type uses `RAGPipeline`, which chains:
 
 - **KnowledgeRetrievalAgent** -- Fetches context from the Knowledge Store service via HTTP.
-- **DecisionMakingAgent** -- Runs a Hugging Face causal instruct model (default `Qwen/Qwen3-4B-Instruct-2507`, or `app/models/Qwen3_instruct_4B/` when complete) to answer from retrieved context.
+- **DecisionMakingAgent** -- Answers from the retrieved context. With `LLM_BACKEND=vllm` (the CPU profiles' llama-server, or vLLM on GPU) it calls the OpenAI-compatible `/chat/completions` of `LLM_VLLM_URL` and loads no model; with `LLM_BACKEND=transformers` (GPU images only) it runs a Hugging Face causal instruct model in-process (default `Qwen/Qwen3-4B-Instruct-2507`, or `app/models/Qwen3_instruct_4B/` when complete).
 
 The pipeline also supports a **ReAct** reasoning mode (`ReactAgent`) that performs multi-step THOUGHT, ACTION, OBSERVATION loops for complex queries.
 
@@ -112,9 +112,14 @@ agent/
       settings.py               # Environment-based configuration
     agent_server/
       server.py                 # FastAPI app, registration, heartbeat, RabbitMQ consumers
+      consumers.py              # Work-queue puller, task claims, worker thread pool
       profiles.py               # The five identities: system prompts and tools
     ai_agents/
       rag_pipeline.py           # RAGPipeline (retrieve + decide + tools)
+      answer_contract.py        # Answer contract: labelled passages, json_schema, parsing
+      generation_stop.py        # Stop flag and GenerationTimedOut for REACT_TIMEOUT_SECONDS
+      response_cache.py         # Exact-match cache of ok answers (AGENT_RESPONSE_CACHE)
+      step_emitter.py           # Thought-process steps, posted to MAS (/tasks/task-step/)
       react_agent.py            # Multi-step ReAct reasoning agent
       agent_tools.py            # ReAct tool definitions and the five-tool limit
       prompt_tokens.py          # Prompt token logging, histogram and budget
@@ -161,6 +166,9 @@ In practice, most tasks arrive through the RabbitMQ consumer rather than the HTT
 | `ORCHESTRATOR_PASSWORD`   | MAS login password                         | --                        |
 | `AGENT_TYPE`              | Agent specialization                       | `general`                 |
 | `AGENT_DESCRIPTION`       | Human-readable agent description           | `Autonomous MAS agent`    |
+| `LLM_BACKEND`             | `vllm`: answer through the OpenAI-compatible server at `LLM_VLLM_URL` (llama-server or vLLM; the only choice in a CPU image); `transformers`: the in-process model of the GPU image | `transformers` |
+| `LLM_VLLM_URL`            | Base URL of that server                    | `http://host.docker.internal:18000/v1` |
+| `AGENT_STREAM_TOKENS`     | `1` streams the `answer` field to the chat as `reasoning.delta` steps | `0` |
 | `MODEL_NAME`              | Hugging Face model id (or local mirror) for decision agent | `Qwen/Qwen3-4B-Instruct-2507` |
 | `MODEL_DEVICE`            | PyTorch device (`auto`, `cpu`, `cuda`)     | `auto`                    |
 | `AGENT_LAZY_DECISION_MODEL` | `1`/`true` = load Qwen on first `decide()`; `0` = load at process start (Compose default `0`) | `0` |

@@ -471,7 +471,8 @@ A replayed `Idempotency-Key` returns the same body shape with the task's current
 
 | Outcome | Task status | Event |
 |---------|-------------|-------|
-| Direct answer (greeting, small talk, arithmetic) | `completed`, the answer is the task result | `result` with `route: "direct_answer"` |
+| Direct answer (greeting, small talk, arithmetic, with no `attached_files` or `inline_files`) | `completed`, the answer is the task result | `result` with `route: "direct_answer"` |
+| A direct answer for a task with attached files | as for one agent: MAS does not read files, so it drops the direct answer and the requested skill's agent, an auto-created specialist or the catch-all agent takes the task and reads them | as for one agent |
 | One agent | `running`, then `completed` when the agent posts its result | `progress` (`status: "running"`), later `result` with `route: "agent"` |
 | The agent type's work queue is full | `queued` while the task waits in MAS, then `running` once RabbitMQ accepts it | `progress` with `status: "busy"`, `position` and `detail: "Busy, position N"`, sent again whenever N changes, then `progress` with `status: "running"` when the task leaves the line |
 | The agent fails or its answer times out | `failed`, the agent's message is the task result | `error` with `status: "failed"` and `reason` (`timeout` or `error`) |
@@ -639,6 +640,28 @@ The first `not_found` or `failed` answer of a task is not final: MAS asks the sa
 | `404` | `Task not found` or `TaskResult not found` |
 | `422` | Request body validation error. |
 | `500` | Processing error (database, WebSocket, or internal). |
+
+---
+
+#### POST /tasks/task-step/
+
+An agent's thought-process step: retrieval start and results, reasoning start and end, a tool call, an error, or with `AGENT_STREAM_TOKENS=1` a `reasoning.delta` that carries the next piece of the answer text (`metadata.chunk`, `metadata.index` from 0 for each answer; only the text of the contract's `answer` field, never its JSON). MAS stores it as an event of the root task (`progress`, or `token` for a delta) and sends it to the conversation as a `task_step` frame. Best-effort: a step for an unknown task is ignored, and a failed step never affects the task's result.
+
+**Auth:** Agent API Key (`X-API-Key` + `Agent-ID` headers). The authenticated worker must be the assignee or share its `AgentTypes` pool.
+
+**Request:** `application/json`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| task_id | string | Yes | The task the step belongs to. |
+| agent_id | string | Yes | Task assignee UUID (must match `Task.agent_id`). |
+| step_type | string | Yes | For example `retrieval.start`, `retrieval.results`, `reasoning.start`, `reasoning.delta`, `reasoning.done`, `tool.invoke`, `error`. |
+| title, detail, timestamp, agent_name | string | No | Shown on the step card. |
+| metadata | object | No | Free-form payload of the step. |
+
+**Response 200:** `{"message": "ok"}`; `{"message": "no conversation"}` for a task outside a conversation (the step is still stored); `{"message": "ignored"}` for an unknown task.
+
+**Errors:** `403` when `agent_id` is not the task's assignee or the worker may not emit steps for it.
 
 ---
 
@@ -1338,7 +1361,11 @@ Returns an empty array `[]` if no messages exist for the agent.
 {
   "demand": "string",
   "conversation_id": 0,
-  "skills_required": ["string"]
+  "skills_required": ["string"],
+  "mode": "auto | specific_agent | any_with_skill | decompose (optional)",
+  "agent_id": "string (optional)",
+  "attached_files": [{"filename": "string", "doc_id": "string (optional)"}],
+  "inline_files": [{"filename": "string", "mime": "string (optional)", "content_b64": "string"}]
 }
 ```
 
@@ -1350,8 +1377,11 @@ Returns an empty array `[]` if no messages exist for the agent.
   "result": "string",
   "conversation_id": "string",
   "agent_id": "string",
-  "status": "completed | failed",
-  "reason": "string (optional)"
+  "agent_name": "string (optional)",
+  "skill_used": "string (optional)",
+  "sources": [{"doc_id": "string", "chunk_id": "string", "title": "string", "page": 0}],
+  "status": "completed | not_found | failed",
+  "reason": "string (optional, at most 64 characters)"
 }
 ```
 
@@ -1502,6 +1532,7 @@ Authentication is not enforced on these endpoints in the default configuration (
 - [Health](#health)
 - [Store Operations](#store-operations)
 - [File Operations](#file-operations)
+- [Corpus Operations](#corpus-operations)
 
 ---
 
@@ -2034,6 +2065,69 @@ Upload a single file specifying its type explicitly, convert to text, analyze, a
 
 ---
 
+### Corpus Operations
+
+Routes under `/corpus` need the `X-Corpus-Token` header, equal to `CORPUS_SCAN_TOKEN` in the `knowledge_store` container. Every route answers `503` when `CORPUS_SCAN_TOKEN` is unset and `403` when the header is missing or wrong. A scan and a re-index never run at the same time: starting one while the other runs gets `409`.
+
+#### POST /corpus/scan
+
+Index every supported file of the read-only folder mounted at `CORPUS_DIR` (default `/app/corpus`, where Compose mounts the host folder `HORUS_CORPUS_DIR`, `demo_assets/` by default) in the background. A file already indexed with the same content is skipped (`skipped_unchanged`), and so is a file deleted from the knowledge store (`skipped_deleted`), even after an edit.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| dry_run | boolean | `false` | Report the decisions without embedding or storing anything. |
+| include_deleted | boolean | `false` | Also index deleted files and take them off the deleted list. |
+
+**Response:** `202 Accepted`
+
+```json
+{"job_id": "9f2c…", "state": "running", "dry_run": false, "include_deleted": false, "root": "/app/corpus"}
+```
+
+**Errors:** `404` (no folder is mounted at `CORPUS_DIR`), `409` (a scan or a re-index is running).
+
+#### GET /corpus/status
+
+The latest scan: `state` (`idle`, `running`, `completed`, `failed`), `totals` (`files_seen`, `eligible`, `ingested`, `would_ingest`, `skipped_unchanged`, `skipped_deleted`, `rejected`, `failed`, `replaced_stale`) and a decision per file. Before any scan it returns `state: "idle"` with the folder, whether it is mounted, the allowed extensions and the size limit.
+
+#### POST /corpus/reindex
+
+Bring every stored document to the current index layout in the background: a document stored as one whole-file entry is split into passages, and a passage whose `embed_model` is not the running embedder's (`fastembed-0.8.1:BAAI/bge-base-en-v1.5`) is embedded again in place. Documents already up to date are left alone, so a second run changes nothing and an interrupted run continues where it stopped. Each changed document bumps the corpus version. A run that ends with no failure writes the embedder into the collection metadata. `scripts/reindex-knowledge-store.py` calls this route and follows its progress.
+
+The service starts the same job by itself at startup when it finds whole-file entries or passages from another embedder (`trigger: "startup"`), unless `KNOWLEDGE_STORE_REINDEX_ON_STARTUP=0`, in which case it only logs how many documents need it.
+
+**Response:** `202 Accepted`
+
+```json
+{"job_id": "9f2c…", "state": "running", "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5"}
+```
+
+**Errors:** `409` (a scan or a re-index is running).
+
+#### GET /corpus/reindex
+
+The latest re-index, whoever started it:
+
+```json
+{
+  "job_id": "9f2c…",
+  "state": "completed",
+  "trigger": "startup",
+  "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5",
+  "started_at": "2026-10-05T09:00:00+00:00",
+  "finished_at": "2026-10-05T09:00:42+00:00",
+  "error": null,
+  "totals": {"pending": 5, "migrated": 5, "reembedded": 0, "unchanged": 0, "failed": 0},
+  "failures": []
+}
+```
+
+`state` is `idle`, `running`, `completed` or `failed`; `trigger` is `request` (`POST /corpus/reindex`) or `startup`. Before any re-index it returns `{"state": "idle", "embed_model": "…"}`.
+
+---
+
 ## Horus WebSocket API Reference
 
 Real-time bidirectional communication between users and the multi-agent system. WebSocket connections are managed through the MAS Chat module.
@@ -2227,6 +2321,7 @@ Every frame about a task is an event of that task. MAS stores the event first (s
 | The agent failed (after a second attempt when one was possible) | `error` | `failed` | `reason`: `error`, `invalid_output`, `degenerate_output` or `retrieval_error` |
 | The agent restarted while it ran the task | `error` | `failed` | `reason: "agent_restarted"` |
 | The task's agent was no longer registered when a worker took the task | `error` | `failed` | `reason: "agent_unregistered"` |
+| MAS could not hand the task to its agent's queue (after waiting in the line for a full queue, or when it asked for a second attempt) | `error` | `failed` | `reason: "dispatch_failed"` |
 
 #### Message Types Summary
 

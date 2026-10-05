@@ -81,8 +81,9 @@ graph TB
 |---|---|---|
 | User <-> Web Client | HTTPS | Browser traffic; static assets and API proxy |
 | Web Client <-> MAS | REST (HTTP/1.1), WebSocket | API calls, real-time chat streaming |
-| MAS <-> RabbitMQ | AMQP 0-9-1 | Asynchronous task dispatch and result delivery |
-| RabbitMQ <-> Agent Service | AMQP 0-9-1 | Task consumption from dedicated queues |
+| MAS <-> RabbitMQ | AMQP 0-9-1 | Asynchronous task dispatch to bounded `horus.work.{type}` queues, with publisher confirms |
+| RabbitMQ <-> Agent Service | AMQP 0-9-1 | Tasks pulled one at a time (`basic.get`) from the shared work queue of each agent type |
+| Agent Service -> MAS | REST (HTTP/1.1) | Task claims, thought-process steps and results (`/tasks/{id}/claim`, `/tasks/task-step/`, `/tasks/task-result/`) |
 | Agent Service <-> Knowledge Store | REST (HTTP/1.1) | Document search and file parsing requests |
 | Knowledge Store <-> ChromaDB | ChromaDB Python client (embedded persistence in container) | Vector similarity search |
 | All services -> Tempo | OTLP (gRPC) | Distributed trace export |
@@ -94,7 +95,7 @@ graph TB
 
 #### 3.1 MAS Orchestrator
 
-**Port:** 8000 | **Runtime:** Python 3.13, FastAPI, Uvicorn
+**Port:** 8000 | **Runtime:** Python 3.11 (image), FastAPI, Uvicorn
 
 The MAS (Multi-Agent System) orchestrator is the central brain of the platform. It receives every user request, authenticates and authorizes it, decomposes complex queries into sub-tasks, and dispatches each sub-task to the appropriate agent via RabbitMQ.
 
@@ -103,8 +104,8 @@ The MAS (Multi-Agent System) orchestrator is the central brain of the platform. 
 - User authentication (OAuth2 password flow, JWT tokens, bcrypt password hashing)
 - Role-based access control with four roles: Admin, Manager, User, System
 - Agent registry management (registration, heartbeat tracking, status monitoring)
-- Task decomposition using LLM-assisted query analysis
-- Task dispatch via RabbitMQ and result aggregation
+- Task routing in a background job, cheapest stage first: rules (greetings, small talk, exact arithmetic, multi-question cues), then MiniLM embeddings on FastEmbed against labelled examples, then a constrained LLM call (`json_schema`, 32 tokens); multi-agent requests go to the planner
+- Task dispatch to bounded RabbitMQ work queues with publisher confirms (a full queue makes the task wait in MAS as "Busy, position N"), a second attempt when an agent answers `not_found` or `failed`, and result aggregation with every cited source kept
 - Conversation and message persistence
 - Real-time WebSocket communication with the web client
 - Audit logging to the `critical_logs` table
@@ -115,7 +116,7 @@ The MAS (Multi-Agent System) orchestrator is the central brain of the platform. 
 |---|---|
 | `auth/` | Authentication, JWT issuance/validation, API key verification, RBAC permissions |
 | `agents/` | Agent registration, discovery, and heartbeat monitoring |
-| `tasks/` | Task lifecycle management, decomposition, dispatch, and result collection |
+| `tasks/` | Task lifecycle management, routing (`router.py`), planning, dispatch, second attempts and result collection |
 | `conversations/` | Conversation CRUD, message history |
 | `chat/` | Real-time WebSocket handler and message routing |
 | `users/` | User management endpoints |
@@ -125,16 +126,16 @@ The MAS (Multi-Agent System) orchestrator is the central brain of the platform. 
 
 #### 3.2 Agent Service
 
-**Port:** 8001 | **Runtime:** Python 3.13, FastAPI, Uvicorn
+**Port:** 8001 | **Runtime:** Python 3.11 (image), FastAPI, Uvicorn
 
 The Agent Service hosts the AI agents that perform the actual reasoning and document retrieval. It consumes tasks from RabbitMQ, runs them through the RAG pipeline with a ReAct (Reasoning + Acting) loop, and posts results back to the MAS.
 
 **Responsibilities:**
 
-- Consuming tasks from RabbitMQ queues
-- Running the RAG pipeline: knowledge retrieval, decision making, response generation
-- ReAct agent loop (Thought -> Action -> Observation) for multi-step reasoning
-- Tool execution: knowledge search, data extraction, file parsing, payment analysis, calculation, summarization
+- Pulling tasks from its RabbitMQ work queue one at a time, claiming each in MAS before acknowledging it, and running it in a worker thread so the connection's heartbeat never waits on an answer
+- Running the RAG pipeline: knowledge retrieval, decision making, response generation, through llama-server or vLLM (`LLM_BACKEND=vllm`) or an in-process model in the GPU image
+- ReAct agent loop (Thought -> Action -> Observation) for multi-step reasoning, used for delegated requests and tasks sent with `mode: "react"`
+- Tool execution: each identity offers at most five tools out of `search_knowledge`, `extract_data`, `analyze_payments`, `calc` and `delegate`
 - Answering in one JSON contract (`status`, `answer`, `sources`, `reason`), with sources taken only from the passages it retrieved
 - Posting task results back to the MAS orchestrator
 
@@ -142,10 +143,13 @@ The Agent Service hosts the AI agents that perform the actual reasoning and docu
 
 | Module | Responsibility |
 |---|---|
-| `agent_server/` | FastAPI app, task consumption endpoints, RabbitMQ listener |
+| `agent_server/` | FastAPI app, registration and heartbeat (`server.py`), work-queue puller, task claims and worker threads (`consumers.py`), the five identities (`profiles.py`) |
 | `ai_agents/rag_pipeline.py` | Orchestrates the full RAG flow: retrieval, reasoning, response |
 | `ai_agents/answer_contract.py` | The answer contract: labelled passages, the `json_schema` response format, lenient and strict parsing, the streamed `answer` field |
 | `ai_agents/react_agent.py` | ReAct loop with configurable max steps and timeout |
+| `ai_agents/agent_tools.py` | ReAct tool definitions and each identity's tool set (at most five) |
+| `ai_agents/generation_stop.py` | Stop flag and `GenerationTimedOut` for `REACT_TIMEOUT_SECONDS` |
+| `ai_agents/prompt_tokens.py` | Prompt tokens per call: log line, `agent_llm_prompt_tokens` histogram, budget |
 | `ai_agents/knowledge_retrieval_agent.py` | Queries the Knowledge Store for relevant document chunks |
 | `ai_agents/decision_making_agent.py` | LLM-based decision making using retrieved context |
 | `ai_agents/tool_registry.py` | Dynamic tool registration and dispatch |
@@ -161,7 +165,7 @@ The Agent Service hosts the AI agents that perform the actual reasoning and docu
 
 #### 3.3 Knowledge Store
 
-**Port:** 8080 | **Runtime:** Python 3.13, FastAPI, Uvicorn
+**Port:** 8080 | **Runtime:** Python 3.11 (image), FastAPI, Uvicorn
 
 The Knowledge Store is the organization's private memory. It ingests documents (PDF, DOCX, TXT, CSV, images), chunks and embeds them into ChromaDB, and serves semantic search queries from the Agent Service.
 
@@ -179,6 +183,7 @@ The Knowledge Store is the organization's private memory. It ingests documents (
 |---|---|
 | `api/routes/store.py` | Collection management and semantic search endpoints |
 | `api/routes/file.py` | File upload, download, and deletion endpoints |
+| `api/routes/corpus.py` | Corpus scan and re-index jobs (`X-Corpus-Token`), the startup re-index check |
 | `api/utils.py` | Request validation and response formatting |
 | `chroma_db/setup.py` | ChromaDB client initialization and collection management |
 | `chroma_db/models/` | Pydantic models for documents and search results |
@@ -271,11 +276,11 @@ sequenceDiagram
     participant DM as Decision Making
     participant LLM as LLM (local)
 
-    Agent->>TR: Select tools for query
+    Agent->>TR: Tools of the task's identity (at most 5)
     TR-->>Agent: Available tools
     Agent->>KR: search_knowledge(query)
-    KR->>KS: GET /search (semantic query)
-    KS-->>KR: Ranked document chunks
+    KR->>KS: GET /?query=…&n_results=… (passages)
+    KS-->>KR: Ranked passages with ids, titles and pages
     KR-->>Agent: Context + sources
 
     loop ReAct steps (max 5)
@@ -346,7 +351,7 @@ The persistence layer is built on PostgreSQL with SQLAlchemy as the ORM. The sch
 
 #### Entity-Relationship Diagram
 
-See [data-model.md](data-model.md) for detailed table descriptions.
+See the Data Model section below for detailed table descriptions.
 
 ```mermaid
 erDiagram
@@ -376,6 +381,10 @@ erDiagram
         string role
         string content
         datetime created_at
+        string agent_id
+        string agent_name
+        string skill_used
+        json sources
         int conversation_id FK
     }
 
@@ -400,6 +409,10 @@ erDiagram
         string query
         int order
         json skills_required
+        string owner_username
+        string claimed_by
+        string claim_run
+        datetime started_at
         datetime created_at
         datetime updated_at
         datetime completed_at
@@ -411,6 +424,7 @@ erDiagram
         json result_data
         json history
         json future_actions
+        json sources
         datetime created_at
     }
 
@@ -440,7 +454,7 @@ erDiagram
 ##### Redis
 
 - **Library:** redis-py
-- **Purpose:** Session caching, rate limiting, temporary data.
+- **Purpose:** Session caching, rate limiting, temporary data; the per-task event streams (`horus:task:{task_id}:events`, 24 h) behind `GET /tasks/{task_id}/events`; `Idempotency-Key` records (`horus:idempotency:{user_id}:{key}`, 24 h); and the dispatch payload of every published task (`horus:task:{task_id}:dispatch`, 24 h), which a second attempt republishes.
 - **Lifecycle:** Managed via a connection pool; host, port, and password loaded from environment variables.
 
 ##### RabbitMQ
@@ -489,6 +503,16 @@ All services are configured via environment variables, typically set in `docker-
 | | `WORK_QUEUE_MAX_LENGTH` | No | Waiting tasks each `horus.work.{type}` queue holds before MAS answers "busy, position N" (default 10). Read by MAS and the agent. |
 | **Agent worker** | `AGENT_MAX_CONCURRENT_TASKS` | No | Tasks one agent process runs at a time (default 1). |
 | | `AGENT_WORKER_ID` | No | Stable worker name for task claims (default: the container's host name). Must differ between agent containers. |
+| | `REACT_TIMEOUT_SECONDS` | No | Limit on one agent answer; past it the generation is stopped and the task fails with `reason: "timeout"` (default 900 s on CPU, 120 s on GPU). |
+| | `AGENT_PROMPT_TOKEN_BUDGET` | No | Prompt tokens one agent LLM call may use before it logs a warning and counts in `agent_llm_prompts_over_budget_total` (default 4096). |
+| **Routing** | `ROUTER_MIN_SCORE` | No | Embedding stage: lowest agent score that may decide a route (default 0.40). |
+| | `ROUTER_MIN_MARGIN` | No | Embedding stage: lowest lead of the best agent over the next one (default 0.10). |
+| | `ROUTER_LLM_MAX_TOKENS` | No | Token budget of the constrained LLM routing call (default 32). |
+| | `MAS_EMBED_THREADS` | No | Threads of MAS's MiniLM embedder (default: `LLM_TORCH_INTRAOP_THREADS`, 1 on the CPU profiles, else onnxruntime's choice). |
+| | `LLM_PROMPT_TOKEN_BUDGET` | No | Prompt tokens one MAS LLM call may use before it logs a warning and counts in `mas_llm_prompts_over_budget_total` (default 4096). |
+| **Knowledge store** | `KNOWLEDGE_STORE_EMBED_DEVICE` | No | `auto`, `cpu` or `cuda` for the FastEmbed BGE embedder (default `auto`; CUDA only when onnxruntime offers it). |
+| | `KNOWLEDGE_STORE_EMBED_THREADS` | No | Threads of the embedder's ONNX Runtime session (default: onnxruntime's choice). |
+| | `KNOWLEDGE_STORE_REINDEX_ON_STARTUP` | No | `0` keeps the startup re-index of whole-file entries and passages from another embedder from running (default on). |
 | **Application** | `LLM_AUTOINIT` | No | Auto-initialize LLM on startup (0 or 1) |
 
 A complete example with all variables is available at `src/infra/.env.example`.
@@ -501,7 +525,7 @@ A complete example with all variables is available at `src/infra/.env.example`.
 
 | Technology | Version | Usage |
 |---|---|---|
-| Python | 3.13 | MAS Orchestrator, Agent Service, Knowledge Store |
+| Python | 3.11 in the images | MAS Orchestrator, Agent Service, Knowledge Store (CI also runs the MAS and agent tests on 3.13) |
 | TypeScript | 5.9 | Web Client |
 | SQL | -- | Database schema and migrations |
 
@@ -645,22 +669,27 @@ name so logs can be filtered by subsystem.
 
 ### Database Schema
 
-SQLAlchemy ORM models live in `src/services/mas/db/models.py`. The schema is the
-system of record for users, conversations, and audit logs.
+SQLAlchemy ORM models live in `src/services/mas/db/models/`. The schema is the
+system of record for users, agents, conversations, tasks and audit logs.
 
 #### Entities
 
 | Entity | Purpose |
 |--------|---------|
 | `User` | Authenticated users with role-based access |
+| `Agents` | Registered agent identities, their skills, type and heartbeat |
 | `Conversation` | Chat sessions with ownership and metadata |
-| `Message` | Individual turns within a conversation |
+| `Message` | Individual turns within a conversation, with the sources an answer cites |
+| `Task` | A request or a chain step: status, assignee, claim (`claimed_by`, `claim_run`, `started_at`) |
+| `TaskResult` | A task's answer, history, remaining chain steps and sources |
 | `CriticalLog` | Audit trail for security-relevant events |
 
 #### Relationships
 
 ```
 User 1 ─── N Conversation 1 ─── N Message
+             Conversation 1 ─── N Task 1 ─── 1 TaskResult
+                                  Task 1 ─── N Task (chain steps)
 ```
 
 #### Conventions
@@ -795,15 +824,18 @@ April 2026 cleanup:
 
 | File | Responsibility |
 |------|----------------|
+| `tasks/routes.py` | Every `/tasks` route (`new_task`, `{id}`, `{id}/events`, `{id}/claim`, `abandoned-claims`, `task-result`, `task-step`, `task-cancel` and its alias `{id}/cancel`, `list`, `stats/queue`, `conversation/{id}/running`, `suggest-skills`) and the background routing job |
 | `tasks/router.py` | Task router: rules, then embeddings over `tasks/router_examples.yaml`, then a constrained LLM call (see the MAS README, "Task Routing") |
-| `tasks/endpoints/create.py` | `POST /tasks/new_task` |
-| `tasks/endpoints/query.py` | `GET /tasks`, `GET /tasks/{id}` |
-| `tasks/endpoints/cancel.py` | `PATCH /tasks/{id}/cancel` |
-| `tasks/endpoints/share.py` | Agent result sharing |
-| `tasks/endpoints/stats.py` | Queue depth and statistics |
+| `tasks/intent_rules.py`, `tasks/direct_answers.py`, `tasks/arithmetic.py` | The rules stage: greetings, small talk, exact arithmetic, multi-question cues |
+| `tasks/router_eval.py` | Router report on the labelled test set (`python -m tasks.router_eval`) |
+| `tasks/decomposition.py`, `tasks/prompts.py` | Planner, the full LLM router of the in-process backend, explicit dispatch modes, orchestrator prompts |
+| `tasks/agent_answers.py` | Second attempt on a `not_found` or `failed` answer, source merging |
+| `tasks/work_queue_line.py` | MAS's first-in, first-out line for a full work queue |
+| `tasks/task_jobs.py`, `tasks/idempotency.py` | Background routing jobs, `Idempotency-Key` records |
+| `tasks/task_crud.py` | Task rows: insert, results, interrupt |
 | `tasks/status.py` | Status enum and helpers |
 | `tasks/task_tool_functions.py` | Background task helpers |
-| `tasks/controller.py` | Task state machine |
+| `tasks/controller.py` | Task timeout watchdog |
 | `tasks/collaborative_task.py` | Cross-agent task coordination |
 
 ---
@@ -822,6 +854,12 @@ The Agent service runs the ReAct (Reasoning + Acting) loop that answers user
 queries with source-cited responses. It lives in
 `src/services/agent/app/ai_agents/` and exposes its HTTP surface through
 `src/services/agent/app/agent_server/server.py`.
+
+A chat answer does not go through this loop: the RAG pipeline retrieves
+passages and answers in one call in the JSON answer contract (`status`,
+`answer`, `sources`, `reason`; see "Answer contract" in the agent README).
+The ReAct loop runs for delegated requests and for tasks sent with
+`mode: "react"`.
 
 This page documents the loop itself — the step-by-step flow, the tool
 registry, and the failure modes. Source files now carry short docstrings;
@@ -890,6 +928,11 @@ The loop is bounded on two axes:
 When either is hit, the agent builds a best-effort answer from whatever
 observations it has collected so far and marks the execution history as
 timed-out.
+
+On the chat answer path the same `REACT_TIMEOUT_SECONDS` bounds one answer
+(default 900 s on CPU, 120 s on GPU), with no partial answer: the
+generation is stopped (`GenerationTimedOut`, `ai_agents/generation_stop.py`)
+and the task is reported to MAS as `failed` with `reason: "timeout"`.
 
 ### 4. Execution history
 
@@ -973,10 +1016,15 @@ retries with exponential backoff, and optional Prometheus metrics.
 
 | Client method | HTTP | Knowledge Store route | Purpose |
 |---------------|------|------------------------|---------|
-| `fetch_for_rag(query)` | `POST` | `/search` | Semantic RAG retrieval |
-| `smart_search(query, ...)` | `POST` | `/smart-search` | RAG with category / entity / confidence filters |
-| `list_inventory()` | `GET` | `/files` | All documents currently in the store |
-| `__call__(query)` | `POST` | `/search` | Alias to `fetch_for_rag` for callable interfaces |
+| `query(query, n_results)` | `GET` | `/?query=…&n_results=…` | Semantic search; passages with their `chunk_id`, `doc_id`, `title` and `page` (`KNOWLEDGE_STORE_N_RESULTS`, default 8) |
+| `fetch_for_rag(query)` | -- | -- | RAG retrieval: `resolve_by_filename` when the query names a stored file, else `query`, else the inventory |
+| `resolve_by_filename(name)` | `GET` | `/file/resolve` | Full text of the documents whose title matches a filename, each cited apart |
+| `resolve_by_doc_id(doc_id)` | `GET` | `/file/{doc_id}/text` | Full text of one attached document |
+| `fetch_document_inventory()` | `GET` | `/file` | All documents currently in the store, with short previews |
+| `smart_search(query, ...)` | `POST` | `/smart-search` | Search with category / entity / confidence filters |
+| `search_by_entity(entity, entity_type)` | `GET` | `/search-by-entity` | Search by entity |
+| `get_categories()` | `GET` | `/categories` | Categories and their document counts |
+| `__call__(query)` | -- | -- | Alias to `fetch_for_rag` for callable interfaces |
 
 ### 2. Retry and timeout behavior
 
@@ -995,9 +1043,9 @@ immediately.
 
 ### 3. Graceful-empty-result handling
 
-When semantic search returns zero matches or only low-confidence hits,
-`fetch_for_rag` calls `list_inventory()` and returns the list of
-document titles/IDs in the store. The ReAct loop can then either:
+When semantic search returns no passage, `fetch_for_rag` calls
+`fetch_document_inventory()` and returns the list of document titles,
+ids and previews in the store. The ReAct loop can then either:
 
 - give the user a "no direct match found, here is what is available"
   answer, or
@@ -1010,8 +1058,8 @@ answer without any retrieved context.
 
 When `core.metrics` is importable, every call records:
 
-- `knowledge_store_requests_total{method, route, status}` — counter
-- `knowledge_store_request_duration{method, route}` — histogram
+- `agent_knowledge_store_requests_total{status}` — counter (`success`, `error`, `timeout`)
+- `agent_knowledge_store_request_duration_seconds` — histogram
 
 The import is wrapped in `try/except ImportError` so the client stays
 usable in lightweight test contexts where the metrics module is not
@@ -1096,6 +1144,10 @@ erDiagram
         string role
         string content
         datetime created_at
+        string agent_id
+        string agent_name
+        string skill_used
+        json sources
         int conversation_id FK
     }
 
@@ -1120,6 +1172,10 @@ erDiagram
         string query
         int order
         json skills_required
+        string owner_username
+        string claimed_by
+        string claim_run
+        datetime started_at
         datetime created_at
         datetime updated_at
         datetime completed_at
@@ -1131,6 +1187,7 @@ erDiagram
         json result_data
         json history
         json future_actions
+        json sources
         datetime created_at
     }
 
@@ -1204,6 +1261,7 @@ Individual messages within a conversation, storing both user inputs and agent re
 | `content` | String | Not null | The message text. |
 | `created_at` | DateTime (tz) | Not null, server default `now()` | Timestamp of message creation. |
 | `conversation_id` | Integer | FK -> `conversations.id`, not null, indexed | Parent conversation. |
+| `agent_id`, `agent_name`, `skill_used` | String | Nullable | The agent that wrote an assistant message and the skill it used; `null` for user messages. |
 | `sources` | JSON | Nullable | Passages an agent answer cites (`doc_id`, `chunk_id`, `title`, `page`); `null` for other messages. |
 
 **Relationships:**
@@ -1245,10 +1303,10 @@ A unit of work assigned to an agent within a conversation. Tasks support hierarc
 | Column | Type | Constraints | Description |
 |---|---|---|---|
 | `id` | String | PK | UUID generated at creation. |
-| `conversation_id` | Integer | FK -> `conversations.id`, not null, indexed | Parent conversation this task belongs to. |
+| `conversation_id` | Integer | FK -> `conversations.id`, nullable, indexed | Parent conversation this task belongs to; `null` for a standalone task. |
 | `parent_task_id` | String | FK -> `tasks.id`, nullable | Optional parent task, enabling sub-task trees. |
 | `agent_id` | String | Not null | ID of the agent assigned to execute this task. |
-| `status` | Enum | Default `"pending"` | Lifecycle status: `pending`, `in_progress`, `completed`, `failed`, or `cancelled`. |
+| `status` | Enum | Default `"pending"` | Lifecycle status: `queued` (stored, waiting for routing or for room in a full work queue), `pending`, `running`, `completed`, `canceled` or `failed`. |
 | `query` | String | Not null | The instruction or question the agent must process. |
 | `order` | Integer | Nullable | Execution order hint for sibling tasks. |
 | `skills_required` | JSON | Nullable | Skills requested for the task, plus the skill the agent reports using when its result arrives. |
@@ -1622,12 +1680,12 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 
 | Component | Purpose | Technology |
 |-----------|---------|------------|
-| **MAS** | API Gateway, Orchestration, RBAC | FastAPI, Python 3.13 |
-| **Agent** | AI Processing, RAG Pipeline | FastAPI, Transformers |
-| **Knowledge Store** | Document Storage, Vector Search | FastAPI, ChromaDB |
+| **MAS** | API Gateway, Routing, Orchestration, RBAC | FastAPI, Python 3.11, FastEmbed |
+| **Agent** | AI Processing, RAG Pipeline | FastAPI; llama-server or vLLM over HTTP, Transformers in the GPU image |
+| **Knowledge Store** | Document Storage, Vector Search | FastAPI, ChromaDB, FastEmbed |
 | **Web Client** | User Interface | Next.js 16, React 19 |
 | **PostgreSQL** | Relational Data | PostgreSQL 15+ |
-| **Redis** | Caching, Sessions | Redis 7+ |
+| **Redis** | Caching, Sessions, Task Event Streams | Redis 7+ |
 | **RabbitMQ** | Message Broker | RabbitMQ 3.12+ |
 | **Prometheus** | Metrics Collection | Prometheus 2.x |
 | **Loki** | Log aggregation backend | Grafana Loki |
@@ -1642,16 +1700,16 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 
 ```
 1. User → Web Client: Submit query
-2. Web Client → MAS: POST /tasks/new_task/ (REST)
-3. MAS → RabbitMQ: Publish task message
-4. Agent ← RabbitMQ: Consume task
-5. Agent → Knowledge Store: Query documents (REST)
-6. Knowledge Store → Agent: Return relevant docs
-7. Agent: Process with LLM (RAG)
-8. Agent → RabbitMQ: Publish result
-9. MAS ← RabbitMQ: Consume result
-10. MAS → WebSocket: Push to client
-11. Web Client ← WebSocket: Receive response
+2. Web Client → MAS: POST /tasks/new_task/ (REST), answered 202 {task_id} at once
+3. MAS (background job): Route with rules, then embeddings, then a constrained LLM call
+4. MAS → RabbitMQ: Publish the task to horus.work.{type} (bounded, publisher confirms; a full queue answers "Busy, position N")
+5. Agent ← RabbitMQ: Pull the task, claim it (POST /tasks/{id}/claim), acknowledge it, run it in a worker thread
+6. Agent → Knowledge Store: Query passages (GET /?query=…)
+7. Knowledge Store → Agent: Passages with ids, titles and pages
+8. Agent: Answer with the LLM in the JSON answer contract (status, answer, sources)
+9. Agent → MAS: POST /tasks/task-result/ (REST)
+10. MAS → WebSocket: Store the result event in the task's stream, then push it with its sources
+11. Web Client ← WebSocket: Show the answer and its sources
 ```
 
 #### 3.2 Agent Registration Flow
@@ -1682,9 +1740,9 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 
 | Service | Language | Framework | Key Libraries |
 |---------|----------|-----------|---------------|
-| MAS | Python 3.13 | FastAPI | SQLAlchemy, Pydantic, Pika |
-| Agent | Python 3.13 | FastAPI | HTTPX, spaCy; Transformers and Torch in the GPU image only |
-| Knowledge Store | Python 3.13 | FastAPI | ChromaDB, FastEmbed (ONNX Runtime) |
+| MAS | Python 3.11 | FastAPI | SQLAlchemy, Pydantic, Pika, FastEmbed (ONNX Runtime) |
+| Agent | Python 3.11 | FastAPI | HTTPX, spaCy; Transformers and Torch in the GPU image only |
+| Knowledge Store | Python 3.11 | FastAPI | ChromaDB, FastEmbed (ONNX Runtime) |
 
 #### 4.2 Frontend
 
@@ -1701,7 +1759,7 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 | Database | PostgreSQL | 15+ |
 | Cache | Redis | 7+ |
 | Message Broker | RabbitMQ | 3.12+ |
-| Vector Database | ChromaDB | 0.4+ |
+| Vector Database | ChromaDB | 1.5 |
 
 #### 4.4 Observability
 
@@ -1820,7 +1878,7 @@ All services run on a single host with exposed ports for development.
 | Failure | Recovery |
 |---------|----------|
 | MAS restart | Agents re-register, conversations persist |
-| Agent failure | Tasks reassigned via RabbitMQ |
+| Agent failure | A task still in its work queue waits for the next worker. A task the agent had claimed is never run twice: the restarted worker calls `POST /tasks/abandoned-claims` and MAS fails it with a message asking the user to send it again |
 | Database restart | Connection pool reconnects |
 | RabbitMQ restart | Durable queues, messages preserved |
 
@@ -1874,7 +1932,7 @@ docker cp knowledge_store:/app/chroma_data ./chroma_backup
 
 - **Admin observability pages (web client, `admin` role required):**
   - Logs: http://localhost:3000/admin/logs (backed by Loki)
-  - Metrics: http://localhost:3000/admin/metrics (backed by Prometheus; replicates the old "MAS Overview" dashboard: Task Queue Depth, Task Errors Rate, Active Agents)
+  - Metrics: http://localhost:3000/admin/metrics (backed by Prometheus): Task Queue Depth, Task Errors Rate and Active Agents; p50/p95 of MAS and agent task time, model inference and knowledge store requests and queries; Routing Decisions by Method and Routing Time p95 by Method (`mas_routing_decisions_total`, `mas_routing_decision_seconds`); Agent and MAS Prompt Tokens per Call (`agent_llm_prompt_tokens`, `mas_llm_prompt_tokens`)
   - Traces: http://localhost:3000/admin/traces (backed by Tempo; trace search + span waterfall)
 - **Backends (internal only, not published to the host by default):** Prometheus (`:9090`), Loki (`:3100`), and Tempo (`:3200`) run inside the Docker network. Their config lives in `src/infra/observability/` (`prometheus.yaml`, `loki.yaml`, `promtail.yaml`, `tempo.yaml`).
 - **Tempo (OTLP):** applications send traces to `http://tempo:4317` inside the Docker network (OTLP ports `4317`/`4318` are the only observability ports published to the host).
