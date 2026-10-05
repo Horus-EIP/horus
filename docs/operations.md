@@ -20,25 +20,20 @@ This repository’s canonical remote is the project GitHub org; avoid unapproved
 
 ### CI pipeline
 
-Continuous integration is defined in **`.github/workflows/ci.yml`** at the repository root. It runs on every push and pull request.
+Continuous integration is defined in **`.github/workflows/ci.yml`** at the repository root. It runs on every pull request, on pushes to `master`, `main` and `pre-release-fix`, and by hand. The jobs use Python **3.13**, except the knowledge-store tests.
 
 **Summary**
 
-1. **`test-unit`**  
-   - Python **3.13**  
-   - Starts infrastructure with `docker compose` from `src/infra`: `postgres`, `redis`, `rabbitmq`  
-   - Installs MAS dependencies from `src/services/mas/requirements-cpu.txt`  
-   - Runs Alembic migrations and `init_db` for MAS, starts Uvicorn on port 8000  
-   - Runs `pytest -c tests/mas/pytest.ini tests/mas` with `tests/mas/test_integration.py` ignored  
+1. **`lint`**: `ruff check src tests scripts installer packaging` with ruff 0.16.6.
+2. **`versions`**: the `tests/ci` unit tests, then `scripts/ci/check-versions.py` compares every version number with `VERSION`.
+3. **`test-mas`**: installs `src/services/mas/requirements.txt`, the CPU set, and fails if it brought in torch or a CUDA package. Then `pytest -c tests/mas/pytest.ini tests/mas -m "not requires_stack"`, with `tests/mas/test_integration.py` ignored and 85% coverage required. No service containers: SQLite, fakeredis and mocks stand in for Postgres, Redis and RabbitMQ, and the job copies `.env.example` to `src/infra/.env` for the tests that read settings.
+4. **`test-agent`**: installs `src/services/agent/requirements-gpu.txt` with `https://download.pytorch.org/whl/cpu` as an extra index, because its tests cover the in-process model code, and fails unless torch is the pinned CPU build. Then `tests/agent`, with 90% coverage required.
+5. **`test-knowledge-store`**: Python 3.11, the Python of its image. Installs `src/services/knowledge-store/requirements.txt`, fails on torch or a CUDA package, then `tests/knowledge_store` with 85% coverage required.
+6. **`coverage-summary`**: writes the coverage and test counts of the three test jobs to the run summary.
 
-2. **`test-integration`**  
-   - Depends on `test-unit`  
-   - Similar infrastructure and MAS startup  
-   - Runs `pytest -c tests/mas/pytest.ini tests/mas/test_integration.py` with `TEST_BASE_URL` and `TEST_WS_BASE_URL` pointing at the local MAS instance  
+Tests that need the running stack are not run in CI. For exact steps and env overrides, read the workflow file: it remains the source of truth.
 
-For exact steps and env overrides (e.g. `DB_HOST=localhost`), read the workflow file. Frontend and other services may add jobs later; the workflow file remains the source of truth.
-
-The **`cpu-images`** job builds the mas, agent and knowledge-store images through the CPU overlay (one runner per image). It fails if `pip list` in an image shows any `nvidia-*`, `cuda-*` or `triton` package, or a torch other than the pinned `+cpu` build (`scripts/ci/check-cpu-image.py`). It writes each image's size and build time to the job summary. The **`cpu-build-wiring`** job runs first: `tests/ci/test_cpu_torch_build.py` checks the torch pin, the Dockerfiles, the overlay and the `cpu-images` job without building anything.
+The **`cpu-images`** job builds the mas, agent and knowledge-store images through the CPU overlay (one runner per image). It fails if `pip list` in an image shows any `nvidia-*`, `cuda-*` or `triton` package, or any torch or sentence-transformers, since a CPU image installs a `requirements.txt` that pins no torch (`scripts/ci/check-cpu-image.py`). It writes each image's size and build time to the job summary. The **`cpu-build-wiring`** job runs first: `tests/ci/test_cpu_torch_build.py` checks the requirement sets, the Dockerfiles, the overlay and the `cpu-images` job without building anything.
 
 The release images are built by a separate workflow, **`.github/workflows/images.yml`**, described under [Prebuilt images](#prebuilt-images).
 
@@ -48,9 +43,9 @@ The release images are built by a separate workflow, **`.github/workflows/images
 
 Testers and customers do not build the four Horus images. `.github/workflows/images.yml` builds them, signs them and pushes them to a private registry, and the installer pulls them.
 
-**Names.** `<registry>/horus-<service>:<version>-<flavor>` for `mas`, `agent`, `knowledge-store` and `web-client`. `<version>` is `VERSION`; `<flavor>` is `cpu` for the `cpu-*` profiles and `gpu` for the others. Compose builds each name from `HORUS_REGISTRY`, `HORUS_VERSION` and the compose files: `docker-compose.yml` ends the tag in `-gpu`, and `docker-compose.cpu.yml`, which also sets the CPU torch index, ends it in `-cpu`. When `HORUS_REGISTRY` is unset, as in `.env.example`, the `image:` fields resolve to nothing and Compose keeps its local build names (`<project>-mas` and so on), so `docker compose up --build`, `stack-up.sh` and the `cpu-images` CI job build exactly as before. Every build also gets a commit tag, `sha-<12 hex digits>-<flavor>`.
+**Names.** `<registry>/horus-<service>:<version>-<flavor>` for `mas`, `agent`, `knowledge-store` and `web-client`. `<version>` is `VERSION`; `<flavor>` is `cpu` for the `cpu-*` profiles and `gpu` for the others. Compose builds each name from `HORUS_REGISTRY`, `HORUS_VERSION` and the compose files: `docker-compose.yml` ends the tag in `-gpu`, and `docker-compose.cpu.yml`, which also selects the CPU requirement set (see [Local deployment with Docker](#local-deployment-with-docker)), ends it in `-cpu`. When `HORUS_REGISTRY` is unset, as in `.env.example`, the `image:` fields resolve to nothing and Compose keeps its local build names (`<project>-mas` and so on), so `docker compose up --build`, `stack-up.sh` and the `cpu-images` CI job build exactly as before. Every build also gets a commit tag, `sha-<12 hex digits>-<flavor>`.
 
-**Workflow.** It runs on a `v*` tag and by hand. The `plan` job runs `tests/ci/test_release_images.py` and the installer tests, checks the version numbers and that the tag is `v` followed by `VERSION`, then picks the registry: the repository variable `HORUS_REGISTRY`, else the installer's default `ghcr.io/epitechpromo2027`. The `image` job builds each of the 4 services in both flavors on its own runner, through the same compose files the profiles use. It rejects a CPU image that contains a CUDA package, pushes the commit tag and, only when the run's ref is the tag `v<VERSION>`, the version tag, then signs the digest and checks the signature. A run started by hand from a branch publishes commit tags only, so it can never replace a release.
+**Workflow.** It runs on a `v*` tag and by hand. The `plan` job runs `tests/ci/test_release_images.py` and the installer tests, checks the version numbers and that the tag is `v` followed by `VERSION`, then picks the registry: the repository variable `HORUS_REGISTRY`, else the installer's default `ghcr.io/epitechpromo2027`. The `image` job builds each of the 4 services in both flavors on its own runner, through the same compose files the profiles use. It rejects a CPU image that contains a CUDA package or any torch, pushes the commit tag and, only when the run's ref is the tag `v<VERSION>`, the version tag, then signs the digest and checks the signature. A run started by hand from a branch publishes commit tags only, so it can never replace a release.
 
 | Setting (Settings > Secrets and variables > Actions) | Kind | Default |
 |---|---|---|
@@ -106,7 +101,7 @@ On a machine without an NVIDIA GPU, add the CPU overlay. The installer does this
 docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --build -d
 ```
 
-The overlay sets the build argument `TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu` for mas, agent and knowledge_store. Each of these Dockerfiles installs the `torch==X` line of its `requirements.txt` from that index first, then the rest of the requirements, which keep the torch already installed. Without the overlay, the argument defaults to `https://pypi.org/simple`, which is the CUDA build the GPU profiles use. All requirement files pin the same torch version; change them together.
+The mas, agent and knowledge-store folders each hold two requirement sets: `requirements.txt`, the CPU set, with no torch, transformers or sentence-transformers (both embedders run on FastEmbed and ONNX Runtime), and `requirements-gpu.txt`, which is `-r requirements.txt` plus the in-process model stack and one pinned `torch==X`. Each Dockerfile picks the set from the build argument `TORCH_INDEX_URL`. The overlay sets it to `https://download.pytorch.org/whl/cpu` for mas, agent and knowledge_store, and that exact value installs `requirements.txt`: no torch at all. Without the overlay, the argument defaults to `https://pypi.org/simple`, and any value other than the CPU index installs `requirements-gpu.txt`: its pinned torch first, from that index (the CUDA build the GPU profiles use), then the rest of the set, which keeps that torch. The three GPU sets pin the same torch version; change them together. `src/services/mas/requirements-cpu.txt` is only `-r requirements.txt`, kept for scripts that name it.
 
 #### The CPU model server
 
@@ -115,7 +110,7 @@ The overlay also adds `llm`: one llama-server (`ghcr.io/ggml-org/llama.cpp:serve
 - **Model file.** `models/manifest.json` lists it: id, version, file, size, SHA-256, minimum RAM, profiles and mirrors. The installer downloads the chosen profile's default model into `models/` (or `--models-dir`, which later runs read back from `.env`) after the images are pulled (or built) and before the first start, and checks it again on every `--start` and `--restart`: it resumes a `.part` file with HTTP `Range`, retries with a growing pause, moves to the next mirror after 3 failures in a row (6 on the last mirror), verifies the SHA-256 and renames the file in one step. A bad hash deletes the file and stops with exit code 45. The installer writes `HORUS_MODELS_DIR` and `LLM_GGUF_FILE`, `LLM_GGUF_URL`, `LLM_GGUF_SHA256`, `LLM_GGUF_SIZE` to `.env`; compose mounts `HORUS_MODELS_DIR` (default `../../models`) read-only into `llm` at `/models`. Details and the download size are in `scripts/models/README.md`.
 - **Start order.** The one-shot service `llm-model` runs first (`src/infra/llm/fetch-model.sh`). It finds the file the installer verified and exits at once; without the installer it downloads the file into the same folder, resuming and checking the SHA-256. `llm` starts once it has exited successfully, and `mas` and `agent` wait for `llm` to be healthy (`GET /health`, 10 minute start window).
 - **Server flags.** `--ctx-size` and `--alias` come from `LLM_VLLM_MAX_MODEL_LEN` and `LLM_VLLM_MODEL`, so server and clients cannot disagree. `--cache-type-k`, `--cache-type-v`, `--flash-attn` and `--cache-ram` come from `LLM_SERVER_CACHE_TYPE_K`, `LLM_SERVER_CACHE_TYPE_V`, `LLM_SERVER_FLASH_ATTN` and `LLM_SERVER_CACHE_RAM_MIB`, whose compose defaults are the `cpu-standard` values (f16, f16, `auto`, 1024); `cpu-lean` writes others (see [Hardware decision](#hardware-decision)). One slot (`--parallel 1`; other requests wait in its queue), `--load-mode mmap`, `--metrics`.
-- **Resources.** `LLM_SERVER_THREADS` (default 4) is `--threads`; the installer writes the physical core count and gives MAS and the agent one torch thread each. `LLM_SERVER_MEM_LIMIT` (default `6g`) is the memory ceiling, and the swap ceiling follows it unless `LLM_SERVER_MEMSWAP_LIMIT` is set. On the CPU, MAS defaults to `3g` and the agent to `4g`.
+- **Resources.** `LLM_SERVER_THREADS` (default 4) is `--threads`; the installer writes the physical core count. It also writes `LLM_TORCH_INTRAOP_THREADS=1`, which MAS's MiniLM embedder (ONNX Runtime) takes as its thread count unless `MAS_EMBED_THREADS` is set, and `AGENT_TORCH_INTRAOP_THREADS=1`, which nothing reads in a CPU agent image because it has no torch. `LLM_SERVER_MEM_LIMIT` (default `6g`) is the memory ceiling, and the swap ceiling follows it unless `LLM_SERVER_MEMSWAP_LIMIT` is set. On the CPU, MAS defaults to `3g` and the agent to `4g`.
 - **Network.** The port is not published to the host. llama-server runs without an API key because only the containers on `horus-net` reach it.
 
 ```bash
@@ -418,7 +413,7 @@ Observability adds small per-request overhead (logging, metrics, tracing). To re
 
 - Ensure `OTEL_ENABLED=true` and `OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317` for the service.  
 - Check `docker logs tempo` and that the app container can resolve `tempo`.  
-- A chat message shows up under the `mas` service as `POST /tasks/new_task/`, with `route_task`, `publish horus.work.<type>`, the agent's `knowledge_store_fetch_for_rag` and the result post as child spans. Healthcheck probes, Prometheus scrapes and agent heartbeats are left out on purpose (`OTEL_PYTHON_EXCLUDED_URLS` in `docker-compose.yml`), and so are database or HTTP calls that MAS makes outside a request.
+- A chat message shows up under the `mas` service as one trace whose root is `POST /tasks/new_task/`. That span is short: the request returns `202 {task_id}` at once, and routing runs afterwards in a background job that stays in the same trace. Its spans are children of the request span that start after it has ended: `route_task` (the router: rules, embeddings, then the constrained LLM fallback), then `publish horus.work.<type>`. Under `route_task`, `route_task_llm` wraps only the legacy routing prompt, when the router still has no answer, and `decompose_task` is the planner of a complex task: the two are siblings, not nested. The agent's spans, `knowledge_store_fetch_for_rag` among them, and its result post to MAS continue the same trace, with `aggregate_results` under the result request when the last step of a plan is combined with the others. Healthcheck probes, Prometheus scrapes and agent heartbeats are left out on purpose (`OTEL_PYTHON_EXCLUDED_URLS` in `docker-compose.yml`), and so are database or HTTP calls that MAS makes outside a request.
 
 #### Connection refused from PgAdmin to the database
 
