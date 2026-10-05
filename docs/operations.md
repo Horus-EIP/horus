@@ -38,6 +38,8 @@ Continuous integration is defined in **`.github/workflows/ci.yml`** at the repos
 
 For exact steps and env overrides (e.g. `DB_HOST=localhost`), read the workflow file. Frontend and other services may add jobs later; the workflow file remains the source of truth.
 
+The **`cpu-images`** job builds the mas, agent and knowledge-store images through the CPU overlay (one runner per image). It fails if `pip list` in an image shows any `nvidia-*`, `cuda-*` or `triton` package, or a torch other than the pinned `+cpu` build (`scripts/ci/check-cpu-image.py`). It writes each image's size and build time to the job summary. The **`cpu-build-wiring`** job runs first: `tests/ci/test_cpu_torch_build.py` checks the torch pin, the Dockerfiles, the overlay and the `cpu-images` job without building anything.
+
 ---
 
 ### Local deployment with Docker
@@ -51,6 +53,14 @@ docker compose up --build -d
 ```
 
 Services are defined in **`src/infra/docker-compose.yml`**. See [Configuration](../getting-started/configuration.md) and [Monitoring](monitoring.md) for URLs and observability.
+
+On a machine without an NVIDIA GPU, add the CPU overlay. The installer does this for the `cpu-*` profiles by writing `COMPOSE_FILE` to `.env`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.cpu.yml up --build -d
+```
+
+The overlay sets the build argument `TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu` for mas, agent and knowledge_store. Each of these Dockerfiles installs the `torch==X` line of its `requirements.txt` from that index first, then the rest of the requirements, which keep the torch already installed. Without the overlay, the argument defaults to `https://pypi.org/simple`, which is the CUDA build the GPU profiles use. All requirement files pin the same torch version; change them together.
 
 ---
 

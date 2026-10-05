@@ -79,6 +79,77 @@ jobs:
       - name: Check every version number against VERSION
         run: python scripts/ci/check-versions.py
 
+  cpu-build-wiring:
+    name: CPU build wiring
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Check the torch pin, the Dockerfiles, the CPU overlay and the image job
+        run: python -m unittest discover -s tests/ci -p "test_cpu_torch_build.py" -v
+
+  cpu-images:
+    name: CPU image · ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: cpu-build-wiring
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: mas
+            context: mas
+          - service: agent
+            context: agent
+          - service: knowledge_store
+            context: knowledge-store
+    env:
+      IMAGE: horus-ci-${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Free disk space for the image build
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Provide the compose configuration
+        run: cp src/infra/.env.example src/infra/.env
+
+      - name: Build the image through the CPU overlay
+        working-directory: src/infra
+        run: |
+          start=$(date +%s)
+          docker compose --progress plain -p horus-ci \
+            -f docker-compose.yml -f docker-compose.cpu.yml \
+            build ${{ matrix.service }}
+          echo "BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+
+      - name: List the installed packages
+        run: docker run --rm --entrypoint python "$IMAGE" -m pip list --format=freeze > packages.txt
+
+      - name: Fail on CUDA packages or a torch other than the pinned CPU build
+        run: |
+          python scripts/ci/check-cpu-image.py packages.txt \
+            --requirements src/services/${{ matrix.context }}/requirements.txt
+
+      - name: Report the image size and build time
+        if: always()
+        run: |
+          if size=$(docker image inspect --format '{{.Size}}' "$IMAGE" 2>/dev/null); then
+            echo "$IMAGE: $(( size / 1000000 )) MB, built in ${BUILD_SECONDS} s" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
   # ----------------------------------------------------------------------- #
   # MAS unit tests with coverage
   # ----------------------------------------------------------------------- #

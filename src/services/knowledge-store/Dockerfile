@@ -15,6 +15,12 @@ ENV PATH="/venv/bin:$PATH"
 RUN pip install --upgrade pip setuptools wheel
 
 COPY requirements.txt .
+
+ARG TORCH_INDEX_URL=https://pypi.org/simple
+RUN --mount=type=cache,target=/root/.cache/pip \
+    torch_pin="$(grep -oE '^torch==[0-9.]+' requirements.txt)" \
+    && pip install --timeout=120 --retries=10 --index-url "$TORCH_INDEX_URL" "$torch_pin"
+
 # Cache pip downloads across builds (BuildKit) + patient timeouts/retries so large
 # ML wheels don't abort on a slow/flaky network read timeout, and a completed
 # download is reused on the next rebuild instead of re-fetched.

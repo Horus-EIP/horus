@@ -1,11 +1,20 @@
 services:
   mas:
+    build:
+      args:
+        TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
     gpus: !reset null
 
   agent:
+    build:
+      args:
+        TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
     gpus: !reset null
 
   knowledge_store:
+    build:
+      args:
+        TORCH_INDEX_URL: https://download.pytorch.org/whl/cpu
     gpus: !reset null
 
   vllm:

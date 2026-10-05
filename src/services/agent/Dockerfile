@@ -4,6 +4,11 @@ WORKDIR /app
 
 COPY requirements.txt /app/requirements.txt
 
+ARG TORCH_INDEX_URL=https://pypi.org/simple
+RUN --mount=type=cache,target=/root/.cache/pip \
+    torch_pin="$(grep -oE '^torch==[0-9.]+' /app/requirements.txt)" \
+    && pip install --timeout=120 --retries=10 --index-url "$TORCH_INDEX_URL" "$torch_pin"
+
 # Cache pip downloads across builds (BuildKit cache mount — kept out of the final
 # image) and be patient on slow/flaky networks so a large wheel (torch ~500MB)
 # doesn't abort on pip's default 15s read timeout, and a completed download is

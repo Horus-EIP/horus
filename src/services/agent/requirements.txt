@@ -14,7 +14,7 @@ opentelemetry-distro
 opentelemetry-exporter-otlp
 langchain
 langchain-core
-torch
+torch==2.14.1
 transformers>=4.44.2,<5
 accelerate>=0.33.0
 bitsandbytes

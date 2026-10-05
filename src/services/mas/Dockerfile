@@ -16,6 +16,11 @@ RUN apt-get update -o Acquire::Retries=5 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
+ARG TORCH_INDEX_URL=https://pypi.org/simple
+RUN --mount=type=cache,target=/root/.cache/pip \
+    torch_pin="$(grep -oE '^torch==[0-9.]+' requirements.txt)" \
+    && pip install --timeout=120 --retries=10 --index-url "$TORCH_INDEX_URL" "$torch_pin"
+
 # Cache pip downloads across builds (BuildKit) + patient timeouts/retries so large
 # ML wheels (torch ~500MB) don't abort on a slow/flaky network read timeout, and a
 # completed download is reused on the next rebuild instead of re-fetched.
