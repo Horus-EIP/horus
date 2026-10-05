@@ -29,8 +29,10 @@ try:
 except Exception:
     pass
 
+CHROMA_DATA_DIR = Path(__file__).parent.parent.parent / "chroma_data"
+
 chroma_client = chromadb.PersistentClient(
-    path=str(Path(__file__).parent.parent.parent / "chroma_data"),
+    path=str(CHROMA_DATA_DIR),
     settings=Settings(anonymized_telemetry=False)
 )
 

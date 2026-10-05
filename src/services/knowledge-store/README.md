@@ -33,7 +33,7 @@ The service is a **FastAPI** application (port 8080) backed by:
 | ---------- | --------------------- | ------------------------------------------------- |
 | `POST`   | `/`                 | Add a text document (with auto-analysis)          |
 | `GET`    | `/`                 | Query the knowledge store by text similarity      |
-| `DELETE` | `/{id}`             | Delete a document by ID                           |
+| `DELETE` | `/{id}`             | Delete a document, its stored file and its corpus entries |
 | `POST`   | `/upload`           | Upload a file, extract text, analyze, and chunk   |
 | `POST`   | `/smart-search`     | Search with metadata filters (category, entities) |
 | `GET`    | `/search-by-entity` | Search by entity type and value                   |
@@ -49,6 +49,10 @@ The service is a **FastAPI** application (port 8080) backed by:
 | `POST`   | `/file/{type}`     | Upload a single file by type with text conversion |
 
 Interactive API documentation is available at `/docs` when the server is running.
+
+### Deleting documents
+
+`DELETE /{id}` (the trash icon in the UI) removes the Chroma entries with that ID or `doc_id`, the other entries indexed from the same corpus path, and the uploaded file in `documents/` once no entry uses it. A deleted corpus file is written to `chroma_data/deleted_sources.json`, so `POST /corpus/scan` skips it (`skipped_deleted`) even after an edit. `POST /corpus/scan?include_deleted=true` indexes such files again and takes them off the list. `DELETE /file/{filename}` only removes the file on disk.
 
 ## Directory Structure
 

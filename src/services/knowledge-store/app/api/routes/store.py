@@ -129,11 +129,24 @@ async def query_knowledge_store(
 @router.delete(
     "/{id}",
     summary="Delete a document",
-    description="Remove a document from the knowledge store by its ID.",
+    description=(
+        "Remove a document from the knowledge store by its ID (or by the doc_id its "
+        "entries carry), together with its uploaded file in documents/ and every other "
+        "entry indexed from the same corpus path. A deleted corpus file goes on the "
+        "deleted list, so a later POST /corpus/scan does not add it back."
+    ),
     responses={
         200: {
             "description": "Document deleted successfully",
-            "content": {"application/json": {"example": {"status": "Document deleted"}}},
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "Document deleted",
+                        "deleted_ids": ["123456"],
+                        "removed_files": ["pdf/report.pdf"],
+                    }
+                }
+            },
         },
         404: {"description": "Document not found or deletion failed"},
     },
@@ -142,13 +155,13 @@ async def delete_document_store(id: str):
     """Delete a document from the knowledge store by ID."""
     logger.info(f"Request to delete document from store: {id}")
     try:
-        await delete_document(id)
-        logger.info(f"Document {id} deleted successfully.")
+        outcome = await delete_document(id)
+        logger.info(f"Document {id} deleted successfully: {outcome}")
     except Exception as e:
         logger.error(f"Failed to delete document {id}: {str(e)}")
         raise HTTPException(status_code=404, detail=str(e))
 
-    return {"status": "Document deleted"}
+    return {**outcome, "status": "Document deleted"}
 
 
 @router.post("/smart-search")

@@ -1,9 +1,22 @@
 import datetime
 import json
+import os
+from collections.abc import Iterable, Mapping
+from pathlib import Path
 from typing import Any
 
 from app.chroma_db.models import DocumentModel, SmartSearchRequest
+from app.chroma_db.services.deleted_sources import remember_deleted
 from app.chroma_db.setup import get_embedding, knowledge_collection
+from app.core.logging import get_logger
+
+logger = get_logger("FileService")
+
+DOCUMENTS_ROOT = Path("documents")
+
+
+class DocumentNotFoundError(LookupError):
+    pass
 
 
 #: Chroma only accepts scalars as metadata values; a dict or a list raises on add().
@@ -109,18 +122,81 @@ async def query_with_filters(query: str, filters: dict, n_results: int) -> dict:
     )
 
 
+def _entries(**selector: Any) -> dict[str, dict[str, Any]]:
+    found = knowledge_collection.get(include=["metadatas"], **selector) or {}
+    ids = found.get("ids") or []
+    metadatas = found.get("metadatas") or []
+    return {
+        str(entry_id): dict(metadata or {})
+        for entry_id, metadata in zip(ids, metadatas, strict=False)
+    }
+
+
+def _entries_of_document(doc_id: str) -> dict[str, dict[str, Any]]:
+    entries = _entries(ids=[doc_id])
+    entries.update(_entries(where={"doc_id": doc_id}))
+    source_paths = sorted({
+        metadata["source_path"] for metadata in entries.values() if metadata.get("source_path")
+    })
+    if source_paths:
+        entries.update(_entries(where={"source_path": {"$in": source_paths}}))
+    return entries
+
+
+def _stored_file(metadata: Mapping[str, Any]) -> Path | None:
+    if metadata.get("source_path"):
+        return None
+    recorded = metadata.get("stored_path")
+    if recorded:
+        candidate = Path(str(recorded))
+    else:
+        name = os.path.basename(str(metadata.get("title") or ""))
+        if not name:
+            return None
+        candidate = DOCUMENTS_ROOT / name.split(".")[-1].lower() / name
+    root = DOCUMENTS_ROOT.resolve()
+    resolved = candidate.resolve()
+    if resolved == root or not resolved.is_relative_to(root):
+        return None
+    return resolved
+
+
+def _still_used(path: Path, title: str) -> bool:
+    return any(
+        _stored_file(metadata) == path
+        for metadata in _entries(where={"title": title}).values()
+    )
+
+
+def _remove_unused_files(metadatas: Iterable[Mapping[str, Any]]) -> list[str]:
+    candidates: dict[Path, str] = {}
+    for metadata in metadatas:
+        path = _stored_file(metadata)
+        if path is not None:
+            candidates.setdefault(path, str(metadata.get("title") or ""))
+
+    removed: list[str] = []
+    for path, title in candidates.items():
+        if not path.is_file() or _still_used(path, title):
+            continue
+        try:
+            path.unlink()
+        except OSError as exc:
+            logger.warning("could not remove stored file %s: %s", path, exc)
+            continue
+        removed.append(path.relative_to(DOCUMENTS_ROOT.resolve()).as_posix())
+    return removed
+
+
 async def delete_document(id: str) -> dict:
-    """
-    Delete a document from the knowledge store by its ID.
+    entries = _entries_of_document(id)
+    if not entries:
+        raise DocumentNotFoundError(f"No document with id {id!r} in the knowledge store")
 
-    Args:
-        id: The ID of the document to delete.
-
-    Returns:
-        dict with status message.
-    """
-    knowledge_collection.delete(ids=[id])
-    return {"status": "document deleted"}
+    remember_deleted({"doc_id": entry_id, **metadata} for entry_id, metadata in entries.items())
+    deleted_ids = list(entries)
+    knowledge_collection.delete(ids=deleted_ids)
+    return {"deleted_ids": deleted_ids, "removed_files": _remove_unused_files(entries.values())}
 
 
 def build_where_clause(request: SmartSearchRequest) -> dict | None:

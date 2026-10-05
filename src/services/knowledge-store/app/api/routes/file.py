@@ -188,6 +188,7 @@ async def upload_file(files: list[UploadFile] = File(...)):
                     size=os.path.getsize(doc_path),
                 ),
                 auto_analysis=auto_analysis,
+                extra_metadata={"stored_path": doc_path},
             )
 
             logger.info(f"File {file.filename} stored successfully with ID {doc_id}")
@@ -370,6 +371,7 @@ async def upload_file_to_text(type: str, doc_id: str, file: UploadFile = File(..
             size=os.path.getsize(path) if os.path.exists(path) else 0,
         ),
         auto_analysis=auto_analysis,
+        extra_metadata={"stored_path": path},
     )
 
     return {

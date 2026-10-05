@@ -63,6 +63,68 @@ class TestStoreDelete:
         r = client.delete("/ghost-id")
         assert r.status_code == 404
 
+    def test_deleted_document_is_absent_from_later_queries(
+        self, client, fake_collection, deleted_sources_file
+    ):
+        corpus_meta = {"title": "q4.md", "source_path": "reports/q4.md", "source": "corpus"}
+        fake_collection.add(
+            ids=["corpus-new", "corpus-old", "other"],
+            documents=["Q4 revenue was 4.2M", "Q4 revenue was 4.0M", "Unrelated notes"],
+            metadatas=[
+                {**corpus_meta, "content_sha256": "new"},
+                {**corpus_meta, "content_sha256": "old"},
+                {"title": "notes.txt"},
+            ],
+        )
+
+        assert client.delete("/corpus-new").status_code == 200
+
+        found = client.get("/", params={"query": "Q4 revenue", "n_results": 10}).json()
+        assert found["ids"] == [["other"]]
+
+    def test_delete_removes_every_entry_carrying_the_doc_id(self, client, fake_collection):
+        fake_collection.add(
+            ids=["doc-a", "doc-a:1", "doc-b"],
+            documents=["part one", "part two", "other"],
+            metadatas=[
+                {"title": "a.txt", "doc_id": "doc-a"},
+                {"title": "a.txt", "doc_id": "doc-a"},
+                {"title": "b.txt", "doc_id": "doc-b"},
+            ],
+        )
+
+        r = client.delete("/doc-a")
+
+        assert r.status_code == 200
+        assert r.json()["deleted_ids"] == ["doc-a", "doc-a:1"]
+        assert sorted(fake_collection.rows) == ["doc-b"]
+
+    def test_delete_removes_the_uploaded_file_from_documents(
+        self, client, fake_collection, documents_root
+    ):
+        stored = documents_root / "txt" / "a.txt"
+        stored.parent.mkdir()
+        stored.write_text("part one", encoding="utf-8")
+        fake_collection.add(
+            ids=["doc-a"],
+            documents=["part one"],
+            metadatas=[{"title": "a.txt", "stored_path": "documents/txt/a.txt"}],
+        )
+
+        r = client.delete("/doc-a")
+
+        assert r.status_code == 200
+        assert r.json()["removed_files"] == ["txt/a.txt"]
+        assert not stored.exists()
+
+    def test_delete_of_an_id_that_is_not_stored_returns_404(self, client, fake_collection):
+        fake_collection.add(ids=["doc-a"], documents=["a"], metadatas=[{"title": "a.txt"}])
+
+        r = client.delete("/ghost-id")
+
+        assert r.status_code == 404
+        assert sorted(fake_collection.rows) == ["doc-a"]
+
 
 class TestSmartSearch:
     @patch("app.api.routes.store.query_with_filters", new_callable=AsyncMock,

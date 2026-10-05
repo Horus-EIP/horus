@@ -7,8 +7,10 @@ the arguments the service forwards to the collection.
 
 from __future__ import annotations
 
+import pytest
+
 from app.chroma_db.models import DocumentModel
-from app.chroma_db.services import file_service
+from app.chroma_db.services import deleted_sources, file_service
 
 
 class TestStoreFile:
@@ -103,11 +105,104 @@ class TestQueriesAndDelete:
         assert out["_kw"]["where"] == where
         assert out["_kw"]["n_results"] == 2
 
-    async def test_delete_document(self, monkeypatch):
-        calls: dict = {}
-        monkeypatch.setattr(
-            file_service.knowledge_collection, "delete", lambda **kw: calls.update(kw)
-        )
+    async def test_delete_document(self, fake_collection):
+        fake_collection.add(ids=["doc-1"], documents=["d"], metadatas=[{"title": "t"}])
+
         out = await file_service.delete_document("doc-1")
-        assert out == {"status": "document deleted"}
-        assert calls["ids"] == ["doc-1"]
+
+        assert out == {"deleted_ids": ["doc-1"], "removed_files": []}
+        assert fake_collection.rows == {}
+
+
+def _upload(collection, doc_id: str, title: str, **metadata) -> None:
+    collection.add(ids=[doc_id], documents=["body"], metadatas=[{"title": title, **metadata}])
+
+
+def _stored_file(documents_root, relative: str):
+    path = documents_root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("body", encoding="utf-8")
+    return path
+
+
+class TestDeleteDocument:
+    async def test_an_unknown_id_raises_not_found(self, fake_collection):
+        _upload(fake_collection, "doc-a", "a.txt")
+
+        with pytest.raises(file_service.DocumentNotFoundError):
+            await file_service.delete_document("ghost")
+
+        assert list(fake_collection.rows) == ["doc-a"]
+
+    async def test_a_file_another_entry_still_uses_is_kept_until_the_last_one_goes(
+        self, fake_collection, documents_root
+    ):
+        stored = _stored_file(documents_root, "txt/a.txt")
+        _upload(fake_collection, "doc-1", "a.txt", stored_path="documents/txt/a.txt")
+        _upload(fake_collection, "doc-2", "a.txt", stored_path="documents/txt/a.txt")
+
+        first = await file_service.delete_document("doc-1")
+        assert first["removed_files"] == []
+        assert stored.exists()
+
+        second = await file_service.delete_document("doc-2")
+        assert second["removed_files"] == ["txt/a.txt"]
+        assert not stored.exists()
+
+    async def test_an_upload_from_before_stored_path_is_found_by_its_title(
+        self, fake_collection, documents_root
+    ):
+        stored = _stored_file(documents_root, "pdf/Report.PDF")
+        _upload(fake_collection, "doc-1", "Report.PDF")
+
+        out = await file_service.delete_document("doc-1")
+
+        assert out["removed_files"] == ["pdf/Report.PDF"]
+        assert not stored.exists()
+
+    async def test_a_stored_path_outside_documents_is_never_removed(
+        self, fake_collection, documents_root, tmp_path
+    ):
+        outside = tmp_path / "outside.txt"
+        outside.write_text("keep me", encoding="utf-8")
+        _upload(fake_collection, "doc-1", "outside.txt", stored_path="documents/../outside.txt")
+
+        out = await file_service.delete_document("doc-1")
+
+        assert out["removed_files"] == []
+        assert outside.exists()
+
+    async def test_a_corpus_entry_leaves_the_documents_folder_alone(
+        self, fake_collection, documents_root, deleted_sources_file
+    ):
+        unrelated = _stored_file(documents_root, "md/q4.md")
+        _upload(
+            fake_collection, "corpus-aaa", "q4.md",
+            source_path="reports/q4.md", content_sha256="aaa", source="corpus",
+        )
+
+        out = await file_service.delete_document("corpus-aaa")
+
+        assert out == {"deleted_ids": ["corpus-aaa"], "removed_files": []}
+        assert unrelated.exists()
+
+    async def test_a_corpus_entry_is_remembered_as_deleted(
+        self, fake_collection, deleted_sources_file
+    ):
+        _upload(
+            fake_collection, "corpus-aaa", "q4.md",
+            source_path="reports/q4.md", content_sha256="aaa", source="corpus",
+        )
+
+        await file_service.delete_document("corpus-aaa")
+
+        assert deleted_sources.was_deleted("reports/q4.md", "aaa")
+
+    async def test_an_upload_is_not_put_on_the_deleted_list(
+        self, fake_collection, documents_root, deleted_sources_file
+    ):
+        _upload(fake_collection, "doc-1", "a.txt", stored_path="documents/txt/a.txt")
+
+        await file_service.delete_document("doc-1")
+
+        assert not deleted_sources_file.exists()

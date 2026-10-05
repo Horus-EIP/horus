@@ -1433,7 +1433,13 @@ Query the knowledge store for relevant documents using semantic search with opti
 
 #### DELETE /{id}
 
-Remove a document from the knowledge store by its ID.
+Remove a document from the knowledge store by its ID. This is the call behind the trash icon on the Knowledge Store page. One call removes:
+
+- every entry whose ID is `id`, or whose `doc_id` metadata is `id`;
+- every other entry indexed from the same corpus file (same `source_path`), such as an older version left by a re-scan;
+- the uploaded file in `documents/`, unless another entry still points at the same file.
+
+A deleted corpus file goes on the deleted list (`chroma_data/deleted_sources.json`, next to the Chroma index). A later `POST /corpus/scan` skips it with the decision `skipped_deleted`, even after the file is edited, and also skips an identical copy at another path. To index it again, run the scan with `include_deleted=true`, or upload the file from the UI.
 
 **Auth:** None (internal service)
 
@@ -1447,9 +1453,13 @@ Remove a document from the knowledge store by its ID.
 
 ```json
 {
-  "status": "Document deleted"
+  "status": "Document deleted",
+  "deleted_ids": ["123456"],
+  "removed_files": ["pdf/report.pdf"]
 }
 ```
+
+`removed_files` is relative to `documents/`.
 
 **Errors:**
 

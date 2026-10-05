@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from app.api.routes.file import _content_analyzer, extract_text
 from app.chroma_db import DocumentModel, knowledge_collection, store_file
+from app.chroma_db.services.deleted_sources import forget_deleted, was_deleted
 from app.core.logging import get_logger
 from app.services.content_analyzer import ContentAnalyzer
 
@@ -238,11 +239,12 @@ _scan_slot = asyncio.Semaphore(1)
 _job: dict[str, Any] | None = None
 _scan_task: asyncio.Task | None = None
 
-def _new_job(dry_run: bool) -> dict[str, Any]:
+def _new_job(dry_run: bool, include_deleted: bool = False) -> dict[str, Any]:
     return {
         "job_id": uuid.uuid4().hex,
         "state": "running",
         "dry_run": dry_run,
+        "include_deleted": include_deleted,
         "root": str(CORPUS_ROOT),
         "started_at": datetime.now(UTC).isoformat(),
         "finished_at": None,
@@ -253,6 +255,7 @@ def _new_job(dry_run: bool) -> dict[str, Any]:
             "ingested": 0,
             "would_ingest": 0,
             "skipped_unchanged": 0,
+            "skipped_deleted": 0,
             "rejected": 0,
             "failed": 0,
             "replaced_stale": 0,
@@ -293,6 +296,14 @@ async def _ingest_one(job: dict[str, Any], path: Path, rel: str, pinned: Candida
             })
             return
 
+        if not job["include_deleted"] and await asyncio.to_thread(was_deleted, rel, digest):
+            job["totals"]["skipped_deleted"] += 1
+            _record(job, {
+                "path": rel, "decision": "skipped_deleted",
+                "doc_id": doc_id, "bytes": size,
+            })
+            return
+
         if job["dry_run"]:
             job["totals"]["would_ingest"] += 1
             _record(job, {
@@ -319,6 +330,8 @@ async def _ingest_one(job: dict[str, Any], path: Path, rel: str, pinned: Candida
             analysis,
             {"source_path": rel, "content_sha256": digest, "source": "corpus"},
         )
+        if job["include_deleted"]:
+            await asyncio.to_thread(forget_deleted, rel, digest)
 
         job["totals"]["ingested"] += 1
         _record(job, {
@@ -377,7 +390,9 @@ async def _run_scan(job: dict[str, Any]) -> None:
         "Walk the read-only folder mounted at CORPUS_DIR (default /app/corpus) and "
         "index every supported file. Returns immediately with a job id; poll "
         "GET /corpus/status for progress. Files already indexed with identical "
-        "content are skipped, so running this twice is a no-op. "
+        "content are skipped, so running this twice is a no-op. Files deleted from "
+        "the knowledge store are skipped too (decision skipped_deleted), even after "
+        "an edit, unless include_deleted=true. "
         "Pass dry_run=true to get the candidate list and per-file decisions "
         "without embedding anything. Requires the X-Corpus-Token header."
     ),
@@ -386,7 +401,10 @@ async def _run_scan(job: dict[str, Any]) -> None:
             "description": "Scan accepted and running in the background",
             "content": {
                 "application/json": {
-                    "example": {"job_id": "9f2c...", "state": "running", "dry_run": False}
+                    "example": {
+                        "job_id": "9f2c...", "state": "running",
+                        "dry_run": False, "include_deleted": False,
+                    }
                 }
             },
         },
@@ -400,6 +418,13 @@ async def scan_corpus(
     dry_run: bool = Query(
         False,
         description="Report what would happen without embedding or storing anything.",
+    ),
+    include_deleted: bool = Query(
+        False,
+        description=(
+            "Also index files that were deleted from the knowledge store, and take "
+            "the ones it indexes off the deleted list."
+        ),
     ),
 ):
     global _job, _scan_task
@@ -422,13 +447,13 @@ async def scan_corpus(
         )
     await _scan_slot.acquire()
 
-    _job = _new_job(dry_run)
-    logger.info("corpus scan %s starting (dry_run=%s) on %s",
-                _job["job_id"], dry_run, CORPUS_ROOT)
+    _job = _new_job(dry_run, include_deleted)
+    logger.info("corpus scan %s starting (dry_run=%s, include_deleted=%s) on %s",
+                _job["job_id"], dry_run, include_deleted, CORPUS_ROOT)
     _scan_task = asyncio.create_task(_run_scan(_job))
 
     return {"job_id": _job["job_id"], "state": "running", "dry_run": dry_run,
-            "root": str(CORPUS_ROOT)}
+            "include_deleted": include_deleted, "root": str(CORPUS_ROOT)}
 
 @router.get(
     "/status",
@@ -449,6 +474,7 @@ async def scan_corpus(
                         "totals": {
                             "files_seen": 12, "eligible": 5, "ingested": 5,
                             "would_ingest": 0, "skipped_unchanged": 0,
+                            "skipped_deleted": 0,
                             "rejected": 7, "failed": 0, "replaced_stale": 0,
                         },
                         "files": [

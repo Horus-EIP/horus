@@ -104,6 +104,18 @@ class TestUpload:
         assert r.status_code == 200
         assert "error" in r.json()[0]
 
+    def test_upload_records_where_the_file_is_stored(self, client, monkeypatch):
+        monkeypatch.setattr(file_mod, "save_file", AsyncMock(return_value="documents/pdf/x.pdf"))
+        monkeypatch.setattr(file_mod, "pdf_to_text", AsyncMock(return_value="text"))
+        monkeypatch.setattr(file_mod._content_analyzer, "analyze", MagicMock(return_value={}))
+        store = AsyncMock()
+        monkeypatch.setattr(file_mod, "store_file", store)
+        monkeypatch.setattr(file_mod.os.path, "getsize", lambda p: 123)
+
+        client.post("/file", files=[("files", ("x.pdf", b"%PDF", "application/pdf"))])
+
+        assert store.await_args.kwargs["extra_metadata"] == {"stored_path": "documents/pdf/x.pdf"}
+
 
 class TestDelete:
     def test_success(self, client, monkeypatch):
@@ -132,6 +144,21 @@ class TestUploadToText:
                         files={"file": ("x.pdf", b"%PDF", "application/pdf")})
         assert r.status_code == 200
         assert r.json()["text"] == "extracted"
+
+    def test_upload_records_where_the_file_is_stored(self, client, monkeypatch):
+        monkeypatch.setattr(file_mod, "save_file", AsyncMock(return_value="documents/image/x.pdf"))
+        monkeypatch.setattr(file_mod, "image_pdf_to_text", AsyncMock(return_value="scanned"))
+        monkeypatch.setattr(file_mod._content_analyzer, "analyze", MagicMock(return_value={}))
+        store = AsyncMock()
+        monkeypatch.setattr(file_mod, "store_file", store)
+        monkeypatch.setattr(file_mod.os.path, "exists", lambda p: False)
+
+        client.post("/file/image", params={"doc_id": "d1"},
+                    files={"file": ("x.pdf", b"%PDF", "application/pdf")})
+
+        assert store.await_args.kwargs["extra_metadata"] == {
+            "stored_path": "documents/image/x.pdf"
+        }
 
     def test_invalid_type_returns_400(self, client, monkeypatch):
         monkeypatch.setattr(file_mod, "save_file", AsyncMock(return_value="/tmp/x.bin"))

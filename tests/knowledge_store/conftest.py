@@ -88,3 +88,94 @@ async def async_client():
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
+
+
+def _metadata_matches(metadata: dict, where: dict | None) -> bool:
+    if not where:
+        return True
+    for key, condition in where.items():
+        if key == "$and":
+            if not all(_metadata_matches(metadata, part) for part in condition):
+                return False
+            continue
+        if key == "$or":
+            if not any(_metadata_matches(metadata, part) for part in condition):
+                return False
+            continue
+        operator, expected = (
+            next(iter(condition.items())) if isinstance(condition, dict) else ("$eq", condition)
+        )
+        value = metadata.get(key)
+        if operator == "$eq" and value != expected:
+            return False
+        if operator == "$ne" and value == expected:
+            return False
+        if operator == "$in" and value not in expected:
+            return False
+    return True
+
+
+class FakeChromaCollection:
+    def __init__(self):
+        self.rows: dict[str, tuple[str, dict]] = {}
+
+    def add(self, ids, documents, metadatas, embeddings=None):
+        for entry_id, document, metadata in zip(ids, documents, metadatas, strict=True):
+            self.rows[entry_id] = (document, dict(metadata))
+
+    def _select(self, ids=None, where=None) -> list[str]:
+        return [
+            entry_id for entry_id, (_document, metadata) in self.rows.items()
+            if (ids is None or entry_id in ids) and _metadata_matches(metadata, where)
+        ]
+
+    def get(self, ids=None, where=None, include=None):
+        selected = self._select(ids, where)
+        return {
+            "ids": selected,
+            "documents": [self.rows[i][0] for i in selected],
+            "metadatas": [dict(self.rows[i][1]) for i in selected],
+        }
+
+    def query(self, query_embeddings, n_results, include=None, where=None):
+        selected = self._select(where=where)[:n_results]
+        return {
+            "ids": [selected],
+            "documents": [[self.rows[i][0] for i in selected]],
+            "metadatas": [[dict(self.rows[i][1]) for i in selected]],
+            "distances": [[0.0 for _ in selected]],
+        }
+
+    def delete(self, ids):
+        if not ids:
+            raise ValueError("Expected IDs to be a non-empty list, got 0 IDs in delete.")
+        for entry_id in ids:
+            self.rows.pop(entry_id, None)
+
+
+@pytest.fixture
+def fake_collection(monkeypatch, tmp_path):
+    from app.api.routes import corpus, file, store  # noqa: PLC0415
+    from app.chroma_db.services import file_service  # noqa: PLC0415
+
+    collection = FakeChromaCollection()
+    for module in (file_service, store, file, corpus):
+        monkeypatch.setattr(module, "knowledge_collection", collection)
+    monkeypatch.chdir(tmp_path)
+    return collection
+
+
+@pytest.fixture
+def documents_root(fake_collection, tmp_path):
+    root = tmp_path / "documents"
+    root.mkdir()
+    return root
+
+
+@pytest.fixture
+def deleted_sources_file(monkeypatch, tmp_path):
+    from app.chroma_db.services import deleted_sources  # noqa: PLC0415
+
+    path = tmp_path / "chroma_data" / "deleted_sources.json"
+    monkeypatch.setattr(deleted_sources, "DELETED_SOURCES_FILE", path)
+    return path
