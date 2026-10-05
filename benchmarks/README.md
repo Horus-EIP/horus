@@ -7,13 +7,15 @@ Measured results for the reference machines in the dev plan (§10), committed as
 | `cpu16` | 16 GB RAM, CPU only, AVX2. The tools record the CPU model, RAM size, type and speed, the disk type and the memory Docker can use. |
 | `gpu8` | NVIDIA GPU with 8 GB of VRAM. |
 
-Three kinds of file live here, told apart by their `kind`:
+Five kinds of file live here, told apart by their `kind`:
 
 | `kind` | Written by | What it holds |
 |---|---|---|
 | `horus-llama-bench` | `scripts/benchmarks/run-llama-bench.py` | The plan's `llama-bench` run, with the llama.cpp build, the SHA-256 of every GGUF and the machine. The rows llama-bench printed are kept unchanged under `results`. |
 | `horus-eval` | `scripts/eval/run-eval.py` | The 100-question test set of `tests/eval/testset.yaml` run against a live stack. |
 | `horus-recorded` | by hand, once | A result measured before these tools existed, copied with its sources. The only one is `cpu-transformers-2026-09-01.json`, the CPU baseline B-91 compares against. |
+| `horus-model-candidates` | `scripts/benchmarks/run-model-candidates.py` | The B-102 comparison of the model candidates with the Qwen3-4B baseline, one entry per GGUF, pointing at the three reports below. See [Model candidates](#model-candidates-b-102). |
+| `horus-contract-probe` | `scripts/benchmarks/run-model-candidates.py` | The raw replies of one model to the B-98 answer request, each checked against the JSON schema it was sent with. |
 
 `scripts/benchmarks/compare-benchmarks.py` reads all three, and also a bare llama-bench JSON array, and prints the §10 metrics table.
 
@@ -283,6 +285,91 @@ One entry per question, in test set order.
 | `source_basis` | Count per `source_basis` over the in-corpus and direct questions (`not_observable` for `null`). |
 | `manual_review` | `reviewed` (both reviewers gave a verdict), `pending`, `agreed_correct` (both said correct), `disagreements` (ids to discuss), `answer_correct_pct` = `agreed_correct / reviewed`. |
 | `by_category` | The same rates, `source_rank` and `total_s` per category. |
+
+## Model candidates (B-102)
+
+Compares the five models of the dev plan with the Qwen3-4B-Instruct-2507 baseline, on the same test set, for B-98 JSON reliability, answers, speed and memory. On the CPU profiles one llama-server answers MAS and every agent, so each model is tried as that one server; a model per role only makes sense on the GPU profiles and is not covered here.
+
+The facts come from `scripts/benchmarks/model-candidates.yaml` (versioned; looked up on Hugging Face and in the llama.cpp history on 2026-10-05). Every GGUF is pinned to a repository revision, and its size and SHA-256 are the ones Hugging Face serves for that revision. The defaults are both baseline quantisations and one file per candidate from its own publisher:
+
+| Model | Repository | Licence (as the card states it) | Default GGUF | Size | Architecture, in llama.cpp since | Thinks by default |
+|---|---|---|---|---:|---|---|
+| Qwen3-4B-Instruct-2507 (baseline) | `Qwen/Qwen3-4B-Instruct-2507` | Apache-2.0 | `unsloth/Qwen3-4B-Instruct-2507-GGUF` Q4_K_M and Q5_K_M | 2.33 and 2.69 GiB | `qwen3`, served by the stack on b11382 | no |
+| Spark-X2.5-4B | `XHToken/Spark-X2.5-4B` | Apache-2.0 | `XHToken/Spark-X2.5-4B-GGUF` Q4_K_M | 2.42 GiB | `spark2_5`, b10828 (#27868) | yes |
+| NeoHorse-1-4B | `TokenRhythm/NeoHorse-1-4B` | Apache-2.0 | `TokenRhythm/NeoHorse-1-4B-GGUF` Q4_K_M | 2.52 GiB | `qwen35`, b7973 (#19435) | yes |
+| Agents-A1-4B | `InternScience/Agents-A1-4B` | Apache-2.0, card metadata only | `InternScience/Agents-A1-4B-Q4_K_M-GGUF` Q4_K_M | 2.52 GiB | `qwen35`, b7973 (#19435) | yes |
+| Ling-3.0-tiny | `inclusionAI/Ling-3.0-tiny` | MIT, card metadata only | `inclusionAI/Ling-3.0-tiny-GGUF` Q4_K_M | 4.49 GiB | `bailingmoe3`, b10460 (#26608) | yes |
+| gemma-4-E4B | `google/gemma-4-E4B-it` | Apache-2.0 | `google/gemma-4-E4B-it-qat-q4_0-gguf` Q4_0 (quantisation-aware) | 4.80 GiB | `gemma4`, b8637 (#21309) | no |
+
+All of them run on the pinned b11382. The catalog also lists optional files (`--all-quants`): the Q5_K_M of NeoHorse and Ling from their publishers, community Q5_K_M files of Spark and Agents-A1, ggml-org's Q4_0 and unsloth's Q4_K_M and Q5_K_M of Gemma. What to check before shipping any of them (`licence_flags` in the catalog, repeated in the summary):
+
+- **Agents-A1-4B**: the licence is only in the card metadata, the repository has no LICENSE file, and no base model is declared (its GGUF architecture is the Qwen3.5 family's).
+- **Ling-3.0-tiny**: MIT only in the card metadata, no LICENSE file. Its Q4_K_M is about twice the baseline and is mapped whole: watch the `llm` memory limit (6 GB by default).
+- **gemma-4-E4B**: the card links Google's licence page, which reproduces the Apache License 2.0, and the same documentation links a prohibited use policy; confirm it is not part of the terms. The plan's `gemma-4-E4B` is the pretrained base model; the instruction-tuned `-it` is the one that can answer.
+
+### Running it
+
+Needs Docker, the Python packages of the evaluation (`pip install httpx websockets pyyaml`) and, for the serving steps, the CPU stack up with the five `demo_assets/` files in the knowledge store. Run it in two passes so that llama-bench does not compete with the stack:
+
+```bash
+cd src/infra && docker compose stop && cd ../..
+python scripts/benchmarks/run-model-candidates.py --reference cpu16 --steps fetch,bench
+
+cd src/infra && docker compose start && cd ../..
+python scripts/benchmarks/run-model-candidates.py --resume benchmarks/model-candidates-<date>.json --steps probe,eval
+```
+
+| Step | What it does |
+|---|---|
+| `fetch` | Downloads each GGUF into `--models-dir` (default `models/`, where the stack reads its model) with the installer's B-95 downloader (`installer/model_manager.py`): resumable `.part` file, retries, SHA-256 check, then the `.sha256` marker the stack and `run-eval.py` read. When the installer cannot be imported it uses `src/infra/llm/fetch-model.sh` in the server image instead. |
+| `bench` | `run-llama-bench.py` for that one file with the catalog's matrix: pp512, pp2048 and tg128 at depth 0 and 4,096, an f16 KV cache, 4 and 8 threads, 5 repetitions. The KV cache comparison stays B-91's. |
+| `probe` | The B-98 request, sent straight to llama-server for the 94 questions that are not greetings or arithmetic. `scripts/eval/agent-contract-probe.py` is copied into the `agent` container and run with the agent's own code and settings: its knowledge-store retrieval, `SourceCatalog`, `answer_prompt`, `answer_response_format` and `_fit_vllm_prompt` build the request the agent sends (one call, temperature 0, `response_format` `json_schema`, not streamed). The raw reply is kept and checked on the host. One unscored warmup question goes first. It asks as the General-Assistant identity: the persona the agent puts before the system prompt of Finance-Analyst, Compliance-Officer and HR-Assistant is left out, and the `eval` step covers the routed identities. |
+| `eval` | `run-eval.py` with `--llm-container llm-candidate --sample-resources`: the 100 questions through MAS and the agents, as a user asks them. |
+
+For `probe` and `eval` the runner stops the stack's `llm` container and starts `llm-candidate` in its place: the same image (the catalog's pinned `server-b11382`), the same arguments with `--model` replaced and `--reasoning off` added, the same memory limit, on the same Docker network under the alias `llm`, so MAS and the agents reach the candidate at `http://llm:8080` unchanged. It waits for `/health` (up to `--start-timeout`, 900 s), runs the steps, reads llama-server's `/proc/1/status` and the container's cgroup `memory.peak` and `memory.events` after each step, removes the container and goes to the next model. At the end, even after an error or Ctrl-C, it starts `llm` again. A model whose architecture llama-server does not know stops while loading; the summary keeps the last lines of its log.
+
+`--reasoning off` is the default because Spark-X2.5, NeoHorse, Agents-A1 and Ling open a thinking block unless told not to, and the stack's `llm` service passes no reasoning flag (llama-server's default is `auto`). Run once more with `--reasoning auto` to measure them as the stack is configured today; every run records which it used.
+
+| Option | Meaning |
+|---|---|
+| `--steps` | Among `fetch,bench,probe,eval` (default all four). |
+| `--only` | Candidate ids (their default files) or GGUF ids from the catalog, comma-separated. `--all-quants` adds the optional files. |
+| `--resume FILE` | Run more steps into an earlier summary: the models it holds (or `--only`), the reports it points at, its downloads and problems are kept, and `run.sessions` lists each pass. Also how to finish an interrupted run. |
+| `--reasoning` | `off` (default), `on` or `auto`, passed to the candidate llama-server. |
+| `--llm-mem-limit` | Memory limit of `llm-candidate`, e.g. `8g`. Default: the stack `llm` container's. |
+| `--ids`, `--category`, `--limit` | Run part of the test set, for the probe and the evaluation alike. |
+| `--bench-arg`, `--eval-arg` | One more argument for `run-llama-bench.py` or `run-eval.py`; repeat it, e.g. `--eval-arg=--no-warmup`. |
+| `--models-dir`, `--out-dir`, `--catalog`, `--testset`, `--server-image`, `--stack-llm-container`, `--agent-container`, `--start-timeout` | Locations and names; the defaults fit a CPU install from this repository. |
+| `--reference`, `--cpu-model`, `--ram`, `--ram-speed`, `--disk-type` | The machine block, as in the other tools, and passed to them. |
+| `--dry-run` | Print what each step would run and stop. |
+| `--resummarize FILE` | Rebuild a summary and its Markdown from its reports, e.g. after the reviewers filled in an evaluation. |
+
+### Model candidates output
+
+`model-candidates-<date>.json` and `model-candidates-<date>.md` (the tables, the licence flags and every problem), and next to them the folder `model-candidates-<date>/` with, for each model, `<gguf id>-llama-bench-<date>.json`, `<gguf id>-contract-<date>.json` and `<gguf id>-eval-<date>.json`. The summary is rewritten after every model, so an interrupted run keeps what it measured.
+
+| Field of the summary | Meaning |
+|---|---|
+| `catalog` | `path`, `version`, `sha256`, `looked_up` and `pinned_build` of the catalog used. |
+| `run` | `started_at` (first pass), `finished_at`, `completed`, `git_commit`, `steps` (every pass together), `reasoning`, `stack_llm` (the `llm` container whose arguments were reused: image, arguments, networks, memory limit), `testset`, and `sessions`: each pass with its steps, options, models folder, server image and memory limit. |
+| `machine` | See [Machine](#machine). |
+| `variants[]` | One per GGUF: the catalog facts (`candidate`, `name`, `licence`, `licence_flags`, `gguf_architecture`, `thinking_default`, `quant`, `file`, `gguf_repo`, `revision`, `publisher`, `size_bytes`, `sha256`), `fetch` (`status`, `method`), `reports` (paths of the three reports, relative to the summary), `llama_bench` (`build`, `speeds`: the fastest thread count of each test and depth, `model_sha256` and whether it matches the catalog), `contract` and `eval` (the headline figures of those reports), `server` (the `docker run` command, the build from `/props`, `n_ctx`, the memory limit and reasoning mode), `memory` (`after_probe` and `after_eval`: llama-server's `VmHWM`, `VmRSS`, `RssAnon` and `RssFile`, the container's `memory.peak` and OOM kills) and `problems`. |
+
+The contract report (`horus-contract-probe`) holds `run`, `model`, `llama_server`, `summary` and `replies`, one per question:
+
+| Field of a reply | Meaning |
+|---|---|
+| `json_valid` | The reply parses with a strict `json.loads` (how the agent reads llama-server) into an object that validates against the exact schema of that request: `status` `ok` or `not_found`, an `answer` string, and, when passages were shown, `sources` from their labels only, nothing else. `null` when the retrieval failed, which is not the model's doing. |
+| `failure`, `violations` | Why not: `request_error`, `empty`, `truncated` (`finish_reason` `length`), `not_json` (text, a code fence or a `<think>` block around the object), `not_object`, `schema` (with each violation), `retrieval_error`. |
+| `thought_first`, `reasoning_chars` | The model reasoned first (`reasoning_content`, or a `<think>` block in the reply). |
+| `status`, `status_correct` | `ok` is expected for in-corpus questions, `not_found` for those the documents do not answer. |
+| `answer_correct_auto`, `cited_sources`, `source_correct_auto` | The test set's patterns on the `answer` field; the documents of the cited labels; every expected document cited. An invalid reply counts as wrong. |
+| `wall_s`, `prompt_tokens`, `completion_tokens`, `cached_tokens`, `prompt_tps`, `generation_tps` | From the reply's `usage` and llama-server's `timings`. |
+| `content`, `labels`, `retrieved_titles` | The raw reply, the labels shown and the documents retrieved. |
+
+`summary` gives `json_valid` (the JSON reliability), `status_correct`, `answer_correct_auto` and `source_correct_auto` as `{"n", "correct", "pct"}`, counts per failure, `thought_first`, `truncated`, `blank_answers`, the statistics of `wall_s`, `prompt_tokens` and `completion_tokens`, `prompt_tps` and `generation_tps` over the run, and the rates per category.
+
+Nothing has been measured with it yet: the reference machines were not reachable when it was written.
 
 ## Recorded result format
 

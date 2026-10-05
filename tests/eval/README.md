@@ -6,7 +6,7 @@
 python -m pytest tests/eval -q -p no:cacheprovider
 ```
 
-These tests are hermetic. They check the set itself and unit-test the runner's scoring and report building. CI runs them (`.github/workflows/eval-testset.yml`) whenever `demo_assets/`, `tests/eval/`, `scripts/eval/` or the reused `scripts/perf/` scripts change. A change to `scripts/benchmarks/` alone does not trigger that workflow yet: run the tests by hand.
+These tests are hermetic. They check the set itself and unit-test the runner's scoring and report building. CI runs them (`.github/workflows/eval-testset.yml`) whenever `demo_assets/`, `tests/eval/`, `scripts/eval/`, `scripts/benchmarks/` or the reused `scripts/perf/` scripts change.
 
 The same folder tests the benchmark tooling of `scripts/benchmarks/` (`pytest.ini` puts both script folders on the path), with Docker, the host queries and llama-server replaced by fakes:
 
@@ -17,6 +17,10 @@ The same folder tests the benchmark tooling of `scripts/benchmarks/` (`pytest.in
 | `test_llama_bench_runner.py` | `run-llama-bench.py` end to end: run, fetch, missing models, `--from-json`, `--dry-run`. |
 | `test_bench_compare.py` | `compare-benchmarks.py`: the §10 table, changes, warnings, the 2026-09-01 baseline, llama-bench selection. |
 | `test_eval_stack.py` | llama-server `/metrics`, `/props`, command-line and `/proc/1/status` parsing, the MAS router histogram, and the cgroup files (`memory.peak`, `memory.events`, `memory.stat`). |
+| `test_eval_contract.py` | B-102 JSON reliability: the schema checker, how each reply fails, the status, answer and source scores of a reply, and the probe summary. |
+| `test_agent_contract_probe.py` | `scripts/eval/agent-contract-probe.py` with a fake agent, knowledge store and llama-server. One test runs it in a subprocess against the agent's real `answer_contract` and checks that the checker accepts the schema it builds; it is skipped where the agent's packages are not installed, as in CI. |
+| `test_model_candidates.py` | `scripts/benchmarks/model-candidates.yaml` (licences, pinned revisions, builds, defaults, the baseline matching B-91 and the manifest), the candidate server command, the parsers and the summary tables. |
+| `test_model_candidates_runner.py` | `run-model-candidates.py` end to end with fake Docker, tools and installer: every step, a failed download, a model that does not load, a missing stack, `--resume`, `--resummarize`, `--dry-run`, and the installer's real downloader adopting a file already in place. |
 
 ## Contents
 

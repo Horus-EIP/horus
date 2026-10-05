@@ -1,0 +1,306 @@
+version: 1.0.0
+looked_up: "2026-10-05"
+llama_cpp:
+  pinned_build: b11382
+  server_image: ghcr.io/ggml-org/llama.cpp:server-b11382
+  bench_image: ghcr.io/ggml-org/llama.cpp:full-b11382
+licences_allowed:
+  - Apache-2.0
+  - MIT
+llama_bench:
+  prompts: "512,2048"
+  generations: "128"
+  depths: "0,4096"
+  cache_types_k: f16
+  cache_types_v: f16
+  threads: "4,8"
+  repetitions: 5
+candidates:
+  - id: qwen3-4b-instruct-2507
+    role: baseline
+    plan_name: Qwen3-4B-Instruct-2507
+    model_repo: Qwen/Qwen3-4B-Instruct-2507
+    model_revision: cdbee75f17c01a7cc42f958dc650907174af0554
+    licence: Apache-2.0
+    licence_statement: "Card metadata license: apache-2.0, license_link to the LICENSE file of the repository."
+    licence_flags: []
+    architecture: Qwen3ForCausalLM
+    gguf_architecture: qwen3
+    llama_cpp:
+      since_build: null
+      since_pr: null
+      evidence: "The CPU stack serves it on b11382 since B-90."
+    parameters: 4022468096
+    active_parameters: null
+    size_note: "4B dense, 36 layers, full attention (8 KV heads, head size 128)."
+    context_length: 262144
+    thinking_default: none
+    thinking_evidence: "Instruct-2507 is the non-thinking variant."
+    notes: []
+    ggufs:
+      - id: qwen3-4b-q4km
+        file: qwen3-4b-instruct-2507-Q4_K_M.gguf
+        quant: Q4_K_M
+        repo: unsloth/Qwen3-4B-Instruct-2507-GGUF
+        revision: a06e946bb6b655725eafa393f4a9745d460374c9
+        upstream_file: Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+        publisher: community
+        size_bytes: 2497281120
+        sha256: 3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597
+        default: true
+      - id: qwen3-4b-q5km
+        file: qwen3-4b-instruct-2507-Q5_K_M.gguf
+        quant: Q5_K_M
+        repo: unsloth/Qwen3-4B-Instruct-2507-GGUF
+        revision: a06e946bb6b655725eafa393f4a9745d460374c9
+        upstream_file: Qwen3-4B-Instruct-2507-Q5_K_M.gguf
+        publisher: community
+        size_bytes: 2889514080
+        sha256: 5bde5e9d883622acb02bf77fe7dcbc56a8b9a9ad4be78a72ca23a532658b4ecb
+        default: true
+
+  - id: spark-x2.5-4b
+    role: candidate
+    plan_name: Spark-X2.5-4B
+    model_repo: XHToken/Spark-X2.5-4B
+    model_revision: 0bcb35678590218655dff3765b9e61c83b35e9c4
+    licence: Apache-2.0
+    licence_statement: "Card metadata license: apache-2.0. Card: \"The Spark-X2.5 model series is licensed under the Apache 2.0 License\". The repository's LICENSE file is the Apache License 2.0 text. The GGUF card says the same."
+    licence_flags: []
+    architecture: Spark2_5ForCausalLM
+    gguf_architecture: spark2_5
+    llama_cpp:
+      since_build: 10828
+      since_pr: 27868
+      evidence: "The GGUF card: native spark2_5 support requires llama.cpp b10828 or later. PR #27868 (merged 2026-09-06) is commit b10828."
+    parameters: 4112079360
+    active_parameters: null
+    size_note: "4B dense, 36 layers: 27 sliding-window (512 tokens) and 9 full-attention layers, 4 KV heads, head size 256. Needs trust_remote_code in Transformers."
+    context_length: 1048576
+    thinking_default: "on"
+    thinking_evidence: "The GGUF chat template sets enable_thinking to true unless the request turns it off; the card evaluates in thinking mode."
+    notes:
+      - "No Q5_K_M from the publisher. The optional Q5_K_M is a community file (abenzerps)."
+    ggufs:
+      - id: spark-x2.5-4b-q4km
+        file: spark-x2.5-4b-Q4_K_M.gguf
+        quant: Q4_K_M
+        repo: XHToken/Spark-X2.5-4B-GGUF
+        revision: 9826e0be84e6e6e8b9668abc91421109a1df1e2d
+        upstream_file: Spark-X2.5-4B-Q4_K_M.gguf
+        publisher: model author
+        size_bytes: 2600224352
+        sha256: adfcfa19a4ed6a5985da8bf565fe15f8e1a7e131d79bae2d19d48d1c40109428
+        default: true
+      - id: spark-x2.5-4b-q5km
+        file: spark-x2.5-4b-Q5_K_M.gguf
+        quant: Q5_K_M
+        repo: abenzerps/Spark-X2.5-4B-GGUF
+        revision: f186f3d265c583a49d5e9d19bff23150b002202b
+        upstream_file: Spark-X2.5-4B-Q5_K_M.gguf
+        publisher: community
+        size_bytes: 2977895232
+        sha256: d585f155289ed7b73f2f644e475445fcc40f1aa5131ca807eade1c726895535a
+        default: false
+
+  - id: neohorse-1-4b
+    role: candidate
+    plan_name: NeoHorse-1-4B
+    model_repo: TokenRhythm/NeoHorse-1-4B
+    model_revision: 56f0584bb40578a2c33b1b40a08ccd17243ad710
+    licence: Apache-2.0
+    licence_statement: "Card metadata license: apache-2.0. Card: \"NeoHorse-1-4B is released under the Apache License 2.0\", with the notice of the upstream Qwen/Qwen3.5-4B (Apache 2.0) kept. The repository's LICENSE file is the Apache License 2.0 text."
+    licence_flags: []
+    architecture: Qwen3_5ForCausalLM
+    gguf_architecture: qwen35
+    llama_cpp:
+      since_build: 7973
+      since_pr: 19435
+      evidence: "qwen35 arrived with PR #19435 (Qwen3.5 dense and MoE support, no vision), merged 2026-02-08 as b7973. PR #28068 (b10829) fixed the Gated DeltaNet normalisation. The card asks for a recent runtime with Qwen3.5 support."
+    parameters: 4205751296
+    active_parameters: null
+    size_note: "4B dense, post-trained from Qwen/Qwen3.5-4B. 32 layers: 24 linear-attention (Gated DeltaNet) and 8 full-attention layers, 4 KV heads, head size 256. Text only."
+    context_length: 262144
+    thinking_default: "on"
+    thinking_evidence: "The Qwen3.5 chat template in the GGUF opens a <think> block unless enable_thinking is false; the card benchmarks with thinking on."
+    notes: []
+    ggufs:
+      - id: neohorse-1-4b-q4km
+        file: neohorse-1-4b-Q4_K_M.gguf
+        quant: Q4_K_M
+        repo: TokenRhythm/NeoHorse-1-4B-GGUF
+        revision: 3c5d58ca82e580b5b0b3ce6eeffd34ac7d0fd95a
+        upstream_file: NeoHorse-1-4B-Q4_K_M.gguf
+        publisher: model author
+        size_bytes: 2708804352
+        sha256: 7da8ac6219b0aaa21b58cb26c1ec6826b478449215a3b0448742e1cda60fa2b4
+        default: true
+      - id: neohorse-1-4b-q5km
+        file: neohorse-1-4b-Q5_K_M.gguf
+        quant: Q5_K_M
+        repo: TokenRhythm/NeoHorse-1-4B-GGUF
+        revision: 3c5d58ca82e580b5b0b3ce6eeffd34ac7d0fd95a
+        upstream_file: NeoHorse-1-4B-Q5_K_M.gguf
+        publisher: model author
+        size_bytes: 3074986752
+        sha256: 617f51ff6e639d0c5049cbacad3ca736523d50de8510b7afff7d5d0fa9e7fc02
+        default: false
+
+  - id: agents-a1-4b
+    role: candidate
+    plan_name: Agents-A1-4B
+    model_repo: InternScience/Agents-A1-4B
+    model_revision: 945c40a4aa6f534d434a353207b8d42ecf7a5293
+    licence: Apache-2.0
+    licence_statement: "Card metadata license: apache-2.0. The card has no licence section and the repository has no LICENSE file. The GGUF repositories say apache-2.0 in their metadata too."
+    licence_flags:
+      - "The licence is only in the card metadata: no LICENSE file and no licence text in the repository. Ask InternScience or check before shipping."
+      - "No base model is declared; the GGUF architecture is qwen35, the Qwen3.5 family (Apache 2.0)."
+    architecture: Qwen3_5ForConditionalGeneration
+    gguf_architecture: qwen35
+    llama_cpp:
+      since_build: 7973
+      since_pr: 19435
+      evidence: "Same qwen35 support as NeoHorse-1-4B: PR #19435, b7973, without vision. The vision tower is a separate mmproj file, which Horus does not need."
+    parameters: 4539265536
+    active_parameters: null
+    size_note: "Vision-language model; 4.54B parameters with the vision tower, 4.21B in the language-model GGUF. 32 layers: 24 linear-attention and 8 full-attention layers, 4 KV heads, head size 256."
+    context_length: 262144
+    thinking_default: "on"
+    thinking_evidence: "The GGUF ships the Qwen3.5 chat template (a <think> block unless enable_thinking is false); the card serves it with the qwen3 reasoning parser."
+    notes:
+      - "Only the language-model GGUF is downloaded; Agents-A1-4B-mmproj.gguf (672 MB) is the vision part."
+      - "No Q5_K_M from the publisher. The optional Q5_K_M is a community file (bartowski), whose Q4_K_M is 176 MB larger than the publisher's, so its quantisation recipe differs."
+    ggufs:
+      - id: agents-a1-4b-q4km
+        file: agents-a1-4b-Q4_K_M.gguf
+        quant: Q4_K_M
+        repo: InternScience/Agents-A1-4B-Q4_K_M-GGUF
+        revision: d92b02e27074b27542384f72bc0e72203c970f0f
+        upstream_file: Agents-A1-4B-Q4_K_M.gguf
+        publisher: model author
+        size_bytes: 2708805312
+        sha256: d93c393a9bd5139a4b5cfe24d31ef553c5a497bfb8afec178a354ecbf508f062
+        default: true
+      - id: agents-a1-4b-q5km
+        file: agents-a1-4b-Q5_K_M.gguf
+        quant: Q5_K_M
+        repo: bartowski/InternScience_Agents-A1-4B-GGUF
+        revision: 41e8e3a6b8406cfbffb7d11165c6e49057abf79d
+        upstream_file: InternScience_Agents-A1-4B-Q5_K_M.gguf
+        publisher: community
+        size_bytes: 3315587008
+        sha256: b22e8fc49f38039d1591e307a409a02bbc745db20048630100d3895dcfd2d0db
+        default: false
+
+  - id: ling-3.0-tiny
+    role: candidate
+    plan_name: Ling-3.0-tiny
+    model_repo: inclusionAI/Ling-3.0-tiny
+    model_revision: 9a98e35fe1c9ee255f78dd64771c7ae15a799481
+    licence: MIT
+    licence_statement: "Card metadata license: mit, in the model and GGUF repositories. The repository has no LICENSE file and the card no licence section."
+    licence_flags:
+      - "The licence is only in the card metadata: no LICENSE file in the repository. Check before shipping."
+    architecture: BailingMoeV3ForCausalLM
+    gguf_architecture: bailingmoe3
+    llama_cpp:
+      since_build: 10460
+      since_pr: 26608
+      evidence: "bailingmoe3 arrived with PR #26608 (BailingMoE3 Support), merged 2026-08-17 as b10460."
+    parameters: 7893392800
+    active_parameters: 1300000000
+    size_note: "MoE, 7.9B total and 1.3B active per token (8 of 128 routed experts plus 1 shared). 24 layers in blocks of 3 Kimi Delta Attention layers and 1 Multi-Head Latent Attention layer. Model type bailing_hybrid, needs trust_remote_code in Transformers."
+    context_length: 131072
+    thinking_default: "on"
+    thinking_evidence: "Card: thinking mode is enabled by default by the chat template, disabled per request with enable_thinking false."
+    notes:
+      - "The Q4_K_M file is 4.8 GB, about twice the baseline: all of it is mapped, so watch the llm memory limit (6 GB by default) and the stack peak."
+      - "active_parameters is the card's rounded figure."
+    ggufs:
+      - id: ling-3.0-tiny-q4km
+        file: ling-3.0-tiny-Q4_K_M.gguf
+        quant: Q4_K_M
+        repo: inclusionAI/Ling-3.0-tiny-GGUF
+        revision: 01b850e29ed5b44e2b810160ff980a9bb353296f
+        upstream_file: Ling-3.0-tiny-Q4_K_M.gguf
+        publisher: model author
+        size_bytes: 4823894944
+        sha256: 246d67d45f5b0c7447ca0ce0bdb8b46b8a47b593c5068635dc16422c051d7be9
+        default: true
+      - id: ling-3.0-tiny-q5km
+        file: ling-3.0-tiny-Q5_K_M.gguf
+        quant: Q5_K_M
+        repo: inclusionAI/Ling-3.0-tiny-GGUF
+        revision: 01b850e29ed5b44e2b810160ff980a9bb353296f
+        upstream_file: Ling-3.0-tiny-Q5_K_M.gguf
+        publisher: model author
+        size_bytes: 5635443616
+        sha256: b20a30eb9fe1b67356cb25f65aa9cad1a7c58263c8edf16b183e47183c05677d
+        default: false
+
+  - id: gemma-4-e4b-it
+    role: candidate
+    plan_name: gemma-4-E4B
+    model_repo: google/gemma-4-E4B-it
+    model_revision: ee0ef6023621cff504d758262d4e04895a5af4a2
+    licence: Apache-2.0
+    licence_statement: "Card metadata license: apache-2.0 with license_link https://ai.google.dev/gemma/docs/gemma_4_license. Card: \"License: Apache 2.0\" linking the same page, which reproduces the Apache License 2.0. The repository has no LICENSE file."
+    licence_flags:
+      - "Google's Gemma documentation, where the licence page lives, also links a prohibited use policy. Confirm it is not part of the terms before shipping."
+    architecture: Gemma4ForConditionalGeneration
+    gguf_architecture: gemma4
+    llama_cpp:
+      since_build: 8637
+      since_pr: 21309
+      evidence: "gemma4 arrived with PR #21309 (support gemma 4, vision and MoE, no audio), merged 2026-04-02 as b8637. Chat template and tokenizer fixes followed until PR #29115 (2026-09-19), all before b11382."
+    parameters: 7996156490
+    active_parameters: null
+    size_note: "Card: 4.5B effective parameters, 8B with the per-layer embeddings; the count above includes the vision and audio encoders. 42 layers: 35 sliding-window (512 tokens) and 7 full-attention layers, 2 KV heads, head size 256. Multimodal; text only here."
+    context_length: 131072
+    thinking_default: "off"
+    thinking_evidence: "The GGUF chat template sets enable_thinking to false unless the request turns it on."
+    notes:
+      - "The plan names gemma-4-E4B, the pretrained base model (google/gemma-4-E4B). The chat model benchmarked here is the instruction-tuned google/gemma-4-E4B-it."
+      - "Google publishes a quantisation-aware-trained Q4_0 GGUF, the default here. ggml-org's Q4_0 is a plain conversion by the llama.cpp maintainers; unsloth's Q4_K_M and Q5_K_M are community files."
+    ggufs:
+      - id: gemma-4-e4b-it-qat-q4_0
+        file: gemma-4-e4b-it-qat-Q4_0.gguf
+        quant: Q4_0 (QAT)
+        repo: google/gemma-4-E4B-it-qat-q4_0-gguf
+        revision: 4b4a2c1d584be7264f87aac328a1bc739ce81b6c
+        upstream_file: gemma-4-E4B_q4_0-it.gguf
+        publisher: model author
+        size_bytes: 5154941280
+        sha256: 676c35070db6dbe52f93e9c864ee0fba4eddea94b9c875d9cb10daff453fbaee
+        default: true
+      - id: gemma-4-e4b-it-q4_0
+        file: gemma-4-e4b-it-Q4_0.gguf
+        quant: Q4_0
+        repo: ggml-org/gemma-4-E4B-it-GGUF
+        revision: b8093469224f83f5c38f691eb906c380e9e63114
+        upstream_file: gemma-4-E4B-it-Q4_0.gguf
+        publisher: llama.cpp maintainers
+        size_bytes: 4590807392
+        sha256: a555b900214b477d8880e7832e0b8925e139b0159640036b09fe472b6f2097f2
+        default: false
+      - id: gemma-4-e4b-it-q4km
+        file: gemma-4-e4b-it-Q4_K_M.gguf
+        quant: Q4_K_M
+        repo: unsloth/gemma-4-E4B-it-GGUF
+        revision: bfc15c382204943c3a8fff0c750b94ae2364d7a3
+        upstream_file: gemma-4-E4B-it-Q4_K_M.gguf
+        publisher: community
+        size_bytes: 4977171584
+        sha256: 85a896a047553e842f25297ee5b031d64ff30147d9c4af17b1e4b394cd1fab87
+        default: false
+      - id: gemma-4-e4b-it-q5km
+        file: gemma-4-e4b-it-Q5_K_M.gguf
+        quant: Q5_K_M
+        repo: unsloth/gemma-4-E4B-it-GGUF
+        revision: bfc15c382204943c3a8fff0c750b94ae2364d7a3
+        upstream_file: gemma-4-E4B-it-Q5_K_M.gguf
+        publisher: community
+        size_bytes: 5481798784
+        sha256: a5d6e634db151368d2caa4270fd32ab604d96c2d1291950586989f46d8e17d36
+        default: false
