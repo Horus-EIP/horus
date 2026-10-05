@@ -139,6 +139,11 @@ def test_a_spaced_or_short_subtraction_is_still_arithmetic(text):
     assert classify_trivial_intent(text) is TrivialIntent.ARITHMETIC
 
 
+@pytest.mark.parametrize("text", ["what is 1000-250", "10-2-3"])
+def test_an_unspaced_subtraction_shaped_like_a_number_is_left_to_the_next_stages(text):
+    assert classify_trivial_intent(text) is None
+
+
 @pytest.mark.parametrize(
     "text",
     ["hi how are you", "hello horus how are you doing today", "hey thanks"],
@@ -185,9 +190,11 @@ class TestComplexCues:
             ("Give me a comparison of P1 and P2 response times", ComplexCue.COMPARISON),
             ("Advisory Services vs Asset Management revenue", ComplexCue.COMPARISON),
             ("EU versus US data residency", ComplexCue.COMPARISON),
+            ("Finance vs. HR travel spend", ComplexCue.COMPARISON),
             ("Summarise the T&E variance and also the GDPR deadlines", ComplexCue.AND_ALSO),
             ("What is the hotel cap? Who approves overages?", ComplexCue.SEVERAL_QUESTIONS),
             ("Is SMS MFA allowed?? And how long are logs kept?", ComplexCue.SEVERAL_QUESTIONS),
+            ("Is 1.5 days enough? What about 2.5 days off?", ComplexCue.SEVERAL_QUESTIONS),
         ],
     )
     def test_cues_for_several_questions_in_one(self, text, cue):
@@ -200,6 +207,11 @@ class TestComplexCues:
             "Is that allowed??",
             "? what is the hotel cap?",
             "Who approved the overage, and on what date?",
+            "Which VS Code extensions are allowed?",
+            "vs code settings for the repository",
+            "Really? What is the hotel cap?",
+            "I read the policy. Really? What is the hotel cap?",
+            "Sorry? Okay? What is the hotel cap?",
             "Summarise the employee handbook",
             "",
             None,

@@ -140,8 +140,11 @@ class TestRules:
     def test_f20_a_factual_question_or_a_phone_number_is_never_a_direct_answer(self, question):
         assert rule_decision(question, ROSTER) is None
 
-    def test_arithmetic_that_cannot_be_computed_is_left_to_the_next_stage(self):
-        assert rule_decision("what is 50% + 10", ROSTER) is None
+    @pytest.mark.parametrize(
+        "question", ["what is 50% + 10", "what is 9^100*9^100*9^100*9^100"]
+    )
+    def test_arithmetic_that_cannot_be_computed_is_left_to_the_next_stage(self, question):
+        assert rule_decision(question, ROSTER) is None
 
     @pytest.mark.parametrize(
         ("question", "cue"),
@@ -447,6 +450,16 @@ class TestDecideWithoutLlm:
 
         assert TaskRouter(failing).decide_without_llm("revenue", ROSTER, SETTINGS) == (None, ())
 
+    def test_a_rules_failure_hands_the_question_to_the_embeddings(self, index, monkeypatch):
+        monkeypatch.setattr(router, "rule_decision", MagicMock(side_effect=OverflowError("big")))
+
+        decision, _scores = TaskRouter(index).decide_without_llm(
+            "revenue this quarter", ROSTER, SETTINGS
+        )
+
+        assert decision.method is RouteMethod.EMBEDDING
+        assert decision.agent is FINANCE
+
 
 def agent_row(agent_id, name, *, skills=None, agent_type="analyst", alive=True, description=""):
     heartbeat = datetime.now(UTC) - (timedelta(seconds=5) if alive else timedelta(days=1))
@@ -491,7 +504,7 @@ def routed(monkeypatch, index):
     for name in ("ROUTER_MIN_SCORE", "ROUTER_MIN_MARGIN", "ROUTER_LLM_MAX_TOKENS"):
         monkeypatch.delenv(name, raising=False)
     with (
-        patch.object(router, "select_agent_for_task") as full_router,
+        patch.object(router, "choose_route_with_llm") as full_router,
         patch.object(router, "decompose_task") as planner,
         patch.object(router, "ask_llm_with_json_schema") as constrained,
     ):
@@ -565,7 +578,7 @@ class TestRouteTask:
     def test_on_the_transformers_backend_an_undecided_question_keeps_the_current_router(
         self, routed
     ):
-        routed.full_router.return_value = ("agent-hr", "rewritten", None, [])
+        routed.full_router.return_value = ("SINGLE_AGENT", ("agent-hr", "rewritten", None, []))
         db = MagicMock()
 
         outcome = router.route_task("Who painted the Mona Lisa?", db)
@@ -573,6 +586,55 @@ class TestRouteTask:
         routed.full_router.assert_called_once_with("Who painted the Mona Lisa?", db)
         routed.constrained.assert_not_called()
         assert outcome == ("agent-hr", "rewritten", None, [])
+
+    def test_on_the_transformers_backend_a_direct_answer_is_passed_on(self, routed):
+        routed.full_router.return_value = (
+            "DIRECT_ANSWER",
+            (None, None, "Response for user : 4", []),
+        )
+        before = counter("llm", "DIRECT_ANSWER")
+
+        outcome = router.route_task("Who painted the Mona Lisa?", MagicMock())
+
+        assert outcome == (None, None, "Response for user : 4", [])
+        assert counter("llm", "DIRECT_ANSWER") == before + 1
+
+    def test_on_the_transformers_backend_a_complex_task_is_timed_before_the_planner_runs(
+        self, routed
+    ):
+        routed.full_router.return_value = ("COMPLEX_TASK", (None, None, None, []))
+        before = latency_count("llm")
+        timed_before_planning = []
+        routed.planner.side_effect = lambda _text, _db: (
+            timed_before_planning.append(latency_count("llm") == before + 1)
+            or (("agent-finance", "step 1"), [("agent-hr", "step 2")])
+        )
+        db = MagicMock()
+
+        outcome = router.route_task("Who painted the Mona Lisa?", db)
+
+        routed.planner.assert_called_once_with("Who painted the Mona Lisa?", db)
+        assert timed_before_planning == [True]
+        assert outcome == ("agent-finance", "step 1", None, [("agent-hr", "step 2")])
+
+    def test_rules_and_embeddings_time_a_complex_task_before_the_planner_runs(self, routed):
+        before = latency_count("rules")
+        timed_before_planning = []
+        routed.planner.side_effect = lambda _text, _db: (
+            timed_before_planning.append(latency_count("rules") == before + 1) or (None, [])
+        )
+
+        router.route_task("Compare Q3 and Q4 revenue", MagicMock())
+
+        assert timed_before_planning == [True]
+
+    def test_arithmetic_too_large_to_show_goes_on_to_the_next_stages(self, routed):
+        routed.full_router.return_value = ("SINGLE_AGENT", ("agent-hr", "big", None, []))
+
+        outcome = router.route_task("what is 9^100*9^100*9^100*9^100", MagicMock())
+
+        assert outcome == ("agent-hr", "big", None, [])
+        routed.full_router.assert_called_once()
 
     def test_on_the_transformers_backend_a_router_crash_leaves_the_task_unrouted(self, routed):
         routed.full_router.side_effect = RuntimeError("LLM is not loaded")

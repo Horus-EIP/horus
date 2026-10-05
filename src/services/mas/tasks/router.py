@@ -14,13 +14,13 @@ from opentelemetry import trace
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from agents.registry_tool_functions import _is_agent_recently_alive
+from agents.registry_tool_functions import is_available_worker
 from core.embedding_setup import embed_texts
 from core.llm_setup import ask_llm_with_json_schema, llm_server_backend
 from core.logger import get_logger
 from core.metrics import observe_routing_decision
 from db.models import Agents
-from tasks.decomposition import decompose_task, select_agent_for_task
+from tasks.decomposition import choose_route_with_llm, decompose_task
 from tasks.demo_log import pretty_log
 from tasks.direct_answers import direct_answer
 from tasks.intent_rules import classify_trivial_intent, find_complex_cue
@@ -29,7 +29,6 @@ logger = get_logger("task_router")
 tracer = trace.get_tracer(__name__)
 
 ROUTER_EXAMPLES_PATH = Path(__file__).with_name("router_examples.yaml")
-MANAGER_AGENT_NAME = "Manager"
 DEFAULT_MIN_SCORE = 0.40
 DEFAULT_MIN_MARGIN = 0.10
 DEFAULT_LLM_MAX_TOKENS = 32
@@ -375,7 +374,11 @@ class TaskRouter:
     def decide_without_llm(
         self, question: str, roster: Sequence[RosterAgent], settings: RouterSettings
     ) -> tuple[RouteDecision | None, tuple[AgentScore, ...]]:
-        decision = rule_decision(question, roster)
+        try:
+            decision = rule_decision(question, roster)
+        except Exception:
+            logger.exception("Rule routing failed; trying the embeddings instead")
+            decision = None
         if decision is not None:
             return decision, ()
         try:
@@ -433,7 +436,7 @@ def available_roster(db: Session) -> list[RosterAgent]:
             skills=tuple(agent.skills) if isinstance(agent.skills, list) else (),
         )
         for agent in agents
-        if agent.name != MANAGER_AGENT_NAME and _is_agent_recently_alive(agent)
+        if is_available_worker(agent)
     ]
 
 
@@ -450,39 +453,42 @@ def route_task(user_input: str, db: Session, *, task_id: str | None = None) -> R
         decision = router.decide_with_llm(
             user_input, roster, settings, scores, ask_llm_with_json_schema
         )
+    full_router_outcome = None
     if decision is None:
-        outcome = _route_with_the_full_llm_router(user_input, db)
-        _record_decision(
-            _decision_from_outcome(outcome, roster, scores),
-            task_id,
-            time.perf_counter() - started,
+        classification, full_router_outcome = _route_with_the_full_llm_router(user_input, db)
+        decision = _decision_from_full_llm_router(
+            classification, full_router_outcome, roster, scores
         )
-        return outcome
     _record_decision(decision, task_id, time.perf_counter() - started)
-    return _outcome(decision, user_input, db)
+    if full_router_outcome is None or decision.route is Route.COMPLEX_TASK:
+        return _outcome(decision, user_input, db)
+    return full_router_outcome
 
 
-def _route_with_the_full_llm_router(user_input: str, db: Session) -> RoutingOutcome:
+def _route_with_the_full_llm_router(
+    user_input: str, db: Session
+) -> tuple[str | None, RoutingOutcome]:
     try:
-        return select_agent_for_task(user_input, db)
+        return choose_route_with_llm(user_input, db)
     except Exception:
         logger.exception("The LLM router failed; leaving the task to the fallback agents")
-        return _unrouted()
+        return None, _unrouted()
 
 
-def _decision_from_outcome(
+def _decision_from_full_llm_router(
+    classification: str | None,
     outcome: RoutingOutcome,
     roster: Sequence[RosterAgent],
     scores: tuple[AgentScore, ...],
 ) -> RouteDecision:
-    agent_id, _demand, direct_response, remaining = outcome
+    if classification == Route.COMPLEX_TASK.value:
+        return RouteDecision(Route.COMPLEX_TASK, RouteMethod.LLM, scores=scores)
+    agent_id, _demand, direct_response, _remaining = outcome
     agent = next((agent for agent in roster if agent.agent_id == agent_id), None)
     if direct_response:
         return RouteDecision(
             Route.DIRECT_ANSWER, RouteMethod.LLM, direct_answer=direct_response, scores=scores
         )
-    if remaining:
-        return RouteDecision(Route.COMPLEX_TASK, RouteMethod.LLM, agent, scores=scores)
     if agent_id:
         return RouteDecision(Route.SINGLE_AGENT, RouteMethod.LLM, agent, scores=scores)
     return RouteDecision(Route.UNROUTED, RouteMethod.LLM, scores=scores)

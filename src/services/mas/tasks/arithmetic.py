@@ -36,6 +36,9 @@ _TOKEN = re.compile(
 
 _OPERATOR_SYMBOLS = {"x": "*", "×": "*", "÷": "/", "**": "^"}
 
+_LARGEST_RESULT = Fraction(10) ** MAX_RESULT_DIGITS
+_SMALLEST_RESULT = 1 / _LARGEST_RESULT
+
 
 class NotArithmeticError(ValueError):
     pass
@@ -48,12 +51,12 @@ def evaluate_arithmetic(expression: str) -> Fraction:
 
 def arithmetic_answer(expression: str) -> str | None:
     try:
-        value = evaluate_arithmetic(expression)
+        result = format_number(evaluate_arithmetic(expression))
     except ZeroDivisionError:
         return f"{expression} is undefined: a number cannot be divided by zero."
     except (NotArithmeticError, OverflowError, ValueError):
         return None
-    return f"{expression} = {format_number(value)}"
+    return f"{expression} = {result}"
 
 
 def format_number(value: Fraction) -> str:
@@ -107,6 +110,12 @@ def _power(base: Fraction, exponent: Fraction) -> Fraction:
     return base ** int(exponent)
 
 
+def _within_range(value: Fraction) -> Fraction:
+    if value and not _SMALLEST_RESULT <= abs(value) <= _LARGEST_RESULT:
+        raise NotArithmeticError("result out of range")
+    return value
+
+
 class _Parser:
     def __init__(self, tokens: list[Fraction | str]):
         self._tokens = tokens
@@ -116,7 +125,7 @@ class _Parser:
         value = self._sum()
         if self._position != len(self._tokens):
             raise NotArithmeticError("unexpected token")
-        return value
+        return _within_range(value)
 
     def _peek(self) -> Fraction | str | None:
         if self._position < len(self._tokens):
@@ -134,7 +143,7 @@ class _Parser:
         value = self._product()
         while (operator := self._take("+", "-")) is not None:
             right = self._product()
-            value = value + right if operator == "+" else value - right
+            value = _within_range(value + right if operator == "+" else value - right)
         return value
 
     def _product(self) -> Fraction:
@@ -151,6 +160,7 @@ class _Parser:
                 value = value % right
             else:
                 value = value / 100 * right
+            value = _within_range(value)
         return value
 
     def _operand_follows(self) -> bool:
@@ -172,7 +182,7 @@ class _Parser:
         base = self._atom()
         if self._take("^") is None:
             return base
-        return _power(base, self._signed())
+        return _within_range(_power(base, self._signed()))
 
     def _atom(self) -> Fraction:
         token = self._peek()

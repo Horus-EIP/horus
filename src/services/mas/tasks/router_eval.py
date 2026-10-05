@@ -22,9 +22,10 @@ from tasks.router import (
     load_router_examples,
 )
 
-DEFAULT_TESTSET = Path(__file__).resolve().parents[4] / "tests" / "mas" / "data" / "router_testset.yaml"
+TESTSET_IN_REPOSITORY = Path("tests", "mas", "data", "router_testset.yaml")
 METHODS = (RouteMethod.RULES, RouteMethod.EMBEDDING, RouteMethod.LLM)
 WARM_UP_QUESTION = "How many vacation days do new employees get?"
+NOT_RUN = "not run"
 
 
 @dataclass(frozen=True)
@@ -70,7 +71,15 @@ class RoutedQuestion:
         return True
 
 
-def load_router_testset(path: Path = DEFAULT_TESTSET) -> RouterTestset:
+def default_testset(module_path: Path = Path(__file__)) -> Path | None:
+    for directory in module_path.resolve().parents:
+        candidate = directory / TESTSET_IN_REPOSITORY
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def load_router_testset(path: Path) -> RouterTestset:
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
     roster = tuple(
         RosterAgent(
@@ -209,12 +218,12 @@ def format_report(summary: dict) -> str:
         f"{'method':<10} {'count':>5} {'share':>7} {'accuracy':>9} {'p50':>10} {'p95':>10}",
     ]
     for method, row in summary["methods"].items():
-        accuracy = _percent(row["accuracy"])
+        accuracy, p50, p95 = _percent(row["accuracy"]), _ms(row["p50_ms"]), _ms(row["p95_ms"])
         if method == RouteMethod.LLM.value and not summary["llm_ran"]:
-            accuracy = "not run"
+            accuracy = p50 = p95 = NOT_RUN
         lines.append(
             f"{method:<10} {row['count']:>5} {_percent(row['rate']):>7} {accuracy:>9} "
-            f"{_ms(row['p50_ms']):>10} {_ms(row['p95_ms']):>10}"
+            f"{p50:>10} {p95:>10}"
         )
     latency = summary["latency_without_llm_ms"]
     lines += [
@@ -252,7 +261,11 @@ def _parser() -> argparse.ArgumentParser:
             "and report accuracy, the share of each method, the fallback rate and latency."
         ),
     )
-    parser.add_argument("--testset", type=Path, default=DEFAULT_TESTSET)
+    parser.add_argument(
+        "--testset",
+        type=Path,
+        help=f"Labelled questions (default: {TESTSET_IN_REPOSITORY.as_posix()} in the repository).",
+    )
     parser.add_argument("--examples", type=Path, default=ROUTER_EXAMPLES_PATH)
     parser.add_argument("--min-score", type=float)
     parser.add_argument("--min-margin", type=float)
@@ -276,7 +289,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         min_margin=defaults.min_margin if args.min_margin is None else args.min_margin,
         llm_max_tokens=defaults.llm_max_tokens,
     )
-    testset = load_router_testset(args.testset)
+    testset_path = args.testset or default_testset()
+    if testset_path is None:
+        print(
+            f"No test set found: {TESTSET_IN_REPOSITORY.as_posix()} is not above this module "
+            "(for example inside the MAS image); pass --testset."
+        )
+        return 2
+    testset = load_router_testset(testset_path)
     examples = load_router_examples(args.examples)
     router = TaskRouter(ExampleIndex(examples))
     routed = route_testset(

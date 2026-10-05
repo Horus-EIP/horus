@@ -14,17 +14,18 @@ from tasks.router import (
     load_router_examples,
     rule_decision,
 )
-from tasks.router_eval import DEFAULT_TESTSET, load_router_testset
+from tasks.router_eval import load_router_testset
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 AGENT_PROFILES = REPO_ROOT / "src" / "services" / "agent" / "app" / "agent_server" / "profiles.py"
 DEMO_ASSETS = REPO_ROOT / "demo_assets"
+TESTSET_PATH = REPO_ROOT / "tests" / "mas" / "data" / "router_testset.yaml"
 COPIED_PHRASE_WORDS = 6
 MIN_QUESTIONS = 100
 MIN_QUESTIONS_PER_DOCUMENT = 10
 EXAMPLES_PER_AGENT = range(10, 31)
 
-TESTSET = load_router_testset(DEFAULT_TESTSET)
+TESTSET = load_router_testset(TESTSET_PATH)
 EXAMPLES = load_router_examples(ROUTER_EXAMPLES_PATH)
 
 

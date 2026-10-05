@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -164,7 +165,9 @@ class TestFormattedReport:
         assert "Accuracy without the LLM fallback: 80.0%" in text
         assert "Accuracy with the LLM fallback: not run (pass --llm)" in text
         assert "Latency when no fallback is needed: p50" in text
-        assert re.search(r"^llm\s+1\s+16\.7%\s+not run", text, re.MULTILINE)
+        assert re.search(
+            r"^llm\s+1\s+16\.7%\s+not run\s+not run\s+not run$", text, re.MULTILINE
+        )
         assert "s2: 'password length' expected SINGLE_AGENT HR-Assistant" in text
         assert "Sent to the LLM: s3" in text
 
@@ -198,5 +201,21 @@ class TestCommandLine:
         assert router_eval.main(["--testset", str(testset_path), "--llm"]) == 2
 
     def test_the_default_test_set_is_the_one_in_the_repository(self):
-        assert router_eval.DEFAULT_TESTSET.is_file()
+        repository = Path(__file__).resolve().parents[3]
+
+        assert router_eval.default_testset() == repository / router_eval.TESTSET_IN_REPOSITORY
         assert router_eval.METHODS == (RouteMethod.RULES, RouteMethod.EMBEDDING, RouteMethod.LLM)
+
+    def test_a_shallow_install_like_the_mas_image_has_no_default_test_set(self):
+        assert router_eval.default_testset(Path("/app/tasks/router_eval.py")) is None
+
+    def test_without_a_default_test_set_main_asks_for_one(self, fake_embedder, monkeypatch, capsys):
+        monkeypatch.setattr(router_eval, "default_testset", lambda: None)
+
+        assert router_eval.main([]) == 2
+        assert "pass --testset" in capsys.readouterr().out
+
+    def test_an_explicit_test_set_needs_no_default(self, fake_embedder, testset_path, monkeypatch):
+        monkeypatch.setattr(router_eval, "default_testset", MagicMock(side_effect=IndexError(4)))
+
+        assert router_eval.main(["--testset", str(testset_path)]) == 0

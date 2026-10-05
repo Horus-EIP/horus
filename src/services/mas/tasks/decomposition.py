@@ -469,7 +469,6 @@ def manager_review_step(
     }
 
 
-@tracer.start_as_current_span("route_task_llm")
 def select_agent_for_task(user_input: str, db: Session = None):
     """Route a user query to the right agent via the LLM intent router.
 
@@ -491,10 +490,43 @@ def select_agent_for_task(user_input: str, db: Session = None):
     (JSON parse failure, unknown classification, or the planner produced no
     plan) and the caller should fall back to its skill-match / catch-all paths.
     """
-    pretty_log(f"ANALYZING USER INPUT: '{user_input}'", "🔍")
-
     if db is None:
         db = SessionLocal()
+
+    classification, outcome = choose_route_with_llm(user_input, db)
+    if classification != "COMPLEX_TASK":
+        return outcome
+
+    # Multi-agent collaboration is the headline feature of this platform —
+    # when the router flags a request as COMPLEX_TASK, hand it straight to
+    # the planner here so the caller doesn't fall back to single-agent
+    # paths (skill-match, auto-create-specialist, catch-all) that would
+    # capture the request before decomposition could ever fire. Returning
+    # the planner's output through the existing 4-tuple lets the regular
+    # subtask-chaining in routes.py + tasks-result/ kick in unchanged.
+    logger.info("LLM requested DECOMPOSITION. Inlining planner.")
+    pretty_log("COMPLEX TASK DETECTED -> RUNNING PLANNER INLINE", "🔨")
+    try:
+        first_action, actions_list = decompose_task(user_input, db)
+    except Exception as exc:
+        logger.exception("Inline decomposition raised: %s", exc)
+        return None, None, None, []
+    if first_action:
+        first_agent, first_demand = first_action
+        pretty_log(
+            f"PLAN READY: {len(actions_list) + 1} subtask(s), first -> {first_agent}",
+            "🗺️",
+        )
+        return first_agent, first_demand, None, actions_list
+    # Planner produced no plan — fall through to the legacy all-None
+    # return so the caller's downstream fallbacks (skill-match → auto-
+    # create → catch-all) still get a chance to dispatch something.
+    return None, None, None, []
+
+
+@tracer.start_as_current_span("route_task_llm")
+def choose_route_with_llm(user_input: str, db: Session) -> tuple[str | None, tuple]:
+    pretty_log(f"ANALYZING USER INPUT: '{user_input}'", "🔍")
 
     available_agents = get_available_agents(db)
     logger.debug(
@@ -503,7 +535,7 @@ def select_agent_for_task(user_input: str, db: Session = None):
 
     if not available_agents:
         pretty_log("NO AGENTS AVAILABLE", "❌")
-        return None, None, None, []
+        return None, _unrouted()
 
     pretty_log(f"FOUND {len(available_agents)} ACTIVE AGENTS", "🤖")
 
@@ -525,46 +557,22 @@ def select_agent_for_task(user_input: str, db: Session = None):
         pretty_log(
             "SELECTOR FAILED TO PARSE JSON - FALLING BACK TO DECOMPOSITION", "⚠️"
         )
-        return None, None, None, []
+        return None, _unrouted()
 
     classification = json_output.get("classification", "UNKNOWN")
     pretty_log(f"ROUTER CLASSIFICATION: {classification.upper()}", "🎯")
 
     if classification == "DIRECT_ANSWER" and classify_trivial_intent(user_input) is None:
-        return _reroute_direct_answer_to_single_agent(
+        return "SINGLE_AGENT", _reroute_direct_answer_to_single_agent(
             user_input, json_output.get("agent_name"), available_agents
         )
 
     if classification == "COMPLEX_TASK":
-        # Multi-agent collaboration is the headline feature of this platform —
-        # when the router flags a request as COMPLEX_TASK, hand it straight to
-        # the planner here so the caller doesn't fall back to single-agent
-        # paths (skill-match, auto-create-specialist, catch-all) that would
-        # capture the request before decomposition could ever fire. Returning
-        # the planner's output through the existing 4-tuple lets the regular
-        # subtask-chaining in routes.py + tasks-result/ kick in unchanged.
-        logger.info("LLM requested DECOMPOSITION. Inlining planner.")
-        pretty_log("COMPLEX TASK DETECTED -> RUNNING PLANNER INLINE", "🔨")
-        try:
-            first_action, actions_list = decompose_task(user_input, db)
-        except Exception as exc:
-            logger.exception("Inline decomposition raised: %s", exc)
-            return None, None, None, []
-        if first_action:
-            first_agent, first_demand = first_action
-            pretty_log(
-                f"PLAN READY: {len(actions_list) + 1} subtask(s), first -> {first_agent}",
-                "🗺️",
-            )
-            return first_agent, first_demand, None, actions_list
-        # Planner produced no plan — fall through to the legacy all-None
-        # return so the caller's downstream fallbacks (skill-match → auto-
-        # create → catch-all) still get a chance to dispatch something.
-        return None, None, None, []
+        return classification, _unrouted()
 
     if classification == "DIRECT_ANSWER":
         pretty_log("RESPONDING DIRECTLY TO USER", "💬")
-        return (
+        return classification, (
             None,
             None,
             f"Response for user : {json_output.get('final_answer', '')}",
@@ -577,19 +585,23 @@ def select_agent_for_task(user_input: str, db: Session = None):
 
         if not agent_name:
             logger.error("SINGLE_AGENT classification but no agent_name provided.")
-            return None, None, None, []
+            return classification, _unrouted()
 
         agent_id = get_agent_id(agent_name, db)
         if not agent_id:
             logger.error(f"Agent '{agent_name}' not found.")
-            return None, None, None, []
+            return classification, _unrouted()
 
         pretty_log(f"SELECTED SINGLE AGENT: {agent_name}", "✅")
-        return agent_id, rewritten_input, None, []
+        return classification, (agent_id, rewritten_input, None, [])
 
     logger.warning(
         f"Unknown classification '{classification}'. Falling back to decomposition."
     )
+    return classification, _unrouted()
+
+
+def _unrouted() -> tuple:
     return None, None, None, []
 
 

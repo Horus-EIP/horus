@@ -131,11 +131,11 @@ All configuration is loaded from environment variables. A reference file is loca
 
 The background job of `POST /tasks/new_task` routes each `auto` task with `tasks/router.py` (`route_task`). Three stages run in order and the first confident one decides:
 
-1. **Rules** (`tasks/intent_rules.py`, no model). Greetings and small talk get a fixed reply (`tasks/direct_answers.py`); arithmetic is computed exactly by a small parser (`tasks/arithmetic.py`, no `eval`), never generated. A phone number or a dashed range such as `555-1234` or `2019-2020` is not arithmetic. "compare", "versus", "and also" or two questions in one go to `COMPLEX_TASK` and the planner.
+1. **Rules** (`tasks/intent_rules.py`, no model). Greetings and small talk get a fixed reply (`tasks/direct_answers.py`); arithmetic is computed exactly by a small parser (`tasks/arithmetic.py`, no `eval`), never generated. A phone number or a dashed range such as `555-1234` or `2019-2020` is not arithmetic, and neither is any unspaced dash between two numbers of three or more digits or across three numbers (`1000-250`, `10-2-3`): those go to the next stages, so write `1000 - 250` to have it computed. A result above 10^100 or below 10^-100 is not answered by the rules either. "compare", "versus", "X vs Y" (not "VS Code"), "and also" or two questions of at least three words each go to `COMPLEX_TASK` and the planner.
 2. **Embeddings.** The question is embedded with the MiniLM model (`embed_for_routing`, the only embedder call) and compared with the labelled examples in `tasks/router_examples.yaml`, embedded once on first use (or by the preload thread). An agent's score is the mean similarity of its two closest examples. The best live agent wins when its score is at least `ROUTER_MIN_SCORE` and leads the next agent by at least `ROUTER_MIN_MARGIN`. A request made of sub-questions ("…, and who…", "…; how…") goes to `COMPLEX_TASK` when its parts confidently belong to different agents. Example groups follow the live roster: by agent name, else the live agent that shares most of the group's skills; groups of offline agents are ignored.
-3. **LLM.** With `LLM_BACKEND=vllm` (llama-server or vLLM) one short call with `response_format: json_schema` lets the model choose only `SINGLE_AGENT` or `COMPLEX_TASK` and a live agent name, with `ROUTER_LLM_MAX_TOKENS` tokens. `DIRECT_ANSWER` is not offered: only the rules may answer directly. With the in-process Transformers backend the full LLM router (`select_agent_for_task`) runs as before. If this stage fails, the task falls back to the skill match and the catch-all agent.
+3. **LLM.** With `LLM_BACKEND=vllm` (llama-server or vLLM) one short call with `response_format: json_schema` lets the model choose only `SINGLE_AGENT` or `COMPLEX_TASK` and a live agent name, with `ROUTER_LLM_MAX_TOKENS` tokens. `DIRECT_ANSWER` is not offered: only the rules may answer directly. With the in-process Transformers backend the full LLM router prompt (`choose_route_with_llm`, the routing call of `select_agent_for_task`) runs as before. If this stage fails, the task falls back to the skill match and the catch-all agent.
 
-Every decision is logged as `Routing decision` with `method` (`rules`, `embedding`, `llm`, `none`), `route`, `agent`, the top `scores` and `latency_ms`, and counted in `mas_routing_decisions_total{method,route}` and `mas_routing_decision_seconds{method}`.
+Every decision is logged as `Routing decision` with `method` (`rules`, `embedding`, `llm`, `none`), `route`, `agent`, the top `scores` and `latency_ms`, and counted in `mas_routing_decisions_total{method,route}` and `mas_routing_decision_seconds{method}`. The latency is the time to the decision on every path: it never includes the planner that a `COMPLEX_TASK` then runs.
 
 Measure the router on the labelled test set (`tests/mas/data/router_testset.yaml`, kept apart from the examples). From `src/services/mas`, `python -m tasks.router_eval` routes it with the rules and the embeddings and prints the accuracy, the share and p50/p95 latency of each method and the fallback rate; `--json report.json` also writes the report as JSON:
 
@@ -144,10 +144,13 @@ cd src/services/mas
 python -m tasks.router_eval --json report.json
 ```
 
-`--llm` also sends the undecided questions to the constrained LLM call, which needs the OpenAI-compatible server:
+To measure on a running stack, run the report inside the MAS container. The test set is not in the MAS image, so copy it in and pass `--testset`. `--llm` also sends the undecided questions to the constrained LLM call; it needs `LLM_BACKEND=vllm` and `LLM_VLLM_URL` (llama-server or vLLM), which the container already has from `.env`:
 
 ```bash
-LLM_BACKEND=vllm LLM_VLLM_URL=http://llm:8080/v1 python -m tasks.router_eval --llm
+cd src/infra
+docker compose cp ../../tests/mas/data/router_testset.yaml mas:/tmp/router_testset.yaml
+docker compose exec mas python -m tasks.router_eval --testset /tmp/router_testset.yaml --json /tmp/router-report.json
+docker compose exec mas python -m tasks.router_eval --testset /tmp/router_testset.yaml --llm --json /tmp/router-llm.json
 ```
 
 `--min-score` and `--min-margin` try other thresholds. `tests/mas/unit/test_router_model.py` (marker `requires_model`) runs the same report when the MiniLM model is on disk and is skipped otherwise.

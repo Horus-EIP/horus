@@ -77,6 +77,34 @@ def test_a_result_too_large_to_show_is_not_evaluated():
     assert time.perf_counter() - started < 1.0
 
 
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "9^100*9^100*9^100*9^100",
+        "10^99*10^99*10^99*10^99",
+        "10^100 + 1",
+        "1/10^99/10^99/10^99/10^99",
+        "0.5^300 * 0.5^300",
+    ],
+)
+def test_a_result_beyond_ten_to_the_hundred_either_way_is_not_evaluated(expression):
+    with pytest.raises(NotArithmeticError):
+        evaluate_arithmetic(expression)
+
+
+@pytest.mark.parametrize(
+    ("expression", "value"),
+    [
+        ("10^100", Fraction(10) ** 100),
+        ("(1/10)^100", Fraction(1, 10**100)),
+        ("0 * 10^99", 0),
+        ("5 - 5", 0),
+    ],
+)
+def test_results_up_to_ten_to_the_hundred_either_way_and_zero_are_evaluated(expression, value):
+    assert evaluate_arithmetic(expression) == value
+
+
 class TestArithmeticAnswer:
     def test_the_answer_repeats_the_expression_and_gives_the_result(self):
         assert arithmetic_answer("2+2") == "2+2 = 4"
@@ -89,9 +117,16 @@ class TestArithmeticAnswer:
             "1/0 is undefined: a number cannot be divided by zero."
         )
 
-    @pytest.mark.parametrize("expression", ["50% + 10", "9^9^9", "√-1"])
+    @pytest.mark.parametrize(
+        "expression",
+        ["50% + 10", "9^9^9", "√-1", "9^100*9^100*9^100*9^100", "1/10^99/10^99/10^99/10^99"],
+    )
     def test_an_expression_that_cannot_be_evaluated_has_no_answer(self, expression):
         assert arithmetic_answer(expression) is None
+
+    def test_the_largest_and_smallest_results_are_shown(self):
+        assert arithmetic_answer("10^100") == "10^100 = 1e+100"
+        assert arithmetic_answer("(1/10)^100") == "(1/10)^100 = 1e-100"
 
 
 class TestFormatNumber:

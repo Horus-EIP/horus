@@ -136,6 +136,8 @@ _POWER_WORD_EXPONENTS = {"squared": "^2", "cubed": "^3"}
 
 _MAX_TRIVIAL_LENGTH = 200
 
+_MIN_QUESTION_WORDS = 3
+
 
 def _any_of(phrases) -> str:
     return "(?:" + "|".join(phrases) + ")"
@@ -169,9 +171,11 @@ _EXPRESSION = re.compile(r"[\d\s.,+\-*/x×÷^%()√]+")
 _NUMBER = re.compile(r"\d[\d.,]*")
 _GROUPING = re.compile(r"[\s()]")
 _OPERATION_SHAPE = re.compile(r"n[+\-*/x×÷^%][+\-]*n|√[+\-]*n")
-_COMPARISON = re.compile(r"\b(?:compar(?:e|es|ed|ing|ison|isons)|versus|vs)\b")
+_COMPARISON = re.compile(r"\b(?:compar(?:e|es|ed|ing|ison|isons)|versus)\b")
+_VS_BETWEEN_OPERANDS = re.compile(r"\w\s+vs\.?\s+(?!code\b)\w")
 _AND_ALSO = re.compile(r"\band\s+also\b")
-_WORD_CHARACTER = re.compile(r"\w")
+_SENTENCE_BREAK = re.compile(r"[!;:\n]|(?<!\d)\.|\.(?!\d)")
+_QUESTION_WORD = re.compile(r"[\w']+")
 
 
 def classify_trivial_intent(text: str | None) -> TrivialIntent | None:
@@ -207,16 +211,19 @@ def find_complex_cue(text: str | None) -> ComplexCue | None:
     if not text:
         return None
     normalised = _normalise(text)
-    if _COMPARISON.search(normalised):
+    if _COMPARISON.search(normalised) or _VS_BETWEEN_OPERANDS.search(normalised):
         return ComplexCue.COMPARISON
     if _AND_ALSO.search(normalised):
         return ComplexCue.AND_ALSO
-    questions = sum(
-        1 for asked in normalised.split("?")[:-1] if _WORD_CHARACTER.search(asked)
-    )
+    questions = sum(1 for asked in normalised.split("?")[:-1] if _is_a_full_question(asked))
     if questions >= 2:
         return ComplexCue.SEVERAL_QUESTIONS
     return None
+
+
+def _is_a_full_question(text_before_mark: str) -> bool:
+    question = _SENTENCE_BREAK.split(text_before_mark)[-1]
+    return len(_QUESTION_WORD.findall(question)) >= _MIN_QUESTION_WORDS
 
 
 def _normalise(text: str) -> str:
