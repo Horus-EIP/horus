@@ -7,6 +7,10 @@ Exposes metrics for task processing, RAG queries, model inference, and error rat
 
 from prometheus_client import Counter, Gauge, Histogram
 
+LONG_RUNNING_BUCKETS = (
+    0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0, 900.0, 1200.0, 1800.0
+)
+
 # Task processing metrics
 task_processing_total = Counter(
     "agent_tasks_total",
@@ -17,7 +21,7 @@ task_processing_total = Counter(
 task_processing_duration = Histogram(
     "agent_task_processing_duration_seconds",
     "Time spent processing tasks",
-    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0]
+    buckets=LONG_RUNNING_BUCKETS
 )
 
 # RAG pipeline metrics
@@ -50,7 +54,7 @@ model_inference_duration = Histogram(
     "agent_model_inference_duration_seconds",
     "Time spent on model inference",
     ["model_name", "device"],
-    buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
+    buckets=LONG_RUNNING_BUCKETS
 )
 
 # Knowledge store client metrics
@@ -63,7 +67,7 @@ knowledge_store_requests_total = Counter(
 knowledge_store_request_duration = Histogram(
     "agent_knowledge_store_request_duration_seconds",
     "Time spent on knowledge store requests",
-    buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
+    buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0]
 )
 
 # Agent status metrics

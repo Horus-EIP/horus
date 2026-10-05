@@ -9,6 +9,7 @@ synthesis helper (``aggregate_results``) that consolidates sub-task output.
 import json
 from graphlib import TopologicalSorter
 
+from opentelemetry import trace
 from sqlalchemy.orm import Session
 
 from agents.registry_tool_functions import (
@@ -33,6 +34,7 @@ from tasks.prompts import (
 )
 
 logger = get_logger("task_tool_functions")
+tracer = trace.get_tracer(__name__)
 
 
 def build_action_list(actions_dict, agents_available, db: Session = None):
@@ -274,6 +276,7 @@ def _heuristic_decompose(user_input: str, db: Session) -> tuple:
     return first_action, actions_list
 
 
+@tracer.start_as_current_span("decompose_task")
 def decompose_task(user_input: str, db: Session = None):
     pretty_log(f"INITIATING TASK DECOMPOSITION FOR: '{user_input}'", "🔨")
 
@@ -381,6 +384,7 @@ def _planned_steps_from_actions(action_list: list, db: Session) -> list[dict]:
     return out
 
 
+@tracer.start_as_current_span("announce_plan")
 def manager_announce_plan(
     user_demand: str, action_list: list, db: Session
 ) -> str:
@@ -421,6 +425,7 @@ def manager_announce_plan(
         )
 
 
+@tracer.start_as_current_span("review_step")
 def manager_review_step(
     user_demand: str,
     transcript: str,
@@ -464,6 +469,7 @@ def manager_review_step(
     }
 
 
+@tracer.start_as_current_span("route_task")
 def select_agent_for_task(user_input: str, db: Session = None):
     """Route a user query to the right agent via the LLM intent router.
 
@@ -692,6 +698,7 @@ def select_agent_by_mode(
     return None, None, None, []
 
 
+@tracer.start_as_current_span("aggregate_results")
 def aggregate_results(history, result):
     """Synthesize a final user-facing answer from sub-task history + output."""
     prompt = get_prompt_final_answer_generation(history, result)

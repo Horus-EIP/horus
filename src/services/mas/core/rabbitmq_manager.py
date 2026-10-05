@@ -236,7 +236,15 @@ class RabbitMQ:
             )
             logger.info(f"Sent message to queue {queue_name}: {message}")
 
-        self._execute_with_retry(_action)
+        with tracer.start_as_current_span(
+            f"publish {queue_name}",
+            kind=trace.SpanKind.PRODUCER,
+            attributes={
+                "messaging.system": "rabbitmq",
+                "messaging.destination.name": queue_name,
+            },
+        ):
+            self._execute_with_retry(_action)
 
     # ------------------------------------------------------------------
     # Agent-to-agent communication helpers

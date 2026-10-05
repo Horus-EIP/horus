@@ -79,3 +79,27 @@ class TestMetricHelpers:
             )
             == 1.0
         )
+
+
+class TestLatencyBuckets:
+    def test_query_and_embedding_buckets_reach_thirty_minutes(self):
+        for name in (
+            "knowledge_store_query_duration_seconds_bucket",
+            "knowledge_store_embedding_duration_seconds_bucket",
+        ):
+            assert REGISTRY.get_sample_value(name, {"le": "1800.0"}) is not None, name
+
+    def test_sub_second_resolution_is_kept(self):
+        assert REGISTRY.get_sample_value(
+            "knowledge_store_query_duration_seconds_bucket", {"le": "0.01"}
+        ) is not None
+
+    def test_a_query_stuck_behind_a_cpu_corpus_scan_lands_in_a_finite_bucket(self):
+        bucket = "knowledge_store_query_duration_seconds_bucket"
+        under_five_minutes = _sample(bucket, {"le": "300.0"})
+        under_ten_minutes = _sample(bucket, {"le": "600.0"})
+
+        metrics.record_query(True, 420.0, 4)
+
+        assert _sample(bucket, {"le": "300.0"}) == under_five_minutes
+        assert _sample(bucket, {"le": "600.0"}) == under_ten_minutes + 1

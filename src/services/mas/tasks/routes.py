@@ -22,7 +22,7 @@ from chat.chat_tool_functions import send_messages_via_websockets, send_task_ste
 from conversations.conversation_tool_functions import add_messages
 from core.logger import get_logger, log_agent_operation
 from core.memory_usage import peak_rss_mb
-from core.metrics import TASK_ERRORS, TASK_QUEUE_DEPTH
+from core.metrics import TASK_ERRORS, TASK_QUEUE_DEPTH, observe_task_processing_time
 from core.rabbitmq_tool import rabbitmq_instance
 from core.skill_cache import rank_skills
 from core.work_queues import agent_may_submit_task_result, resolve_work_queue_for_agent_id
@@ -1091,6 +1091,7 @@ async def sharing_agent_result(
         db.commit()
 
         TASK_QUEUE_DEPTH.dec()
+        observe_task_processing_time(task.created_at)
         log_agent_operation(
             task_result.agent_id,
             "TASK",

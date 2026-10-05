@@ -2,6 +2,8 @@
 
 from prometheus_client import Counter, Gauge, Histogram, Info
 
+LONG_RUNNING_TAIL_BUCKETS = (10.0, 30.0, 60.0, 120.0, 300.0, 600.0, 900.0, 1200.0, 1800.0)
+
 # --- Document metrics ---
 DOCUMENT_OPERATIONS = Counter(
     "knowledge_store_document_operations_total",
@@ -24,7 +26,7 @@ QUERY_COUNT = Counter(
 QUERY_LATENCY = Histogram(
     "knowledge_store_query_duration_seconds",
     "Query latency in seconds",
-    buckets=[0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0]
+    buckets=[0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, *LONG_RUNNING_TAIL_BUCKETS]
 )
 
 QUERY_RESULTS = Histogram(
@@ -37,7 +39,7 @@ QUERY_RESULTS = Histogram(
 EMBEDDING_TIME = Histogram(
     "knowledge_store_embedding_duration_seconds",
     "Time to generate embeddings",
-    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0]
+    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, *LONG_RUNNING_TAIL_BUCKETS]
 )
 
 EMBEDDING_COUNT = Counter(

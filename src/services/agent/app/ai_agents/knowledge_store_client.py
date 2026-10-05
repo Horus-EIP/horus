@@ -11,8 +11,10 @@ import time
 from typing import Any
 
 import httpx
+from opentelemetry import trace
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
 # Filename-like tokens the agent can resolve to full store text (not only semantic search).
 _FILENAME_EXT_RE = re.compile(
@@ -118,6 +120,7 @@ class KnowledgeStoreClient:
             return self.base_url
         return f"{self.base_url}{self._api_prefix}"
 
+    @tracer.start_as_current_span("knowledge_store_query")
     async def query(self, query: str, n_results: int | None = None) -> dict[str, Any]:
         """
         Query the knowledge store with a query string (async).
@@ -373,6 +376,7 @@ class KnowledgeStoreClient:
 
         return {"query": f"__file__:{name}", "data": ""}
 
+    @tracer.start_as_current_span("knowledge_store_fetch_for_rag")
     async def fetch_for_rag(
         self, query: str, n_results: int | None = None
     ) -> dict[str, Any]:

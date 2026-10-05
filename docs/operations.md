@@ -300,6 +300,7 @@ JSON_LOGGING=true
 OTEL_ENABLED=true
 OTEL_SERVICE_NAME=mas
 OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
+OTEL_PYTHON_EXCLUDED_URLS=/health,/metrics,/rabbitmq/heartbeat,/agents/heartbeat/
 TASK_TIMEOUT_SECONDS=300
 ```
 
@@ -332,7 +333,8 @@ Observability adds small per-request overhead (logging, metrics, tracing). To re
 #### No traces at `/admin/traces`
 
 - Ensure `OTEL_ENABLED=true` and `OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317` for the service.  
-- Check `docker logs tempo` and that the app container can resolve `tempo`.
+- Check `docker logs tempo` and that the app container can resolve `tempo`.  
+- A chat message shows up under the `mas` service as `POST /tasks/new_task/`, with `route_task`, `publish horus.work.<type>`, the agent's `knowledge_store_fetch_for_rag` and the result post as child spans. Healthcheck probes, Prometheus scrapes and agent heartbeats are left out on purpose (`OTEL_PYTHON_EXCLUDED_URLS` in `docker-compose.yml`), and so are database or HTTP calls that MAS makes outside a request.
 
 #### Connection refused from PgAdmin to the database
 

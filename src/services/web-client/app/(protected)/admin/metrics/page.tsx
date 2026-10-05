@@ -9,6 +9,7 @@ import {
   type MetricSeries,
   type ScrapeTarget,
 } from "@/lib/metrics/api";
+import { METRIC_PANELS } from "@/lib/metrics/panels";
 import { useNotification } from "@/contexts/notification-context";
 import { ObservabilityTabs } from "@/components/admin/observability-tabs";
 
@@ -17,13 +18,6 @@ const SINCE_OPTIONS = [
   { value: "1h", label: "Last 1 hour" },
   { value: "6h", label: "Last 6 hours" },
   { value: "24h", label: "Last 24 hours" },
-];
-
-/** Replicates the Grafana "MAS Overview" dashboard panels. */
-const PANELS: { title: string; query: string; nameLabel?: string; unit?: string }[] = [
-  { title: "Task Queue Depth", query: "mas_task_queue_depth" },
-  { title: "Task Errors Rate", query: "rate(mas_task_errors_total[5m])", unit: "/s" },
-  { title: "Active Agents", query: "mas_agent_count", nameLabel: "status" },
 ];
 
 const PALETTE = ["blue.5", "teal.5", "grape.5", "orange.5", "lime.5", "pink.5", "cyan.5"];
@@ -145,7 +139,7 @@ function MetricPanel({
           withLegend={chartSeries.length > 1}
           tickLine="y"
           gridAxis="xy"
-          valueFormatter={(v) => `${v}${unit ?? ""}`}
+          valueFormatter={(v) => `${Number(v.toPrecision(3))}${unit ?? ""}`}
           xAxisProps={{ minTickGap: 40 }}
         />
       )}
@@ -246,7 +240,7 @@ const AdminMetricsPage = () => {
 
       {/* Fixed panels */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {PANELS.map((p) => (
+        {METRIC_PANELS.map((p) => (
           <MetricPanel
             key={p.title}
             {...p}

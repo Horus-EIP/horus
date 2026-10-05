@@ -78,6 +78,7 @@ services:
       - OTEL_ENABLED=${OTEL_ENABLED:-true}
       - OTEL_SERVICE_NAME=mas
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
+      - OTEL_PYTHON_EXCLUDED_URLS=/health,/metrics,/rabbitmq/heartbeat,/agents/heartbeat/
       - JSON_LOGGING=true
       - LOG_LEVEL=INFO
       # Wall-clock cap for RUNNING tasks (LLM + agent). TASK_TIMEOUT_SECONDS also accepted by MAS settings.
@@ -208,6 +209,7 @@ services:
       - OTEL_ENABLED=${OTEL_ENABLED:-true}
       - OTEL_SERVICE_NAME=agent
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
+      - OTEL_PYTHON_EXCLUDED_URLS=/health,/metrics,/agents/heartbeat/
       # Default ONLINE so first-run can pull. Flip to 1 once the cache is warm.
       - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
       - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
@@ -329,6 +331,7 @@ services:
       - OTEL_ENABLED=${OTEL_ENABLED:-true}
       - OTEL_SERVICE_NAME=knowledge-store
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
+      - OTEL_PYTHON_EXCLUDED_URLS=/health,/metrics
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=10)"]
       interval: 30s
