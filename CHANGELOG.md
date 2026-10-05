@@ -24,6 +24,52 @@ Releases from 0.1.0 on have their own section, named after the tag. The monthly 
 
 ---
 
+## Unreleased
+
+The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 8, B-87 to B-102): a 16 GB CPU-only machine runs one llama-server for every model, answers are never lost on a reconnect, and answers cite their sources. None of it is measured on the reference machines yet; each task's commit lists the commands that produce the numbers.
+
+### Upgrading an existing install
+
+- Database migrations add the `queued` task status, `tasks.owner_username`, `tasks.skills_required` and `tasks.completed_at`, and the worker-claim columns. MAS also adds a missing `queued` value to a `taskstatus` enum built by the `create_all` fallback.
+- The knowledge store re-embeds every stored document once on its first start (passages instead of whole files, FastEmbed instead of sentence-transformers). `KNOWLEDGE_STORE_REINDEX_ON_STARTUP=0` turns it off.
+- RabbitMQ work queues get a length limit: an empty queue declared by an older version is deleted and declared again; a queue that still holds tasks is kept and limited by MAS until it drains.
+- The CPU profiles download a 2.5 GB GGUF for llama-server instead of the in-process 1.5B router and 4B worker. Docker Compose 2.33.0 or later is required.
+
+### Fixed
+
+- **F27** The chat socket no longer drops after about 40 s on CPU (WebSocket ping timeout 120 s, aggregation off the event loop), and a result that finished while the browser was disconnected is shown after the reconnect (`ef05b6b`)
+- **F29/F36** The task page shows the skills and the start and end times, its spinner follows the task's status, and the documents tile refreshes once after an upload (`cd8247a`)
+- **F37** No horizontal page scroll at 1366x768 or on a 768 px tablet (`ae538f3`)
+- **F34/F35** MAS traces appear under the service name `mas`, routing, publishing and knowledge-store calls have spans, and the admin metrics page has p50/p95 latency panels with buckets up to 1,800 s (`e5a3589`)
+- The answer cache stores only validated answers and is keyed on a corpus version that every upload, delete, scan and re-index changes (`fd4ae36`)
+- Attached knowledge-store files reached the agent as "(no content available)"; their text is now read and sent once (`3ba1272`)
+- A fresh MAS image failed to reach Postgres because SQLAlchemy 2.1 defaults to psycopg 3; the URL now names psycopg2 and SQLAlchemy is bounded (`6851af5`)
+- A direct answer to a request with attached files was dropped; such requests go to an agent (`e8c79df`)
+- `--start` waits for a service that is still downloading its model instead of exiting with code 42 (`0f0b39b`)
+
+### Added
+
+- One llama-server (`ghcr.io/ggml-org/llama.cpp:server-b11382`, Qwen3-4B-Instruct-2507 Q4_K_M) serves MAS and every agent on the CPU profiles; neither service loads a local model (B-90, `9739864`)
+- `POST /tasks/new_task` answers 202 with the task id at once; task events are stored in Redis Streams, replayed with `GET /tasks/{id}/events?since=`, and a heartbeat arrives every 5 s; an `Idempotency-Key` keeps a retried request from creating a second task (B-93, `fd8778b`)
+- Bounded work queues with publisher confirms ("Busy, position N"), a claim-based agent worker that never runs a task twice, and a timeout that fails the task instead of answering with a canned text (B-94, `84fc34b`)
+- A router that tries rules, then embeddings, then a constrained LLM call: 98.7% of the 116 router test questions routed correctly without the LLM, in a median 2.5 ms on the development laptop (B-92, `0ca74e7`)
+- Model manager: `models/manifest.json`, resumable and hash-checked downloads with mirror switching (B-95, `e9364c8`)
+- Prebuilt, signed images per profile from `.github/workflows/images.yml`; the installer pulls instead of building (B-66, `736fdc2`)
+- Documents are indexed as passages (`{doc_id}:{n}`) with page and offset metadata, and agents can fetch an attachment by its document id (B-97, `8670bec`)
+- Answer contract: every agent answer is JSON with a status and its sources, the chat shows the sources under the answer, and MAS retries once on `not_found` or `failed` (B-98, `803176d`)
+- Benchmark tooling (`scripts/benchmarks/`, `scripts/eval/` resource sampling and comparison) and ADR-005 on machines under 16 GB (B-91, `cc03ea7`)
+- The installer decides the CPU profile, or refuses an unsupported machine, before any large download; it warns without AVX2 and re-detects only when the hardware changed (B-100, `5154b23`)
+- Research note on integrated GPUs and NPUs (B-101, `8d91cef`) and a harness for the model candidates (B-102, `5b304e6`)
+- Preflight refuses Docker Compose older than 2.33.0 and checks that ghcr.io is reachable on CPU profiles (`2cb3aa9`)
+
+### Changed
+
+- CPU images install the CPU PyTorch wheel, and torch is pinned to 2.14.1 (B-87, `c0f89b3`); since B-96 the CPU images contain no torch at all
+- Memory limits for the agent and the knowledge store, thread budgets from the physical core count, and one MAS generation at a time (B-88, `39fc78c`)
+- CPU profiles use fewer passages and a 6,000-character context cap, and stream the answer (B-89, `1d5dd31`)
+- Embeddings run on ONNX Runtime with FastEmbed in MAS and the knowledge store (B-96, `5055cd2`)
+- Agent personas fit 300 tokens with at most 5 tools, prompts put the fixed part first so llama-server can reuse it, and prompt tokens are counted per call (B-99, `c19eff0`)
+
 ## 0.1.2 (unreleased)
 
 Fixes for what the ATP beta testers hit. Not tagged yet: the tag waits for the smoke test on a clean CPU VM and on the GPU VM (B-47).
