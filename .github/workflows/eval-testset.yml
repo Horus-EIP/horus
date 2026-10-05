@@ -1,0 +1,45 @@
+name: Eval test set
+
+on:
+  push:
+    branches: [master, main, pre-release-fix]
+    paths:
+      - demo_assets/**
+      - tests/eval/**
+      - scripts/eval/**
+      - scripts/perf/benchmark-pipeline.py
+      - scripts/perf/quality-benchmark.py
+      - .github/workflows/eval-testset.yml
+  pull_request:
+    paths:
+      - demo_assets/**
+      - tests/eval/**
+      - scripts/eval/**
+      - scripts/perf/benchmark-pipeline.py
+      - scripts/perf/quality-benchmark.py
+      - .github/workflows/eval-testset.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: '3.13'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  test-eval:
+    name: Tests · Eval test set
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install test dependencies
+        run: pip install pytest pyyaml httpx websockets
+
+      - name: Check the test set and the runner
+        run: pytest tests/eval -q

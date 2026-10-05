@@ -1,0 +1,896 @@
+version: 1.0.0
+corpus_dir: ../../demo_assets
+corpus:
+  1_Q4_2025_Financial_Report.md: 7e3a592933a1b6d8f2d69c3132c23371d2dbfaf8be553c140c4798fb810c7880
+  2_Employee_Handbook.md: c416c7fec78af0ac90281927e2aff03e54ef37ff3b3c026586fbb65d4972c1b1
+  3_Compliance_Guidelines.md: 3d8fb608c2cb74e4275b2c1c6d50a9870f0a14e0c6322ffe73ebfdd6721cadec
+  4_Expense_Policy.md: 946fc442a43dab428f93d20e1a1dc0b54160b54fc7a9381a680ebc36ebbadf44
+  5_IT_Security_Policy.md: 5a52e6bb01ecf184a46771e28ab64dc83147fdf92770642f8f72ab1a356b7f40
+refusal_patterns: &refusal_patterns
+  - '\b(does|do|did)\s*(not|n.t)\s+(contain|include|mention|specify|provide|state|say|cover|list|have)\b|\bnot\s+(found|available|mentioned|specified|provided|included|stated|covered|listed|present|contained)\b|\bno\s+(information|mention|details?|data|record|reference)\b|\b(could|can|did)\s*(not|n.t)\s+(find|locate|identify)\b|\bunable\s+to\s+(find|locate|identify)\b|\bnot\s+in\s+the\s+(documents?|retrieved|provided|knowledge|context)\b'
+items:
+  - id: fin-01
+    category: lookup
+    difficulty: easy
+    question: "What was FinCorp's total revenue in Q4 2025?"
+    expected_answer: "$4.2M ($4,200,000), up 12% year-over-year."
+    expected_source: 1_Q4_2025_Financial_Report.md
+    answer_patterns:
+      - '\b4\.2\s*(m\b|million)|\b4,200,000\b'
+  - id: fin-02
+    category: numeric
+    difficulty: easy
+    question: "By how much did FinCorp's Q4 2025 revenue grow year-over-year?"
+    expected_answer: "12% year-over-year."
+    expected_source: 1_Q4_2025_Financial_Report.md
+    answer_patterns:
+      - '\b12\s*(%|percent)'
+  - id: fin-03
+    category: lookup
+    difficulty: easy
+    question: "What were FinCorp's total operating expenses in Q4 2025?"
+    expected_answer: "$3.1M ($3,100,000)."
+    expected_source: 1_Q4_2025_Financial_Report.md
+    answer_patterns:
+      - '\b3\.1\s*(m\b|million)|\b3,100,000\b'
+  - id: fin-04
+    category: numeric
+    difficulty: easy
+    question: "What net operating income did FinCorp report for Q4 2025?"
+    expected_answer: "$1.1M."
+    expected_source: 1_Q4_2025_Financial_Report.md
+    answer_patterns:
+      - '\b1\.1\s*(m\b|million)|\b1,100,000\b'
+  - id: fin-05
+    category: lookup
+    difficulty: easy
+    question: "What was FinCorp's full-year revenue for 2025?"
+    expected_answer: "$15.8M."
+    expected_source: 1_Q4_2025_Financial_Report.md
+    answer_patterns:
+      - '\b15\.8\s*(m\b|million)|\b15,800,000\b'
+  - id: fin-06
+    category: numeric
+    difficulty: medium
+    question: "By what percentage did FinCorp's 2025 full-year revenue beat the board target?"
+    expected_answer: "By 5.3%: $15.8M against a board target of $15M."
+    expected_source: 1_Q4_2025_Financial_Report.md
+    answer_patterns:
+      - '\b5\.3\s*(%|percent)'
+  - id: fin-07
+    category: lookup
+    difficulty: easy
+    question: "Which three enterprise clients did FinCorp onboard in Q4 2025?"
+    expected_answer: "Acme Bank, Meridian Holdings and Kestrel Capital."
+    expected_source: 1_Q4_2025_Financial_Report.md
+    answer_patterns:
+      - 'Acme\s+Bank'
+      - 'Meridian\s+Holdings'
+      - 'Kestrel\s+Capital'
+  - id: fin-08
+    category: lookup
+    difficulty: easy
+    question: "When did FinCorp complete its SOC 2 Type II audit?"
+    expected_answer: "November 24, 2025."
+    expected_source: 1_Q4_2025_Financial_Report.md
+    answer_patterns:
+      - 'November\s+24(th)?,?\s+2025|\b24(th)?\s+(of\s+)?November,?\s+2025|\b2025-11-24\b'
+  - id: fin-09
+    category: lookup
+    difficulty: medium
+    question: "How much revenue did the Advisory Services segment generate in Q4 2025?"
+    expected_answer: "$1,850,000, which is 44.0% of total revenue."
+    expected_source: 1_Q4_2025_Financial_Report.md
+    answer_patterns:
+      - '\b1,850,000\b|\b1\.85\s*(m\b|million)'
+  - id: fin-10
+    category: numeric
+    difficulty: medium
+    question: "What share of FinCorp's Q4 2025 revenue came from Asset Management?"
+    expected_answer: "33.8% ($1,420,000)."
+    expected_source: 1_Q4_2025_Financial_Report.md
+    answer_patterns:
+      - '\b33\.8\s*(%|percent)'
+  - id: fin-11
+    category: lookup
+    difficulty: medium
+    question: "Which revenue segment was the smallest in Q4 2025?"
+    expected_answer: "Technology Licensing, with $310,000 (7.4% of total revenue)."
+    expected_source: 1_Q4_2025_Financial_Report.md
+    answer_patterns:
+      - 'Technology\s+Licensing'
+  - id: fin-12
+    category: numeric
+    difficulty: medium
+    question: "How far over budget was Travel & Entertainment in Q4 2025?"
+    expected_answer: "$55K over budget (+26%): $265K spent against a Q4 budget of $210K."
+    expected_source: 1_Q4_2025_Financial_Report.md
+    answer_patterns:
+      - '\b55\s*k\b|\b55,000\b|\b26\s*(%|percent)'
+  - id: fin-13
+    category: lookup
+    difficulty: medium
+    question: "Who approved the Q4 2025 Travel & Entertainment overage, and on what date?"
+    expected_answer: "Sarah Johnson, COO, on December 12, 2025."
+    expected_source: 1_Q4_2025_Financial_Report.md
+    answer_patterns:
+      - 'Sarah\s+Johnson'
+      - 'December\s+12(th)?,?\s+2025|\b12(th)?\s+(of\s+)?December,?\s+2025|\b2025-12-12\b'
+  - id: fin-14
+    category: lookup
+    difficulty: medium
+    question: "How much of the Q4 2025 Technology & Cloud spend was for the Horus deployment?"
+    expected_answer: "$85K, out of $410,000 of Technology & Cloud spend."
+    expected_source: 1_Q4_2025_Financial_Report.md
+    answer_patterns:
+      - '\b85\s*k\b|\b85,000\b'
+  - id: fin-15
+    category: lookup
+    difficulty: easy
+    question: "What is FinCorp's revenue target for Q1 2026?"
+    expected_answer: "$4.5M."
+    expected_source: 1_Q4_2025_Financial_Report.md
+    answer_patterns:
+      - '\b4\.5\s*(m\b|million)|\b4,500,000\b'
+  - id: fin-16
+    category: multi_hop
+    difficulty: hard
+    question: "What is the combined annual contract value of the three clients onboarded in Q4 2025?"
+    expected_answer: "$2,520,000: $1,200,000 (Acme Bank) + $780,000 (Meridian Holdings) + $540,000 (Kestrel Capital)."
+    expected_source: 1_Q4_2025_Financial_Report.md
+    answer_patterns:
+      - '\b2,520,000\b|\b2\.52\s*(m\b|million)'
+    evidence_patterns:
+      - 'Acme Bank \| \$1,200,000'
+      - 'Meridian Holdings \| \$780,000'
+      - 'Kestrel Capital \| \$540,000'
+  - id: hr-01
+    category: lookup
+    difficulty: easy
+    question: "How many days per week are FinCorp employees expected to be in the office?"
+    expected_answer: "At least 3 days per week (hybrid policy)."
+    expected_source: 2_Employee_Handbook.md
+    answer_patterns:
+      - '\b(3|three)\s+days'
+  - id: hr-02
+    category: lookup
+    difficulty: easy
+    question: "What are FinCorp's standard working hours?"
+    expected_answer: "Monday to Friday, 9:00 AM to 6:00 PM local time."
+    expected_source: 2_Employee_Handbook.md
+    answer_patterns:
+      - '\b9(:00)?\s*(am|a\.m\.)'
+      - '\b6(:00)?\s*(pm|p\.m\.)'
+  - id: hr-03
+    category: lookup
+    difficulty: medium
+    question: "What are the core collaboration hours at FinCorp?"
+    expected_answer: "10:00 AM to 3:00 PM local time."
+    expected_source: 2_Employee_Handbook.md
+    answer_patterns:
+      - '\b10(:00)?\s*(am|a\.m\.)'
+      - '\b3(:00)?\s*(pm|p\.m\.)'
+  - id: hr-04
+    category: numeric
+    difficulty: easy
+    question: "How many annual vacation days does an employee with 0–2 years of tenure get?"
+    expected_answer: "18 vacation days per year."
+    expected_source: 2_Employee_Handbook.md
+    answer_patterns:
+      - '\b(18|eighteen)\b'
+  - id: hr-05
+    category: numeric
+    difficulty: medium
+    question: "How many sick days does an employee with 6+ years of tenure get?"
+    expected_answer: "12 sick days (alongside 28 vacation days)."
+    expected_source: 2_Employee_Handbook.md
+    answer_patterns:
+      - '\b(12|twelve)\b'
+  - id: hr-06
+    category: numeric
+    difficulty: easy
+    question: "How many unused vacation days can be carried over into the next calendar year?"
+    expected_answer: "A maximum of 5 days."
+    expected_source: 2_Employee_Handbook.md
+    answer_patterns:
+      - '\b(5|five)\s+(\w+\s+){0,2}days?\b'
+  - id: hr-07
+    category: lookup
+    difficulty: easy
+    question: "When are salaries reviewed at FinCorp?"
+    expected_answer: "Annually, effective April 1 each year."
+    expected_source: 2_Employee_Handbook.md
+    answer_patterns:
+      - 'April\s+1(st)?\b|\b1(st)?\s+(of\s+)?April'
+  - id: hr-08
+    category: numeric
+    difficulty: easy
+    question: "What share of dependents' health insurance does FinCorp cover?"
+    expected_answer: "70% (the employee's own cover is fully employer-funded)."
+    expected_source: 2_Employee_Handbook.md
+    answer_patterns:
+      - '\b70\s*(%|percent)'
+  - id: hr-09
+    category: numeric
+    difficulty: easy
+    question: "Up to what percentage of base salary does FinCorp match for retirement contributions?"
+    expected_answer: "Up to 6% of base salary."
+    expected_source: 2_Employee_Handbook.md
+    answer_patterns:
+      - '\b6\s*(%|percent)'
+  - id: hr-10
+    category: lookup
+    difficulty: medium
+    question: "What is the notice period for senior managers?"
+    expected_answer: "60 days."
+    expected_source: 2_Employee_Handbook.md
+    answer_patterns:
+      - '\b(60|sixty)\s+days'
+  - id: hr-11
+    category: lookup
+    difficulty: easy
+    question: "Who is FinCorp's HR Director?"
+    expected_answer: "Rachel Garcia."
+    expected_source: 2_Employee_Handbook.md
+    answer_patterns:
+      - 'Rachel\s+Garcia'
+  - id: hr-12
+    category: lookup
+    difficulty: medium
+    question: "Whose approval does a fully remote work arrangement require?"
+    expected_answer: "Written approval from the department head and from Sarah Johnson (COO)."
+    expected_source: 2_Employee_Handbook.md
+    answer_patterns:
+      - 'department\s+head'
+      - 'Sarah\s+Johnson'
+  - id: hr-13
+    category: multi_hop
+    difficulty: medium
+    question: "What is the notice period for the executive team, and who conducts exit interviews?"
+    expected_answer: "90 days; exit interviews are conducted by Rachel Garcia within 5 business days of the notice."
+    expected_source: 2_Employee_Handbook.md
+    answer_patterns:
+      - '\b(90|ninety)\s+days'
+      - 'Rachel\s+Garcia'
+  - id: hr-14
+    category: numeric
+    difficulty: hard
+    question: "How many more annual vacation days does an employee with 6+ years of tenure get than one with 0–2 years?"
+    expected_answer: "10 more days: 28 versus 18."
+    expected_source: 2_Employee_Handbook.md
+    answer_patterns:
+      - '\b(10|ten)\b'
+    evidence_patterns:
+      - '6\+ years \| 28 \|'
+      - '0–2 years \| 18 \|'
+  - id: comp-01
+    category: lookup
+    difficulty: easy
+    question: "Who is FinCorp's Data Protection Officer?"
+    expected_answer: "Michael Brown."
+    expected_source: 3_Compliance_Guidelines.md
+    answer_patterns:
+      - 'Michael\s+Brown'
+  - id: comp-02
+    category: numeric
+    difficulty: easy
+    question: "Within how many days must FinCorp respond to a Data Subject Access Request?"
+    expected_answer: "Within 30 calendar days."
+    expected_source: 3_Compliance_Guidelines.md
+    answer_patterns:
+      - '\b(30|thirty)\s+(calendar\s+)?days'
+  - id: comp-03
+    category: numeric
+    difficulty: easy
+    question: "Under the GDPR obligations in the Compliance Guidelines, within how many hours must a personal data breach be reported to the supervisory authority?"
+    expected_answer: "Within 72 hours of discovery."
+    expected_source: 3_Compliance_Guidelines.md
+    answer_patterns:
+      - '\b(72|seventy-two)\b'
+  - id: comp-04
+    category: lookup
+    difficulty: medium
+    question: "When is the annual ROPA review due?"
+    expected_answer: "February 15, 2026, owned by Michael Brown."
+    expected_source: 3_Compliance_Guidelines.md
+    answer_patterns:
+      - 'February\s+15(th)?,?\s+2026|\b15(th)?\s+(of\s+)?February,?\s+2026|\b2026-02-15\b'
+  - id: comp-05
+    category: lookup
+    difficulty: medium
+    question: "When is the DPIA for the Horus AI platform due, and who owns it?"
+    expected_answer: "March 31, 2026; owned by Michael Brown and Priya Patel."
+    expected_source: 3_Compliance_Guidelines.md
+    answer_patterns:
+      - 'March\s+31(st)?,?\s+2026|\b31(st)?\s+(of\s+)?March,?\s+2026|\b2026-03-31\b'
+      - 'Michael\s+Brown'
+      - 'Priya\s+Patel'
+  - id: comp-06
+    category: lookup
+    difficulty: medium
+    question: "Who owns the annual GDPR training for all staff, and when is it due?"
+    expected_answer: "Rachel Garcia, due April 30, 2026."
+    expected_source: 3_Compliance_Guidelines.md
+    answer_patterns:
+      - 'Rachel\s+Garcia'
+      - 'April\s+30(th)?,?\s+2026|\b30(th)?\s+(of\s+)?April,?\s+2026|\b2026-04-30\b'
+  - id: comp-07
+    category: numeric
+    difficulty: medium
+    question: "Above what transaction amount does the AML policy require enhanced due diligence?"
+    expected_answer: "Transactions above $10,000."
+    expected_source: 3_Compliance_Guidelines.md
+    answer_patterns:
+      - '\b10,000\b|\b10\s*k\b'
+  - id: comp-08
+    category: numeric
+    difficulty: medium
+    question: "Within how many days of detection must Suspicious Activity Reports be filed?"
+    expected_answer: "Within 30 days of detection."
+    expected_source: 3_Compliance_Guidelines.md
+    answer_patterns:
+      - '\b(30|thirty)\s+days'
+  - id: comp-09
+    category: lookup
+    difficulty: medium
+    question: "When does the insider-trading window open?"
+    expected_answer: "Only 2 business days after each earnings release; it closes 14 days before the next close."
+    expected_source: 3_Compliance_Guidelines.md
+    answer_patterns:
+      - '\b(2|two)\s+business\s+days'
+  - id: comp-10
+    category: lookup
+    difficulty: easy
+    question: "Who must pre-clear trades by executives and senior managers?"
+    expected_answer: "The Compliance Officer, Michael Brown."
+    expected_source: 3_Compliance_Guidelines.md
+    answer_patterns:
+      - 'Michael\s+Brown'
+  - id: comp-11
+    category: multi_hop
+    difficulty: medium
+    question: "Who owns the MiCA mitigation plan, and who reviews it?"
+    expected_answer: "Michael Brown owns it; John Smith (CFO) and Sarah Johnson (COO) review it."
+    expected_source: 3_Compliance_Guidelines.md
+    answer_patterns:
+      - 'Michael\s+Brown'
+      - 'John\s+Smith'
+      - 'Sarah\s+Johnson'
+  - id: comp-12
+    category: lookup
+    difficulty: easy
+    question: "According to the Compliance Guidelines, what are the four data classification levels?"
+    expected_answer: "PUBLIC, INTERNAL, CONFIDENTIAL and RESTRICTED."
+    expected_source: 3_Compliance_Guidelines.md
+    answer_patterns:
+      - '\bpublic\b'
+      - '\binternal\b'
+      - '\bconfidential\b'
+      - '\brestricted\b'
+  - id: comp-13
+    category: lookup
+    difficulty: easy
+    question: "Which email address handles privacy and GDPR questions?"
+    expected_answer: "privacy@fincorp.com, handled by Michael Brown as DPO."
+    expected_source: 3_Compliance_Guidelines.md
+    answer_patterns:
+      - 'privacy@fincorp\.com'
+  - id: comp-14
+    category: lookup
+    difficulty: medium
+    question: "Which regulatory regimes apply to FinCorp in the United States?"
+    expected_answer: "SEC registration, FINRA membership and SOX (Sarbanes-Oxley)."
+    expected_source: 3_Compliance_Guidelines.md
+    answer_patterns:
+      - '\bSEC\b'
+      - '\bFINRA\b'
+      - '\bSOX\b|Sarbanes'
+  - id: exp-01
+    category: lookup
+    difficulty: easy
+    question: "What is the hotel limit per night in the US?"
+    expected_answer: "$250 per night."
+    expected_source: 4_Expense_Policy.md
+    answer_patterns:
+      - '\b250\b'
+  - id: exp-02
+    category: lookup
+    difficulty: easy
+    question: "What is the hotel limit per night in the EU?"
+    expected_answer: "$300 per night."
+    expected_source: 4_Expense_Policy.md
+    answer_patterns:
+      - '\b300\b'
+  - id: exp-03
+    category: lookup
+    difficulty: easy
+    question: "What is the hotel limit per night in Singapore?"
+    expected_answer: "$200 per night."
+    expected_source: 4_Expense_Policy.md
+    answer_patterns:
+      - '\b200\b'
+  - id: exp-04
+    category: lookup
+    difficulty: easy
+    question: "From what amount are receipts mandatory for an expense?"
+    expected_answer: "For any expense of $25 or more."
+    expected_source: 4_Expense_Policy.md
+    answer_patterns:
+      - '\$\s?25\b|\b25\s*(dollars|usd)\b'
+  - id: exp-05
+    category: numeric
+    difficulty: easy
+    question: "Within how many days must expense reports be submitted?"
+    expected_answer: "Within 30 days of the expense being incurred."
+    expected_source: 4_Expense_Policy.md
+    answer_patterns:
+      - '\b(30|thirty)\s+days'
+  - id: exp-06
+    category: lookup
+    difficulty: medium
+    question: "When are approved expense reimbursements paid?"
+    expected_answer: "On the 15th of each month, for approved reports submitted by the 5th."
+    expected_source: 4_Expense_Policy.md
+    answer_patterns:
+      - '\b15th\b|fifteenth'
+      - '\b5th\b|fifth'
+  - id: exp-07
+    category: lookup
+    difficulty: easy
+    question: "What is the limit for a domestic flight?"
+    expected_answer: "Economy up to $800; business class requires VP+ approval."
+    expected_source: 4_Expense_Policy.md
+    answer_patterns:
+      - '\b800\b'
+  - id: exp-08
+    category: lookup
+    difficulty: medium
+    question: "When is business class allowed on international flights?"
+    expected_answer: "For flights longer than 8 hours."
+    expected_source: 4_Expense_Policy.md
+    answer_patterns:
+      - '\b(8|eight)\s*(\+\s*)?hours?'
+  - id: exp-09
+    category: lookup
+    difficulty: easy
+    question: "What is the dinner limit per person?"
+    expected_answer: "$75 per person."
+    expected_source: 4_Expense_Policy.md
+    answer_patterns:
+      - '\b75\b'
+  - id: exp-10
+    category: lookup
+    difficulty: easy
+    question: "What is the per-person limit for a client entertainment dinner?"
+    expected_answer: "$150 per person."
+    expected_source: 4_Expense_Policy.md
+    answer_patterns:
+      - '\b150\b'
+  - id: exp-11
+    category: numeric
+    difficulty: easy
+    question: "What is the annual professional development and training budget per employee?"
+    expected_answer: "$2,500 per year per employee."
+    expected_source: 4_Expense_Policy.md
+    answer_patterns:
+      - '\b2,500\b|\b2500\b|\b2\.5\s*k\b'
+  - id: exp-12
+    category: lookup
+    difficulty: medium
+    question: "Who must approve an expense between $2,001 and $5,000?"
+    expected_answer: "The CFO, John Smith."
+    expected_source: 4_Expense_Policy.md
+    answer_patterns:
+      - 'John\s+Smith|\bCFO\b|Chief\s+Financial\s+Officer'
+  - id: exp-13
+    category: lookup
+    difficulty: medium
+    question: "Who must approve an expense above $25,000?"
+    expected_answer: "The COO (Sarah Johnson) and the CFO (John Smith) jointly."
+    expected_source: 4_Expense_Policy.md
+    answer_patterns:
+      - 'Sarah\s+Johnson|\bCOO\b|Chief\s+Operating\s+Officer'
+      - 'John\s+Smith|\bCFO\b|Chief\s+Financial\s+Officer'
+  - id: exp-14
+    category: numeric
+    difficulty: medium
+    question: "Within how many days must a corporate credit card be reconciled before it is suspended?"
+    expected_answer: "45 days: failure to reconcile within 45 days suspends the card."
+    expected_source: 4_Expense_Policy.md
+    answer_patterns:
+      - '\b(45|forty-five)\b'
+  - id: exp-15
+    category: multi_hop
+    difficulty: hard
+    question: "An employee wants to attend a conference costing $3,500 including ticket, travel and lodging. Is that within policy, and if not, who must pre-approve it?"
+    expected_answer: "No. The conference limit is $3,000 per event, so the overage needs written pre-approval from Sarah Johnson (COO) before the expense is incurred; an expense of that size also falls in the CFO (John Smith) approval band of $2,001 to $5,000."
+    expected_source: 4_Expense_Policy.md
+    answer_patterns:
+      - '\b3,000\b|\b3000\b|\b3\s*k\b'
+      - 'Sarah\s+Johnson'
+  - id: exp-16
+    category: numeric
+    difficulty: hard
+    question: "What is the total daily meal allowance for one person covering breakfast, lunch and dinner?"
+    expected_answer: "$140: $25 for breakfast, $40 for lunch and $75 for dinner."
+    expected_source: 4_Expense_Policy.md
+    answer_patterns:
+      - '\b140\b'
+    evidence_patterns:
+      - 'Breakfast \| \$25/person'
+      - 'Lunch \| \$40/person'
+      - 'Dinner \| \$75/person'
+  - id: it-01
+    category: numeric
+    difficulty: easy
+    question: "What is the minimum password length?"
+    expected_answer: "14 characters."
+    expected_source: 5_IT_Security_Policy.md
+    answer_patterns:
+      - '\b(14|fourteen)\b'
+  - id: it-02
+    category: numeric
+    difficulty: easy
+    question: "How many previous passwords cannot be reused?"
+    expected_answer: "The last 12 passwords."
+    expected_source: 5_IT_Security_Policy.md
+    answer_patterns:
+      - '\b(12|twelve)\b'
+  - id: it-03
+    category: lookup
+    difficulty: medium
+    question: "How often must passwords for privileged accounts be rotated?"
+    expected_answer: "Every 90 days."
+    expected_source: 5_IT_Security_Policy.md
+    answer_patterns:
+      - '\b(90|ninety)\s+days'
+  - id: it-04
+    category: lookup
+    difficulty: medium
+    question: "How often must passwords for standard accounts be rotated?"
+    expected_answer: "Every 180 days."
+    expected_source: 5_IT_Security_Policy.md
+    answer_patterns:
+      - '\b180\s+days'
+  - id: it-05
+    category: lookup
+    difficulty: easy
+    question: "Is SMS-based MFA allowed for FinCorp accounts?"
+    expected_answer: "No, SMS-based MFA is not permitted for any account."
+    expected_source: 5_IT_Security_Policy.md
+    answer_patterns:
+      - '\bnot\s+(be\s+)?(permitted|allowed)\b|prohibited|forbidden|banned'
+  - id: it-06
+    category: lookup
+    difficulty: medium
+    question: "What kind of MFA is required for privileged accounts?"
+    expected_answer: "Hardware tokens (YubiKey)."
+    expected_source: 5_IT_Security_Policy.md
+    answer_patterns:
+      - 'YubiKey|hardware\s+tokens?'
+  - id: it-07
+    category: lookup
+    difficulty: medium
+    question: "Within how many hours must all access be revoked after a termination notification?"
+    expected_answer: "Within 4 hours."
+    expected_source: 5_IT_Security_Policy.md
+    answer_patterns:
+      - '\b(4|four)\s+hours?'
+  - id: it-08
+    category: lookup
+    difficulty: easy
+    question: "How quickly must a suspected security incident be reported to the IT Security team?"
+    expected_answer: "Within 1 hour of discovery."
+    expected_source: 5_IT_Security_Policy.md
+    answer_patterns:
+      - '\b(1|one)\s+hour\b|\b60\s+minutes'
+  - id: it-09
+    category: lookup
+    difficulty: easy
+    question: "Which email address is used to report security incidents?"
+    expected_answer: "security@fincorp.com."
+    expected_source: 5_IT_Security_Policy.md
+    answer_patterns:
+      - 'security@fincorp\.com'
+  - id: it-10
+    category: numeric
+    difficulty: medium
+    question: "What is the response SLA for a P1 critical incident?"
+    expected_answer: "15 minutes."
+    expected_source: 5_IT_Security_Policy.md
+    answer_patterns:
+      - '\b(15|fifteen)\s+min'
+  - id: it-11
+    category: lookup
+    difficulty: medium
+    question: "What encryption is required for Restricted data at rest and in transit?"
+    expected_answer: "AES-256 at rest and TLS 1.2+ in transit."
+    expected_source: 5_IT_Security_Policy.md
+    answer_patterns:
+      - 'AES[-\s]?256'
+      - 'TLS\s*1\.2'
+  - id: it-12
+    category: lookup
+    difficulty: easy
+    question: "How long are Horus platform audit logs retained?"
+    expected_answer: "12 months."
+    expected_source: 5_IT_Security_Policy.md
+    answer_patterns:
+      - '\b(12|twelve)\s+months|\b(1|one)\s+year'
+  - id: it-13
+    category: lookup
+    difficulty: easy
+    question: "Who runs FinCorp's quarterly phishing simulations?"
+    expected_answer: "Alice Chen, the IT Director."
+    expected_source: 5_IT_Security_Policy.md
+    answer_patterns:
+      - 'Alice\s+Chen'
+  - id: it-14
+    category: multi_hop
+    difficulty: medium
+    question: "An employee loses a company device that holds no sensitive data. What incident severity is that, and what is the response SLA?"
+    expected_answer: "P4 (Low): a lost non-sensitive device, with a 24-hour response SLA."
+    expected_source: 5_IT_Security_Policy.md
+    answer_patterns:
+      - '\bP4\b|\blow\b'
+      - '\b24[\s-]*hours?'
+  - id: cross-01
+    category: multi_hop
+    difficulty: medium
+    question: "Who owns both the Employee Handbook and the Expense Reimbursement Policy?"
+    expected_answer: "Sarah Johnson, Chief Operating Officer."
+    expected_source:
+      - 2_Employee_Handbook.md
+      - 4_Expense_Policy.md
+    answer_patterns:
+      - 'Sarah\s+Johnson'
+  - id: cross-02
+    category: multi_hop
+    difficulty: hard
+    question: "Who signed the approval for the Q4 2025 Travel & Entertainment overage, and above what expense amount is that person's approval required under the Expense Policy?"
+    expected_answer: "Sarah Johnson (COO); expenses above $5,000 require her approval."
+    expected_source:
+      - 1_Q4_2025_Financial_Report.md
+      - 4_Expense_Policy.md
+    answer_patterns:
+      - 'Sarah\s+Johnson'
+      - '\b5,000\b|\b5000\b|\b5\s*k\b'
+  - id: cross-03
+    category: multi_hop
+    difficulty: hard
+    question: "How much did FinCorp spend on Technology & Cloud in Q4 2025, and who owns the DPIA for the Horus AI platform?"
+    expected_answer: "$410,000; the DPIA is owned by Michael Brown and Priya Patel."
+    expected_source:
+      - 1_Q4_2025_Financial_Report.md
+      - 3_Compliance_Guidelines.md
+    answer_patterns:
+      - '\b410,000\b|\b410\s*k\b'
+      - 'Michael\s+Brown'
+      - 'Priya\s+Patel'
+  - id: cross-04
+    category: multi_hop
+    difficulty: medium
+    question: "What is the minimum password length, and how many vacation days does an employee with 0–2 years of tenure get?"
+    expected_answer: "14 characters; 18 vacation days per year."
+    expected_source:
+      - 5_IT_Security_Policy.md
+      - 2_Employee_Handbook.md
+    answer_patterns:
+      - '\b(14|fourteen)\b'
+      - '\b(18|eighteen)\b'
+  - id: cross-05
+    category: multi_hop
+    difficulty: medium
+    question: "Who is the HR Director, and who runs the quarterly phishing simulations?"
+    expected_answer: "Rachel Garcia is the HR Director; Alice Chen, the IT Director, runs the phishing simulations."
+    expected_source:
+      - 2_Employee_Handbook.md
+      - 5_IT_Security_Policy.md
+    answer_patterns:
+      - 'Rachel\s+Garcia'
+      - 'Alice\s+Chen'
+  - id: cross-06
+    category: multi_hop
+    difficulty: medium
+    question: "How much did FinCorp spend on Travel & Entertainment in Q4 2025, and what is the per-person limit for a client entertainment dinner?"
+    expected_answer: "$265,000 ($265K); client entertainment dinners are limited to $150 per person."
+    expected_source:
+      - 1_Q4_2025_Financial_Report.md
+      - 4_Expense_Policy.md
+    answer_patterns:
+      - '\b265,000\b|\b265\s*k\b'
+      - '\b150\b'
+  - id: cross-07
+    category: multi_hop
+    difficulty: hard
+    question: "How much revenue did Compliance Consulting bring in during Q4 2025, and within how many days must a Data Subject Access Request be answered?"
+    expected_answer: "$620,000; Data Subject Access Requests must be answered within 30 calendar days."
+    expected_source:
+      - 1_Q4_2025_Financial_Report.md
+      - 3_Compliance_Guidelines.md
+    answer_patterns:
+      - '\b620,000\b|\b620\s*k\b'
+      - '\b(30|thirty)\s+(calendar\s+)?days'
+  - id: cross-08
+    category: multi_hop
+    difficulty: medium
+    question: "What is the economy limit for an international flight, and how often are performance bonuses paid?"
+    expected_answer: "Economy up to $2,500; performance bonuses are paid quarterly."
+    expected_source:
+      - 4_Expense_Policy.md
+      - 2_Employee_Handbook.md
+    answer_patterns:
+      - '\b2,500\b|\b2500\b|\b2\.5\s*k\b'
+      - 'quarterly'
+  - id: cross-09
+    category: multi_hop
+    difficulty: hard
+    question: "Who signed the Q4 2025 Financial Report, and which expense range does that person approve under the Expense Policy?"
+    expected_answer: "John Smith (CFO); he approves expenses from $2,001 to $5,000."
+    expected_source:
+      - 1_Q4_2025_Financial_Report.md
+      - 4_Expense_Policy.md
+    answer_patterns:
+      - 'John\s+Smith'
+      - '\b2,001\b|\b2001\b'
+  - id: cross-10
+    category: multi_hop
+    difficulty: medium
+    question: "What is the response SLA for a P2 incident, and when is the annual GDPR training due?"
+    expected_answer: "1 hour for a P2 incident; the annual GDPR training is due April 30, 2026."
+    expected_source:
+      - 5_IT_Security_Policy.md
+      - 3_Compliance_Guidelines.md
+    answer_patterns:
+      - '\b(1|one)\s+hour\b'
+      - 'April\s+30(th)?,?\s+2026|\b30(th)?\s+(of\s+)?April,?\s+2026|\b2026-04-30\b'
+  - id: none-01
+    category: not_in_corpus
+    difficulty: medium
+    question: "What is FinCorp's parental leave policy?"
+    expected_answer: "The documents do not contain this information."
+    expected_source: null
+    answer_patterns: *refusal_patterns
+    absent_terms:
+      - parental
+      - maternity
+      - paternity
+  - id: none-02
+    category: not_in_corpus
+    difficulty: medium
+    question: "What was FinCorp's revenue in Q3 2025?"
+    expected_answer: "The documents do not contain this information."
+    expected_source: null
+    answer_patterns: *refusal_patterns
+    absent_terms:
+      - Q3
+      - third quarter
+  - id: none-03
+    category: not_in_corpus
+    difficulty: medium
+    question: "What is FinCorp's stock ticker symbol?"
+    expected_answer: "The documents do not contain this information."
+    expected_source: null
+    answer_patterns: *refusal_patterns
+    absent_terms:
+      - ticker
+      - NASDAQ
+      - NYSE
+  - id: none-04
+    category: not_in_corpus
+    difficulty: medium
+    question: "What is the mileage reimbursement rate for using a personal car?"
+    expected_answer: "The documents do not contain this information."
+    expected_source: null
+    answer_patterns: *refusal_patterns
+    absent_terms:
+      - mileage
+      - per mile
+  - id: none-05
+    category: not_in_corpus
+    difficulty: hard
+    question: "Who is FinCorp's CEO?"
+    expected_answer: "The documents do not contain this information."
+    expected_source: null
+    answer_patterns: *refusal_patterns
+    absent_terms:
+      - CEO
+      - Chief Executive Officer
+  - id: none-06
+    category: not_in_corpus
+    difficulty: medium
+    question: "What is FinCorp's dress code?"
+    expected_answer: "The documents do not contain this information."
+    expected_source: null
+    answer_patterns: *refusal_patterns
+    absent_terms:
+      - dress code
+      - attire
+  - id: none-07
+    category: not_in_corpus
+    difficulty: hard
+    question: "What is FinCorp's revenue target for 2027?"
+    expected_answer: "The documents do not contain this information."
+    expected_source: null
+    answer_patterns: *refusal_patterns
+    absent_terms:
+      - '2027'
+  - id: none-08
+    category: not_in_corpus
+    difficulty: medium
+    question: "What is FinCorp's policy on bringing pets to the office?"
+    expected_answer: "The documents do not contain this information."
+    expected_source: null
+    answer_patterns: *refusal_patterns
+    absent_terms:
+      - pet
+      - pets
+      - dog
+  - id: none-09
+    category: not_in_corpus
+    difficulty: hard
+    question: "What was FinCorp's revenue in 2023?"
+    expected_answer: "The documents do not contain this information."
+    expected_source: null
+    answer_patterns: *refusal_patterns
+    absent_terms:
+      - '2023'
+  - id: none-10
+    category: not_in_corpus
+    difficulty: medium
+    question: "What is the interest rate on FinCorp's corporate credit line?"
+    expected_answer: "The documents do not contain this information."
+    expected_source: null
+    answer_patterns: *refusal_patterns
+    absent_terms:
+      - interest rate
+      - credit line
+      - loan
+  - id: direct-01
+    category: direct
+    difficulty: easy
+    question: "Hello!"
+    expected_answer: "Hello! How can I help you today?"
+    expected_source: null
+    answer_patterns:
+      - '\b(hello|hi|hey|greetings|welcome)\b|\bhelp\b|\bassist'
+  - id: direct-02
+    category: direct
+    difficulty: easy
+    question: "Hi, how are you today?"
+    expected_answer: "I'm doing well, thank you. How can I help you?"
+    expected_source: null
+    answer_patterns:
+      - '\b(hello|hi|hey|well|good|great|fine|doing|thanks|thank\s+you)\b|\bhelp\b|\bassist'
+  - id: direct-03
+    category: direct
+    difficulty: easy
+    question: "Thanks, that's all for now."
+    expected_answer: "You're welcome! Have a good day."
+    expected_source: null
+    answer_patterns:
+      - '\bwelcome\b|\bglad\b|\bpleasure\b|\banytime\b|\bhappy\s+to\b|\bgood\s+day\b|\bbye\b|\bgreat\s+day\b'
+  - id: direct-04
+    category: direct
+    difficulty: easy
+    question: "What is 2 + 2?"
+    expected_answer: "4"
+    expected_source: null
+    answer_patterns:
+      - '\b4\b|\bfour\b'
+  - id: direct-05
+    category: direct
+    difficulty: easy
+    question: "What is 12 multiplied by 7?"
+    expected_answer: "84"
+    expected_source: null
+    answer_patterns:
+      - '\b84\b|\beighty-four\b'
+  - id: direct-06
+    category: direct
+    difficulty: easy
+    question: "What is 100 divided by 4?"
+    expected_answer: "25"
+    expected_source: null
+    answer_patterns:
+      - '\b25\b|\btwenty-five\b'
