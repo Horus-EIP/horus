@@ -21,7 +21,7 @@ bitsandbytes
 hf-transfer
 python-jose[cryptography]
 python-multipart
-SQLAlchemy>=2.0
+SQLAlchemy>=2.0,<2.2
 alembic>=1.12.0
 psycopg2-binary>=2.9.10
 passlib[bcrypt]==1.7.4

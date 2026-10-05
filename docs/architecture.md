@@ -588,7 +588,7 @@ committed to version control.
 
 ```python
 from core.config import settings
-db_url = f"postgresql://{settings.postgres_user}:..."
+db_url = f"postgresql+psycopg2://{settings.postgres_user}:..."
 ```
 
 ---
