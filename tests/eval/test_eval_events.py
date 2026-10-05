@@ -161,8 +161,8 @@ class TestFoldEvents:
         assert observation.answer is None
 
 
-class TestRoutingTime:
-    def test_routing_ends_with_the_first_frame_past_the_routing_stage(self):
+class TestDispatchTime:
+    def test_dispatch_is_the_first_frame_past_the_routing_stage(self):
         observation = fold_events(
             [
                 (0.1, {"type": "task_status", "status": "queued", "stage": "queued"}),
@@ -173,29 +173,29 @@ class TestRoutingTime:
                 (30.0, {**answer("Q4 revenue was $4.2M."), "stage": "generation"}),
             ]
         )
-        assert observation.routing_s == 7.4
+        assert observation.dispatch_s == 7.4
 
-    def test_heartbeat_past_routing_ends_it_when_the_status_frame_was_missed(self):
+    def test_heartbeat_past_routing_marks_dispatch_when_the_status_frame_was_missed(self):
         observation = fold_events(
             [
                 (0.2, {"type": "task_status", "status": "routing", "stage": "routing"}),
                 (10.0, {"type": "heartbeat", "elapsed_s": 10.0, "stage": "generation"}),
             ]
         )
-        assert observation.routing_s == 10.0
+        assert observation.dispatch_s == 10.0
 
-    def test_direct_answer_ends_routing_with_the_answer(self):
+    def test_direct_answer_marks_dispatch_with_the_answer(self):
         observation = fold_events(
             [
                 (0.2, {"type": "task_status", "status": "routing", "stage": "routing"}),
                 (0.9, {"type": "agent", "content": "Hello!", "event": "result", "stage": "routing"}),
             ]
         )
-        assert observation.routing_s == 0.9
+        assert observation.dispatch_s == 0.9
 
-    def test_frames_without_a_stage_leave_routing_time_unknown(self):
+    def test_frames_without_a_stage_leave_dispatch_time_unknown(self):
         observation = fold_events([(1.0, step("retrieval.start")), (9.0, answer("$250."))])
-        assert observation.routing_s is None
+        assert observation.dispatch_s is None
 
 
 class TestEventHelpers:

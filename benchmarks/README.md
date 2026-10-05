@@ -126,6 +126,8 @@ python scripts/eval/run-eval.py --label eval-cpu16-standard --reference cpu16 --
 
 On the CPU stack the runner reads the llama-server facts from the running `llm` container (`docker inspect`, `GET /props` and the `.sha256` file written next to the GGUF once its hash was verified): the llama.cpp build, the model file and its SHA-256, and the server arguments, so the report says which context size and KV cache type ran. `--llama-cpp-build` and `--model-*` override them; on the GPU path, where there is no `llm` container, they are the only source.
 
+In chat mode the runner also reads `GET /metrics` of MAS (`--mas-url`) before and after each question. The B-92 router's `mas_routing_decision_seconds` histogram then gives the router's own time and method for that question (`routing_decision`). MAS servers older than B-92 do not have it, and the field stays `null`.
+
 | Option | Meaning |
 |---|---|
 | `--mode chat` (default) | Every question goes through `POST /tasks/new_task/` in `auto` mode, one new conversation per question, and the answer is read from the chat WebSocket. If the socket drops, the runner polls `GET /tasks/{id}` until the task ends. |
@@ -134,7 +136,7 @@ On the CPU stack the runner reads the llama-server facts from the running `llm` 
 | `--event-timeout` | Seconds to wait for each final answer (default 1800). |
 | `--submit-timeout` | Seconds for the `new_task` request itself (default 900). Since B-93 MAS answers `202` with the queued task at once and routes in the background; servers older than B-93 kept the request open during routing. |
 | `--no-warmup` | Skip the unscored warmup question that loads the model. The warmup question is fixed and not in the test set, so a response or prompt cache cannot make a scored answer faster. |
-| `--sample-resources` | Every `--sample-interval` seconds (default 10), sample `docker stats` and the swap in use, and keep the peaks for the run and for each question. At the end, read each container's cgroup `memory.peak` and OOM kills. |
+| `--sample-resources` | Every `--sample-interval` seconds (default 10), sample `docker stats` and the swap in use, and keep the peaks for the run and for each question. Just before the first scored question and again at the end, read each container's cgroup `memory.peak` and OOM kills, and the Docker host's swap; at the end, also each container's restart count. |
 | `--llm-container` | The llama-server container (default `llm`). Its facts are recorded, and its `/metrics` counters are read before and after each question. `""` turns this off. |
 | `--swap-container` | A running container whose `/proc/meminfo` gives the swap of the machine Docker runs on (default `mas`). On Linux that is the host; with Docker Desktop it is its VM, whose swap the host does not see. `""` turns it off. |
 | `--llama-cpp-build`, `--model-*` | Override the llama-server facts. `--model-sha256` must be 64 hex characters. |
@@ -152,7 +154,7 @@ python scripts/benchmarks/compare-benchmarks.py --before cpu16-2026-10-06.json e
 python scripts/benchmarks/compare-benchmarks.py eval-cpu16-standard-2026-10-06.json
 ```
 
-It prints Markdown, ready for a pull request: the machines, builds, models and test sets of both sides, warnings (different test sets, different machines, KV cache changed, unfinished runs, answers still waiting for review, recorded results), then the §10 table with a change column, then every llama-bench configuration side by side. Each side takes at most one llama-bench file and one evaluation or recorded file. One file alone prints its own table.
+It prints Markdown, ready for a pull request: the machines, builds, models and test sets of both sides, warnings (different test sets, different machines, KV cache changed, unfinished runs, answers still waiting for review, recorded results, a memory peak the samples missed by more than 0.5 GiB), then the §10 table with a change column, then every llama-bench configuration side by side. Each side takes at most one llama-bench file and one evaluation or recorded file. One file alone prints its own table.
 
 The llama-bench rows of the §10 table show one model (`--model`, a part of its file name; default the first in the file), one KV cache type for K and V (`--kv`, default `f16`) and the fastest thread count (`--threads` to fix one). Install time and peak disk are measured on a clean VM and are not in these files, so their rows stay empty.
 
@@ -161,8 +163,8 @@ The llama-bench rows of the §10 table show one model (`--model`, a part of its 
 | Prompt processing and generation (tokens/s) | llama-bench `summary`: pp512, pp2048, tg128, at depth 0 and 4,096 |
 | Time to first token, total time (s) | evaluation `summary.ttft_s`, `summary.total_s` |
 | Prompt reading per question, generation speed in the stack | evaluation `summary.llm` (llama-server `/metrics`) |
-| Routing time (ms) | evaluation `summary.routing_s`; the method is in the router logs |
-| Peak RAM (GiB) and swap | evaluation `resources` |
+| Routing time (ms) and method | evaluation `summary.routing` (the router's own time and method, from MAS `/metrics`); the separate "submit to dispatch" row is `summary.dispatch_s`, which includes the queue |
+| Peak RAM (GiB) and swap | evaluation `resources`: `containers_sum_peak_mem_bytes` (all containers at once, the `P` of ADR-005), the `llm` peaks, OOM kills, restarts, swap peak and swap growth during the questions |
 | Answer correct (%) | `summary.manual_review.answer_correct_pct` (two reviewers) and `summary.answer_correct_auto` |
 | Source correct (%) | `summary.source_correct_auto` |
 | Quality with a q8_0 KV cache | two evaluations whose `llama_cpp.server.settings` differ in KV cache type: the table marks the KV row as changed |
@@ -185,7 +187,7 @@ The llama-bench rows of the §10 table show one model (`--model`, a part of its 
 }
 ```
 
-Schema version 2 added `llama_cpp.server`, `model.sha256_source`, the detected `machine` fields, the per-question `routing_s`, `llm` and `resources`, the cgroup and Docker-host swap fields of `resources`, and `summary.routing_s` and `summary.llm`. Version 1 files still compare.
+Schema version 2 added `llama_cpp.server`, `model.sha256_source`, the detected `machine` fields, the per-question `dispatch_s`, `routing_decision`, `llm` and `resources`, the cgroup, restart, start-of-questions and Docker-host swap fields of `resources`, and `summary.dispatch_s`, `summary.routing` and `summary.llm`. Version 1 files still compare.
 
 `llama_cpp.build` and every `model` field are `null` when neither the options nor a running `llm` container gave them (for example on the vLLM GPU path).
 
@@ -217,11 +219,16 @@ Schema version 2 added `llama_cpp.server`, `model.sha256_source`, the detected `
 | Field | Meaning |
 |---|---|
 | `samples` | Number of samples taken. |
-| `container_peak_mem_bytes`, `containers_sum_peak_mem_bytes` | Peak per container from `docker stats`, and peak of the per-sample total. |
-| `container_lifetime_peak_mem_bytes` | Each container's cgroup `memory.peak` at the end: the true peak since the container started, between samples included (cgroup v2, Linux 5.19 or later). |
-| `container_oom_kills` | `oom_kill` of each container's cgroup `memory.events`. Anything above 0 means a container hit its `mem_limit`. |
+| `container_peak_mem_bytes` | Peak per container from `docker stats`, which reports the cgroup's memory minus its inactive page cache: files read once (model files at start, database files) do not count, the model pages llama-server reads for every token do. |
+| `containers_sum_peak_mem_bytes` | The largest total of one sample: memory in use by all containers at the same moment. ADR-005 sets its thresholds from this field. |
+| `container_lifetime_peak_mem_bytes` | Each container's cgroup `memory.peak` at the end (cgroup v2, Linux 5.19 or later): the peak since the container started, its start-up included, page cache included, between samples included. The peaks of different containers happen at different moments, so do not add them up. |
+| `container_oom_kills` | `oom_kill` of each container's cgroup `memory.events`, since the container last started. Anything above 0 means the kernel killed a process in that container. |
+| `container_restarts` | Each container's `RestartCount` (`docker inspect`). A container restarted after an out-of-memory kill starts a new cgroup, whose `memory.events` count from 0 again, so read both fields. |
+| `at_questions_start` | Read just before the first scored question: `container_lifetime_peak_mem_bytes`, `container_oom_kills` and `docker_host_swap_used_bytes`. `null` when the run stopped before its first question. |
+| `unsampled_peak_excess_bytes` | For each container whose `memory.peak` rose during the questions: how far above its `docker stats` peak it went. Above 0.5 GiB, a spike fell between two samples (or page cache grew): repeat with `--sample-interval 2`. |
 | `docker_host_swap_peak_used_bytes` | Peak swap in use on the machine Docker runs on, read inside `--swap-container`. |
-| `swap_peak_used_bytes` | Peak swap in use on the machine running the script. With Docker Desktop this is not the VM's swap; read the field above. |
+| `docker_host_swap_growth_bytes` | That peak minus the swap in use at `at_questions_start` (0 if it shrank). |
+| `swap_peak_used_bytes` | Peak swap in use on the machine running the script. With Docker Desktop this is not the VM's swap; read the Docker host fields. |
 
 ### `questions[]`
 
@@ -237,7 +244,8 @@ One entry per question, in test set order.
 | `timing_source` | `websocket`, `poll` (the socket dropped and the result came from `GET /tasks/{id}`, so `total_s` is accurate to `--poll-interval`) or `http`. |
 | `submit_http_s` | Time until `POST /tasks/new_task/` returned. Since B-93 this is only the time to queue the task; routing time is part of `first_event_s` and `total_s`. |
 | `first_event_s`, `retrieval_s`, `reasoning_start_s` | Time to the first WebSocket event (heartbeats and `task_status` frames are not counted), the first `retrieval.results` step, the first `reasoning.start` step. |
-| `routing_s` | Time from submitting to the first event whose `stage` is past `queued` and `routing` (the dispatch to an agent), or to the final answer when MAS answered during routing. It includes the wait in the queue. `null` when the events carry no `stage` (servers older than B-93). |
+| `dispatch_s` | Time from submitting to the first event whose `stage` is past `queued` and `routing` (the dispatch to an agent), or to the final answer when MAS answered during routing. It includes the HTTP submit and the wait in the queue, so it is not the router's time. `null` when the events carry no `stage` (servers older than B-93). |
+| `routing_decision` | The router's own work for the question, from the change in MAS's `mas_routing_decision_seconds` histogram: `decisions` (1 normally; 0 when the task named its agent and the router did not run), `methods` (`rules`, `embedding`, `llm` or `none`, with counts) and `seconds`. `{"restarted": true}` when MAS restarted during the question. `null` in retrieval mode or without the B-92 histogram. Run one evaluation at a time against a stack: the counters are global. |
 | `ttft_s` | Time to the first `reasoning.delta` step, i.e. the first streamed token. `null` when token streaming is off (`AGENT_STREAM_TOKENS`) or the backend does not stream. The agent holds back the first 500 characters to check them for a spiral, so this is the first token the user sees. |
 | `total_s` | Time from submitting the question to the final answer. |
 | `llm` | What llama-server did during the question, from its `/metrics` counters: `prompt_tokens`, `prompt_s` (time spent reading prompts, the server side of the time to first token, summed over every call MAS and the agent made), `generated_tokens`, `generation_s`, `decode_calls`, `prompt_tps`, `generation_tps`. `{"restarted": true}` when the counters went down, i.e. llama-server restarted during the question. `null` without an `llm` container or in retrieval mode. |
@@ -262,7 +270,8 @@ One entry per question, in test set order.
 |---|---|
 | `questions`, `status` | Number of questions and count per status. |
 | `answer_correct_auto`, `source_correct_auto`, `route_correct` | `{"n", "correct", "pct"}` over the questions where the flag is not `null`. Failed and timed-out questions count as wrong answers; their source is only scored when the events seen before the failure already decide it. |
-| `total_s`, `ttft_s`, `routing_s` | `{"n", "mean", "median", "p90", "min", "max", "sum"}` over the questions that have the value. |
+| `total_s`, `ttft_s`, `dispatch_s` | `{"n", "mean", "median", "p90", "min", "max", "sum"}` over the questions that have the value. |
+| `routing` | `null` without router metrics. Otherwise `questions`, `mas_restarts`, `decided_once` (questions with exactly one decision), `without_decision`, `several_decisions`, `methods` (count per method over `decided_once`), `llm_pct` (share of `decided_once` routed by the LLM fallback), and the statistics of `decision_s` and `decision_s_without_llm`. |
 | `llm` | `null` without server metrics. Otherwise `questions`, `server_restarts`, the same statistics of `prompt_s`, `prompt_tokens`, `generation_s` and `generated_tokens`, and `prompt_tps` and `generation_tps` over the whole run (total tokens over total seconds). |
 | `fallbacks` | Count per fallback kind. |
 | `source_rank` | `stats` of every expected document's `source_ranks` entry that is not `null`, plus `first` (how many were ranked first) and `not_retrieved` (how many were never retrieved). |

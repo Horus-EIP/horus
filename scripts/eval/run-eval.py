@@ -22,6 +22,7 @@ from eval_report import (
     parse_docker_stats,
     parse_meminfo_swap_used,
     question_record,
+    questions_peak_checks,
     resummarize,
     titles_from_query_result,
 )
@@ -35,7 +36,10 @@ from eval_stack import (
     parse_memory_events,
     parse_prometheus,
     parse_props,
+    parse_restart_counts,
+    parse_routing_decisions,
     parse_server_args,
+    routing_decision,
 )
 from eval_testset import (
     CATEGORIES,
@@ -97,7 +101,7 @@ def now_utc() -> str:
 def observation_fields(observation: Observation) -> dict[str, Any]:
     return {
         "first_event_s": observation.first_event_s,
-        "routing_s": observation.routing_s,
+        "dispatch_s": observation.dispatch_s,
         "retrieval_s": observation.retrieval_s,
         "reasoning_start_s": observation.reasoning_start_s,
         "ttft_s": observation.ttft_s,
@@ -387,6 +391,13 @@ def container_cgroup_facts(names: list[str]) -> dict[str, dict[str, int]]:
     }
 
 
+def container_restart_counts(names: list[str]) -> dict[str, int]:
+    if not names:
+        return {}
+    output = docker_text(["inspect", "--format", "{{.Name}} {{.RestartCount}}", *names])
+    return dict(sorted(parse_restart_counts(output).items()))
+
+
 class ResourceSampler(threading.Thread):
     def __init__(self, interval: float, swap_container: str | None = None) -> None:
         super().__init__(daemon=True)
@@ -394,10 +405,11 @@ class ResourceSampler(threading.Thread):
         self.swap_container = swap_container
         self.peaks = ResourcePeaks()
         self.window: ResourcePeaks | None = None
+        self.at_questions_start: dict[str, Any] | None = None
         self._lock = threading.Lock()
         self._stopping = threading.Event()
 
-    def sample(self) -> None:
+    def sample(self) -> tuple[dict[str, int], int | None]:
         usage = docker_memory_usage()
         swap = swap_used_bytes()
         docker_host_swap = docker_host_swap_used_bytes(self.swap_container)
@@ -405,6 +417,14 @@ class ResourceSampler(threading.Thread):
             for peaks in (self.peaks, self.window):
                 if peaks is not None:
                     peaks.add(usage, swap, docker_host_swap)
+        return usage, docker_host_swap
+
+    def mark_questions_start(self) -> None:
+        usage, docker_host_swap = self.sample()
+        self.at_questions_start = {
+            **container_cgroup_facts(sorted(usage)),
+            "docker_host_swap_used_bytes": docker_host_swap,
+        }
 
     def run(self) -> None:
         while not self._stopping.is_set():
@@ -424,8 +444,20 @@ class ResourceSampler(threading.Thread):
         self._stopping.set()
         self.join(timeout=90)
         resources = self.peaks.as_dict()
-        resources.update(container_cgroup_facts(list(resources["container_peak_mem_bytes"])))
+        started = (self.at_questions_start or {}).get("container_lifetime_peak_mem_bytes") or {}
+        names = sorted(set(resources["container_peak_mem_bytes"]) | set(started))
+        resources.update(container_cgroup_facts(names))
+        resources["container_restarts"] = container_restart_counts(names)
+        resources.update(questions_peak_checks(resources, self.at_questions_start))
         return resources
+
+
+def read_routing_decisions(mas_url: str) -> dict[str, dict[str, float]] | None:
+    try:
+        response = httpx.get(f"{mas_url.rstrip('/')}/metrics", timeout=10.0)
+    except httpx.HTTPError:
+        return None
+    return parse_routing_decisions(response.text) if response.status_code == 200 else None
 
 
 def read_llm_counters(container: str, port: int) -> dict[str, float]:
@@ -464,24 +496,43 @@ def llama_server_facts(container: str | None) -> dict[str, Any] | None:
 
 
 class QuestionProbes:
-    def __init__(self, sampler: ResourceSampler | None, llama_server: dict[str, Any] | None) -> None:
+    def __init__(
+        self,
+        sampler: ResourceSampler | None,
+        llama_server: dict[str, Any] | None,
+        mas_url: str | None = None,
+    ) -> None:
         self.sampler = sampler
         self.llama_server = llama_server
+        self.mas_url = mas_url
         self.counters: dict[str, float] | None = None
+        self.routing: dict[str, dict[str, float]] | None = None
 
     def read_counters(self) -> dict[str, float] | None:
         if not self.llama_server:
             return None
         return read_llm_counters(self.llama_server["container"], self.llama_server["port"])
 
+    def read_routing(self) -> dict[str, dict[str, float]] | None:
+        return read_routing_decisions(self.mas_url) if self.mas_url else None
+
+    async def start(self) -> None:
+        if self.sampler:
+            await asyncio.to_thread(self.sampler.mark_questions_start)
+
     async def before(self) -> None:
         if self.sampler:
             self.sampler.begin_window()
         self.counters = await asyncio.to_thread(self.read_counters)
+        self.routing = await asyncio.to_thread(self.read_routing)
 
     async def after(self, outcome: dict[str, Any]) -> None:
         if self.llama_server:
             outcome["llm"] = llm_usage(self.counters, await asyncio.to_thread(self.read_counters))
+        if self.mas_url:
+            outcome["routing_decision"] = routing_decision(
+                self.routing, await asyncio.to_thread(self.read_routing)
+            )
         if self.sampler:
             outcome["resources"] = self.sampler.end_window()
 
@@ -653,6 +704,8 @@ async def run_questions(
             print(f"[info] warmup (not scored): {WARMUP_QUESTION}")
             await client.ask(WARMUP_QUESTION, f"eval-warmup-{safe_label(args.label)}")
     records: list[dict[str, Any]] = []
+    if probes:
+        await probes.start()
     for index, item in enumerate(items, 1):
         if probes:
             await probes.before()
@@ -756,7 +809,8 @@ def main() -> int:
     print(f"[info] {len(items)} question(s), writing {out_path}")
     if sampler:
         sampler.start()
-    probes = QuestionProbes(sampler, llama_server if args.mode == "chat" else None)
+    chat = args.mode == "chat"
+    probes = QuestionProbes(sampler, llama_server if chat else None, args.mas_url if chat else None)
     records = asyncio.run(run_questions(args, testset, items, save, probes))
     resources = sampler.finish() if sampler else None
     if records is None:
@@ -772,7 +826,8 @@ def main() -> int:
         "route_correct",
         "total_s",
         "ttft_s",
-        "routing_s",
+        "dispatch_s",
+        "routing",
         "llm",
     )
     print(json.dumps({key: summary[key] for key in headline}, indent=2))

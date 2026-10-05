@@ -15,6 +15,7 @@ from eval_scoring import (
     route_correct,
     source_check,
 )
+from eval_stack import LLM_ROUTING_METHOD
 from eval_testset import CATEGORIES
 
 REPORT_KIND = "horus-eval"
@@ -71,7 +72,8 @@ def question_record(item: dict[str, Any], outcome: dict[str, Any]) -> dict[str, 
         "timing_source": outcome.get("timing_source"),
         "submit_http_s": outcome.get("submit_http_s"),
         "first_event_s": outcome.get("first_event_s"),
-        "routing_s": outcome.get("routing_s"),
+        "dispatch_s": outcome.get("dispatch_s"),
+        "routing_decision": outcome.get("routing_decision"),
         "retrieval_s": outcome.get("retrieval_s"),
         "reasoning_start_s": outcome.get("reasoning_start_s"),
         "ttft_s": outcome.get("ttft_s"),
@@ -176,6 +178,28 @@ def llm_summary(records: list[dict[str, Any]]) -> dict[str, Any] | None:
     }
 
 
+def routing_summary(records: list[dict[str, Any]]) -> dict[str, Any] | None:
+    probed = [r["routing_decision"] for r in records if isinstance(r.get("routing_decision"), dict)]
+    observed = [probe for probe in probed if "decisions" in probe]
+    restarts = sum(1 for probe in probed if probe.get("restarted"))
+    if not observed and not restarts:
+        return None
+    single = [probe for probe in observed if probe["decisions"] == 1]
+    methods = Counter(method for probe in single for method in probe.get("methods") or {})
+    without_llm = [probe for probe in single if LLM_ROUTING_METHOD not in (probe.get("methods") or {})]
+    return {
+        "questions": len(observed),
+        "mas_restarts": restarts,
+        "decided_once": len(single),
+        "without_decision": sum(1 for probe in observed if probe["decisions"] == 0),
+        "several_decisions": sum(1 for probe in observed if probe["decisions"] > 1),
+        "methods": dict(sorted(methods.items())),
+        "llm_pct": round(100.0 * methods[LLM_ROUTING_METHOD] / len(single), 1) if single else None,
+        "decision_s": stats([probe.get("seconds") for probe in single]),
+        "decision_s_without_llm": stats([probe.get("seconds") for probe in without_llm]),
+    }
+
+
 def _group_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "questions": len(records),
@@ -199,7 +223,8 @@ def build_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
         )
     )
     summary["ttft_s"] = stats([r.get("ttft_s") for r in records])
-    summary["routing_s"] = stats([r.get("routing_s") for r in records])
+    summary["dispatch_s"] = stats([r.get("dispatch_s") for r in records])
+    summary["routing"] = routing_summary(records)
     summary["llm"] = llm_summary(records)
     summary["manual_review"] = manual_review_summary(records)
     summary["by_category"] = {
@@ -316,6 +341,30 @@ class ResourcePeaks:
             "swap_peak_used_bytes": self.swap_peak,
             "docker_host_swap_peak_used_bytes": self.docker_host_swap_peak,
         }
+
+
+def questions_peak_checks(resources: dict[str, Any], at_start: dict[str, Any] | None) -> dict[str, Any]:
+    if not at_start:
+        return {
+            "at_questions_start": None,
+            "unsampled_peak_excess_bytes": None,
+            "docker_host_swap_growth_bytes": None,
+        }
+    start_peaks = at_start.get("container_lifetime_peak_mem_bytes") or {}
+    sampled = resources.get("container_peak_mem_bytes") or {}
+    excess = {}
+    for name, end_peak in (resources.get("container_lifetime_peak_mem_bytes") or {}).items():
+        start_peak = start_peaks.get(name)
+        if name in sampled and start_peak is not None and end_peak > start_peak and end_peak > sampled[name]:
+            excess[name] = end_peak - sampled[name]
+    swap_at_start = at_start.get("docker_host_swap_used_bytes")
+    swap_peak = resources.get("docker_host_swap_peak_used_bytes")
+    swap_known = swap_at_start is not None and swap_peak is not None
+    return {
+        "at_questions_start": at_start,
+        "unsampled_peak_excess_bytes": dict(sorted(excess.items())),
+        "docker_host_swap_growth_bytes": max(swap_peak - swap_at_start, 0) if swap_known else None,
+    }
 
 
 def titles_from_query_result(raw: Any) -> list[str]:

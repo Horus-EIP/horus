@@ -601,6 +601,15 @@ class TestStackResources:
             "container_oom_kills": {"agent": 1, "llm": 0},
         }
 
+    def test_restart_counts_come_from_docker_inspect(self, runner, monkeypatch):
+        calls = []
+        responses = [(["inspect", "--format", "{{.Name}} {{.RestartCount}}"], "/llm 0\n/agent 3\n")]
+        monkeypatch.setattr(runner, "docker_text", fake_docker(responses, calls))
+        assert runner.container_restart_counts(["llm", "agent"]) == {"agent": 3, "llm": 0}
+        assert calls == [["inspect", "--format", "{{.Name}} {{.RestartCount}}", "llm", "agent"]]
+        assert runner.container_restart_counts([]) == {}
+        assert len(calls) == 1
+
     def test_sampler_windows_keep_the_peaks_of_one_question(self, runner, monkeypatch):
         usage = iter([{"llm": 100, "mas": 10}, {"llm": 300, "mas": 10}, {"llm": 200, "mas": 10}])
         monkeypatch.setattr(runner, "docker_memory_usage", lambda: next(usage))
@@ -631,17 +640,55 @@ class TestStackResources:
             "container_cgroup_facts",
             lambda names: {"container_lifetime_peak_mem_bytes": dict.fromkeys(names, 7), "container_oom_kills": {}},
         )
+        monkeypatch.setattr(runner, "container_restart_counts", lambda names: dict.fromkeys(names, 0))
         sampler = runner.ResourceSampler(60.0)
         sampler.start()
         resources = sampler.finish()
         assert resources["container_peak_mem_bytes"] == {"llm": 100}
         assert resources["container_lifetime_peak_mem_bytes"] == {"llm": 7}
         assert resources["container_oom_kills"] == {}
+        assert resources["container_restarts"] == {"llm": 0}
+        assert resources["at_questions_start"] is None
+        assert resources["unsampled_peak_excess_bytes"] is None
+
+    def test_peaks_reached_during_the_questions_are_checked_against_the_samples(self, runner, monkeypatch):
+        gib = 2**30
+        monkeypatch.setattr(runner, "docker_memory_usage", lambda: {"knowledge_store": 2 * gib, "llm": 3 * gib})
+        monkeypatch.setattr(runner, "swap_used_bytes", lambda: None)
+        monkeypatch.setattr(runner, "docker_host_swap_used_bytes", lambda container: gib // 4)
+        facts = iter(
+            [
+                {"container_lifetime_peak_mem_bytes": {"knowledge_store": 5 * gib, "llm": 3 * gib}, "container_oom_kills": {}},
+                {"container_lifetime_peak_mem_bytes": {"knowledge_store": 5 * gib, "llm": 4 * gib}, "container_oom_kills": {}},
+            ]
+        )
+        asked = []
+
+        def cgroup_facts(names):
+            asked.append(names)
+            return next(facts)
+
+        monkeypatch.setattr(runner, "container_cgroup_facts", cgroup_facts)
+        monkeypatch.setattr(runner, "container_restart_counts", lambda names: dict.fromkeys(names, 0))
+        sampler = runner.ResourceSampler(60.0, "mas")
+        sampler.mark_questions_start()
+        sampler.start()
+        resources = sampler.finish()
+        assert asked == [["knowledge_store", "llm"], ["knowledge_store", "llm"]]
+        assert resources["at_questions_start"]["container_lifetime_peak_mem_bytes"]["llm"] == 3 * gib
+        assert resources["at_questions_start"]["docker_host_swap_used_bytes"] == gib // 4
+        assert resources["unsampled_peak_excess_bytes"] == {"llm": gib}
+        assert resources["docker_host_swap_growth_bytes"] == 0
+        assert resources["containers_sum_peak_mem_bytes"] == 5 * gib
 
 
 class FakeSampler:
     def __init__(self):
         self.windows = 0
+        self.starts = 0
+
+    def mark_questions_start(self):
+        self.starts += 1
 
     def begin_window(self):
         self.windows += 1
@@ -673,9 +720,54 @@ class TestQuestionProbes:
     def test_probes_without_a_server_or_sampler_add_nothing(self, runner):
         probes = runner.QuestionProbes(None, None)
         outcome = {}
+        asyncio.run(probes.start())
         asyncio.run(probes.before())
         asyncio.run(probes.after(outcome))
         assert outcome == {}
+
+    def test_start_takes_the_snapshot_before_the_first_question(self, runner):
+        sampler = FakeSampler()
+        asyncio.run(runner.QuestionProbes(sampler, None).start())
+        assert sampler.starts == 1
+        assert sampler.windows == 0
+
+    def test_probes_record_the_router_decision_of_the_question(self, runner, monkeypatch):
+        scrapes = iter(
+            [
+                {"embedding": {"count": 4.0, "seconds": 0.05}},
+                {"embedding": {"count": 5.0, "seconds": 0.062}},
+            ]
+        )
+        urls = []
+
+        def read(mas_url):
+            urls.append(mas_url)
+            return next(scrapes)
+
+        monkeypatch.setattr(runner, "read_routing_decisions", read)
+        probes = runner.QuestionProbes(None, None, "http://localhost:8000")
+        outcome = {}
+        asyncio.run(probes.before())
+        asyncio.run(probes.after(outcome))
+        assert outcome == {"routing_decision": {"decisions": 1, "methods": {"embedding": 1}, "seconds": 0.012}}
+        assert urls == ["http://localhost:8000", "http://localhost:8000"]
+
+    def test_router_metrics_are_read_from_the_mas_metrics_endpoint(self, runner, monkeypatch):
+        text = 'mas_routing_decision_seconds_count{method="rules"} 2.0\n'
+        replies = {
+            "http://mas:8000/metrics": httpx.Response(200, text="# TYPE mas_routing_decision_seconds histogram\n" + text),
+            "http://old-mas:8000/metrics": httpx.Response(404),
+        }
+
+        def get(url, timeout):
+            if url not in replies:
+                raise httpx.ConnectError("refused")
+            return replies[url]
+
+        monkeypatch.setattr(runner.httpx, "get", get)
+        assert runner.read_routing_decisions("http://mas:8000/") == {"rules": {"count": 2.0, "seconds": 0.0}}
+        assert runner.read_routing_decisions("http://old-mas:8000") is None
+        assert runner.read_routing_decisions("http://down:8000") is None
 
     def test_every_scored_question_goes_through_the_probes(self, runner, testset, monkeypatch):
         class FakeEvalClient:
@@ -692,6 +784,9 @@ class TestQuestionProbes:
             def __init__(self):
                 self.calls = []
 
+            async def start(self):
+                self.calls.append("start")
+
             async def before(self):
                 self.calls.append("before")
 
@@ -706,7 +801,7 @@ class TestQuestionProbes:
         probes = CountingProbes()
         items = runner.chosen_items(args, testset)
         records = asyncio.run(runner.run_questions(args, testset, items, lambda _records: None, probes))
-        assert probes.calls == ["before", "after", "before", "after"]
+        assert probes.calls == ["start", "before", "after", "before", "after"]
         assert [record["llm"] for record in records] == [{"prompt_s": 1.0}, {"prompt_s": 1.0}]
 
 
@@ -763,13 +858,22 @@ class TestMainAgainstAStack:
                     "answer": "$250",
                     "timing_source": "websocket",
                     "total_s": 30.0,
-                    "routing_s": 0.3,
+                    "dispatch_s": 0.3,
                 }
 
         collected = {"cpu_model": ("AMD Ryzen 5 5600U", "/proc/cpuinfo"), "ram_total_bytes": (16 * 2**30, "/proc/meminfo")}
         monkeypatch.setattr(runner, "EvalClient", FakeEvalClient)
         monkeypatch.setattr(runner, "llama_server_facts", lambda container: facts if container == "llm" else None)
+        routing = iter(
+            [
+                {},
+                {"embedding": {"count": 1.0, "seconds": 0.01}},
+                {"embedding": {"count": 1.0, "seconds": 0.01}},
+                {"embedding": {"count": 1.0, "seconds": 0.01}, "llm": {"count": 1.0, "seconds": 2.0}},
+            ]
+        )
         monkeypatch.setattr(runner, "read_llm_counters", lambda container, port: next(scrapes))
+        monkeypatch.setattr(runner, "read_routing_decisions", lambda mas_url: next(routing))
         monkeypatch.setattr(runner.host, "docker_facts", lambda: {"mem_total_bytes": 15 * 2**30})
         monkeypatch.setattr(runner.host, "collect_host", lambda path: collected)
         monkeypatch.setattr(runner.pipeline, "gpu_info", lambda: {"error": "nvidia-smi not found"})
@@ -791,7 +895,12 @@ class TestMainAgainstAStack:
         assert report["machine"]["reference"] == "cpu16"
         assert report["machine"]["docker"] == {"mem_total_bytes": 15 * 2**30}
         assert [question["llm"]["prompt_tokens"] for question in report["questions"]] == [900, 1200]
-        assert [question["routing_s"] for question in report["questions"]] == [0.3, 0.3]
+        assert [question["dispatch_s"] for question in report["questions"]] == [0.3, 0.3]
+        assert [question["routing_decision"]["methods"] for question in report["questions"]] == [
+            {"embedding": 1},
+            {"llm": 1},
+        ]
         assert report["summary"]["llm"]["prompt_tps"] == 50.0
-        assert report["summary"]["routing_s"]["median"] == 0.3
+        assert report["summary"]["dispatch_s"]["median"] == 0.3
+        assert report["summary"]["routing"]["llm_pct"] == 50.0
         assert report["run"]["completed"] is True

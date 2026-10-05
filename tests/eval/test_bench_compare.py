@@ -24,10 +24,13 @@ Q5 = "qwen3-4b-instruct-2507-Q5_K_M.gguf"
 GIB = 2**30
 
 
-def eval_report(make_item, totals, *, kv="f16", testset_sha="a" * 64, label="eval-cpu16", reviewed=True):
+def eval_report(
+    make_item, totals, *, kv="f16", testset_sha="a" * 64, label="eval-cpu16", reviewed=True, unsampled=None
+):
     item = make_item(id="exp-01")
     records = []
     for index, total in enumerate(totals):
+        method, seconds = ("embedding", 0.012) if index else ("llm", 2.4)
         outcome = {
             "mode": "chat",
             "status": "ok",
@@ -36,7 +39,8 @@ def eval_report(make_item, totals, *, kv="f16", testset_sha="a" * 64, label="eva
             "observed_route": "AGENT",
             "total_s": total,
             "ttft_s": total / 4,
-            "routing_s": 0.25,
+            "dispatch_s": 0.25,
+            "routing_decision": {"decisions": 1, "methods": {method: 1}, "seconds": seconds},
             "retrieval_steps": 1,
             "retrieved_sources": [["4_Expense_Policy.md"]],
             "llm": {"prompt_s": total / 2, "prompt_tokens": 1000, "generation_s": total / 4, "generated_tokens": 100},
@@ -63,6 +67,9 @@ def eval_report(make_item, totals, *, kv="f16", testset_sha="a" * 64, label="eva
             "docker_host_swap_peak_used_bytes": GIB // 2,
             "container_lifetime_peak_mem_bytes": {"llm": 5 * GIB},
             "container_oom_kills": {"llm": 0, "agent": 1},
+            "container_restarts": {"llm": 0, "agent": 0},
+            "docker_host_swap_growth_bytes": GIB // 4,
+            "unsampled_peak_excess_bytes": unsampled or {},
         },
     )
 
@@ -115,11 +122,18 @@ class TestEndToEnd:
         assert table_row(markdown, "Total time, median")[2:] == ["30.0 s (n=2)", "15.0 s (n=2)", "-15.0 s (-50%)"]
         assert table_row(markdown, "Total time, whole run")[2:] == ["60.0 s (n=2)", "30.0 s (n=2)", "-30.0 s (-50%)"]
         assert table_row(markdown, "Time to first token, median")[2:] == ["7.50 s (n=2)", "3.75 s (n=2)", "-3.75 s (-50%)"]
-        assert table_row(markdown, "Routing time, median")[2] == "250 ms (n=2)"
-        assert table_row(markdown, "Peak RAM, all containers")[2] == "9.00 GiB"
+        assert table_row(markdown, "Submit to dispatch, median")[1:3] == ["task events, queue wait included", "250 ms (n=2)"]
+        assert table_row(markdown, "Routing decision, median")[1:3] == ["MAS /metrics, B-92 router", "1,206 ms (n=2)"]
+        assert table_row(markdown, "Routing decision without the LLM, p90")[2] == "12 ms (n=1)"
+        assert table_row(markdown, "Routed by the LLM fallback")[2:] == ["50.0% (n=2)", "50.0% (n=2)", "+0.0 pts"]
+        assert table_row(markdown, "Routing methods")[2:] == ["embedding 1, llm 1", "embedding 1, llm 1", "same"]
+        assert table_row(markdown, "Peak RAM, all containers at once")[1:3] == ["docker stats samples (ADR-005 P)", "9.00 GiB"]
         assert table_row(markdown, "Peak RAM, llm, since it started")[2] == "5.00 GiB"
         assert table_row(markdown, "Out-of-memory kills")[2] == "1"
+        assert table_row(markdown, "Container restarts")[2] == "0"
         assert table_row(markdown, "Peak swap used")[2] == "0.50 GiB"
+        assert table_row(markdown, "Swap growth during the questions")[2] == "0.25 GiB"
+        assert "memory.peak" not in markdown.split("## Section 10 metrics")[0]
         assert table_row(markdown, "Answer correct, two reviewers")[2:] == ["50.0% (n=2)", "50.0% (n=2)", "+0.0 pts"]
         assert table_row(markdown, "Generation speed in the stack")[2] == "13.3 t/s (n=2)"
         assert table_row(markdown, "Install time without the model")[2:4] == ["—", "—"]
@@ -137,6 +151,16 @@ class TestEndToEnd:
         before = write(tmp_path, "a.json", eval_report(make_item, [10.0], testset_sha="a" * 64))
         after = write(tmp_path, "b.json", eval_report(make_item, [10.0], testset_sha="b" * 64))
         assert "different test sets" in compare_markdown([before], [after], BenchSelection())
+
+    def test_a_peak_missed_between_samples_asks_for_a_shorter_interval(self, tmp_path, make_item):
+        report = eval_report(make_item, [10.0], unsampled={"llm": GIB, "mas": GIB // 2})
+        markdown = compare_markdown([write(tmp_path, "a.json", report)], None, BenchSelection())
+        assert (
+            "eval-cpu16: the cgroup memory.peak of llm rose 1.00 GiB above its docker stats peak during the "
+            "questions (a spike between samples, or page cache). Repeat the run with --sample-interval 2 before "
+            "taking ADR-005's P from it."
+        ) in markdown
+        assert "memory.peak of mas" not in markdown
 
     def test_pending_reviews_and_incomplete_runs_are_flagged(self, tmp_path, make_item):
         report = eval_report(make_item, [10.0], reviewed=False)

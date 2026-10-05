@@ -15,8 +15,10 @@ from eval_report import (
     parse_docker_stats,
     parse_meminfo_swap_used,
     question_record,
+    questions_peak_checks,
     rate,
     resummarize,
+    routing_summary,
     stats,
     titles_from_query_result,
 )
@@ -27,6 +29,7 @@ from eval_scoring import (
     STOPPED_BY_WATCHDOG,
 )
 
+GIB = 2**30
 ALL_DOCUMENTS = [
     "1_Q4_2025_Financial_Report.md",
     "2_Employee_Handbook.md",
@@ -91,17 +94,21 @@ class TestQuestionRecord:
         assert record["ttft_s"] == 3.5
         assert record["fallback"] is None
 
-    def test_record_keeps_routing_time_server_metrics_and_question_resources(self, lookup_item):
+    def test_record_keeps_dispatch_time_routing_server_metrics_and_question_resources(self, lookup_item):
         llm = {"prompt_s": 41.5, "prompt_tokens": 2100, "generation_s": 30.2, "generated_tokens": 160}
+        decision = {"decisions": 1, "methods": {"embedding": 1}, "seconds": 0.012}
         resources = {"samples": 4, "containers_sum_peak_mem_bytes": 9 * 2**30}
-        record = question_record(lookup_item, chat_outcome(routing_s=0.8, llm=llm, resources=resources))
-        assert record["routing_s"] == 0.8
+        outcome = chat_outcome(dispatch_s=0.8, routing_decision=decision, llm=llm, resources=resources)
+        record = question_record(lookup_item, outcome)
+        assert record["dispatch_s"] == 0.8
+        assert record["routing_decision"] == decision
         assert record["llm"] == llm
         assert record["resources"] == resources
 
     def test_record_without_probes_has_null_server_metrics(self, lookup_item):
         record = question_record(lookup_item, chat_outcome())
-        assert record["routing_s"] is None
+        assert record["dispatch_s"] is None
+        assert record["routing_decision"] is None
         assert record["llm"] is None
         assert record["resources"] is None
 
@@ -412,10 +419,54 @@ class TestResources:
         assert ResourcePeaks().window_dict() is None
 
 
+class TestQuestionsPeakChecks:
+    @staticmethod
+    def resources(lifetime, sampled, swap_peak=None):
+        return {
+            "container_peak_mem_bytes": sampled,
+            "container_lifetime_peak_mem_bytes": lifetime,
+            "docker_host_swap_peak_used_bytes": swap_peak,
+        }
+
+    def test_only_a_peak_reached_during_the_questions_counts_against_the_samples(self):
+        at_start = {
+            "container_lifetime_peak_mem_bytes": {"knowledge_store": 5 * GIB, "llm": 3 * GIB, "mas": GIB},
+            "docker_host_swap_used_bytes": GIB // 4,
+        }
+        resources = self.resources(
+            lifetime={"knowledge_store": 5 * GIB, "llm": 4 * GIB, "mas": GIB + 100},
+            sampled={"knowledge_store": 2 * GIB, "llm": 3 * GIB, "mas": GIB + 200},
+            swap_peak=GIB // 2,
+        )
+        checks = questions_peak_checks(resources, at_start)
+        assert checks["unsampled_peak_excess_bytes"] == {"llm": GIB}
+        assert checks["docker_host_swap_growth_bytes"] == GIB // 4
+        assert checks["at_questions_start"] is at_start
+
+    def test_a_container_missing_from_the_samples_or_the_start_is_not_judged(self):
+        at_start = {"container_lifetime_peak_mem_bytes": {"llm": GIB}}
+        resources = self.resources(lifetime={"llm": 2 * GIB, "web_client": GIB}, sampled={"web_client": 10})
+        checks = questions_peak_checks(resources, at_start)
+        assert checks["unsampled_peak_excess_bytes"] == {}
+        assert checks["docker_host_swap_growth_bytes"] is None
+
+    def test_swap_that_shrank_is_no_growth(self):
+        at_start = {"container_lifetime_peak_mem_bytes": {}, "docker_host_swap_used_bytes": GIB}
+        checks = questions_peak_checks(self.resources({}, {}, swap_peak=GIB // 2), at_start)
+        assert checks["docker_host_swap_growth_bytes"] == 0
+
+    def test_without_a_start_snapshot_nothing_is_judged(self):
+        assert questions_peak_checks(self.resources({"llm": GIB}, {"llm": 1}), None) == {
+            "at_questions_start": None,
+            "unsampled_peak_excess_bytes": None,
+            "docker_host_swap_growth_bytes": None,
+        }
+
+
 class TestServerSideSummary:
     @staticmethod
-    def record(llm=None, routing_s=None, **outcome):
-        return {"llm": llm, "routing_s": routing_s, **outcome}
+    def record(llm=None, dispatch_s=None, **outcome):
+        return {"llm": llm, "dispatch_s": dispatch_s, **outcome}
 
     def test_totals_give_the_throughput_over_all_questions(self):
         records = [
@@ -443,15 +494,59 @@ class TestServerSideSummary:
     def test_no_server_metrics_give_no_llm_summary(self):
         assert llm_summary([self.record(), self.record()]) is None
 
-    def test_summary_has_routing_time_and_llm_blocks(self, lookup_item):
+    def test_summary_has_dispatch_time_routing_and_llm_blocks(self, lookup_item):
+        decision = {"decisions": 1, "methods": {"rules": 1}, "seconds": 0.002}
         records = [
-            question_record(lookup_item, chat_outcome(routing_s=0.2, llm={"prompt_s": 1.0, "prompt_tokens": 50})),
-            question_record(lookup_item, chat_outcome(routing_s=0.4)),
+            question_record(lookup_item, chat_outcome(dispatch_s=0.2, llm={"prompt_s": 1.0, "prompt_tokens": 50})),
+            question_record(lookup_item, chat_outcome(dispatch_s=0.4, routing_decision=decision)),
         ]
         summary = build_summary(records)
-        assert summary["routing_s"]["n"] == 2
-        assert summary["routing_s"]["max"] == 0.4
+        assert summary["dispatch_s"]["n"] == 2
+        assert summary["dispatch_s"]["max"] == 0.4
+        assert summary["routing"]["methods"] == {"rules": 1}
         assert summary["llm"]["questions"] == 1
+
+
+class TestRoutingSummary:
+    @staticmethod
+    def record(decision):
+        return {"routing_decision": decision}
+
+    @staticmethod
+    def decided(method, seconds):
+        return {"decisions": 1, "methods": {method: 1}, "seconds": seconds}
+
+    def test_router_time_method_share_and_llm_fallback_rate(self):
+        records = [
+            self.record(self.decided("rules", 0.001)),
+            self.record(self.decided("embedding", 0.012)),
+            self.record(self.decided("embedding", 0.018)),
+            self.record(self.decided("llm", 2.5)),
+            self.record({"decisions": 0, "methods": {}, "seconds": 0.0}),
+            self.record({"decisions": 2, "methods": {"embedding": 1, "llm": 1}, "seconds": 3.0}),
+            self.record({"restarted": True}),
+            self.record(None),
+        ]
+        summary = routing_summary(records)
+        assert summary["questions"] == 6
+        assert summary["mas_restarts"] == 1
+        assert summary["decided_once"] == 4
+        assert summary["without_decision"] == 1
+        assert summary["several_decisions"] == 1
+        assert summary["methods"] == {"embedding": 2, "llm": 1, "rules": 1}
+        assert summary["llm_pct"] == 25.0
+        assert summary["decision_s"]["median"] == 0.015
+        assert summary["decision_s"]["max"] == 2.5
+        assert summary["decision_s_without_llm"]["max"] == 0.018
+
+    def test_no_router_metrics_give_no_routing_summary(self):
+        assert routing_summary([self.record(None), {}]) is None
+
+    def test_questions_without_a_decision_leave_the_rates_empty(self):
+        summary = routing_summary([self.record({"decisions": 0, "methods": {}, "seconds": 0.0})])
+        assert summary["decided_once"] == 0
+        assert summary["llm_pct"] is None
+        assert summary["decision_s"] == {"n": 0}
 
 
 class TestFiles:

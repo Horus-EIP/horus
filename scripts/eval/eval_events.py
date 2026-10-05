@@ -6,14 +6,14 @@ from typing import Any
 MANAGER_SKILLS = frozenset({"planning", "review", "orchestration"})
 ANSWER_EVENT_TYPES = frozenset({"task_complete", "agent"})
 LIVENESS_EVENT_TYPES = frozenset({"heartbeat", "task_status"})
-ROUTING_STAGES = frozenset({"queued", "routing"})
+PRE_DISPATCH_STAGES = frozenset({"queued", "routing"})
 
 
 @dataclass
 class Observation:
     events: int = 0
     first_event_s: float | None = None
-    routing_s: float | None = None
+    dispatch_s: float | None = None
     retrieval_s: float | None = None
     reasoning_start_s: float | None = None
     ttft_s: float | None = None
@@ -65,13 +65,13 @@ def _record_retrieval(observation: Observation, metadata: dict[str, Any]) -> Non
         observation.untitled_retrieval_steps += 1
 
 
-def _record_stage(observation: Observation, stage: Any, offset_s: float) -> None:
-    if observation.routing_s is None and isinstance(stage, str) and stage not in ROUTING_STAGES:
-        observation.routing_s = offset_s
+def _record_dispatch(observation: Observation, stage: Any, offset_s: float) -> None:
+    if observation.dispatch_s is None and isinstance(stage, str) and stage not in PRE_DISPATCH_STAGES:
+        observation.dispatch_s = offset_s
 
 
 def apply_event(observation: Observation, event: dict[str, Any], offset_s: float) -> Observation:
-    _record_stage(observation, event.get("stage"), offset_s)
+    _record_dispatch(observation, event.get("stage"), offset_s)
     if event.get("type") in LIVENESS_EVENT_TYPES:
         return observation
     observation.events += 1
@@ -99,8 +99,8 @@ def apply_event(observation: Observation, event: dict[str, Any], offset_s: float
         observation.total_s = offset_s
         observation.route = event.get("route") if isinstance(event.get("route"), str) else None
         observation.done = True
-        if observation.routing_s is None and event.get("stage") in ROUTING_STAGES:
-            observation.routing_s = offset_s
+        if observation.dispatch_s is None and event.get("stage") in PRE_DISPATCH_STAGES:
+            observation.dispatch_s = offset_s
         if isinstance(event.get("sources"), list):
             observation.cited_sources = _source_titles(event["sources"])
     return observation

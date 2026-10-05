@@ -74,7 +74,7 @@ python scripts/eval/run-eval.py --label eval-cpu16-standard --reference cpu16 --
 python scripts/benchmarks/compare-benchmarks.py benchmarks/cpu-transformers-2026-09-01.json benchmarks/eval-cpu16-standard-<date>.json
 ```
 
-The comparison prints the dev plan's §10 table (tokens per second, time to first token, total time, routing time, peak RAM and swap, answer and source correctness) in Markdown, ready for a pull request.
+The comparison prints the dev plan's §10 table (tokens per second, time to first token, total time, routing time and method, peak RAM and swap, answer and source correctness) in Markdown, ready for a pull request.
 
 ---
 
@@ -89,7 +89,7 @@ The comparison prints the dev plan's §10 table (tokens per second, time to firs
 | Resilience / chaos | [`resilience.py`](../../scripts/perf/resilience.py) | RabbitMQ death, ChromaDB restart, Postgres failover | Once per sprint |
 | Retrieval quality | [`retrieval-quality.py`](../../scripts/perf/retrieval-quality.py) | Recall on a curated query set | Whenever the embedding model or chunker changes |
 | Quality benchmark (keyword + output assertions) | [`quality-benchmark.py`](../../scripts/perf/quality-benchmark.py) | Keyword-match precision, answer-contains assertions | Each release + after any RAG pipeline change |
-| Test set evaluation (100 questions) | [`run-eval.py`](../../scripts/eval/run-eval.py) | Time to first token, total time, routing time, peak RAM and swap, answer and source correctness | Before and after every dev plan task of phases 1 to 8 |
+| Test set evaluation (100 questions) | [`run-eval.py`](../../scripts/eval/run-eval.py) | Time to first token, total time, routing time and method, peak RAM and swap, answer and source correctness | Before and after every dev plan task of phases 1 to 8 |
 | Model speed | [`run-llama-bench.py`](../../scripts/benchmarks/run-llama-bench.py) | llama-bench prompt processing and generation, KV cache types, thread counts | When the llama.cpp build, the model or the reference machine changes |
 
 ---

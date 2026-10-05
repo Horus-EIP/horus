@@ -6,7 +6,7 @@
 python -m pytest tests/eval -q -p no:cacheprovider
 ```
 
-These tests are hermetic. They check the set itself and unit-test the runner's scoring and report building. CI runs them (`.github/workflows/eval-testset.yml`) whenever `demo_assets/`, `tests/eval/`, `scripts/eval/` or the reused `scripts/perf/` scripts change.
+These tests are hermetic. They check the set itself and unit-test the runner's scoring and report building. CI runs them (`.github/workflows/eval-testset.yml`) whenever `demo_assets/`, `tests/eval/`, `scripts/eval/` or the reused `scripts/perf/` scripts change. A change to `scripts/benchmarks/` alone does not trigger that workflow yet: run the tests by hand.
 
 The same folder tests the benchmark tooling of `scripts/benchmarks/` (`pytest.ini` puts both script folders on the path), with Docker, the host queries and llama-server replaced by fakes:
 
@@ -16,7 +16,7 @@ The same folder tests the benchmark tooling of `scripts/benchmarks/` (`pytest.in
 | `test_bench_llama.py` | The plan's llama-bench command, the pinned image and model hashes against the CPU stack, parsing and the enriched report. |
 | `test_llama_bench_runner.py` | `run-llama-bench.py` end to end: run, fetch, missing models, `--from-json`, `--dry-run`. |
 | `test_bench_compare.py` | `compare-benchmarks.py`: the §10 table, changes, warnings, the 2026-09-01 baseline, llama-bench selection. |
-| `test_eval_stack.py` | llama-server `/metrics`, `/props` and command-line parsing, cgroup files. |
+| `test_eval_stack.py` | llama-server `/metrics`, `/props` and command-line parsing, the MAS router histogram, cgroup files and restart counts. |
 
 ## Contents
 

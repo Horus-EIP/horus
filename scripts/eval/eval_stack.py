@@ -38,8 +38,12 @@ SERVER_FLAGS = {
     "--load-mode": "load_mode",
 }
 INTEGER_SETTINGS = frozenset({"port", "ctx_size", "cache_ram_mib", "threads", "parallel"})
+ROUTING_HISTOGRAM = "mas_routing_decision_seconds"
+ROUTING_HISTOGRAM_FIELDS = {f"{ROUTING_HISTOGRAM}_count": "count", f"{ROUTING_HISTOGRAM}_sum": "seconds"}
+LLM_ROUTING_METHOD = "llm"
 
 _PROMETHEUS_LINE = re.compile(r"^([A-Za-z_:][A-Za-z0-9_:]*)(\{[^}]*\})?\s+(\S+)")
+_PROMETHEUS_LABEL = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)="((?:[^"\\]|\\.)*)"')
 _BUILD = re.compile(r"(?:^|[^0-9A-Za-z])b?(\d{3,})(?:$|[^0-9])")
 
 
@@ -72,6 +76,45 @@ def llm_usage(before: dict[str, float] | None, after: dict[str, float] | None) -
     usage["prompt_tps"] = _rate(usage.get("prompt_tokens"), usage.get("prompt_s"))
     usage["generation_tps"] = _rate(usage.get("generated_tokens"), usage.get("generation_s"))
     return usage
+
+
+def parse_routing_decisions(text: str | None) -> dict[str, dict[str, float]] | None:
+    if f"# TYPE {ROUTING_HISTOGRAM} histogram" not in (text or ""):
+        return None
+    decisions: dict[str, dict[str, float]] = {}
+    for line in text.splitlines():
+        match = _PROMETHEUS_LINE.match(line.strip())
+        field = ROUTING_HISTOGRAM_FIELDS.get(match.group(1)) if match else None
+        method = dict(_PROMETHEUS_LABEL.findall(match.group(2) or "")).get("method") if field else None
+        if method is None:
+            continue
+        try:
+            value = float(match.group(3))
+        except ValueError:
+            continue
+        decisions.setdefault(method, {"count": 0.0, "seconds": 0.0})[field] = value
+    return decisions
+
+
+def routing_decision(
+    before: dict[str, dict[str, float]] | None, after: dict[str, dict[str, float]] | None
+) -> dict[str, Any] | None:
+    if before is None or after is None:
+        return None
+    methods: dict[str, int] = {}
+    seconds = 0.0
+    for method in sorted(before.keys() | after.keys()):
+        earlier = before.get(method, {})
+        later = after.get(method)
+        if later is None:
+            return {"restarted": True}
+        count = later.get("count", 0.0) - earlier.get("count", 0.0)
+        if count < 0:
+            return {"restarted": True}
+        if count:
+            methods[method] = int(round(count))
+            seconds += later.get("seconds", 0.0) - earlier.get("seconds", 0.0)
+    return {"decisions": sum(methods.values()), "methods": methods, "seconds": round(max(seconds, 0.0), 4)}
 
 
 def _rate(tokens: float | None, seconds: float | None) -> float | None:
@@ -131,10 +174,18 @@ def parse_cgroup_bytes(text: str | None) -> int | None:
     return int(value) if value.isdigit() else None
 
 
-def parse_memory_events(text: str | None) -> dict[str, int]:
-    events: dict[str, int] = {}
+def _name_counts(text: str | None) -> dict[str, int]:
+    counts: dict[str, int] = {}
     for line in (text or "").splitlines():
         parts = line.split()
         if len(parts) == 2 and parts[1].isdigit():
-            events[parts[0]] = int(parts[1])
-    return events
+            counts[parts[0]] = int(parts[1])
+    return counts
+
+
+def parse_memory_events(text: str | None) -> dict[str, int]:
+    return _name_counts(text)
+
+
+def parse_restart_counts(text: str | None) -> dict[str, int]:
+    return {name.lstrip("/"): count for name, count in _name_counts(text).items()}

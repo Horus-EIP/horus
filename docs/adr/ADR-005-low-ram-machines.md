@@ -40,7 +40,7 @@ Sizes in GiB (1024³ bytes). "Arithmetic" is computed from file sizes and the mo
 | Agent: Python, torch, spaCy `en_core_web_sm` | 1.50 | estimate: 1 to 1.5 GB | 4g |
 | postgres, redis, rabbitmq, web client, loki, promtail, tempo, prometheus | 2.00 | allowance | none |
 | **All containers** | **12.96** | | |
-| Kernel, Docker itself, page cache for the memory-mapped model, and on a Linux desktop the session and browser | 2.00 | allowance (headroom) | |
+| Kernel, Docker itself, page cache the containers are not actively using (model files read at start, database files), and on a Linux desktop the session and browser | 2.00 | allowance (headroom) | |
 | **Memory Docker must see** | **14.96** | | |
 
 The ceilings add up to 19 GiB: they stop one runaway container, they are not a budget. The 14.96 GiB total matches the 15.0 GiB split the installer already uses.
@@ -87,7 +87,7 @@ On Windows the "not supported" screen must say that Docker gets half of the RAM 
 2. `docker-compose.cpu.yml`: take the KV cache types and the prompt cache from the environment, for example `--cache-type-k ${LLM_SERVER_CACHE_TYPE_K:-f16}`, `--cache-type-v ${LLM_SERVER_CACHE_TYPE_V:-f16}`, `--flash-attn ${LLM_SERVER_FLASH_ATTN:-auto}` and `--cache-ram ${LLM_SERVER_CACHE_RAM_MIB:-1024}`. `--ctx-size` already follows `LLM_VLLM_MAX_MODEL_LEN`.
 3. `installer/profiles.py`: `cpu-lean` sets `LLM_VLLM_MAX_MODEL_LEN=4096`, the two cache types to `q8_0`, flash attention `on` (a quantized V cache needs it), `LLM_SERVER_CACHE_RAM_MIB=256` and `LLM_SERVER_MEM_LIMIT=5g`. Its trigger becomes 13.5 to 15.0 GiB of Docker memory.
 4. Under 13.5 GiB: the "not supported" screen with the Docker memory found, the 13.5 GiB needed, and on Windows the WSL advice above. `--profile cpu-lean` or `--profile cpu-standard` still overrides it, with a warning, for people who want to try.
-5. The thresholds live in one place in `installer/profiles.py` and quote this ADR. The Q4_K_M entry of `models/manifest.json` (B-95) says `min_ram_gb: 16` and lists both CPU profiles: make it agree with the lean floor, or state that the installer's thresholds decide.
+5. The thresholds live in one place in `installer/profiles.py` and quote this ADR. Until the measurements land they are 15.0 and 13.5; afterwards they are the values the [decision rule](#decision-rule) computes from `resources.containers_sum_peak_mem_bytes` of the B-91 reports. Those report fields feed this ADR, not the installer, which decides on `docker info` alone. The Q4_K_M entry of `models/manifest.json` (B-95) says `min_ram_gb: 16` and lists both CPU profiles: make it agree with the lean floor, or state that the installer's thresholds decide.
 
 ## Measurement protocol
 
@@ -98,7 +98,7 @@ Reference machine: 16 GB of RAM, CPU only, AVX2 (dev plan §10). Linux gives Doc
    writes `benchmarks/cpu16-<date>.json` (the plan's llama-bench matrix, enriched with the build, the GGUF hashes and the machine).
 2. **`cpu-standard`, 100 questions.** Install with `--profile cpu-standard`, then
    `python scripts/eval/run-eval.py --label eval-cpu16-standard --reference cpu16 --sample-resources`.
-   The report records the llama-server arguments, the build, the model hash, the Docker memory, the peak memory per container from `docker stats`, each container's `memory.peak` and OOM kills, and the swap of the Docker host.
+   The report records the llama-server arguments, the build, the model hash, the Docker memory, the peak memory of all containers at once and of each container from `docker stats`, each container's `memory.peak` and OOM kills just before the first scored question and at the end, each container's restart count, and the swap of the Docker host at the same two moments and at its peak.
 3. **Option B, 100 questions, same machine.** Until B-100 lands, set `LLM_VLLM_MAX_MODEL_LEN=4096` in `src/infra/.env` and add this file to `COMPOSE_FILE`:
 
    ```yaml
@@ -118,9 +118,11 @@ Reference machine: 16 GB of RAM, CPU only, AVX2 (dev plan §10). Linux gives Doc
 
 ### Decision rule
 
-- `P` = the run's `resources.containers_sum_peak_mem_bytes`, or the sum of the containers' `memory.peak` when that is larger. Threshold = `P` + 2.0 GiB of headroom, rounded **up** to the next 0.5 GiB. This replaces 15.0 for `cpu-standard` (step 2) and 13.5 for `cpu-lean` (step 3).
-- Option B stays only if, against the `cpu-standard` run on the same machine and test set version: the two-reviewer answer-correct rate and the source-correct rate are each within 5 points, every question ends with an answer, and the run at the threshold (step 4) has no OOM kill and less than 256 MiB of swap growth. Otherwise `cpu-lean` becomes "not supported" too, and the single threshold is the `cpu-standard` one.
-- Option A comes back only if the measured peak of the containers other than `llm` is 3.5 GiB or less, which is plausible after B-96 removes torch from MAS and the knowledge store. Then an 8 GB machine (about 7.6 GiB for Docker) could hold a 2 GiB model server, and the 1.7B model must pass the same quality rule against the 4B.
+- `P` = the run's `resources.containers_sum_peak_mem_bytes`: the largest total of one `docker stats` sample, that is the memory all containers used at the same moment. `docker stats` reports each cgroup's memory minus its inactive page cache, so files read once (the knowledge store's model files at start, database files) do not count, while the model pages llama-server reads for every token do. Threshold = `P` + 2.0 GiB of headroom, rounded **up** to the next 0.5 GiB. This replaces 15.0 for `cpu-standard` (step 2) and 13.5 for `cpu-lean` (step 3). It is the only field the B-100 constants are computed from.
+- The cgroup `memory.peak` values are **not** added to `P`. Each one is the maximum since its container started (the knowledge store loading its four models and indexing the corpus included), the maxima of different containers happen at different moments, and they count page cache: their sum overstates what the stack ever used at once and would push both thresholds up. They check the sampling instead. `run-eval.py` reads them just before the first scored question and again at the end; for each container whose `memory.peak` rose during the questions, `resources.unsampled_peak_excess_bytes` holds how far above that container's `docker stats` peak it went. If one value is above 0.5 GiB (the comparison prints a warning), a spike fell between two samples or page cache grew: repeat the run with `--sample-interval 2`, and if the excess stays, add it to `P`.
+- Starting the stack is not in `P`, since sampling starts with the run. Step 4 covers it: the stack starts with exactly the threshold, and `resources.container_oom_kills` and `resources.container_restarts` must both be 0 at the end. Restarts count because a container restarted after an out-of-memory kill gets a new cgroup, whose `oom_kill` counter starts from 0 again.
+- Option B stays only if, against the `cpu-standard` run on the same machine and test set version: the two-reviewer answer-correct rate and the source-correct rate are each within 5 points, every question ends with an answer, and the run at the threshold (step 4) has no OOM kill, no container restart and less than 256 MiB of swap growth (`resources.docker_host_swap_growth_bytes`, the peak minus the swap in use when the questions started). Otherwise `cpu-lean` becomes "not supported" too, and the single threshold is the `cpu-standard` one.
+- Option A comes back only if the containers other than `llm` need 3.5 GiB or less: their `docker stats` peaks (`resources.container_peak_mem_bytes`) added up, which can only overstate what they used at once. That is plausible after B-96 removes torch from MAS and the knowledge store. Then an 8 GB machine (about 7.6 GiB for Docker) could hold a 2 GiB model server, and the 1.7B model must pass the same quality rule against the 4B.
 - When the rule moves a threshold, update this ADR (status Accepted, with the measured numbers and the files in `benchmarks/`) and the constants in `installer/profiles.py` in the same change.
 
 ## Consequences

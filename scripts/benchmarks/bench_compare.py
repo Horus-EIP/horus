@@ -15,6 +15,8 @@ BENCH_KINDS = frozenset({LLAMA_BENCH_KIND, RAW_LLAMA_BENCH_KIND})
 END_TO_END_KINDS = frozenset({EVAL_KIND, RECORDED_KIND})
 GIB = 1024**3
 LLM_CONTAINER = "llm"
+ROUTER = "MAS /metrics, B-92 router"
+UNSAMPLED_PEAK_LIMIT_BYTES = GIB // 2
 HEADLINE_TESTS = (
     ("pp512", 0),
     ("pp2048", 0),
@@ -98,12 +100,18 @@ SECTION_10_ROWS = (
     MetricRow("total_sum_s", "Total time, whole run", "sum over the questions", "s", is_total=True),
     MetricRow("llm_prompt_median_s", "Prompt reading per question, median", "llama-server /metrics", "s"),
     MetricRow("llm_generation_tps", "Generation speed in the stack", "llama-server /metrics", "t/s"),
-    MetricRow("routing_median_ms", "Routing time, median", "task events (method: router logs)", "ms"),
-    MetricRow("peak_ram_gib", "Peak RAM, all containers", "docker stats", "GiB"),
+    MetricRow("routing_decision_median_ms", "Routing decision, median", ROUTER, "ms"),
+    MetricRow("routing_decision_without_llm_p90_ms", "Routing decision without the LLM, p90", ROUTER, "ms"),
+    MetricRow("routing_llm_pct", "Routed by the LLM fallback", ROUTER, "%"),
+    MetricRow("routing_methods", "Routing methods", ROUTER, "text"),
+    MetricRow("dispatch_median_ms", "Submit to dispatch, median", "task events, queue wait included", "ms"),
+    MetricRow("peak_ram_gib", "Peak RAM, all containers at once", "docker stats samples (ADR-005 P)", "GiB"),
     MetricRow("peak_ram_llm_gib", "Peak RAM, llm container", "docker stats", "GiB"),
     MetricRow("lifetime_peak_llm_gib", "Peak RAM, llm, since it started", "cgroup memory.peak", "GiB"),
     MetricRow("oom_kills", "Out-of-memory kills", "cgroup memory.events", "count"),
+    MetricRow("restarts", "Container restarts", "docker inspect", "count"),
     MetricRow("swap_peak_gib", "Peak swap used", "Docker host /proc/meminfo", "GiB"),
+    MetricRow("swap_growth_gib", "Swap growth during the questions", "Docker host /proc/meminfo", "GiB"),
     MetricRow("install_min", "Install time without the model", "clean VM (not in these files)", "min"),
     MetricRow("peak_disk_gb", "Peak disk during install", "clean VM (not in these files)", "GB"),
     MetricRow("answer_correct_reviewed_pct", "Answer correct, two reviewers", "manual review", "%"),
@@ -144,10 +152,17 @@ def _total(values: Any) -> int | None:
     return sum(values.values()) if isinstance(values, dict) else None
 
 
+def _methods_text(methods: Any) -> str | None:
+    if not isinstance(methods, dict) or not methods:
+        return None
+    return ", ".join(f"{method} {count}" for method, count in sorted(methods.items()))
+
+
 def eval_metrics(report: dict[str, Any]) -> dict[str, Metric]:
     summary = report.get("summary") or {}
     resources = report.get("resources") or {}
     llm = summary.get("llm") or {}
+    routing = summary.get("routing") or {}
     review = summary.get("manual_review") or {}
     peaks = resources.get("container_peak_mem_bytes") or {}
     lifetime = resources.get("container_lifetime_peak_mem_bytes") or {}
@@ -163,12 +178,18 @@ def eval_metrics(report: dict[str, Any]) -> dict[str, Metric]:
         "total_sum_s": _stat(summary, "total_s", "sum"),
         "llm_prompt_median_s": _stat(llm, "prompt_s", "median"),
         "llm_generation_tps": Metric(llm.get("generation_tps"), llm.get("questions")),
-        "routing_median_ms": _stat(summary, "routing_s", "median", 1000.0),
+        "routing_decision_median_ms": _stat(routing, "decision_s", "median", 1000.0),
+        "routing_decision_without_llm_p90_ms": _stat(routing, "decision_s_without_llm", "p90", 1000.0),
+        "routing_llm_pct": Metric(routing.get("llm_pct"), routing.get("decided_once")),
+        "routing_methods": Metric(_methods_text(routing.get("methods"))),
+        "dispatch_median_ms": _stat(summary, "dispatch_s", "median", 1000.0),
         "peak_ram_gib": Metric(_gib(resources.get("containers_sum_peak_mem_bytes"))),
         "peak_ram_llm_gib": Metric(_gib(peaks.get(LLM_CONTAINER))),
         "lifetime_peak_llm_gib": Metric(_gib(lifetime.get(LLM_CONTAINER))),
         "oom_kills": Metric(_total(resources.get("container_oom_kills"))),
+        "restarts": Metric(_total(resources.get("container_restarts"))),
         "swap_peak_gib": Metric(_gib(swap)),
+        "swap_growth_gib": Metric(_gib(resources.get("docker_host_swap_growth_bytes"))),
         "answer_correct_reviewed_pct": Metric(review.get("answer_correct_pct"), review.get("reviewed")),
         "answer_correct_auto_pct": _rate(summary.get("answer_correct_auto")),
         "source_correct_auto_pct": _rate(summary.get("source_correct_auto")),
@@ -375,6 +396,17 @@ def header_rows(sides: list[Side]) -> list[list[Any]]:
     ]
 
 
+def sampling_warnings(doc: dict[str, Any]) -> list[str]:
+    excess = (doc.get("resources") or {}).get("unsampled_peak_excess_bytes") or {}
+    return [
+        f"{doc.get('label')}: the cgroup memory.peak of {name} rose {_gib(over):.2f} GiB above its docker stats "
+        "peak during the questions (a spike between samples, or page cache). Repeat the run with "
+        "--sample-interval 2 before taking ADR-005's P from it."
+        for name, over in sorted(excess.items())
+        if isinstance(over, (int, float)) and over > UNSAMPLED_PEAK_LIMIT_BYTES
+    ]
+
+
 def comparison_warnings(sides: list[Side]) -> list[str]:
     warnings = []
     for side in sides:
@@ -382,6 +414,8 @@ def comparison_warnings(sides: list[Side]) -> list[str]:
             run = doc.get("run") or {}
             if doc.get("kind") == EVAL_KIND and run.get("completed") is False:
                 warnings.append(f"{doc.get('label')}: the run did not complete.")
+            if doc.get("kind") == EVAL_KIND:
+                warnings += sampling_warnings(doc)
             pending = ((doc.get("summary") or {}).get("manual_review") or {}).get("pending")
             if doc.get("kind") == EVAL_KIND and pending:
                 warnings.append(f"{doc.get('label')}: {pending} answers still wait for the two reviewers.")
