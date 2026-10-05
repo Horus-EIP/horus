@@ -29,7 +29,7 @@ This guide helps you set up a local environment for the Horus multi-agent system
 
 - **Docker** with Compose v2 (`docker compose`)  
   [Docker Desktop](https://www.docker.com/products/docker-desktop)  
-  Allocate at least 4 CPUs and 8 GB RAM in Docker settings.
+  Allocate at least 4 CPUs in Docker settings. Without an NVIDIA GPU, give Docker at least 13.5 GiB of memory (15.0 GiB for the `cpu-standard` profile); see [Hardware decision](operations.md#hardware-decision).
 
 #### Optional (running services outside Docker)
 

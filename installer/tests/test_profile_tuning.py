@@ -28,6 +28,7 @@ SWAP_KEYS = ("MAS_MEMSWAP_LIMIT", "AGENT_MEMSWAP_LIMIT", "KNOWLEDGE_STORE_MEMSWA
              "LLM_SERVER_MEMSWAP_LIMIT")
 IN_PROCESS_MODEL_KEYS = ("LLM_MODEL_ID", "MODEL_NAME")
 GIB = 1024 ** 3
+KV_BYTES = {"f16": 2.0, "q8_0": 34 / 32}
 
 def cpu_probe(physical: int | None, logical: int | None = None,
               logical_fallback: bool = False) -> dict:
@@ -105,8 +106,11 @@ class CpuModelServer(unittest.TestCase):
                 self.assertEqual(env["LLM_BACKEND"], "vllm")
                 self.assertEqual(env["LLM_VLLM_URL"], "http://llm:8080/v1")
                 self.assertEqual(env["LLM_VLLM_MODEL"], "qwen3-4b")
-                self.assertEqual(env["LLM_VLLM_MAX_MODEL_LEN"], "8192")
                 self.assertEqual(env["LLM_VLLM_TIMEOUT"], "900")
+
+    def test_cpu_standard_keeps_the_8k_context_and_cpu_lean_halves_it(self):
+        self.assertEqual(profiles.env_for("cpu-standard")["LLM_VLLM_MAX_MODEL_LEN"], "8192")
+        self.assertEqual(profiles.env_for("cpu-lean")["LLM_VLLM_MAX_MODEL_LEN"], "4096")
 
     def test_cpu_profiles_configure_no_local_model(self):
         for name in CPU_PROFILES:
@@ -182,12 +186,21 @@ class MemoryCeilings(unittest.TestCase):
 
     def test_the_model_server_ceiling_holds_weights_kv_cache_and_prompt_cache(self):
         weights = profiles.GGUF_BYTES / GIB
-        kv_cache = 36 * 8 * 128 * 2 * 2 * profiles.CPU_CONTEXT_TOKENS / GIB
-        prompt_cache = 1.0
         for name in CPU_PROFILES:
             with self.subTest(name):
-                ceiling = gib(profiles.env_for(name)["LLM_SERVER_MEM_LIMIT"])
+                env = profiles.env_for(name)
+                context = int(env["LLM_VLLM_MAX_MODEL_LEN"])
+                kv_cache = sum(36 * 8 * 128 * KV_BYTES[env[key]] * context / GIB
+                               for key in ("LLM_SERVER_CACHE_TYPE_K", "LLM_SERVER_CACHE_TYPE_V"))
+                prompt_cache = int(env["LLM_SERVER_CACHE_RAM_MIB"]) / 1024
+                ceiling = gib(env["LLM_SERVER_MEM_LIMIT"])
                 self.assertGreater(ceiling, weights + kv_cache + prompt_cache + 0.5)
+
+    def test_the_lean_model_server_needs_less_than_the_standard_one(self):
+        lean, standard = profiles.env_for("cpu-lean"), profiles.env_for("cpu-standard")
+        self.assertLess(gib(lean["LLM_SERVER_MEM_LIMIT"]), gib(standard["LLM_SERVER_MEM_LIMIT"]))
+        self.assertLess(int(lean["LLM_SERVER_CACHE_RAM_MIB"]),
+                        int(standard["LLM_SERVER_CACHE_RAM_MIB"]))
 
     def test_memory_ceilings_are_derived_and_explained(self):
         for name in CPU_PROFILES:
@@ -376,6 +389,8 @@ class InstallWritesTheTuning(unittest.TestCase):
         with contextlib.ExitStack() as stack:
             patch = stack.enter_context
             patch(mock.patch.object(horus_install, "find_repo", return_value=self.repo))
+            patch(mock.patch.object(horus_install, "PROFILE_JSON",
+                                    self.repo / "horus-profile.json"))
             patch(mock.patch.object(horus_install, "banner"))
             patch(mock.patch.object(horus_install, "preflight"))
             consent = patch(mock.patch.object(horus_install, "consent"))
@@ -437,11 +452,12 @@ class InstallWritesTheTuning(unittest.TestCase):
         self.assertFalse(set(model_manager.MODEL_ENV_KEYS) & set(env))
         self.assertIsNone(self.pull_and_build.call_args.kwargs["before_start"])
 
-    def test_a_small_machine_is_warned_that_the_model_is_sized_for_sixteen_gigabytes(self):
+    def test_a_small_machine_forced_onto_a_cpu_profile_is_warned_in_the_log(self):
         self.install("cpu-lean", "linux-cpu-8gb")
         self.log.close(0)
         text = (self.repo / "install-log.txt").read_text(encoding="utf-8")
-        self.assertIn("sized for 16 GB", text)
+        self.assertIn("forces a profile this machine is not supported for", text)
+        self.assertIn("13.5 GiB", text)
 
     def test_the_profile_json_records_the_model_file_it_installs(self):
         _, written = self.install("cpu-standard", "nvidia-16gb")

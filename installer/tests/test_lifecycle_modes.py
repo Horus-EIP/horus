@@ -108,14 +108,14 @@ class RequireInstalled(unittest.TestCase):
         infra = self.tmp / "src" / "infra"
         infra.mkdir(parents=True)
         with self.assertRaises(InstallError) as caught:
-            horus_install.require_installed(infra)
+            horus_install.require_installed(infra, self.tmp / "horus-profile.json")
         self.assertEqual(caught.exception.code, EXIT_NOT_INSTALLED)
 
     def test_error_names_the_launcher_rather_than_a_command(self):
         infra = self.tmp / "src" / "infra"
         infra.mkdir(parents=True)
         with self.assertRaises(InstallError) as caught:
-            horus_install.require_installed(infra)
+            horus_install.require_installed(infra, self.tmp / "horus-profile.json")
         self.assertIn("START-HERE", caught.exception.fix)
 
     def test_present_env_is_accepted(self):
@@ -244,13 +244,8 @@ class LogRecordsTheRealExitCode(unittest.TestCase):
                 "services: {}\n", encoding="utf-8"
             )
             log_path = tmp / "install-log.txt"
-            original = horus_install.LOG_PATH
-            horus_install.LOG_PATH = log_path
-            try:
-                with contextlib.redirect_stdout(io.StringIO()):
-                    code = horus_install.main(["--start", "--repo", str(tmp)])
-            finally:
-                horus_install.LOG_PATH = original
+            with mock.patch.object(horus_install, "LOG_PATH", log_path),                     mock.patch.object(horus_install, "PROFILE_JSON", tmp / "horus-profile.json"),                     contextlib.redirect_stdout(io.StringIO()):
+                code = horus_install.main(["--start", "--repo", str(tmp)])
 
             self.assertEqual(code, EXIT_NOT_INSTALLED)
             last = [

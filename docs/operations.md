@@ -114,7 +114,7 @@ The overlay also adds `llm`: one llama-server (`ghcr.io/ggml-org/llama.cpp:serve
 
 - **Model file.** `models/manifest.json` lists it: id, version, file, size, SHA-256, minimum RAM, profiles and mirrors. The installer downloads the chosen profile's default model into `models/` (or `--models-dir`, which later runs read back from `.env`) after the images are pulled (or built) and before the first start, and checks it again on every `--start` and `--restart`: it resumes a `.part` file with HTTP `Range`, retries with a growing pause, moves to the next mirror after 3 failures in a row (6 on the last mirror), verifies the SHA-256 and renames the file in one step. A bad hash deletes the file and stops with exit code 45. The installer writes `HORUS_MODELS_DIR` and `LLM_GGUF_FILE`, `LLM_GGUF_URL`, `LLM_GGUF_SHA256`, `LLM_GGUF_SIZE` to `.env`; compose mounts `HORUS_MODELS_DIR` (default `../../models`) read-only into `llm` at `/models`. Details and the download size are in `scripts/models/README.md`.
 - **Start order.** The one-shot service `llm-model` runs first (`src/infra/llm/fetch-model.sh`). It finds the file the installer verified and exits at once; without the installer it downloads the file into the same folder, resuming and checking the SHA-256. `llm` starts once it has exited successfully, and `mas` and `agent` wait for `llm` to be healthy (`GET /health`, 10 minute start window).
-- **Server flags.** `--ctx-size` and `--alias` come from `LLM_VLLM_MAX_MODEL_LEN` and `LLM_VLLM_MODEL`, so server and clients cannot disagree. One slot (`--parallel 1`; other requests wait in its queue), `--load-mode mmap`, `--cache-ram 1024`, `--metrics`, f16 KV cache.
+- **Server flags.** `--ctx-size` and `--alias` come from `LLM_VLLM_MAX_MODEL_LEN` and `LLM_VLLM_MODEL`, so server and clients cannot disagree. `--cache-type-k`, `--cache-type-v`, `--flash-attn` and `--cache-ram` come from `LLM_SERVER_CACHE_TYPE_K`, `LLM_SERVER_CACHE_TYPE_V`, `LLM_SERVER_FLASH_ATTN` and `LLM_SERVER_CACHE_RAM_MIB`, whose compose defaults are the `cpu-standard` values (f16, f16, `auto`, 1024); `cpu-lean` writes others (see [Hardware decision](#hardware-decision)). One slot (`--parallel 1`; other requests wait in its queue), `--load-mode mmap`, `--metrics`.
 - **Resources.** `LLM_SERVER_THREADS` (default 4) is `--threads`; the installer writes the physical core count and gives MAS and the agent one torch thread each. `LLM_SERVER_MEM_LIMIT` (default `6g`) is the memory ceiling, and the swap ceiling follows it unless `LLM_SERVER_MEMSWAP_LIMIT` is set. On the CPU, MAS defaults to `3g` and the agent to `4g`.
 - **Network.** The port is not published to the host. llama-server runs without an API key because only the containers on `horus-net` reach it.
 
@@ -124,6 +124,26 @@ docker compose logs llm-model
 docker compose logs -f llm
 docker compose exec llm curl -s localhost:8080/health
 ```
+
+#### Hardware decision
+
+The installer chooses the profile right after it has checked Python, Docker and Compose: before the disk, network and port checks, the registry sign-in, the file-access questions and every download (`decide_profile` in `installer/horus_install.py`).
+
+1. **Probe.** OS, processor (with AVX2), RAM, disk, the host's GPU list and the memory Docker can use (`docker info --format '{{.MemTotal}}'`). Then, only when there is a GPU to try, the Docker GPU test (`nvidia-smi` in `nvidia/cuda:12.4.0-base-ubuntu22.04`, about 250 MB the first time).
+2. **GPU or CPU.** A GPU profile when Docker can use an NVIDIA card with at least 6 GiB of VRAM. Otherwise a CPU profile, chosen on the memory Docker can use, or on the RAM when Docker does not say. The thresholds are those of [ADR-005](adr/ADR-005-low-ram-machines.md), whose status is Proposed: planning figures until the B-91 measurements confirm or move them.
+
+   | Memory Docker can use | Profile | llama-server |
+   |---|---|---|
+   | 15.0 GiB or more | `cpu-standard` | `--ctx-size 8192`, f16 KV cache, `--flash-attn auto`, `--cache-ram 1024`, `mem_limit` 6g |
+   | 13.5 to under 15.0 GiB | `cpu-lean` | the same model, `--ctx-size 4096`, q8_0 KV cache, `--flash-attn on`, `--cache-ram 256`, `mem_limit` 5g |
+   | under 13.5 GiB | not supported | none |
+
+   On Linux Docker can use all the RAM. On Windows Docker Desktop runs in WSL 2, which gets half of the RAM by default, and on macOS it gets what its settings give it.
+3. **Not supported.** The installer stops with exit code 32 before anything large is downloaded. The screen lists what the machine has, what Horus needs and what to do: give Docker more memory (on Windows through WSL Settings > Memory and processor, or `memory=` under `[wsl2]` in `%UserProfile%\.wslconfig`, then `wsl --shutdown`; the installer never changes it), use a machine with an NVIDIA GPU or more RAM, or force a profile. With `--json-events` the same content is one `unsupported` event, which the desktop app shows on its own screen. `horus-profile.json` keeps it, so the app and `--start` show it again instead of "not installed". `--profile cpu-lean` or `--profile cpu-standard` still installs, with a warning.
+4. **AVX2.** Read from the `flags` of `/proc/cpuinfo` on Linux, `sysctl hw.optional.avx2_0` on an Intel Mac and `IsProcessorFeaturePresent(40)` on Windows. Apple Silicon and other ARM processors are not checked: AVX2 is an x86 feature. Without it the installer warns on a CPU profile and goes on: the official llama.cpp build picks the CPU code at start, so llama-server still runs, slowly.
+5. **Re-runs.** `horus-profile.json` keeps a fingerprint of the RAM, the Docker memory and the GPU list. When the next run finds the same fingerprint and Docker could use the GPU last time, the GPU test is not repeated and its result decides again. A GPU test that failed always runs again, so a driver or toolkit fixed since is noticed. `--profile` still overrides.
+
+The thresholds live in one place, `installer/profiles.py`: `CPU_STANDARD_MIN_GIB`, `CPU_LEAN_MIN_GIB`, and `CPU_LEAN_SUPPORTED`, which turns option B off (every machine under 15.0 GiB is then not supported) if the measurements reject the q8_0 cache. `--dry-run --simulate linux-cpu-8gb` (or `laptop-cpu-14gb`, `linux-cpu-16gb`, `windows-cpu-16gb`, `old-cpu-no-avx2`) shows each outcome without Docker.
 
 ---
 
@@ -203,7 +223,8 @@ That is **not** cryptographic immutability: anyone who can remove the Docker vol
 | Item | Value |
 |------|--------|
 | Scrape config (mounted in Compose) | **`src/infra/observability/prometheus.yaml`** |
-| Jobs | `prometheus` (self), `mas-api`, `agent-api`, `knowledge-store` |
+| Jobs | `prometheus` (self), `mas-api`, `agent-api`, `knowledge-store`; on the CPU profiles also `llm` |
+| CPU-only jobs | **`src/infra/observability/prometheus-llm.yaml`**, which only the CPU overlay mounts into `/etc/prometheus/scrape.d/`; `prometheus.yaml` reads that folder with `scrape_config_files`, so the GPU stack has no `llm` target to report down |
 
 **Host access:** The `prometheus` service has **no** `ports:` mapping in the default Compose file. You cannot open `http://localhost:9090` on the host unless you add a port mapping. Use either:
 
@@ -212,7 +233,7 @@ That is **not** cryptographic immutability: anyone who can remove the Docker vol
 
 #### Verification
 
-Inside the Docker network, targets should include `mas:8000`, `agent:8001`, and `knowledge_store:8080` when those services are up. There is no `postgres` scrape job in the default config.
+Inside the Docker network, targets should include `mas:8000`, `agent:8001`, and `knowledge_store:8080` when those services are up, and `llm:8080` (llama-server's `/metrics`, the `llamacpp:*` series) on the CPU profiles. There is no `postgres` scrape job in the default config.
 
 ---
 

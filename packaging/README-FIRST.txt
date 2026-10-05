@@ -4,6 +4,11 @@ BEFORE YOU START you need Docker Desktop installed AND RUNNING
 (https://www.docker.com/products/docker-desktop/), Python 3.11+
 (https://www.python.org/downloads/), 150 GB free disk, and internet.
 With an NVIDIA GPU 125 GB is enough.
+Without an NVIDIA GPU, Docker needs at least 13.5 GiB of memory. On
+Windows Docker gets only half of the RAM unless you raise it, so in
+practice that takes a 24 GB machine. The installer checks this first
+and, if it is short, stops before downloading anything and says what
+you can do.
 
 YOUR ACCESS TOKEN
 Horus downloads its own containers from our private registry. Save

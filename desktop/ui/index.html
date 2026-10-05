@@ -87,6 +87,26 @@
       </div>
     </section>
 
+    <section class="view" data-view="unsupported">
+      <p class="lead" id="unsupported-headline">This machine does not have enough memory for Horus.</p>
+      <p class="detail" id="unsupported-checked" hidden></p>
+      <p class="label">This machine</p>
+      <ul class="plain" id="unsupported-have"></ul>
+      <p class="label">Horus needs</p>
+      <ul class="plain" id="unsupported-need"></ul>
+      <p class="label">What you can do</p>
+      <ul class="plain" id="unsupported-alternatives"></ul>
+      <p class="detail">
+        The installer stopped before downloading Horus, so nothing was installed.
+      </p>
+      <div class="actions">
+        <button class="primary" id="unsupported-open">Open the Horus folder</button>
+        <button id="unsupported-profile">Open hardware profile</button>
+        <button id="unsupported-log">Open install log</button>
+        <button id="unsupported-quit">Quit</button>
+      </div>
+    </section>
+
     <section class="view" data-view="starting">
       <p class="lead" id="starting-step">Starting Horus</p>
       <p class="detail">

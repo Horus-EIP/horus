@@ -273,7 +273,7 @@ class DispatchChoosesTheImageSource(TempDirCase):
         self.assertIs(mocks["pull_and_build"].call_args.kwargs["from_source"], False)
         self.assertEqual(mocks["sign_in_to_registry"].call_args.args[2],
                          images.DEFAULT_REGISTRY)
-        self.assertEqual(mocks["preflight"].run_all.call_args.kwargs["image_registry"],
+        self.assertEqual(mocks["preflight"].run_install_checks.call_args.kwargs["image_registry"],
                          images.DEFAULT_REGISTRY)
         self.assertIs(mocks["_success"].call_args.kwargs["built_here"], False)
 
@@ -282,7 +282,7 @@ class DispatchChoosesTheImageSource(TempDirCase):
         self.assertNotIn(images.REGISTRY_KEY, self.written(mocks))
         self.assertIs(mocks["pull_and_build"].call_args.kwargs["from_source"], True)
         mocks["sign_in_to_registry"].assert_not_called()
-        self.assertIsNone(mocks["preflight"].run_all.call_args.kwargs["image_registry"])
+        self.assertIsNone(mocks["preflight"].run_install_checks.call_args.kwargs["image_registry"])
         self.assertIs(mocks["_success"].call_args.kwargs["built_here"], True)
 
     def test_the_variable_builds_from_source_too(self):
@@ -394,18 +394,30 @@ class PreflightNetworkHosts(unittest.TestCase):
         self.assertEqual(hosts["Horus images"], "https://registry.example.com/v2/")
         self.assertNotIn("Horus image layers", hosts)
 
-    def test_run_all_checks_the_hosts_of_the_chosen_image_source(self):
+    def test_the_install_checks_reach_the_hosts_of_the_chosen_image_source(self):
         with contextlib.ExitStack() as stack:
-            for name in ("check_python", "check_docker", "check_compose", "check_disk",
-                         "check_ports"):
+            for name in ("check_disk", "check_ports"):
                 stack.enter_context(mock.patch.object(preflight, name))
             network = stack.enter_context(mock.patch.object(preflight, "check_network"))
             stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
             with tempfile.TemporaryDirectory() as name:
                 log = Log(Path(name) / "log.txt")
-                preflight.run_all(log, Path(name), image_registry="ghcr.io/acme")
+                preflight.run_install_checks(log, Path(name), image_registry="ghcr.io/acme")
                 log.close(0)
         self.assertEqual(network.call_args.args[1], preflight.network_hosts("ghcr.io/acme"))
+
+    def test_the_engine_checks_contact_no_registry(self):
+        with contextlib.ExitStack() as stack:
+            for name in ("check_python", "check_docker", "check_compose"):
+                stack.enter_context(mock.patch.object(preflight, name))
+            network = stack.enter_context(mock.patch.object(preflight, "check_network"))
+            disk = stack.enter_context(mock.patch.object(preflight, "check_disk"))
+            with tempfile.TemporaryDirectory() as name:
+                log = Log(Path(name) / "log.txt")
+                preflight.run_engine_checks(log)
+                log.close(0)
+        network.assert_not_called()
+        disk.assert_not_called()
 
 class Parser(unittest.TestCase):
     def parse(self, argv):

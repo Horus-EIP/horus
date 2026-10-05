@@ -22,6 +22,7 @@ import model_manager  # noqa: E402
 import preflight  # noqa: E402
 import profiles  # noqa: E402
 import smoke  # noqa: E402
+import unsupported  # noqa: E402
 from common import (  # noqa: E402
     BUNDLE_DIR,
     EXIT_COMPOSE_PULL_FAILED,
@@ -82,8 +83,10 @@ _GIB = 1024 ** 3
 def _simulated(system: str, machine: str, cpu_model: str, physical: int,
                logical: int, ram_gib: float, *, gpu_vendor: str | None = None,
                gpu_name: str | None = None, vram_gib: float | None = None,
-               docker_gpu: bool = False, wsl: bool = False) -> dict:
+               docker_gpu: bool = False, wsl: bool = False,
+               avx2: bool | None = True) -> dict:
     has_gpu = gpu_name is not None
+    docker_gib = ram_gib if system == "Linux" else ram_gib / 2
     return {
         "installer_version": VERSION,
         "timestamp_utc": "simulated",
@@ -92,9 +95,11 @@ def _simulated(system: str, machine: str, cpu_model: str, physical: int,
                "platform": system.lower(), "is_wsl": wsl, "is_64bit": True},
         "cpu": {"model": cpu_model, "physical_cores": physical,
                 "logical_cores": logical, "count_is_logical_fallback": False,
-                "source": "simulated"},
+                "source": "simulated", "avx2": avx2, "avx2_source": "simulated"},
         "memory": {"total_bytes": int(ram_gib * _GIB), "total_gib": float(ram_gib),
                    "source": "simulated"},
+        "docker": {"mem_total_bytes": int(docker_gib * _GIB),
+                   "mem_total_gib": round(docker_gib, 2), "source": "simulated"},
         "disk": {"path": "(simulated)", "free_bytes": 500 * _GIB,
                  "total_bytes": 1000 * _GIB},
         "gpu": {"vendor": gpu_vendor, "name": gpu_name,
@@ -124,9 +129,19 @@ SIMULATIONS = {
     "macos-arm": _simulated(
         "Darwin", "arm64", "Apple M3 Pro", 11, 11, 18,
         gpu_vendor="apple", gpu_name="Apple M3 Pro (integrated)",
-        vram_gib=None, docker_gpu=False),
+        vram_gib=None, docker_gpu=False, avx2=None),
     "linux-cpu-8gb": _simulated(
-        "Linux", "x86_64", "Intel Core i5-8250U", 4, 8, 8),
+        "Linux", "x86_64", "Intel Core i5-8250U", 4, 8, 7.6),
+    "laptop-cpu-14gb": _simulated(
+        "Linux", "x86_64", "Intel Core i7-1165G7", 4, 8, 13.8,
+        gpu_vendor="intel", gpu_name="Intel Iris Xe Graphics"),
+    "linux-cpu-16gb": _simulated(
+        "Linux", "x86_64", "AMD Ryzen 5 5600G", 6, 12, 15.4),
+    "windows-cpu-16gb": _simulated(
+        "Windows", "AMD64", "Intel Core i5-1135G7", 4, 8, 15.8,
+        gpu_vendor="intel", gpu_name="Intel Iris Xe Graphics", wsl=True),
+    "old-cpu-no-avx2": _simulated(
+        "Linux", "x86_64", "Intel Core i5-3470", 4, 4, 15.6, avx2=False),
     "amd-gpu": _simulated(
         "Linux", "x86_64", "AMD Ryzen 7 5800X", 8, 16, 32,
         gpu_vendor="amd", gpu_name="AMD Radeon RX 7900 XTX",
@@ -786,9 +801,12 @@ def warn_cpu_expectations(log: Log) -> None:
     log.say("")
 
 
-def require_installed(infra: Path) -> None:
+def require_installed(infra: Path, record: Path | None = None) -> None:
     if (infra / ".env").is_file():
         return
+    refused = unsupported.from_record(hardware.read_profile_json(record or PROFILE_JSON))
+    if refused is not None:
+        raise refused
     raise InstallError(
         EXIT_NOT_INSTALLED,
         "Horus has not been installed on this machine yet.",
@@ -1070,6 +1088,37 @@ def banner(log: Log) -> None:
     log.say("")
     log.say(rule())
 
+def say_detected(log: Log, probe: dict) -> None:
+    osi = probe.get("os") or {}
+    cpu = probe.get("cpu") or {}
+    mem = probe.get("memory") or {}
+    gpu = probe.get("gpu") or {}
+    docker = probe.get("docker") or {}
+    cores = cpu.get("physical_cores")
+    ram = mem.get("total_bytes") or 0
+    log.say(f"  detected : {osi.get('system') or '?'} {osi.get('machine') or '?'}, "
+            f"{cores if cores is not None else '?'} cores, "
+            f"{ram / 1024**3:.0f} GB RAM")
+    docker_bytes = docker.get("mem_total_bytes")
+    log.say("  docker   : " + (f"{docker_bytes / 1024**3:.1f} GiB of memory" if docker_bytes
+                              else f"memory not read ({docker.get('detail') or 'unknown'})"))
+    vram = gpu.get("vram_bytes")
+    log.say(f"  gpu      : {gpu.get('name') or 'none detected'}"
+            + (f", {vram / 1024**3:.0f} GB VRAM" if vram else "")
+            + ", usable by Docker: "
+            + ("yes" if probe.get("cuda_usable_in_docker") else "no"))
+
+def say_refusal(log: Log, probe: dict, reasons: list[str]) -> None:
+    refused = unsupported.refusal(probe)
+    log.say(f"  profile  : {bold('not supported')}")
+    for reason in reasons:
+        log.say(f"             - {reason}")
+    log.say(f"  stops    : before any download, exit code {refused.code}, with:")
+    for line in [refused.headline, "", *refused.detail.splitlines(), "",
+                 "What to do:", *refused.fix.splitlines()]:
+        log.say(f"             {line}".rstrip())
+    log.say("")
+
 def do_dry_run(log: Log, args, repo: Path) -> int:
     log.step("Dry run - nothing will be changed")
 
@@ -1079,24 +1128,34 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
             log.say("  Available: " + ", ".join(SIMULATIONS))
             return EXIT_PROFILE_UNKNOWN
         probes = [(args.simulate, dict(SIMULATIONS[args.simulate]))]
-    elif args.profile:
-        probes = [("this machine", hardware.probe(log, allow_docker_gpu_test=False))]
     else:
-        probes = [("this machine", hardware.probe(log, allow_docker_gpu_test=False))]
-        probes += [(name, dict(spec)) for name, spec in SIMULATIONS.items()]
+        probes = [("this machine", hardware.probe(log, allow_docker_gpu_test=False,
+                                                  ask_docker=False))]
+        if not args.profile:
+            probes += [(name, dict(spec)) for name, spec in SIMULATIONS.items()]
+
+    if args.profile and args.profile not in profiles.PROFILES:
+        log.fail(f"Unknown profile {args.profile!r}")
+        log.say("  Available: " + ", ".join(profiles.PROFILES))
+        return EXIT_PROFILE_UNKNOWN
 
     registry = image_source(args, infra_dir(repo))
     manifest = None
     models_dir = None
     for label, probe in probes:
         if args.profile:
-            if args.profile not in profiles.PROFILES:
-                log.fail(f"Unknown profile {args.profile!r}")
-                log.say("  Available: " + ", ".join(profiles.PROFILES))
-                return EXIT_PROFILE_UNKNOWN
             name, reasons = args.profile, ["forced with --profile"]
         else:
             name, reasons = profiles.select_profile(probe)
+
+        log.say("")
+        log.say(rule(label))
+        say_detected(log, probe)
+        if name == profiles.NOT_SUPPORTED:
+            say_refusal(log, probe, reasons)
+            continue
+        warnings = [profiles.forced_profile_warning(name, probe) if args.profile else None,
+                    profiles.avx2_warning(probe) if profiles.is_cpu_profile(name) else None]
 
         env = profiles.env_for(name, probe)
         plan = None
@@ -1108,25 +1167,12 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
                 env.update(plan.env(repo))
         if registry is not None:
             env[images.REGISTRY_KEY] = registry
-        log.say("")
-        log.say(rule(label))
         osi = probe.get("os") or {}
-        cpu = probe.get("cpu") or {}
-        mem = probe.get("memory") or {}
-        gpu = probe.get("gpu") or {}
-        cores = cpu.get("physical_cores")
-        ram = mem.get("total_bytes") or 0
-        log.say(f"  detected : {osi.get('system') or '?'} {osi.get('machine') or '?'}, "
-                f"{cores if cores is not None else '?'} cores, "
-                f"{ram / 1024**3:.0f} GB RAM")
-        vram = gpu.get("vram_bytes")
-        log.say(f"  gpu      : {gpu.get('name') or 'none detected'}"
-                + (f", {vram / 1024**3:.0f} GB VRAM" if vram else "")
-                + ", usable by Docker: "
-                + ("yes" if probe.get("cuda_usable_in_docker") else "no"))
         log.say(f"  profile  : {bold(name)}")
         for reason in reasons:
             log.say(f"             - {reason}")
+        for warning in filter(None, warnings):
+            log.say(f"             ! {warning}")
         log.say(f"  images   : {describe_images(registry, name)}")
         if registry is not None and str(osi.get("machine") or "").lower() in ARM_MACHINES:
             log.say("             ! built for x86-64 only: Docker emulates them on this "
@@ -1134,9 +1180,6 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
         if plan is not None:
             log.say(f"  model    : {plan.entry.id}, {human_bytes(plan.entry.size_bytes)}, "
                     f"into {plan.models_dir}")
-            warning = model_manager.ram_warning(plan.entry, probe, name)
-            if warning:
-                log.say(f"             ! {warning}")
         log.say("")
         log.say("  would write to src/infra/.env:")
         for key in sorted(env):
@@ -1160,8 +1203,8 @@ def models_dir_to_use(log: Log, repo: Path, requested: str | None) -> str | Path
     log.say(f"  Keeping the models folder chosen before: {folder}")
     return folder
 
-def plan_model(log: Log, repo: Path, profile: str, requested_dir: str | None,
-               probe: dict | None) -> model_manager.ModelPlan | None:
+def plan_model(log: Log, repo: Path, profile: str,
+               requested_dir: str | None) -> model_manager.ModelPlan | None:
     if profiles.get(profile).runs_vllm:
         return None
     plan = model_manager.plan_for_profile(repo, profile,
@@ -1174,14 +1217,11 @@ def plan_model(log: Log, repo: Path, profile: str, requested_dir: str | None,
             f"entry under \"defaults\" for {profile}.",
             "Extract the ZIP again; the manifest ships with Horus.",
         )
-    warning = model_manager.ram_warning(plan.entry, probe, profile)
-    if warning:
-        log.warn(warning)
     return plan
 
 def do_download_model(log: Log, args, repo: Path) -> int:
     name = args.profile or "cpu-standard"
-    plan = plan_model(log, repo, name, args.models_dir, None)
+    plan = plan_model(log, repo, name, args.models_dir)
     if plan is None:
         log.ok(f"The {name} profile has no model file to download: vLLM fetches its own "
                "model when it first starts.")
@@ -1190,6 +1230,52 @@ def do_download_model(log: Log, args, repo: Path) -> int:
     log.say("")
     log.ok(f"{path} is ready for llama-server")
     return EXIT_OK
+
+def _unknown_profile_error(profile: str) -> InstallError:
+    return InstallError(
+        EXIT_PROFILE_UNKNOWN,
+        f"Unknown profile {profile!r}.",
+        "Available: " + ", ".join(profiles.PROFILES),
+        "Re-run without --profile to let the installer choose.",
+    )
+
+def record_refusal(log: Log, probe: dict, reasons: list[str]) -> unsupported.NotSupported:
+    for reason in reasons:
+        log.say(f"           {reason}")
+    refused = unsupported.refusal(probe)
+    hardware.write_profile_json(PROFILE_JSON, probe, profiles.NOT_SUPPORTED, {}, reasons,
+                                log=log, refusal=refused.record())
+    return refused
+
+def decide_profile(log: Log, args, registry: str | None) -> tuple[dict, str, list[str]]:
+    if args.profile and args.profile not in profiles.PROFILES:
+        raise _unknown_profile_error(args.profile)
+    log.step("Checking your hardware")
+    probe = hardware.probe(log, allow_docker_gpu_test=not args.skip_gpu_test,
+                           previous=hardware.read_profile_json(PROFILE_JSON))
+    if args.profile:
+        name, reasons = args.profile, [f"forced with --profile {args.profile}"]
+        forced = profiles.forced_profile_warning(name, probe)
+        if forced:
+            log.warn(forced)
+    else:
+        name, reasons = profiles.select_profile(probe)
+    if name == profiles.NOT_SUPPORTED:
+        raise record_refusal(log, probe, reasons)
+
+    log.ok(f"profile: {bold(name)}")
+    for reason in reasons:
+        log.say(f"           {reason}")
+    log.say(f"  images:  {describe_images(registry, name)}")
+    if registry is not None:
+        warn_if_images_are_emulated(log, probe)
+
+    if profiles.is_cpu_profile(name):
+        avx2 = profiles.avx2_warning(probe)
+        if avx2:
+            log.warn(avx2)
+        warn_cpu_expectations(log)
+    return probe, name, reasons
 
 def _dispatch(log: Log, args) -> int:
     repo = find_repo(args.repo)
@@ -1215,8 +1301,11 @@ def _dispatch(log: Log, args) -> int:
         return do_download_model(log, args, repo)
 
     registry = image_source(args, infra)
-    preflight.run_all(log, infra, want_admin_profile=args.admin_profile,
-                      skip_disk_check=args.skip_disk_check, image_registry=registry)
+    preflight.run_engine_checks(log)
+    probe, name, reasons = decide_profile(log, args, registry)
+    preflight.run_install_checks(log, infra, want_admin_profile=args.admin_profile,
+                                 skip_disk_check=args.skip_disk_check,
+                                 image_registry=registry)
     if registry is not None:
         sign_in_to_registry(log, args, registry)
         if args.no_build:
@@ -1229,31 +1318,8 @@ def _dispatch(log: Log, args) -> int:
         preselect=args.consent,
     )
 
-    log.step("Checking your hardware")
-    probe = hardware.probe(log, allow_docker_gpu_test=not args.skip_gpu_test)
-    if args.profile:
-        if args.profile not in profiles.PROFILES:
-            raise InstallError(
-                EXIT_PROFILE_UNKNOWN,
-                f"Unknown profile {args.profile!r}.",
-                "Available: " + ", ".join(profiles.PROFILES),
-                "Re-run without --profile to let the installer choose.",
-            )
-        name, reasons = args.profile, [f"forced with --profile {args.profile}"]
-    else:
-        name, reasons = profiles.select_profile(probe)
-    log.ok(f"profile: {bold(name)}")
-    for reason in reasons:
-        log.say(f"           {reason}")
-    log.say(f"  images:  {describe_images(registry, name)}")
-    if registry is not None:
-        warn_if_images_are_emulated(log, probe)
-
-    if profiles.is_cpu_profile(name):
-        warn_cpu_expectations(log)
-
     env = profiles.env_for(name, probe)
-    model_plan = plan_model(log, repo, name, args.models_dir, probe)
+    model_plan = plan_model(log, repo, name, args.models_dir)
     if model_plan is not None:
         env.update(model_plan.env(repo))
     env["HORUS_CORPUS_DIR"] = choice["corpus_dir"]

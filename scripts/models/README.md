@@ -31,7 +31,7 @@ Until we serve our own conversion, the manifest's only model is the community GG
 
 The size and hash come from the Hugging Face API (`https://huggingface.co/api/models/unsloth/Qwen3-4B-Instruct-2507-GGUF/tree/main`, the `lfs` block of the file). The pinned `resolve` URL redirects to the Hugging Face CDN, which reports the same size and answers `Range` requests with `206 Partial Content` (checked 2026-10-05).
 
-`min_ram_gb` is 16. `cpu-lean` machines get the same file for now, with a warning, until the CPU benchmark (B-91) decides what they get. The GPU profiles have no default: vLLM fetches its AWQ model itself.
+`min_ram_gb` is 16: the class of machine the model is sized for. The installer does not decide on it. It decides on the memory Docker can use, with the thresholds of [ADR-005](../../docs/adr/ADR-005-low-ram-machines.md) in `installer/profiles.py`: `cpu-standard` from 15.0 GiB, `cpu-lean` from 13.5 GiB with the same file, and under that it stops before downloading anything ([Hardware decision](../../docs/operations.md#hardware-decision)). The GPU profiles have no default: vLLM fetches its AWQ model itself.
 
 `mirror_bases` is the slot for our own storage (open decision 3). It is empty today; each base URL listed there adds `<base>/<file>` as a mirror of every model, after the model's own `mirrors`.
 
@@ -89,6 +89,8 @@ The CPU figure is arithmetic on the measured one: minus the 3.10 GB `Qwen/Qwen2.
 | Compute buffers | "plus buffers" | a few hundred MB; llama-server prints the exact `CPU compute buffer size` at start |
 | Prompt cache | not counted | up to 1 GiB (`--cache-ram 1024`; the default is 8 GiB) |
 | Total | about 4 GB | about 4 GiB, up to 5 GiB with a full prompt cache, under `mem_limit` 6g (`LLM_SERVER_MEM_LIMIT`) |
+
+That is `cpu-standard`. `cpu-lean` (ADR-005 option B) serves the same file with `--ctx-size 4096`, a q8_0 KV cache (`--cache-type-k q8_0 --cache-type-v q8_0`, with `--flash-attn on`, which a quantized V cache needs) and `--cache-ram 256`: weights 2.33 GiB, KV cache 36 x 8 x 128 x 2 x 1.0625 bytes x 4,096 tokens = 0.30 GiB, compute buffers about 0.5 GiB and prompt cache up to 0.25 GiB, about 3.4 GiB in all under `mem_limit` 5g. The installer writes these as `LLM_VLLM_MAX_MODEL_LEN`, `LLM_SERVER_CACHE_TYPE_K`, `LLM_SERVER_CACHE_TYPE_V`, `LLM_SERVER_FLASH_ATTN`, `LLM_SERVER_CACHE_RAM_MIB` and `LLM_SERVER_MEM_LIMIT`. Arithmetic, not measured.
 
 Before this change the CPU profiles held about 12 GB of models: the 1.5B router in MAS (3.1 GB in bf16) and the 4B worker in the agent (8.1 GB in bf16). On the CPU, MAS now gets `mem_limit` 3g and the agent 4g. None of these numbers is measured yet; `docker stats` during the 100-question run (B-91) measures them.
 

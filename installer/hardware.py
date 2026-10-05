@@ -169,6 +169,59 @@ def _cpu_macos(log: Log) -> tuple[str | None, int | None, str]:
     count = int(cores.out.strip()) if cores.ok and cores.out.strip().isdigit() else None
     return name, count, "sysctl"
 
+PF_AVX2_INSTRUCTIONS_AVAILABLE = 40
+
+X86_MACHINES = frozenset({"x86_64", "amd64", "x64", "i386", "i686", "x86"})
+
+APPLE_SILICON = "Apple Silicon: an ARM processor, which has no AVX2 and does not need it"
+
+def _avx2_in_cpuinfo(cpuinfo: Path) -> tuple[bool | None, str]:
+    try:
+        text = cpuinfo.read_text(errors="replace")
+    except OSError as exc:
+        return None, f"{cpuinfo.as_posix()} unreadable: {exc}"
+    for line in text.splitlines():
+        key, _, value = line.partition(":")
+        if key.strip() == "flags":
+            return "avx2" in value.split(), f"{cpuinfo.as_posix()} flags"
+    return None, f"{cpuinfo.as_posix()} lists no flags"
+
+def _avx2_windows(kernel32=None) -> tuple[bool | None, str]:
+    source = f"IsProcessorFeaturePresent({PF_AVX2_INSTRUCTIONS_AVAILABLE})"
+    try:
+        if kernel32 is None:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+        present = kernel32.IsProcessorFeaturePresent(PF_AVX2_INSTRUCTIONS_AVAILABLE)
+    except (AttributeError, ImportError, OSError) as exc:
+        return None, f"{source} failed: {exc}"
+    return bool(present), source
+
+def _avx2_macos(log: Log) -> tuple[bool | None, str]:
+    arm = run(["sysctl", "-n", "hw.optional.arm64"], log, timeout=20)
+    if arm.ok and arm.out.strip() == "1":
+        return None, APPLE_SILICON
+    res = run(["sysctl", "-n", "hw.optional.avx2_0"], log, timeout=20)
+    value = res.out.strip() if res.ok else ""
+    if value in ("0", "1"):
+        return value == "1", "sysctl hw.optional.avx2_0"
+    return None, "sysctl hw.optional.avx2_0 gave no answer"
+
+def detect_avx2(log: Log, osinfo: dict, cpuinfo: Path = LINUX_CPUINFO,
+                kernel32=None) -> dict:
+    machine = str(osinfo.get("machine") or "").lower()
+    if machine and machine not in X86_MACHINES:
+        found, source = None, f"{machine} processor: AVX2 is an x86 feature it does not need"
+    elif sys.platform == "win32":
+        found, source = _avx2_windows(kernel32)
+    elif sys.platform == "darwin":
+        found, source = _avx2_macos(log)
+    else:
+        found, source = _avx2_in_cpuinfo(cpuinfo)
+    label = {True: "yes", False: "NO", None: "not checked"}[found]
+    log.info(f"avx2: {label} ({source})")
+    return {"avx2": found, "avx2_source": source}
+
 def detect_cpu(log: Log) -> dict:
     if sys.platform == "win32":
         model, physical, source = _cpu_windows(log)
@@ -245,6 +298,24 @@ def detect_memory(log: Log) -> dict:
         "source": source,
         "detail": detail,
     }
+
+DOCKER_NOT_ASKED = {
+    "mem_total_bytes": None, "mem_total_gib": None, "source": "not asked",
+    "detail": "a dry run does not contact Docker",
+}
+
+def detect_docker_memory(log: Log) -> dict:
+    res = run(["docker", "info", "--format", "{{.MemTotal}}"], log, timeout=45)
+    raw = res.out.strip() if res.ok else ""
+    if raw.isdigit() and int(raw) > 0:
+        total = int(raw)
+        log.info(f"docker memory: {human_bytes(total)} (docker info MemTotal)")
+        return {"mem_total_bytes": total, "mem_total_gib": round(total / 1024**3, 2),
+                "source": "docker info MemTotal", "detail": ""}
+    detail = res.first_line() or "docker info returned nothing"
+    log.info(f"docker memory: unknown ({detail})")
+    return {"mem_total_bytes": None, "mem_total_gib": None, "source": "unavailable",
+            "detail": detail}
 
 def detect_disk(log: Log, path: Path | None = None) -> dict:
     target = path
@@ -529,6 +600,8 @@ def _partial_probe(reason: str) -> dict:
         "cpu": {},
         "memory": {"total_bytes": None, "total_gib": None,
                    "source": "unavailable", "detail": reason},
+        "docker": {"mem_total_bytes": None, "mem_total_gib": None,
+                   "source": "unavailable", "detail": reason},
         "disk": {"path": None, "free_bytes": None, "total_bytes": None,
                  "detail": reason},
         "gpu": {"vendor": "unknown", "name": None, "vram_bytes": None,
@@ -550,9 +623,36 @@ def _partial_probe(reason: str) -> dict:
         ],
     }
 
-def probe(log: Log, allow_docker_gpu_test: bool = True) -> dict:
+def _mib(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        return None
+    return int(value) // 1024**2
+
+def fingerprint(probe_data: dict) -> dict:
+    memory = probe_data.get("memory") or {}
+    docker = probe_data.get("docker") or {}
+    gpu = probe_data.get("gpu") or {}
+    cards = [f"{card.get('name')} {_mib(card.get('vram_bytes'))} MiB"
+             for card in gpu.get("gpus") or [] if isinstance(card, dict)]
+    return {
+        "ram_mib": _mib(memory.get("total_bytes")),
+        "docker_memory_mib": _mib(docker.get("mem_total_bytes")),
+        "gpus": sorted(str(name) for name in [*cards, *(gpu.get("adapters") or [])]),
+    }
+
+def reusable_gpu_test(previous: dict | None, current: dict) -> dict | None:
+    if not isinstance(previous, dict) or previous.get("hardware_fingerprint") != current:
+        return None
+    recorded = previous.get("hardware")
+    test = recorded.get("docker_gpu_test") if isinstance(recorded, dict) else None
+    if not isinstance(test, dict) or test.get("usable") is not True:
+        return None
+    return {**test, "reused_from": str(previous.get("generated_utc") or "an earlier run")}
+
+def probe(log: Log, allow_docker_gpu_test: bool = True, ask_docker: bool = True,
+          previous: dict | None = None) -> dict:
     try:
-        return _probe_machine(log, allow_docker_gpu_test)
+        return _probe_machine(log, allow_docker_gpu_test, ask_docker, previous)
     except Exception as exc:  # noqa: BLE001 - the promise is the point
         reason = f"{type(exc).__name__}: {exc}"
         log.debug(f"hardware probe raised: {reason}")
@@ -560,15 +660,25 @@ def probe(log: Log, allow_docker_gpu_test: bool = True) -> dict:
                  "unknown hardware and the cautious CPU profile.")
         return _partial_probe(reason)
 
-def _probe_machine(log: Log, allow_docker_gpu_test: bool) -> dict:
+def _probe_machine(log: Log, allow_docker_gpu_test: bool, ask_docker: bool,
+                   previous: dict | None) -> dict:
     log.step("Hardware")
 
     osinfo = detect_os(log)
     cpu = detect_cpu(log)
+    cpu.update(detect_avx2(log, osinfo))
     memory = detect_memory(log)
     disk = detect_disk(log)
     gpu = detect_gpu_host(log, osinfo)
-    gpu_test = docker_gpu_test(log, osinfo, gpu, allow=allow_docker_gpu_test)
+    docker = detect_docker_memory(log) if ask_docker else dict(DOCKER_NOT_ASKED)
+    current = fingerprint({"memory": memory, "docker": docker, "gpu": gpu})
+    reused = reusable_gpu_test(previous, current) if allow_docker_gpu_test else None
+    if reused is not None:
+        gpu_test = reused
+        log.ok(f"Same RAM, Docker memory and GPUs as on {reused['reused_from']}, when "
+               "Docker could use the GPU: the GPU test is not run again.")
+    else:
+        gpu_test = docker_gpu_test(log, osinfo, gpu, allow=allow_docker_gpu_test)
 
     notes: list[str] = []
     if osinfo.get("system") == "Darwin":
@@ -592,6 +702,17 @@ def _probe_machine(log: Log, allow_docker_gpu_test: bool) -> dict:
         )
     if memory.get("total_bytes") is None:
         notes.append("Total RAM could not be measured; the cautious profile was chosen.")
+    if docker.get("mem_total_bytes") is None:
+        notes.append(f"The memory Docker can use was not read ({docker.get('detail')}). "
+                     "The RAM of the machine stood in for it, which overstates it on "
+                     "Windows and macOS, where Docker runs in a virtual machine.")
+    if cpu.get("avx2") is False:
+        notes.append("The processor has no AVX2. llama-server still runs, because the "
+                     "official llama.cpp build picks the code the processor supports when "
+                     "it starts, but generation on the CPU is much slower.")
+    if gpu_test.get("reused_from"):
+        notes.append(f"The Docker GPU test was not run again: RAM, Docker memory and GPUs "
+                     f"are the same as on {gpu_test['reused_from']}, when it passed.")
     if gpu_test.get("usable") is False:
         notes.append("A GPU exists on the host but Docker could not use it. "
                      "See docker_gpu_test.advice in this file.")
@@ -607,11 +728,13 @@ def _probe_machine(log: Log, allow_docker_gpu_test: bool) -> dict:
         "os": osinfo,
         "cpu": cpu,
         "memory": memory,
+        "docker": docker,
         "disk": disk,
         "gpu": gpu,
         "docker_gpu_test": gpu_test,
         "cuda_usable_in_docker": gpu_test.get("usable") is True,
-        "gpu_test_ran": gpu_test.get("attempted", False),
+        "gpu_test_ran": bool(gpu_test.get("attempted", False)) and not gpu_test.get("reused_from"),
+        "hardware_fingerprint": current,
         "notes": notes,
     }
     log.info(f"cuda usable in docker: {result['cuda_usable_in_docker']}")
@@ -628,6 +751,24 @@ def _redact(env: dict) -> dict:
             out[key] = value
     return out
 
+def read_profile_json(path: Path) -> dict | None:
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return document if isinstance(document, dict) else None
+
+def _profile_facts(profile_name: str, probe_data: dict) -> tuple:
+    import profiles
+
+    try:
+        prof = profiles.get(profile_name)
+        return (profiles.provenance_for(profile_name, probe_data), prof.runs_vllm,
+                profiles.model_server(profile_name), prof.confidence, prof.trigger,
+                list(prof.notes))
+    except Exception as exc:  # noqa: BLE001 - a bad name must not lose the probe
+        return {}, None, None, "unknown", "", [f"profile lookup failed: {exc}"]
+
 def write_profile_json(
     path: Path,
     probe_data: dict,
@@ -635,20 +776,16 @@ def write_profile_json(
     env: dict,
     reasons: list[str],
     log: Log | None = None,
+    refusal: dict | None = None,
 ) -> None:
     import profiles
 
-    try:
-        prof = profiles.get(profile_name)
-        provenance = profiles.provenance_for(profile_name, probe_data)
-        runs_vllm = prof.runs_vllm
-        model_server = profiles.model_server(profile_name)
-        confidence = prof.confidence
-        trigger = prof.trigger
-        notes = list(prof.notes)
-    except Exception as exc:  # noqa: BLE001 - a bad name must not lose the probe
+    if refusal is None:
+        provenance, runs_vllm, model_server, confidence, trigger, notes = _profile_facts(
+            profile_name, probe_data)
+    else:
         provenance, runs_vllm, model_server, confidence = {}, None, None, "unknown"
-        trigger, notes = "", [f"profile lookup failed: {exc}"]
+        trigger, notes = "", []
 
     derived = sorted(k for k, v in provenance.items()
                      if v.get("provenance") == profiles.DERIVED)
@@ -658,6 +795,8 @@ def write_profile_json(
         "installer_version": VERSION,
         "generated_utc": _now(),
         "hardware": probe_data,
+        "hardware_fingerprint": probe_data.get("hardware_fingerprint") or fingerprint(probe_data),
+        "memory_decision": profiles.memory_decision(probe_data),
         "profile": {
             "name": profile_name,
             "trigger": trigger,
@@ -680,10 +819,18 @@ def write_profile_json(
             "cuda_usable_in_docker is the field that decided GPU vs CPU. It is "
             "the result of running nvidia-smi inside a container, not of asking "
             "the host what hardware it has.",
+            "memory_decision is what decided between the CPU profiles: the memory "
+            "Docker can use (docker info), or the RAM of the machine when Docker "
+            "could not say, against the thresholds of ADR-005.",
+            "hardware_fingerprint is the RAM, the Docker memory and the GPU list. "
+            "The next run compares it: when nothing changed and Docker could use "
+            "the GPU, the Docker GPU test is not run again.",
             "Send this file with any performance report; it is the first thing "
             "we ask for.",
         ],
     }
+    if refusal is not None:
+        document["refusal"] = refusal
 
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -695,8 +842,9 @@ def write_profile_json(
         if log is None:
             raise
         log.warn(f"Could not write {path}: {exc}")
-        log.warn("The install continues, but please quote install-log.txt "
-                 "instead of horus-profile.json if you report a problem.")
+        if refusal is None:
+            log.warn("The install continues, but please quote install-log.txt "
+                     "instead of horus-profile.json if you report a problem.")
         return
     if log:
         log.ok(f"Hardware profile written to {path}")

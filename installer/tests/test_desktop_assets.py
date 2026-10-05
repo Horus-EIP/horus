@@ -241,6 +241,7 @@ class ExitCodeMapping(unittest.TestCase):
             common.EXIT_DOCKER_DAEMON_DOWN: "docker-down",
             common.EXIT_REPO_NOT_FOUND: "not-found",
             common.EXIT_NOT_INSTALLED: "not-installed",
+            common.EXIT_HARDWARE_NOT_SUPPORTED: "unsupported",
         }
         self.assertEqual(self.mapping(), expected)
 

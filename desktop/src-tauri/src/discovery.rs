@@ -28,6 +28,14 @@ impl Layout {
     pub fn is_installed(&self) -> bool {
         self.env_file.is_file()
     }
+
+    pub fn was_refused(&self) -> bool {
+        std::fs::read_to_string(&self.profile)
+            .ok()
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+            .and_then(|document| document.get("refusal").map(serde_json::Value::is_object))
+            .unwrap_or(false)
+    }
 }
 
 fn join(base: &Path, parts: &[&str]) -> PathBuf {

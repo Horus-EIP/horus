@@ -11,7 +11,23 @@ MEASURED = "measured"
 
 DERIVED = "derived"
 
-CPU_RAM_SPLIT_GIB = 15.0
+LOW_RAM_ADR = "docs/adr/ADR-005-low-ram-machines.md"
+
+THRESHOLDS_BASIS = f"planning figures from {LOW_RAM_ADR}, not measured yet"
+
+CPU_STANDARD_MIN_GIB = 15.0
+
+CPU_LEAN_MIN_GIB = 13.5
+
+CPU_LEAN_SUPPORTED = True
+
+NOT_SUPPORTED = "not-supported"
+
+DOCKER_BASIS = "docker"
+
+RAM_BASIS = "ram"
+
+UNKNOWN_BASIS = "unknown"
 
 MIN_USABLE_VRAM_GIB = 6.0
 
@@ -83,6 +99,8 @@ CPU_MODEL_SERVER_URL = f"http://{CPU_MODEL_SERVER}:{CPU_MODEL_SERVER_PORT}/v1"
 
 CPU_CONTEXT_TOKENS = 8192
 
+LEAN_CONTEXT_TOKENS = 4096
+
 GGUF_BYTES = 2_497_281_120
 
 _KNOWLEDGE_STORE_MEMORY = "6g"
@@ -92,6 +110,8 @@ _CPU_MAS_MEMORY = "3g"
 _CPU_AGENT_MEMORY = "4g"
 
 _CPU_MODEL_SERVER_MEMORY = "6g"
+
+_LEAN_MODEL_SERVER_MEMORY = "5g"
 
 def _no_swap_why(swap_key: str) -> str:
     return (
@@ -189,6 +209,76 @@ def _thread_settings(probe: dict | None) -> dict[str, Setting]:
             "The agent loads no decision model on the CPU, so its torch has "
             "no generation to run. One thread, so nothing it does competes "
             "with llama-server.",
+        ),
+    }
+
+SERVER_KEYS: tuple[str, ...] = (
+    "LLM_SERVER_CACHE_TYPE_K", "LLM_SERVER_CACHE_TYPE_V", "LLM_SERVER_FLASH_ATTN",
+    "LLM_SERVER_CACHE_RAM_MIB",
+)
+
+def _standard_server_settings() -> dict[str, Setting]:
+    return {
+        "LLM_SERVER_CACHE_TYPE_K": Setting(
+            "f16", DERIVED,
+            "llama-server keeps the keys of its KV cache in f16, its own default "
+            "and the plan's first choice: 1.13 GiB for 8,192 tokens. q8_0 would "
+            "halve that at a cost in answer quality the test set has not measured.",
+        ),
+        "LLM_SERVER_CACHE_TYPE_V": Setting(
+            "f16", DERIVED, "The values of the KV cache, in f16 like the keys.",
+        ),
+        "LLM_SERVER_FLASH_ATTN": Setting(
+            "auto", DERIVED,
+            "llama-server's default: flash attention wherever the CPU backend "
+            "supports it. An f16 cache does not need it.",
+        ),
+        "LLM_SERVER_CACHE_RAM_MIB": Setting(
+            "1024", DERIVED,
+            "Caps llama-server's prompt cache at 1 GiB instead of its 8 GiB "
+            "default. The cache lets a request that starts like an earlier one "
+            "skip re-reading that start.",
+        ),
+    }
+
+def _lean_server_settings() -> dict[str, Setting]:
+    return {
+        "LLM_VLLM_MAX_MODEL_LEN": Setting(
+            str(LEAN_CONTEXT_TOKENS), DERIVED,
+            "Half the cpu-standard context (ADR-005 option B), so the KV cache "
+            "halves too. It still holds the 6,000-character retrieval cap, about "
+            "2,000 tokens, with room for the answer: both clients size the answer "
+            "to the room left. Compose passes the same value to llama-server's "
+            "--ctx-size.",
+        ),
+        "LLM_SERVER_CACHE_TYPE_K": Setting(
+            "q8_0", DERIVED,
+            "q8_0 stores 32 values in 34 bytes instead of 64. With the 4,096 "
+            "context the KV cache is 36 layers x 8 KV heads x 128 x 2 x 1.0625 "
+            "bytes x 4,096 = 0.30 GiB, against 1.13 GiB for cpu-standard. What "
+            "it costs in answer quality is what the ADR-005 decision rule "
+            "measures on the test set.",
+        ),
+        "LLM_SERVER_CACHE_TYPE_V": Setting(
+            "q8_0", DERIVED, "The values of the KV cache, in q8_0 like the keys.",
+        ),
+        "LLM_SERVER_FLASH_ATTN": Setting(
+            "on", DERIVED,
+            "llama-server needs flash attention to quantize the V cache, so it is "
+            "asked for explicitly instead of left to 'auto'.",
+        ),
+        "LLM_SERVER_CACHE_RAM_MIB": Setting(
+            "256", DERIVED,
+            "A 256 MiB prompt cache instead of 1 GiB: 0.75 GiB less, at the cost "
+            "of re-reading more prompt starts.",
+        ),
+        "LLM_SERVER_MEM_LIMIT": Setting(
+            _LEAN_MODEL_SERVER_MEMORY, DERIVED,
+            f"llama-server holds the Q4_K_M weights ({GGUF_BYTES:,} bytes, 2.33 "
+            "GiB, memory-mapped), the 0.30 GiB q8_0 KV cache, about 0.5 GiB of "
+            "compute buffers and up to 0.25 GiB of prompt cache: 3.38 GiB, which "
+            "leaves about 1.6 GiB of margin under 5g. Arithmetic, not a "
+            "measurement. " + _no_swap_why("LLM_SERVER_MEMSWAP_LIMIT"),
         ),
     }
 
@@ -328,6 +418,7 @@ def _cpu_common() -> dict[str, Setting]:
             "unit tests but has not been watched in a browser on a CPU host.",
         ),
         **_memory_settings(),
+        **_standard_server_settings(),
     }
 
 PROFILES: dict[str, Profile] = {}
@@ -335,41 +426,58 @@ PROFILES: dict[str, Profile] = {}
 def _add(p: Profile) -> None:
     PROFILES[p.name] = p
 
-_CPU_MEMORY_NOTE = (
-    "The memory ceilings (MAS 3g, agent 4g, knowledge store 6g, llm 6g) are "
-    "ceilings, not a budget: they add up to more than 16 GB. They stop one "
-    "runaway container from pushing the host into swap. Expected use is lower: "
-    "about 4 GiB for llm, 2 to 3 GB for the knowledge store and 1 to 1.5 GB "
-    "each for MAS and the agent, by estimate."
-)
+def _cpu_memory_note(llm_ceiling: str, llm_use: str) -> str:
+    return (
+        f"The memory ceilings (MAS 3g, agent 4g, knowledge store 6g, llm "
+        f"{llm_ceiling}) are ceilings, not a budget: they add up to more than "
+        "the machine has. They stop one runaway container from pushing the "
+        f"host into swap. Expected use is lower: about {llm_use} for llm, 2 to "
+        "3 GB for the knowledge store and 1 to 1.5 GB each for MAS and the "
+        "agent, by estimate."
+    )
+
+def cpu_floor_gib() -> float:
+    return CPU_LEAN_MIN_GIB if CPU_LEAN_SUPPORTED else CPU_STANDARD_MIN_GIB
+
+def _lean_trigger() -> str:
+    if not CPU_LEAN_SUPPORTED:
+        return (f"Never chosen by the installer: CPU_LEAN_SUPPORTED is off, so a "
+                f"machine under {CPU_STANDARD_MIN_GIB:.1f} GiB of memory for Docker "
+                "is not supported. --profile cpu-lean still forces it.")
+    return (f"No CUDA usable from Docker, at least {CPU_LEAN_MIN_GIB:.1f} and under "
+            f"{CPU_STANDARD_MIN_GIB:.1f} GiB of memory for Docker.")
 
 _add(Profile(
     name="cpu-lean",
-    trigger=f"No CUDA usable from Docker, under about 16 GB of RAM "
-            f"(threshold {CPU_RAM_SPLIT_GIB:.1f} GiB reported).",
+    trigger=_lean_trigger(),
     runs_vllm=False,
-    summary="The cpu-standard model server on a smaller machine. Untested.",
-    settings=_cpu_common(),
+    summary="The cpu-standard model with a 4,096-token context and a q8_0 KV "
+            "cache, for less memory. Untested.",
+    settings={**_cpu_common(), **_lean_server_settings()},
     notes=(
-        "Runs what cpu-standard runs: one llama-server (the llm service) with "
-        "Qwen3-4B-Instruct-2507 Q4_K_M, about 4 GiB resident. That is less "
-        "than the two 1.5B models this profile used to load in-process (6.2 GB "
-        "of bf16 weights), and answers come from the 4B model again.",
-        "Whether it fits next to the rest of the stack on a machine this size "
-        "has not been measured. Machines under 16 GB get a smaller GGUF or a "
-        "'not supported' screen once the CPU benchmark (B-91) has run.",
+        "ADR-005 option B: the same llama-server and Qwen3-4B-Instruct-2507 "
+        "Q4_K_M as cpu-standard, with --ctx-size 4096, a q8_0 KV cache, flash "
+        "attention on and a 256 MiB prompt cache. llm needs about 3.4 GiB "
+        "instead of about 5, and answers come from the same model.",
+        f"The thresholds are {THRESHOLDS_BASIS}: the containers other than llm "
+        "come to about 8 GiB by estimate, plus 2 GiB of headroom. The B-91 "
+        "measurements confirm or move them, and CPU_LEAN_SUPPORTED in "
+        "installer/profiles.py turns this profile off if the q8_0 cache costs "
+        "too much quality.",
+        f"Under {cpu_floor_gib():.1f} GiB of memory for Docker the installer "
+        "stops before any large download and says why: no profile fits.",
         "No CPU-only machine has been benchmarked with llama-server. The "
         "timeouts, threads and memory ceilings are reasoned, not measured - if "
         "this profile behaves oddly, suspect those numbers before you suspect "
         "a bug.",
-        _CPU_MEMORY_NOTE,
+        _cpu_memory_note(_LEAN_MODEL_SERVER_MEMORY, "3.4 GiB"),
     ),
 ))
 
 _add(Profile(
     name="cpu-standard",
-    trigger=f"No CUDA usable from Docker, about 16 GB of RAM or more "
-            f"(threshold {CPU_RAM_SPLIT_GIB:.1f} GiB reported).",
+    trigger=f"No CUDA usable from Docker, {CPU_STANDARD_MIN_GIB:.1f} GiB of memory "
+            "for Docker or more.",
     runs_vllm=False,
     summary="Qwen3-4B Q4_K_M on llama-server: one model for MAS and every agent.",
     settings=_cpu_common(),
@@ -389,7 +497,7 @@ _add(Profile(
         "The timeouts are still DERIVED, not fitted - but the 1800s ReAct "
         "budget was at least shown to be generous rather than tight: the slow "
         "run finished well inside it and was not truncated.",
-        _CPU_MEMORY_NOTE,
+        _cpu_memory_note(_CPU_MODEL_SERVER_MEMORY, "4 GiB"),
     ),
 ))
 
@@ -516,7 +624,7 @@ _add(Profile(
 ))
 
 MANAGED_KEYS: tuple[str, ...] = tuple(sorted(
-    {"COMPOSE_FILE", *THREAD_KEYS, *MODEL_ENV_KEYS, *IMAGE_ENV_KEYS}
+    {"COMPOSE_FILE", *THREAD_KEYS, *SERVER_KEYS, *MODEL_ENV_KEYS, *IMAGE_ENV_KEYS}
     | {k for p in PROFILES.values() for k in p.settings}
 ))
 
@@ -555,35 +663,105 @@ def get(profile_name: str) -> Profile:
         ) from None
 
 def _gib(n: int | float | None) -> float | None:
-    return None if not n else float(n) / (1024.0 ** 3)
+    if isinstance(n, bool) or not isinstance(n, (int, float)) or n <= 0:
+        return None
+    return float(n) / (1024.0 ** 3)
 
-def _cpu_profile_for_ram(ram_gib: float | None) -> tuple[str, str]:
-    if ram_gib is None:
-        return "cpu-lean", (
-            "Total RAM could not be measured, so the low-RAM profile is "
-            "chosen. It runs the same llama-server model as cpu-standard."
+def memory_for_docker(probe: dict | None) -> tuple[float | None, str]:
+    docker = _gib(((probe or {}).get("docker") or {}).get("mem_total_bytes"))
+    if docker is not None:
+        return docker, DOCKER_BASIS
+    ram = _gib(((probe or {}).get("memory") or {}).get("total_bytes"))
+    if ram is not None:
+        return ram, RAM_BASIS
+    return None, UNKNOWN_BASIS
+
+def describe_memory(gib: float, basis: str) -> str:
+    if basis == DOCKER_BASIS:
+        return f"Docker can use {gib:.1f} GiB of memory"
+    return f"This machine has {gib:.1f} GiB of RAM"
+
+def memory_decision(probe: dict | None) -> dict:
+    gib, basis = memory_for_docker(probe)
+    return {
+        "memory_gib": None if gib is None else round(gib, 2),
+        "basis": basis,
+        "cpu_standard_min_gib": CPU_STANDARD_MIN_GIB,
+        "cpu_lean_min_gib": CPU_LEAN_MIN_GIB,
+        "cpu_lean_supported": CPU_LEAN_SUPPORTED,
+        "thresholds": THRESHOLDS_BASIS,
+    }
+
+def supported_floor_gib(profile_name: str) -> float | None:
+    if profile_name == "cpu-standard":
+        return CPU_STANDARD_MIN_GIB
+    if profile_name == "cpu-lean":
+        return cpu_floor_gib()
+    return None
+
+def _cpu_profile_for_memory(probe: dict) -> tuple[str, list[str]]:
+    gib, basis = memory_for_docker(probe)
+    reasons: list[str] = []
+    if basis == RAM_BASIS:
+        reasons.append(
+            "Docker did not say how much memory it can use, so the RAM of this "
+            "machine decides. On Windows and macOS Docker runs in a virtual "
+            "machine that gets less than that."
         )
-    if ram_gib < CPU_RAM_SPLIT_GIB:
-        return "cpu-lean", (
-            f"{ram_gib:.1f} GiB RAM is under the {CPU_RAM_SPLIT_GIB:.0f} GiB "
-            "line. For now this profile runs the same llama-server model as "
-            "cpu-standard; what machines this size get is decided after the "
-            "CPU benchmark (B-91)."
+    if gib is None:
+        reasons.append(
+            "Neither the memory Docker can use nor the RAM could be read, so "
+            "the smaller CPU profile is chosen. Nothing was refused: the "
+            "installer cannot tell whether this machine is too small."
         )
-    return "cpu-standard", (
-        f"{ram_gib:.1f} GiB RAM holds the llama-server 4B model (about 4 GiB) "
-        "next to the rest of the stack."
+        return "cpu-lean", reasons
+    have = describe_memory(gib, basis)
+    if gib >= CPU_STANDARD_MIN_GIB:
+        reasons.append(
+            f"{have}: at least the {CPU_STANDARD_MIN_GIB:.1f} GiB cpu-standard "
+            f"needs ({THRESHOLDS_BASIS}). llama-server runs the 4B model with "
+            f"an {CPU_CONTEXT_TOKENS:,}-token context next to the rest of the stack."
+        )
+        return "cpu-standard", reasons
+    if CPU_LEAN_SUPPORTED and gib >= CPU_LEAN_MIN_GIB:
+        reasons.append(
+            f"{have}: under the {CPU_STANDARD_MIN_GIB:.1f} GiB of cpu-standard and "
+            f"at least the {CPU_LEAN_MIN_GIB:.1f} GiB of cpu-lean "
+            f"({THRESHOLDS_BASIS}). The same 4B model, with a "
+            f"{LEAN_CONTEXT_TOKENS:,}-token context and a q8_0 KV cache."
+        )
+        return "cpu-lean", reasons
+    reasons.append(
+        f"{have}: under the {cpu_floor_gib():.1f} GiB the smallest CPU profile "
+        f"needs ({THRESHOLDS_BASIS}). No CPU profile fits this machine."
     )
+    return NOT_SUPPORTED, reasons
+
+def forced_profile_warning(profile_name: str, probe: dict | None) -> str | None:
+    floor = supported_floor_gib(profile_name)
+    gib, basis = memory_for_docker(probe)
+    if floor is None or gib is None or gib >= floor:
+        return None
+    return (f"--profile {profile_name} forces a profile this machine is not supported "
+            f"for. {describe_memory(gib, basis)}; {profile_name} needs "
+            f"{floor:.1f} GiB ({THRESHOLDS_BASIS}). Expect containers stopped for "
+            "lack of memory, or answers that take far longer.")
+
+def avx2_warning(probe: dict | None) -> str | None:
+    if ((probe or {}).get("cpu") or {}).get("avx2") is not False:
+        return None
+    return ("This processor has no AVX2. llama-server still runs: the official "
+            "llama.cpp build picks the code this processor supports when it starts. "
+            "Answers will be much slower than on a processor with AVX2; how much "
+            "slower has not been measured.")
 
 def select_profile(probe: dict) -> tuple[str, list[str]]:
     reasons: list[str] = []
     gpu = probe.get("gpu") or {}
-    mem = probe.get("memory") or {}
     osinfo = probe.get("os") or {}
     gpu_test = probe.get("docker_gpu_test") or {}
 
     vram_gib = _gib(gpu.get("vram_bytes"))
-    ram_gib = _gib(mem.get("total_bytes"))
     usable = probe.get("cuda_usable_in_docker") is True
     outcome = gpu_test.get("usable")
 
@@ -627,14 +805,19 @@ def select_profile(probe: dict) -> tuple[str, list[str]]:
                     "test to find out whether Docker can actually use it."
                 )
 
-        name_cpu, why = _cpu_profile_for_ram(ram_gib)
-        reasons.append(why)
-        return name_cpu, reasons
+        name_cpu, why = _cpu_profile_for_memory(probe)
+        return name_cpu, reasons + why
 
     reasons.append(
         "A Docker container successfully ran nvidia-smi and saw a CUDA device. "
         "This is the test that decides, and it passed."
     )
+    if gpu_test.get("reused_from"):
+        reasons.append(
+            f"It passed on {gpu_test['reused_from']}, and the RAM, the Docker memory "
+            "and the GPUs are the same as then, so it was not run again. --profile "
+            "still chooses another profile."
+        )
     if vram_gib is None:
         reasons.append(
             f"VRAM on {name} could not be read, so the most conservative GPU "
@@ -649,9 +832,8 @@ def select_profile(probe: dict) -> tuple[str, list[str]]:
             "cache need. CUDA works, but the model would not fit, so the CPU "
             "profile is safer than a card that OOMs on every request."
         )
-        name_cpu, why = _cpu_profile_for_ram(ram_gib)
-        reasons.append(why)
-        return name_cpu, reasons
+        name_cpu, why = _cpu_profile_for_memory(probe)
+        return name_cpu, reasons + why
 
     for low, high, pname in VRAM_BANDS:
         if low <= vram_gib < high:

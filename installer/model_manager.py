@@ -52,7 +52,6 @@ EVENT_EVERY_SECONDS = 0.5
 LINE_EVERY_SECONDS = 15.0
 SPEED_WINDOW_SECONDS = 10.0
 DISK_HEADROOM_BYTES = 1024 ** 3
-REPORTED_RAM_SLACK_GIB = 1.0
 TOKEN_HOSTS = ("huggingface.co",)
 RETRYABLE_CLIENT_ERRORS = frozenset({408, 425, 429})
 
@@ -256,17 +255,6 @@ def _reason(exc: BaseException) -> str:
 
 def _tried(host: str, reason: str, attempts: int) -> str:
     return f"{host}, {attempts} attempt{'' if attempts == 1 else 's'}: {reason}"
-
-def ram_warning(entry: ModelEntry, probe: dict | None, profile: str) -> str | None:
-    total = ((probe or {}).get("memory") or {}).get("total_bytes")
-    if not isinstance(total, (int, float)) or total <= 0:
-        return None
-    ram_gib = total / 1024 ** 3
-    if ram_gib >= entry.min_ram_gb - REPORTED_RAM_SLACK_GIB:
-        return None
-    return (f"{entry.id} is sized for {entry.min_ram_gb:g} GB of RAM and this machine reports "
-            f"{ram_gib:.1f} GiB. It is downloaded anyway: {profile} serves the same model "
-            "until the CPU benchmark decides what smaller machines get.")
 
 class Progress:
 

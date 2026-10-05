@@ -8,6 +8,7 @@ const EXIT_VIEWS = {
   12: "docker-down",
   17: "not-found",
   18: "not-installed",
+  32: "unsupported",
 };
 
 const MAX_OUTPUT_LINES = 400;
@@ -36,6 +37,7 @@ function show(view) {
     "no-python": "Python is missing",
     "docker-down": "Docker is not running",
     "not-installed": "Not installed yet",
+    "unsupported": "Not enough memory",
     "starting": "Starting the stack",
     "failed": "Something went wrong",
     "running": "Running",
@@ -156,6 +158,29 @@ function renderDownload(data) {
   box.hidden = false;
 }
 
+function fillList(id, items) {
+  const list = document.getElementById(id);
+  list.textContent = "";
+  for (const item of items || []) {
+    const li = document.createElement("li");
+    li.textContent = String(item);
+    list.appendChild(li);
+  }
+}
+
+function renderUnsupported(data) {
+  if (data.headline) {
+    document.getElementById("unsupported-headline").textContent = data.headline;
+  }
+  const checked = document.getElementById("unsupported-checked");
+  checked.textContent = data.checked_utc
+    ? `Found when START-HERE last ran (${data.checked_utc}).` : "";
+  checked.hidden = !data.checked_utc;
+  fillList("unsupported-have", data.have);
+  fillList("unsupported-need", data.need);
+  fillList("unsupported-alternatives", data.alternatives);
+}
+
 function hideDownload() {
   document.getElementById("download").hidden = true;
   document.getElementById("download-text").textContent = "";
@@ -185,6 +210,10 @@ async function bootstrap() {
     return;
   }
   if (info.state === "not-installed") {
+    if (info.refused) {
+      await startStack();
+      return;
+    }
     show("not-installed");
     return;
   }
@@ -255,6 +284,9 @@ function handleInstallerEvent(data) {
       break;
     case "download":
       renderDownload(data);
+      break;
+    case "unsupported":
+      renderUnsupported(data);
       break;
     case "ready":
       stopTicker();
@@ -383,6 +415,7 @@ function wire() {
   on("docker-quit", () => invoke("quit_app"));
   on("installed-quit", () => invoke("quit_app"));
   on("failed-quit", () => invoke("quit_app"));
+  on("unsupported-quit", () => invoke("quit_app"));
   on("stopped-quit", () => invoke("quit_app"));
 
   on("python-retry", () => bootstrap());
@@ -392,9 +425,12 @@ function wire() {
   on("stopped-start", () => startStack());
 
   on("installed-open", () => invoke("open_path", { which: "bundle" }));
+  on("unsupported-open", () => invoke("open_path", { which: "bundle" }));
   on("starting-log", () => invoke("open_path", { which: "log" }));
   on("failed-log", () => invoke("open_path", { which: "log" }));
   on("failed-profile", () => invoke("open_path", { which: "profile" }));
+  on("unsupported-profile", () => invoke("open_path", { which: "profile" }));
+  on("unsupported-log", () => invoke("open_path", { which: "log" }));
   on("running-log", () => invoke("open_path", { which: "log" }));
   on("running-profile", () => invoke("open_path", { which: "profile" }));
   on("running-browser", () => invoke("open_path", { which: "web" }));

@@ -722,18 +722,28 @@ class Plans(unittest.TestCase):
             self.assertEqual(horus_install._dispatch(log, args), horus_install.EXIT_OK)
         return out.getvalue()
 
-    def test_the_dry_run_names_the_model_and_warns_a_small_machine(self):
-        out = self.dry_run("--simulate", "linux-cpu-8gb")
+    def test_the_dry_run_names_the_model_of_a_cpu_machine(self):
+        out = self.dry_run("--simulate", "linux-cpu-16gb")
         self.assertIn("model    : qwen3-4b-q4km, 2.3 GB", out)
-        self.assertIn("sized for 16 GB", out)
         self.assertIn(f"LLM_GGUF_SHA256={UNSLOTH_SHA256}", out)
         self.assertIn("HORUS_MODELS_DIR=../../models", out)
+
+    def test_the_dry_run_of_a_machine_too_small_names_no_model(self):
+        out = self.dry_run("--simulate", "linux-cpu-8gb")
+        self.assertIn("not supported", out)
+        self.assertNotIn("model    :", out)
+        self.assertNotIn("LLM_GGUF_", out)
+
+    def test_a_forced_profile_on_a_small_machine_is_warned_but_still_gets_its_model(self):
+        out = self.dry_run("--simulate", "linux-cpu-8gb", "--profile", "cpu-lean")
+        self.assertIn("forces a profile this machine is not supported for", out)
+        self.assertIn("model    : qwen3-4b-q4km, 2.3 GB", out)
 
     def test_the_dry_run_keeps_the_models_folder_an_earlier_install_chose(self):
         elsewhere = (self.repo / "elsewhere").resolve()
         (self.infra / ".env").write_text(f"HORUS_MODELS_DIR={elsewhere.as_posix()}\n",
                                          encoding="utf-8")
-        out = self.dry_run("--simulate", "linux-cpu-8gb")
+        out = self.dry_run("--simulate", "linux-cpu-16gb")
         self.assertIn(f"Keeping the models folder chosen before: {elsewhere}", out)
         self.assertIn(f"HORUS_MODELS_DIR={elsewhere.as_posix()}", out)
         self.assertIn(f"into {elsewhere}", out)
@@ -743,7 +753,7 @@ class Plans(unittest.TestCase):
         (self.infra / ".env").write_text(
             f"{horus_install.UNSET_MARKER}HORUS_MODELS_DIR={elsewhere.as_posix()}\n",
             encoding="utf-8")
-        out = self.dry_run("--simulate", "linux-cpu-8gb")
+        out = self.dry_run("--simulate", "linux-cpu-16gb")
         self.assertIn("HORUS_MODELS_DIR=../../models", out)
         self.assertNotIn("Keeping the models folder", out)
 
@@ -752,15 +762,9 @@ class Plans(unittest.TestCase):
         self.assertNotIn("model    :", out)
         self.assertNotIn("LLM_GGUF_", out)
 
-    def test_a_machine_under_the_model_ram_is_warned_but_not_stopped(self):
-        entry = model_manager.load_manifest(MANIFEST).default_for("cpu-lean")
-        small = {"memory": {"total_bytes": 8 * 1024 ** 3}}
-        warning = model_manager.ram_warning(entry, small, "cpu-lean")
-        self.assertIn("16 GB", warning)
-        self.assertIn("8.0 GiB", warning)
-        usual = {"memory": {"total_bytes": int(15.6 * 1024 ** 3)}}
-        self.assertIsNone(model_manager.ram_warning(entry, usual, "cpu-standard"))
-        self.assertIsNone(model_manager.ram_warning(entry, {}, "cpu-standard"))
+    def test_both_cpu_profiles_download_the_same_model(self):
+        manifest = model_manager.load_manifest(MANIFEST)
+        self.assertEqual(manifest.default_for("cpu-lean"), manifest.default_for("cpu-standard"))
 
 class InstalledStackChecksItsModel(DownloadCase):
 

@@ -424,12 +424,14 @@ def check_ports(log: Log, infra: Path, want_admin_profile: bool = False) -> dict
     log.ok(f"all {len([p for p in PORTS if p[3] is None])} required ports free")
     return report
 
-def run_all(log: Log, infra: Path, want_admin_profile: bool = False,
-            skip_disk_check: bool = False, image_registry: str | None = None) -> dict:
-    summary: dict = {}
+def run_engine_checks(log: Log) -> dict:
     check_python(log)
-    summary["docker_version"] = check_docker(log)
-    summary["compose_version"] = check_compose(log)
+    return {"docker_version": check_docker(log), "compose_version": check_compose(log)}
+
+def run_install_checks(log: Log, infra: Path, want_admin_profile: bool = False,
+                       skip_disk_check: bool = False,
+                       image_registry: str | None = None) -> dict:
+    summary: dict = {}
     if skip_disk_check:
         log.step("4/6  Disk space")
         log.warn("Skipped with --skip-disk-check. If the build runs out of "

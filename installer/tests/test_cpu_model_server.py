@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import fnmatch
 import hashlib
 import io
 import os
@@ -19,6 +20,7 @@ except ImportError:
 
 REPO = Path(__file__).resolve().parent.parent.parent
 INFRA = REPO / "src" / "infra"
+OBSERVABILITY = INFRA / "observability"
 MANIFEST = REPO / "models" / "manifest.json"
 FETCH_SCRIPT = INFRA / "llm" / "fetch-model.sh"
 CONVERT_SCRIPT = REPO / "scripts" / "models" / "convert-qwen3-4b-gguf.sh"
@@ -102,9 +104,40 @@ class CpuOverlayRunsLlamaServer(unittest.TestCase):
         self.assertEqual(flags["--parallel"], "1")
         self.assertEqual(flags["--load-mode"], "mmap")
         self.assertEqual(flags["--cache-ram"], "1024")
+        self.assertEqual(flags["--cache-type-k"], "f16")
+        self.assertEqual(flags["--cache-type-v"], "f16")
+        self.assertEqual(flags["--flash-attn"], "auto")
         self.assertIn("--metrics", flags)
         self.assertNotIn("--api-key", flags)
         self.assertNotIn("--api-key-file", flags)
+
+    def test_cpu_lean_runs_the_same_model_with_the_adr_005_option_b_flags(self):
+        lean = profiles.env_for("cpu-lean", {"cpu": {"physical_cores": 4}})
+        flags = self.flags(lean)
+        self.assertEqual(flags["--model"], self.flags()["--model"])
+        self.assertEqual(flags["--ctx-size"], "4096")
+        self.assertEqual(flags["--cache-type-k"], "q8_0")
+        self.assertEqual(flags["--cache-type-v"], "q8_0")
+        self.assertEqual(flags["--flash-attn"], "on")
+        self.assertEqual(flags["--cache-ram"], "256")
+        self.assertEqual(interpolate(self.llm["mem_limit"], lean), "5g")
+
+    def test_every_server_setting_a_profile_writes_reaches_the_command(self):
+        read = set(re.findall(r"\$\{(\w+)", " ".join(map(str, self.llm["command"]))))
+        self.assertLessEqual(set(profiles.SERVER_KEYS), read)
+        for name in ("cpu-lean", "cpu-standard"):
+            with self.subTest(name):
+                self.assertLessEqual(set(profiles.SERVER_KEYS), set(profiles.env_for(name)))
+
+    def test_without_the_installer_the_server_runs_like_cpu_standard(self):
+        defaults = self.flags({})
+        for key, flag in (("LLM_SERVER_CACHE_TYPE_K", "--cache-type-k"),
+                          ("LLM_SERVER_CACHE_TYPE_V", "--cache-type-v"),
+                          ("LLM_SERVER_FLASH_ATTN", "--flash-attn"),
+                          ("LLM_SERVER_CACHE_RAM_MIB", "--cache-ram"),
+                          ("LLM_VLLM_MAX_MODEL_LEN", "--ctx-size")):
+            with self.subTest(key):
+                self.assertEqual(defaults[flag], self.cpu_env[key])
 
     def test_the_clients_reach_the_server_at_its_service_name_and_port(self):
         self.assertEqual(self.cpu_env["LLM_VLLM_URL"], f"http://llm:{self.flags()['--port']}/v1")
@@ -238,6 +271,46 @@ class CpuOverlayRunsLlamaServer(unittest.TestCase):
         written = {key for key in self.cpu_env if key.endswith("_MEM_LIMIT")}
         self.assertEqual(len(written), 4)
         self.assertLessEqual(written, read)
+
+def glob_matches(pattern: str, path: str) -> bool:
+    return fnmatch.fnmatchcase(path, pattern) and "/" not in path[pattern.rfind("/") + 1:]
+
+@needs_yaml
+class PrometheusScrapesLlamaServerOnCpuOnly(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.base = load_compose(profiles.BASE_COMPOSE)
+        cls.overlay = load_compose(profiles.CPU_OVERLAY)
+        cls.config = yaml.safe_load((OBSERVABILITY / "prometheus.yaml").read_text(encoding="utf-8"))
+
+    def cpu_mount(self) -> tuple[str, str]:
+        mounts = self.overlay["services"]["prometheus"]["volumes"]
+        self.assertEqual(len(mounts), 1, mounts)
+        source, target, mode = mounts[0].split(":")
+        self.assertEqual(mode, "ro")
+        return source, target
+
+    def test_prometheus_reads_extra_jobs_from_the_folder_the_cpu_overlay_fills(self):
+        _, target = self.cpu_mount()
+        patterns = self.config["scrape_config_files"]
+        self.assertTrue(any(glob_matches(pattern, target) for pattern in patterns), patterns)
+
+    def test_the_mounted_file_scrapes_llama_server_metrics(self):
+        source, _ = self.cpu_mount()
+        jobs = yaml.safe_load((INFRA / source).read_text(encoding="utf-8"))["scrape_configs"]
+        self.assertEqual([job["job_name"] for job in jobs], ["llm"])
+        port = flag_values(self.overlay["services"]["llm"]["command"], {})["--port"]
+        self.assertEqual(jobs[0]["static_configs"], [{"targets": [f"llm:{port}"]}])
+        self.assertEqual(jobs[0].get("metrics_path", "/metrics"), "/metrics")
+        self.assertIn("--metrics", self.overlay["services"]["llm"]["command"])
+
+    def test_the_gpu_stack_has_no_llm_target_to_report_down(self):
+        base_mounts = self.base["services"]["prometheus"]["volumes"]
+        _, target = self.cpu_mount()
+        self.assertFalse(any(target in mount for mount in base_mounts), base_mounts)
+        targets = [target for job in self.config["scrape_configs"]
+                   for config in job.get("static_configs", []) for target in config["targets"]]
+        self.assertFalse([t for t in targets if t.startswith(f"{profiles.CPU_MODEL_SERVER}:")])
 
 def run_fetch(models: Path, url: str, sha256: str, size: int,
               attempts: int = 2) -> subprocess.CompletedProcess:

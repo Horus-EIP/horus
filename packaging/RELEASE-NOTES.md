@@ -8,6 +8,7 @@ leaves it.
 | **Docker Desktop** | installed **and running** |
 | **Python 3.11+** | only used to run the installer |
 | **NVIDIA GPU** | strongly recommended — see Known limitations |
+| **Memory without a GPU** | at least 13.5 GiB for Docker (15.0 GiB for the larger CPU profile). On Windows Docker gets only half of the RAM unless you raise it, so in practice that takes a 24 GB machine. Planning figures, not measured yet: the installer checks them first and stops before any download when the machine is too small |
 | **Free disk** | 150 GB while installing (125 GB with an NVIDIA GPU), settling to 130 GB / 110 GB |
 | **Time** | 1.5 to 2 hours for the first install when testers built the containers; downloading the prebuilt ones has not been timed yet |
 | **Access token** | the one we sent you, saved as `registry-token.txt` next to `START-HERE`, on one line: `USERNAME:TOKEN` |

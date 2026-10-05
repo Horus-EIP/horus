@@ -33,6 +33,10 @@ services:
   web-client:
     image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-web-client:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-cpu}
 
+  prometheus:
+    volumes:
+      - ./observability/prometheus-llm.yaml:/etc/prometheus/scrape.d/llm.yaml:ro
+
   vllm:
     gpus: !reset null
     profiles: ["gpu"]
@@ -76,10 +80,16 @@ services:
       - ${LLM_VLLM_MAX_MODEL_LEN:-8192}
       - --parallel
       - "1"
+      - --cache-type-k
+      - ${LLM_SERVER_CACHE_TYPE_K:-f16}
+      - --cache-type-v
+      - ${LLM_SERVER_CACHE_TYPE_V:-f16}
+      - --flash-attn
+      - ${LLM_SERVER_FLASH_ATTN:-auto}
       - --load-mode
       - mmap
       - --cache-ram
-      - "1024"
+      - ${LLM_SERVER_CACHE_RAM_MIB:-1024}
       - --threads
       - ${LLM_SERVER_THREADS:-4}
       - --metrics
