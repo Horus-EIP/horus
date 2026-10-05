@@ -321,6 +321,8 @@ services:
       # to keep the BGE embedder off the shared 8 GB GPU so it doesn't evict the
       # agent's 4B model under ingestion load (see scripts/perf).
       - KNOWLEDGE_STORE_EMBED_DEVICE=${KNOWLEDGE_STORE_EMBED_DEVICE:-auto}
+      - KNOWLEDGE_STORE_EMBED_THREADS=${KNOWLEDGE_STORE_EMBED_THREADS:-}
+      - KNOWLEDGE_STORE_REINDEX_ON_STARTUP=${KNOWLEDGE_STORE_REINDEX_ON_STARTUP:-1}
       # Where POST /corpus/scan looks for documents to index. This block has no
       # `env_file: - .env`, so a value set only in .env would never reach the
       # container — it has to be listed here.

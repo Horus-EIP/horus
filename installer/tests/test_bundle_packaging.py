@@ -448,6 +448,24 @@ class ComposeHealthchecks(unittest.TestCase):
                 with self.subTest(f"{name} -> {dependency}"):
                     self.assertEqual(condition, "service_healthy")
 
+KNOWLEDGE_STORE_APP = REPO / "src" / "services" / "knowledge-store" / "app"
+
+def knowledge_store_settings() -> set[str]:
+    names: set[str] = set()
+    for source in KNOWLEDGE_STORE_APP.rglob("*.py"):
+        names.update(re.findall(r"\"(KNOWLEDGE_STORE_[A-Z_]+)\"", source.read_text(encoding="utf-8")))
+    return names
+
+@needs_yaml
+class ComposeKnowledgeStoreSettings(unittest.TestCase):
+    def test_every_setting_the_knowledge_store_reads_reaches_its_container(self):
+        spec = compose_services()["knowledge_store"]
+        self.assertNotIn("env_file", spec)
+        passed = {entry.split("=", 1)[0] for entry in spec["environment"]}
+        settings = knowledge_store_settings()
+        self.assertTrue(settings)
+        self.assertEqual(settings - passed, set())
+
 def cpu_overlay_services() -> dict:
     loader = type("ComposeOverlayLoader", (yaml.SafeLoader,), {})
     loader.add_constructor("!reset", lambda _loader, _node: None)
