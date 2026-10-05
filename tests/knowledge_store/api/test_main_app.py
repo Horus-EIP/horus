@@ -1,11 +1,3 @@
-"""Smoke + handler tests for the Knowledge Store ASGI app (``app.main``).
-
-Importing ``app.main`` executes the module-level app wiring (metrics mount,
-middleware, router mounting, system-info). The ``with TestClient(...)``
-context drives the lifespan startup/shutdown. ChromaDB / spaCy / sentence-
-transformers are mocked at the conftest level.
-"""
-
 from __future__ import annotations
 
 import json

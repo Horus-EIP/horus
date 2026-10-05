@@ -1,13 +1,3 @@
-"""Unit tests for ``build_where_clause`` (hermetic).
-
-``build_where_clause`` lives in ``app.chroma_db.services.file_service``.
-The conftest mocks chromadb / sentence-transformers / spaCy at import
-time, and ``file_service`` imports from the ``app.chroma_db.setup`` and
-``app.chroma_db.models`` submodules directly, so the function imports
-cleanly with no real vector store, no model download, and no circular
-import through ``app.chroma_db.__init__``.
-"""
-
 from __future__ import annotations
 
 from app.chroma_db.models import SmartSearchRequest
