@@ -247,7 +247,7 @@ class Downloads(DownloadCase):
         _out, raised = self.download(entry)
         self.assertIsNotNone(raised)
         self.assertEqual(raised.code, EXIT_MODEL_DOWNLOAD_FAILED)
-        self.assertEqual(script.requests, model_manager.FAILURES_BEFORE_NEXT_MIRROR)
+        self.assertEqual(script.requests, model_manager.FAILURES_ON_THE_LAST_MIRROR)
         self.assertEqual(self.part.stat().st_size, self.half)
         self.assertFalse(self.target.exists())
         self.assertIn("the next run resumes from it", raised.detail)
@@ -307,6 +307,34 @@ class Downloads(DownloadCase):
         self.assertEqual(self.pauses, [model_manager.BACKOFF_SECONDS,
                                        2 * model_manager.BACKOFF_SECONDS])
         self.assertIn("next mirror", out)
+
+    def test_the_last_mirror_rides_out_a_short_network_drop_before_the_install_gives_up(self):
+        script, url = self.mirrors.add("only", self.payload)
+        script.afterwards = 503
+        out, raised = self.download(entry_for(self.payload, url))
+        self.assertIsNotNone(raised)
+        self.assertEqual(raised.code, EXIT_MODEL_DOWNLOAD_FAILED)
+        budget = model_manager.FAILURES_ON_THE_LAST_MIRROR
+        self.assertGreater(budget, model_manager.FAILURES_BEFORE_NEXT_MIRROR)
+        self.assertEqual(script.requests, budget)
+        self.assertEqual(self.pauses,
+                         [model_manager.BACKOFF_SECONDS * n for n in range(1, budget)])
+        self.assertGreaterEqual(sum(self.pauses), 120)
+        self.assertNotIn("Trying the next mirror", out)
+        self.assertIn("No other mirror is listed", out)
+
+    def test_the_give_up_message_counts_the_attempts_each_mirror_really_had(self):
+        missing_url = self.mirrors.url("gone")
+        down, down_url = self.mirrors.add("down", self.payload)
+        down.afterwards = 503
+        _out, raised = self.download(entry_for(self.payload, missing_url, down_url))
+        self.assertIsNotNone(raised)
+        self.assertEqual(raised.code, EXIT_MODEL_DOWNLOAD_FAILED)
+        self.assertIn("from 2 mirror(s)", raised.detail)
+        self.assertIn("1 attempt: HTTP 404", raised.detail)
+        self.assertIn(f"{model_manager.FAILURES_ON_THE_LAST_MIRROR} attempts: HTTP 503",
+                      raised.detail)
+        self.assertNotIn("times each", raised.detail)
 
     def test_the_next_mirror_resumes_what_the_first_one_delivered(self):
         flaky, flaky_url = self.mirrors.add("flaky", self.payload)
@@ -701,6 +729,24 @@ class Plans(unittest.TestCase):
         self.assertIn(f"LLM_GGUF_SHA256={UNSLOTH_SHA256}", out)
         self.assertIn("HORUS_MODELS_DIR=../../models", out)
 
+    def test_the_dry_run_keeps_the_models_folder_an_earlier_install_chose(self):
+        elsewhere = (self.repo / "elsewhere").resolve()
+        (self.infra / ".env").write_text(f"HORUS_MODELS_DIR={elsewhere.as_posix()}\n",
+                                         encoding="utf-8")
+        out = self.dry_run("--simulate", "linux-cpu-8gb")
+        self.assertIn(f"Keeping the models folder chosen before: {elsewhere}", out)
+        self.assertIn(f"HORUS_MODELS_DIR={elsewhere.as_posix()}", out)
+        self.assertIn(f"into {elsewhere}", out)
+
+    def test_a_models_folder_set_aside_by_a_gpu_install_is_not_reused(self):
+        elsewhere = (self.repo / "elsewhere").resolve()
+        (self.infra / ".env").write_text(
+            f"{horus_install.UNSET_MARKER}HORUS_MODELS_DIR={elsewhere.as_posix()}\n",
+            encoding="utf-8")
+        out = self.dry_run("--simulate", "linux-cpu-8gb")
+        self.assertIn("HORUS_MODELS_DIR=../../models", out)
+        self.assertNotIn("Keeping the models folder", out)
+
     def test_the_dry_run_of_a_gpu_profile_names_no_model_file(self):
         out = self.dry_run("--simulate", "nvidia-8gb")
         self.assertNotIn("model    :", out)
@@ -787,21 +833,111 @@ class InstalledStackChecksItsModel(DownloadCase):
         self.assertEqual(code, horus_install.EXIT_OK)
         self.assertEqual(order, ["model", "up"])
 
-    def test_the_command_line_can_fetch_the_model_alone(self):
-        _script, url = self.mirrors.add("a", self.payload)
-        (self.repo / "models").mkdir()
+    def test_llm_is_stopped_before_a_model_file_it_may_hold_open_is_replaced(self):
+        script, url = self.mirrors.add("a", self.payload)
+        self.write_env(f"docker-compose.yml:{profiles.CPU_OVERLAY}", url)
+        self.models.mkdir()
+        self.target.write_bytes(damaged(self.payload))
+        calls: list[tuple[str, bool]] = []
+
+        def docker(cmd, *args, **kwargs) -> int:
+            calls.append((" ".join(cmd[2:]), self.target.read_bytes() == self.payload))
+            return 0
+
+        with contextlib.ExitStack() as stack:
+            patch = stack.enter_context
+            patch(mock.patch.object(horus_install, "_require_docker"))
+            patch(mock.patch.object(horus_install, "wait_for_health"))
+            patch(mock.patch.object(horus_install, "_stream", side_effect=docker))
+            patch(contextlib.redirect_stdout(io.StringIO()))
+            code = horus_install.do_restart(self.log, self.infra, timeout=60)
+        self.assertEqual(code, horus_install.EXIT_OK)
+        self.assertEqual(calls, [(f"stop {profiles.CPU_MODEL_SERVER}", False), ("restart", True)])
+        self.assert_in_place()
+        self.assertEqual(script.requests, 1)
+
+    def test_a_missing_or_checked_model_leaves_llm_running(self):
+        script, url = self.mirrors.add("a", self.payload)
+        self.write_env(f"docker-compose.yml:{profiles.CPU_OVERLAY}", url)
+        with mock.patch.object(horus_install, "_stream") as docker:
+            self.check()
+            self.check()
+        docker.assert_not_called()
+        self.assert_in_place()
+        self.assertEqual(script.requests, 1)
+
+    def serve_the_manifest_model(self, url: str) -> str:
+        (self.repo / "models").mkdir(exist_ok=True)
         document = shipped_manifest()
         document["models"][0].update(size_bytes=len(self.payload), mirrors=[url],
                                      sha256=hashlib.sha256(self.payload).hexdigest())
         (self.repo / "models" / "manifest.json").write_text(json.dumps(document),
                                                             encoding="utf-8")
+        return document["models"][0]["file"]
+
+    def run_installer(self, *argv: str) -> str:
+        out = io.StringIO()
+        with contextlib.ExitStack() as stack:
+            patch = stack.enter_context
+            patch(mock.patch.object(horus_install, "find_repo", return_value=self.repo))
+            patch(mock.patch.object(horus_install, "banner"))
+            patch(mock.patch.object(horus_install, "preflight"))
+            consent = patch(mock.patch.object(horus_install, "consent"))
+            consent.choose.return_value = {"corpus_dir": "../../demo_assets"}
+            hardware = patch(mock.patch.object(horus_install, "hardware"))
+            hardware.probe.return_value = dict(horus_install.SIMULATIONS["nvidia-16gb"])
+            patch(mock.patch.object(
+                horus_install, "pull_and_build",
+                side_effect=lambda *args, before_start=None, **kwargs: before_start()))
+            patch(mock.patch.object(horus_install, "wait_for_health"))
+            patch(mock.patch.object(horus_install, "_success"))
+            patch(contextlib.redirect_stdout(out))
+            code = horus_install._dispatch(self.log, horus_install.build_parser().parse_args(
+                list(argv)))
+        self.assertEqual(code, horus_install.EXIT_OK)
+        return out.getvalue()
+
+    def installed_env(self) -> dict[str, str]:
+        return horus_install.smoke.read_env(self.infra / ".env")
+
+    def test_a_reinstall_without_the_option_keeps_the_models_folder_chosen_before(self):
+        script, url = self.mirrors.add("a", self.payload)
+        file = self.serve_the_manifest_model(url)
+        (self.infra / ".env").write_text("JWT_SECRET_KEY=test\n", encoding="utf-8")
+        install = ["--profile", "cpu-standard", "--non-interactive", "--skip-smoke"]
+
+        self.run_installer(*install, "--models-dir", str(self.models))
+        chosen = self.installed_env()["HORUS_MODELS_DIR"]
+        self.assertEqual(chosen, self.models.resolve().as_posix())
+        self.assertEqual((self.models / file).read_bytes(), self.payload)
+
+        out = self.run_installer(*install)
+        self.assertIn(f"Keeping the models folder chosen before: {self.models.resolve()}", out)
+        self.assertEqual(self.installed_env()["HORUS_MODELS_DIR"], chosen)
+        self.assertIn("verified before", out)
+        self.assertEqual(script.requests, 1)
+        self.assertEqual(sorted(path.name for path in (self.repo / "models").iterdir()),
+                         ["manifest.json"])
+
+    def test_the_command_line_fetches_the_model_into_the_folder_the_stack_mounts(self):
+        _script, url = self.mirrors.add("a", self.payload)
+        file = self.serve_the_manifest_model(url)
+        (self.infra / ".env").write_text(f"HORUS_MODELS_DIR={self.models.as_posix()}\n",
+                                         encoding="utf-8")
+        self.run_installer("--download-model")
+        self.assertEqual((self.models / file).read_bytes(), self.payload)
+        self.assertFalse((self.repo / "models" / file).exists())
+
+    def test_the_command_line_can_fetch_the_model_alone(self):
+        _script, url = self.mirrors.add("a", self.payload)
+        file = self.serve_the_manifest_model(url)
         args = horus_install.build_parser().parse_args(
             ["--download-model", "--models-dir", str(self.models)])
         with mock.patch.object(horus_install, "find_repo", return_value=self.repo), \
                 contextlib.redirect_stdout(io.StringIO()):
             code = horus_install._dispatch(self.log, args)
         self.assertEqual(code, horus_install.EXIT_OK)
-        downloaded = self.models / document["models"][0]["file"]
+        downloaded = self.models / file
         self.assertEqual(downloaded.read_bytes(), self.payload)
 
 if __name__ == "__main__":

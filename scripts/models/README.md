@@ -37,15 +37,15 @@ The size and hash come from the Hugging Face API (`https://huggingface.co/api/mo
 
 ## How the file reaches llama-server
 
-The model lives in a folder on the host, `models/` at the top of the Horus folder unless the installer is given `--models-dir`. Compose mounts that folder read-only into `llm` at `/models`, and llama-server loads `/models/$LLM_GGUF_FILE`.
+The model lives in a folder on the host, `models/` at the top of the Horus folder unless the installer is given `--models-dir`. A folder given once is kept: the next install, `--start`, `--restart` and `--download-model` read it back from `HORUS_MODELS_DIR` in `src/infra/.env`. Compose mounts that folder read-only into `llm` at `/models`, and llama-server loads `/models/$LLM_GGUF_FILE`.
 
 The installer's model manager (`installer/model_manager.py`, standard library only) fills it:
 
-1. It runs after the images are built and before the first `docker compose up`, and again on every `--start` and `--restart`, which is when the desktop app sees it. It downloads only the default model of the chosen profile.
-2. It writes to `<file>.part`. After any failure it resumes with an HTTP `Range` request from the bytes already on disk. It waits 10 s, then 20 s; after 3 failures in a row it moves to the next mirror. An attempt that delivered bytes resets that count, so a connection that keeps dropping but keeps delivering is never given up. A mirror that answers `404` or `403`, or serves a file of another size, is left at once.
+1. It runs after the images are built and before the first `docker compose up`, and again on every `--start` and `--restart`, which is when the desktop app sees it. It downloads only the default model of the chosen profile. When a file that is not the checked one has to be hashed and maybe replaced, `llm` is stopped first, so a running llama-server does not hold it open.
+2. It writes to `<file>.part`. After any failure it resumes with an HTTP `Range` request from the bytes already on disk. It waits 10 s, then 20 s; after 3 failures in a row it moves to the next mirror. The last mirror, today the only one, gets 6 failures in a row, with pauses from 10 s to 50 s (2.5 minutes in all), so a short Wi-Fi or VPN drop does not end the install. An attempt that delivered bytes resets that count, so a connection that keeps dropping but keeps delivering is never given up. A mirror that answers `404` or `403`, or serves a file of another size, is left at once.
 3. At the end it checks the SHA-256, renames the file in one step and writes `<file>.sha256` with the hash. A wrong hash deletes the file and stops the install with a message that says so and gives both hashes (exit code 45). A file put together from several downloads is first fetched once more from the start.
 4. It shows the total size, the speed and the time left: a console line every 15 s, and twice a second a `download` event on `--json-events`, which the desktop app shows as a progress bar.
-5. It writes `HORUS_MODELS_DIR`, `LLM_GGUF_FILE`, `LLM_GGUF_URL`, `LLM_GGUF_SHA256` and `LLM_GGUF_SIZE` to `src/infra/.env`. A GPU reinstall comments them out.
+5. It writes `HORUS_MODELS_DIR`, `LLM_GGUF_FILE`, `LLM_GGUF_URL`, `LLM_GGUF_SHA256` and `LLM_GGUF_SIZE` to `src/infra/.env`. A GPU reinstall comments them out, so a later CPU install goes back to `models/` unless it is given `--models-dir` again.
 
 `python installer/horus_install.py --download-model [--profile NAME] [--models-dir PATH]` runs only this step, without Docker.
 

@@ -44,6 +44,7 @@ PARTIAL_SUFFIX = ".part"
 VERIFIED_SUFFIX = ".sha256"
 
 FAILURES_BEFORE_NEXT_MIRROR = 3
+FAILURES_ON_THE_LAST_MIRROR = 6
 BACKOFF_SECONDS = 10
 CHUNK_BYTES = 1024 * 1024
 READ_TIMEOUT_SECONDS = 60
@@ -253,6 +254,9 @@ def _reason(exc: BaseException) -> str:
         return f"cannot reach it ({exc.reason})"
     return str(exc) or type(exc).__name__
 
+def _tried(host: str, reason: str, attempts: int) -> str:
+    return f"{host}, {attempts} attempt{'' if attempts == 1 else 's'}: {reason}"
+
 def ram_warning(entry: ModelEntry, probe: dict | None, profile: str) -> str | None:
     total = ((probe or {}).get("memory") or {}).get("total_bytes")
     if not isinstance(total, (int, float)) or total <= 0:
@@ -390,30 +394,34 @@ class ModelDownload:
 
         problems: list[str] = []
         damaged_last = False
-        for url in self.mirrors:
-            outcome = self._from_mirror(url)
+        for index, url in enumerate(self.mirrors):
+            outcome = self._from_mirror(url, last=index == len(self.mirrors) - 1)
             if outcome is None:
                 return self.target
             problem, damaged_last = outcome
             problems.append(problem)
         raise self._give_up(problems, damaged_last)
 
-    def _from_mirror(self, url: str) -> tuple[str, bool] | None:
+    def _from_mirror(self, url: str, last: bool) -> tuple[str, bool] | None:
         host = _host(url)
+        allowed = FAILURES_ON_THE_LAST_MIRROR if last else FAILURES_BEFORE_NEXT_MIRROR
+        moving_on = "No other mirror is listed." if last else "Trying the next mirror."
+        attempts = 0
         failures = 0
         restarted_after_mismatch = False
         while True:
+            attempts += 1
             try:
                 self._fetch(url)
             except _NextMirror as exc:
-                self.log.warn(f"{host}: {exc}. Trying the next mirror.")
-                return f"{host}: {exc}", False
+                self.log.warn(f"{host}: {exc}. {moving_on}")
+                return _tried(host, str(exc), attempts), False
             except _TryAgain as exc:
                 failures = 1 if exc.received else failures + 1
-                if failures >= FAILURES_BEFORE_NEXT_MIRROR:
+                if failures >= allowed:
                     self.log.warn(f"{host}: {exc.reason}. That is {failures} failures in a "
-                                  "row, so the next mirror is tried.")
-                    return f"{host}: {exc.reason}", False
+                                  f"row. {moving_on}")
+                    return _tried(host, exc.reason, attempts), False
                 pause = BACKOFF_SECONDS * failures
                 self.log.warn(f"{host}: {exc.reason}. Trying again in {pause}s, from "
                               f"{human_bytes(_size(self.part))}.")
@@ -427,7 +435,8 @@ class ModelDownload:
                 self.log.say("   It was put together from more than one download, so it "
                              "is downloaded once more from the start.")
                 continue
-            return f"{host}: the file it serves does not have the expected SHA-256", True
+            return _tried(host, "the file it serves does not have the expected SHA-256",
+                          attempts), True
 
     def _fetch(self, url: str) -> None:
         size = self.entry.size_bytes
@@ -575,7 +584,8 @@ class ModelDownload:
             f"plus {human_bytes(DISK_HEADROOM_BYTES)} to spare. {human_bytes(free)} is free there.",
             "Free some space and run this again: what was already downloaded is\n"
             "kept. Or keep the model on another disk:\n"
-            "  START-HERE (your platform) --models-dir <folder on that disk>",
+            "  START-HERE (your platform) --models-dir <folder on that disk>\n"
+            "Later runs keep using that folder without the option.",
         )
 
     def _file_error(self, exc: OSError, path: Path) -> InstallError:
@@ -613,8 +623,7 @@ class ModelDownload:
             EXIT_MODEL_DOWNLOAD_FAILED,
             "The language model could not be downloaded.",
             f"{entry.file} ({human_bytes(entry.size_bytes)}) was tried from "
-            f"{len(problems)} mirror(s), {FAILURES_BEFORE_NEXT_MIRROR} times each:\n  {tried}\n"
-            + kept,
+            f"{len(problems)} mirror(s):\n  {tried}\n" + kept,
             "This is almost always the network. Check the connection, and the\n"
             "proxy or VPN if you use one (set HTTPS_PROXY before running), then\n"
             "run your START-HERE file again: the download resumes where it stopped.",

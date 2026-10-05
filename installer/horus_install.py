@@ -661,6 +661,21 @@ def download_model(log: Log, plan: model_manager.ModelPlan, infra: Path,
     log.say(f"  in {plan.models_dir}")
     return plan.ensure(log, token=_model_token(infra))
 
+def stop_llm_before_its_model_changes(log: Log, infra: Path,
+                                      plan: model_manager.ModelPlan) -> None:
+    if not plan.target.is_file() or model_manager.is_verified(plan.entry, plan.target):
+        return
+    log.say(f"  {plan.entry.file} was not verified yet, so llm is stopped while it is "
+            "checked and maybe replaced")
+    if _stream(compose(["stop", profiles.CPU_MODEL_SERVER]), log, infra, "stop llm") != 0:
+        log.warn("`docker compose stop llm` failed. If the model file cannot be replaced, "
+                 "stop Horus with --stop, then run this again.")
+
+def download_model_for_the_stack(log: Log, plan: model_manager.ModelPlan, infra: Path,
+                                 title: str = "Downloading the language model") -> Path:
+    stop_llm_before_its_model_changes(log, infra, plan)
+    return download_model(log, plan, infra, title)
+
 def ensure_installed_model(log: Log, infra: Path) -> None:
     if not cpu_overlay_active(infra):
         return
@@ -674,7 +689,7 @@ def ensure_installed_model(log: Log, infra: Path) -> None:
     if plan is None:
         log.info("src/infra/.env names no model file; the llm-model service fetches it")
         return
-    download_model(log, plan, infra, "Checking the language model")
+    download_model_for_the_stack(log, plan, infra, "Checking the language model")
 
 def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
     require_installed(infra)
@@ -840,7 +855,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="start without rebuilding images (faster re-run)")
     p.add_argument("--models-dir", metavar="PATH",
                    help="where the CPU profiles keep their language model "
-                        "(default: the models folder next to src)")
+                        "(default: the folder a previous install chose, else the "
+                        "models folder next to src)")
     p.add_argument("--download-model", action="store_true",
                    help="only download and check the language model of --profile "
                         "(default cpu-standard), then exit; Docker is not needed")
@@ -890,6 +906,7 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
         probes += [(name, dict(spec)) for name, spec in SIMULATIONS.items()]
 
     manifest = None
+    models_dir = None
     for label, probe in probes:
         if args.profile:
             if args.profile not in profiles.PROFILES:
@@ -904,7 +921,8 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
         plan = None
         if not profiles.get(name).runs_vllm:
             manifest = manifest or model_manager.load_manifest(model_manager.manifest_path(repo))
-            plan = model_manager.plan_for_profile(repo, name, args.models_dir, manifest)
+            models_dir = models_dir or models_dir_to_use(log, repo, args.models_dir)
+            plan = model_manager.plan_for_profile(repo, name, models_dir, manifest)
             if plan is not None:
                 env.update(plan.env(repo))
         log.say("")
@@ -942,11 +960,25 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
     log.say("  Dry run complete. No files were written and Docker was not contacted.")
     return EXIT_OK
 
-def plan_model(log: Log, repo: Path, profile: str, models_dir: str | None,
+def models_dir_to_use(log: Log, repo: Path, requested: str | None) -> str | Path | None:
+    if requested:
+        return requested
+    infra = infra_dir(repo)
+    configured = smoke.read_env(infra / ".env").get("HORUS_MODELS_DIR", "")
+    if not configured:
+        return None
+    folder = model_manager.models_dir_from_env(configured, infra)
+    if folder == model_manager.default_models_dir(repo).resolve():
+        return None
+    log.say(f"  Keeping the models folder chosen before: {folder}")
+    return folder
+
+def plan_model(log: Log, repo: Path, profile: str, requested_dir: str | None,
                probe: dict | None) -> model_manager.ModelPlan | None:
     if profiles.get(profile).runs_vllm:
         return None
-    plan = model_manager.plan_for_profile(repo, profile, models_dir)
+    plan = model_manager.plan_for_profile(repo, profile,
+                                          models_dir_to_use(log, repo, requested_dir))
     if plan is None:
         raise InstallError(
             EXIT_MODEL_MANIFEST_INVALID,
@@ -1041,7 +1073,7 @@ def _dispatch(log: Log, args) -> int:
     pull_and_build(
         log, infra, no_build=args.no_build, timeout=args.timeout,
         before_start=None if model_plan is None
-        else lambda: download_model(log, model_plan, infra),
+        else lambda: download_model_for_the_stack(log, model_plan, infra),
     )
 
     expect = [*CORE_SERVICES, profiles.model_server(name)]
