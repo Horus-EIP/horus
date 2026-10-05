@@ -226,6 +226,7 @@ def _create_chain_root(
     user_demand: str,
     conversation_id: int | None,
     db: Session,
+    skills_required: list[str] | None = None,
 ) -> "Task":
     """Create the Manager-owned root task that holds a multi-agent chain.
 
@@ -273,6 +274,7 @@ def _create_chain_root(
         history,
         [],  # planner output lives on subtasks, not root
         db,
+        skills_required=skills_required,
     )
     root = db.query(Task).filter(Task.id == root_id).first()
     if root is not None:
@@ -443,6 +445,10 @@ def _task_status_value(status) -> str:
     return v
 
 
+def _isoformat_or_none(moment) -> str | None:
+    return moment.isoformat() if moment else None
+
+
 @router.get(
     "/conversation/{conversation_id}/running",
     summary="List in-flight root tasks for a conversation",
@@ -518,6 +524,9 @@ def get_task_detail(task_id: str, db: Session = Depends(get_db)):
             "title": (c.query[:200] + "…") if len(c.query) > 200 else c.query,
             "status": _task_status_value(c.status),
             "assignedAgent": c.agent_id,
+            "skillsRequired": c.skills_required or [],
+            "createdAt": _isoformat_or_none(c.created_at),
+            "completedAt": _isoformat_or_none(c.completed_at),
         }
         for c in children
     ]
@@ -528,7 +537,9 @@ def get_task_detail(task_id: str, db: Session = Depends(get_db)):
         "agent_id": task.agent_id,
         "conversation_id": task.conversation_id,
         "query": task.query,
+        "skills_required": task.skills_required or [],
         "created_at": task.created_at.isoformat() if task.created_at else "",
+        "completed_at": _isoformat_or_none(task.completed_at),
         "result": result_str,
         "history": tr.history if tr else [],
         "future_actions": tr.future_actions if tr else [],
@@ -668,14 +679,22 @@ async def create_new_task(
         # Manager-owned root task. ``/tasks/{root.id}`` is the canonical entry
         # point users navigate to — they see the whole multi-agent
         # collaboration in one place, not N separate Task rows in their list.
-        root = _create_chain_root(task.demand, task.conversation_id, db)
+        root = _create_chain_root(
+            task.demand, task.conversation_id, db, skills_required=task.skills_required
+        )
         if root is None:
             logger.warning(
                 "Force-decompose: Manager missing, falling back to linked-list chain"
             )
         history = [{"role": "user", "message": task.demand}]
         task_id = insert_new_task(
-            task.conversation_id, agent_id, user_demand, history, actions_list, db
+            task.conversation_id,
+            agent_id,
+            user_demand,
+            history,
+            actions_list,
+            db,
+            skills_required=task.skills_required,
         )
         subtask_row = db.query(Task).filter(Task.id == task_id).first()
         if subtask_row is not None and root is not None:
@@ -883,10 +902,21 @@ async def create_new_task(
         # the legacy one-row shape (no root, the task IS the root).
         root_task = None
         if future_actions:
-            root_task = _create_chain_root(task.demand, task.conversation_id, db)
+            root_task = _create_chain_root(
+                task.demand,
+                task.conversation_id,
+                db,
+                skills_required=task.skills_required,
+            )
 
         task_id = insert_new_task(
-            task.conversation_id, agent_id, user_demand, history, future_actions, db
+            task.conversation_id,
+            agent_id,
+            user_demand,
+            history,
+            future_actions,
+            db,
+            skills_required=task.skills_required,
         )
 
         if not task_id:
@@ -991,7 +1021,13 @@ async def create_new_task(
     history = [{"role": "user", "message": task.demand}]
 
     task_id = insert_new_task(
-        task.conversation_id, agent_id, user_demand, history, actions_list, db
+        task.conversation_id,
+        agent_id,
+        user_demand,
+        history,
+        actions_list,
+        db,
+        skills_required=task.skills_required,
     )
     files_payload = _build_files_payload(task)
     decomp_payload = {
@@ -1071,7 +1107,12 @@ async def sharing_agent_result(
         )
 
     try:
-        validating_task_results(task_result.task_id, task_result.result, db)
+        validating_task_results(
+            task_result.task_id,
+            task_result.result,
+            db,
+            skill_used=task_result.skill_used,
+        )
         task = db.query(Task).filter(Task.id == task_result.task_id).first()
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")

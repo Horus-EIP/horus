@@ -68,9 +68,13 @@ export default function KnowledgeStorePage() {
     uploadProgress?.phase === 'uploading' ||
     uploadProgress?.phase === 'processing';
 
+  const latestDocumentsRequest = React.useRef(0);
+
   const getDocuments = useCallback(async () => {
+    const request = ++latestDocumentsRequest.current;
     const response = await fetch(ksUrl('/file'), { method: 'GET' });
     const data = await response.json();
+    if (request !== latestDocumentsRequest.current) return;
     if (response.ok && Array.isArray(data.documents)) {
       setDocuments(
         data.documents.map((d: Record<string, unknown>) => ({
@@ -102,8 +106,7 @@ export default function KnowledgeStorePage() {
     if (isMounted) {
       localStorage.setItem('knowledgeStoreDocuments', JSON.stringify(toUpload));
     }
-    getDocuments();
-  }, [toUpload, isMounted, getDocuments]);
+  }, [toUpload, isMounted]);
 
   const getFileExtension = (fileName: string) => {
     const parts = fileName?.split('.');

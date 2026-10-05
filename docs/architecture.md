@@ -394,8 +394,10 @@ erDiagram
         string status
         string query
         int order
+        json skills_required
         datetime created_at
         datetime updated_at
+        datetime completed_at
     }
 
     TASK_RESULTS {
@@ -1063,8 +1065,10 @@ erDiagram
         string status
         string query
         int order
+        json skills_required
         datetime created_at
         datetime updated_at
+        datetime completed_at
     }
 
     TASK_RESULTS {
@@ -1192,8 +1196,10 @@ A unit of work assigned to an agent within a conversation. Tasks support hierarc
 | `status` | Enum | Default `"pending"` | Lifecycle status: `pending`, `in_progress`, `completed`, `failed`, or `cancelled`. |
 | `query` | String | Not null | The instruction or question the agent must process. |
 | `order` | Integer | Nullable | Execution order hint for sibling tasks. |
+| `skills_required` | JSON | Nullable | Skills requested for the task, plus the skill the agent reports using when its result arrives. |
 | `created_at` | DateTime (tz) | Not null, server default `now()` | Task creation timestamp. |
 | `updated_at` | DateTime (tz) | Not null, server default `now()`, auto-update | Last status change timestamp. |
+| `completed_at` | DateTime (tz) | Nullable | Set once, when the status first becomes `completed`, `canceled` or `failed`. |
 
 **Relationships:**
 

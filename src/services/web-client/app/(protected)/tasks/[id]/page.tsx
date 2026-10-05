@@ -6,7 +6,9 @@ import { SubtaskTree } from '@/components/tasks/subtask-tree';
 import { MessageFlow } from '@/components/tasks/message-flow';
 import { DelegationChain } from '@/components/tasks/delegation-chain';
 import { CollaborationView } from '@/components/agents/collaboration-view';
+import { TaskFacts } from '@/components/tasks/task-facts';
 import type { TaskDetail, TaskStatus, Subtask, AgentMessage, DelegationStep } from '@/lib/tasks/types';
+import { taskStatusByAgentId } from '@/lib/tasks/agent-activity';
 import { chatApi, type TaskDetails } from '@/lib/chat/api';
 import { agentApi, type Agent } from '@/lib/agents/api';
 import { useNotification } from '@/contexts/notification-context';
@@ -48,7 +50,13 @@ function buildTaskDetail(data: TaskDetails): TaskDetail & { result?: string; que
     title: st.title,
     status: normalizeStatus(st.status),
     assignedAgent: st.assignedAgent,
+    skillsRequired: st.skillsRequired ?? [],
+    createdAt: st.createdAt ?? null,
+    completedAt: st.completedAt ?? null,
   }));
+  const skills = Array.from(
+    new Set([...(data.skills_required ?? []), ...subtasks.flatMap((s) => s.skillsRequired ?? [])])
+  );
   const agents = new Set<string>([data.agent_id]);
   subtasks.forEach((s) => agents.add(s.assignedAgent));
 
@@ -58,7 +66,7 @@ function buildTaskDetail(data: TaskDetails): TaskDetail & { result?: string; que
       ? subtasks.map((s) => ({
           agentName: s.assignedAgent,
           action: s.title,
-          timestamp: data.created_at,
+          timestamp: s.createdAt ?? data.created_at,
         }))
       : [
           {
@@ -72,7 +80,10 @@ function buildTaskDetail(data: TaskDetails): TaskDetail & { result?: string; que
     id: data.task_id,
     title: data.query.length > 120 ? `${data.query.slice(0, 120)}…` : data.query,
     status: normalizeStatus(data.status),
+    agentId: data.agent_id,
+    skills,
     createdAt: data.created_at,
+    completedAt: data.completed_at ?? null,
     collaboratingAgents: Array.from(agents),
     subtasks,
     messages,
@@ -219,6 +230,8 @@ export default function TaskDetailPage() {
         <span className="text-xs text-[var(--textSoft)]">Task ID: {task.id}</span>
       </div>
 
+      <TaskFacts skills={task.skills} createdAt={task.createdAt} completedAt={task.completedAt} />
+
       {/* Original request */}
       <div className="rounded-2xl border border-white/10 bg-[var(--bgSoft)]/70 p-4">
         <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--textSoft)]">
@@ -261,7 +274,12 @@ export default function TaskDetailPage() {
         </div>
       )}
 
-      <CollaborationView title="Collaborating agents" agents={collaborating} isLoading={false} />
+      <CollaborationView
+        title="Collaborating agents"
+        agents={collaborating}
+        isLoading={false}
+        taskStatusByAgentId={taskStatusByAgentId(task)}
+      />
 
       {task.subtasks.length > 0 || task.messages.length > 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

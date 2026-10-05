@@ -55,6 +55,9 @@ export interface TaskSubtaskRow {
   title: string;
   status: string;
   assignedAgent: string;
+  skillsRequired?: string[];
+  createdAt?: string | null;
+  completedAt?: string | null;
 }
 
 export interface TaskDetails {
@@ -63,7 +66,9 @@ export interface TaskDetails {
   agent_id: string;
   conversation_id: number;
   query: string;
+  skills_required?: string[];
   created_at: string;
+  completed_at?: string | null;
   result?: string;
   history?: unknown[];
   future_actions?: unknown[];
@@ -77,8 +82,10 @@ export interface TaskSummary {
   agent_id: string;
   conversation_id: number | null;
   query: string;
+  skills_required?: string[] | null;
   created_at: string;
   updated_at?: string;
+  completed_at?: string | null;
   parent_task_id?: string | null;
 }
 

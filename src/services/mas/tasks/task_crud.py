@@ -22,6 +22,7 @@ def insert_new_task(
     history: list,
     future_actions: list,
     db: Session,
+    skills_required: list[str] | None = None,
 ):
     """Create a running ``Task`` + its ``TaskResult`` shell and return the task id."""
     pretty_log(f"SCHEDULING NEW TASK FOR AGENT {agent_id}", "📅")
@@ -36,6 +37,7 @@ def insert_new_task(
             query=query,
             parent_task_id=None,
             order=0,
+            skills_required=list(skills_required or []),
         )
         db.add(task)
         db.commit()
@@ -58,7 +60,15 @@ def insert_new_task(
         return None
 
 
-def validating_task_results(task_id: str, task_result: str, db: Session):
+def record_skill_used(task: Task, skill_used: str | None) -> None:
+    known_skills = list(task.skills_required or [])
+    if skill_used and skill_used not in known_skills:
+        task.skills_required = [*known_skills, skill_used]
+
+
+def validating_task_results(
+    task_id: str, task_result: str, db: Session, skill_used: str | None = None
+):
     """Mark a task completed and persist its result + updated history."""
     pretty_log(f"VALIDATING RESULTS FOR TASK {task_id}", "📥")
     try:
@@ -71,6 +81,7 @@ def validating_task_results(task_id: str, task_result: str, db: Session):
         history = current_task_result.history or []
         history.append({"role": "assistant", "message": task_result})
         task.status = TaskStatus.COMPLETED
+        record_skill_used(task, skill_used)
         current_task_result.result_data = task_result
         current_task_result.history = history
         db.commit()

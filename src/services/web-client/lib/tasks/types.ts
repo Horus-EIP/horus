@@ -6,6 +6,9 @@ export interface Subtask {
   title: string;
   status: TaskStatus;
   assignedAgent: string;
+  skillsRequired?: string[];
+  createdAt?: string | null;
+  completedAt?: string | null;
   children?: Subtask[];
 }
 
@@ -28,7 +31,10 @@ export interface TaskDetail {
   id: string;
   title: string;
   status: TaskStatus;
+  agentId: string;
+  skills: string[];
   createdAt: string;
+  completedAt: string | null;
   subtasks: Subtask[];
   messages: AgentMessage[];
   delegationChain: DelegationStep[];

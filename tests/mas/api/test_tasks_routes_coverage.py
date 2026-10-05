@@ -63,6 +63,8 @@ def _task(
         order=order,
         created_at=created_at if created_at is not None else datetime(2024, 1, 1),
         result=result,
+        skills_required=None,
+        completed_at=None,
     )
 
 
