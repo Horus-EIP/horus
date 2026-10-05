@@ -125,7 +125,7 @@ cd scripts/perf && locust -f load-locust.py
 `docker-compose.yml` requests **`gpus: all`** for four services — **`mas`** (orchestrator LLM), **`agent`** (decision / RAG model), **`vllm`** (the AWQ 4B server) and **`knowledge_store`** (embeddings) — when the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) is installed (Docker Desktop on Windows: WSL2 + GPU drivers).
 
 - Keep **`LLM_FORCE_CPU=0`** (default) so MAS uses CUDA when visible.
-- If you have **no GPU**, use the CPU overlay `src/infra/docker-compose.cpu.yml` (the installer's `cpu-*` profiles do this for you). It drops the `gpus` requests and replaces vLLM with one llama-server, the `llm` service, that serves Qwen3-4B Q4_K_M to MAS and every agent; point both at it with `LLM_VLLM_URL=http://llm:8080/v1`. See [docs/operations.md](docs/operations.md#the-cpu-model-server) and [scripts/models/README.md](scripts/models/README.md).
+- If you have **no GPU**, use the CPU overlay `src/infra/docker-compose.cpu.yml` (the installer's `cpu-*` profiles do this for you). It drops the `gpus` requests and replaces vLLM with one llama-server, the `llm` service, that serves Qwen3-4B Q4_K_M to MAS and every agent; point both at it with `LLM_VLLM_URL=http://llm:8080/v1`. The model file is listed in [`models/manifest.json`](models/manifest.json); the installer downloads it into `models/`, and without the installer the one-shot `llm-model` service fetches it there. See [docs/operations.md](docs/operations.md#the-cpu-model-server) and [scripts/models/README.md](scripts/models/README.md).
 
 ## Documentation
 

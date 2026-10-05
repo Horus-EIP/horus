@@ -29,7 +29,7 @@ fi
 
 rm -f "$verified"
 if [ -f "$target" ]; then
-  say "checking the $LLM_GGUF_FILE already in the volume"
+  say "checking the $LLM_GGUF_FILE already in the models folder"
   if [ "$(size_of "$target")" = "$LLM_GGUF_SIZE" ] && [ "$(sha_of "$target")" = "$LLM_GGUF_SHA256" ]; then
     echo "$LLM_GGUF_SHA256" > "$verified"
     say "it has the expected SHA-256"

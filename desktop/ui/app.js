@@ -137,6 +137,30 @@ function renderServices(payload) {
   table.hidden = expected.length === 0;
 }
 
+function renderDownload(data) {
+  const box = document.getElementById("download");
+  const bar = document.getElementById("download-bar");
+  if (data.phase === "verified") {
+    box.hidden = true;
+    return;
+  }
+  const label = data.phase === "downloading" ? "Downloading the language model" : "";
+  document.getElementById("download-text").textContent =
+    label ? `${label}: ${data.text || ""}` : data.text || "";
+  if (data.phase === "downloading" && typeof data.percent === "number") {
+    bar.value = data.percent;
+  } else {
+    bar.removeAttribute("value");
+  }
+  bar.hidden = data.phase === "failed";
+  box.hidden = false;
+}
+
+function hideDownload() {
+  document.getElementById("download").hidden = true;
+  document.getElementById("download-text").textContent = "";
+}
+
 async function bootstrap() {
   show("locating");
   let info;
@@ -182,6 +206,7 @@ function beginPhase(phase) {
   const table = document.getElementById("services");
   table.hidden = true;
   table.querySelector("tbody").textContent = "";
+  hideDownload();
   for (const id of ["output", "stopping-output"]) {
     const pre = document.getElementById(id);
     if (pre) pre.textContent = "";
@@ -227,6 +252,9 @@ function handleInstallerEvent(data) {
       break;
     case "services":
       renderServices(data);
+      break;
+    case "download":
+      renderDownload(data);
       break;
     case "ready":
       stopTicker();

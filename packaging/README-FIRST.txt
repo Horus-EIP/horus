@@ -12,7 +12,8 @@ TO INSTALL
 It asks two or three questions, then downloads and starts everything.
 The first run takes 1.5 to 2 hours: it downloads and builds containers,
 then downloads an AI model. It is NOT frozen. Leave it running and it
-will finish. A download that fails is retried automatically.
+will finish. A download that fails is retried automatically, and an
+interrupted one resumes where it stopped when you run it again.
 
 ABOUT THE DISK SPACE
 150 GB is the peak while the images build. Afterwards Horus settles

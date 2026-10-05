@@ -401,9 +401,11 @@ def ps_row(service, health, state="running"):
 
 class FakeDocker:
 
-    def __init__(self, config=None, pulls=(), ups=((0, ""),), ps=((),), local_images=()):
+    def __init__(self, config=None, pulls=(), ups=((0, ""),), ps=((),), local_images=(),
+                 builds=()):
         self.config = config
         self.pulls = list(pulls)
+        self.builds = list(builds)
         self.ups = list(ups)
         self.ps = [list(rows) for rows in ps]
         self.local_images = set(local_images)
@@ -418,6 +420,8 @@ class FakeDocker:
         if cmd[2] == "pull":
             self.pull_envs.append(env)
             return self.pulls.pop(0) if self.pulls else 0
+        if cmd[2] == "build":
+            return self.builds.pop(0) if self.builds else 0
         code, line = self.ups.pop(0)
         if found is not None:
             for phrase in watch_for:
@@ -600,11 +604,13 @@ class DependencyAbort(FakeDockerCase):
         self.assertEqual(docker.history[second_up], "up -d")
         self.assertLess(docker.history.index("ps"), second_up)
 
-    def test_the_second_start_does_not_rebuild(self):
+    def test_the_images_build_once_before_the_first_start(self):
         docker = FakeDocker(config=compose_config({}), ups=[(1, ABORT), (0, "")])
         _out, raised = self.run_it(docker, no_build=False)
         self.assertIsNone(raised)
-        self.assertEqual(docker.started(), ["up -d --build", "up -d"])
+        self.assertEqual(docker.history.count("build"), 1)
+        self.assertLess(docker.history.index("build"), docker.history.index("up -d"))
+        self.assertEqual(docker.started(), ["up -d", "up -d"])
 
     def test_the_no_build_path_never_builds(self):
         docker = FakeDocker(config=compose_config({}), ups=[(1, ABORT), (0, "")])
@@ -642,6 +648,41 @@ class DependencyAbort(FakeDockerCase):
         self.assertIsNotNone(raised)
         self.assertIn("--start", raised.fix)
         self.assertIn("retried once", raised.fix)
+
+class ModelBeforeTheFirstStart(FakeDockerCase):
+
+    def test_the_model_downloads_after_the_images_and_before_the_first_start(self):
+        docker = FakeDocker(config=compose_config(PULLABLE))
+        _out, raised = self.run_it(
+            docker, no_build=False, before_start=lambda: docker.history.append("model"))
+        self.assertIsNone(raised)
+        self.assertEqual(docker.history,
+                         ["config", "pull postgres", "pull redis", "build", "model", "up -d"])
+
+    def test_without_a_build_the_model_still_comes_before_the_start(self):
+        docker = FakeDocker(config=compose_config(PULLABLE))
+        self.run_it(docker, no_build=True, before_start=lambda: docker.history.append("model"))
+        self.assertEqual(docker.history[-2:], ["model", "up -d"])
+
+    def test_a_failed_model_download_starts_nothing(self):
+        docker = FakeDocker(config=compose_config(PULLABLE))
+
+        def fail() -> None:
+            raise InstallError(44, "The language model could not be downloaded.")
+
+        _out, raised = self.run_it(docker, no_build=False, before_start=fail)
+        self.assertEqual(raised.code, 44)
+        self.assertEqual(docker.started(), [])
+
+    def test_a_failed_build_stops_before_the_model_and_the_start(self):
+        docker = FakeDocker(config=compose_config(PULLABLE), builds=[1])
+        steps = []
+        _out, raised = self.run_it(docker, no_build=False,
+                                   before_start=lambda: steps.append("model"))
+        self.assertEqual(raised.code, EXIT_COMPOSE_UP_FAILED)
+        self.assertIn("did not build", raised.headline)
+        self.assertEqual(steps, [])
+        self.assertEqual(docker.started(), [])
 
 class FullInstallPassesTheTimeoutOn(unittest.TestCase):
 

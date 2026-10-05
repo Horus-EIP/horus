@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import consent  # noqa: E402
 import hardware  # noqa: E402
+import model_manager  # noqa: E402
 import preflight  # noqa: E402
 import profiles  # noqa: E402
 import smoke  # noqa: E402
@@ -27,6 +28,7 @@ from common import (  # noqa: E402
     EXIT_ENV_WRITE_FAILED,
     EXIT_HEALTH_TIMEOUT,
     EXIT_INTERRUPTED,
+    EXIT_MODEL_MANIFEST_INVALID,
     EXIT_NOT_INSTALLED,
     EXIT_OK,
     EXIT_PROFILE_UNKNOWN,
@@ -456,19 +458,38 @@ def up_waiting_out_a_dependency_abort(log: Log, infra: Path, up: list[str],
             log.ok("Started on the second attempt.")
     return up, code
 
+def build_images(log: Log, infra: Path) -> None:
+    log.step("Building the images")
+    code = _stream(compose(["build"]), log, infra, "build")
+    if code != 0:
+        raise InstallError(
+            EXIT_COMPOSE_UP_FAILED,
+            "The images did not build.",
+            f"`docker compose build` exited {code}. The lines above show what "
+            "Docker reported; the full output is in the log.",
+            "Common causes:\n"
+            "  - out of disk space part-way through   ->  docker system df\n"
+            "  - a package download that timed out    ->  just run this again,\n"
+            "    it reuses every layer that already built\n"
+            f"Full log: {LOG_PATH}",
+        )
+
 def pull_and_build(log: Log, infra: Path, no_build: bool = False,
-                   timeout: int = 1800) -> None:
+                   timeout: int = 1800, before_start=None) -> None:
     log.step("Downloading container images")
     log.say(f"  This is the long part. A first install takes {FIRST_INSTALL_TIME}:")
     log.say("  the images download one at a time, the containers build, then the")
-    log.say("  language models download in the background. It is not frozen.")
+    log.say("  language model downloads. It is not frozen.")
     log.say("")
 
     pull_images(log, infra)
+    if not no_build:
+        build_images(log, infra)
+    if before_start is not None:
+        before_start()
 
-    log.step("Building and starting the stack")
-    up, code = up_waiting_out_a_dependency_abort(
-        log, infra, ["up", "-d"] + ([] if no_build else ["--build"]), timeout)
+    log.step("Starting the stack")
+    up, code = up_waiting_out_a_dependency_abort(log, infra, ["up", "-d"], timeout)
     if code != 0:
         raise InstallError(
             EXIT_COMPOSE_UP_FAILED,
@@ -628,9 +649,37 @@ def _require_docker(log: Log) -> None:
     preflight.check_docker(log)
     preflight.check_compose(log)
 
+def _model_token(infra: Path) -> str | None:
+    return os.environ.get("HF_TOKEN") or smoke.read_env(infra / ".env").get("HF_TOKEN") or None
+
+def download_model(log: Log, plan: model_manager.ModelPlan, infra: Path,
+                   title: str = "Downloading the language model") -> Path:
+    entry = plan.entry
+    log.step(title)
+    log.say(f"  {entry.file}, {human_bytes(entry.size_bytes)}"
+            + (f" ({entry.id} {entry.version})" if entry.version else ""))
+    log.say(f"  in {plan.models_dir}")
+    return plan.ensure(log, token=_model_token(infra))
+
+def ensure_installed_model(log: Log, infra: Path) -> None:
+    if not cpu_overlay_active(infra):
+        return
+    values = smoke.read_env(infra / ".env")
+    try:
+        manifest = model_manager.load_manifest(model_manager.manifest_path(infra.parent.parent))
+    except InstallError as exc:
+        log.warn(f"{exc.headline} Using the model named in src/infra/.env.")
+        manifest = None
+    plan = model_manager.plan_from_env(values, infra, manifest)
+    if plan is None:
+        log.info("src/infra/.env names no model file; the llm-model service fetches it")
+        return
+    download_model(log, plan, infra, "Checking the language model")
+
 def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
     require_installed(infra)
     _require_docker(log)
+    ensure_installed_model(log, infra)
 
     expect = expected_services(infra)
     log.step("Starting Horus")
@@ -666,6 +715,7 @@ def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
 def do_restart(log: Log, infra: Path, timeout: int) -> int:
     require_installed(infra)
     _require_docker(log)
+    ensure_installed_model(log, infra)
 
     log.step("Restarting Horus")
     code = _stream(compose(["restart"]), log, infra, "restart")
@@ -710,10 +760,12 @@ def do_uninstall(log: Log, infra: Path, assume_yes: bool) -> int:
     log.say(red("    - every document you uploaded or ingested"))
     log.say(red("    - the vector index built from them"))
     log.say(red("    - all accounts, conversations and task history"))
-    log.say(red("    - the downloaded model weights (many GB, re-downloaded next time)"))
+    log.say(red("    - the model weights the GPU server downloaded (many GB,"))
+    log.say(red("      downloaded again next time)"))
     log.say("")
     log.say("  Your own files on disk are NOT touched: the corpus folder was")
-    log.say("  mounted read-only and is never written to.")
+    log.say("  mounted read-only and is never written to. The CPU language model")
+    log.say("  stays in the models folder; delete that folder to free its space.")
     log.say("")
 
     if not assume_yes:
@@ -759,6 +811,7 @@ def build_parser() -> argparse.ArgumentParser:
                "  horus_install.py --start               start an installed stack\n"
                "  horus_install.py --restart             restart it in place\n"
                "  horus_install.py --stop                stop the stack, keep data\n"
+               "  horus_install.py --download-model      fetch the CPU model only\n"
                "  horus_install.py --uninstall           remove everything, DELETES DATA\n",
     )
     p.add_argument("--version", action="version", version=f"Horus beta installer {VERSION}")
@@ -785,6 +838,12 @@ def build_parser() -> argparse.ArgumentParser:
                         "secret (signs everyone out). A backup is always kept.")
     p.add_argument("--no-build", action="store_true",
                    help="start without rebuilding images (faster re-run)")
+    p.add_argument("--models-dir", metavar="PATH",
+                   help="where the CPU profiles keep their language model "
+                        "(default: the models folder next to src)")
+    p.add_argument("--download-model", action="store_true",
+                   help="only download and check the language model of --profile "
+                        "(default cpu-standard), then exit; Docker is not needed")
     p.add_argument("--skip-smoke", action="store_true", help="do not run the smoke test")
     p.add_argument("--admin-profile", action="store_true",
                    help="also start pgadmin and redisinsight (Compose profile 'admin')")
@@ -830,6 +889,7 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
         probes = [("this machine", hardware.probe(log, allow_docker_gpu_test=False))]
         probes += [(name, dict(spec)) for name, spec in SIMULATIONS.items()]
 
+    manifest = None
     for label, probe in probes:
         if args.profile:
             if args.profile not in profiles.PROFILES:
@@ -841,6 +901,12 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
             name, reasons = profiles.select_profile(probe)
 
         env = profiles.env_for(name, probe)
+        plan = None
+        if not profiles.get(name).runs_vllm:
+            manifest = manifest or model_manager.load_manifest(model_manager.manifest_path(repo))
+            plan = model_manager.plan_for_profile(repo, name, args.models_dir, manifest)
+            if plan is not None:
+                env.update(plan.env(repo))
         log.say("")
         log.say(rule(label))
         osi = probe.get("os") or {}
@@ -860,6 +926,12 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
         log.say(f"  profile  : {bold(name)}")
         for reason in reasons:
             log.say(f"             - {reason}")
+        if plan is not None:
+            log.say(f"  model    : {plan.entry.id}, {human_bytes(plan.entry.size_bytes)}, "
+                    f"into {plan.models_dir}")
+            warning = model_manager.ram_warning(plan.entry, probe, name)
+            if warning:
+                log.say(f"             ! {warning}")
         log.say("")
         log.say("  would write to src/infra/.env:")
         for key in sorted(env):
@@ -868,6 +940,36 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
     log.say("")
     log.say(rule())
     log.say("  Dry run complete. No files were written and Docker was not contacted.")
+    return EXIT_OK
+
+def plan_model(log: Log, repo: Path, profile: str, models_dir: str | None,
+               probe: dict | None) -> model_manager.ModelPlan | None:
+    if profiles.get(profile).runs_vllm:
+        return None
+    plan = model_manager.plan_for_profile(repo, profile, models_dir)
+    if plan is None:
+        raise InstallError(
+            EXIT_MODEL_MANIFEST_INVALID,
+            f"models/manifest.json names no language model for the {profile} profile.",
+            f"llama-server needs one, and {model_manager.manifest_path(repo)} has no\n"
+            f"entry under \"defaults\" for {profile}.",
+            "Extract the ZIP again; the manifest ships with Horus.",
+        )
+    warning = model_manager.ram_warning(plan.entry, probe, profile)
+    if warning:
+        log.warn(warning)
+    return plan
+
+def do_download_model(log: Log, args, repo: Path) -> int:
+    name = args.profile or "cpu-standard"
+    plan = plan_model(log, repo, name, args.models_dir, None)
+    if plan is None:
+        log.ok(f"The {name} profile has no model file to download: vLLM fetches its own "
+               "model when it first starts.")
+        return EXIT_OK
+    path = download_model(log, plan, infra_dir(repo))
+    log.say("")
+    log.ok(f"{path} is ready for llama-server")
     return EXIT_OK
 
 def _dispatch(log: Log, args) -> int:
@@ -890,6 +992,8 @@ def _dispatch(log: Log, args) -> int:
         return do_uninstall(log, infra, args.yes)
     if args.dry_run:
         return do_dry_run(log, args, repo)
+    if args.download_model:
+        return do_download_model(log, args, repo)
 
     preflight.run_all(log, infra, want_admin_profile=args.admin_profile,
                       skip_disk_check=args.skip_disk_check)
@@ -921,6 +1025,9 @@ def _dispatch(log: Log, args) -> int:
         warn_cpu_expectations(log)
 
     env = profiles.env_for(name, probe)
+    model_plan = plan_model(log, repo, name, args.models_dir, probe)
+    if model_plan is not None:
+        env.update(model_plan.env(repo))
     env["HORUS_CORPUS_DIR"] = choice["corpus_dir"]
     env["CORPUS_SCAN_TOKEN"] = corpus_scan_token(log, infra)
     env["HORUS_VERSION"] = VERSION
@@ -931,7 +1038,11 @@ def _dispatch(log: Log, args) -> int:
     log.step("Writing configuration")
     apply_env(log, infra, env, reset=args.reset_env)
 
-    pull_and_build(log, infra, no_build=args.no_build, timeout=args.timeout)
+    pull_and_build(
+        log, infra, no_build=args.no_build, timeout=args.timeout,
+        before_start=None if model_plan is None
+        else lambda: download_model(log, model_plan, infra),
+    )
 
     expect = [*CORE_SERVICES, profiles.model_server(name)]
     wait_for_health(log, infra, expect, timeout=args.timeout)

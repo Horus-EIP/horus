@@ -31,6 +31,7 @@ SOURCE_INCLUDE = [
     "src/services/knowledge-store",
     "src/infra",
     "demo_assets",
+    "models",
 ]
 
 SOURCE_FILES = [
@@ -50,6 +51,7 @@ PRUNE_GLOBS = [
     ".env", ".env.bak.*", "*.pyc", "*.pyo", "*.log", "*.tmp", "*.swp",
     ".DS_Store", "Thumbs.db", "*.sqlite3", "*.db",
     "install-log.txt", "horus-profile.json",
+    "*.gguf", "*.part", "*.gguf.sha256",
 ]
 
 PRUNE_PATHS = (

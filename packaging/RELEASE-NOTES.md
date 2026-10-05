@@ -45,9 +45,16 @@ Would rather not bypass an OS warning? Fair. Use the browser at
   took **14 minutes** and returned a wrong answer. With a GPU the same question
   answers in about 4 seconds. If you have no NVIDIA GPU, the stack will install
   and every part of it works except the model itself.
-- The first install downloads about 25 GB (CPU) or 26.5 GB (GPU) of
-  container images and model weights, and needs 150 GB / 125 GB of free
-  disk while it builds, settling to 130 GB / 110 GB afterwards.
+- The first install downloads about 26.5 GB of container images and model
+  weights with an NVIDIA GPU (measured). On the CPU it is about 16.6 GB,
+  derived from the 25 GB we measured before the CPU model changed: the two
+  models the containers downloaded (11.2 GB) are gone, and a 2.5 GB model
+  file and a 0.3 GB model server came in. The install needs 150 GB / 125 GB
+  of free disk while it builds, settling to 130 GB / 110 GB afterwards
+  (measured before that change).
+- On the CPU the installer downloads the language model itself, shows its
+  size, speed and time left, resumes an interrupted download and checks its
+  SHA-256. It is kept in `horus/models`, also after `--uninstall`.
 - Your documents are mounted **read-only**. Horus cannot modify anything you own.
 
 ## If something goes wrong

@@ -488,8 +488,9 @@ MODEL_SERVER_HINTS = {
     profiles.CPU_MODEL_SERVER: (
         "On a CPU profile llm is llama-server. If its log shows it was killed\n"
         "for memory, raise LLM_SERVER_MEM_LIMIT in src/infra/.env. If it never\n"
-        "started, the model download did not finish:\n"
-        "  docker compose logs llm-model"
+        "started, its model file is missing or damaged: START-HERE (your\n"
+        "platform) --start downloads and checks it again. Then read:\n"
+        "  docker compose logs llm-model llm"
     ),
 }
 

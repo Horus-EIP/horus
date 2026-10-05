@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -10,10 +11,12 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+REPO = Path(__file__).resolve().parents[2]
 
 import common  # noqa: E402
 import hardware  # noqa: E402
 import horus_install  # noqa: E402
+import model_manager  # noqa: E402
 import profiles  # noqa: E402
 from common import Log  # noqa: E402
 
@@ -360,6 +363,8 @@ class InstallWritesTheTuning(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.repo = Path(self._tmp.name)
         (self.repo / "src" / "infra").mkdir(parents=True)
+        (self.repo / "models").mkdir()
+        shutil.copy(REPO / "models" / "manifest.json", self.repo / "models" / "manifest.json")
         self.log = Log(self.repo / "install-log.txt")
         self.addCleanup(self.log.close, 0)
 
@@ -379,7 +384,8 @@ class InstallWritesTheTuning(unittest.TestCase):
             probe_machine.return_value = probe
             write_json = patch(mock.patch.object(horus_install.hardware, "write_profile_json"))
             apply_env = patch(mock.patch.object(horus_install, "apply_env"))
-            patch(mock.patch.object(horus_install, "pull_and_build"))
+            self.pull_and_build = patch(mock.patch.object(horus_install, "pull_and_build"))
+            self.download_model = patch(mock.patch.object(horus_install, "download_model"))
             self.wait_for_health = patch(mock.patch.object(horus_install, "wait_for_health"))
             patch(mock.patch.object(horus_install, "_success"))
             patch(contextlib.redirect_stdout(io.StringIO()))
@@ -412,6 +418,36 @@ class InstallWritesTheTuning(unittest.TestCase):
         expect = self.wait_for_health.call_args.args[2]
         self.assertIn("vllm", expect)
         self.assertNotIn("llm", expect)
+
+    def test_a_cpu_install_downloads_its_model_just_before_the_first_start(self):
+        env, _ = self.install("cpu-standard", "nvidia-16gb")
+        self.assertEqual(env["HORUS_MODELS_DIR"], "../../models")
+        self.assertEqual(env["LLM_GGUF_FILE"], "qwen3-4b-instruct-2507-Q4_K_M.gguf")
+        self.assertEqual(env["LLM_GGUF_SIZE"], str(profiles.GGUF_BYTES))
+        before_start = self.pull_and_build.call_args.kwargs["before_start"]
+        self.download_model.assert_not_called()
+        with mock.patch.object(horus_install, "download_model") as download_model:
+            before_start()
+        plan = download_model.call_args.args[1]
+        self.assertEqual(plan.entry.id, "qwen3-4b-q4km")
+        self.assertEqual(plan.models_dir, self.repo / "models")
+
+    def test_a_gpu_install_has_no_model_file_to_download(self):
+        env, _ = self.install("gpu-8g", "nvidia-8gb")
+        self.assertFalse(set(model_manager.MODEL_ENV_KEYS) & set(env))
+        self.assertIsNone(self.pull_and_build.call_args.kwargs["before_start"])
+
+    def test_a_small_machine_is_warned_that_the_model_is_sized_for_sixteen_gigabytes(self):
+        self.install("cpu-lean", "linux-cpu-8gb")
+        self.log.close(0)
+        text = (self.repo / "install-log.txt").read_text(encoding="utf-8")
+        self.assertIn("sized for 16 GB", text)
+
+    def test_the_profile_json_records_the_model_file_it_installs(self):
+        _, written = self.install("cpu-standard", "nvidia-16gb")
+        expected = model_manager.load_manifest(REPO / "models" / "manifest.json")
+        self.assertEqual(written.args[3]["LLM_GGUF_SHA256"],
+                         expected.default_for("cpu-standard").sha256)
 
     def test_the_profile_json_receives_the_probe_the_threads_came_from(self):
         _, written = self.install("cpu-lean", "linux-cpu-8gb")

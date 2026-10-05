@@ -115,7 +115,7 @@ Every application service declares a healthcheck, so wait until `mas`, `agent`, 
 | `web-client` | `GET /api/health` on :3000 (wget) | 2 min |
 | `llm` (CPU only) | `GET /health` on :8080 inside `horus-net` (curl) | 10 min (model load) |
 
-A service is only marked `unhealthy` after that start window, so `(health: starting)` during a first install is normal. The agent starts only once `mas` and `knowledge_store` are healthy, and `mas` only once `postgres`, `redis` and `rabbitmq` are. With the CPU overlay, `mas` and `agent` also wait for `llm`, which starts after the one-shot `llm-model` has downloaded and checked the 2.5 GB model (`docker compose logs llm-model` shows the download). On the CPU, MAS and the agent load no model of their own, so their start windows are mostly unused.
+A service is only marked `unhealthy` after that start window, so `(health: starting)` during a first install is normal. The agent starts only once `mas` and `knowledge_store` are healthy, and `mas` only once `postgres`, `redis` and `rabbitmq` are. With the CPU overlay, `mas` and `agent` also wait for `llm`, which starts after the one-shot `llm-model` has found the 2.5 GB model in `models/` (the installer puts it there; without the installer `llm-model` downloads and checks it, and `docker compose logs llm-model` shows the download). To fetch it with a progress display first, run `python installer/horus_install.py --download-model` from the top of the repository. On the CPU, MAS and the agent load no model of their own, so their start windows are mostly unused.
 
 **PostgreSQL** (adjust user and database to match `.env`):
 

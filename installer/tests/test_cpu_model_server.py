@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import io
 import os
 import re
 import shutil
@@ -17,11 +19,14 @@ except ImportError:
 
 REPO = Path(__file__).resolve().parent.parent.parent
 INFRA = REPO / "src" / "infra"
+MANIFEST = REPO / "models" / "manifest.json"
 FETCH_SCRIPT = INFRA / "llm" / "fetch-model.sh"
 CONVERT_SCRIPT = REPO / "scripts" / "models" / "convert-qwen3-4b-gguf.sh"
 MODELS_README = REPO / "scripts" / "models" / "README.md"
 sys.path.insert(0, str(REPO / "installer"))
+import model_manager  # noqa: E402
 import profiles  # noqa: E402
+from common import Log  # noqa: E402
 
 needs_yaml = unittest.skipUnless(yaml is not None, "needs PyYAML to read the compose file")
 needs_shell = unittest.skipUnless(
@@ -138,16 +143,52 @@ class CpuOverlayRunsLlamaServer(unittest.TestCase):
         self.assertEqual(depends(self.base["services"]["agent"])["vllm"]["condition"],
                          "service_healthy")
 
-    def test_the_model_is_fetched_into_the_volume_before_the_server_starts(self):
+    def models_mount(self, spec: dict, env: dict[str, str]) -> tuple[str, str]:
+        mounts = [interpolate(m, env) for m in spec["volumes"] if "/models" in m]
+        self.assertEqual(len(mounts), 1, spec["volumes"])
+        source, _, rest = mounts[0].rpartition(":/models")
+        return source, "/models" + rest
+
+    def test_the_server_reads_the_host_models_folder_read_only(self):
+        self.assertEqual(self.models_mount(self.llm, {}), ("../../models", "/models:ro"))
+        self.assertEqual((INFRA / "../../models").resolve(), MANIFEST.parent.resolve())
+        self.assertNotIn("volumes", self.overlay)
+
+    def test_the_fallback_fetches_into_the_same_folder_before_the_server_starts(self):
         self.assertEqual(depends(self.llm)["llm-model"]["condition"],
                          "service_completed_successfully")
-        self.assertIn("llm_models:/models:ro", self.llm["volumes"])
-        self.assertIn("llm_models:/models", self.fetch["volumes"])
-        self.assertIn("llm_models", self.overlay["volumes"])
+        for env in ({}, {"HORUS_MODELS_DIR": "D:/horus-models"}):
+            with self.subTest(env=env):
+                source, target = self.models_mount(self.fetch, env)
+                self.assertEqual(target, "/models")
+                self.assertEqual(source, self.models_mount(self.llm, env)[0])
+                self.assertEqual(source, env.get("HORUS_MODELS_DIR", "../../models"))
 
     def test_the_fetched_file_is_the_one_the_server_loads(self):
-        fetched = environment(self.fetch)["LLM_GGUF_FILE"]
-        self.assertEqual(self.flags()["--model"], f"/models/{fetched}")
+        for env in ({}, {"LLM_GGUF_FILE": "own.gguf"}):
+            with self.subTest(env=env):
+                fetched = interpolate(environment(self.fetch)["LLM_GGUF_FILE"], env)
+                self.assertEqual(self.flags({**self.cpu_env, **env})["--model"],
+                                 f"/models/{fetched}")
+
+    def test_the_fallback_defaults_are_the_manifest_cpu_model(self):
+        manifest = model_manager.load_manifest(MANIFEST)
+        entry = manifest.default_for("cpu-standard")
+        defaults = {key: interpolate(value, {}) for key, value in environment(self.fetch).items()}
+        self.assertEqual(defaults["LLM_GGUF_FILE"], entry.file)
+        self.assertEqual(defaults["LLM_GGUF_URL"], manifest.mirrors_for(entry)[0])
+        self.assertEqual(defaults["LLM_GGUF_SHA256"], entry.sha256)
+        self.assertEqual(int(defaults["LLM_GGUF_SIZE"]), entry.size_bytes)
+        self.assertEqual(self.flags({})["--model"], f"/models/{entry.file}")
+
+    def test_the_installer_values_reach_the_fallback_and_the_server(self):
+        plan = model_manager.plan_for_profile(REPO, "cpu-standard")
+        written = plan.env(REPO)
+        fetch_env = {key: interpolate(value, written)
+                     for key, value in environment(self.fetch).items()}
+        for key in ("LLM_GGUF_FILE", "LLM_GGUF_URL", "LLM_GGUF_SHA256", "LLM_GGUF_SIZE"):
+            self.assertEqual(fetch_env[key], written[key])
+        self.assertEqual(self.models_mount(self.llm, written)[0], written["HORUS_MODELS_DIR"])
 
     def test_the_fetch_service_has_no_server_healthcheck(self):
         self.assertIs(self.fetch["healthcheck"].get("disable"), True)
@@ -274,6 +315,21 @@ class FetchScript(unittest.TestCase):
         result = self.fetch()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.target.read_bytes(), self.payload)
+
+    def test_a_file_the_installer_verified_is_used_without_a_download(self):
+        entry = model_manager.ModelEntry(
+            id="m", version="1", file="model.gguf", size_bytes=len(self.payload),
+            sha256=self.sha, min_ram_gb=0, profiles=(), mirrors=())
+        self.target.write_bytes(self.payload)
+        with tempfile.TemporaryDirectory() as name:
+            log = Log(Path(name) / "install-log.txt")
+            with contextlib.redirect_stdout(io.StringIO()):
+                model_manager.ModelDownload(log, entry, self.models, []).run()
+            log.close(0)
+        missing = (Path(self._tmp.name) / "gone.gguf").as_uri()
+        result = self.fetch(url=missing)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("verified before", result.stdout)
 
     def test_a_download_that_keeps_failing_stops_after_its_attempts(self):
         missing = (Path(self._tmp.name) / "gone.gguf").as_uri()

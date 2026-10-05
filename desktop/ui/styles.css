@@ -182,6 +182,19 @@ button.primary {
   font-weight: 560;
 }
 
+.download { margin: 4px 0 14px; max-width: 62ch; }
+
+.download .detail {
+  margin-bottom: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.download progress {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--accent);
+}
+
 table.services {
   border-collapse: collapse;
   margin: 4px 0 14px;

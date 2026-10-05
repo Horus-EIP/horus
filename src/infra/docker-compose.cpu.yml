@@ -38,7 +38,7 @@ services:
     container_name: llm_model
     entrypoint: ["/bin/sh", "/opt/horus/fetch-model.sh"]
     environment:
-      - LLM_GGUF_FILE=qwen3-4b-instruct-2507-Q4_K_M.gguf
+      - LLM_GGUF_FILE=${LLM_GGUF_FILE:-qwen3-4b-instruct-2507-Q4_K_M.gguf}
       - LLM_GGUF_URL=${LLM_GGUF_URL:-https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/a06e946bb6b655725eafa393f4a9745d460374c9/Qwen3-4B-Instruct-2507-Q4_K_M.gguf}
       - LLM_GGUF_SHA256=${LLM_GGUF_SHA256:-3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597}
       - LLM_GGUF_SIZE=${LLM_GGUF_SIZE:-2497281120}
@@ -47,7 +47,7 @@ services:
       disable: true
     volumes:
       - ./llm/fetch-model.sh:/opt/horus/fetch-model.sh:ro
-      - llm_models:/models
+      - ${HORUS_MODELS_DIR:-../../models}:/models
     networks:
       - horus-net
 
@@ -59,7 +59,7 @@ services:
     memswap_limit: ${LLM_SERVER_MEMSWAP_LIMIT:-${LLM_SERVER_MEM_LIMIT:-6g}}
     command:
       - --model
-      - /models/qwen3-4b-instruct-2507-Q4_K_M.gguf
+      - /models/${LLM_GGUF_FILE:-qwen3-4b-instruct-2507-Q4_K_M.gguf}
       - --alias
       - ${LLM_VLLM_MODEL:-qwen3-4b}
       - --host
@@ -89,7 +89,4 @@ services:
     networks:
       - horus-net
     volumes:
-      - llm_models:/models:ro
-
-volumes:
-  llm_models: {}
+      - ${HORUS_MODELS_DIR:-../../models}:/models:ro

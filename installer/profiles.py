@@ -4,6 +4,7 @@ import sys
 from dataclasses import dataclass, field
 
 from common import EXIT_PROFILE_UNKNOWN, InstallError
+from model_manager import MODEL_ENV_KEYS
 
 MEASURED = "measured"
 
@@ -514,7 +515,8 @@ _add(Profile(
 ))
 
 MANAGED_KEYS: tuple[str, ...] = tuple(sorted(
-    {"COMPOSE_FILE", *THREAD_KEYS} | {k for p in PROFILES.values() for k in p.settings}
+    {"COMPOSE_FILE", *THREAD_KEYS, *MODEL_ENV_KEYS}
+    | {k for p in PROFILES.values() for k in p.settings}
 ))
 
 PROFILE_ORDER: tuple[str, ...] = (

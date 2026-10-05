@@ -289,6 +289,18 @@ class BundleShipsTheVersion(unittest.TestCase):
             self.assertIn("installer/common.py", names)
             self.assertEqual(zf.read("VERSION").decode("utf-8").strip(), self.version)
 
+    def test_the_model_manifest_ships_where_the_installer_reads_it(self):
+        with zipfile.ZipFile(self.zip_path) as zf:
+            names = set(zf.namelist())
+        self.assertIn("horus/models/manifest.json", names)
+        self.assertIn("installer/model_manager.py", names)
+
+    def test_no_downloaded_model_file_ships(self):
+        with zipfile.ZipFile(self.zip_path) as zf:
+            names = zf.namelist()
+        for suffix in (".gguf", ".part", ".gguf.sha256"):
+            self.assertEqual([n for n in names if n.endswith(suffix)], [], suffix)
+
     def test_the_unpacked_installer_reports_the_shipped_version(self):
         dest = self.tmp / "unpacked"
         with zipfile.ZipFile(self.zip_path) as zf:
@@ -301,6 +313,14 @@ class BundleShipsTheVersion(unittest.TestCase):
             capture_output=True, text=True, cwd=str(dest / "installer"), timeout=60,
         )
         self.assertEqual(proc.stdout.strip(), self.version, proc.stderr)
+
+class ModelFilesStayOutOfTheBundle(unittest.TestCase):
+    def test_downloaded_and_partial_models_are_pruned(self):
+        for name in ("models/qwen3.gguf", "models/qwen3.gguf.part",
+                     "models/qwen3.gguf.sha256"):
+            with self.subTest(name):
+                self.assertTrue(build_bundle.pruned(Path(name)))
+        self.assertFalse(build_bundle.pruned(Path("models/manifest.json")))
 
 @needs_yaml
 class ComposeReleaseVersion(unittest.TestCase):
