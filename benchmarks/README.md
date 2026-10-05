@@ -80,7 +80,7 @@ The report is rewritten after every question, so an interrupted run keeps what i
 | `git_commit` | Short commit of the checkout that ran the script. |
 | `mas_url`, `ks_url`, `event_timeout_s`, `submit_timeout_s`, `top_k` | Run settings. |
 | `warmup` | The warmup question that was asked before the scored ones, or `null`. |
-| `server_settings` | `LLM_BACKEND`, `LLM_VLLM_MODEL`, `KNOWLEDGE_STORE_N_RESULTS`, `AGENT_MAX_NEW_TOKENS`, `AGENT_STREAM_TOKENS`, `AGENT_RESPONSE_CACHE`, `LLM_TORCH_INTRAOP_THREADS`, `AGENT_TORCH_INTRAOP_THREADS`, each labelled with where the value came from (the runner's environment, or `src/infra/.env` of this checkout). Turn the response cache off for timing runs. |
+| `server_settings` | `LLM_BACKEND`, `LLM_VLLM_MODEL`, `KNOWLEDGE_STORE_N_RESULTS`, `AGENT_MAX_NEW_TOKENS`, `AGENT_MAX_CONTEXT_CHARS`, `AGENT_STREAM_TOKENS`, `AGENT_RESPONSE_CACHE`, `LLM_TORCH_INTRAOP_THREADS`, `AGENT_TORCH_INTRAOP_THREADS`, each labelled with where the value came from (the runner's environment, or `src/infra/.env` of this checkout). Turn the response cache off for timing runs. |
 | `observed_models`, `observed_devices` | What the agent reported in its `reasoning.start` steps. |
 
 ### `testset`

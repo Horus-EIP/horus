@@ -475,6 +475,16 @@ class TestSendTaskStepViaWebsockets:
         assert payload["metadata"] == {"k": "v"}
         assert payload["timestamp"] == "2026-01-01T00:00:00"
 
+    async def test_the_subtask_that_emitted_the_step_is_forwarded(self):
+        ws = _fake_ws()
+        ctf.active_connections["1"] = [ws]
+        await ctf.send_task_step_via_websockets(
+            "1", {"task_id": "root-1", "subtask_id": "step-2"}
+        )
+        payload = ws.send_json.await_args.args[0]
+        assert payload["task_id"] == "root-1"
+        assert payload["subtask_id"] == "step-2"
+
     async def test_defaults_timestamp_and_metadata(self):
         ws = _fake_ws()
         ctf.active_connections["1"] = [ws]

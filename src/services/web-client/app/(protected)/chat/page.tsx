@@ -15,6 +15,7 @@ import { Modal, Button, Group, Text, Textarea, TextInput } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { config } from '@/utils/config';
 import { chatApi, type Conversation, type TaskDetails } from '@/lib/chat/api';
+import { appendStreamChunk, type StreamPreviews } from '@/lib/chat/stream-preview';
 import { agentApi, type Agent } from '@/lib/agents/api';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { useNotification } from '@/contexts/notification-context';
@@ -81,7 +82,7 @@ function ChatPageContent() {
   // Live answer text accumulated from reasoning.delta frames (Phase 1 token
   // streaming), keyed by the (root) task_id. Rendered as a "typing" preview in
   // the thinking slot until the authoritative task_complete answer commits.
-  const [streamingByTaskId, setStreamingByTaskId] = useState<Record<string, string>>({});
+  const [streamingByTaskId, setStreamingByTaskId] = useState<StreamPreviews>({});
 
   const { user } = useAuth();
   const { error: notifyError, success: notifySuccess } = useNotification();
@@ -201,11 +202,12 @@ function ChatPageContent() {
             ? (message.metadata as Record<string, unknown>)
             : {};
         const chunk = typeof meta.chunk === 'string' ? meta.chunk : '';
+        const subtaskId =
+          typeof message.subtask_id === 'string' ? message.subtask_id : taskId;
         if (taskId && chunk) {
-          setStreamingByTaskId((prev) => ({
-            ...prev,
-            [taskId]: (prev[taskId] ?? '') + chunk,
-          }));
+          setStreamingByTaskId((prev) =>
+            appendStreamChunk(prev, taskId, subtaskId, chunk)
+          );
         }
         return;
       }
@@ -854,7 +856,7 @@ function ChatPageContent() {
               stepsByTaskId={stepsByTaskId}
               workingTaskId={workingTaskId}
               streamingText={
-                workingTaskId ? streamingByTaskId[workingTaskId] ?? '' : ''
+                workingTaskId ? streamingByTaskId[workingTaskId]?.text ?? '' : ''
               }
               emptyStateTitle={
                 conversationId ? undefined : 'No conversation selected'

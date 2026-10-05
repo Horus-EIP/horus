@@ -217,7 +217,31 @@ def _cpu_common() -> dict[str, Setting]:
             "wide margin: the code's own device-aware CPU default is 900s, and "
             "neither number has been timed on a CPU-only host.",
         ),
-        "KNOWLEDGE_STORE_N_RESULTS": _N_RESULTS,
+        "KNOWLEDGE_STORE_N_RESULTS": Setting(
+            "4", DERIVED,
+            "Each result is a whole document, joined best-ranked first, and "
+            "AGENT_MAX_CONTEXT_CHARS=6000 keeps only the first two or so of "
+            "them. Fetching 4 instead of 10 drops documents the model would "
+            "never see. The GPU profiles keep 10, where raising 4 to 10 "
+            "measurably stopped invented figures, so check answer quality on "
+            "the test set before trusting this value.",
+        ),
+        "AGENT_MAX_CONTEXT_CHARS": Setting(
+            "6000", DERIVED,
+            "Half the 12,000-character default: about 1,500 to 2,000 tokens of "
+            "retrieved text instead of 3,000 to 4,000. On a CPU the whole "
+            "prompt is read before the first word of the answer, so this "
+            "halves the retrieved part of that wait. The cut falls on the "
+            "lowest-ranked text. Not measured yet.",
+        ),
+        "AGENT_STREAM_TOKENS": Setting(
+            "1", DERIVED,
+            "Shows the answer in the chat while it is written, so a CPU answer "
+            "that takes minutes shows text long before it ends. The first 500 "
+            "characters are held back and checked for a self-correction "
+            "spiral before anything is shown. The chat's live preview has "
+            "unit tests but has not been watched in a browser on a CPU host.",
+        ),
     }
 
 PROFILES: dict[str, Profile] = {}

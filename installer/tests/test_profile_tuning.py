@@ -141,6 +141,42 @@ class MemoryCeilings(unittest.TestCase):
         for key in MEMORY_KEYS:
             self.assertIn(key, profiles.MANAGED_KEYS)
 
+class ShorterCpuPrompts(unittest.TestCase):
+    def test_cpu_profiles_fetch_four_documents(self):
+        for name in CPU_PROFILES:
+            with self.subTest(name):
+                self.assertEqual(profiles.env_for(name)["KNOWLEDGE_STORE_N_RESULTS"], "4")
+
+    def test_cpu_profiles_cap_the_retrieved_context_at_six_thousand_characters(self):
+        for name in CPU_PROFILES:
+            with self.subTest(name):
+                self.assertEqual(profiles.env_for(name)["AGENT_MAX_CONTEXT_CHARS"], "6000")
+
+    def test_cpu_profiles_stream_the_answer_while_it_is_written(self):
+        for name in CPU_PROFILES:
+            with self.subTest(name):
+                self.assertEqual(profiles.env_for(name)["AGENT_STREAM_TOKENS"], "1")
+
+    def test_gpu_profiles_keep_ten_documents_and_the_code_defaults(self):
+        for name in GPU_PROFILES:
+            with self.subTest(name):
+                env = profiles.env_for(name)
+                self.assertEqual(env["KNOWLEDGE_STORE_N_RESULTS"], "10")
+                self.assertNotIn("AGENT_MAX_CONTEXT_CHARS", env)
+                self.assertNotIn("AGENT_STREAM_TOKENS", env)
+
+    def test_the_shorter_prompt_settings_are_derived_until_the_test_set_runs(self):
+        for name in CPU_PROFILES:
+            provenance = profiles.provenance_for(name)
+            for key in ("KNOWLEDGE_STORE_N_RESULTS", "AGENT_MAX_CONTEXT_CHARS",
+                        "AGENT_STREAM_TOKENS"):
+                with self.subTest(f"{name} {key}"):
+                    self.assertEqual(provenance[key]["provenance"], profiles.DERIVED)
+
+    def test_a_gpu_reinstall_deactivates_the_cpu_prompt_settings(self):
+        for key in ("AGENT_MAX_CONTEXT_CHARS", "AGENT_STREAM_TOKENS"):
+            self.assertIn(key, profiles.MANAGED_KEYS)
+
 class DescribeShowsTheComputedSettings(unittest.TestCase):
     def test_describe_lists_thread_and_memory_settings_with_their_reasons(self):
         text = profiles.describe("cpu-standard", cpu_probe(8))

@@ -25,6 +25,8 @@ import os
 import threading
 import time as time_module
 import uuid
+from collections import deque
+from collections.abc import Callable
 
 import pika
 from pika.exceptions import AMQPError
@@ -40,6 +42,39 @@ logger = get_logger("agent_server.consumers")
 # truncated with a marker so prompts stay bounded for downstream LLM calls.
 _MAX_FILE_CONTEXT_CHARS = 50_000
 _MAX_TOTAL_CONTEXT_CHARS = 200_000
+
+
+class _OrderedStepSender:
+    def __init__(self, post: Callable[[dict], None]) -> None:
+        self._post = post
+        self._pending: deque[dict] = deque()
+        self._lock = threading.Lock()
+        self._draining = False
+
+    def __call__(self, event: dict) -> None:
+        with self._lock:
+            self._pending.append(event)
+            if self._draining:
+                return
+            self._draining = True
+        try:
+            threading.Thread(target=self._drain, daemon=True).start()
+        except RuntimeError:
+            with self._lock:
+                self._draining = False
+            raise
+
+    def _drain(self) -> None:
+        while True:
+            with self._lock:
+                if not self._pending:
+                    self._draining = False
+                    return
+                event = self._pending.popleft()
+            try:
+                self._post(event)
+            except Exception:
+                logger.debug("Step POST raised", exc_info=True)
 
 
 def _decode_inline_file(content_b64: str) -> str:
@@ -298,21 +333,15 @@ def _consume_messages_session() -> bool:
                 _conv_for_emit = conversation_id
                 _task_for_emit = task_id
 
-                def _emit_step(event: dict) -> None:
-                    def _post():
-                        try:
-                            server.send_step(
-                                event,
-                                _conv_for_emit,
-                                _task_for_emit,
-                                assigned_agent_id=_assigned_for_emit,
-                            )
-                        except Exception:
-                            logger.debug(
-                                "Step POST raised", exc_info=True
-                            )
+                def _post_step(event: dict) -> None:
+                    server.send_step(
+                        event,
+                        _conv_for_emit,
+                        _task_for_emit,
+                        assigned_agent_id=_assigned_for_emit,
+                    )
 
-                    threading.Thread(target=_post, daemon=True).start()
+                _emit_step = _OrderedStepSender(_post_step)
 
                 emitter_token = current_step_emitter.set(_emit_step)
 

@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import base64
 import json
+import threading
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -686,6 +688,73 @@ class TestConsumeMessagesCallback:
             cb(ch, _make_method(16), _make_props(), body)  # must not raise
 
         ch.basic_ack.assert_called_once_with(delivery_tag=16)
+
+    def test_streamed_steps_reach_mas_in_the_order_they_were_emitted(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        posted: list[int] = []
+        all_posted = threading.Event()
+
+        def first_post_is_slow(event, *_args, **_kwargs):
+            index = event["metadata"]["index"]
+            if index == 0:
+                time.sleep(0.3)
+            posted.append(index)
+            if len(posted) == 3:
+                all_posted.set()
+
+        srv.send_step.side_effect = first_post_is_slow
+
+        async def stream_three_deltas(_task):
+            from agent_server.profiles import current_step_emitter
+
+            emit = current_step_emitter.get()
+            for index in range(3):
+                emit({"step_type": "reasoning.delta", "metadata": {"index": index}})
+            return {"response": "ANSWER"}
+
+        pipeline = MagicMock()
+        pipeline.process_task = stream_three_deltas
+        srv.get_pipeline_for_type.return_value = pipeline
+        body = json.dumps({"demand": "x", "task_id": "t", "conversation_id": "c"})
+
+        with self._patch_profiles():
+            cb(MagicMock(), _make_method(18), _make_props(), body.encode("utf-8"))
+
+        assert all_posted.wait(5)
+        assert posted == [0, 1, 2]
+
+    def test_a_failed_step_post_does_not_stop_the_later_ones(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        posted: list[int] = []
+        delivered = threading.Event()
+
+        def first_post_fails(event, *_args, **_kwargs):
+            index = event["metadata"]["index"]
+            if index == 0:
+                raise RuntimeError("MAS unreachable")
+            posted.append(index)
+            delivered.set()
+
+        srv.send_step.side_effect = first_post_fails
+
+        async def stream_two_deltas(_task):
+            from agent_server.profiles import current_step_emitter
+
+            emit = current_step_emitter.get()
+            for index in range(2):
+                emit({"step_type": "reasoning.delta", "metadata": {"index": index}})
+            return {"response": "ANSWER"}
+
+        pipeline = MagicMock()
+        pipeline.process_task = stream_two_deltas
+        srv.get_pipeline_for_type.return_value = pipeline
+        body = json.dumps({"demand": "x", "task_id": "t", "conversation_id": "c"})
+
+        with self._patch_profiles():
+            cb(MagicMock(), _make_method(19), _make_props(), body.encode("utf-8"))
+
+        assert delivered.wait(5)
+        assert posted == [1]
 
     def test_active_profile_binds_persona(self, fake_pika):
         # When a profile matches the assigned agent, its persona/name are bound

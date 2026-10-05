@@ -825,6 +825,39 @@ class TestDecide:
         user_content = messages[1]["content"]
         assert "[retrieved content truncated]" in user_content
 
+    def _vllm_user_content(self, context: str) -> str:
+        agent = _causal_agent()
+        with patch.object(dma, "_llm_backend", return_value="vllm"), patch.object(
+            agent, "_generate_vllm", return_value="ok"
+        ) as generate:
+            agent.decide("Q?", context=context)
+        return generate.call_args.args[0]
+
+    def test_decide_caps_context_at_twelve_thousand_characters_by_default(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("AGENT_MAX_CONTEXT_CHARS", raising=False)
+        user_content = self._vllm_user_content("A" * 20000)
+        assert "A" * 12000 + "\n…[retrieved content truncated]" in user_content
+        assert "A" * 12001 not in user_content
+
+    def test_decide_caps_context_at_agent_max_context_chars(self, monkeypatch):
+        monkeypatch.setenv("AGENT_MAX_CONTEXT_CHARS", "6000")
+        user_content = self._vllm_user_content("A" * 20000)
+        assert "A" * 6000 + "\n…[retrieved content truncated]" in user_content
+        assert "A" * 6001 not in user_content
+
+    def test_context_within_the_cap_is_not_marked_truncated(self, monkeypatch):
+        monkeypatch.setenv("AGENT_MAX_CONTEXT_CHARS", "6000")
+        user_content = self._vllm_user_content("B" * 6000)
+        assert "B" * 6000 in user_content
+        assert "truncated" not in user_content
+
+    @pytest.mark.parametrize("raw", ["", "abc", "0", "-5"])
+    def test_an_unusable_context_cap_falls_back_to_the_default(self, monkeypatch, raw):
+        monkeypatch.setenv("AGENT_MAX_CONTEXT_CHARS", raw)
+        assert dma._max_context_chars() == dma.DEFAULT_MAX_CONTEXT_CHARS == 12000
+
     def test_decide_reraises_on_model_error(self):
         model = MagicMock(side_effect=RuntimeError("inference blew up"))
         agent = DecisionMakingAgent(decision_model=model, device="cpu")

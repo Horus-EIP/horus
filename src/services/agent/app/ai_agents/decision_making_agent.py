@@ -405,6 +405,18 @@ def _max_new_tokens() -> int:
         return 256
 
 
+DEFAULT_MAX_CONTEXT_CHARS = 12000
+
+
+def _max_context_chars() -> int:
+    raw = os.getenv("AGENT_MAX_CONTEXT_CHARS", "").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_MAX_CONTEXT_CHARS
+    return value if value > 0 else DEFAULT_MAX_CONTEXT_CHARS
+
+
 def _bnb4bit():
     assert BitsAndBytesConfig is not None
     assert torch is not None
@@ -994,10 +1006,10 @@ class DecisionMakingAgent:
             # echoing/repeating retrieved chunks instead of answering. ~12k
             # chars (~3k tokens) leaves room for the persona, instructions,
             # and the bracketed task line under the 8192-token prompt budget.
-            _MAX_CTX_CHARS = 12000
+            max_ctx_chars = _max_context_chars()
             ctx = context or ""
-            if len(ctx) > _MAX_CTX_CHARS:
-                ctx = ctx[:_MAX_CTX_CHARS] + "\n…[retrieved content truncated]"
+            if len(ctx) > max_ctx_chars:
+                ctx = ctx[:max_ctx_chars] + "\n…[retrieved content truncated]"
 
             # Bracket the task at both ends: even if the middle gets truncated,
             # the instruction at the top and the question at the bottom both

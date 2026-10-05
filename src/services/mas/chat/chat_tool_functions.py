@@ -82,6 +82,7 @@ async def send_task_step_via_websockets(
     payload = {
         "type": "task_step",
         "task_id": step.get("task_id"),
+        "subtask_id": step.get("subtask_id"),
         "agent_id": step.get("agent_id"),
         "agent_name": step.get("agent_name"),
         "step_type": step.get("step_type"),
