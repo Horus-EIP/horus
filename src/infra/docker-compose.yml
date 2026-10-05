@@ -314,11 +314,10 @@ services:
       - HORUS_VERSION=${HORUS_VERSION:-}
       - CHROMA_TELEMETRY_ENABLED=0
       - POSTHOG_DISABLED=true
-      - SENTENCE_TRANSFORMERS_NO_TELEMETRY=1
       - HF_HUB_DISABLE_TELEMETRY=1
       - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
       - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
-      # Embedder device: "auto" (GPU when available, historical default) or "cpu"
+      # Embedder device: "auto" (CUDA only when onnxruntime offers it, which the images do not) or "cpu"
       # to keep the BGE embedder off the shared 8 GB GPU so it doesn't evict the
       # agent's 4B model under ingestion load (see scripts/perf).
       - KNOWLEDGE_STORE_EMBED_DEVICE=${KNOWLEDGE_STORE_EMBED_DEVICE:-auto}

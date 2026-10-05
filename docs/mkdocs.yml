@@ -64,6 +64,7 @@ nav:
       - Objectives Audit: eip/objectives-audit.md
       - Performance (Point D): eip/performance.md
       - Tech Watch (Point 1): eip/tech-watch.md
+      - Tech Watch — Integrated GPUs and NPUs: tech-watch/IGPU_NPU_RESEARCH.md
       - Community Contributions (Point 1): eip/community-contributions.md
       - Protection Plan (Point A): eip/protection-plan.md
       - Diffusion Strategy (Point A): eip/diffusion-strategy.md
@@ -73,6 +74,7 @@ nav:
       - ADR-002 ChromaDB: adr/ADR-002-chromadb.md
       - ADR-003 FastAPI: adr/ADR-003-fastapi.md
       - ADR-004 Closed-source licence: adr/ADR-004-closed-source-licence.md
+      - ADR-005 Machines under 16 GB: adr/ADR-005-low-ram-machines.md
   - Assets:
       - Horus Presentation v8: assets/horus_presentation_v8.pdf
       - Research — Agent Management: assets/research/mas/Agent_Management.pdf

@@ -19,6 +19,7 @@ docs/agent_architecture.md
 # Timestamped backups written by init-env.sh --force and by the beta installer.
 # They are whole copies of .env, so they carry every secret it holds.
 .env.bak.*
+registry-token.txt
 !.env.example
 !.env.*.example
 

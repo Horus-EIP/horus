@@ -7,6 +7,7 @@ on:
       - demo_assets/**
       - tests/eval/**
       - scripts/eval/**
+      - scripts/benchmarks/**
       - scripts/perf/benchmark-pipeline.py
       - scripts/perf/quality-benchmark.py
       - .github/workflows/eval-testset.yml
@@ -15,6 +16,7 @@ on:
       - demo_assets/**
       - tests/eval/**
       - scripts/eval/**
+      - scripts/benchmarks/**
       - scripts/perf/benchmark-pipeline.py
       - scripts/perf/quality-benchmark.py
       - .github/workflows/eval-testset.yml

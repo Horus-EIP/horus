@@ -145,7 +145,7 @@ jobs:
           docker compose --progress plain build "$SERVICE"
           echo "BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
 
-      - name: Fail on CUDA packages or a torch other than the pinned CPU build
+      - name: Fail on CUDA packages or any torch in the CPU image
         if: matrix.flavor == 'cpu' && matrix.requirements
         run: |
           docker run --rm --entrypoint python "$IMAGE" -m pip list --format=freeze > packages.txt
