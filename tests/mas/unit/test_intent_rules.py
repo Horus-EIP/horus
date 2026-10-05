@@ -5,7 +5,14 @@ import time
 import pytest
 
 from tasks import intent_rules
-from tasks.intent_rules import TrivialIntent, classify_trivial_intent
+from tasks.intent_rules import (
+    ComplexCue,
+    TrivialClause,
+    TrivialIntent,
+    classify_trivial_intent,
+    find_complex_cue,
+    trivial_clauses,
+)
 
 
 @pytest.mark.parametrize(
@@ -110,6 +117,108 @@ def test_factual_and_document_questions_are_not_trivial(text):
 )
 def test_numbers_without_an_operation_between_operands_are_not_arithmetic(text):
     assert classify_trivial_intent(text) is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "555-1234",
+        "what is 555-123-4567",
+        "(555) 123-4567",
+        "+1 555-123-4567",
+        "what is 2019-2020",
+        "06-12-34-56-78",
+    ],
+)
+def test_phone_numbers_and_dashed_ranges_are_not_arithmetic(text):
+    assert classify_trivial_intent(text) is None
+
+
+@pytest.mark.parametrize("text", ["2 - 3", "1000 - 250", "what is 12-5", "2 - -3"])
+def test_a_spaced_or_short_subtraction_is_still_arithmetic(text):
+    assert classify_trivial_intent(text) is TrivialIntent.ARITHMETIC
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["hi how are you", "hello horus how are you doing today", "hey thanks"],
+)
+def test_a_greeting_followed_by_small_talk_in_one_clause_is_small_talk(text):
+    assert classify_trivial_intent(text) is TrivialIntent.SMALL_TALK
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Thanks, that's all for now.", "that is all", "nothing else, thanks", "That'll be all"],
+)
+def test_closing_phrases_are_small_talk(text):
+    assert classify_trivial_intent(text) is TrivialIntent.SMALL_TALK
+
+
+class TestTrivialClauses:
+    def test_each_clause_keeps_its_intent_and_text(self):
+        assert trivial_clauses("Hello Horus! Thank you.") == [
+            TrivialClause(TrivialIntent.GREETING, "hello horus"),
+            TrivialClause(TrivialIntent.SMALL_TALK, "thank you"),
+        ]
+
+    def test_an_arithmetic_clause_keeps_only_the_expression(self):
+        assert trivial_clauses("hi, what's 12 multiplied by 7 please?") == [
+            TrivialClause(TrivialIntent.GREETING, "hi"),
+            TrivialClause(TrivialIntent.ARITHMETIC, "12 multiplied by 7"),
+        ]
+
+    def test_full_width_input_is_folded_before_it_is_returned(self):
+        assert trivial_clauses("２＋２") == [TrivialClause(TrivialIntent.ARITHMETIC, "2+2")]
+
+    @pytest.mark.parametrize("text", ["What is the capital of Peru?", "hello, who is the CFO?", "", None])
+    def test_a_request_that_is_not_trivial_has_no_clauses(self, text):
+        assert trivial_clauses(text) == []
+
+
+class TestComplexCues:
+    @pytest.mark.parametrize(
+        ("text", "cue"),
+        [
+            ("Compare the US and EU hotel limits", ComplexCue.COMPARISON),
+            ("How does Q4 revenue compare with the board target?", ComplexCue.COMPARISON),
+            ("Give me a comparison of P1 and P2 response times", ComplexCue.COMPARISON),
+            ("Advisory Services vs Asset Management revenue", ComplexCue.COMPARISON),
+            ("EU versus US data residency", ComplexCue.COMPARISON),
+            ("Summarise the T&E variance and also the GDPR deadlines", ComplexCue.AND_ALSO),
+            ("What is the hotel cap? Who approves overages?", ComplexCue.SEVERAL_QUESTIONS),
+            ("Is SMS MFA allowed?? And how long are logs kept?", ComplexCue.SEVERAL_QUESTIONS),
+        ],
+    )
+    def test_cues_for_several_questions_in_one(self, text, cue):
+        assert find_complex_cue(text) is cue
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "What is the minimum password length?",
+            "Is that allowed??",
+            "? what is the hotel cap?",
+            "Who approved the overage, and on what date?",
+            "Summarise the employee handbook",
+            "",
+            None,
+        ],
+    )
+    def test_a_single_question_has_no_cue(self, text):
+        assert find_complex_cue(text) is None
+
+    def test_a_long_request_without_question_marks_is_checked_quickly(self):
+        started = time.perf_counter()
+        assert find_complex_cue("a" * 200_000 + " b" * 50_000) is None
+        assert time.perf_counter() - started < 1.0
+
+    def test_cue_values_are_plain_strings_for_logging(self):
+        assert [cue.value for cue in ComplexCue] == [
+            "comparison",
+            "and_also",
+            "several_questions",
+        ]
 
 
 @pytest.mark.parametrize(

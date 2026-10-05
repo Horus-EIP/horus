@@ -75,6 +75,12 @@ def start_embedding_preload_background_thread() -> None:
                 warm_skill_cache()
             except Exception:
                 logger.exception("Skill-cache warm failed during embedding preload.")
+            try:
+                from tasks.router import warm_router_examples
+
+                warm_router_examples()
+            except Exception:
+                logger.exception("Router examples warm failed during embedding preload.")
         except Exception:
             logger.exception(
                 "Background embedder preload failed; first suggest call will retry."

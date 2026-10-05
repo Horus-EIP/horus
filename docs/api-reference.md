@@ -431,7 +431,7 @@ Retrieve task counts by status (queued, pending, running, completed, failed, can
 
 #### POST /tasks/new_task/
 
-Queue a new task. The task is stored with status `queued` and the call answers `202` at once; it no longer waits for routing. A background job in MAS then routes the demand (direct answer, one agent, or a multi-agent chain planned by the Manager) and dispatches it. The job uses its own database session and runs the blocking router and planner calls in a thread pool, so it keeps going after the HTTP request has ended. Follow the outcome on the conversation WebSocket, with `GET /tasks/{task_id}/events`, or with `GET /tasks/{task_id}`.
+Queue a new task. The task is stored with status `queued` and the call answers `202` at once; it no longer waits for routing. A background job in MAS then routes the demand (direct answer, one agent, or a multi-agent chain planned by the Manager) and dispatches it. In `auto` mode the router tries rules first (greetings, small talk and arithmetic are answered at once, with no model), then embeddings over labelled examples, and calls the LLM only when neither is confident (see "Task Routing" in `src/services/mas/README.md`). The job uses its own database session and runs the blocking router and planner calls in a thread pool, so it keeps going after the HTTP request has ended. Follow the outcome on the conversation WebSocket, with `GET /tasks/{task_id}/events`, or with `GET /tasks/{task_id}`.
 
 The `task_id` returned here is the one to follow for the whole request: a single-agent task keeps it, and a multi-agent chain uses it as the Manager-owned root of its subtasks.
 

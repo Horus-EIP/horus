@@ -4,6 +4,9 @@ import { describe, it, expect } from "vitest";
 import {
   LATENCY_PANELS,
   METRIC_PANELS,
+  ROUTING_DECISION_HISTOGRAM,
+  ROUTING_DECISIONS_COUNTER,
+  ROUTING_PANELS,
   latencyQuantilesQuery,
 } from "@/lib/metrics/panels";
 import { TRACED_SERVICES } from "@/lib/traces/services";
@@ -79,13 +82,40 @@ describe("metrics latency panels", () => {
     }
   });
 
-  it("keep the overview panels ahead of the latency panels", () => {
+  it("keep the overview panels ahead of the latency and routing panels", () => {
     expect(METRIC_PANELS.map((panel) => panel.title)).toEqual([
       "Task Queue Depth",
       "Task Errors Rate",
       "Active Agents",
       ...LATENCY_PANELS.map((panel) => panel.title),
+      ...ROUTING_PANELS.map((panel) => panel.title),
     ]);
+  });
+});
+
+describe("routing panels", () => {
+  const masMetrics = read("mas/core/metrics.py");
+
+  it("chart the router's decisions and its p95 time, one series per method", () => {
+    const [decisions, latency] = ROUTING_PANELS;
+
+    expect(decisions.query).toBe(
+      `sum by (method) (rate(${ROUTING_DECISIONS_COUNTER}[5m]))`
+    );
+    expect(decisions.unit).toBe("/s");
+    expect(latency.query).toBe(
+      `histogram_quantile(0.95, sum by (le, method) (rate(${ROUTING_DECISION_HISTOGRAM}_bucket[5m])))`
+    );
+    expect(latency.unit).toBe(" s");
+    for (const panel of ROUTING_PANELS) {
+      expect(panel.nameLabel).toBe("method");
+    }
+  });
+
+  it("only chart routing metrics MAS declares", () => {
+    expect(masMetrics).toMatch(new RegExp(`Counter\\(\\s*"${ROUTING_DECISIONS_COUNTER.replace("_total", "")}`));
+    expect(declaredHistograms).toContain(ROUTING_DECISION_HISTOGRAM);
+    expect(scrapedHosts).toContain("mas");
   });
 });
 

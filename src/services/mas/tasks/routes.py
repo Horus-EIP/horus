@@ -48,6 +48,7 @@ from tasks.openapi_docs import (
     SHARE_RESULT_OPENAPI_EXTRA,
     SHARE_RESULT_RESPONSES,
 )
+from tasks.router import route_task
 from tasks.status import IN_PROGRESS_STATUSES, TaskStatus, is_final_status
 from tasks.task_jobs import task_jobs
 from tasks.task_tool_functions import (
@@ -57,7 +58,6 @@ from tasks.task_tool_functions import (
     insert_queued_task,
     interrupt_task,
     select_agent_by_mode,
-    select_agent_for_task,
     validating_task_results,
 )
 
@@ -801,7 +801,7 @@ async def _route_by_selection(
         # serves from a single Uvicorn worker, so calling it inline blocks the
         # event loop for every other request, including the Compose healthcheck.
         agent_id, user_demand, direct_response, future_actions = (
-            await run_in_threadpool(select_agent_for_task, task.demand, db)
+            await run_in_threadpool(route_task, task.demand, db, task_id=queued.id)
         )
         if _routing_was_stopped(queued, db):
             return _stopped_outcome(queued.id)

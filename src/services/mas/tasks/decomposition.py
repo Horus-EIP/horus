@@ -469,7 +469,7 @@ def manager_review_step(
     }
 
 
-@tracer.start_as_current_span("route_task")
+@tracer.start_as_current_span("route_task_llm")
 def select_agent_for_task(user_input: str, db: Session = None):
     """Route a user query to the right agent via the LLM intent router.
 

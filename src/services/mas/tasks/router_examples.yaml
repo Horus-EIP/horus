@@ -1,0 +1,133 @@
+version: 1
+agents:
+  - agent: General-Assistant
+    skills: [decision_making, rag_pipeline]
+    examples:
+      - "What is the capital of Australia?"
+      - "Explain how compound interest works in simple terms."
+      - "Write a short welcome note for our new intern."
+      - "Translate 'good morning' into Spanish."
+      - "What does the acronym API stand for?"
+      - "Give me three tips for running a productive meeting."
+      - "How many days are there in a leap year?"
+      - "Who wrote Pride and Prejudice?"
+      - "Suggest a catchy title for a talk about teamwork."
+      - "What is the difference between a virus and a bacterium?"
+      - "Draft a polite email turning down a meeting invitation."
+      - "Which time zone is Tokyo in?"
+      - "What is a good way to start learning Python?"
+      - "How do I convert Celsius to Fahrenheit?"
+      - "What is machine learning, in one paragraph?"
+      - "Tell me a fun fact about octopuses."
+  - agent: Finance-Analyst
+    skills: [financial_analysis, quarterly_report_qa, revenue_breakdown, budget_summary]
+    examples:
+      - "How much revenue did FinCorp book last quarter?"
+      - "Show me the revenue split by business segment."
+      - "Which segment brought in the most money in the fourth quarter?"
+      - "What were the main operating cost lines in Q4?"
+      - "Did any expense category run over its budget?"
+      - "What was the operating margin for the quarter?"
+      - "Did annual revenue beat the target the board set?"
+      - "What is the revenue outlook for next quarter?"
+      - "Which new enterprise customers signed in Q4?"
+      - "What risks does the quarterly report flag?"
+      - "Who attested the quarterly financial statements?"
+      - "How much went on cloud infrastructure this quarter?"
+      - "Give me the net income figure from the latest report."
+      - "Summarise the key numbers from the quarterly financial report."
+      - "What is the nightly hotel allowance for a business trip to New York?"
+      - "Can I fly business class to Tokyo for work?"
+      - "How much can I spend on lunch while travelling?"
+      - "Who needs to approve a $4,000 purchase?"
+      - "How soon after a trip do I have to file my expense claim?"
+      - "Are receipts needed for small purchases?"
+      - "Which expenses are never reimbursed?"
+      - "What happens if I don't reconcile my corporate card on time?"
+      - "Is there a monthly phone and internet allowance for remote staff?"
+      - "How much budget do I get for courses and certifications?"
+      - "What is the spending cap for taking a client to dinner?"
+      - "What is the airfare limit for an economy long-haul flight?"
+  - agent: Compliance-Officer
+    skills:
+      - compliance_check
+      - policy_review
+      - audit
+      - gdpr
+      - sox
+      - mica
+      - finra
+      - data_protection
+      - it_security_policy
+      - access_control
+      - incident_response
+    examples:
+      - "Which regulations does FinCorp have to follow in Europe?"
+      - "How long do we have to answer a customer's GDPR access request?"
+      - "What must we do if personal data leaks?"
+      - "When is the next records of processing review?"
+      - "Who is responsible for the data protection impact assessment?"
+      - "What SOX controls apply to our financial reporting?"
+      - "When do we need enhanced due diligence on a client?"
+      - "How fast must suspicious transactions be reported?"
+      - "Can employees trade company stock right before earnings?"
+      - "Where are we with MiCA readiness?"
+      - "How should confidential documents be labelled?"
+      - "Where can I report a compliance concern anonymously?"
+      - "How long does my password need to be?"
+      - "Do I need two-factor authentication on my work account?"
+      - "Which authenticator types are allowed for admin accounts?"
+      - "How soon is a leaver's system access removed?"
+      - "Is it okay to use public Wi-Fi without the VPN?"
+      - "Do laptops need full-disk encryption?"
+      - "I clicked a link in a phishing email, what do I do?"
+      - "What counts as a critical security incident?"
+      - "How long are audit logs kept for the AI platform?"
+      - "Do staff have to take security awareness training?"
+      - "What happens to someone who breaks the security policy?"
+      - "Can I copy restricted client data onto a USB stick?"
+  - agent: HR-Assistant
+    skills:
+      - hr_policy
+      - employee_handbook
+      - leave_policy
+      - benefits_qa
+      - remote_work_policy
+      - code_of_conduct
+    examples:
+      - "How many days a week do I need to be in the office?"
+      - "What are the core hours when everyone should be reachable?"
+      - "Can I ask to work from home permanently?"
+      - "How much holiday do new joiners get?"
+      - "How many sick days am I entitled to?"
+      - "Can I roll over vacation days I didn't use?"
+      - "When do pay reviews happen?"
+      - "How often are bonuses paid out?"
+      - "Does the company pay for my family's health insurance?"
+      - "What is the pension matching contribution?"
+      - "How much notice do I have to give if I resign?"
+      - "Who should I talk to about a workplace grievance?"
+      - "What does the code of conduct say about accepting gifts?"
+      - "Am I allowed to talk about company information with friends?"
+      - "Is there an exit interview when someone leaves the company?"
+      - "What benefits do employees get?"
+      - "How do I request time off?"
+      - "What is the policy on harassment at work?"
+      - "Who heads the HR team?"
+      - "What should a new employee know in their first week?"
+  - agent: Researcher
+    skills: [research, literature_review, citation_lookup]
+    examples:
+      - "Which documents in the knowledge base mention Sarah Johnson?"
+      - "Find every reference to the Horus platform across our files."
+      - "List the sources that discuss data retention."
+      - "Give me an overview of all the documents we have."
+      - "Search the knowledge store for anything about audits."
+      - "What topics does the document collection cover?"
+      - "Pull together everything we know about our key clients, with citations."
+      - "Which file talks about encryption standards?"
+      - "Find the passages that cite deadlines in 2026."
+      - "Review all our internal policies that touch on travel."
+      - "Where in our documents is the chief financial officer named?"
+      - "Collect quotes from the documents about risk."
+      - "Cross-reference the documents for any mention of approvals."

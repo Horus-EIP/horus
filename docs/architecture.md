@@ -756,7 +756,7 @@ April 2026 cleanup:
 
 | File | Responsibility |
 |------|----------------|
-| `tasks/router.py` | `APIRouter` aggregator |
+| `tasks/router.py` | Task router: rules, then embeddings over `tasks/router_examples.yaml`, then a constrained LLM call (see the MAS README, "Task Routing") |
 | `tasks/endpoints/create.py` | `POST /tasks/new_task` |
 | `tasks/endpoints/query.py` | `GET /tasks`, `GET /tasks/{id}` |
 | `tasks/endpoints/cancel.py` | `PATCH /tasks/{id}/cancel` |
@@ -1474,7 +1474,7 @@ Use **option 1** if you want to stay close to the current Python services and Ra
 
 Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intelligent agents for enterprise task automation. The system provides:
 
-- **Intelligent Task Routing:** LLM-based agent selection and task distribution
+- **Intelligent Task Routing:** agent selection by rules, then embeddings, then a constrained LLM call, and task distribution
 - **RAG-Powered Responses:** Context-aware answers using document retrieval
 - **Real-Time Communication:** WebSocket-based chat interface
 - **Enterprise Security:** RBAC, JWT authentication, audit logging

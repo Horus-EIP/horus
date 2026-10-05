@@ -457,10 +457,10 @@ def _published_texts(task_id):
 
 
 class TestCreateNewTaskSingleAgent:
-    """``mode`` unset → select_agent_by_mode/-for_task path."""
+    """``mode`` unset → select_agent_by_mode/route_task path."""
 
     @patch(
-        "tasks.routes.select_agent_for_task",
+        "tasks.routes.route_task",
         return_value=(None, None, "Here is your direct answer", []),
     )
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
@@ -477,7 +477,7 @@ class TestCreateNewTaskSingleAgent:
         dispatch.publish.assert_not_called()
         assert _stored(routing_db, submitted.outcome["task_id"]).status == "completed"
 
-    @patch("tasks.routes.select_agent_for_task")
+    @patch("tasks.routes.route_task")
     @patch(
         "tasks.routes.select_agent_by_mode",
         return_value=("agent-77", "rewritten demand", None, []),
@@ -528,7 +528,7 @@ class TestCreateNewTaskSingleAgent:
         assert "Could not resolve RabbitMQ work queue" in task.result.result_data
 
     @patch("tasks.routes.manager_announce_plan", return_value="Here's the plan")
-    @patch("tasks.routes.select_agent_for_task")
+    @patch("tasks.routes.route_task")
     @patch(
         "tasks.routes.select_agent_by_mode",
         return_value=("agent-1", "demand", None, [("agent-2", "second step")]),
@@ -551,7 +551,7 @@ class TestCreateNewTaskSingleAgent:
         announce.assert_called_once()
         assert "Here's the plan" in _published_texts(root_id)
 
-    @patch("tasks.routes.select_agent_for_task")
+    @patch("tasks.routes.route_task")
     @patch("tasks.routes.select_agent_by_mode")
     async def test_attachments_discard_direct_answer_and_dispatch(
         self, by_mode, for_task, dispatch, submit_task, as_user
@@ -570,7 +570,7 @@ class TestCreateNewTaskSingleAgent:
 
 class TestCreateNewTaskAutoCreateAndCatchAll:
     @patch("tasks.routes.create_agent", return_value=("auto-id", "auto-key"))
-    @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
+    @patch("tasks.routes.route_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
     async def test_auto_creates_specialist_for_missing_skill(
         self, _by_mode, _for_task, create, dispatch, submit_task, routing_db, as_user
@@ -589,7 +589,7 @@ class TestCreateNewTaskAutoCreateAndCatchAll:
         assert payload["task_id"] == submitted.response.json()["task_id"]
 
     @patch("tasks.routes.create_agent", side_effect=RuntimeError("registry down"))
-    @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
+    @patch("tasks.routes.route_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
     async def test_auto_create_failure_falls_back_to_catch_all_agent(
         self, _by_mode, _for_task, _create, dispatch, submit_task, routing_db, as_user
@@ -603,7 +603,7 @@ class TestCreateNewTaskAutoCreateAndCatchAll:
         assert "catch-all" in submitted.outcome["message"]
         assert _dispatched(dispatch)[0] == "catch-all"
 
-    @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
+    @patch("tasks.routes.route_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode")
     async def test_skill_match_fallback_selects_agent(
         self, by_mode, _for_task, dispatch, submit_task, as_user
@@ -622,7 +622,7 @@ class TestCreateNewTaskAutoCreateAndCatchAll:
 class TestCreateNewTaskDecompositionFallback:
     @patch("tasks.routes.manager_announce_plan")
     @patch("tasks.routes.decompose_task")
-    @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
+    @patch("tasks.routes.route_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
     async def test_decomposition_fallback_dispatches_first_action(
         self,
@@ -650,7 +650,7 @@ class TestCreateNewTaskDecompositionFallback:
         announce.assert_not_called()
 
     @patch("tasks.routes.decompose_task", return_value=(("dagent", "only step"), []))
-    @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
+    @patch("tasks.routes.route_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
     async def test_one_step_decomposition_dispatches_the_queued_task_itself(
         self, _by_mode, _for_task, _decompose, dispatch, submit_task, routing_db, as_user
@@ -664,7 +664,7 @@ class TestCreateNewTaskDecompositionFallback:
 
     @patch("tasks.routes.create_agent", return_value=("auto-id", "auto-key"))
     @patch("tasks.routes.decompose_task")
-    @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
+    @patch("tasks.routes.route_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
     async def test_auto_created_credentials_ride_along_in_dispatch_payload(
         self,
@@ -689,7 +689,7 @@ class TestCreateNewTaskDecompositionFallback:
         assert payload["assigned_agent_type"] == "general"
 
     @patch("tasks.routes.decompose_task", return_value=(None, []))
-    @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
+    @patch("tasks.routes.route_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
     async def test_no_plan_no_agents_registered_message(
         self, _by_mode, _for_task, _decompose, dispatch, submit_task, routing_db, as_user
@@ -707,7 +707,7 @@ class TestCreateNewTaskDecompositionFallback:
 
     @patch("tasks.routes.create_agent", side_effect=RuntimeError("registry down"))
     @patch("tasks.routes.decompose_task", return_value=(None, []))
-    @patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
+    @patch("tasks.routes.route_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
     async def test_no_plan_with_requested_skills_message(
         self,
@@ -793,7 +793,7 @@ class TestCreateNewTaskDecomposeMode:
 # --------------------------------------------------------------------------- #
 
 
-@patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
+@patch("tasks.routes.route_task", return_value=(None, None, None, []))
 @patch(
     "tasks.routes.select_agent_by_mode",
     return_value=("agent-1", "demand", None, []),
@@ -841,7 +841,7 @@ class TestInlineFileValidation:
         assert any(f["source"] == "inline" for f in payload["files"])
 
 
-@patch("tasks.routes.select_agent_for_task", return_value=(None, None, None, []))
+@patch("tasks.routes.route_task", return_value=(None, None, None, []))
 @patch(
     "tasks.routes.select_agent_by_mode",
     return_value=("agent-1", "demand", None, []),

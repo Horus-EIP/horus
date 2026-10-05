@@ -278,14 +278,49 @@ def _vllm_timeout() -> float:
         return 120.0
 
 
-def _ask_vllm(messages: list, max_new_tokens: int) -> str:
-    """Run an orchestration LLM call against the external vLLM server. Greedy to
-    match the in-process path; vLLM applies the chat template server-side. Uses
-    stdlib urllib so no new MAS dependency / image rebuild is needed for deps."""
+def llm_server_backend() -> bool:
+    return _llm_backend() == "vllm"
+
+
+def _post_chat_completion(body: dict) -> str:
     import json
     import urllib.request
 
     url = _vllm_base_url().rstrip("/") + "/chat/completions"
+    req = urllib.request.Request(
+        url, json.dumps(body).encode("utf-8"), {"Content-Type": "application/json"}, method="POST"
+    )
+    with urllib.request.urlopen(req, timeout=_vllm_timeout()) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    return (data["choices"][0]["message"].get("content") or "").strip()
+
+
+def ask_llm_with_json_schema(
+    messages: list, schema_name: str, schema: dict, max_tokens: int
+) -> str:
+    if not llm_server_backend():
+        raise RuntimeError(
+            "Constrained JSON output needs the OpenAI-compatible server backend (LLM_BACKEND=vllm)."
+        )
+    return _post_chat_completion(
+        {
+            "model": _vllm_model_name(),
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": 0.0,
+            "stream": False,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": schema_name, "strict": True, "schema": schema},
+            },
+        }
+    )
+
+
+def _ask_vllm(messages: list, max_new_tokens: int) -> str:
+    """Run an orchestration LLM call against the external vLLM server. Greedy to
+    match the in-process path; vLLM applies the chat template server-side. Uses
+    stdlib urllib so no new MAS dependency / image rebuild is needed for deps."""
     # Budget max_tokens to the room left under max_model_len so a big prompt
     # (e.g. the aggregation step's full chain history) neither 400s nor silently
     # truncates. Estimate prompt tokens from chars (~chars/3, conservative).
@@ -295,7 +330,7 @@ def _ask_vllm(messages: list, max_new_tokens: int) -> str:
         max_model_len = 8192
     est_prompt = sum(len(str(m.get("content", ""))) for m in messages) // 3
     safe_max = max(256, min(int(max_new_tokens), max_model_len - est_prompt - 256))
-    body = json.dumps(
+    return _post_chat_completion(
         {
             "model": _vllm_model_name(),
             "messages": messages,
@@ -303,13 +338,7 @@ def _ask_vllm(messages: list, max_new_tokens: int) -> str:
             "temperature": 0.0,
             "stream": False,
         }
-    ).encode("utf-8")
-    req = urllib.request.Request(
-        url, body, {"Content-Type": "application/json"}, method="POST"
     )
-    with urllib.request.urlopen(req, timeout=_vllm_timeout()) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-    return (data["choices"][0]["message"].get("content") or "").strip()
 
 
 def ask_llm(messages: list, max_new_tokens: int = 256):

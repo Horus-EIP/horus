@@ -140,3 +140,48 @@ def test_the_in_process_backend_would_download_the_router_model(llama_server_env
     with patch.dict(sys.modules, {"huggingface_hub": hub}):
         assert bootstrap_llm.main() == 0
     hub.snapshot_download.assert_called_once()
+
+
+ROUTE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "route": {"type": "string", "enum": ["SINGLE_AGENT", "COMPLEX_TASK"]},
+        "agent": {"type": "string", "enum": ["Finance-Analyst", "HR-Assistant"]},
+    },
+    "required": ["route", "agent"],
+    "additionalProperties": False,
+}
+
+
+def test_the_constrained_router_call_sends_a_json_schema_and_a_32_token_budget(llama_server_env):
+    server = FakeUrlopen(llama_server_completion(ROUTING_REPLY))
+    with patch("urllib.request.urlopen", server):
+        answer = llm_setup.ask_llm_with_json_schema(
+            [{"role": "user", "content": "Route this."}], "task_route", ROUTE_SCHEMA, 32
+        )
+    sent = server.sent()
+    assert answer == ROUTING_REPLY
+    assert sent["max_tokens"] == 32
+    assert sent["temperature"] == 0.0
+    assert sent["stream"] is False
+    assert sent["model"] == "qwen3-4b"
+    assert sent["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {"name": "task_route", "strict": True, "schema": ROUTE_SCHEMA},
+    }
+    assert server.requests[-1].full_url == "http://llm:8080/v1/chat/completions"
+    assert server.timeouts[-1] == 900.0
+
+
+def test_the_constrained_router_call_needs_the_server_backend(monkeypatch):
+    monkeypatch.setenv("LLM_BACKEND", "transformers")
+    server = FakeUrlopen(llama_server_completion(ROUTING_REPLY))
+    with patch("urllib.request.urlopen", server), pytest.raises(RuntimeError, match="LLM_BACKEND=vllm"):
+        llm_setup.ask_llm_with_json_schema([], "task_route", ROUTE_SCHEMA, 32)
+    assert server.requests == []
+
+
+def test_the_server_backend_is_recognised(llama_server_env):
+    assert llm_setup.llm_server_backend() is True
+    llama_server_env.setenv("LLM_BACKEND", "transformers")
+    assert llm_setup.llm_server_backend() is False

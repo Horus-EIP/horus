@@ -620,17 +620,50 @@ class TestPreloadBackgroundThread:
 
         warm = MagicMock()
         fake_skill_cache = MagicMock(warm_skill_cache=warm)
+        router_warm = MagicMock()
+        fake_router = MagicMock(warm_router_examples=router_warm)
 
         with patch.object(embedding_setup.threading, "Thread",
                           side_effect=fake_thread), \
              patch.object(embedding_setup, "_ensure_embedder_loaded") as ensure, \
-             patch.dict("sys.modules", {"core.skill_cache": fake_skill_cache}):
+             patch.dict(
+                 "sys.modules",
+                 {"core.skill_cache": fake_skill_cache, "tasks.router": fake_router},
+             ):
             embedding_setup.start_embedding_preload_background_thread()
             # Invoke the captured worker as the thread would have.
             captured["target"]()
 
         ensure.assert_called_once()
         warm.assert_called_once()
+        router_warm.assert_called_once()
+
+    def test_worker_swallows_router_examples_warm_exception(self, monkeypatch):
+        monkeypatch.delenv("TEST_MODE", raising=False)
+        captured = {}
+
+        def fake_thread(target, name, daemon):
+            captured["target"] = target
+            return MagicMock()
+
+        skill_warm = MagicMock()
+        failing_router = MagicMock()
+        failing_router.warm_router_examples.side_effect = RuntimeError("examples failed")
+
+        with patch.object(embedding_setup.threading, "Thread", side_effect=fake_thread), \
+             patch.object(embedding_setup, "_ensure_embedder_loaded"), \
+             patch.dict(
+                 "sys.modules",
+                 {
+                     "core.skill_cache": MagicMock(warm_skill_cache=skill_warm),
+                     "tasks.router": failing_router,
+                 },
+             ):
+            embedding_setup.start_embedding_preload_background_thread()
+            captured["target"]()
+
+        skill_warm.assert_called_once()
+        failing_router.warm_router_examples.assert_called_once()
 
     def test_worker_swallows_loader_exception(self, monkeypatch):
         monkeypatch.delenv("TEST_MODE", raising=False)
@@ -662,7 +695,9 @@ class TestPreloadBackgroundThread:
         with patch.object(embedding_setup.threading, "Thread",
                           side_effect=fake_thread), \
              patch.object(embedding_setup, "_ensure_embedder_loaded"), \
-             patch.dict("sys.modules", {"core.skill_cache": boom_cache}):
+             patch.dict(
+                 "sys.modules", {"core.skill_cache": boom_cache, "tasks.router": MagicMock()}
+             ):
             embedding_setup.start_embedding_preload_background_thread()
             captured["target"]()  # inner warm raises, outer try swallows
 

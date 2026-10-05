@@ -12,7 +12,7 @@ from opentelemetry.trace import SpanKind
 from core import tracing
 from core.rabbitmq_manager import RabbitMQ
 from core.version import HORUS_VERSION
-from tasks import decomposition
+from tasks import decomposition, router
 
 
 def run_init_tracing(app, env, auto_instrumented=False):
@@ -150,10 +150,16 @@ class TestRootSampling:
 
 class TestPipelineSpans:
     def test_routing_runs_inside_a_route_task_span(self, exported_spans):
+        with patch.object(router, "available_roster", return_value=[]):
+            router.route_task("What is our hotel limit?", MagicMock())
+
+        assert span_names(exported_spans) == ["route_task"]
+
+    def test_the_full_llm_router_runs_inside_a_route_task_llm_span(self, exported_spans):
         with patch("tasks.decomposition.get_available_agents", return_value=[]):
             decomposition.select_agent_for_task("What is our hotel limit?", MagicMock())
 
-        assert span_names(exported_spans) == ["route_task"]
+        assert span_names(exported_spans) == ["route_task_llm"]
 
     def test_decomposition_runs_inside_a_decompose_task_span(self, exported_spans):
         with patch("tasks.decomposition.get_available_agents", return_value=[]):

@@ -44,9 +44,28 @@ export const LATENCY_PANELS: LatencyPanelSpec[] = [
   latencyPanel("Knowledge Store Query Time", "knowledge_store_query_duration_seconds"),
 ];
 
+export const ROUTING_DECISIONS_COUNTER = "mas_routing_decisions_total";
+export const ROUTING_DECISION_HISTOGRAM = "mas_routing_decision_seconds";
+
+export const ROUTING_PANELS: MetricPanelSpec[] = [
+  {
+    title: "Routing Decisions by Method",
+    query: `sum by (method) (rate(${ROUTING_DECISIONS_COUNTER}[${LATENCY_RATE_WINDOW}]))`,
+    nameLabel: "method",
+    unit: "/s",
+  },
+  {
+    title: "Routing Time p95 by Method",
+    query: `histogram_quantile(0.95, sum by (le, method) (rate(${ROUTING_DECISION_HISTOGRAM}_bucket[${LATENCY_RATE_WINDOW}])))`,
+    nameLabel: "method",
+    unit: " s",
+  },
+];
+
 export const METRIC_PANELS: MetricPanelSpec[] = [
   { title: "Task Queue Depth", query: "mas_task_queue_depth" },
   { title: "Task Errors Rate", query: "rate(mas_task_errors_total[5m])", unit: "/s" },
   { title: "Active Agents", query: "mas_agent_count", nameLabel: "status" },
   ...LATENCY_PANELS,
+  ...ROUTING_PANELS,
 ];

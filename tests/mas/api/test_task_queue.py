@@ -34,7 +34,7 @@ def routed_to_finance():
     with (
         patch.object(routes, "select_agent_by_mode", return_value=(None, None, None, [])),
         patch.object(
-            routes, "select_agent_for_task", return_value=("agent-finance", QUESTION, None, [])
+            routes, "route_task", return_value=("agent-finance", QUESTION, None, [])
         ),
         patch.object(routes, "_publish_task_to_work_queue") as publish,
         patch.object(routes, "add_messages", return_value={"id": 41}),
@@ -49,13 +49,13 @@ class TestQueuedSubmission:
         monkeypatch.setattr(routes, "SessionLocal", lambda: routing_db)
         release_router = threading.Event()
 
-        def slow_router(demand, _db):
+        def slow_router(demand, _db, **_kwargs):
             release_router.wait(5)
             return ("agent-finance", demand, None, [])
 
         with (
             patch.object(routes, "select_agent_by_mode", return_value=(None, None, None, [])),
-            patch.object(routes, "select_agent_for_task", side_effect=slow_router),
+            patch.object(routes, "route_task", side_effect=slow_router),
             patch.object(routes, "_publish_task_to_work_queue") as publish,
             patch.object(routes, "add_messages", return_value={"id": 41}),
         ):
@@ -99,6 +99,24 @@ class TestQueuedSubmission:
         assert len(sessions_opened) == 1
         routed_to_finance.assert_called_once()
 
+    async def test_the_cheap_router_decides_in_the_background_job_with_the_task_id(
+        self, submit_task, as_user
+    ):
+        with (
+            patch.object(routes, "select_agent_by_mode", return_value=(None, None, None, [])),
+            patch.object(
+                routes, "route_task", return_value=("agent-finance", QUESTION, None, [])
+            ) as route_task,
+            patch.object(routes, "_publish_task_to_work_queue"),
+            patch.object(routes, "add_messages", return_value={"id": 41}),
+        ):
+            submitted = await submit_task(_chat_task(), user=as_user)
+
+        task_id = submitted.response.json()["task_id"]
+        demand, _db = route_task.call_args.args
+        assert demand == QUESTION
+        assert route_task.call_args.kwargs == {"task_id": task_id}
+
     async def test_user_message_is_saved_when_the_task_is_queued(
         self, submit_task, as_user, routed_to_finance
     ):
@@ -126,7 +144,7 @@ class TestQueuedSubmission:
     ):
         with (
             patch.object(routes, "select_agent_by_mode", return_value=(None, None, None, [])),
-            patch.object(routes, "select_agent_for_task", return_value=(None, None, "Hello!", [])),
+            patch.object(routes, "route_task", return_value=(None, None, "Hello!", [])),
             patch.object(routes, "_publish_task_to_work_queue") as publish,
             patch.object(routes, "add_messages", return_value={"id": 52}),
         ):
@@ -148,7 +166,7 @@ class TestQueuedSubmission:
     ):
         with (
             patch.object(routes, "select_agent_by_mode", return_value=(None, None, None, [])),
-            patch.object(routes, "select_agent_for_task", return_value=(None, None, None, [])),
+            patch.object(routes, "route_task", return_value=(None, None, None, [])),
             patch.object(routes, "decompose_task", return_value=(None, [])),
             patch.object(routes, "add_messages", return_value={"id": 53}),
         ):
@@ -184,13 +202,13 @@ class TestQueuedSubmission:
         monkeypatch.setattr(routes, "SessionLocal", lambda: routing_db)
         release_router = threading.Event()
 
-        def slow_router(demand, _db):
+        def slow_router(demand, _db, **_kwargs):
             release_router.wait(5)
             return ("agent-finance", demand, None, [])
 
         with (
             patch.object(routes, "select_agent_by_mode", return_value=(None, None, None, [])),
-            patch.object(routes, "select_agent_for_task", side_effect=slow_router),
+            patch.object(routes, "route_task", side_effect=slow_router),
             patch.object(routes, "_publish_task_to_work_queue") as publish,
             patch.object(routes, "add_messages", return_value={"id": 41}),
             patch("tasks.task_crud.rabbitmq_instance"),
