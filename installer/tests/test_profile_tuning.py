@@ -19,10 +19,8 @@ from common import Log  # noqa: E402
 
 CPU_PROFILES = [name for name in profiles.PROFILE_ORDER if profiles.is_cpu_profile(name)]
 GPU_PROFILES = [name for name in profiles.PROFILE_ORDER if not profiles.is_cpu_profile(name)]
-MEMORY_KEYS = (
-    "AGENT_MEM_LIMIT", "AGENT_MEMSWAP_LIMIT",
-    "KNOWLEDGE_STORE_MEM_LIMIT", "KNOWLEDGE_STORE_MEMSWAP_LIMIT",
-)
+MEMORY_KEYS = ("AGENT_MEM_LIMIT", "KNOWLEDGE_STORE_MEM_LIMIT")
+SWAP_KEYS = ("AGENT_MEMSWAP_LIMIT", "KNOWLEDGE_STORE_MEMSWAP_LIMIT")
 
 def cpu_probe(physical: int | None, logical: int | None = None,
               logical_fallback: bool = False) -> dict:
@@ -101,13 +99,24 @@ class MemoryCeilings(unittest.TestCase):
                 for key in MEMORY_KEYS:
                     self.assertRegex(env[key], r"^\d+g$")
 
-    def test_swap_ceilings_equal_the_memory_ceilings_so_nothing_swaps(self):
-        for name in CPU_PROFILES:
+    def test_profiles_leave_the_swap_ceiling_to_follow_the_memory_ceiling(self):
+        for name in profiles.PROFILE_ORDER:
             with self.subTest(name):
                 env = profiles.env_for(name)
-                self.assertEqual(env["AGENT_MEMSWAP_LIMIT"], env["AGENT_MEM_LIMIT"])
-                self.assertEqual(env["KNOWLEDGE_STORE_MEMSWAP_LIMIT"],
-                                 env["KNOWLEDGE_STORE_MEM_LIMIT"])
+                for key in SWAP_KEYS:
+                    self.assertNotIn(key, env)
+
+    def test_the_memory_reason_says_the_swap_ceiling_follows_it(self):
+        for name in CPU_PROFILES:
+            provenance = profiles.provenance_for(name)
+            for key, swap_key in zip(MEMORY_KEYS, SWAP_KEYS, strict=True):
+                with self.subTest(f"{name} {key}"):
+                    self.assertIn(swap_key, provenance[key]["why"])
+                    self.assertIn("never swaps", provenance[key]["why"])
+
+    def test_a_hand_set_swap_ceiling_survives_a_reinstall(self):
+        for key in SWAP_KEYS:
+            self.assertNotIn(key, profiles.MANAGED_KEYS)
 
     def test_the_4b_worker_gets_more_room_than_the_1_5b_worker(self):
         lean = profiles.env_for("cpu-lean")["AGENT_MEM_LIMIT"]

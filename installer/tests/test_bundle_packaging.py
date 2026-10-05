@@ -33,6 +33,20 @@ SOURCE_BUILT_SERVICES = {"mas", "agent", "knowledge_store", "web-client"}
 
 MEMORY_REFERENCE = re.compile(r"^\$\{(\w+):-(\d+g)\}$")
 
+SWAP_REFERENCE = re.compile(r"^\$\{(\w+):-")
+
+INNERMOST_DEFAULT = re.compile(r"\$\{(\w+):-([^${}]*)\}")
+
+def interpolate(value: str, env: dict[str, str]) -> str:
+    while True:
+        resolved = INNERMOST_DEFAULT.sub(lambda m: env.get(m.group(1)) or m.group(2), value)
+        if resolved == value:
+            return resolved
+        value = resolved
+
+def referenced_keys(value: str) -> set[str]:
+    return set(re.findall(r"\$\{(\w+)", value))
+
 def compose_services() -> dict:
     text = (INFRA / "docker-compose.yml").read_text(encoding="utf-8")
     return yaml.safe_load(text)["services"]
@@ -303,26 +317,48 @@ class ComposeMemoryCeilings(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.services = compose_services()
 
+    def limits(self, name: str, env: dict[str, str]) -> tuple[str, str]:
+        spec = self.services[name]
+        return (interpolate(str(spec["mem_limit"]), env),
+                interpolate(str(spec["memswap_limit"]), env))
+
     def test_each_python_service_takes_its_memory_ceilings_from_the_env(self):
         for name in ("mas", "agent", "knowledge_store"):
-            for field in ("mem_limit", "memswap_limit"):
-                with self.subTest(f"{name} {field}"):
-                    self.assertRegex(str(self.services[name].get(field, "")),
-                                     MEMORY_REFERENCE)
+            with self.subTest(name):
+                spec = self.services[name]
+                self.assertRegex(str(spec.get("mem_limit", "")), MEMORY_REFERENCE)
+                self.assertRegex(str(spec.get("memswap_limit", "")), SWAP_REFERENCE)
+                for limit in self.limits(name, {}):
+                    self.assertRegex(limit, r"^\d+g$")
 
     def test_agent_and_knowledge_store_default_to_no_swap(self):
         for name in ("agent", "knowledge_store"):
             with self.subTest(name):
-                spec = self.services[name]
-                limit = MEMORY_REFERENCE.match(spec["mem_limit"]).group(2)
-                swap = MEMORY_REFERENCE.match(spec["memswap_limit"]).group(2)
+                limit, swap = self.limits(name, {})
                 self.assertEqual(limit, swap)
+
+    def test_raising_only_the_memory_limit_raises_the_swap_limit_with_it(self):
+        for name in ("agent", "knowledge_store"):
+            with self.subTest(name):
+                key = MEMORY_REFERENCE.match(self.services[name]["mem_limit"]).group(1)
+                self.assertEqual(self.limits(name, {key: "20g"}), ("20g", "20g"))
+
+    def test_a_swap_limit_set_in_the_env_still_wins(self):
+        for name in ("agent", "knowledge_store"):
+            with self.subTest(name):
+                spec = self.services[name]
+                key = MEMORY_REFERENCE.match(spec["mem_limit"]).group(1)
+                swap_key = SWAP_REFERENCE.match(spec["memswap_limit"]).group(1)
+                self.assertNotEqual(swap_key, key)
+                self.assertEqual(self.limits(name, {key: "16g", swap_key: "20g"}),
+                                 ("16g", "20g"))
 
     def test_every_memory_ceiling_a_profile_writes_is_read_by_compose(self):
         read = {
-            MEMORY_REFERENCE.match(str(spec[field])).group(1)
+            key
             for spec in self.services.values()
             for field in ("mem_limit", "memswap_limit") if field in spec
+            for key in referenced_keys(str(spec[field]))
         }
         written = {key for key in profiles.MANAGED_KEYS
                    if key.endswith(("_MEM_LIMIT", "_MEMSWAP_LIMIT"))}

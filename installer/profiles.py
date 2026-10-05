@@ -71,25 +71,25 @@ _SERVED_NAME = "qwen3-4b"
 
 _KNOWLEDGE_STORE_MEMORY = "6g"
 
-_NO_SWAP_WHY = (
-    "Equal to the memory limit, so the container never swaps. Past its limit "
-    "it is killed and restarted by Compose instead of pushing the whole host "
-    "into swap."
-)
+def _no_swap_why(swap_key: str) -> str:
+    return (
+        f"Compose gives the swap limit the same value unless {swap_key} is "
+        "set, so the container never swaps: past its limit it is killed and "
+        "restarted instead of pushing the whole host into swap."
+    )
 
 def _memory_settings(agent_limit: str, agent_why: str) -> dict[str, Setting]:
     return {
-        "AGENT_MEM_LIMIT": Setting(agent_limit, DERIVED, agent_why),
-        "AGENT_MEMSWAP_LIMIT": Setting(agent_limit, DERIVED, _NO_SWAP_WHY),
+        "AGENT_MEM_LIMIT": Setting(
+            agent_limit, DERIVED, f"{agent_why} {_no_swap_why('AGENT_MEMSWAP_LIMIT')}",
+        ),
         "KNOWLEDGE_STORE_MEM_LIMIT": Setting(
             _KNOWLEDGE_STORE_MEMORY, DERIVED,
             "The knowledge store holds the BGE base embedder, spaCy "
             "en_core_web_trf, t5-small and distilbart-cnn-6-6 in fp32, about "
             "2.1 GB of weights, plus torch, Chroma and the working set of an "
-            "ingestion. Sized from those weights, not measured.",
-        ),
-        "KNOWLEDGE_STORE_MEMSWAP_LIMIT": Setting(
-            _KNOWLEDGE_STORE_MEMORY, DERIVED, _NO_SWAP_WHY,
+            "ingestion. Sized from those weights, not measured. "
+            + _no_swap_why("KNOWLEDGE_STORE_MEMSWAP_LIMIT"),
         ),
     }
 
@@ -271,9 +271,9 @@ _add(Profile(
         **_memory_settings(
             "6g",
             "The 1.5B worker in bf16 is 3.1 GB of weights. Its KV cache is "
-            "small (28 layers x 2 KV heads x 128 x 2 bytes, about 0.2 GB at 8k "
-            "tokens) and torch, transformers and spaCy add about 1.5 GB. "
-            "Arithmetic, not a measurement.",
+            "small (28 layers x 2 KV heads x 128 x 2 for K and V x 2 bytes, "
+            "about 0.2 GB at 8k tokens) and torch, transformers and spaCy "
+            "add about 1.5 GB. Arithmetic, not a measurement.",
         ),
     },
     notes=(
@@ -308,9 +308,9 @@ _add(Profile(
             "12g",
             "The 4B worker in bf16 is 8.1 GB of weights. The KV cache of an "
             "8k-token prompt and answer adds about 1.1 GB (36 layers x 8 KV "
-            "heads x 128 x 2 bytes) and torch, transformers and spaCy about "
-            "1.5 GB, which leaves about 1 GB of margin. Arithmetic, not a "
-            "measurement.",
+            "heads x 128 x 2 for K and V x 2 bytes) and torch, transformers "
+            "and spaCy about 1.5 GB, which leaves about 1 GB of margin. "
+            "Arithmetic, not a measurement.",
         ),
     },
     notes=(
