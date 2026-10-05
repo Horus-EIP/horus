@@ -19,12 +19,12 @@ from eval_files import is_sha256, report_path, safe_label, write_json
 from eval_report import (
     ResourcePeaks,
     build_report,
+    llm_mapped_outside_docker_stats,
     parse_docker_stats,
     parse_meminfo_swap_used,
     question_record,
     questions_peak_checks,
     resummarize,
-    stack_peak_fields,
     titles_from_query_result,
 )
 from eval_scoring import ROUTE_AGENT, ROUTE_DIRECT, ROUTE_NONE
@@ -404,6 +404,11 @@ def llm_process_memory(container: str | None) -> dict[str, Any] | None:
     return parse_process_status(docker_exec(container, "cat", "/proc/1/status")) if container else None
 
 
+def llm_mapped_outside_now(container: str) -> int | None:
+    memory_stat = parse_memory_stat(docker_exec(container, "cat", "/sys/fs/cgroup/memory.stat"))
+    return llm_mapped_outside_docker_stats(llm_process_memory(container), memory_stat)
+
+
 class ResourceSampler(threading.Thread):
     def __init__(
         self, interval: float, swap_container: str | None = None, llm_container: str | None = None
@@ -421,20 +426,23 @@ class ResourceSampler(threading.Thread):
 
     def sample(self) -> tuple[dict[str, int], int | None]:
         usage = docker_memory_usage()
+        llm_outside = llm_mapped_outside_now(self.llm_container) if self.llm_container in usage else None
         swap = swap_used_bytes()
         docker_host_swap = docker_host_swap_used_bytes(self.swap_container)
         with self._lock:
             for peaks in (self.peaks, self.window, self.since_questions_start):
                 if peaks is not None:
-                    peaks.add(usage, swap, docker_host_swap)
+                    peaks.add(usage, swap, docker_host_swap, self.llm_container, llm_outside)
         return usage, docker_host_swap
 
     def mark_questions_start(self) -> None:
         with self._lock:
             self.since_questions_start = ResourcePeaks()
         usage, docker_host_swap = self.sample()
+        with self._lock:
+            names = sorted(set(usage) | set(self.peaks.container_peaks))
         self.at_questions_start = {
-            **container_cgroup_facts(sorted(usage)),
+            **container_cgroup_facts(names),
             "llm_process": llm_process_memory(self.llm_container),
             "docker_host_swap_used_bytes": docker_host_swap,
         }
@@ -462,7 +470,6 @@ class ResourceSampler(threading.Thread):
         resources.update(container_cgroup_facts(names))
         resources["container_restarts"] = container_restart_counts(names)
         resources["llm_process"] = llm_process_memory(self.llm_container)
-        resources.update(stack_peak_fields(resources, self.llm_container))
         questions = self.since_questions_start
         questions_swap_peak = questions.docker_host_swap_peak if questions else None
         resources.update(questions_peak_checks(resources, self.at_questions_start, questions_swap_peak))

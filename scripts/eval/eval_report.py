@@ -303,6 +303,9 @@ class ResourcePeaks:
         self.samples = 0
         self.container_peaks: dict[str, int] = {}
         self.containers_sum_peak: int | None = None
+        self.stack_peak: int | None = None
+        self.llm_mapped_outside_at_stack_peak: int | None = None
+        self.samples_without_llm_pages = 0
         self.swap_peak: int | None = None
         self.docker_host_swap_peak: int | None = None
 
@@ -311,6 +314,8 @@ class ResourcePeaks:
         container_usage: dict[str, int],
         swap_used: int | None = None,
         docker_host_swap_used: int | None = None,
+        llm_container: str | None = None,
+        llm_mapped_outside: int | None = None,
     ) -> None:
         self.samples += 1
         for name, used in container_usage.items():
@@ -318,16 +323,28 @@ class ResourcePeaks:
         if container_usage:
             total = sum(container_usage.values())
             self.containers_sum_peak = max(total, self.containers_sum_peak or 0)
+            if llm_container in container_usage:
+                self._add_stack_total(total, llm_mapped_outside)
         if swap_used is not None:
             self.swap_peak = max(swap_used, self.swap_peak or 0)
         if docker_host_swap_used is not None:
             self.docker_host_swap_peak = max(docker_host_swap_used, self.docker_host_swap_peak or 0)
+
+    def _add_stack_total(self, containers_total: int, llm_mapped_outside: int | None) -> None:
+        if llm_mapped_outside is None:
+            self.samples_without_llm_pages += 1
+        elif self.stack_peak is None or containers_total + llm_mapped_outside > self.stack_peak:
+            self.stack_peak = containers_total + llm_mapped_outside
+            self.llm_mapped_outside_at_stack_peak = llm_mapped_outside
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "samples": self.samples,
             "container_peak_mem_bytes": dict(sorted(self.container_peaks.items())),
             "containers_sum_peak_mem_bytes": self.containers_sum_peak,
+            "llm_mapped_outside_docker_stats_bytes": self.llm_mapped_outside_at_stack_peak,
+            "stack_peak_mem_bytes": self.stack_peak,
+            "samples_without_llm_pages": self.samples_without_llm_pages,
             "swap_peak_used_bytes": self.swap_peak,
             "docker_host_swap_peak_used_bytes": self.docker_host_swap_peak,
         }
@@ -358,7 +375,12 @@ def questions_peak_checks(
     excess: dict[str, int | None] = {}
     for name, end_peak in (resources.get("container_lifetime_peak_mem_bytes") or {}).items():
         start_peak = start_peaks.get(name)
-        if name not in sampled or end_peak is None or start_peak is None or end_peak <= start_peak:
+        if name not in sampled:
+            continue
+        if end_peak is None or start_peak is None:
+            excess[name] = None
+            continue
+        if end_peak <= start_peak:
             continue
         inactive_file = (memory_stats.get(name) or {}).get("inactive_file")
         if inactive_file is None:
@@ -383,16 +405,6 @@ def llm_mapped_outside_docker_stats(
         return None
     counted_by_docker_stats = min(memory_stat["file_mapped"], memory_stat["active_file"])
     return max(process["rss_file_bytes"] - counted_by_docker_stats, 0)
-
-
-def stack_peak_fields(resources: dict[str, Any], llm_container: str | None) -> dict[str, Any]:
-    memory_stat = (resources.get("container_memory_stat") or {}).get(llm_container) if llm_container else None
-    outside = llm_mapped_outside_docker_stats(resources.get("llm_process"), memory_stat)
-    total = resources.get("containers_sum_peak_mem_bytes")
-    return {
-        "llm_mapped_outside_docker_stats_bytes": outside,
-        "stack_peak_mem_bytes": None if total is None or outside is None else total + outside,
-    }
 
 
 def titles_from_query_result(raw: Any) -> list[str]:

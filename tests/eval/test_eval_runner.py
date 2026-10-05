@@ -651,6 +651,51 @@ class TestStackResources:
         assert sampler.peaks.as_dict()["container_peak_mem_bytes"] == {"llm": 300, "mas": 10}
         assert sampler.end_window() is None
 
+    def test_the_start_snapshot_covers_the_containers_seen_before_when_docker_stats_fails(self, runner, monkeypatch):
+        usage = iter([{"mas": 10, "llm": 100}, {}])
+        monkeypatch.setattr(runner, "docker_memory_usage", lambda: next(usage))
+        monkeypatch.setattr(runner, "swap_used_bytes", lambda: None)
+        monkeypatch.setattr(runner, "docker_host_swap_used_bytes", lambda container: None)
+        asked = []
+        monkeypatch.setattr(runner, "container_cgroup_facts", lambda names: asked.append(names) or {})
+        monkeypatch.setattr(runner, "llm_process_memory", lambda container: None)
+        monkeypatch.setattr(runner, "llm_mapped_outside_now", lambda container: None)
+        sampler = runner.ResourceSampler(60.0, "mas", "llm")
+        sampler.sample()
+        sampler.mark_questions_start()
+        assert asked == [["llm", "mas"]]
+
+    def test_each_sample_reads_the_llm_pages_only_while_llm_runs(self, runner, monkeypatch):
+        gib = 2**30
+        usage = iter([{"llm": 4 * gib, "mas": 5 * gib}, {"llm": 2 * gib, "mas": 5 * gib + gib // 2}, {"mas": 6 * gib}])
+        monkeypatch.setattr(runner, "docker_memory_usage", lambda: next(usage))
+        monkeypatch.setattr(runner, "swap_used_bytes", lambda: None)
+        monkeypatch.setattr(runner, "docker_host_swap_used_bytes", lambda container: None)
+        outside = iter([0, 2 * gib])
+        read = []
+        monkeypatch.setattr(runner, "llm_mapped_outside_now", lambda container: read.append(container) or next(outside))
+        sampler = runner.ResourceSampler(60.0, "mas", "llm")
+        for _ in range(3):
+            sampler.sample()
+        resources = sampler.peaks.as_dict()
+        assert read == ["llm", "llm"]
+        assert resources["containers_sum_peak_mem_bytes"] == 9 * gib
+        assert resources["stack_peak_mem_bytes"] == 9 * gib + gib // 2
+        assert resources["llm_mapped_outside_docker_stats_bytes"] == 2 * gib
+        assert resources["samples_without_llm_pages"] == 0
+
+    def test_the_llm_pages_come_from_pid_1_status_and_the_llm_cgroup(self, runner, monkeypatch):
+        status = "Name:\tllama-server\nRssFile:\t 2490368 kB\n"
+        memory_stat = "anon 100\nfile 300\nactive_file 1048576\ninactive_file 250\nfile_mapped 2097152\n"
+        responses = [
+            (["exec", "llm", "cat", "/proc/1/status"], status),
+            (["exec", "llm", "cat", "/sys/fs/cgroup/memory.stat"], memory_stat),
+        ]
+        monkeypatch.setattr(runner, "docker_text", fake_docker(responses))
+        assert runner.llm_mapped_outside_now("llm") == 2490368 * 1024 - 1048576
+        monkeypatch.setattr(runner, "docker_text", fake_docker(responses[:1]))
+        assert runner.llm_mapped_outside_now("llm") is None
+
     def test_finished_sampler_adds_the_cgroup_facts(self, runner, monkeypatch):
         monkeypatch.setattr(runner, "docker_memory_usage", lambda: {"llm": 100})
         monkeypatch.setattr(runner, "swap_used_bytes", lambda: None)
@@ -680,7 +725,7 @@ class TestStackResources:
         monkeypatch.setattr(runner, "swap_used_bytes", lambda: None)
         swaps = iter([gib, gib // 4])
         monkeypatch.setattr(runner, "docker_host_swap_used_bytes", lambda container: next(swaps, gib // 2))
-        llm_stat = {"anon": gib, "file": 3 * gib, "active_file": gib // 8, "inactive_file": 2 * gib, "file_mapped": 2 * gib}
+        llm_stat = {"anon": gib, "file": 4 * gib, "active_file": 2 * gib, "inactive_file": 2 * gib, "file_mapped": 2 * gib}
         facts = iter(
             [
                 {
@@ -710,6 +755,8 @@ class TestStackResources:
         monkeypatch.setattr(runner, "container_cgroup_facts", cgroup_facts)
         monkeypatch.setattr(runner, "container_restart_counts", lambda names: dict.fromkeys(names, 0))
         monkeypatch.setattr(runner, "llm_process_memory", llm_process)
+        outside = iter([2 * gib])
+        monkeypatch.setattr(runner, "llm_mapped_outside_now", lambda container: next(outside, 0))
         sampler = runner.ResourceSampler(60.0, "mas", "llm")
         sampler.sample()
         sampler.mark_questions_start()

@@ -9,6 +9,7 @@ from eval_report import (
     blank_review,
     build_report,
     build_summary,
+    llm_mapped_outside_docker_stats,
     llm_summary,
     manual_review_summary,
     parse_docker_size,
@@ -19,7 +20,6 @@ from eval_report import (
     rate,
     resummarize,
     routing_summary,
-    stack_peak_fields,
     stats,
     titles_from_query_result,
 )
@@ -396,6 +396,9 @@ class TestResources:
             "samples": 3,
             "container_peak_mem_bytes": {"agent": 500, "mas": 300},
             "containers_sum_peak_mem_bytes": 600,
+            "llm_mapped_outside_docker_stats_bytes": None,
+            "stack_peak_mem_bytes": None,
+            "samples_without_llm_pages": 0,
             "swap_peak_used_bytes": 50,
             "docker_host_swap_peak_used_bytes": 70,
         }
@@ -478,12 +481,19 @@ class TestQuestionsPeakChecks:
         )
         assert questions_peak_checks(resources, at_start, None)["unsampled_peak_excess_bytes"] == {"llm": None}
 
-    def test_a_container_missing_from_the_samples_or_the_start_or_unread_is_not_judged(self):
-        at_start = {"container_lifetime_peak_mem_bytes": {"llm": GIB, "agent": GIB}}
+    def test_an_unread_memory_peak_at_the_start_or_the_end_leaves_the_check_open(self):
+        at_start = {"container_lifetime_peak_mem_bytes": {"llm": None, "agent": GIB}}
         resources = self.resources(
-            lifetime={"llm": 2 * GIB, "web_client": GIB, "agent": None},
-            sampled={"web_client": 10, "agent": 5},
+            lifetime={"llm": 2 * GIB, "agent": None, "web_client": GIB},
+            sampled={"llm": GIB, "agent": 5, "web_client": 10},
+            memory_stats={"llm": memory_stat(), "agent": memory_stat(), "web_client": memory_stat()},
         )
+        checks = questions_peak_checks(resources, at_start, None)
+        assert checks["unsampled_peak_excess_bytes"] == {"agent": None, "llm": None, "web_client": None}
+
+    def test_a_container_docker_stats_never_sampled_is_not_judged(self):
+        at_start = {"container_lifetime_peak_mem_bytes": {"llm": GIB}}
+        resources = self.resources(lifetime={"llm": 2 * GIB}, sampled={})
         checks = questions_peak_checks(resources, at_start, None)
         assert checks["unsampled_peak_excess_bytes"] == {}
         assert checks["docker_host_swap_growth_bytes"] is None
@@ -506,50 +516,72 @@ class TestQuestionsPeakChecks:
         }
 
 
-class TestStackPeak:
+class TestLlmPagesOutsideDockerStats:
     LLAMA_SERVER = {"name": "llama-server", "rss_file_bytes": 2 * GIB + 4 * GIB // 10}
 
-    @staticmethod
-    def resources(llm_stat, process=LLAMA_SERVER, total=9 * GIB):
-        return {
-            "containers_sum_peak_mem_bytes": total,
-            "container_memory_stat": {"llm": llm_stat, "mas": memory_stat(inactive_file=GIB)},
-            "llm_process": process,
-        }
-
-    def test_model_pages_on_the_inactive_list_are_added_to_p(self):
+    def test_model_pages_on_the_inactive_list_are_left_out_of_docker_stats(self):
         llm_stat = memory_stat(inactive_file=2 * GIB + 4 * GIB // 10, active_file=GIB // 20, file_mapped=2 * GIB + 4 * GIB // 10)
-        fields = stack_peak_fields(self.resources(llm_stat), "llm")
-        assert fields["llm_mapped_outside_docker_stats_bytes"] == 2 * GIB + 4 * GIB // 10 - GIB // 20
-        assert fields["stack_peak_mem_bytes"] == 11 * GIB + 4 * GIB // 10 - GIB // 20
+        assert llm_mapped_outside_docker_stats(self.LLAMA_SERVER, llm_stat) == 2 * GIB + 4 * GIB // 10 - GIB // 20
 
-    def test_model_pages_charged_to_the_container_that_downloaded_them_are_added_to_p(self):
+    def test_model_pages_charged_to_the_container_that_downloaded_them_are_left_out(self):
         llm_stat = memory_stat(active_file=GIB // 5, file_mapped=GIB // 50)
-        fields = stack_peak_fields(self.resources(llm_stat), "llm")
-        assert fields["llm_mapped_outside_docker_stats_bytes"] == 2 * GIB + 4 * GIB // 10 - GIB // 50
+        assert llm_mapped_outside_docker_stats(self.LLAMA_SERVER, llm_stat) == 2 * GIB + 4 * GIB // 10 - GIB // 50
 
     def test_model_pages_on_the_active_list_are_already_in_docker_stats(self):
         llm_stat = memory_stat(active_file=2 * GIB + GIB // 2, file_mapped=2 * GIB + GIB // 2)
-        fields = stack_peak_fields(self.resources(llm_stat), "llm")
-        assert fields == {"llm_mapped_outside_docker_stats_bytes": 0, "stack_peak_mem_bytes": 9 * GIB}
+        assert llm_mapped_outside_docker_stats(self.LLAMA_SERVER, llm_stat) == 0
 
     @pytest.mark.parametrize(
-        ("llm_stat", "process", "llm_container"),
+        ("process", "llm_stat"),
         [
-            (memory_stat(), {"name": "sh", "rss_file_bytes": GIB}, "llm"),
-            (memory_stat(), {"name": "llama-server", "rss_file_bytes": None}, "llm"),
-            (memory_stat(), None, "llm"),
-            (None, LLAMA_SERVER, "llm"),
-            (memory_stat(), LLAMA_SERVER, None),
+            ({"name": "sh", "rss_file_bytes": GIB}, memory_stat()),
+            ({"name": "llama-server", "rss_file_bytes": None}, memory_stat()),
+            (None, memory_stat()),
+            (LLAMA_SERVER, None),
         ],
     )
-    def test_without_the_llama_server_figures_p_is_unknown(self, llm_stat, process, llm_container):
-        fields = stack_peak_fields(self.resources(llm_stat, process), llm_container)
-        assert fields == {"llm_mapped_outside_docker_stats_bytes": None, "stack_peak_mem_bytes": None}
+    def test_without_the_llama_server_figures_nothing_is_known(self, process, llm_stat):
+        assert llm_mapped_outside_docker_stats(process, llm_stat) is None
 
-    def test_without_samples_p_is_unknown(self):
-        fields = stack_peak_fields(self.resources(memory_stat(), total=None), "llm")
-        assert fields == {"llm_mapped_outside_docker_stats_bytes": 2 * GIB + 4 * GIB // 10, "stack_peak_mem_bytes": None}
+
+class TestStackPeak:
+    def test_p_is_the_largest_total_of_one_sample_with_the_model_pages_of_that_sample(self):
+        peaks = ResourcePeaks()
+        peaks.add({"llm": 4 * GIB, "knowledge_store": 5 * GIB}, llm_container="llm", llm_mapped_outside=0)
+        peaks.add({"llm": 2 * GIB, "knowledge_store": 4 * GIB + GIB // 2}, llm_container="llm", llm_mapped_outside=2 * GIB)
+        peaks.add({"llm": 2 * GIB, "knowledge_store": 4 * GIB}, llm_container="llm", llm_mapped_outside=2 * GIB)
+        resources = peaks.as_dict()
+        assert resources["containers_sum_peak_mem_bytes"] == 9 * GIB
+        assert resources["stack_peak_mem_bytes"] == 9 * GIB
+        assert resources["llm_mapped_outside_docker_stats_bytes"] == 0
+        assert resources["samples_without_llm_pages"] == 0
+
+    def test_model_pages_left_out_in_the_peak_sample_are_added_to_p(self):
+        peaks = ResourcePeaks()
+        peaks.add({"llm": 2 * GIB, "knowledge_store": 7 * GIB}, llm_container="llm", llm_mapped_outside=2 * GIB)
+        peaks.add({"llm": 4 * GIB, "knowledge_store": 4 * GIB}, llm_container="llm", llm_mapped_outside=0)
+        resources = peaks.as_dict()
+        assert resources["stack_peak_mem_bytes"] == 11 * GIB
+        assert resources["llm_mapped_outside_docker_stats_bytes"] == 2 * GIB
+
+    def test_a_sample_whose_llm_pages_could_not_be_read_is_counted_and_left_out_of_p(self):
+        peaks = ResourcePeaks()
+        peaks.add({"llm": 4 * GIB, "mas": 6 * GIB}, llm_container="llm", llm_mapped_outside=None)
+        peaks.add({"llm": 4 * GIB, "mas": GIB}, llm_container="llm", llm_mapped_outside=GIB)
+        peaks.add({"mas": GIB}, llm_container="llm", llm_mapped_outside=None)
+        resources = peaks.as_dict()
+        assert resources["containers_sum_peak_mem_bytes"] == 10 * GIB
+        assert resources["stack_peak_mem_bytes"] == 6 * GIB
+        assert resources["samples_without_llm_pages"] == 1
+
+    @pytest.mark.parametrize("llm_container", ["llm", None])
+    def test_without_the_llm_figures_in_any_sample_p_is_unknown(self, llm_container):
+        peaks = ResourcePeaks()
+        peaks.add({"llm": 4 * GIB, "mas": GIB}, llm_container=llm_container, llm_mapped_outside=None)
+        resources = peaks.as_dict()
+        assert resources["stack_peak_mem_bytes"] is None
+        assert resources["llm_mapped_outside_docker_stats_bytes"] is None
+        assert resources["samples_without_llm_pages"] == (1 if llm_container else 0)
 
 
 class TestServerSideSummary:

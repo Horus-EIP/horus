@@ -35,6 +35,8 @@ def eval_report(
     unsampled=None,
     oom_kills=None,
     restarts=None,
+    stack_peak=11 * GIB + GIB // 2,
+    samples_without_llm_pages=0,
 ):
     item = make_item(id="exp-01")
     records = []
@@ -73,7 +75,8 @@ def eval_report(
             "container_peak_mem_bytes": {"llm": 4 * GIB, "mas": GIB},
             "containers_sum_peak_mem_bytes": 9 * GIB,
             "llm_mapped_outside_docker_stats_bytes": 2 * GIB + GIB // 2,
-            "stack_peak_mem_bytes": 11 * GIB + GIB // 2,
+            "stack_peak_mem_bytes": stack_peak,
+            "samples_without_llm_pages": samples_without_llm_pages,
             "swap_peak_used_bytes": 0,
             "docker_host_swap_peak_used_bytes": GIB // 2,
             "container_lifetime_peak_mem_bytes": {"llm": 5 * GIB},
@@ -138,12 +141,16 @@ class TestEndToEnd:
         assert table_row(markdown, "Routing decision without the LLM, p90")[2] == "12 ms (n=1)"
         assert table_row(markdown, "Routed by the LLM fallback")[2:] == ["50.0% (n=2)", "50.0% (n=2)", "+0.0 pts"]
         assert table_row(markdown, "Routing methods")[2:] == ["embedding 1, llm 1", "embedding 1, llm 1", "same"]
-        assert table_row(markdown, "Peak RAM of the stack (ADR-005 P)")[1:3] == ["the next two rows added up", "11.50 GiB"]
+        assert table_row(markdown, "Peak RAM of the stack (ADR-005 P)")[1:3] == [
+            "docker stats total + model pages left out, in one sample",
+            "11.50 GiB",
+        ]
         assert table_row(markdown, "Peak RAM, all containers at once")[1:3] == ["docker stats samples", "9.00 GiB"]
         assert table_row(markdown, "Model pages docker stats left out")[1:3] == [
-            "llama-server RssFile, memory.stat",
+            "llama-server RssFile, memory.stat, in the sample of P",
             "2.50 GiB",
         ]
+        assert "RssFile" not in markdown.split("## Section 10 metrics")[0]
         assert table_row(markdown, "Peak RAM, llm, since it started")[2] == "5.00 GiB"
         assert table_row(markdown, "Out-of-memory kills")[2] == "1"
         assert table_row(markdown, "Container restarts")[2] == "0"
@@ -169,7 +176,8 @@ class TestEndToEnd:
         assert "different test sets" in compare_markdown([before], [after], BenchSelection())
 
     def test_a_peak_missed_between_samples_asks_for_a_shorter_interval(self, tmp_path, make_item):
-        report = eval_report(make_item, [10.0], unsampled={"llm": GIB, "mas": GIB // 2, "agent": None})
+        unsampled = {"llm": GIB, "mas": GIB // 2, "web_client": None, "agent": None}
+        report = eval_report(make_item, [10.0], unsampled=unsampled)
         markdown = compare_markdown([write(tmp_path, "a.json", report)], None, BenchSelection())
         assert (
             "eval-cpu16: the memory.peak of llm, less its inactive page cache, went 1.00 GiB above its docker "
@@ -177,10 +185,31 @@ class TestEndToEnd:
             "--sample-interval 2 before taking ADR-005's P from it."
         ) in markdown
         assert (
-            "eval-cpu16: the memory.peak of agent rose during the questions, but its memory.stat could not be "
-            "read, so a spike between samples cannot be ruled out."
+            "eval-cpu16: no sampling check for agent, web_client: a memory.peak or memory.stat could not be "
+            "read (memory.peak needs cgroup v2 and Linux 5.19 or later), so a spike between two samples "
+            "cannot be ruled out."
         ) in markdown
         assert "memory.peak of mas" not in markdown
+
+    @pytest.mark.parametrize(
+        ("stack_peak", "warning"),
+        [
+            (
+                11 * GIB,
+                "eval-cpu16: llama-server's RssFile or the llm memory.stat could not be read in 3 samples: "
+                "ADR-005's P leaves them out.",
+            ),
+            (
+                None,
+                "eval-cpu16: llama-server's RssFile or the llm memory.stat could not be read in any of the 3 "
+                "samples taken while llm ran, so ADR-005's P is unknown: fix the read and run again.",
+            ),
+        ],
+    )
+    def test_samples_without_the_llm_pages_are_called_out(self, tmp_path, make_item, stack_peak, warning):
+        report = eval_report(make_item, [10.0], stack_peak=stack_peak, samples_without_llm_pages=3)
+        markdown = compare_markdown([write(tmp_path, "a.json", report)], None, BenchSelection())
+        assert warning in markdown
 
     def test_unread_oom_kills_or_restarts_leave_their_rows_empty(self, tmp_path, make_item):
         report = eval_report(make_item, [10.0], oom_kills={"llm": 0, "agent": None, "mas": None}, restarts={})

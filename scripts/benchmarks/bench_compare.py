@@ -106,9 +106,19 @@ SECTION_10_ROWS = (
     MetricRow("routing_llm_pct", "Routed by the LLM fallback", ROUTER, "%"),
     MetricRow("routing_methods", "Routing methods", ROUTER, "text"),
     MetricRow("dispatch_median_ms", "Submit to dispatch, median", "task events, queue wait included", "ms"),
-    MetricRow("stack_peak_gib", "Peak RAM of the stack (ADR-005 P)", "the next two rows added up", "GiB"),
+    MetricRow(
+        "stack_peak_gib",
+        "Peak RAM of the stack (ADR-005 P)",
+        "docker stats total + model pages left out, in one sample",
+        "GiB",
+    ),
     MetricRow("peak_ram_gib", "Peak RAM, all containers at once", "docker stats samples", "GiB"),
-    MetricRow("llm_mapped_outside_gib", "Model pages docker stats left out", "llama-server RssFile, memory.stat", "GiB"),
+    MetricRow(
+        "llm_mapped_outside_gib",
+        "Model pages docker stats left out",
+        "llama-server RssFile, memory.stat, in the sample of P",
+        "GiB",
+    ),
     MetricRow("peak_ram_llm_gib", "Peak RAM, llm container", "docker stats", "GiB"),
     MetricRow("lifetime_peak_llm_gib", "Peak RAM, llm, since it started", "cgroup memory.peak", "GiB"),
     MetricRow("oom_kills", "Out-of-memory kills", "cgroup memory.events", "count"),
@@ -410,19 +420,35 @@ def header_rows(sides: list[Side]) -> list[list[Any]]:
 def sampling_warnings(doc: dict[str, Any]) -> list[str]:
     excess = (doc.get("resources") or {}).get("unsampled_peak_excess_bytes") or {}
     warnings = []
+    unchecked = sorted(name for name, over in excess.items() if over is None)
+    if unchecked:
+        warnings.append(
+            f"{doc.get('label')}: no sampling check for {', '.join(unchecked)}: a memory.peak or memory.stat "
+            "could not be read (memory.peak needs cgroup v2 and Linux 5.19 or later), so a spike between two "
+            "samples cannot be ruled out."
+        )
     for name, over in sorted(excess.items()):
-        if over is None:
-            warnings.append(
-                f"{doc.get('label')}: the memory.peak of {name} rose during the questions, but its memory.stat "
-                "could not be read, so a spike between samples cannot be ruled out."
-            )
-        elif over > UNSAMPLED_PEAK_LIMIT_BYTES:
+        if over is not None and over > UNSAMPLED_PEAK_LIMIT_BYTES:
             warnings.append(
                 f"{doc.get('label')}: the memory.peak of {name}, less its inactive page cache, went "
                 f"{_gib(over):.2f} GiB above its docker stats peak during the questions: a spike fell between "
                 "two samples. Repeat the run with --sample-interval 2 before taking ADR-005's P from it."
             )
     return warnings
+
+
+def stack_peak_warnings(doc: dict[str, Any]) -> list[str]:
+    resources = doc.get("resources")
+    missing = resources.get("samples_without_llm_pages") if isinstance(resources, dict) else None
+    if not missing:
+        return []
+    unread = f"{doc.get('label')}: llama-server's RssFile or the llm memory.stat could not be read in"
+    if resources.get("stack_peak_mem_bytes") is None:
+        return [
+            f"{unread} any of the {missing} samples taken while llm ran, so ADR-005's P is unknown: "
+            "fix the read and run again."
+        ]
+    return [f"{unread} {missing} samples: ADR-005's P leaves them out."]
 
 
 def unread_count_warnings(doc: dict[str, Any]) -> list[str]:
@@ -447,7 +473,7 @@ def comparison_warnings(sides: list[Side]) -> list[str]:
             if doc.get("kind") == EVAL_KIND and run.get("completed") is False:
                 warnings.append(f"{doc.get('label')}: the run did not complete.")
             if doc.get("kind") == EVAL_KIND:
-                warnings += sampling_warnings(doc) + unread_count_warnings(doc)
+                warnings += sampling_warnings(doc) + stack_peak_warnings(doc) + unread_count_warnings(doc)
             pending = ((doc.get("summary") or {}).get("manual_review") or {}).get("pending")
             if doc.get("kind") == EVAL_KIND and pending:
                 warnings.append(f"{doc.get('label')}: {pending} answers still wait for the two reviewers.")
