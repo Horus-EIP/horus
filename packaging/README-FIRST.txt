@@ -1,7 +1,8 @@
 HORUS - BETA TEST BUILD
 =======================
 BEFORE YOU START you need Docker Desktop installed AND RUNNING
-(https://www.docker.com/products/docker-desktop/), Python 3.11+
+(https://www.docker.com/products/docker-desktop/) with Docker
+Compose 2.33 or newer (check with: docker compose version), Python 3.11+
 (https://www.python.org/downloads/), 150 GB free disk, and internet.
 With an NVIDIA GPU 125 GB is enough.
 Without an NVIDIA GPU, Docker needs at least 13.5 GiB of memory. On

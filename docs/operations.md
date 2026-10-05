@@ -66,7 +66,7 @@ cosign verify \
 
 **Installer.** By default it never builds:
 
-1. It writes `HORUS_REGISTRY` (from `--registry`, the `HORUS_REGISTRY` variable, the previous install, or the default) and `HORUS_VERSION` to `.env`. Preflight checks that registry's host instead of PyPI, npm and Debian, and for GHCR also `pkg-containers.githubusercontent.com`, which serves the image layers: a proxy or firewall has to let both through.
+1. It writes `HORUS_REGISTRY` (from `--registry`, the `HORUS_REGISTRY` variable, the previous install, or the default) and `HORUS_VERSION` to `.env`. Preflight checks that registry's host instead of PyPI, npm and Debian, and for GHCR also `pkg-containers.githubusercontent.com`, which serves the image layers: a proxy or firewall has to let both through. The `cpu-*` profiles need both GHCR hosts in any case, for the llama.cpp server image (see [Installer preflight](#installer-preflight)).
 2. If it is given a token, it signs Docker in with `docker login <host> --username <user> --password-stdin`, the token on stdin. The token comes from `--registry-token-file PATH`, from `HORUS_REGISTRY_TOKEN` (with `HORUS_REGISTRY_USERNAME` or `--registry-user`), or from `registry-token.txt` next to START-HERE, written as `USERNAME:TOKEN` on one line. It never reaches `install-log.txt`, `.env` or `horus-profile.json`, and no flag takes the token itself, so it stays out of shell history and process lists. The bundle builder never archives a `registry-token.txt`. Docker keeps the sign-in in its credential store like any `docker login`; `docker logout ghcr.io` removes it. On GHCR the token is a personal access token (classic) with `read:packages`. A refused sign-in stops with exit code 47.
 3. It pulls the Horus images first, then the third-party ones, one at a time with 3 tries each. It checks that each Horus image is really on the machine afterwards (`docker image inspect`), because `docker compose pull` can report success for a service that also has a `build:` section. When the registry refuses an image it stops at once with exit code 41 and says how to give it the token.
 4. It starts the stack with `docker compose up -d --no-build`. `--start` and `--restart` also pass `--no-build` while `.env` has `HORUS_REGISTRY`. It then names the Horus images this install does not use, with the `docker image rm` command that frees their space: images an earlier source install built (`<project>-mas` and so on), and other releases or the other flavor of `<registry>/horus-*` (another tag of the image in use is left out). It removes nothing itself. At the end it offers to prune Docker's build cache when more than 1 GB of it is left from earlier source builds, as the source path does.
@@ -139,6 +139,22 @@ The installer chooses the profile right after it has checked Python, Docker and 
 5. **Re-runs.** The installer writes `horus-profile.json` as soon as it has decided, and again with the settings once `.env` is written. It keeps a fingerprint of the RAM, the Docker memory and the GPU list. When the next run finds the same fingerprint and Docker could use the GPU last time, the GPU test is not repeated and its result decides again. A GPU test that failed always runs again, so a driver or toolkit fixed since is noticed. `--profile` still overrides.
 
 The thresholds live in one place, `installer/profiles.py`: `CPU_STANDARD_MIN_GIB`, `CPU_LEAN_MIN_GIB`, and `CPU_LEAN_SUPPORTED`, which turns option B off (every machine under 15.0 GiB is then not supported) if the measurements reject the q8_0 cache. `--dry-run --simulate linux-cpu-8gb` (or `laptop-cpu-14gb`, `linux-cpu-16gb`, `windows-cpu-16gb`, `old-cpu-no-avx2`) shows each outcome without Docker. `--dry-run` without `--simulate` decides for this machine as the install would: it asks Docker how much memory it can use (`docker info`, which changes nothing), and falls back to the RAM when Docker does not answer.
+
+#### Installer preflight
+
+Before the hardware decision the installer checks Python 3.11 or newer, the Docker daemon and Compose; `--start` and `--restart` check Docker and Compose again. After the decision it checks the disk, the network and the ports (`installer/preflight.py`).
+
+- **Compose version.** The compose files need Docker Compose **2.33.0** or newer, the newest of the features they use, each taken from the Compose release notes and the compose-go version each release ships:
+
+  | Feature in the compose files | Supported since |
+  |---|---|
+  | `gpus: all` on a service (base file) | Compose 2.33.0 (compose-go 2.4.8; 2.30 to 2.32 accept only a list of device requests, older ones no `gpus` key) |
+  | `depends_on` with `required: false` | Compose 2.20.2 |
+  | the `!reset` tag (CPU overlay) | Compose 2.18.0 (compose-go 1.13.5) |
+  | `${VAR:+...}` interpolation (image names) | Compose 2.8.0 (compose-go 1.3.0) |
+
+  An older Compose stops the installer with exit code 13 and the update steps. A version string with no `x.y.z` in it (some builds print a commit hash) only gets a warning. The table is `COMPOSE_FEATURES` in `installer/preflight.py`; `installer/tests/test_preflight_requirements.py` fails when the compose files stop using one of these features.
+- **Network.** The hosts every install needs (Docker Hub and Hugging Face), then the image source: PyPI, npm and Debian when building from source, or the registry of the prebuilt images (see [Prebuilt images](#prebuilt-images)). On a `cpu-*` profile it also checks the registry of the llama.cpp server image, `ghcr.io` and `pkg-containers.githubusercontent.com` by default, even when the Horus images come from elsewhere or are built from source. `LLM_SERVER_IMAGE`, from the environment or `src/infra/.env` as for Compose, moves that check to its own registry; an image on Docker Hub adds nothing. A host that serves both is checked once.
 
 ---
 

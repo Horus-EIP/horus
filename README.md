@@ -73,7 +73,7 @@ greenlight/               EIP greenlight deliverables (deck, reports, code-quali
 
 ## Prerequisites
 
-- **Docker** (v20.10+) and **Docker Compose** (v2+)
+- **Docker** (v20.10+) and **Docker Compose** 2.33.0 or newer (`docker compose version`; the installer refuses older ones)
 - Optional: Python 3.13+ (local development without Docker)
 - Optional: Node.js 20+ (web client development)
 

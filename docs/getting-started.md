@@ -27,7 +27,8 @@ This guide helps you set up a local environment for the Horus multi-agent system
 - **Git** (2.30+)  
   [Download Git](https://git-scm.com/downloads)
 
-- **Docker** with Compose v2 (`docker compose`)  
+- **Docker** with Compose 2.33.0 or newer (`docker compose`)  
+  The compose files use `gpus: all`, which older versions reject, and the installer stops on an older Compose; see [Installer preflight](operations.md#installer-preflight).  
   [Docker Desktop](https://www.docker.com/products/docker-desktop)  
   Allocate at least 4 CPUs in Docker settings. Without an NVIDIA GPU, give Docker at least 13.5 GiB of memory (15.0 GiB for the `cpu-standard` profile); see [Hardware decision](operations.md#hardware-decision).
 

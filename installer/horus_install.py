@@ -1310,7 +1310,8 @@ def _dispatch(log: Log, args) -> int:
     probe, name, reasons = decide_profile(log, args, registry)
     preflight.run_install_checks(log, infra, want_admin_profile=args.admin_profile,
                                  skip_disk_check=args.skip_disk_check,
-                                 image_registry=registry)
+                                 image_registry=registry,
+                                 cpu_profile=profiles.is_cpu_profile(name))
     if registry is not None:
         sign_in_to_registry(log, args, registry)
         if args.no_build:

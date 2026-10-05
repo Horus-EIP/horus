@@ -445,7 +445,7 @@ class InstallWritesTheTuning(unittest.TestCase):
             patch(mock.patch.object(horus_install, "PROFILE_JSON",
                                     self.repo / "horus-profile.json"))
             patch(mock.patch.object(horus_install, "banner"))
-            patch(mock.patch.object(horus_install, "preflight"))
+            self.preflight = patch(mock.patch.object(horus_install, "preflight"))
             consent = patch(mock.patch.object(horus_install, "consent"))
             consent.choose.return_value = {"corpus_dir": "../../demo_assets"}
             probe_machine = patch(mock.patch.object(horus_install.hardware, "probe"))
@@ -466,6 +466,14 @@ class InstallWritesTheTuning(unittest.TestCase):
         self.assertEqual(env["LLM_SERVER_THREADS"], "4")
         self.assertEqual(env["LLM_TORCH_INTRAOP_THREADS"], "1")
         self.assertEqual(env["AGENT_TORCH_INTRAOP_THREADS"], "1")
+
+    def test_only_a_cpu_install_checks_the_registry_of_the_llama_server_image(self):
+        for profile, simulation, cpu_profile in (("cpu-standard", "nvidia-16gb", True),
+                                                 ("gpu-8g", "nvidia-8gb", False)):
+            with self.subTest(profile):
+                self.install(profile, simulation)
+                checks = self.preflight.run_install_checks.call_args
+                self.assertIs(checks.kwargs["cpu_profile"], cpu_profile)
 
     def test_a_cpu_install_writes_the_memory_ceilings(self):
         env, _ = self.install("cpu-standard", "nvidia-16gb")

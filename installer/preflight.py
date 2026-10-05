@@ -51,14 +51,69 @@ REGISTRIES = RUNTIME_HOSTS + SOURCE_BUILD_HOSTS
 
 LAYER_HOSTS = {"ghcr.io": "https://pkg-containers.githubusercontent.com/"}
 
-def network_hosts(image_registry: str | None) -> list[tuple[str, str]]:
-    if not image_registry:
-        return list(REGISTRIES)
-    host = image_registry.split("/", 1)[0]
-    hosts = [*RUNTIME_HOSTS, ("Horus images", f"https://{host}/v2/")]
+MODEL_SERVER_IMAGE_KEY = "LLM_SERVER_IMAGE"
+
+DEFAULT_MODEL_SERVER_IMAGE = "ghcr.io/ggml-org/llama.cpp"
+
+COMPOSE_FEATURES: tuple[tuple[str, tuple[int, int, int]], ...] = (
+    ("gpus: all", (2, 33, 0)),
+    ("depends_on with required: false", (2, 20, 2)),
+    ("the !reset tag", (2, 18, 0)),
+    ("${VAR:+...} interpolation", (2, 8, 0)),
+)
+
+MIN_COMPOSE_VERSION = max(version for _feature, version in COMPOSE_FEATURES)
+
+VERSION_NUMBER = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+
+def dotted(version: tuple[int, ...]) -> str:
+    return ".".join(str(part) for part in version)
+
+def compose_version(text: str) -> tuple[int, int, int] | None:
+    match = VERSION_NUMBER.search(text or "")
+    if match is None:
+        return None
+    major, minor, patch = (int(part) for part in match.groups())
+    return major, minor, patch
+
+DOCKER_HUB_NAMES = {"docker.io", "index.docker.io", "registry-1.docker.io"}
+
+def registry_host(image: str) -> str | None:
+    first, separator, _rest = image.strip().partition("/")
+    names_a_registry = "." in first or ":" in first or first == "localhost"
+    if separator and names_a_registry and first not in DOCKER_HUB_NAMES:
+        return first
+    return None
+
+def model_server_hosts(image: str) -> list[tuple[str, str]]:
+    host = registry_host(image)
+    if host is None:
+        return []
+    hosts = [("llama.cpp server image", f"https://{host}/v2/")]
     if host in LAYER_HOSTS:
-        hosts.append(("Horus image layers", LAYER_HOSTS[host]))
+        hosts.append(("llama.cpp server image layers", LAYER_HOSTS[host]))
     return hosts
+
+def _labelled_once(hosts: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    labels: dict[str, list[str]] = {}
+    for label, url in hosts:
+        names = labels.setdefault(url, [])
+        if label not in names:
+            names.append(label)
+    return [(" and ".join(names), url) for url, names in labels.items()]
+
+def network_hosts(image_registry: str | None,
+                  model_server_image: str | None = None) -> list[tuple[str, str]]:
+    if not image_registry:
+        hosts = list(REGISTRIES)
+    else:
+        host = image_registry.split("/", 1)[0]
+        hosts = [*RUNTIME_HOSTS, ("Horus images", f"https://{host}/v2/")]
+        if host in LAYER_HOSTS:
+            hosts.append(("Horus image layers", LAYER_HOSTS[host]))
+    if model_server_image:
+        hosts.extend(model_server_hosts(model_server_image))
+    return _labelled_once(hosts)
 
 PORTS = [
     (3000, "web-client", None, None),
@@ -167,8 +222,26 @@ def check_docker(log: Log) -> str:
         fix,
     )
 
+def _compose_too_old(found: tuple[int, int, int]) -> InstallError:
+    width = max(len(feature) for feature, _version in COMPOSE_FEATURES)
+    return InstallError(
+        EXIT_COMPOSE_MISSING,
+        f"Docker Compose {dotted(found)} is too old: Horus needs "
+        f"{dotted(MIN_COMPOSE_VERSION)} or newer.",
+        "The Horus compose files use these features, and an older Compose\n"
+        "rejects or misreads them before any container starts:\n\n  "
+        + "\n  ".join(f"{feature:<{width}}  since Compose {dotted(version)}"
+                      for feature, version in COMPOSE_FEATURES),
+        "Update Docker Desktop: it ships Compose.\n"
+        "On Linux update the plugin from Docker's own package repository:\n"
+        "  sudo apt-get update && sudo apt-get install docker-compose-plugin\n"
+        "  (or see https://docs.docker.com/compose/install/linux/)\n"
+        f"Then check that  docker compose version  says {dotted(MIN_COMPOSE_VERSION)} "
+        "or newer,\nand run this again.",
+    )
+
 def check_compose(log: Log) -> str:
-    log.step("3/6  Docker Compose v2")
+    log.step("3/6  Docker Compose")
     res = run(["docker", "compose", "version"], log, timeout=45)
     if not res.ok:
         raise InstallError(
@@ -181,7 +254,16 @@ def check_compose(log: Log) -> str:
             "  sudo apt-get install docker-compose-plugin\n"
             "  (or see https://docs.docker.com/compose/install/linux/)",
         )
-    version = res.out.strip().splitlines()[0] if res.out else "unknown"
+    version = res.first_line() or "unknown"
+    found = compose_version(version)
+    if found is None:
+        log.warn(f"Could not read a version number in {version!r}. Horus needs "
+                 f"Compose {dotted(MIN_COMPOSE_VERSION)} or newer; if the stack does "
+                 "not start, update Docker.")
+        return version
+    if found < MIN_COMPOSE_VERSION:
+        log.fail(f"{version}  (Horus needs {dotted(MIN_COMPOSE_VERSION)} or newer)")
+        raise _compose_too_old(found)
     log.ok(version)
     return version
 
@@ -306,7 +388,7 @@ def check_network(log: Log, hosts: list[tuple[str, str]] | None = None) -> dict:
         )
     return results
 
-def _read_env_ports(env_path: Path) -> dict[str, str]:
+def _read_env_values(env_path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     if not env_path.is_file():
         return values
@@ -319,10 +401,20 @@ def _read_env_ports(env_path: Path) -> dict[str, str]:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, val = line.partition("=")
-        key = key.strip()
-        if key.endswith("_PORT"):
-            values[key] = val.strip()
+        val = val.strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
+            val = val[1:-1]
+        values[key.strip()] = val
     return values
+
+def _read_env_ports(env_path: Path) -> dict[str, str]:
+    return {key: value for key, value in _read_env_values(env_path).items()
+            if key.endswith("_PORT")}
+
+def model_server_image(infra: Path) -> str:
+    return (os.environ.get(MODEL_SERVER_IMAGE_KEY, "").strip()
+            or _read_env_values(infra / ".env").get(MODEL_SERVER_IMAGE_KEY, "")
+            or DEFAULT_MODEL_SERVER_IMAGE)
 
 def _port_free(port: int) -> bool:
     for family, addr in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
@@ -430,7 +522,8 @@ def run_engine_checks(log: Log) -> dict:
 
 def run_install_checks(log: Log, infra: Path, want_admin_profile: bool = False,
                        skip_disk_check: bool = False,
-                       image_registry: str | None = None) -> dict:
+                       image_registry: str | None = None,
+                       cpu_profile: bool = False) -> dict:
     summary: dict = {}
     if skip_disk_check:
         log.step("4/6  Disk space")
@@ -440,7 +533,8 @@ def run_install_checks(log: Log, infra: Path, want_admin_profile: bool = False,
                            "free_bytes": None, "skipped": True}
     else:
         summary["disk"] = check_disk(log)
-    summary["network"] = check_network(log, network_hosts(image_registry))
+    llama_image = model_server_image(infra) if cpu_profile else None
+    summary["network"] = check_network(log, network_hosts(image_registry, llama_image))
     summary["ports"] = check_ports(log, infra, want_admin_profile)
     log.say("")
     log.say("  " + "Preflight passed.")
