@@ -31,6 +31,11 @@ CPU_TORCH_INDEX = "https://download.pytorch.org/whl/cpu"
 DEFAULT_INDEX = "https://pypi.org/simple"
 CPU_IMAGE_JOB = "cpu-images"
 
+CPU_TORCH_TEST_JOBS = {
+    "test-agent": ("src/services/agent/requirements.txt", 90),
+    "test-knowledge-store": ("src/services/knowledge-store/requirements.txt", 85),
+}
+
 TORCH_SERVICES = {
     "mas": SERVICES / "mas",
     "agent": SERVICES / "agent",
@@ -163,6 +168,54 @@ class TorchPin(unittest.TestCase):
     def test_the_cpu_requirements_file_reads_torch_from_the_cpu_index(self):
         text = (SERVICES / "mas" / "requirements-cpu.txt").read_text(encoding="utf-8")
         self.assertIn(f"--extra-index-url {CPU_TORCH_INDEX}", text.splitlines())
+
+
+@needs_yaml
+class CiTestJobsInstallCpuTorch(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.jobs = load_yaml(CI_WORKFLOW)["jobs"]
+
+    def runs(self, job: str) -> list[str]:
+        return [step.get("run", "") for step in self.jobs[job]["steps"]]
+
+    def step_running(self, job: str, text: str) -> int:
+        for index, run in enumerate(self.runs(job)):
+            if text in run:
+                return index
+        raise AssertionError(f"{job} has no step running {text!r}")
+
+    def requirements_install(self, job: str) -> str:
+        requirements, _ = CPU_TORCH_TEST_JOBS[job]
+        for run in self.runs(job):
+            for line in run.splitlines():
+                if f"-r {requirements}" in line:
+                    return line
+        raise AssertionError(f"{job} does not install {requirements}")
+
+    def test_the_requirements_are_installed_with_the_cpu_torch_index_as_an_extra_index(self):
+        for job in CPU_TORCH_TEST_JOBS:
+            with self.subTest(job):
+                install = self.requirements_install(job)
+                self.assertIn(f"--extra-index-url {CPU_TORCH_INDEX}", install)
+                self.assertIsNone(re.search(r"\s(?:-i|--index-url)[\s=]", install), install)
+
+    def test_the_installed_torch_must_be_the_pinned_cpu_build_before_the_tests_run(self):
+        for job, (requirements, _) in CPU_TORCH_TEST_JOBS.items():
+            with self.subTest(job):
+                check = self.runs(job)[self.step_running(job, "scripts/ci/check-cpu-image.py")]
+                self.assertIn("pip list --format=freeze", check)
+                self.assertIn(f"--requirements {requirements}", check)
+                self.assertLess(self.step_running(job, "scripts/ci/check-cpu-image.py"),
+                                self.step_running(job, "pytest -c"))
+                self.assertGreater(self.step_running(job, "scripts/ci/check-cpu-image.py"),
+                                   self.step_running(job, f"-r {requirements}"))
+
+    def test_the_coverage_gates_are_kept(self):
+        for job, (_, gate) in CPU_TORCH_TEST_JOBS.items():
+            with self.subTest(job):
+                tests = self.runs(job)[self.step_running(job, "pytest -c")]
+                self.assertIn(f"--cov-fail-under={gate}", tests)
 
 
 class DockerfileTorchInstall(unittest.TestCase):

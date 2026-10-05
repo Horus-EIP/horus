@@ -224,8 +224,14 @@ jobs:
       - name: Install Agent dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r src/services/agent/requirements.txt
+          pip install -r src/services/agent/requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
           pip install pytest-cov
+
+      - name: Fail on CUDA packages or a torch other than the pinned CPU build
+        run: |
+          pip list --format=freeze > packages.txt
+          python scripts/ci/check-cpu-image.py packages.txt \
+            --requirements src/services/agent/requirements.txt
 
       - name: Run Agent unit tests with coverage
         run: |
@@ -267,8 +273,14 @@ jobs:
       - name: Install Knowledge Store dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r src/services/knowledge-store/requirements.txt
+          pip install -r src/services/knowledge-store/requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
           pip install pytest-cov
+
+      - name: Fail on CUDA packages or a torch other than the pinned CPU build
+        run: |
+          pip list --format=freeze > packages.txt
+          python scripts/ci/check-cpu-image.py packages.txt \
+            --requirements src/services/knowledge-store/requirements.txt
 
       - name: Run Knowledge Store unit tests with coverage
         run: |
