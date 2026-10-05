@@ -248,6 +248,11 @@ class ReleaseWorkflow(unittest.TestCase):
         self.assertNotIn("--key", everything)
         self.assertNotIn("COSIGN_PRIVATE_KEY", everything)
 
+    def test_the_cosign_installer_is_pinned_to_a_published_release(self):
+        _, step = self.step(self.job, "sigstore/cosign-installer")
+        _action, ref = step["uses"].split("@", 1)
+        self.assertRegex(ref, r"^(v\d+\.\d+\.\d+|[0-9a-f]{40})$")
+
     def test_only_the_image_job_may_write_packages_and_request_an_oidc_token(self):
         self.assertEqual(self.workflow["permissions"], {"contents": "read"})
         self.assertEqual(self.job["permissions"],

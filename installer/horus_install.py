@@ -371,12 +371,39 @@ def images_built_here_before(log: Log, project: str, services: dict[str, dict]) 
     local = [f"{project}-{name}" for name, spec in services.items() if ours(spec)]
     return [image for image in local if _image_on_this_machine(log, image)]
 
+def _images_in_repository(log: Log, repository: str) -> list[tuple[str, str]]:
+    res = run(["docker", "image", "ls", "--format", "{{.ID}} {{.Repository}}:{{.Tag}}",
+               repository], log, timeout=60)
+    if not res.ok:
+        return []
+    rows = (line.split() for line in res.out.splitlines())
+    return [(row[0], row[1]) for row in rows if len(row) == 2]
+
+def other_releases_left_here(log: Log, services: dict[str, dict]) -> list[str]:
+    left: list[str] = []
+    for spec in services.values():
+        image = str(spec.get("image") or "")
+        if not (ours(spec) and image):
+            continue
+        repository, in_use = images.split_tag(image)
+        listed = _images_in_repository(log, repository)
+        in_use_ids = {image_id for image_id, name in listed
+                      if images.split_tag(name)[1] == in_use}
+        left += [name for image_id, name in listed
+                 if image_id not in in_use_ids
+                 and images.split_tag(name)[1] not in ("", "<none>")]
+    return left
+
+def unused_horus_images(log: Log, project: str, services: dict[str, dict]) -> list[str]:
+    built_here = images_built_here_before(log, project, services)
+    return built_here + other_releases_left_here(log, services)
+
 def point_out_unused_local_images(log: Log, leftovers: list[str]) -> None:
     if not leftovers:
         return
     log.say("")
-    log.say("  An earlier install built these images here. The stack no longer uses")
-    log.say("  them, and they take a lot of disk. Free the space with:")
+    log.say("  Earlier installs left these Horus images here. This install does not")
+    log.say("  use them, and they take a lot of disk. Free the space with:")
     log.say("    docker image rm " + " ".join(leftovers))
 
 def pullable_images(services: dict[str, dict], from_source: bool) -> dict[str, str]:
@@ -502,7 +529,7 @@ def pull_images(log: Log, infra: Path, from_source: bool = False) -> list[str]:
             "for this processor: run START-HERE again with  --build-from-source\n"
             f"Full log: {LOG_PATH}",
         )
-    return [] if from_source else images_built_here_before(log, project, services)
+    return [] if from_source else unused_horus_images(log, project, services)
 
 def services_still_starting(log: Log, infra: Path) -> list[str]:
     starting: list[str] = []
@@ -1331,9 +1358,8 @@ def _success(log: Log, infra: Path, profile_name: str, choice: dict,
     log.say("  To stop:       START-HERE (your platform) --stop")
     log.say("  To remove:     START-HERE (your platform) --uninstall")
     log.say("")
-    if built_here:
-        offer_to_reclaim(log, non_interactive=non_interactive)
-        log.say("")
+    offer_to_reclaim(log, non_interactive=non_interactive, built_here=built_here)
+    log.say("")
 
 def reclaimable_build_cache(log: Log) -> int:
     res = run(["docker", "system", "df", "--format", "{{json .}}"], log, timeout=60)
@@ -1356,11 +1382,15 @@ def reclaimable_build_cache(log: Log) -> int:
         return int(float(match.group(1)) * scale.get(match.group(2), 1))
     return 0
 
-def offer_to_reclaim(log: Log, non_interactive: bool = False) -> None:
+def offer_to_reclaim(log: Log, non_interactive: bool = False, built_here: bool = True) -> None:
     spare = reclaimable_build_cache(log)
     if spare < 1024**3:
         return
-    log.say(f"  The build left {human_bytes(spare)} of Docker build cache behind.")
+    if built_here:
+        log.say(f"  The build left {human_bytes(spare)} of Docker build cache behind.")
+    else:
+        log.say(f"  Docker still holds {human_bytes(spare)} of build cache from images built")
+        log.say("  on this machine before. The prebuilt images do not need it.")
     log.say("  It only makes a future rebuild faster. Deleting it does not")
     log.say("  touch Horus, its images or your data.")
     if non_interactive:

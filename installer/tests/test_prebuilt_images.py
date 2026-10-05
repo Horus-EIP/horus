@@ -105,6 +105,15 @@ class ImageNames(unittest.TestCase):
                 self.assertEqual(images.image_name("ghcr.io/acme", service, "1.2.3", "cpu"),
                                  expected[service])
 
+    def test_the_tag_is_split_off_even_behind_a_registry_port(self):
+        self.assertEqual(images.split_tag("ghcr.io/acme/horus-mas:1.2.3-cpu"),
+                         ("ghcr.io/acme/horus-mas", "1.2.3-cpu"))
+        self.assertEqual(images.split_tag("registry:5000/team/horus-mas:1.2.3-gpu"),
+                         ("registry:5000/team/horus-mas", "1.2.3-gpu"))
+        self.assertEqual(images.split_tag("registry:5000/team/horus-mas"),
+                         ("registry:5000/team/horus-mas", ""))
+        self.assertEqual(images.split_tag("infra-mas"), ("infra-mas", ""))
+
     def test_the_tag_suffix_follows_the_profile(self):
         for name in profiles.PROFILE_ORDER:
             with self.subTest(name):
@@ -374,6 +383,16 @@ class PreflightNetworkHosts(unittest.TestCase):
         for label in ("PyPI (Python deps)", "npm (web client deps)",
                       "Debian apt (image packages)"):
             self.assertNotIn(label, hosts)
+
+    def test_ghcr_also_needs_the_host_that_serves_its_layers(self):
+        hosts = dict(preflight.network_hosts("ghcr.io/acme"))
+        self.assertEqual(hosts["Horus image layers"],
+                         "https://pkg-containers.githubusercontent.com/")
+
+    def test_another_registry_is_checked_on_its_own_host_only(self):
+        hosts = dict(preflight.network_hosts("registry.example.com/team"))
+        self.assertEqual(hosts["Horus images"], "https://registry.example.com/v2/")
+        self.assertNotIn("Horus image layers", hosts)
 
     def test_run_all_checks_the_hosts_of_the_chosen_image_source(self):
         with contextlib.ExitStack() as stack:

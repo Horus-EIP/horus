@@ -49,11 +49,16 @@ SOURCE_BUILD_HOSTS = [
 
 REGISTRIES = RUNTIME_HOSTS + SOURCE_BUILD_HOSTS
 
+LAYER_HOSTS = {"ghcr.io": "https://pkg-containers.githubusercontent.com/"}
+
 def network_hosts(image_registry: str | None) -> list[tuple[str, str]]:
     if not image_registry:
         return list(REGISTRIES)
     host = image_registry.split("/", 1)[0]
-    return [*RUNTIME_HOSTS, ("Horus images", f"https://{host}/v2/")]
+    hosts = [*RUNTIME_HOSTS, ("Horus images", f"https://{host}/v2/")]
+    if host in LAYER_HOSTS:
+        hosts.append(("Horus image layers", LAYER_HOSTS[host]))
+    return hosts
 
 PORTS = [
     (3000, "web-client", None, None),

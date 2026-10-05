@@ -416,7 +416,7 @@ def watched(line, watch_for, found):
 class FakeDocker:
 
     def __init__(self, config=None, pulls=(), ups=((0, ""),), ps=((),), local_images=(),
-                 builds=(), vanishing=None):
+                 builds=(), vanishing=None, image_ids=None):
         self.config = config
         self.pulls = list(pulls)
         self.builds = list(builds)
@@ -424,6 +424,7 @@ class FakeDocker:
         self.ps = [list(rows) for rows in ps]
         self.local_images = set(local_images)
         self.vanishing = dict(vanishing or {})
+        self.image_ids = dict(image_ids or {})
         self.history: list[str] = []
         self.labels: list[str] = []
         self.pull_envs: list[dict | None] = []
@@ -474,6 +475,13 @@ class FakeDocker:
         if cmd[1:3] == ["image", "inspect"]:
             self.history.append("inspect " + cmd[-1])
             return Result(0 if cmd[-1] in self.local_images else 1, "", "")
+        if cmd[1:3] == ["image", "ls"]:
+            repository = cmd[-1]
+            self.history.append("ls " + repository)
+            rows = [f"{self.image_ids.get(image, 'id-' + image)} {image}"
+                    for image in sorted(self.local_images)
+                    if image.rpartition(":")[0] == repository]
+            return Result(0, "\n".join(rows), "")
         raise AssertionError(f"unexpected command {cmd}")
 
     def pulled(self) -> list[str]:
@@ -693,6 +701,36 @@ class PrebuiltImagePulls(FakeDockerCase):
         out, _raised = self.run_it(docker, from_source=True)
         self.assertNotIn("docker image rm", out)
 
+    def test_other_releases_and_flavors_of_our_images_are_named_once_the_stack_runs(self):
+        docker = FakeDocker(config=compose_config(PREBUILT),
+                            local_images={"ghcr.io/acme/horus-mas:0.1.1-cpu",
+                                          "ghcr.io/acme/horus-mas:0.1.2-gpu"})
+        out, raised = self.run_it(docker)
+        self.assertIsNone(raised)
+        self.assertIn("docker image rm ghcr.io/acme/horus-mas:0.1.1-cpu "
+                      "ghcr.io/acme/horus-mas:0.1.2-gpu\n", out)
+        self.assertNotIn("horus-mas:0.1.2-cpu", out.split("docker image rm", 1)[1])
+
+    def test_old_source_builds_and_old_releases_are_named_together(self):
+        docker = FakeDocker(config=compose_config(PREBUILT),
+                            local_images={"infra-mas", "ghcr.io/acme/horus-mas:0.1.1-cpu"})
+        out, _raised = self.run_it(docker)
+        self.assertIn("docker image rm infra-mas ghcr.io/acme/horus-mas:0.1.1-cpu\n", out)
+
+    def test_another_tag_of_the_image_in_use_is_not_called_unused(self):
+        commit_tag = "ghcr.io/acme/horus-mas:sha-0123456789ab-cpu"
+        docker = FakeDocker(config=compose_config(PREBUILT), local_images={commit_tag},
+                            image_ids={commit_tag: "same",
+                                       "ghcr.io/acme/horus-mas:0.1.2-cpu": "same"})
+        out, _raised = self.run_it(docker)
+        self.assertNotIn("docker image rm", out)
+
+    def test_an_untagged_image_is_not_offered_for_removal_by_name(self):
+        docker = FakeDocker(config=compose_config(PREBUILT),
+                            local_images={"ghcr.io/acme/horus-mas:<none>"})
+        out, _raised = self.run_it(docker)
+        self.assertNotIn("docker image rm", out)
+
 class RunCanKeepOutputOutOfTheLog(unittest.TestCase):
 
     SECRET = "JWT_SECRET_KEY=not-for-the-log"
@@ -823,7 +861,8 @@ class ModelBeforeTheFirstStart(FakeDockerCase):
         self.assertEqual(
             docker.history,
             ["config", "pull mas", "inspect ghcr.io/acme/horus-mas:0.1.2-cpu",
-             "pull postgres", "pull redis", "inspect infra-mas", "model", UP],
+             "pull postgres", "pull redis", "inspect infra-mas", "ls ghcr.io/acme/horus-mas",
+             "model", UP],
         )
 
     def test_without_a_build_the_model_still_comes_before_the_start(self):
@@ -1059,10 +1098,18 @@ class ReclaimBuildCache(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
-    def call(self, non_interactive=False):
+    def call(self, non_interactive=False, built_here=True):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            horus_install.offer_to_reclaim(self.log, non_interactive=non_interactive)
+            horus_install.offer_to_reclaim(self.log, non_interactive=non_interactive,
+                                           built_here=built_here)
+        return buf.getvalue()
+
+    def succeed(self, built_here):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            horus_install._success(self.log, self.tmp, "cpu-standard", {"mode": "demo"},
+                                   non_interactive=True, built_here=built_here)
         return buf.getvalue()
 
     def test_a_small_cache_is_not_mentioned_at_all(self):
@@ -1087,6 +1134,22 @@ class ReclaimBuildCache(unittest.TestCase):
         out = self.call()
         self.assertEqual(self.commands, [["docker", "builder", "prune", "-f"]])
         self.assertIn("Reclaimed", out)
+
+    def test_after_prebuilt_images_the_cache_is_put_down_to_an_earlier_build(self):
+        self.stub([30 * 1024**3])
+        out = self.call(non_interactive=True, built_here=False)
+        self.assertIn("built\n  on this machine before", out)
+        self.assertNotIn("The build left", out)
+        self.assertIn("docker builder prune -f", out)
+
+    def test_a_prebuilt_install_still_offers_a_large_cache_back(self):
+        self.stub([30 * 1024**3])
+        self.assertIn("docker builder prune -f", self.succeed(built_here=False))
+        self.assertEqual(self.commands, [])
+
+    def test_a_prebuilt_install_with_a_small_cache_says_nothing_about_it(self):
+        self.stub([500 * 1024**2])
+        self.assertNotIn("build cache", self.succeed(built_here=False))
 
 
 if __name__ == "__main__":

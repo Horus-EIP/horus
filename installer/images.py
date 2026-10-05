@@ -65,6 +65,12 @@ def image_repository(service: str) -> str:
 def image_name(registry: str, service: str, version: str, flavor: str) -> str:
     return f"{registry}/{image_repository(service)}:{version}-{flavor}"
 
+def split_tag(image: str) -> tuple[str, str]:
+    repository, colon, tag = image.rpartition(":")
+    if not colon or "/" in tag:
+        return image, ""
+    return repository, tag
+
 def flavor_for(cpu_profile: bool) -> str:
     return CPU_FLAVOR if cpu_profile else GPU_FLAVOR
 

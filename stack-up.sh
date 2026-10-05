@@ -20,7 +20,6 @@ fi
 
 cd "$INFRA"
 bash "$INFRA/init-env.sh"
-export HORUS_REGISTRY=
 
 echo ""
 echo "Validating Docker Compose configuration..."
@@ -49,8 +48,6 @@ If the knowledge store is behind a reverse proxy with a path prefix, set in .env
   NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX=...               # web rebuild
 
 Starting stack (docker compose up --build)...
-Building from source: the app images keep local names, so they never replace
-the prebuilt images the installer pulled (HORUS_REGISTRY is ignored here).
 EOF
 
 exec docker compose up --build "$@"
