@@ -775,10 +775,14 @@ def warn_if_images_are_emulated(log: Log, probe: dict | None) -> None:
     log.say("  If the download or the start fails, run START-HERE again with")
     log.say(f"  --build-from-source to build them for this processor ({FIRST_INSTALL_TIME}).")
 
-def warn_cpu_expectations(log: Log) -> None:
+def warn_cpu_expectations(log: Log, gpu_usable: bool = False) -> None:
     log.say("")
     log.say(yellow("=" * 72))
-    log.say(yellow("  No NVIDIA GPU was usable, so Horus will run on the CPU."))
+    if gpu_usable:
+        log.say(yellow("  A CPU profile was chosen, so Horus will run on the CPU even though"))
+        log.say(yellow("  Docker can use your GPU."))
+    else:
+        log.say(yellow("  No NVIDIA GPU was usable, so Horus will run on the CPU."))
     log.say(yellow("=" * 72))
     log.say("")
     log.say(f"  Read this before you spend {FIRST_INSTALL_TIME} on the install.")
@@ -1279,7 +1283,7 @@ def decide_profile(log: Log, args, registry: str | None) -> tuple[dict, str, lis
         avx2 = profiles.avx2_warning(probe)
         if avx2:
             log.warn(avx2)
-        warn_cpu_expectations(log)
+        warn_cpu_expectations(log, gpu_usable=probe.get("cuda_usable_in_docker") is True)
     return probe, name, reasons
 
 def _dispatch(log: Log, args) -> int:

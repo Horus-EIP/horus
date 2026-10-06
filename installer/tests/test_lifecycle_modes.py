@@ -327,6 +327,15 @@ class CpuProfileDoesNotFailTheInstall(unittest.TestCase):
         self.assertIn("14 minutes", joined)
         self.assertIn("llama-server", joined)
 
+    def test_a_cpu_profile_chosen_on_a_usable_gpu_does_not_claim_there_is_no_gpu(self):
+        lines = []
+        log = type("Cap", (), {"say": lambda self, msg="": lines.append(msg)})()
+        horus_install.warn_cpu_expectations(log, gpu_usable=True)
+        joined = " ".join(lines)
+        self.assertNotIn("No NVIDIA GPU was usable", joined)
+        self.assertIn("run on the CPU", joined)
+        self.assertIn("Docker can use your GPU", joined)
+
     def unanswered_chat(self, model_server):
         import smoke
         steps, _ = self.make_steps()
