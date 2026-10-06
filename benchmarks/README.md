@@ -372,7 +372,27 @@ The contract report (`horus-contract-probe`) holds `run`, `model`, `llama_server
 
 `summary` gives `json_valid` (the JSON reliability), `status_correct`, `answer_correct_auto` and `source_correct_auto` as `{"n", "correct", "pct"}`, counts per failure, `thought_first`, `truncated`, `blank_answers`, the statistics of `wall_s`, `prompt_tokens` and `completion_tokens`, `prompt_tps` and `generation_tps` over the run, and the rates per category.
 
-Nothing has been measured with it yet: the reference machines were not reachable when it was written.
+The first run, `model-candidates-2026-10-06.json` with 20 questions per model, was on the development laptop, not on a reference machine.
+
+### Prompt cache in the contract probe (B-99)
+
+That run already measured how much of each prompt llama-server took from its prompt cache: every reply of a contract report records `prompt_tokens` and `cached_tokens`, and `prompt_tokens` is `cached_tokens` plus the tokens it processed (`prompt_n`). Over the 20 questions of each model:
+
+| Model (GGUF id) | Median cached tokens | Median prompt tokens | Share cached |
+|---|---:|---:|---:|
+| `qwen3-4b-q4km` | 527 | 1,566 | 31.9% |
+| `qwen3-4b-q5km` | 527 | 1,566 | 31.9% |
+| `agents-a1-4b-q4km` | 171 | 1,615 | 13.4% |
+| `gemma-4-e4b-it-qat-q4_0` | 173 | 1,603 | 13.5% |
+| `ling-3.0-tiny-q4km` | 176 | 1,658.5 | 13.4% |
+| `neohorse-1-4b-q4km` | 171 | 1,615 | 13.4% |
+| `spark-x2.5-4b-q4km` | 182 | 1,718.5 | 13.5% |
+
+Share cached is all the cached tokens of the 20 calls over all their prompt tokens. Per call, 171 to 1,218 tokens came from the cache.
+
+- This is the B-102 contract probe with the probe's own prompt: it builds the agent's B-98 answer prompt and sends it straight to llama-server, so nothing else runs between two answers. It is not the full stack.
+- The stack runs llama-server with `--parallel 1`, a single slot, so the MAS calls between two answers (routing, planning, aggregation) can evict the cached prefix. The full stack may reuse less.
+- The B-99 done-when, the same figures measured on the full stack, is still to do.
 
 ## Recorded result format
 
