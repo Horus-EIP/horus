@@ -1018,3 +1018,53 @@ class TestMainAgainstAStack:
         assert report["summary"]["dispatch_s"]["median"] == 0.3
         assert report["summary"]["routing"]["llm_pct"] == 50.0
         assert report["run"]["completed"] is True
+
+
+class TestTokenRenewal:
+    def signed_in_client(self, runner, urls):
+        client = make_client(runner, FakeSocket(AGENT_EVENTS), urls)
+        logins = []
+
+        async def authenticate(username, password):
+            logins.append((username, password))
+            client.token = f"jwt-{len(logins)}"
+            return True
+
+        client.authenticate = authenticate
+        clock = [1000.0]
+        client.clock = lambda: clock[0]
+        assert asyncio.run(client.sign_in("admin", "admin"))
+        return client, logins, clock
+
+    def test_a_token_older_than_the_refresh_age_is_renewed_before_the_next_question(
+        self, runner, mas
+    ):
+        urls = []
+        client, logins, clock = self.signed_in_client(runner, urls)
+        clock[0] += runner.TOKEN_REFRESH_S + 1
+
+        outcome = asyncio.run(client.ask("What is the hotel limit per night in the US?", "eval-x"))
+
+        assert outcome["status"] == "ok"
+        assert logins == [("admin", "admin"), ("admin", "admin")]
+        assert urls == ["ws://mas:8000/chat/7/?token=jwt-2"]
+
+    def test_a_fresh_token_is_kept(self, runner, mas):
+        urls = []
+        client, logins, clock = self.signed_in_client(runner, urls)
+        clock[0] += 60
+
+        asyncio.run(client.ask("What is the hotel limit per night in the US?", "eval-x"))
+
+        assert logins == [("admin", "admin")]
+        assert urls == ["ws://mas:8000/chat/7/?token=jwt-1"]
+
+    def test_a_token_given_on_the_command_line_is_never_renewed(self, runner, mas):
+        urls = []
+        client = make_client(runner, FakeSocket(AGENT_EVENTS), urls)
+        client.clock = lambda: 10_000_000.0
+
+        outcome = asyncio.run(client.ask("What is the hotel limit per night in the US?", "eval-x"))
+
+        assert outcome["status"] == "ok"
+        assert urls == ["ws://mas:8000/chat/7/?token=jwt"]

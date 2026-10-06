@@ -60,6 +60,7 @@ PERF_DIR = Path(__file__).resolve().parent.parent / "perf"
 BENCHMARKS_DIR = Path(__file__).resolve().parent.parent / "benchmarks"
 DEFAULT_OUT_DIR = REPO_ROOT / "benchmarks"
 DEFAULT_SWAP_CONTAINER = "mas"
+TOKEN_REFRESH_S = 600.0
 DOCKER_TIMEOUT_S = 30.0
 TERMINAL_TASK_STATUSES = frozenset({"completed", "failed", "cancelled", "canceled"})
 ACCEPTED_SUBMIT_STATUSES = frozenset({200, 202})
@@ -136,9 +137,27 @@ class EvalClient(pipeline.PipelineBench):
         self.submit_timeout = submit_timeout
         self.poll_interval = poll_interval
         self.connect = connect or pipeline.websockets.connect
+        self.clock = time.monotonic
+        self.credentials: tuple[str, str] | None = None
+        self.token_obtained_at = 0.0
+
+    async def sign_in(self, username: str, password: str) -> bool:
+        self.credentials = (username, password)
+        return await self._renew_token()
+
+    async def _renew_token(self) -> bool:
+        if not await self.authenticate(*self.credentials):
+            return False
+        self.token_obtained_at = self.clock()
+        return True
+
+    async def keep_token_fresh(self) -> None:
+        if self.credentials and self.clock() - self.token_obtained_at >= TOKEN_REFRESH_S:
+            await self._renew_token()
 
     async def ask(self, question: str, conversation_name: str) -> dict[str, Any]:
         outcome: dict[str, Any] = {"mode": "chat", "status": "error"}
+        await self.keep_token_fresh()
         conversation_id = await self.create_conversation(conversation_name)
         if conversation_id is None:
             outcome["error"] = "could not create a conversation"
@@ -165,6 +184,7 @@ class EvalClient(pipeline.PipelineBench):
                     timing_source="websocket",
                 )
             else:
+                await self.keep_token_fresh()
                 await self._poll(outcome["task_id"], started, outcome)
         return {**observation_fields(observation), **outcome}
 
@@ -697,7 +717,7 @@ def chosen_items(args: argparse.Namespace, testset: dict[str, Any]) -> list[dict
 async def prepare_chat(args: argparse.Namespace, client: EvalClient) -> bool:
     if args.token:
         client.token = args.token
-    elif not await client.authenticate(args.username, args.password):
+    elif not await client.sign_in(args.username, args.password):
         return False
     return await client.wait_for_agent(timeout=args.agent_wait) is not None
 
