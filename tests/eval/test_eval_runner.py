@@ -1074,6 +1074,66 @@ class TestTokenRenewal:
         assert logins == [("admin", "admin")]
         assert urls == ["ws://mas:8000/chat/7/?token=jwt-1"]
 
+    def polling_mas(self, monkeypatch, task_status):
+        polled_with = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/conversations/create-conversation/":
+                return httpx.Response(200, json={"conversation_id": 7})
+            if request.url.path == "/tasks/new_task/":
+                return httpx.Response(200, json={"task_id": "t-1"})
+            if request.url.path == "/tasks/t-1":
+                token = request.headers.get("Authorization", "")
+                polled_with.append(token)
+                return task_status(token)
+            return httpx.Response(404, json={})
+
+        transport = httpx.MockTransport(handler)
+        real_async_client = httpx.AsyncClient
+        monkeypatch.setattr(
+            httpx, "AsyncClient", lambda *a, **kw: real_async_client(*a, transport=transport, **kw)
+        )
+        return polled_with
+
+    def test_polling_renews_a_refused_token_and_reports_the_real_final_status(
+        self, runner, monkeypatch
+    ):
+        def task_status(token):
+            if token != "Bearer jwt-2":
+                return httpx.Response(401, json={"detail": "Could not validate credentials"})
+            return httpx.Response(200, json={"status": "completed", "result": "$250 per night."})
+
+        polled_with = self.polling_mas(monkeypatch, task_status)
+        client, logins, _clock = self.signed_in_client(runner, [])
+        client.connect = fake_connect(FakeSocket(TITLED_AGENT_EVENTS[:2]), [])
+
+        outcome = asyncio.run(client.ask("What is the hotel limit per night in the US?", "eval-x"))
+
+        assert outcome["status"] == "ok"
+        assert outcome["timing_source"] == "poll"
+        assert outcome["answer"] == "$250 per night."
+        assert logins == [("admin", "admin"), ("admin", "admin")]
+        assert polled_with == ["Bearer jwt-1", "Bearer jwt-2"]
+
+    def test_a_long_poll_renews_the_token_once_it_is_old(self, runner, monkeypatch):
+        client, logins, clock = self.signed_in_client(runner, [])
+        client.connect = fake_connect(FakeSocket(TITLED_AGENT_EVENTS[:2]), [])
+
+        def task_status(token):
+            if token == "Bearer jwt-2":
+                return httpx.Response(200, json={"status": "completed", "result": "$250 per night."})
+            clock[0] += runner.TOKEN_REFRESH_S / 2
+            return httpx.Response(200, json={"status": "running"})
+
+        polled_with = self.polling_mas(monkeypatch, task_status)
+
+        outcome = asyncio.run(client.ask("What is the hotel limit per night in the US?", "eval-x"))
+
+        assert outcome["status"] == "ok"
+        assert outcome["answer"] == "$250 per night."
+        assert logins == [("admin", "admin"), ("admin", "admin")]
+        assert polled_with == ["Bearer jwt-1", "Bearer jwt-1", "Bearer jwt-2"]
+
     def test_a_token_given_on_the_command_line_is_never_renewed(self, runner, mas):
         urls = []
         client = make_client(runner, FakeSocket(AGENT_EVENTS), urls)

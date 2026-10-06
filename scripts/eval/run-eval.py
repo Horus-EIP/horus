@@ -184,7 +184,6 @@ class EvalClient(pipeline.PipelineBench):
                     timing_source="websocket",
                 )
             else:
-                await self.keep_token_fresh()
                 await self._poll(outcome["task_id"], started, outcome)
         return {**observation_fields(observation), **outcome}
 
@@ -268,14 +267,20 @@ class EvalClient(pipeline.PipelineBench):
             if observation.done and finished_at is None:
                 finished_at = time.perf_counter()
 
+    async def _get_task(self, client: httpx.AsyncClient, task_id: str) -> httpx.Response:
+        await self.keep_token_fresh()
+        url = f"{self.mas_url}/tasks/{task_id}"
+        response = await client.get(url, headers=self._headers(), timeout=30.0)
+        if response.status_code == 401 and self.credentials and await self._renew_token():
+            response = await client.get(url, headers=self._headers(), timeout=30.0)
+        return response
+
     async def _poll(self, task_id: str, started: float, outcome: dict[str, Any]) -> None:
         deadline = started + self.event_timeout
         async with httpx.AsyncClient() as client:
             while True:
                 try:
-                    response = await client.get(
-                        f"{self.mas_url}/tasks/{task_id}", headers=self._headers(), timeout=30.0
-                    )
+                    response = await self._get_task(client, task_id)
                     detail = response.json() if response.status_code == 200 else {}
                 except (httpx.HTTPError, ValueError):
                     detail = {}
