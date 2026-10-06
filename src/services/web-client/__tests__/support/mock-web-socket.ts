@@ -4,6 +4,7 @@ import { act, waitFor } from "@testing-library/react";
 export class MockWebSocket {
   static instances: MockWebSocket[] = [];
   static refuseConnections = false;
+  static holdOpen = false;
 
   url: string;
   readyState = 0;
@@ -18,7 +19,7 @@ export class MockWebSocket {
     MockWebSocket.instances.push(this);
 
     setTimeout(() => {
-      if (this.readyState !== 0) return;
+      if (this.readyState !== 0 || MockWebSocket.holdOpen) return;
       if (MockWebSocket.refuseConnections) {
         act(() => {
           this.readyState = 3;
@@ -54,6 +55,14 @@ export class MockWebSocket {
     this.listeners["close"]?.forEach((fn) => fn());
   }
 
+  openFromServer() {
+    act(() => {
+      this.readyState = 1;
+      this.onopen?.();
+      this.listeners["open"]?.forEach((fn) => fn());
+    });
+  }
+
   dropFromServer() {
     act(() => {
       this.readyState = 3;
@@ -71,6 +80,7 @@ export class MockWebSocket {
 export function installMockWebSocket() {
   MockWebSocket.instances = [];
   MockWebSocket.refuseConnections = false;
+  MockWebSocket.holdOpen = false;
   (global).WebSocket = MockWebSocket as unknown as typeof WebSocket;
 }
 

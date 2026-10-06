@@ -111,6 +111,10 @@ function ChatPageContent() {
   const [streamingByTaskId, setStreamingByTaskId] = useState<StreamPreviews>({});
   const [taskProgress, setTaskProgress] = useState<TaskProgress | null>(null);
   const eventLogRef = useRef(new TaskEventLog());
+  const conversationIdRef = useRef(conversationId);
+  conversationIdRef.current = conversationId;
+  const workingTaskIdRef = useRef(workingTaskId);
+  workingTaskIdRef.current = workingTaskId;
 
   const { user } = useAuth();
   const { error: notifyError, success: notifySuccess } = useNotification();
@@ -240,7 +244,9 @@ function ChatPageContent() {
 
   const replayTaskEvents = useCallback(
     async (taskId: string) => {
+      const replayingFor = conversationIdRef.current;
       const frames = await fetchMissedTaskFrames(taskId, eventLogRef.current.since(taskId));
+      if (conversationIdRef.current !== replayingFor) return;
       frames.forEach(handleTaskFrame);
     },
     [handleTaskFrame]
@@ -297,6 +303,13 @@ function ChatPageContent() {
     onResync: applyTaskResync,
   });
 
+  const resyncOnOpen = useCallback(
+    ({ reconnect }: { reconnect: boolean }) => {
+      if (reconnect || workingTaskIdRef.current) void resyncTasks();
+    },
+    [resyncTasks]
+  );
+
   const wsUrl =
     conversationId && authToken
       ? `${config.wsUrl}/chat/${conversationId}/?token=${authToken}`
@@ -310,7 +323,7 @@ function ChatPageContent() {
     maxBackoffMs: 10000,
     keepReconnecting: isLoading,
     onMessage: (event) => handleTaskFrame(JSON.parse(event.data)),
-    onReconnect: resyncTasks,
+    onOpen: resyncOnOpen,
   });
 
   const progressText = taskProgressLabel(
@@ -381,6 +394,9 @@ function ChatPageContent() {
       const r = await chatApi.getTask(workingTaskId);
       if (cancelled || !r.ok || !r.data) return;
       setWorkingTaskDetail(r.data);
+      if (isFinishedTask(r.data) && String(r.data.conversation_id) === conversationIdRef.current) {
+        void resyncTasks();
+      }
     };
 
     void tick();
@@ -389,7 +405,7 @@ function ChatPageContent() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [workingTaskId, isLoading]);
+  }, [workingTaskId, isLoading, resyncTasks]);
 
   useEffect(() => {
     const el = scrollContainerRef.current;

@@ -19,6 +19,7 @@ type UseWebSocketOptions = {
   maxBackoffMs?: number;
   keepReconnecting?: boolean;
   onMessage?: (event: MessageEvent) => void;
+  onOpen?: (opened: { reconnect: boolean }) => void;
   onReconnect?: () => void;
 };
 
@@ -38,6 +39,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
     maxBackoffMs = 30000,
     keepReconnecting = false,
     onMessage,
+    onOpen,
     onReconnect,
   } = options;
 
@@ -51,6 +53,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
   const attemptsRef = useRef(0);
   const queueRef = useRef<string[]>([]);
   const onMessageRef = useRef(onMessage);
+  const onOpenRef = useRef(onOpen);
   const onReconnectRef = useRef(onReconnect);
   const lastOpenedUrlRef = useRef<string | null>(null);
   const intentionalCloseRef = useRef(false);  // Track intentional closes
@@ -60,6 +63,10 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
+
+  useEffect(() => {
+    onOpenRef.current = onOpen;
+  }, [onOpen]);
 
   useEffect(() => {
     onReconnectRef.current = onReconnect;
@@ -123,6 +130,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
         queueRef.current = [];
       }
 
+      onOpenRef.current?.({ reconnect: isReconnect });
       if (isReconnect) {
         onReconnectRef.current?.();
       }

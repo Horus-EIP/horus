@@ -76,6 +76,19 @@ describe("useWebSocket", () => {
     expect(result.current.status).toBe("connected");
   });
 
+  it("reports every open, the first one too, and says which ones are reconnects", async () => {
+    const onOpen = vi.fn();
+    renderHook(() => useWebSocket({ url: "ws://example.com", backoffBaseMs: 1, onOpen }));
+    await waitForOpenSockets(1);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onOpen).toHaveBeenLastCalledWith({ reconnect: false });
+
+    latestSocket().dropFromServer();
+
+    await waitFor(() => expect(onOpen).toHaveBeenCalledTimes(2));
+    expect(onOpen).toHaveBeenLastCalledWith({ reconnect: true });
+  });
+
   it("does not report a reconnect when the url changes to another conversation", async () => {
     const onReconnect = vi.fn();
     const { rerender } = renderHook(
