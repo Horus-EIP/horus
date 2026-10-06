@@ -741,7 +741,7 @@ def step_wait_for_agents(steps: Steps, mas: str, token: str, deadline: float) ->
         "  docker compose -f src/infra/docker-compose.yml logs --tail 120 mas",
     )
 
-def step_upload_document(steps: Steps, ks: str, repo: Path, deadline: float) -> None:
+def step_upload_document(steps: Steps, ks: str, repo: Path, deadline: float) -> str | None:
     steps.start("6/9  Ingest the demo document")
     doc = repo / "demo_assets" / DEMO_DOC
     if not doc.is_file():
@@ -774,7 +774,7 @@ def step_upload_document(steps: Steps, ks: str, repo: Path, deadline: float) -> 
 
     if DEMO_DOC in titles(listed):
         steps.passed(f"'{DEMO_DOC}' is already indexed (upload skipped)")
-        return
+        return None
 
     content_type, body = build_multipart(
         [("files", DEMO_DOC, "text/markdown", doc.read_bytes())]
@@ -827,6 +827,21 @@ def step_upload_document(steps: Steps, ks: str, repo: Path, deadline: float) -> 
             "  START-HERE (your platform)",
         )
     steps.passed(f"'{DEMO_DOC}' uploaded and indexed")
+    return uploaded_doc_id(up)
+
+def uploaded_doc_id(up: Response) -> str | None:
+    for entry in up.json() or []:
+        if isinstance(entry, dict) and entry.get("filename") == DEMO_DOC and entry.get("doc_id"):
+            return str(entry["doc_id"])
+    return None
+
+def remove_uploaded_document(log: Log, ks: str, doc_id: str) -> None:
+    try:
+        removed = http("DELETE", f"{ks}/{urllib.parse.quote(doc_id)}", timeout=HTTP_TIMEOUT)
+    except Unreachable as exc:
+        log.info(f"smoke: could not remove the uploaded demo document {doc_id}: {exc}")
+        return
+    log.info(f"smoke: removed the uploaded demo document {doc_id} (HTTP {removed.status})")
 
 def _create_conversation(mas: str, token: str, name: str, timeout: float) -> int | None:
     resp = _json_post(
@@ -1084,11 +1099,15 @@ def run(log: Log, repo: Path, base_urls: dict | None = None,
         token = step_login(steps, mas, username, password, deadline)
         step_authenticated_ping(steps, mas, token, deadline)
         workers = step_wait_for_agents(steps, mas, token, deadline)
-        step_upload_document(steps, ks, repo, deadline)
-        answer = step_chat(steps, log, mas, deadline, token,
-                           model_server or model_server_of(infra_dir(repo)))
-        step_check_answer(steps, answer, require_answer_quality)
-        step_negative_control(steps, log, mas, token, deadline)
+        uploaded = step_upload_document(steps, ks, repo, deadline)
+        try:
+            answer = step_chat(steps, log, mas, deadline, token,
+                               model_server or model_server_of(infra_dir(repo)))
+            step_check_answer(steps, answer, require_answer_quality)
+            step_negative_control(steps, log, mas, token, deadline)
+        finally:
+            if uploaded:
+                remove_uploaded_document(log, ks, uploaded)
     except InstallError:
         log.info("smoke steps: " + json.dumps(steps.entries))
         raise
