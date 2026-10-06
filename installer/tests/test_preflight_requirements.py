@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import os
 import re
 import sys
@@ -18,7 +19,7 @@ CPU_OVERLAY = INFRA / "docker-compose.cpu.yml"
 
 import horus_install  # noqa: E402
 import preflight  # noqa: E402
-from common import EXIT_COMPOSE_MISSING, InstallError, Log, Result  # noqa: E402
+from common import EXIT_COMPOSE_MISSING, EXIT_PORTS_BUSY, InstallError, Log, Result  # noqa: E402
 
 GHCR = "https://ghcr.io/v2/"
 GHCR_LAYERS = "https://pkg-containers.githubusercontent.com/"
@@ -119,6 +120,47 @@ class ComposeVersion(LogCase):
                 self.assertRaises(InstallError) as caught:
             horus_install._require_docker(self.log)
         self.assertEqual(caught.exception.code, EXIT_COMPOSE_MISSING)
+
+class PortsHeldByThisInstall(LogCase):
+    def ports(self, busy: set[int], compose_ps: str, holder: str = "") -> dict:
+        (self.tmp / ".env").write_text("COMPOSE_PROJECT_NAME=horus_verify\n", encoding="utf-8")
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(mock.patch.object(
+                preflight, "_port_free", side_effect=lambda port: port not in busy))
+            stack.enter_context(mock.patch.object(preflight, "_holder", return_value=holder))
+            stack.enter_context(mock.patch.object(
+                preflight, "run", return_value=Result(0, compose_ps, "")))
+            return preflight.check_ports(self.log, self.tmp)
+
+    def published(self, *ports: int) -> str:
+        return json.dumps({
+            "Name": "horus_verify-mas-1",
+            "Publishers": [
+                {"URL": "0.0.0.0", "TargetPort": port, "PublishedPort": port, "Protocol": "tcp"}
+                for port in ports
+            ],
+        }) + "\n"
+
+    def test_a_port_held_by_this_installs_own_container_does_not_stop_a_new_run(self):
+        report = self.ports({8000, 3000}, self.published(8000, 3000), "com.docker.backend.exe")
+
+        self.assertTrue(report["8000"]["held_by_this_install"])
+        self.assertTrue(report["3000"]["held_by_this_install"])
+
+    def test_a_port_held_by_something_else_still_stops_the_install(self):
+        with self.assertRaises(InstallError) as caught:
+            self.ports({8000, 5432}, self.published(8000), "postgres.exe (PID 7)")
+
+        self.assertEqual(caught.exception.code, EXIT_PORTS_BUSY)
+        self.assertIn("5432", caught.exception.detail)
+        self.assertNotIn("8000  needed", caught.exception.detail)
+
+    def test_without_a_running_stack_a_busy_port_stops_the_install(self):
+        with self.assertRaises(InstallError) as caught:
+            self.ports({8000}, "", "nginx (PID 3)")
+
+        self.assertEqual(caught.exception.code, EXIT_PORTS_BUSY)
+
 
 class ModelServerRegistry(LogCase):
     def install_checks(self, image_registry: str | None, cpu_profile: bool) -> list:

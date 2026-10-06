@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -471,11 +472,47 @@ def _holder(port: int) -> str:
         pass
     return ""
 
+def _compose_rows(text: str) -> list[dict]:
+    text = text.strip()
+    if not text:
+        return []
+    try:
+        parsed = json.loads(text)
+        return [row for row in (parsed if isinstance(parsed, list) else [parsed])
+                if isinstance(row, dict)]
+    except json.JSONDecodeError:
+        pass
+    rows = []
+    for line in text.splitlines():
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict):
+            rows.append(row)
+    return rows
+
+def ports_of_this_install(log: Log, infra: Path) -> set[int]:
+    if not (infra / ".env").is_file():
+        return set()
+    res = run(["docker", "compose", "ps", "--format", "json"], log, timeout=60, cwd=infra,
+              log_output=False)
+    if not res.ok:
+        return set()
+    published = set()
+    for row in _compose_rows(res.out):
+        for publisher in row.get("Publishers") or []:
+            port = publisher.get("PublishedPort") if isinstance(publisher, dict) else None
+            if isinstance(port, int) and port > 0:
+                published.add(port)
+    return published
+
 def check_ports(log: Log, infra: Path, want_admin_profile: bool = False) -> dict:
     log.step("6/6  Ports")
     env_ports = _read_env_ports(infra / ".env")
     if env_ports:
         log.debug(f"port overrides from .env: {env_ports}")
+    ours = ports_of_this_install(log, infra)
 
     busy, report = [], {}
     for default, service, env_key, profile in PORTS:
@@ -487,6 +524,11 @@ def check_ports(log: Log, infra: Path, want_admin_profile: bool = False) -> dict
         free = _port_free(port)
         report[str(port)] = {"service": service, "free": free, "optional": optional}
         if free:
+            continue
+        if port in ours:
+            report[str(port)]["held_by_this_install"] = True
+            log.ok(f"port {port} ({service}) is this Horus install's own; "
+                   "its container is replaced on start")
             continue
         who = _holder(port)
         report[str(port)]["holder"] = who
@@ -513,7 +555,11 @@ def check_ports(log: Log, infra: Path, want_admin_profile: bool = False) -> dict
             "If it is another project's containers:\n"
             "  docker ps        then    docker stop <name>",
         )
-    log.ok(f"all {len([p for p in PORTS if p[3] is None])} required ports free")
+    required = len([p for p in PORTS if p[3] is None])
+    if any(entry.get("held_by_this_install") for entry in report.values()):
+        log.ok(f"all {required} required ports are free or this install's own")
+    else:
+        log.ok(f"all {required} required ports free")
     return report
 
 def run_engine_checks(log: Log) -> dict:
