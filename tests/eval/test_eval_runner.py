@@ -582,6 +582,21 @@ class TestModelInfo:
         assert args.swap_container == "mas"
 
 
+class TestTestsetInfo:
+    def test_the_shipped_testset_is_recorded_relative_to_the_repo(self, runner, testset):
+        args = runner.build_parser().parse_args(["--label", "x"])
+        assert runner.testset_info(args, testset, testset["items"])["path"] == "tests/eval/testset.yaml"
+
+    def test_a_testset_outside_the_repo_keeps_no_part_of_its_folder(
+        self, runner, monkeypatch, testset, host_folder, host_folder_leaks
+    ):
+        monkeypatch.setattr(runner, "file_sha256", lambda path: "0" * 64)
+        args = runner.build_parser().parse_args(["--label", "x", "--testset", f"{host_folder}/own-testset.yaml"])
+        info = runner.testset_info(args, testset, testset["items"])
+        assert info["path"] == "own-testset.yaml"
+        assert host_folder_leaks(json.dumps(info)) == []
+
+
 class TestStackResources:
     def test_docker_host_swap_is_read_inside_a_container(self, runner, monkeypatch):
         meminfo = "SwapTotal: 4194304 kB\nSwapFree: 3145728 kB\n"

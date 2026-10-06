@@ -273,11 +273,14 @@ def test_parse_container_inspect_reads_what_the_runner_reuses():
         "running": True,
         "oom_killed": False,
         "restart_count": 0,
-        "models_source": "/home/u/horus/models",
+        "models_source": "<models-dir>",
     }
     assert parse_container_inspect("[]") is None
     assert parse_container_inspect(None) is None
     assert parse_container_inspect(json.dumps([{"HostConfig": {"Memory": 0}}]))["memory_bytes"] is None
+    assert parse_container_inspect(json.dumps([{"Mounts": []}]))["models_source"] is None
+    volume = {"Type": "volume", "Name": "infra_llm_models", "Source": "/var/lib/docker/volumes/infra_llm_models/_data", "Destination": "/models"}
+    assert parse_container_inspect(json.dumps([{"Mounts": [volume]}]))["models_source"] == "infra_llm_models"
 
 
 def test_parse_container_env_reads_the_variables_the_container_was_given():

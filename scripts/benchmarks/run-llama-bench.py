@@ -27,6 +27,7 @@ from bench_llama import (
     DEFAULT_REPETITIONS,
     FETCH_IMAGE,
     KNOWN_MODELS,
+    MODELS_DIR_PLACEHOLDER,
     PLAN_CACHE_TYPES,
     PLAN_DEPTHS,
     PLAN_GENERATIONS,
@@ -37,12 +38,14 @@ from bench_llama import (
     build_report,
     checksum_command,
     fetch_command,
+    file_name,
     listing_command,
     model_files_in,
     model_records,
     parse_bench_output,
     parse_checksums,
     parse_listing,
+    recorded_command,
     summary_lines,
 )
 
@@ -285,9 +288,9 @@ def main() -> int:
         "finished_at": now_utc(finished),
         "duration_s": round((finished - started).total_seconds(), 1),
         "git_commit": git_commit(),
-        "from_json": args.from_json,
-        "models_location": {"dir": source if args.models_dir else None, "volume": args.models_volume},
-        "command": command,
+        "from_json": file_name(args.from_json) if args.from_json else None,
+        "models_location": {"dir": MODELS_DIR_PLACEHOLDER if args.models_dir else None, "volume": args.models_volume},
+        "command": recorded_command(command, source if args.models_dir else None),
         "matrix": asdict(matrix),
     }
     report = build_report(

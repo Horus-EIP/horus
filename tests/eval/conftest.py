@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -58,3 +59,18 @@ def make_testset(testset):
         return {**testset, "items": items}
 
     return _factory
+
+
+@pytest.fixture(params=["C:\\Users\\someone\\x", "/home/someone/x"])
+def host_folder(request):
+    return request.param
+
+
+@pytest.fixture
+def host_folder_leaks(host_folder):
+    parts = [part for part in re.split(r"[\\/:]+", host_folder) if len(part) > 1]
+
+    def leaks(text):
+        return [part for part in parts if part in text]
+
+    return leaks

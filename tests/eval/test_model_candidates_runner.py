@@ -580,7 +580,7 @@ def test_the_installer_downloader_is_reused_and_adopts_a_verified_file(runner, t
     variant = Variant({"id": "tiny", "licence": "MIT", "plan_name": "Tiny"}, gguf)
     (tmp_path / gguf["file"]).write_bytes(content)
     outcome = runner.fetch_with_installer(modules, variant, tmp_path, tmp_path / "download.log", "1.0.0")
-    assert outcome == {"status": "verified", "method": "installer", "path": str(tmp_path / gguf["file"])}
+    assert outcome == {"status": "verified", "method": "installer", "path": "<models-dir>/tiny-Q4_K_M.gguf"}
     assert (tmp_path / "tiny-Q4_K_M.gguf.sha256").read_text(encoding="ascii").strip() == gguf["sha256"]
 
 
@@ -596,3 +596,62 @@ def test_without_the_installer_the_docker_fetch_script_is_used(runner, monkeypat
     assert f"LLM_GGUF_FILE={variant.file}" in command
     assert f"LLM_GGUF_SHA256={variant.gguf['sha256']}" in command
     assert f"LLM_GGUF_URL={variant.url}" in command
+
+
+class HostFolderStack(FakeStack):
+    def __init__(self, tmp_path, folder):
+        super().__init__(tmp_path)
+        self.folder = folder
+
+    def docker_text(self, argv, timeout=60.0):
+        text = super().docker_text(argv, timeout)
+        if argv[:2] == ["inspect", "llm"] and text:
+            inspected = json.loads(text)
+            inspected[0]["Mounts"] = [{"Type": "bind", "Source": self.folder, "Destination": "/models"}]
+            text = json.dumps(inspected)
+        return text
+
+
+def test_no_part_of_the_host_models_folder_reaches_the_reports(
+    runner, monkeypatch, tmp_path, quiet_host, host_folder, host_folder_leaks
+):
+    stack = HostFolderStack(tmp_path, host_folder)
+    install_fakes(runner, monkeypatch, stack)
+    monkeypatch.setattr(runner.CandidateRun, "model_missing", lambda self, variant: False)
+    out_dir = tmp_path / "benchmarks"
+    run_main(
+        runner, monkeypatch,
+        "--only", "qwen3-4b-q4km", "--steps", "probe", "--ids", "exp-01",
+        "--models-dir", host_folder, "--out-dir", str(out_dir),
+    )
+    started = next(c for c in stack.commands if c[:3] == ["docker", "run", "-d"])
+    assert host_folder_leaks(" ".join(started)) != []
+
+    _summary_path, summary = summary_files(out_dir)
+    assert summary["run"]["sessions"][-1]["models_dir"] == "<models-dir>"
+    assert summary["run"]["stack_llm"]["models_source"] == "<models-dir>"
+    variant = summary["variants"][0]
+    assert "<models-dir>:/models:ro" in variant["server"]["command"]
+    contract = json.loads((out_dir / variant["reports"]["contract"]).read_text(encoding="utf-8"))
+    assert "<models-dir>:/models:ro" in contract["llama_server"]["command"]
+    written = sorted(path for path in out_dir.rglob("*") if path.is_file())
+    assert len(written) == 3
+    for path in written:
+        assert host_folder_leaks(path.read_text(encoding="utf-8")) == [], path.name
+
+
+def test_a_fetched_model_is_recorded_inside_the_models_folder(runner, monkeypatch, host_folder, host_folder_leaks):
+    catalog = load_catalog(BENCH_DIR / "model-candidates.yaml")
+    candidate = catalog["candidates"][1]
+    variant = Variant(candidate, candidate["ggufs"][0])
+    monkeypatch.setattr(runner, "run_and_echo", lambda command, stdin_text=None: (0, []))
+    outcome = runner.fetch_with_docker(variant, Path(host_folder), "ghcr.io/ggml-org/llama.cpp:server-b11382")
+    assert outcome == {"status": "verified", "method": "docker", "path": f"<models-dir>/{variant.file}"}
+    assert host_folder_leaks(json.dumps(outcome)) == []
+
+
+def test_a_file_outside_the_repo_is_recorded_by_its_name(runner, host_folder, host_folder_leaks):
+    assert runner.relative_to(runner.REPO_ROOT / "tests" / "eval" / "testset.yaml", runner.REPO_ROOT) == "tests/eval/testset.yaml"
+    recorded = runner.relative_to(f"{host_folder}/own-testset.yaml", runner.REPO_ROOT)
+    assert recorded == "own-testset.yaml"
+    assert host_folder_leaks(recorded) == []

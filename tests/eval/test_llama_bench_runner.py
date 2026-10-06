@@ -164,7 +164,8 @@ class TestRun:
         assert report["machine"]["ram_speed"] == "3200 MT/s"
         assert report["machine"]["docker"]["mem_total_bytes"] == 16 * 2**30
         assert report["run"]["git_commit"] == "abc1234"
-        assert report["run"]["command"] == launched[0]
+        assert launched[0][3:5] == ["-v", f"{models.resolve()}:/models:ro"]
+        assert report["run"]["command"] == [*launched[0][:4], "<models-dir>:/models:ro", *launched[0][5:]]
         assert len(report["results"]) == 4
         assert host_facts == [models.resolve()]
         output = capsys.readouterr().out
@@ -233,7 +234,7 @@ class TestFromJson:
         [saved] = list((tmp_path / "out").iterdir())
         assert saved.name.startswith("cpu16-q4-only-")
         report = json.loads(saved.read_text(encoding="utf-8"))
-        assert report["run"]["from_json"] == str(raw)
+        assert report["run"]["from_json"] == "raw.json"
         assert report["run"]["command"] is None
         assert report["run"]["models_location"] == {"dir": None, "volume": "infra_llm_models"}
         assert [model["file"] for model in report["models"]] == [Q4]
@@ -250,3 +251,38 @@ class TestFromJson:
         report = json.loads(next((tmp_path / "out").iterdir()).read_text(encoding="utf-8"))
         assert report["models"][0]["sha256"] is None
         assert "SHA-256 is not recorded" in capsys.readouterr().out
+
+
+class TestRecordedPaths:
+    def test_the_report_keeps_no_part_of_the_host_models_folder(
+        self, bench_runner, monkeypatch, tmp_path, host_facts, host_folder, host_folder_leaks
+    ):
+        monkeypatch.setattr(bench_runner, "run_text", FakeDocker(f"2497281120 {Q4}\n").run_text)
+        launched = []
+
+        def fake_run(command, **kwargs):
+            launched.append(command)
+            return subprocess.CompletedProcess(command, 0, stdout=json.dumps(bench_rows(Q4)))
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        status = run_main(
+            bench_runner, monkeypatch, "--models-dir", host_folder, "--model", Q4, "--out-dir", str(tmp_path / "out")
+        )
+        assert status == 0
+        assert host_folder_leaks(" ".join(launched[0])) != []
+        text = next((tmp_path / "out").iterdir()).read_text(encoding="utf-8")
+        report = json.loads(text)
+        assert report["run"]["models_location"] == {"dir": "<models-dir>", "volume": None}
+        assert "<models-dir>:/models:ro" in report["run"]["command"]
+        assert [model["file"] for model in report["models"]] == [Q4]
+        assert host_folder_leaks(text) == []
+
+    def test_a_saved_raw_run_is_recorded_by_its_file_name(self, bench_runner, monkeypatch, tmp_path, host_facts):
+        raw = tmp_path / "raw.json"
+        raw.write_text(json.dumps(bench_rows(Q4)), encoding="utf-8")
+        monkeypatch.setattr(bench_runner, "run_text", FakeDocker("").run_text)
+        status = run_main(bench_runner, monkeypatch, "--from-json", str(raw), "--out-dir", str(tmp_path / "out"))
+        assert status == 0
+        text = next((tmp_path / "out").iterdir()).read_text(encoding="utf-8")
+        assert json.loads(text)["run"]["from_json"] == "raw.json"
+        assert tmp_path.name not in text

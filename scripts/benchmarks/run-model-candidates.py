@@ -28,7 +28,13 @@ from bench_host import (  # noqa: E402
     missing_fields,
     run_text,
 )
-from bench_llama import KnownModel, fetch_command  # noqa: E402
+from bench_llama import (  # noqa: E402
+    MODELS_DIR_PLACEHOLDER,
+    KnownModel,
+    fetch_command,
+    recorded_command,
+    recorded_model_path,
+)
 from eval_contract import (  # noqa: E402
     WARMUP_QUESTION,
     build_contract_report,
@@ -270,7 +276,7 @@ def fetch_with_installer(
         return {"status": "failed", "method": "installer", "error": detail}
     finally:
         log.close(code)
-    return {"status": "verified", "method": "installer", "path": str(path)}
+    return {"status": "verified", "method": "installer", "path": recorded_model_path(path)}
 
 
 def fetch_with_docker(variant: Variant, models_dir: Path, image: str) -> dict[str, Any]:
@@ -280,7 +286,7 @@ def fetch_with_docker(variant: Variant, models_dir: Path, image: str) -> dict[st
     returncode, _lines = run_and_echo(command)
     if returncode != 0:
         return {"status": "failed", "method": "docker", "error": f"fetch-model.sh exited with {returncode}"}
-    return {"status": "verified", "method": "docker", "path": str(models_dir / variant.file)}
+    return {"status": "verified", "method": "docker", "path": recorded_model_path(variant.file)}
 
 
 def relative_to(path: Path | str | None, base: Path) -> str | None:
@@ -290,7 +296,7 @@ def relative_to(path: Path | str | None, base: Path) -> str | None:
     try:
         return resolved.relative_to(base.resolve()).as_posix()
     except ValueError:
-        return str(resolved)
+        return resolved.name
 
 
 def read_report(base: Path, relative: str | None) -> dict[str, Any] | None:
@@ -390,7 +396,7 @@ class CandidateRun:
             "reasoning": self.args.reasoning,
             "only": self.args.only,
             "all_quants": self.args.all_quants,
-            "models_dir": str(self.models_dir),
+            "models_dir": MODELS_DIR_PLACEHOLDER,
             "server_image": self.server_image,
             "llm_mem_limit_bytes": self.memory_limit(),
             "testset": {
@@ -640,7 +646,7 @@ class CandidateRun:
         return {
             "container": CANDIDATE_CONTAINER,
             "image": self.server_image,
-            "command": command,
+            "command": recorded_command(command, str(self.models_dir)),
             "memory_limit_bytes": self.memory_limit(),
             "reasoning": self.args.reasoning,
             "build_info": props.get("build_info"),

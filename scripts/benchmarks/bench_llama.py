@@ -10,6 +10,7 @@ SCHEMA_VERSION = 1
 BENCH_IMAGE = "ghcr.io/ggml-org/llama.cpp:full-b11382"
 FETCH_IMAGE = "ghcr.io/ggml-org/llama.cpp:server-b11382"
 CONTAINER_MODELS_DIR = "/models"
+MODELS_DIR_PLACEHOLDER = "<models-dir>"
 CONTAINER_FETCH_SCRIPT = "/opt/horus/fetch-model.sh"
 PLAN_PROMPTS = "512,2048"
 PLAN_GENERATIONS = "128"
@@ -102,6 +103,17 @@ def container_path(file: str) -> str:
 
 def models_mount(source: str, *, writable: bool = False) -> list[str]:
     return ["-v", f"{source}:{CONTAINER_MODELS_DIR}" + ("" if writable else ":ro")]
+
+
+def recorded_model_path(path: Any) -> str:
+    return f"{MODELS_DIR_PLACEHOLDER}/{file_name(path)}"
+
+
+def recorded_command(command: list[str] | None, models_dir: str | None) -> list[str] | None:
+    if not command or not models_dir:
+        return command
+    host = f"{models_dir}:"
+    return [MODELS_DIR_PLACEHOLDER + arg[len(models_dir):] if arg.startswith(host) else arg for arg in command]
 
 
 def bench_command(image: str, source: str, files: list[str], matrix: BenchMatrix) -> list[str]:

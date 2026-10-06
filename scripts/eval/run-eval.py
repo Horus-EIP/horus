@@ -617,7 +617,7 @@ def testset_info(args: argparse.Namespace, testset: dict[str, Any], items: list[
     try:
         shown = path.relative_to(REPO_ROOT).as_posix()
     except ValueError:
-        shown = str(path)
+        shown = path.name
     return {
         "path": shown,
         "version": str(testset["version"]),

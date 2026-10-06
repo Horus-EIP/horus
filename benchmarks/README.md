@@ -95,7 +95,7 @@ If llama-bench fails or prints something that is not its JSON, nothing is writte
 
 | Field | Meaning |
 |---|---|
-| `run` | `started_at`, `finished_at`, `duration_s`, `git_commit`, `from_json` (the raw file, or `null`), `models_location` (`dir` or `volume`), `command` (the exact `docker run`), `matrix`. |
+| `run` | `started_at`, `finished_at`, `duration_s`, `git_commit`, `from_json` (the raw file's name, or `null`), `models_location` (`dir`, always `<models-dir>`, or `volume`), `command` (the exact `docker run`, with the host folder written `<models-dir>`), `matrix`. |
 | `llama_cpp` | `image`, `image_digest` (from `docker image inspect`), `build` (`b` + the `build_number` llama-bench wrote into its rows), `build_number`, `build_commit`, `image_tag_matches` (the image tag names the same build). |
 | `models[]` | `file`, `size_bytes`, `sha256` (computed in the container with `sha256sum`), `known_source`, `matches_known_sha256` (`false` for a file of our own, such as the one `scripts/models/convert-qwen3-4b-gguf.sh` builds). |
 | `machine` | See [Machine](#machine). |

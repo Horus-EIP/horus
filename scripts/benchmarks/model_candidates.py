@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from bench_llama import MODELS_DIR_PLACEHOLDER
 
 REPORT_KIND = "horus-model-candidates"
 SCHEMA_VERSION = 1
@@ -378,10 +379,14 @@ def parse_container_inspect(text: str | None) -> dict[str, Any] | None:
     state = data.get("State") or {}
     networks = (data.get("NetworkSettings") or {}).get("Networks") or {}
     mounts = data.get("Mounts") or []
-    models_source = next(
-        (m.get("Source") for m in mounts if isinstance(m, dict) and m.get("Destination") == CONTAINER_MODELS_DIR),
+    models_mount = next(
+        (m for m in mounts if isinstance(m, dict) and m.get("Destination") == CONTAINER_MODELS_DIR),
         None,
     )
+    models_source = None
+    if models_mount is not None:
+        volume = models_mount.get("Name") if models_mount.get("Type") == "volume" else None
+        models_source = volume or MODELS_DIR_PLACEHOLDER
     return {
         "name": str(data.get("Name") or "").lstrip("/") or None,
         "image": config.get("Image"),
