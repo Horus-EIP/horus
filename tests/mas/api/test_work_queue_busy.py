@@ -4,6 +4,7 @@ import asyncio
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from core.rabbitmq_manager import WorkQueueFull
 from core.task_events import read_task_events
@@ -112,6 +113,61 @@ class TestFullQueueOnSubmit:
         assert work_queue_line.has_waiting(QUEUE) is False
         statuses = [event["data"].get("status") for event in read_task_events(task_id)]
         assert statuses.index("busy") < statuses.index("running")
+
+
+class TestFailureAfterJoiningTheLine:
+    async def test_a_database_blip_while_the_queue_is_full_leaves_the_line(
+        self, routing_db, finance_queue
+    ):
+        _add_task(routing_db, "blip")
+        blip = OperationalError("UPDATE tasks", {}, Exception("server closed the connection"))
+
+        with (
+            patch.object(
+                routes, "_publish_task_to_work_queue", side_effect=WorkQueueFull(QUEUE, 10)
+            ),
+            patch.object(routes, "_set_waiting_status", side_effect=blip),
+            pytest.raises(OperationalError),
+        ):
+            await routes._publish_unless_full(routing_db, _dispatch("blip"))
+
+        assert work_queue_line.has_waiting(QUEUE) is False
+
+    async def test_a_busy_report_that_fails_leaves_the_line(self, routing_db, finance_queue):
+        _add_task(routing_db, "unreported")
+
+        with (
+            patch.object(
+                routes, "_publish_task_to_work_queue", side_effect=WorkQueueFull(QUEUE, 10)
+            ),
+            patch.object(routes, "_report_busy", side_effect=RuntimeError("redis down")),
+            pytest.raises(RuntimeError, match="redis down"),
+        ):
+            await routes._publish_unless_full(routing_db, _dispatch("unreported"))
+
+        assert work_queue_line.has_waiting(QUEUE) is False
+
+    async def test_the_next_request_is_not_held_behind_the_failed_one(
+        self, routing_db, finance_queue
+    ):
+        _add_task(routing_db, "blip")
+        _add_task(routing_db, "next")
+        blip = OperationalError("UPDATE tasks", {}, Exception("server closed the connection"))
+
+        with (
+            patch.object(
+                routes, "_publish_task_to_work_queue", side_effect=WorkQueueFull(QUEUE, 10)
+            ),
+            patch.object(routes, "_set_waiting_status", side_effect=blip),
+            pytest.raises(OperationalError),
+        ):
+            await routes._publish_unless_full(routing_db, _dispatch("blip"))
+
+        with patch.object(routes, "_publish_task_to_work_queue") as publish:
+            assert await routes._publish_unless_full(routing_db, _dispatch("next")) is True
+
+        publish.assert_called_once()
+        assert _busy_events("next") == []
 
 
 class TestWaitingLine:

@@ -213,8 +213,12 @@ async def _publish_unless_full(db: Session, dispatch: _WorkDispatch) -> bool:
         except WorkQueueFull as full:
             depth = full.depth
     work_queue_line.join(queue, dispatch.task_id, depth)
-    _set_waiting_status(db, dispatch, waiting=True)
-    await _report_busy(dispatch, work_queue_line.position(queue, dispatch.task_id))
+    try:
+        _set_waiting_status(db, dispatch, waiting=True)
+        await _report_busy(dispatch, work_queue_line.position(queue, dispatch.task_id))
+    except BaseException:
+        work_queue_line.leave(queue, dispatch.task_id)
+        raise
     return False
 
 
