@@ -53,6 +53,15 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
   - The CPU banner said "No NVIDIA GPU was usable" when a CPU profile was forced on a machine with a usable GPU (`c67ed96`)
   - The evaluation runner never renewed its 20-minute login token, so long runs failed after about 35 questions (`23c1a08`)
   - The knowledge store never received `KNOWLEDGE_STORE_EMBED_THREADS` or `KNOWLEDGE_STORE_REINDEX_ON_STARTUP` from `.env` (`2affc76`)
+- Found by the B-106 review of these commits on 2026-10-07:
+  - The benchmark tools wrote absolute host paths into their reports; they now write `<models-dir>` for the models folder and the file name for other files, and the 2026-10-06 reports were cleaned in history (`4ce62d6`)
+  - A database or Redis error right after a request joined the "Busy" line left it at the head of the line, so every later request for that agent type showed "Busy" until MAS restarted (B-94, `67b48a4`)
+  - Publishing to RabbitMQ waited for the broker's confirm on the event loop, so a RabbitMQ disk or memory alarm froze MAS for up to 300 s; work, cancel and delegation messages are now published from a worker thread (B-94, `a7c0b0d`)
+  - The knowledge store extracted PDF text and ran OCR on its event loop, so retrievals and `/health` hung during a large upload (`bd870a6`)
+  - A result published while the chat page was opening its socket after adopting a running task was never shown; the page re-syncs on every socket open while a task runs, ends the turn when the task poll sees it finished, and drops a replay for a conversation the user has left (B-93, `9ea8dae`)
+  - The evaluation runner did not renew its login token while polling a task, so a finished task could be reported as a timeout (`72b0b49`)
+  - Answers lost their superscripts and fractions (`10⁶ m²` became `106 m2`); only full-width forms are folded now (B-62, `c6afebf`)
+  - The installer said its images were signed although it checks no signature, the CPU profiles said nothing had been measured, and the candidates summary named a 100-question evaluation for a 20-question run (`5496787`)
 
 ### Added
 
@@ -68,6 +77,8 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - The installer decides the CPU profile, or refuses an unsupported machine, before any large download; it warns without AVX2 and re-detects only when the hardware changed (B-100, `5154b23`)
 - Research note on integrated GPUs and NPUs (B-101, `8d91cef`) and a harness for the model candidates (B-102, `5b304e6`)
 - Preflight refuses Docker Compose older than 2.33.0 and checks that ghcr.io is reachable on CPU profiles (`2cb3aa9`)
+- Regression log `docs/eip/regressions.md` with F25, F28 and F7, and a What / How / When docstring on their tests (B-48, B-49, B-50, `3dc3813`)
+- The prompt-cache reuse the B-102 contract probe measured, per model, in `benchmarks/README.md`; the full-stack measurement is still to do (B-99, `edc3d3b`)
 
 ### Changed
 
@@ -76,6 +87,9 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - CPU profiles use fewer passages and a 6,000-character context cap, and stream the answer (B-89, `1d5dd31`)
 - Embeddings run on ONNX Runtime with FastEmbed in MAS and the knowledge store (B-96, `5055cd2`)
 - Agent personas fit 300 tokens with at most 5 tools, prompts put the fixed part first so llama-server can reuse it, and prompt tokens are counted per call (B-99, `c19eff0`)
+- The actions in `.github/workflows/images.yml` run at pinned commit SHAs (`f3db7d7`)
+- The ADR on machines under 16 GB is ADR-006; ADR-005 is the quality-debt ADR (`d4cdf34`)
+- The README calls the CPU memory thresholds planning figures kept until the reference-machine run, and `.env.example` documents `KNOWLEDGE_STORE_EMBED_THREADS` and `KNOWLEDGE_STORE_REINDEX_ON_STARTUP` (`590547a`)
 
 ## 0.1.2 (unreleased)
 
