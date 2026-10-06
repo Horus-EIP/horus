@@ -913,6 +913,14 @@ class TestAttachedKnowledgeStoreRefs:
     async def test_f25_same_name_documents_dispatch_with_their_doc_ids(
         self, _by_mode, _for_task, dispatch, submit_task, as_user
     ):
+        """Regression F25 (B-48).
+
+        What: two knowledge-store documents with the same filename crashed the
+        attachment picker; each one is now picked and sent by its doc_id.
+        How: submit a task with two refs that share a title but not a doc_id,
+        and check the agent's payload keeps both doc_ids, in order.
+        When: found in ATP v7 (18/09/2026), fixed in 0b93375.
+        """
         title = "1_Q4_2025_Financial_Report.md"
         body = _task_form(
             attached_files=[
@@ -934,6 +942,14 @@ class TestAttachedKnowledgeStoreRefs:
     async def test_f25_filename_only_ref_still_dispatches(
         self, _by_mode, _for_task, dispatch, submit_task, as_user
     ):
+        """Regression F25 (B-48).
+
+        What: the F25 fix sends refs by doc_id; a ref that carries only a
+        filename, as older clients send, must still reach the agent.
+        How: submit a task with one filename-only ref and check the agent's
+        payload has the filename and no doc_id.
+        When: found in ATP v7 (18/09/2026), fixed in 0b93375.
+        """
         body = _task_form(attached_files=[{"filename": "report.pdf"}])
 
         submitted = await submit_task(body, user=as_user)
@@ -1915,6 +1931,14 @@ class TestQueueStatsHelper:
 
     @pytest.mark.regression
     def test_f28_queue_stats_count_root_tasks_not_subtasks(self, sqlite_session):
+        """Regression F28 (B-49).
+
+        What: the task stats counted subtasks, so Total Tasks disagreed with
+        the Recent tasks list, which shows root tasks only.
+        How: store one root task with two subtasks in an in-memory SQLite
+        database and check the stats count one task.
+        When: found in ATP v7 (18/09/2026), fixed in ff82920.
+        """
         from db.models import Task
         from tasks.routes import get_task_queue_stats
 
@@ -1976,6 +2000,14 @@ class TestBuildFilesPayload:
 
     @pytest.mark.regression
     def test_f25_blank_doc_id_is_not_forwarded(self):
+        """Regression F25 (B-48).
+
+        What: with the F25 fix the files payload forwards doc_id; a blank one
+        must not reach the agent as an id, and a padded one is trimmed.
+        How: build the files payload from a blank and a padded doc_id and
+        compare it with the expected refs.
+        When: found in ATP v7 (18/09/2026), fixed in 0b93375.
+        """
         from schemas.schemas import TaskForm
         from tasks.routes import _build_files_payload
 

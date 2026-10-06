@@ -63,6 +63,7 @@ nav:
       - Index: eip/README.md
       - Objectives Audit: eip/objectives-audit.md
       - Performance (Point D): eip/performance.md
+      - Regression Log: eip/regressions.md
       - Tech Watch (Point 1): eip/tech-watch.md
       - Tech Watch — Integrated GPUs and NPUs: tech-watch/IGPU_NPU_RESEARCH.md
       - Community Contributions (Point 1): eip/community-contributions.md

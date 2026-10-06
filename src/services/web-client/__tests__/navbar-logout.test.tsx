@@ -92,6 +92,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// Regression F7 (B-50).
+// What: after logout, Back showed the logged-in view again: the navbar logged out
+// without telling the auth context, and the login redirect kept the protected page
+// in the history.
+// How: log out from the navbar, then check the auth context, that the history entry
+// is replaced by the login page and that a logged-out visit is redirected with replace.
+// When: found in ATP v7 (18/09/2026), fixed in 905cedb.
 describe("regression F7 navbar logout", () => {
   it("marks the auth context unauthenticated and replaces the history entry with the login page", async () => {
     renderProtectedPageWithNavbar();
@@ -116,6 +123,12 @@ describe("regression F7 navbar logout", () => {
   });
 });
 
+// Regression F7 (B-50), back-forward cache.
+// What: a protected page that the browser restored from its back-forward cache after
+// logout still showed the logged-in view.
+// How: fire pageshow with and without persisted set, and check that a restored page
+// checks the session again and redirects only once logged out.
+// When: found in ATP v7 (18/09/2026), fixed in 905cedb.
 describe("regression F7 back-forward cache restore", () => {
   it("re-checks the session when the page is restored and redirects once logged out", async () => {
     renderProtectedPageWithNavbar();
