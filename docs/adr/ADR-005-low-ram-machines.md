@@ -125,6 +125,27 @@ Reference machine: 16 GB of RAM, CPU only, AVX2 (dev plan §10). Linux gives Doc
 - Option A comes back only if the containers other than `llm` need 3.5 GiB or less: their `docker stats` peaks (`resources.container_peak_mem_bytes`) added up, which can only overstate what they used at once. That is plausible after B-96 removes torch from MAS and the knowledge store. Then an 8 GB machine (about 7.6 GiB for Docker) could hold a 2 GiB model server, and the 1.7B model must pass the same quality rule against the 4B.
 - When the rule moves a threshold, update this ADR (status Accepted, with the measured numbers and the files in `benchmarks/`) and the constants in `installer/profiles.py` (`CPU_STANDARD_MIN_GIB`, `CPU_LEAN_MIN_GIB`, `CPU_LEAN_SUPPORTED`) in the same change.
 
+### First measurements (development laptop, not the reference machine)
+
+Run on 2026-10-06 on the development laptop: AMD Ryzen AI 9 HX 370 (12 cores, AVX2), 64 GB LPDDR5-7500, Docker Desktop on WSL2 with 31 GiB, llama-server b11382, Qwen3-4B-Instruct-2507 Q4_K_M. Docker had far more memory than the thresholds, so no step ran under memory pressure, and step 4 was not run: giving Docker exactly the threshold means changing the WSL memory setting of the machine. These numbers do not replace the reference-machine run; they show where it is likely to land.
+
+| | Step 2: `cpu-standard`, 100 questions | Step 3: `cpu-lean` (option B), first 30 questions |
+|---|---|---|
+| Report | `benchmarks/eval-laptop-cpu-standard-2026-10-06.json` | `benchmarks/eval-laptop-cpu-lean-2026-10-06.json` |
+| Answers correct (automatic) | 93 / 100 (on the same 30 questions: 28) | 29 / 30 |
+| Median total time | 18.2 s (same 30 questions: 17.7 s) | 33.2 s, 1.87 times step 2 |
+| llama-server prompt / generation speed | 109 / 11.4 tokens/s | 48 / 9.0 tokens/s |
+| `P` (`resources.stack_peak_mem_bytes`) | 8.34 GiB | 6.21 GiB |
+| Threshold from the decision rule (`P` + 2.0 GiB, rounded up) | **10.5 GiB** | 8.5 GiB |
+| OOM kills, restarts, swap growth | 0, 0, 0 | 0, 0, 0 |
+| Largest unsampled spike | 6.3 MiB | 5.3 MiB |
+
+`llama-bench` on the same machine (`benchmarks/cpu-laptop-2026-10-06.json`, 12 threads) explains step 3: with a q8_0 V cache, prompt processing at 2,048 tokens falls from 141 to 53 tokens/s, and from 80 to 13 tokens/s with 4,096 tokens already in the context. Prompt processing is most of each answer's time on the CPU, so option B cannot meet the step-4 timing condition (at least 90% of step 3's generation speed and a median time within 115%) against `cpu-standard`.
+
+What the rule gives on this machine, to confirm on the reference machine: `cpu-standard` needs **10.5 GiB** of Docker memory, not 15.0, and option B fails the timing condition, so `cpu-lean` as defined here would become "not supported" (`CPU_LEAN_SUPPORTED = False`). A lean variant that keeps the f16 cache and only shortens the context (`--ctx-size 4096`, `--cache-ram 256`) halves the KV cache without the speed loss; it is worth measuring as step 3 before giving up on a lean profile. The constants in `installer/profiles.py` stay at 15.0 and 13.5 GiB until the reference-machine run.
+
+The same `llama-bench` run measured Q5_K_M reading prompts faster than Q4_K_M on this processor (201 against 141 tokens/s at 2,048 tokens) and writing slightly slower (20.6 against 24.1 tokens/s); since prompt reading dominates, Q5_K_M may be both faster and more accurate here, and deserves a step-2 run of its own (B-102).
+
 ## Consequences
 
 **Pros**
