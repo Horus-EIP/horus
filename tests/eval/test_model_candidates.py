@@ -505,6 +505,18 @@ class TestMarkdown:
         assert "stack peak: the evaluation's `stack_peak_mem_bytes`, the ADR-005 `P`: the peak memory of the whole stack" in text
         assert any(line.startswith("- Agents-A1-4B: The licence is only in the card metadata") for line in lines)
 
+    def test_the_chat_columns_name_the_question_count_of_the_evaluation_that_ran(self, catalog):
+        report = self.report(catalog)
+        report["variants"][0]["eval"]["questions"] = 20
+        text = markdown_summary(report)
+        assert "chat columns from the 20-question evaluation." in text
+        assert "100-question" not in text
+
+    def test_without_an_evaluation_the_chat_columns_give_no_question_count(self, catalog):
+        report = self.report(catalog)
+        report["variants"][0]["eval"] = None
+        assert "chat columns from the evaluation." in markdown_summary(report)
+
     def test_licence_flags_are_listed_once_per_candidate(self, catalog):
         report = self.report(catalog)
         report["variants"].append(variant_summary(variant_by_id(catalog, "agents-a1-4b-q5km")))

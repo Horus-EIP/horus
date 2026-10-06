@@ -509,7 +509,7 @@ def pull_images(log: Log, infra: Path, from_source: bool = False) -> list[str]:
     for index, (service, image) in enumerate(wanted.items(), start=1):
         prebuilt = ours(services[service])
         log.say(f"  [{index}/{len(wanted)}] {service}  " + dim(image)
-                + ("  (prebuilt, signed)" if prebuilt else ""))
+                + ("  (prebuilt)" if prebuilt else ""))
         landed = (lambda image=image: _image_on_this_machine(log, image)) if prebuilt else None
         outcome = _pull_with_retries(log, infra, f"pull {service}", [service], landed)
         if outcome == PULLED:

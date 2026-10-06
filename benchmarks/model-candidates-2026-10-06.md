@@ -4,7 +4,7 @@ Catalog `scripts/benchmarks/model-candidates.yaml` version 1.0.0, llama.cpp b113
 
 ## Reliability and answers
 
-JSON valid: replies to the B-98 request that parse and validate against the schema sent. Probe columns come from the direct contract probe, chat columns from the 100-question evaluation.
+JSON valid: replies to the B-98 request that parse and validate against the schema sent. Probe columns come from the direct contract probe, chat columns from the 20-question evaluation.
 
 | Model | GGUF | Licence | JSON valid | Thought first | Status correct | Answer correct (probe) | Source correct (probe) | Answer correct (chat, auto) | Answer correct (reviewed) | Source correct (chat) |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|

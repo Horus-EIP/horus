@@ -177,7 +177,7 @@ def refusal(probe: dict) -> NotSupported:
     alternatives.append(
         "Try anyway, unsupported: run START-HERE again with --profile cpu-lean. Expect "
         "containers stopped for lack of memory, or answers that take far longer. If "
-        "it works, tell us: these thresholds are not measured yet."
+        "it works, tell us: these thresholds are still planning figures."
     )
 
     numbers = {

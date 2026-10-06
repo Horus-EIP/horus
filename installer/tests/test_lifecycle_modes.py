@@ -688,6 +688,12 @@ class PrebuiltImagePulls(FakeDockerCase):
         self.assertIn("ghcr.io/acme/horus-mas:0.1.2-cpu", out)
         self.assertIn("prebuilt", out)
 
+    def test_the_download_list_claims_no_signature_check_it_does_not_make(self):
+        out, _raised = self.run_it(FakeDocker(config=compose_config(PREBUILT)))
+        (line,) = [line for line in out.splitlines() if "horus-mas:0.1.2-cpu" in line]
+        self.assertTrue(line.endswith("(prebuilt)"), line)
+        self.assertNotIn("signed", line)
+
     def test_images_an_earlier_install_built_are_named_once_the_stack_runs(self):
         docker = FakeDocker(config=compose_config({**PULLABLE, **PREBUILT}),
                             local_images={"infra-mas"})

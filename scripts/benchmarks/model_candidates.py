@@ -707,6 +707,15 @@ def _speed_row(variant: dict[str, Any]) -> str:
     return "| " + " | ".join(cells) + " |"
 
 
+def _evaluation_name(variants: list[dict[str, Any]]) -> str:
+    counts = sorted({(variant.get("eval") or {}).get("questions") for variant in variants} - {None})
+    if len(counts) == 1:
+        return f"the {counts[0]}-question evaluation"
+    if counts:
+        return f"the evaluation ({counts[0]} to {counts[-1]} questions)"
+    return "the evaluation"
+
+
 def markdown_summary(report: dict[str, Any]) -> str:
     run = report.get("run") or {}
     catalog = report.get("catalog") or {}
@@ -724,7 +733,8 @@ def markdown_summary(report: dict[str, Any]) -> str:
         "## Reliability and answers",
         "",
         "JSON valid: replies to the B-98 request that parse and validate against the schema sent. "
-        "Probe columns come from the direct contract probe, chat columns from the 100-question evaluation.",
+        "Probe columns come from the direct contract probe, chat columns from "
+        f"{_evaluation_name(variants)}.",
         "",
         "| Model | GGUF | Licence | JSON valid | Thought first | Status correct | Answer correct (probe) | "
         "Source correct (probe) | Answer correct (chat, auto) | Answer correct (reviewed) | Source correct (chat) |",

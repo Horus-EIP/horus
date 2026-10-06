@@ -315,11 +315,23 @@ class MemoryDecision(unittest.TestCase):
                 probe = dict(horus_install.SIMULATIONS[simulation])
                 self.assertEqual(profiles.select_profile(probe)[0], name)
 
-    def test_the_reasons_quote_the_adr_and_say_the_figures_are_not_measured(self):
+    def test_the_reasons_quote_the_adr_and_say_the_figures_are_still_planning_figures(self):
         _, reasons = profiles.select_profile(probe_of(ram=64, docker=14.0))
         text = " ".join(reasons)
         self.assertIn(profiles.LOW_RAM_ADR, text)
-        self.assertIn("not measured", text)
+        self.assertIn("planning figures", text)
+        self.assertIn("until the run on the 16 GB reference machine", text)
+        self.assertNotIn("not measured", text)
+
+    def test_the_cpu_notes_quote_the_first_laptop_run_and_keep_the_thresholds(self):
+        notes = " ".join(profiles.get("cpu-lean").notes + profiles.get("cpu-standard").notes)
+        self.assertIn("benchmarks/cpu-laptop-2026-10-06.json", notes)
+        self.assertIn("8.34 GiB on cpu-standard and 6.21 GiB on cpu-lean", notes)
+        self.assertIn("10.5 and 8.5 GiB", notes)
+        self.assertIn(f"stay at {profiles.CPU_STANDARD_MIN_GIB:.1f} and "
+                      f"{profiles.CPU_LEAN_MIN_GIB:.1f} GiB", notes)
+        self.assertNotIn("benchmarked", notes)
+        self.assertNotIn("has not been timed", notes)
 
     def test_the_lean_profile_is_described_by_its_thresholds(self):
         trigger = profiles.get("cpu-lean").trigger
@@ -391,6 +403,11 @@ class RefusalScreen(TempDir):
         self.assertIn("--profile cpu-lean", refused.alternatives[-1])
         self.assertIn(profiles.THRESHOLDS_BASIS, " ".join(refused.need))
         self.assertEqual(refused.code, EXIT_HARDWARE_NOT_SUPPORTED)
+
+    def test_trying_anyway_calls_the_thresholds_planning_figures(self):
+        last = self.refusal(ram=7.6, docker=7.6).alternatives[-1]
+        self.assertIn("these thresholds are still planning figures", last)
+        self.assertNotIn("not measured", last)
 
     def test_the_report_emits_the_event_before_the_screen(self):
         stream = io.StringIO()

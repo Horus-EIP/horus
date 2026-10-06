@@ -13,7 +13,9 @@ DERIVED = "derived"
 
 LOW_RAM_ADR = "docs/adr/ADR-005-low-ram-machines.md"
 
-THRESHOLDS_BASIS = f"planning figures from {LOW_RAM_ADR}, not measured yet"
+THRESHOLDS_BASIS = (
+    f"planning figures from {LOW_RAM_ADR}, kept until the run on the 16 GB reference machine"
+)
 
 CPU_STANDARD_MIN_GIB = 15.0
 
@@ -388,8 +390,8 @@ def _cpu_common() -> dict[str, Setting]:
             "3600", DERIVED,
             "CPU generation is roughly an order of magnitude slower. At the GPU "
             "default MAS cancels the task mid-answer and chat hangs on 'loading'. "
-            "The doubling of the 1800s GPU value is reasoning, not a measured "
-            "CPU run - no CPU-only machine has been benchmarked.",
+            "The doubling of the 1800s GPU value is reasoning, not fitted to a "
+            "measured CPU run.",
         ),
         "REACT_TIMEOUT_SECONDS": Setting(
             "1800", DERIVED,
@@ -477,10 +479,15 @@ _add(Profile(
         "too much quality.",
         f"Under {cpu_floor_gib():.1f} GiB of memory for Docker the installer "
         "stops before any large download and says why: no profile fits.",
-        "No CPU-only machine has been benchmarked with llama-server. The "
-        "timeouts, threads and memory ceilings are reasoned, not measured - if "
-        "this profile behaves oddly, suspect those numbers before you suspect "
-        "a bug.",
+        "A first run of the CPU profiles is recorded in "
+        f"benchmarks/cpu-laptop-2026-10-06.json and {LOW_RAM_ADR}: a "
+        "development laptop with 64 GB of RAM, on its CPU. The whole stack "
+        "peaked at 8.34 GiB on cpu-standard and 6.21 GiB on cpu-lean, which "
+        "the ADR's decision rule turns into 10.5 and 8.5 GiB. The thresholds "
+        f"stay at {CPU_STANDARD_MIN_GIB:.1f} and {CPU_LEAN_MIN_GIB:.1f} GiB until "
+        "the run on the 16 GB reference machine. The timeouts and thread counts "
+        "are still reasoned, not measured - if this profile behaves oddly, "
+        "suspect those numbers before you suspect a bug.",
         _cpu_memory_note(_LEAN_MODEL_SERVER_MEMORY, "3.4 GiB"),
     ),
 ))
@@ -503,8 +510,10 @@ _add(Profile(
         "the anti-spiral guard fired instead of an answer. Retrieval was fine "
         "and everything else passed. The same machine answers in about 4 "
         "seconds on its GPU.",
-        "llama-server has not been timed on a CPU-only machine yet; the "
-        "100-question test set (B-91) does that.",
+        "llama-server was first timed on the CPU of a development laptop on "
+        f"2026-10-06 ({LOW_RAM_ADR}): a median of 18.2 s per answer over "
+        "the 100-question test set, 93 of 100 answers correct. The run on the "
+        "16 GB reference machine is still to do.",
         "The timeouts are still DERIVED, not fitted - but the 1800s ReAct "
         "budget was at least shown to be generous rather than tight: the slow "
         "run finished well inside it and was not truncated.",
