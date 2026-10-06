@@ -745,7 +745,7 @@ def markdown_summary(report: dict[str, Any]) -> str:
         "",
         "llama-bench tokens per second with an f16 KV cache, best thread count, depth 0 unless named. "
         "Medians in seconds. llm VmHWM and cgroup peak: the candidate llama-server; stack peak: the evaluation's "
-        "`stack_peak_mem_bytes`, the ADR-005 `P`: the peak memory of the whole stack, model pages included.",
+        "`stack_peak_mem_bytes`, the ADR-006 `P`: the peak memory of the whole stack, model pages included.",
         "",
         "| Model | GGUF | File | pp512 | pp2048 | tg128 | tg128 @ 4096 | Probe reply | Chat answer | "
         "Chat first token | llm VmHWM | llm cgroup peak | Stack peak | OOM kills |",

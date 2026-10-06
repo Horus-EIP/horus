@@ -268,7 +268,7 @@ class MemoryDecision(unittest.TestCase):
     def chosen(self, **machine) -> str:
         return profiles.select_profile(probe_of(**machine))[0]
 
-    def test_the_adr_005_thresholds_apply_to_the_memory_docker_can_use(self):
+    def test_the_adr_006_thresholds_apply_to_the_memory_docker_can_use(self):
         cases = ((16.0, "cpu-standard"), (15.0, "cpu-standard"), (14.99, "cpu-lean"),
                  (13.5, "cpu-lean"), (13.49, profiles.NOT_SUPPORTED),
                  (7.6, profiles.NOT_SUPPORTED))

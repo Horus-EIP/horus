@@ -125,7 +125,7 @@ docker compose exec llm curl -s localhost:8080/health
 The installer chooses the profile right after it has checked Python, Docker and Compose: before the disk, network and port checks, the registry sign-in, the file-access questions and every download (`decide_profile` in `installer/horus_install.py`).
 
 1. **Probe.** OS, processor (with AVX2), RAM, disk, the host's GPU list and the memory Docker can use (`docker info --format '{{.MemTotal}}'`). Then, only when there is a GPU to try, the Docker GPU test (`nvidia-smi` in `nvidia/cuda:12.4.0-base-ubuntu22.04`, about 250 MB the first time).
-2. **GPU or CPU.** A GPU profile when Docker can use an NVIDIA card with at least 6 GiB of VRAM. Otherwise a CPU profile, chosen on the memory Docker can use, or on the RAM when Docker does not say. The thresholds are those of [ADR-005](adr/ADR-005-low-ram-machines.md), whose status is Proposed: planning figures until the B-91 measurements confirm or move them.
+2. **GPU or CPU.** A GPU profile when Docker can use an NVIDIA card with at least 6 GiB of VRAM. Otherwise a CPU profile, chosen on the memory Docker can use, or on the RAM when Docker does not say. The thresholds are those of [ADR-006](adr/ADR-006-low-ram-machines.md), whose status is Proposed: planning figures until the B-91 measurements confirm or move them.
 
    | Memory Docker can use | Profile | llama-server |
    |---|---|---|

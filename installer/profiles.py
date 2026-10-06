@@ -11,7 +11,7 @@ MEASURED = "measured"
 
 DERIVED = "derived"
 
-LOW_RAM_ADR = "docs/adr/ADR-005-low-ram-machines.md"
+LOW_RAM_ADR = "docs/adr/ADR-006-low-ram-machines.md"
 
 THRESHOLDS_BASIS = (
     f"planning figures from {LOW_RAM_ADR}, kept until the run on the 16 GB reference machine"
@@ -255,7 +255,7 @@ def _lean_server_settings() -> dict[str, Setting]:
     return {
         "LLM_VLLM_MAX_MODEL_LEN": Setting(
             str(LEAN_CONTEXT_TOKENS), DERIVED,
-            "Half the cpu-standard context (ADR-005 option B), so the KV cache "
+            "Half the cpu-standard context (ADR-006 option B), so the KV cache "
             "halves too. It still holds the 6,000-character retrieval cap, about "
             "2,000 tokens, with room for the answer: both clients size the answer "
             "to the room left. Compose passes the same value to llama-server's "
@@ -266,7 +266,7 @@ def _lean_server_settings() -> dict[str, Setting]:
             "q8_0 stores 32 values in 34 bytes instead of 64. With the 4,096 "
             "context the KV cache is 36 layers x 8 KV heads x 128 x 2 x 1.0625 "
             "bytes x 4,096 = 0.30 GiB, against 1.13 GiB for cpu-standard. What "
-            "it costs in answer quality is what the ADR-005 decision rule "
+            "it costs in answer quality is what the ADR-006 decision rule "
             "measures on the test set.",
         ),
         "LLM_SERVER_CACHE_TYPE_V": Setting(
@@ -468,7 +468,7 @@ _add(Profile(
             "cache, for less memory. Untested.",
     settings={**_cpu_common(), **_lean_server_settings()},
     notes=(
-        "ADR-005 option B: the same llama-server and Qwen3-4B-Instruct-2507 "
+        "ADR-006 option B: the same llama-server and Qwen3-4B-Instruct-2507 "
         "Q4_K_M as cpu-standard, with --ctx-size 4096, a q8_0 KV cache, flash "
         "attention on and a 256 MiB prompt cache. llm needs about 3.4 GiB "
         "instead of about 5, and answers come from the same model.",

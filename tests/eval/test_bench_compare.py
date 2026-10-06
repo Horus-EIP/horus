@@ -141,7 +141,7 @@ class TestEndToEnd:
         assert table_row(markdown, "Routing decision without the LLM, p90")[2] == "12 ms (n=1)"
         assert table_row(markdown, "Routed by the LLM fallback")[2:] == ["50.0% (n=2)", "50.0% (n=2)", "+0.0 pts"]
         assert table_row(markdown, "Routing methods")[2:] == ["embedding 1, llm 1", "embedding 1, llm 1", "same"]
-        assert table_row(markdown, "Peak RAM of the stack (ADR-005 P)")[1:3] == [
+        assert table_row(markdown, "Peak RAM of the stack (ADR-006 P)")[1:3] == [
             "docker stats total + model pages left out, in one sample",
             "11.50 GiB",
         ]
@@ -182,7 +182,7 @@ class TestEndToEnd:
         assert (
             "eval-cpu16: the memory.peak of llm, less its inactive page cache, went 1.00 GiB above its docker "
             "stats peak during the questions: a spike fell between two samples. Repeat the run with "
-            "--sample-interval 2 before taking ADR-005's P from it."
+            "--sample-interval 2 before taking ADR-006's P from it."
         ) in markdown
         assert (
             "eval-cpu16: no sampling check for agent, web_client: a memory.peak or memory.stat could not be "
@@ -197,12 +197,12 @@ class TestEndToEnd:
             (
                 11 * GIB,
                 "eval-cpu16: llama-server's RssFile or the llm memory.stat could not be read in 3 samples: "
-                "ADR-005's P leaves them out.",
+                "ADR-006's P leaves them out.",
             ),
             (
                 None,
                 "eval-cpu16: llama-server's RssFile or the llm memory.stat could not be read in any of the 3 "
-                "samples taken while llm ran, so ADR-005's P is unknown: fix the read and run again.",
+                "samples taken while llm ran, so ADR-006's P is unknown: fix the read and run again.",
             ),
         ],
     )

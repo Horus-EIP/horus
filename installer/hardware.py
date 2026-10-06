@@ -814,7 +814,7 @@ def write_profile_json(
             "the host what hardware it has.",
             "memory_decision is what decided between the CPU profiles: the memory "
             "Docker can use (docker info), or the RAM of the machine when Docker "
-            "could not say, against the thresholds of ADR-005.",
+            "could not say, against the thresholds of ADR-006.",
             "hardware_fingerprint is the RAM, the Docker memory and the GPU list. "
             "The next run compares it: when nothing changed and Docker could use "
             "the GPU, the Docker GPU test is not run again.",

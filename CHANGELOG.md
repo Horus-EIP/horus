@@ -64,7 +64,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - Prebuilt, signed images per profile from `.github/workflows/images.yml`; the installer pulls instead of building (B-66, `736fdc2`)
 - Documents are indexed as passages (`{doc_id}:{n}`) with page and offset metadata, and agents can fetch an attachment by its document id (B-97, `8670bec`)
 - Answer contract: every agent answer is JSON with a status and its sources, the chat shows the sources under the answer, and MAS retries once on `not_found` or `failed` (B-98, `803176d`)
-- Benchmark tooling (`scripts/benchmarks/`, `scripts/eval/` resource sampling and comparison) and ADR-005 on machines under 16 GB (B-91, `cc03ea7`)
+- Benchmark tooling (`scripts/benchmarks/`, `scripts/eval/` resource sampling and comparison) and ADR-006 on machines under 16 GB (B-91, `cc03ea7`)
 - The installer decides the CPU profile, or refuses an unsupported machine, before any large download; it warns without AVX2 and re-detects only when the hardware changed (B-100, `5154b23`)
 - Research note on integrated GPUs and NPUs (B-101, `8d91cef`) and a harness for the model candidates (B-102, `5b304e6`)
 - Preflight refuses Docker Compose older than 2.33.0 and checks that ghcr.io is reachable on CPU profiles (`2cb3aa9`)

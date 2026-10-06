@@ -111,7 +111,7 @@ class CpuOverlayRunsLlamaServer(unittest.TestCase):
         self.assertNotIn("--api-key", flags)
         self.assertNotIn("--api-key-file", flags)
 
-    def test_cpu_lean_runs_the_same_model_with_the_adr_005_option_b_flags(self):
+    def test_cpu_lean_runs_the_same_model_with_the_adr_006_option_b_flags(self):
         lean = profiles.env_for("cpu-lean", {"cpu": {"physical_cores": 4}})
         flags = self.flags(lean)
         self.assertEqual(flags["--model"], self.flags()["--model"])

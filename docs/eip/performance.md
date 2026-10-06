@@ -59,14 +59,14 @@ This section records every optimization we shipped, with measured impact. Empty 
 
 ## CPU-only machines (dev plan B-91)
 
-The CPU path is measured with the 100-question test set and llama-bench on the reference machine `cpu16` (16 GB of RAM, CPU only, AVX2). Results go to [`benchmarks/`](../../benchmarks/README.md); [ADR-005](../adr/ADR-005-low-ram-machines.md) uses them to decide what happens under 16 GB.
+The CPU path is measured with the 100-question test set and llama-bench on the reference machine `cpu16` (16 GB of RAM, CPU only, AVX2). Results go to [`benchmarks/`](../../benchmarks/README.md); [ADR-006](../adr/ADR-006-low-ram-machines.md) uses them to decide what happens under 16 GB.
 
 | Measurement | Date | Result | File |
 |---|---|---|---|
 | Old CPU profile (Qwen2.5-1.5B router in MAS, Qwen3-4B in bf16 in the agent, both with Transformers), one grounded question, 12-core laptop with 64 GB of RAM | 2026-09-01 | **14 min 14 s**, wrong answer (the anti-spiral guard replaced it). Retrieval ranked the right document first. | [`cpu-transformers-2026-09-01.json`](../../benchmarks/cpu-transformers-2026-09-01.json) |
 | llama-bench, Qwen3-4B Q4_K_M and Q5_K_M, build b11382, `cpu16` | not run yet | | `benchmarks/cpu16-<date>.json` |
 | 100 questions, `cpu-standard` on llama-server, `cpu16` | not run yet | | `benchmarks/eval-cpu16-standard-<date>.json` |
-| 100 questions, the 4B with a 4,096 context and a q8_0 KV cache (ADR-005 option B), `cpu16` | not run yet | | `benchmarks/eval-cpu16-lean-<date>.json` |
+| 100 questions, the 4B with a 4,096 context and a q8_0 KV cache (ADR-006 option B), `cpu16` | not run yet | | `benchmarks/eval-cpu16-lean-<date>.json` |
 
 ```bash
 python scripts/benchmarks/run-llama-bench.py --models-dir <folder> --fetch

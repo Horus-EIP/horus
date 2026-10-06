@@ -108,7 +108,7 @@ SECTION_10_ROWS = (
     MetricRow("dispatch_median_ms", "Submit to dispatch, median", "task events, queue wait included", "ms"),
     MetricRow(
         "stack_peak_gib",
-        "Peak RAM of the stack (ADR-005 P)",
+        "Peak RAM of the stack (ADR-006 P)",
         "docker stats total + model pages left out, in one sample",
         "GiB",
     ),
@@ -432,7 +432,7 @@ def sampling_warnings(doc: dict[str, Any]) -> list[str]:
             warnings.append(
                 f"{doc.get('label')}: the memory.peak of {name}, less its inactive page cache, went "
                 f"{_gib(over):.2f} GiB above its docker stats peak during the questions: a spike fell between "
-                "two samples. Repeat the run with --sample-interval 2 before taking ADR-005's P from it."
+                "two samples. Repeat the run with --sample-interval 2 before taking ADR-006's P from it."
             )
     return warnings
 
@@ -445,10 +445,10 @@ def stack_peak_warnings(doc: dict[str, Any]) -> list[str]:
     unread = f"{doc.get('label')}: llama-server's RssFile or the llm memory.stat could not be read in"
     if resources.get("stack_peak_mem_bytes") is None:
         return [
-            f"{unread} any of the {missing} samples taken while llm ran, so ADR-005's P is unknown: "
+            f"{unread} any of the {missing} samples taken while llm ran, so ADR-006's P is unknown: "
             "fix the read and run again."
         ]
-    return [f"{unread} {missing} samples: ADR-005's P leaves them out."]
+    return [f"{unread} {missing} samples: ADR-006's P leaves them out."]
 
 
 def unread_count_warnings(doc: dict[str, Any]) -> list[str]:

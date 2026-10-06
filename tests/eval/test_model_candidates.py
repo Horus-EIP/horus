@@ -502,7 +502,7 @@ class TestMarkdown:
         failed = [line for line in lines if line.startswith("| Agents-A1-4B")]
         assert failed[0].count("–") == 8
         assert "- `agents-a1-4b-q4km`: download failed: HTTP 404" in lines
-        assert "stack peak: the evaluation's `stack_peak_mem_bytes`, the ADR-005 `P`: the peak memory of the whole stack" in text
+        assert "stack peak: the evaluation's `stack_peak_mem_bytes`, the ADR-006 `P`: the peak memory of the whole stack" in text
         assert any(line.startswith("- Agents-A1-4B: The licence is only in the card metadata") for line in lines)
 
     def test_the_chat_columns_name_the_question_count_of_the_evaluation_that_ran(self, catalog):

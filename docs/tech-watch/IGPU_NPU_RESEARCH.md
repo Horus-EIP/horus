@@ -4,7 +4,7 @@
 **Task:** dev plan B-101, a research spike. Nothing is built. This note says what trying each option would take, what can go wrong, and what to do next.
 **Related:**
 
-- [ADR-005](../adr/ADR-005-low-ram-machines.md): the memory budget of the CPU stack
+- [ADR-006](../adr/ADR-006-low-ram-machines.md): the memory budget of the CPU stack
 - [benchmarks/README.md](../../benchmarks/README.md): the B-91 tools (`run-llama-bench.py`, `run-eval.py`, `compare-benchmarks.py`)
 - [scripts/models/README.md](../../scripts/models/README.md): the pinned llama.cpp build and the model file
 - B-100 (profiles), B-96 (embeddings on ONNX Runtime), B-99 (prompt layout for llama-server's prompt cache)
@@ -15,7 +15,7 @@
 
 - **Vulkan on an integrated GPU (iGPU) is worth one measured spike, on Linux only.** The official `server-vulkan` image runs the same llama-server build as the `llm` service. On a Linux host it only needs `/dev/dri` passed into the container. The public numbers (llama.cpp discussion #10879) put recent laptop iGPUs at hundreds of tokens per second for prompt reading on a 7B model, and prompt reading is the slow part of a CPU answer. There are no CPU rows to compare with, so the spike has to measure the CPU and the iGPU on the same laptop.
 - **Windows has no container route today.** Docker Desktop passes only NVIDIA GPUs to containers. Inside WSL 2 the GPU is a Direct3D 12 device, and the official image has no Vulkan driver for it. A native `llama-server.exe` works, but it would take the model server out of Docker.
-- **An iGPU does not save memory.** It uses the same RAM as the CPU. The ADR-005 thresholds do not move, and the weights may stop being memory the kernel can drop.
+- **An iGPU does not save memory.** It uses the same RAM as the CPU. The ADR-006 thresholds do not move, and the weights may stop being memory the kernel can drop.
 - **OpenVINO: do not try it yet.** The llama.cpp backend is marked work in progress, is Intel-only and has been validated on Core Ultra Series 1 and 2 only. Its fast GPU mode serves one session and, from its documented limits, loses llama-server's prompt cache. Its NPU mode needs small contexts. If the Vulkan spike runs on an Intel Core Ultra Series 2 laptop, add one llama-bench run with the OpenVINO image: it costs one command.
 - **NPUs are not a route for the LLM for now.** The repository's earlier NPU work targeted the embedder ([below](#earlier-npu-work-in-this-repository)), and that stays a separate experiment.
 
@@ -24,7 +24,7 @@
 - **Who gets them.** The installer treats AMD, Intel and Apple GPUs as unsupported (`UNSUPPORTED_VENDORS` in `installer/hardware.py`), skips the CUDA test and picks a CPU profile. Every laptop with only an iGPU runs `cpu-standard` or `cpu-lean`.
 - **What runs.** The `llm` service in `src/infra/docker-compose.cpu.yml`: `ghcr.io/ggml-org/llama.cpp:server-b11382`, Qwen3-4B-Instruct-2507 Q4_K_M (2.33 GiB), `--ctx-size 8192 --parallel 1 --load-mode mmap --cache-ram 1024 --threads N`. `LLM_SERVER_IMAGE` overrides the image of `llm` and of the `llm-model` download step.
 - **Where the wait is.** The CPU profiles retrieve up to five passages under a 6,000-character cap, about 1,500 to 2,000 tokens, and the whole prompt is read before the first word of the answer (`AGENT_MAX_CONTEXT_CHARS` in `installer/profiles.py`). Reading a prompt is arithmetic-bound. Generating is bound by memory bandwidth. An iGPU brings more parallel arithmetic but uses the same memory, so the gain should be in prompt reading and small in generation.
-- **What is measured.** Nothing on llama-server yet: B-91 delivered the tools and ADR-005, and its `cpu16` runs are still to do. The spike below does not need them, because it compares the CPU and the iGPU of one laptop.
+- **What is measured.** Nothing on llama-server yet: B-91 delivered the tools and ADR-006, and its `cpu16` runs are still to do. The spike below does not need them, because it compares the CPU and the iGPU of one laptop.
 
 ## Earlier NPU work in this repository
 
@@ -57,7 +57,7 @@ What the thread tells us, and what it does not:
 - **The rows rank chips; they are not a fixed benchmark.** Each row comes from a different user, build, driver and operating system. The Core Ultra 200 row was posted from Windows with Intel's driver (Arc 140V). The Core Ultra 300 row (Arc B390, also Windows) was measured on an 8B Llama model rather than the reference file.
 - **There are no CPU-only rows.** The one same-machine comparison in the visible comments is a 2020 Tiger Lake laptop (i7-1185G7, Iris Xe). There, generation was faster with every layer left on the CPU (`-ngl 0`, about 9.9 t/s) than with every layer on the iGPU (about 7.3 t/s), while prompt reading was faster with every layer on the iGPU (about 42 against 31 t/s). A llama.cpp collaborator replied that `-ngl 0`, where only prompt processing goes to the GPU, is often a good setting for iGPUs.
 - **Memory decides a lot.** The opening post warns that for iGPUs "memory speed and number of channels will greatly affect your inference speed". Two laptops with the same chip and different RAM will not match.
-- **Flash attention depends on the chip.** With it, prompt reading on the AMD rows is 11 to 16% faster. On the Core Ultra 100 row it drops from 186 to 78 t/s, though from a different build. The ADR-005 lean option needs flash attention for its q8_0 V cache, so a lean run on an iGPU must be measured with flash attention on.
+- **Flash attention depends on the chip.** With it, prompt reading on the AMD rows is 11 to 16% faster. On the Core Ultra 100 row it drops from 186 to 78 t/s, though from a different build. The ADR-006 lean option needs flash attention for its q8_0 V cache, so a lean run on an iGPU must be measured with flash attention on.
 - **Our model is not the reference model.** The Q4_K_M file is 2.33 GiB against 3.56 GiB, and K-quants run different kernels from Q4_0. The table says which chips are worth trying. It does not predict our numbers.
 - **Old Intel iGPUs are not worth the work.** The Core 8000 to Core 1100 and Core Ultra 100 rows are far below the Series 2 and 3 rows and the AMD rows, and the Tiger Lake comparison above favours the CPU.
 
@@ -75,7 +75,7 @@ The image is built from `.devops/vulkan.Dockerfile` at b11382: Ubuntu 26.04 with
 
 ### Linux: pass `/dev/dri` into the container
 
-With Docker Engine the container needs the GPU's device nodes. llama.cpp's build documentation passes `/dev/dri/renderD128` and a `/dev/dri/card*` node. llama-server runs as root in this image, so no `group_add` is needed; a non-root user would need the host's `render` group. For the spike, an override file in the style of ADR-005, added to `COMPOSE_FILE`:
+With Docker Engine the container needs the GPU's device nodes. llama.cpp's build documentation passes `/dev/dri/renderD128` and a `/dev/dri/card*` node. llama-server runs as root in this image, so no `group_add` is needed; a non-root user would need the host's `render` group. For the spike, an override file in the style of ADR-006, added to `COMPOSE_FILE`:
 
 ```yaml
 services:
@@ -128,15 +128,15 @@ A native `llama-server.exe` is the realistic Windows route, but it changes the a
      `--image` puts the Vulkan image and its digest in the report. The matrix options must match what llama-bench ran, so that `run.matrix` tells the truth.
    - Native Windows (the development laptop): unzip the `win-vulkan` release, run `llama-bench.exe` with the same flags plus `-dev VulkanN`, and keep its bare JSON array: `compare-benchmarks.py` reads bare llama-bench arrays. `run-llama-bench.py` records Docker images and cannot hash through a native binary.
 3. **In the stack** (Linux only): the override file above, `AGENT_RESPONSE_CACHE=0`, and `python scripts/eval/run-eval.py --label eval-igpu-780m-vulkan --reference igpu-780m --sample-resources`, against a CPU-only evaluation on the same laptop. The report records the image and the server arguments (`llama_cpp.server`). Also note the host's `MemAvailable` (`/proc/meminfo`) before the stack starts, after the model has loaded and at the end, because the GPU driver's memory may not appear in `docker stats` (see the risks).
-4. **Go or stop.** These are planning values, to revisit after the first run, like ADR-005's margins:
+4. **Go or stop.** These are planning values, to revisit after the first run, like ADR-006's margins:
    - Go on to the evaluation only if the iGPU reads pp2048 at least twice as fast as the same laptop's CPU.
    - Keep it only if the evaluation's median `summary.ttft_s` is at least 30% lower than CPU-only; the answer-correct and source-correct rates are each within 5 points; every question ends with an answer; there are no OOM kills or restarts; and the lowest `MemAvailable` is no more than 0.5 GiB below the CPU-only run's.
    - If it holds, B-100 can offer it as an opt-in on Linux (the detection above and the override), never as the default without a smoke test on a reference machine.
 
 ### Risks
 
-- **No memory is saved, and the weights may get stickier.** The iGPU's memory is the system RAM. In b11382 the Vulkan backend does not report `buffer_from_host_ptr`, so offloaded weights are copied into buffers the Vulkan driver allocates instead of being used in place from the memory-mapped file. ADR-005 counts on the weights being file-backed: when memory runs short the kernel drops those pages and answers get slower, but nothing is killed. Driver memory may not be droppable, so a shortfall can become a failure. Whether the driver's memory is charged to the `llm` container's memory cgroup depends on the driver, so `mem_limit` may not cap it and `docker stats`, which ADR-005's measurement rule reads, may not show it. The host's `MemAvailable` catches it either way.
-- **Less RAM for everything else.** Many laptops reserve part of the RAM for the iGPU in their firmware, before the operating system starts. ADR-005 already notes that such 16 GB machines report less than 15.0 GiB.
+- **No memory is saved, and the weights may get stickier.** The iGPU's memory is the system RAM. In b11382 the Vulkan backend does not report `buffer_from_host_ptr`, so offloaded weights are copied into buffers the Vulkan driver allocates instead of being used in place from the memory-mapped file. ADR-006 counts on the weights being file-backed: when memory runs short the kernel drops those pages and answers get slower, but nothing is killed. Driver memory may not be droppable, so a shortfall can become a failure. Whether the driver's memory is charged to the `llm` container's memory cgroup depends on the driver, so `mem_limit` may not cap it and `docker stats`, which ADR-006's measurement rule reads, may not show it. The host's `MemAvailable` catches it either way.
+- **Less RAM for everything else.** Many laptops reserve part of the RAM for the iGPU in their firmware, before the operating system starts. ADR-006 already notes that such 16 GB machines report less than 15.0 GiB.
 - **Shared power and bandwidth.** The iGPU and the CPU cores share one power budget and one memory bus. While llama-server works on the iGPU, the knowledge store, MAS and the agent have less of both. Only the evaluation shows the net effect.
 - **Builds and drivers move the numbers.** One poster in the thread saw prompt reading on Xe2 iGPUs jump between llama.cpp builds, and the image tag pins both the build and the Mesa driver. Every build bump needs the llama-bench run again. For RADV, the thread asks users to set `RADV_PERFTEST=nogttspill`; check whether it matters on the chosen AMD laptop.
 - **Answers can change.** GPU kernels round differently from the CPU's, so greedy answers may differ. The B-92 router's JSON output and the planned B-98 answer contract are enforced by llama.cpp's grammar sampling, which works on the logits whichever backend computed them, but quality has to be checked on the test set like any other change.

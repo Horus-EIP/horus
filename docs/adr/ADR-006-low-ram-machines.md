@@ -1,6 +1,7 @@
-# ADR-005: What Horus does on machines with less than 16 GB of RAM
+# ADR-006: What Horus does on machines with less than 16 GB of RAM
 
 **Date:** 2026-10-05
+**Renumbered:** this ADR was ADR-005 on the branch until 07/10/2026; it became ADR-006 because ADR-005 is the quality-debt ADR.
 **Status:** Proposed. The thresholds below come from arithmetic, the compose ceilings and estimates. The B-91 measurements confirm or move them with the rule in [Measurement protocol](#measurement-protocol).
 **Deciders:** Loup Marquez-Luttringer, Noah Gibelli, Matheus Lopez
 **Related:**
