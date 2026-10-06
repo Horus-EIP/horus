@@ -123,7 +123,7 @@ def _next_specialist_name(skills: list[str], db: Session) -> str:
     return f"{base}-{uuid.uuid4().hex[:6]}"
 
 
-def _publish_task_to_work_queue(
+async def _publish_task_to_work_queue(
     db: Session, assigned_agent_id: str, payload: dict
 ) -> None:
     """Publish a task JSON payload to the shared work queue for the assignee's type."""
@@ -134,7 +134,7 @@ def _publish_task_to_work_queue(
             detail="Could not resolve RabbitMQ work queue for assigned agent",
         )
     payload.setdefault("assigned_agent_id", assigned_agent_id)
-    rabbitmq_instance.publish_task(queue, json.dumps(payload))
+    await asyncio.to_thread(rabbitmq_instance.publish_task, queue, json.dumps(payload))
 
 
 @dataclass(frozen=True)
@@ -208,7 +208,7 @@ async def _publish_unless_full(db: Session, dispatch: _WorkDispatch) -> bool:
         depth = work_queue_line.depth(queue)
     else:
         try:
-            _publish_task_to_work_queue(db, dispatch.agent_id, dict(dispatch.payload))
+            await _publish_task_to_work_queue(db, dispatch.agent_id, dict(dispatch.payload))
             return True
         except WorkQueueFull as full:
             depth = full.depth
@@ -239,7 +239,9 @@ async def _wait_for_room(db: Session, dispatch: _WorkDispatch) -> bool:
                 return False
             if work_queue_line.ahead_of(queue, dispatch.task_id) == 0:
                 try:
-                    _publish_task_to_work_queue(db, dispatch.agent_id, dict(dispatch.payload))
+                    await _publish_task_to_work_queue(
+                        db, dispatch.agent_id, dict(dispatch.payload)
+                    )
                     return True
                 except WorkQueueFull as full:
                     work_queue_line.record_depth(queue, full.depth)
@@ -2446,7 +2448,7 @@ async def cancel_task(
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
     try:
-        if interrupt_task(task_id, db):
+        if await interrupt_task(task_id, db):
             log_agent_operation(
                 "system",
                 "TASK_CANCEL",

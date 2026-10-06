@@ -16,6 +16,8 @@ mutated.
 
 from __future__ import annotations
 
+import asyncio
+import threading
 from unittest.mock import MagicMock, patch
 
 import alembic_helper
@@ -160,7 +162,7 @@ class TestValidatingTaskResults:
 
 
 class TestInterruptTask:
-    def test_success_cancels_and_publishes(self):
+    async def test_success_cancels_and_publishes(self):
         task = MagicMock()
         task.status = TaskRunStatus.RUNNING
         task.conversation_id = 99
@@ -168,7 +170,7 @@ class TestInterruptTask:
         db = _query_returning(task)
 
         with patch.object(task_crud, "rabbitmq_instance") as rmq:
-            ok = task_crud.interrupt_task("task-1", db, reason="stop please")
+            ok = await task_crud.interrupt_task("task-1", db, reason="stop please")
 
         assert ok is True
         assert task.status == TaskRunStatus.CANCELED
@@ -181,7 +183,7 @@ class TestInterruptTask:
         assert '"type": "cancel"' in kwargs["message"]
         assert '"reason": "stop please"' in kwargs["message"]
 
-    def test_default_reason_used_when_none(self):
+    async def test_default_reason_used_when_none(self):
         task = MagicMock()
         task.status = TaskRunStatus.RUNNING
         task.conversation_id = 1
@@ -189,41 +191,61 @@ class TestInterruptTask:
         db = _query_returning(task)
 
         with patch.object(task_crud, "rabbitmq_instance") as rmq:
-            task_crud.interrupt_task("task-2", db)
+            await task_crud.interrupt_task("task-2", db)
 
         msg = rmq.publish.call_args.kwargs["message"]
         assert "User requested cancellation" in msg
 
-    def test_task_not_found_raises_404(self):
+    async def test_task_not_found_raises_404(self):
         db = _query_returning(None)
         with patch.object(task_crud, "rabbitmq_instance") as rmq:
             with pytest.raises(HTTPException) as exc:
-                task_crud.interrupt_task("missing", db)
+                await task_crud.interrupt_task("missing", db)
         assert exc.value.status_code == 404
         rmq.publish.assert_not_called()
 
-    def test_already_terminal_raises_400(self):
+    async def test_already_terminal_raises_400(self):
         task = MagicMock()
         # Handler compares task.status against the enum *.value strings.
         task.status = TaskRunStatus.COMPLETED.value
         db = _query_returning(task)
         with patch.object(task_crud, "rabbitmq_instance") as rmq:
             with pytest.raises(HTTPException) as exc:
-                task_crud.interrupt_task("done", db)
+                await task_crud.interrupt_task("done", db)
         assert exc.value.status_code == 400
         assert "Cannot interrupt a completed task" in exc.value.detail
         rmq.publish.assert_not_called()
 
-    def test_generic_error_rolls_back_and_raises_500(self):
+    async def test_generic_error_rolls_back_and_raises_500(self):
         task = MagicMock()
         task.status = TaskRunStatus.RUNNING
         db = _query_returning(task)
         db.commit.side_effect = RuntimeError("commit fail")
         with patch.object(task_crud, "rabbitmq_instance"):
             with pytest.raises(HTTPException) as exc:
-                task_crud.interrupt_task("task-3", db)
+                await task_crud.interrupt_task("task-3", db)
         assert exc.value.status_code == 500
         db.rollback.assert_called_once()
+
+    async def test_the_cancel_signal_waits_for_the_broker_off_the_event_loop(self):
+        task = MagicMock()
+        task.status = TaskRunStatus.RUNNING
+        task.conversation_id = 5
+        task.agent_id = "agent-Z"
+        db = _query_returning(task)
+        release = threading.Event()
+        waits: list[bool] = []
+
+        async def another_request():
+            release.set()
+
+        with patch.object(task_crud, "rabbitmq_instance") as rmq:
+            rmq.publish.side_effect = lambda **_kwargs: waits.append(release.wait(timeout=2))
+            ok, _ = await asyncio.gather(task_crud.interrupt_task("task-4", db), another_request())
+
+        assert ok is True
+        assert waits == [True]
+        assert rmq.publish.call_args.kwargs["queue_name"] == "agent-Z"
 
 
 class TestGetAllTasksInternal:

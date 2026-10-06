@@ -95,7 +95,7 @@ async def check_task_timeout(test_mode=False):
                         limit_s,
                     )
                     try:
-                        interrupt_task(
+                        await interrupt_task(
                             task.id,
                             db,
                             reason=f"Exceeded maximum runtime ({limit_s}s, TASK_TIMEOUT)",

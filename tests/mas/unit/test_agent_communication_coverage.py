@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -309,6 +310,27 @@ class TestHandleDelegation:
         assert resp.status == "error"
         assert resp.error == "Failed to deliver delegation message"
         assert resp.delegation_id  # the generated message id is echoed back
+
+    async def test_the_delegation_waits_for_the_broker_off_the_event_loop(self):
+        rabbit = MagicMock()
+        release = threading.Event()
+        waits: list[bool] = []
+        rabbit.publish.side_effect = lambda *_args: waits.append(release.wait(timeout=2))
+        comm = AgentCommunicator(rabbitmq_instance=rabbit)
+        req = DelegationRequest(
+            sender_agent_id="a", to_agent_type="analyst", request="r", timeout_seconds=0.01
+        )
+
+        async def another_request():
+            release.set()
+
+        resp, _ = await asyncio.gather(
+            comm.handle_delegation(req, lambda t: "target"), another_request()
+        )
+
+        assert waits == [True]
+        assert resp.status == "timeout"
+        rabbit.publish.assert_called_once()
 
     async def test_timeout_path(self):
         comm = AgentCommunicator(rabbitmq_instance=MagicMock())

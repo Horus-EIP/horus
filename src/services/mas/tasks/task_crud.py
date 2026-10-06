@@ -1,5 +1,6 @@
 """DB-bound task lifecycle helpers: create, validate, cancel, list."""
 
+import asyncio
 import json
 from uuid import uuid4
 
@@ -136,7 +137,7 @@ def validating_task_results(
         )
 
 
-def interrupt_task(task_id: str, db: Session, reason: str | None = None):
+async def interrupt_task(task_id: str, db: Session, reason: str | None = None):
     """Cancel an in-flight task and notify its agent via RabbitMQ."""
     pretty_log(f"INTERRUPT SIGNAL RECEIVED FOR TASK {task_id}", "🛑")
     cancel_reason = reason or "User requested cancellation"
@@ -169,8 +170,11 @@ def interrupt_task(task_id: str, db: Session, reason: str | None = None):
             "reason": cancel_reason,
         }
     )
-    rabbitmq_instance.publish(
-        queue_name=task.agent_id, message=cancellation_message, priority_value=10
+    await asyncio.to_thread(
+        rabbitmq_instance.publish,
+        queue_name=task.agent_id,
+        message=cancellation_message,
+        priority_value=10,
     )
     logger.info(f"Cancellation signal sent for task {task_id} to agent {task.agent_id}")
     return True

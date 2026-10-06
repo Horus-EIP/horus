@@ -1618,7 +1618,7 @@ class TestCancelTask:
 
 
 class TestPublishHelper:
-    def test_unresolvable_queue_raises_500(self):
+    async def test_unresolvable_queue_raises_500(self):
         from fastapi import HTTPException
 
         from tasks.routes import _publish_task_to_work_queue
@@ -1627,17 +1627,17 @@ class TestPublishHelper:
             "tasks.routes.resolve_work_queue_for_agent_id", return_value=None
         ):
             with pytest.raises(HTTPException) as exc:
-                _publish_task_to_work_queue(MagicMock(), "agent-1", {})
+                await _publish_task_to_work_queue(MagicMock(), "agent-1", {})
         assert exc.value.status_code == 500
 
-    def test_resolved_queue_publishes_payload(self):
+    async def test_resolved_queue_publishes_payload(self):
         from tasks.routes import _publish_task_to_work_queue
 
         with patch(
             "tasks.routes.resolve_work_queue_for_agent_id", return_value="q.general"
         ), patch("tasks.routes.rabbitmq_instance") as mock_rmq:
             payload = {"task_id": "x"}
-            _publish_task_to_work_queue(MagicMock(), "agent-9", payload)
+            await _publish_task_to_work_queue(MagicMock(), "agent-9", payload)
         # assignee id injected + published to the resolved queue.
         assert payload["assigned_agent_id"] == "agent-9"
         mock_rmq.publish_task.assert_called_once_with("q.general", json.dumps(payload))

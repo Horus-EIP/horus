@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from unittest.mock import patch
 
 import pytest
@@ -168,6 +169,56 @@ class TestFailureAfterJoiningTheLine:
 
         publish.assert_called_once()
         assert _busy_events("next") == []
+
+
+class TestPublishingOffTheEventLoop:
+    async def test_a_publish_waiting_for_the_broker_leaves_the_event_loop_free(
+        self, routing_db, finance_queue
+    ):
+        release = threading.Event()
+        waits: list[bool] = []
+
+        def publish_waiting_for_confirm(_queue, _body):
+            waits.append(release.wait(timeout=2))
+
+        async def another_request():
+            release.set()
+
+        with (
+            patch.object(routes, "resolve_work_queue_for_agent_id", return_value=QUEUE),
+            patch.object(
+                routes.rabbitmq_instance, "publish_task", side_effect=publish_waiting_for_confirm
+            ),
+        ):
+            handed, _ = await asyncio.gather(
+                routes._publish_unless_full(routing_db, _dispatch("slow")), another_request()
+            )
+
+        assert handed is True
+        assert waits == [True]
+
+    async def test_a_full_queue_reported_from_the_worker_thread_still_shows_busy(
+        self, routing_db, finance_queue
+    ):
+        _add_task(routing_db, "full", status="running")
+        publisher_threads: list[int] = []
+
+        def full(queue, _body):
+            publisher_threads.append(threading.get_ident())
+            raise WorkQueueFull(queue, 10)
+
+        with (
+            patch.object(routes, "resolve_work_queue_for_agent_id", return_value=QUEUE),
+            patch.object(routes.rabbitmq_instance, "publish_task", side_effect=full),
+        ):
+            handed = await routes._publish_unless_full(routing_db, _dispatch("full"))
+
+        assert handed is False
+        assert publisher_threads != [threading.get_ident()]
+        assert work_queue_line.position(QUEUE, "full") == 11
+        (busy,) = _busy_events("full")
+        assert busy["data"]["detail"] == "Busy, position 11"
+        assert _stored(routing_db, "full").status == "queued"
 
 
 class TestWaitingLine:
