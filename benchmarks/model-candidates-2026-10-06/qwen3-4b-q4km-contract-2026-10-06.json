@@ -1,0 +1,1101 @@
+{
+  "kind": "horus-contract-probe",
+  "schema_version": 1,
+  "label": "qwen3-4b-q4km-contract",
+  "run": {
+    "started_at": "2026-10-06T16:11:02Z",
+    "finished_at": "2026-10-06T16:15:44Z",
+    "completed": true,
+    "agent_container": "horus_upgrade-agent-1",
+    "warmup": "In one sentence, what kinds of documents are in the knowledge store?",
+    "items": 20
+  },
+  "model": {
+    "id": "qwen3-4b-q4km",
+    "file": "qwen3-4b-instruct-2507-Q4_K_M.gguf",
+    "sha256": "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597"
+  },
+  "llama_server": {
+    "container": "llm-candidate",
+    "image": "ghcr.io/ggml-org/llama.cpp:server-b11382",
+    "command": [
+      "docker",
+      "run",
+      "-d",
+      "--name",
+      "llm-candidate",
+      "--network",
+      "horus_upgrade_horus-net",
+      "--network-alias",
+      "llm",
+      "--memory",
+      "6442450944",
+      "--memory-swap",
+      "6442450944",
+      "-v",
+      "<bench-dir>\\candidates:/models:ro",
+      "ghcr.io/ggml-org/llama.cpp:server-b11382",
+      "--model",
+      "/models/qwen3-4b-instruct-2507-Q4_K_M.gguf",
+      "--alias",
+      "qwen3-4b",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8080",
+      "--ctx-size",
+      "8192",
+      "--parallel",
+      "1",
+      "--cache-type-k",
+      "f16",
+      "--cache-type-v",
+      "f16",
+      "--flash-attn",
+      "auto",
+      "--load-mode",
+      "mmap",
+      "--cache-ram",
+      "1024",
+      "--threads",
+      "12",
+      "--metrics",
+      "--reasoning",
+      "off"
+    ],
+    "memory_limit_bytes": 6442450944,
+    "reasoning": "off",
+    "build_info": "b11382-11fe02151",
+    "build": "b11382",
+    "n_ctx": 8192,
+    "model_path": "/models/qwen3-4b-instruct-2507-Q4_K_M.gguf"
+  },
+  "summary": {
+    "replies": 20,
+    "json_valid": {
+      "n": 20,
+      "correct": 20,
+      "pct": 100.0
+    },
+    "status_correct": {
+      "n": 20,
+      "correct": 20,
+      "pct": 100.0
+    },
+    "answer_correct_auto": {
+      "n": 20,
+      "correct": 19,
+      "pct": 95.0
+    },
+    "source_correct_auto": {
+      "n": 20,
+      "correct": 20,
+      "pct": 100.0
+    },
+    "failures": {},
+    "thought_first": 0,
+    "truncated": 0,
+    "blank_answers": 0,
+    "wall_s": {
+      "n": 20,
+      "mean": 13.088,
+      "median": 12.826,
+      "p90": 16.86,
+      "min": 5.737,
+      "max": 18.394,
+      "sum": 261.768
+    },
+    "prompt_tokens": {
+      "n": 20,
+      "mean": 1572.8,
+      "median": 1566.0,
+      "p90": 1769,
+      "min": 1252,
+      "max": 1781,
+      "sum": 31456
+    },
+    "completion_tokens": {
+      "n": 20,
+      "mean": 45.15,
+      "median": 40.0,
+      "p90": 56,
+      "min": 36,
+      "max": 98,
+      "sum": 903
+    },
+    "prompt_tps": 115.68,
+    "generation_tps": 12.55,
+    "by_category": {
+      "lookup": {
+        "replies": 13,
+        "json_valid": {
+          "n": 13,
+          "correct": 13,
+          "pct": 100.0
+        },
+        "status_correct": {
+          "n": 13,
+          "correct": 13,
+          "pct": 100.0
+        },
+        "answer_correct_auto": {
+          "n": 13,
+          "correct": 12,
+          "pct": 92.3
+        },
+        "source_correct_auto": {
+          "n": 13,
+          "correct": 13,
+          "pct": 100.0
+        }
+      },
+      "numeric": {
+        "replies": 6,
+        "json_valid": {
+          "n": 6,
+          "correct": 6,
+          "pct": 100.0
+        },
+        "status_correct": {
+          "n": 6,
+          "correct": 6,
+          "pct": 100.0
+        },
+        "answer_correct_auto": {
+          "n": 6,
+          "correct": 6,
+          "pct": 100.0
+        },
+        "source_correct_auto": {
+          "n": 6,
+          "correct": 6,
+          "pct": 100.0
+        }
+      },
+      "multi_hop": {
+        "replies": 1,
+        "json_valid": {
+          "n": 1,
+          "correct": 1,
+          "pct": 100.0
+        },
+        "status_correct": {
+          "n": 1,
+          "correct": 1,
+          "pct": 100.0
+        },
+        "answer_correct_auto": {
+          "n": 1,
+          "correct": 1,
+          "pct": 100.0
+        },
+        "source_correct_auto": {
+          "n": 1,
+          "correct": 1,
+          "pct": 100.0
+        }
+      }
+    }
+  },
+  "replies": [
+    {
+      "id": "fin-01",
+      "category": "lookup",
+      "question": "What was FinCorp's total revenue in Q4 2025?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "FinCorp's total revenue in Q4 2025 was $4.2M.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "1_Q4_2025_Financial_Report.md",
+        "2_Employee_Handbook.md",
+        "4_Expense_Policy.md"
+      ],
+      "wall_s": 15.274,
+      "prompt_tokens": 1563,
+      "completion_tokens": 38,
+      "cached_tokens": 176,
+      "prompt_n": 1387,
+      "prompt_ms": 11808.763,
+      "predicted_n": 38,
+      "predicted_ms": 3238.105,
+      "prompt_tps": 117.46,
+      "generation_tps": 11.43,
+      "content": "{\"status\": \"ok\", \"answer\": \"FinCorp's total revenue in Q4 2025 was $4.2M.\", \"sources\": [\"S1\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "fin-02",
+      "category": "numeric",
+      "question": "By how much did FinCorp's Q4 2025 revenue grow year-over-year?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "FinCorp's Q4 2025 revenue grew by 12% year-over-year.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "1_Q4_2025_Financial_Report.md",
+        "2_Employee_Handbook.md",
+        "3_Compliance_Guidelines.md"
+      ],
+      "wall_s": 10.703,
+      "prompt_tokens": 1585,
+      "completion_tokens": 39,
+      "cached_tokens": 712,
+      "prompt_n": 873,
+      "prompt_ms": 7686.559,
+      "predicted_n": 39,
+      "predicted_ms": 2773.485,
+      "prompt_tps": 113.57,
+      "generation_tps": 13.7,
+      "content": "{\"status\": \"ok\", \"answer\": \"FinCorp's Q4 2025 revenue grew by 12% year-over-year.\", \"sources\": [\"S1\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "fin-03",
+      "category": "lookup",
+      "question": "What were FinCorp's total operating expenses in Q4 2025?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "FinCorp's total operating expenses in Q4 2025 were $3.1M.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "1_Q4_2025_Financial_Report.md",
+        "4_Expense_Policy.md",
+        "2_Employee_Handbook.md",
+        "3_Compliance_Guidelines.md"
+      ],
+      "wall_s": 12.745,
+      "prompt_tokens": 1635,
+      "completion_tokens": 39,
+      "cached_tokens": 527,
+      "prompt_n": 1108,
+      "prompt_ms": 9627.621,
+      "predicted_n": 39,
+      "predicted_ms": 2944.392,
+      "prompt_tps": 115.09,
+      "generation_tps": 12.91,
+      "content": "{\"status\": \"ok\", \"answer\": \"FinCorp's total operating expenses in Q4 2025 were $3.1M.\", \"sources\": [\"S1\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "fin-04",
+      "category": "numeric",
+      "question": "What net operating income did FinCorp report for Q4 2025?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "FinCorp reported a net operating income of $1.1M for Q4 2025.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "1_Q4_2025_Financial_Report.md",
+        "2_Employee_Handbook.md",
+        "3_Compliance_Guidelines.md",
+        "4_Expense_Policy.md"
+      ],
+      "wall_s": 13.95,
+      "prompt_tokens": 1635,
+      "completion_tokens": 40,
+      "cached_tokens": 527,
+      "prompt_n": 1108,
+      "prompt_ms": 10571.159,
+      "predicted_n": 40,
+      "predicted_ms": 3053.814,
+      "prompt_tps": 104.81,
+      "generation_tps": 12.77,
+      "content": "{\"status\": \"ok\", \"answer\": \"FinCorp reported a net operating income of $1.1M for Q4 2025.\", \"sources\": [\"S1\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "fin-05",
+      "category": "lookup",
+      "question": "What was FinCorp's full-year revenue for 2025?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "FinCorp's full-year revenue for 2025 was $15.8M.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "1_Q4_2025_Financial_Report.md",
+        "2_Employee_Handbook.md",
+        "4_Expense_Policy.md",
+        "3_Compliance_Guidelines.md"
+      ],
+      "wall_s": 5.737,
+      "prompt_tokens": 1492,
+      "completion_tokens": 38,
+      "cached_tokens": 1218,
+      "prompt_n": 274,
+      "prompt_ms": 2279.228,
+      "predicted_n": 38,
+      "predicted_ms": 3181.124,
+      "prompt_tps": 120.22,
+      "generation_tps": 11.63,
+      "content": "{\"status\": \"ok\", \"answer\": \"FinCorp's full-year revenue for 2025 was $15.8M.\", \"sources\": [\"S1\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "fin-06",
+      "category": "numeric",
+      "question": "By what percentage did FinCorp's 2025 full-year revenue beat the board target?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "FinCorp's 2025 full-year revenue beat the board target by 5.3%.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "1_Q4_2025_Financial_Report.md",
+        "3_Compliance_Guidelines.md"
+      ],
+      "wall_s": 10.592,
+      "prompt_tokens": 1554,
+      "completion_tokens": 40,
+      "cached_tokens": 712,
+      "prompt_n": 842,
+      "prompt_ms": 7358.409,
+      "predicted_n": 40,
+      "predicted_ms": 3008.088,
+      "prompt_tps": 114.43,
+      "generation_tps": 12.97,
+      "content": "{\"status\": \"ok\", \"answer\": \"FinCorp's 2025 full-year revenue beat the board target by 5.3%.\", \"sources\": [\"S1\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "fin-07",
+      "category": "lookup",
+      "question": "Which three enterprise clients did FinCorp onboard in Q4 2025?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "FinCorp onboarded Acme Bank, Meridian Holdings, and Kestrel Capital in Q4 2025.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "1_Q4_2025_Financial_Report.md",
+        "2_Employee_Handbook.md",
+        "3_Compliance_Guidelines.md"
+      ],
+      "wall_s": 10.545,
+      "prompt_tokens": 1582,
+      "completion_tokens": 44,
+      "cached_tokens": 795,
+      "prompt_n": 787,
+      "prompt_ms": 6823.422,
+      "predicted_n": 44,
+      "predicted_ms": 3529.934,
+      "prompt_tps": 115.34,
+      "generation_tps": 12.18,
+      "content": "{\"status\": \"ok\", \"answer\": \"FinCorp onboarded Acme Bank, Meridian Holdings, and Kestrel Capital in Q4 2025.\", \"sources\": [\"S1\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "fin-08",
+      "category": "lookup",
+      "question": "When did FinCorp complete its SOC 2 Type II audit?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "FinCorp completed its SOC 2 Type II audit on November 24, 2025.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "1_Q4_2025_Financial_Report.md",
+        "3_Compliance_Guidelines.md",
+        "5_IT_Security_Policy.md",
+        "2_Employee_Handbook.md"
+      ],
+      "wall_s": 12.681,
+      "prompt_tokens": 1569,
+      "completion_tokens": 40,
+      "cached_tokens": 527,
+      "prompt_n": 1042,
+      "prompt_ms": 9350.081,
+      "predicted_n": 40,
+      "predicted_ms": 3134.122,
+      "prompt_tps": 111.44,
+      "generation_tps": 12.44,
+      "content": "{\"status\": \"ok\", \"answer\": \"FinCorp completed its SOC 2 Type II audit on November 24, 2025.\", \"sources\": [\"S1\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "fin-09",
+      "category": "lookup",
+      "question": "How much revenue did the Advisory Services segment generate in Q4 2025?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "The Advisory Services segment generated $1,850,000 in revenue during Q4 2025.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "1_Q4_2025_Financial_Report.md",
+        "3_Compliance_Guidelines.md"
+      ],
+      "wall_s": 15.023,
+      "prompt_tokens": 1719,
+      "completion_tokens": 48,
+      "cached_tokens": 541,
+      "prompt_n": 1178,
+      "prompt_ms": 10243.266,
+      "predicted_n": 48,
+      "predicted_ms": 4225.981,
+      "prompt_tps": 115.0,
+      "generation_tps": 11.12,
+      "content": "{\"status\": \"ok\", \"answer\": \"The Advisory Services segment generated $1,850,000 in revenue during Q4 2025.\", \"sources\": [\"S1\", \"S2\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "fin-10",
+      "category": "numeric",
+      "question": "What share of FinCorp's Q4 2025 revenue came from Asset Management?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "33.8% of FinCorp's Q4 2025 revenue came from Asset Management.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "1_Q4_2025_Financial_Report.md",
+        "2_Employee_Handbook.md",
+        "3_Compliance_Guidelines.md"
+      ],
+      "wall_s": 11.827,
+      "prompt_tokens": 1584,
+      "completion_tokens": 40,
+      "cached_tokens": 712,
+      "prompt_n": 872,
+      "prompt_ms": 7913.26,
+      "predicted_n": 40,
+      "predicted_ms": 3653.368,
+      "prompt_tps": 110.19,
+      "generation_tps": 10.68,
+      "content": "{\"status\": \"ok\", \"answer\": \"33.8% of FinCorp's Q4 2025 revenue came from Asset Management.\", \"sources\": [\"S1\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "fin-11",
+      "category": "lookup",
+      "question": "Which revenue segment was the smallest in Q4 2025?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "The smallest revenue segment in Q4 2025 was Compliance Consulting, with $620,000, accounting for 14.8% of total revenue.",
+      "blank_answer": false,
+      "answer_correct_auto": false,
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "1_Q4_2025_Financial_Report.md",
+        "3_Compliance_Guidelines.md"
+      ],
+      "wall_s": 15.344,
+      "prompt_tokens": 1716,
+      "completion_tokens": 56,
+      "cached_tokens": 541,
+      "prompt_n": 1175,
+      "prompt_ms": 10366.567,
+      "predicted_n": 56,
+      "predicted_ms": 4829.373,
+      "prompt_tps": 113.35,
+      "generation_tps": 11.39,
+      "content": "{\"status\": \"ok\", \"answer\": \"The smallest revenue segment in Q4 2025 was Compliance Consulting, with $620,000, accounting for 14.8% of total revenue.\", \"sources\": [\"S1\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "fin-12",
+      "category": "numeric",
+      "question": "How far over budget was Travel & Entertainment in Q4 2025?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "Travel & Entertainment was $55K over budget in Q4 2025.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "1_Q4_2025_Financial_Report.md",
+        "4_Expense_Policy.md"
+      ],
+      "wall_s": 16.86,
+      "prompt_tokens": 1769,
+      "completion_tokens": 41,
+      "cached_tokens": 190,
+      "prompt_n": 1579,
+      "prompt_ms": 13570.577,
+      "predicted_n": 41,
+      "predicted_ms": 3147.473,
+      "prompt_tps": 116.35,
+      "generation_tps": 12.71,
+      "content": "{\"status\": \"ok\", \"answer\": \"Travel & Entertainment was $55K over budget in Q4 2025.\", \"sources\": [\"S1\", \"S3\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "fin-13",
+      "category": "lookup",
+      "question": "Who approved the Q4 2025 Travel & Entertainment overage, and on what date?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "Sarah Johnson, COO, approved the Q4 2025 Travel & Entertainment overage on December 12, 2025.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "1_Q4_2025_Financial_Report.md",
+        "4_Expense_Policy.md"
+      ],
+      "wall_s": 12.241,
+      "prompt_tokens": 1444,
+      "completion_tokens": 50,
+      "cached_tokens": 502,
+      "prompt_n": 942,
+      "prompt_ms": 8030.376,
+      "predicted_n": 50,
+      "predicted_ms": 4028.425,
+      "prompt_tps": 117.3,
+      "generation_tps": 12.16,
+      "content": "{\"status\": \"ok\", \"answer\": \"Sarah Johnson, COO, approved the Q4 2025 Travel & Entertainment overage on December 12, 2025.\", \"sources\": [\"S1\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "fin-14",
+      "category": "lookup",
+      "question": "How much of the Q4 2025 Technology & Cloud spend was for the Horus deployment?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "The Q4 2025 Technology & Cloud spend of $410,000 includes $85,000 for the Horus platform deployment.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "1_Q4_2025_Financial_Report.md",
+        "5_IT_Security_Policy.md",
+        "3_Compliance_Guidelines.md"
+      ],
+      "wall_s": 15.719,
+      "prompt_tokens": 1781,
+      "completion_tokens": 54,
+      "cached_tokens": 502,
+      "prompt_n": 1279,
+      "prompt_ms": 11320.418,
+      "predicted_n": 54,
+      "predicted_ms": 4065.232,
+      "prompt_tps": 112.98,
+      "generation_tps": 13.04,
+      "content": "{\"status\": \"ok\", \"answer\": \"The Q4 2025 Technology & Cloud spend of $410,000 includes $85,000 for the Horus platform deployment.\", \"sources\": [\"S2\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "fin-15",
+      "category": "lookup",
+      "question": "What is FinCorp's revenue target for Q1 2026?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "FinCorp's revenue target for Q1 2026 is $4.5M.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "1_Q4_2025_Financial_Report.md",
+        "3_Compliance_Guidelines.md",
+        "2_Employee_Handbook.md"
+      ],
+      "wall_s": 14.304,
+      "prompt_tokens": 1492,
+      "completion_tokens": 38,
+      "cached_tokens": 190,
+      "prompt_n": 1302,
+      "prompt_ms": 10643.866,
+      "predicted_n": 38,
+      "predicted_ms": 3441.757,
+      "prompt_tps": 122.32,
+      "generation_tps": 10.75,
+      "content": "{\"status\": \"ok\", \"answer\": \"FinCorp's revenue target for Q1 2026 is $4.5M.\", \"sources\": [\"S1\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "fin-16",
+      "category": "multi_hop",
+      "question": "What is the combined annual contract value of the three clients onboarded in Q4 2025?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "The combined annual contract value of the three clients onboarded in Q4 2025 is $1,200,000 (Acme Bank) + $780,000 (Meridian Holdings) + $540,000 (Kestrel Capital) = $2,520,000.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "1_Q4_2025_Financial_Report.md",
+        "4_Expense_Policy.md"
+      ],
+      "wall_s": 18.394,
+      "prompt_tokens": 1529,
+      "completion_tokens": 98,
+      "cached_tokens": 190,
+      "prompt_n": 1339,
+      "prompt_ms": 10820.873,
+      "predicted_n": 98,
+      "predicted_ms": 7431.946,
+      "prompt_tps": 123.74,
+      "generation_tps": 13.05,
+      "content": "{\"status\": \"ok\", \"answer\": \"The combined annual contract value of the three clients onboarded in Q4 2025 is $1,200,000 (Acme Bank) + $780,000 (Meridian Holdings) + $540,000 (Kestrel Capital) = $2,520,000.\", \"sources\": [\"S1\", \"S2\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "hr-01",
+      "category": "lookup",
+      "question": "How many days per week are FinCorp employees expected to be in the office?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "FinCorp employees are expected to be in the office at least 3 days per week.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "2_Employee_Handbook.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "2_Employee_Handbook.md",
+        "4_Expense_Policy.md",
+        "5_IT_Security_Policy.md"
+      ],
+      "wall_s": 13.715,
+      "prompt_tokens": 1452,
+      "completion_tokens": 36,
+      "cached_tokens": 176,
+      "prompt_n": 1276,
+      "prompt_ms": 10735.536,
+      "predicted_n": 36,
+      "predicted_ms": 2798.853,
+      "prompt_tps": 118.86,
+      "generation_tps": 12.51,
+      "content": "{\"status\": \"ok\", \"answer\": \"FinCorp employees are expected to be in the office at least 3 days per week.\", \"sources\": [\"S1\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "hr-02",
+      "category": "lookup",
+      "question": "What are FinCorp's standard working hours?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "FinCorp's standard working hours are Monday to Friday, 9:00 AM to 6:00 PM local time.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "2_Employee_Handbook.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "2_Employee_Handbook.md",
+        "3_Compliance_Guidelines.md",
+        "1_Q4_2025_Financial_Report.md",
+        "5_IT_Security_Policy.md"
+      ],
+      "wall_s": 11.386,
+      "prompt_tokens": 1551,
+      "completion_tokens": 45,
+      "cached_tokens": 667,
+      "prompt_n": 884,
+      "prompt_ms": 7722.135,
+      "predicted_n": 45,
+      "predicted_ms": 3435.943,
+      "prompt_tps": 114.48,
+      "generation_tps": 12.81,
+      "content": "{\"status\": \"ok\", \"answer\": \"FinCorp's standard working hours are Monday to Friday, 9:00 AM to 6:00 PM local time.\", \"sources\": [\"S1\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "hr-03",
+      "category": "lookup",
+      "question": "What are the core collaboration hours at FinCorp?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "The core collaboration hours at FinCorp are 10:00 AM – 3:00 PM local time.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "2_Employee_Handbook.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "2_Employee_Handbook.md",
+        "1_Q4_2025_Financial_Report.md",
+        "3_Compliance_Guidelines.md",
+        "5_IT_Security_Policy.md"
+      ],
+      "wall_s": 12.907,
+      "prompt_tokens": 1552,
+      "completion_tokens": 43,
+      "cached_tokens": 444,
+      "prompt_n": 1108,
+      "prompt_ms": 9405.037,
+      "predicted_n": 43,
+      "predicted_ms": 3316.17,
+      "prompt_tps": 117.81,
+      "generation_tps": 12.67,
+      "content": "{\"status\": \"ok\", \"answer\": \"The core collaboration hours at FinCorp are 10:00 AM – 3:00 PM local time.\", \"sources\": [\"S1\"]}",
+      "reasoning_chars": 0
+    },
+    {
+      "id": "hr-04",
+      "category": "numeric",
+      "question": "How many annual vacation days does an employee with 0–2 years of tenure get?",
+      "expected_status": "ok",
+      "json_valid": true,
+      "failure": null,
+      "violations": [],
+      "status": "ok",
+      "status_correct": true,
+      "answer": "An employee with 0–2 years of tenure gets 18 annual vacation days.",
+      "blank_answer": false,
+      "answer_correct_auto": true,
+      "cited_sources": [
+        "2_Employee_Handbook.md"
+      ],
+      "source_correct_auto": true,
+      "error": null,
+      "finish_reason": "stop",
+      "thought_first": false,
+      "labels": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "retrieved_titles": [
+        "2_Employee_Handbook.md",
+        "4_Expense_Policy.md"
+      ],
+      "wall_s": 11.821,
+      "prompt_tokens": 1252,
+      "completion_tokens": 36,
+      "cached_tokens": 184,
+      "prompt_n": 1068,
+      "prompt_ms": 8906.765,
+      "predicted_n": 36,
+      "predicted_ms": 2705.279,
+      "prompt_tps": 119.91,
+      "generation_tps": 12.94,
+      "content": "{\"status\": \"ok\", \"answer\": \"An employee with 0–2 years of tenure gets 18 annual vacation days.\", \"sources\": [\"S1\"]}",
+      "reasoning_chars": 0
+    }
+  ]
+}
