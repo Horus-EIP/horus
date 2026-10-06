@@ -26,7 +26,7 @@ Releases from 0.1.0 on have their own section, named after the tag. The monthly 
 
 ## Unreleased
 
-The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 8, B-87 to B-102): a 16 GB CPU-only machine runs one llama-server for every model, answers are never lost on a reconnect, and answers cite their sources. None of it is measured on the reference machines yet; each task's commit lists the commands that produce the numbers.
+The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 8, B-87 to B-102): a 16 GB CPU-only machine runs one llama-server for every model, answers are never lost on a reconnect, and answers cite their sources. Measured live on 2026-10-06 on the development laptop (Ryzen AI 9 HX 370; RTX 4070 Laptop 8 GB), not yet on the reference machines: on the CPU profile 93 of 100 evaluation answers are correct with a median of 18 s per question (the old CPU setup took 14 minutes for one wrong answer), on the 8 GB GPU 96 of 100 with a median of 3 s; reports in `benchmarks/`.
 
 ### Upgrading an existing install
 
@@ -46,6 +46,13 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - A fresh MAS image failed to reach Postgres because SQLAlchemy 2.1 defaults to psycopg 3; the URL now names psycopg2 and SQLAlchemy is bounded (`6851af5`)
 - A direct answer to a request with attached files was dropped; such requests go to an agent (`e8c79df`)
 - `--start` waits for a service that is still downloading its model instead of exiting with code 42 (`0f0b39b`)
+- Found by the live tests on 2026-10-06:
+  - The router's LLM fallback sent most of the questions it saw to the multi-agent path; it now treats one agent as the default (router accuracy 73.3% to 94.0% on the 116-question set) (`09e72dd`)
+  - The installer's smoke test left the demo document it uploaded in the store, so the first corpus scan indexed it twice; it now deletes it (`13cdeba`)
+  - Running the installer again while Horus was up stopped at the port check; ports held by the install's own containers are accepted (`04c05a7`)
+  - The CPU banner said "No NVIDIA GPU was usable" when a CPU profile was forced on a machine with a usable GPU (`c67ed96`)
+  - The evaluation runner never renewed its 20-minute login token, so long runs failed after about 35 questions (`23c1a08`)
+  - The knowledge store never received `KNOWLEDGE_STORE_EMBED_THREADS` or `KNOWLEDGE_STORE_REINDEX_ON_STARTUP` from `.env` (`2affc76`)
 
 ### Added
 
