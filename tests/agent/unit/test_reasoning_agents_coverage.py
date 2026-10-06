@@ -127,6 +127,12 @@ class TestDecisionHelpers:
     def test_normalize_model_text_folds_halfwidth_ideographic_full_stop(self):
         assert dma._normalize_model_text("$4｡2M") == "$4.2M"
 
+    def test_normalize_model_text_keeps_superscripts_fractions_and_symbols(self):
+        assert dma._normalize_model_text("10⁶ m² ½ x³ ™ ① ﬁ") == "10⁶ m² ½ x³ ™ ① ﬁ"
+
+    def test_normalize_model_text_folds_the_ideographic_space(self):
+        assert dma._normalize_model_text("Ｑ４\u3000ｒｅｖｅｎｕｅ！") == "Q4 revenue!"
+
     def test_normalize_model_text_leaves_plain_markdown_unchanged(self):
         text = "## Q4 2025\n- **Revenue:** $4.2M — up 12% → ahead of plan"
         assert dma._normalize_model_text(text) == text

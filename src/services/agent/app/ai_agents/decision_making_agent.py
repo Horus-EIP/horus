@@ -12,7 +12,6 @@ import logging
 import os
 import threading
 import time
-import unicodedata
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
@@ -108,11 +107,18 @@ DEGENERATE_OUTPUT_FALLBACK = (
 )
 
 
-_IDEOGRAPHIC_FULL_STOP_TO_PERIOD = str.maketrans({"。": "."})
+_FULL_WIDTH_TO_ASCII = str.maketrans(
+    {
+        **{chr(code): chr(code - 0xFEE0) for code in range(0xFF01, 0xFF5F)},
+        "\u3000": " ",
+        "。": ".",
+        "｡": ".",
+    }
+)
 
 
 def _normalize_model_text(text: str) -> str:
-    return unicodedata.normalize("NFKC", text).translate(_IDEOGRAPHIC_FULL_STOP_TO_PERIOD)
+    return text.translate(_FULL_WIDTH_TO_ASCII)
 
 
 def clean_model_text(text: str) -> str:
