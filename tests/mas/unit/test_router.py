@@ -359,6 +359,12 @@ class TestConstrainedLlm:
         assert "- Finance-Analyst: Finance." in system["content"]
         assert user == {"role": "user", "content": "Who approves a $4,000 purchase?"}
 
+    def test_the_prompt_makes_one_agent_the_default_and_keeps_complex_for_separate_asks(self):
+        system, _user = llm_route_messages("Is alcohol reimbursable?", ROSTER)
+
+        assert "SINGLE_AGENT for almost every request" in system["content"]
+        assert "two or more separate things" in system["content"]
+
     def test_the_system_message_is_the_same_whatever_the_question_and_roster_order(self):
         reordered = (HR, FINANCE, COMPLIANCE)
 

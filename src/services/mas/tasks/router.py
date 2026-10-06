@@ -332,10 +332,11 @@ def llm_route_messages(question: str, roster: Sequence[RosterAgent]) -> list[dic
             "role": "system",
             "content": (
                 "You route requests inside a multi-agent assistant. Reply with JSON only.\n"
-                "route SINGLE_AGENT: one agent's domain covers the whole request; "
-                "agent is that agent.\n"
-                "route COMPLEX_TASK: the request needs two or more agents' domains; "
-                "agent is the one for its first part.\n"
+                "route: SINGLE_AGENT for almost every request, including any question "
+                "about one topic, however it is phrased.\n"
+                "route: COMPLEX_TASK only when the request asks two or more separate things "
+                "that belong to different agents' domains.\n"
+                "agent: the agent whose domain best fits the request, or its first part.\n"
                 f"Agents:\n{agents_block}"
             ),
         },
