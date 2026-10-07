@@ -79,6 +79,28 @@ jobs:
       - name: Check every version number against VERSION
         run: python scripts/ci/check-versions.py
 
+  licences:
+    name: Licences
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Test the licence scripts
+        run: python -m unittest tests.ci.test_third_party_notices tests.ci.test_check_licences -v
+
+      - name: THIRD_PARTY_NOTICES is up to date
+        run: python scripts/licences/third_party_notices.py --check
+
+      - name: No GPL, AGPL or SSPL in the Python packages, web client or desktop app
+        run: python scripts/licences/check_licences.py
+
   cpu-build-wiring:
     name: CPU build wiring
     runs-on: ubuntu-latest

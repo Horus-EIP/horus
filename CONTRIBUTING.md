@@ -115,14 +115,14 @@ To add, remove or upgrade a Python dependency:
    python scripts/licences/third_party_notices.py --refresh python --python-env PATH/TO/python
    ```
 
-4. Commit the `.txt` and `.lock` files, `scripts/licences/python-packages.json` and `THIRD_PARTY_NOTICES` together.
+4. Commit the `.txt` and `.lock` files, `scripts/licences/python-packages.json` and `THIRD_PARTY_NOTICES` together. The CI job `licences` fails when they are out of date.
 
 ---
 
 ## 5. Code from elsewhere and AI tools
 
 - **No copied code without its licence.** If you copy code from another project, name the source and its licence in the pull request. Code under the GPL, AGPL or SSPL, or code with no licence, can't be used.
-- **New dependencies** are named in the pull request with their licence.
+- **New dependencies** are named in the pull request with their licence. The CI job `licences` fails on a GPL, AGPL or SSPL licence among the Python packages, the web client's production dependencies and the desktop app's crates; an exception needs the maintainers' review and a line with its reason in `scripts/licences/allowlist.yaml`.
 - **Online services:** don't paste or upload Horus code or documents into online services (AI assistants, translators, pastebins, forums) unless the maintainers have approved that service by email. GitHub is approved for the Horus repositories. Tools that run entirely on your own computer are fine.
 - **AI-written code:** you may use AI coding tools within the rule above, as long as you review and understand everything you submit, and say in the pull request when a large part was generated.
 
