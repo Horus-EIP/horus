@@ -71,6 +71,7 @@ nav:
       - Community Outreach: eip/community-outreach.md
       - Protection Plan (Point A): eip/protection-plan.md
       - Diffusion Strategy (Point A): eip/diffusion-strategy.md
+      - Reproducibility Test: eip/reproducibility-test.md
       - Who Made What — Noah: who-made-what-noah.md
       - Code-vs-Docs Audit (archived): eip/code-vs-docs-audit.md
   - ADRs:

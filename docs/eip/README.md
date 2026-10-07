@@ -26,6 +26,7 @@ If you arrived here from the MkDocs sidebar or a jury hand-out, start with [obje
 | [community-contributions.md](community-contributions.md) | Log of upstream contributions + three ready-to-post issue drafts. | Add real link before jury |
 | [protection-plan.md](protection-plan.md) | Seven-asset protection inventory, legal + technical layers, SAST checklist. | Run bandit before jury |
 | [diffusion-strategy.md](diffusion-strategy.md) | Three-tier visibility model (public / NDA / internal), per-asset decision matrix, open-source posture. | Live |
+| [reproducibility-test.md](reproducibility-test.md) | Protocol and form for someone outside Epitech who installs Horus from the readme and the installer (B-39). | Fill in after the test |
 | [performance.md](performance.md) | KPIs (K1 chat p95, K2 RAG precision@5, K3 read throughput) with targets, benchmark scripts, optimization log. | Fill in numbers after the A/B run |
 | [code-vs-docs-audit.md](code-vs-docs-audit.md) | Historical audit (May 2026) of documentation drift against the codebase. Findings were addressed. Kept as evidence of process rigor. | Archived — already acted upon |
 | [Technical-Track-Student-Guide-Tech-4.pdf](Technical-Track-Student-Guide-Tech-4.pdf) | Official EIP guide we are graded against. Kept here for reference and to anchor the objectives-audit cross-refs. | Reference |
