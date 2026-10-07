@@ -3,9 +3,8 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import Card from "@/components/ui/card";
 import Info from "@/components/ui/info";
-import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/components/auth/auth-provider";
-import { agentApi, Agent as AgentType } from "@/lib/agents/api";
+import { agentApi } from "@/lib/agents/api";
 import { chatApi, TaskQueueStats, AnalyticsOverview } from "@/lib/chat/api";
 import { useNotification } from "@/contexts/notification-context";
 import { IconTrash } from "@tabler/icons-react";
@@ -33,7 +32,6 @@ const MAX_DATA_POINTS = 30;
 export default function DashboardPage() {
   const { status, user } = useAuth();
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [rawAgents, setRawAgents] = useState<AgentType[]>([]);
   const [taskStats, setTaskStats] = useState<TaskQueueStats | null>(null);
   const [agentSnapshot, setAgentSnapshot] = useState<
     AnalyticsOverview['agents'] | null
@@ -69,7 +67,6 @@ export default function DashboardPage() {
     const result = await agentApi.getAgents();
     
     if (result.ok && result.data) {
-      setRawAgents(result.data);
       const list: Agent[] = result.data.map((info) => ({
         id: info.id,
         name: info.name,
@@ -290,7 +287,7 @@ export default function DashboardPage() {
       } else {
         notifyError(result.error || "Failed to delete agent");
       }
-    } catch (e) {
+    } catch {
       notifyError("Failed to delete agent");
     } finally {
       setIsDeleting(false);
@@ -331,7 +328,7 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-4">
           <Text size="md" className="text-[var(--textSoft)]">
             Are you sure you want to <span className="text-red-500 underline">permanently</span> delete the agent{' '}
-            <span className="text-[var(--text)] font-bold">"{deletingAgent?.name}"</span>?
+            <span className="text-[var(--text)] font-bold">&quot;{deletingAgent?.name}&quot;</span>?
           </Text>
           <Text size="sm" className="text-[var(--textSoft)]">
             This action <span className="text-red-500 underline">cannot</span> be undone.

@@ -431,7 +431,7 @@ function SaveToKsModal({
     >
       <Stack gap="md">
         <Text size="sm">
-          Save these files to the knowledge store so they're indexed and
+          Save these files to the knowledge store so they&apos;re indexed and
           available to future tasks? Choose <strong>One-shot</strong> to send
           them only for this task without persisting anything.
         </Text>
@@ -459,7 +459,7 @@ function SaveToKsModal({
             onClick={onAttachOnly}
             disabled={uploading}
           >
-            One-shot (don't save)
+            One-shot (don&apos;t save)
           </Button>
           <Button
             onClick={onSaveAndAttach}

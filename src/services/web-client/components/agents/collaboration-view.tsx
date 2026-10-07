@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { AgentTypeBadge, getRole } from './agent-type-badge';
 import { Agent } from '@/lib/agents/api';
 import { Spinner } from '@/components/ui/spinner';

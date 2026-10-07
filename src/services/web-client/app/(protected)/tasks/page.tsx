@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { chatApi, TaskQueueStats, type TaskSummary } from "@/lib/chat/api";
-import Card from "@/components/ui/card";
 import { useNotification } from "@/contexts/notification-context";
 import { useAuth } from "@/components/auth/auth-provider";
 import { isTaskInProgress } from "@/lib/tasks/agent-activity";
@@ -98,7 +97,7 @@ export default function TasksPage() {
         setTasks(sorted);
       }
       setLastUpdated(new Date());
-    } catch (e) {
+    } catch {
       notifyError("Failed to load task queue stats");
     } finally {
       if (!signal?.aborted) setIsLoading(false);
@@ -138,7 +137,7 @@ export default function TasksPage() {
         <div className="rounded-2xl border border-white/10 bg-[var(--bgSoft)]/70 p-6 text-center">
           <IconBan className="w-12 h-12 mx-auto mb-4 text-[var(--textSoft)]" />
           <p className="text-[var(--textSoft)]">
-            You don't have permission to view task queue statistics.
+            You don&apos;t have permission to view task queue statistics.
           </p>
         </div>
       </div>
