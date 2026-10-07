@@ -44,7 +44,7 @@ These need their own, stricter tests.
 | 2.2 | **API (Python)** | FastAPI endpoints through a test client: status codes, auth, validation, response shape | `tests/<service>/api/` | pytest, FastAPI `TestClient` / httpx | CI (`ci.yml`) |
 | 2.3 | **Web client** | API clients, hooks, components with logic | `src/services/web-client/__tests__/` | Vitest, Testing Library, jsdom | Locally only. Not in CI |
 | 2.4 | **Installer** | Preflight, hardware and profile choice, consent, model manager, smoke-test parsing, bundle | `installer/tests/` | `unittest` | `desktop-release.yml` and `images.yml`, on a `v*` tag or by hand. Not on pull requests |
-| 2.5 | **CI wiring** | Version numbers, CPU build wiring, release images, repository wiring | `tests/ci/` | `unittest` | CI (`ci.yml` jobs `versions` and `cpu-build-wiring`; `images.yml`) |
+| 2.5 | **CI wiring** | Version numbers, CPU build wiring, release images, repository wiring, third-party notices | `tests/ci/` | `unittest` | CI (`ci.yml` jobs `versions` and `cpu-build-wiring`; `images.yml`) |
 | 2.6 | **Evaluation set checks** | The 100-question set itself, the eval runner's scoring and reports, the benchmark tooling | `tests/eval/` | pytest, hermetic | `eval-testset.yml`, when `demo_assets/`, `tests/eval/`, `scripts/eval/`, `scripts/benchmarks/` or the two reused `scripts/perf/` scripts change |
 | 2.7 | **Grounding evaluation** | Answers are correct, cite the right document, and out-of-corpus questions are refused | `tests/eval/testset.yaml` + `scripts/eval/run-eval.py` | Runner against a live stack; results in `benchmarks/` | By hand, before each release (section 6) |
 | 2.8 | **Integration checks** | Two or more real services together (MAS, RabbitMQ, Postgres, agent, knowledge store) | `scripts/integration-checks/` (20 files) | pytest or python, against a live stack | By hand. Not in CI (section 7) |
@@ -72,7 +72,7 @@ tests/
   knowledge_store/
     unit/  api/  conftest.py  pytest.ini
   eval/                      # testset.yaml, README.md, tests of the eval and benchmark tools
-  ci/                        # unittest: versions, CPU build, release images, repository wiring
+  ci/                        # unittest: versions, CPU build, release images, repository wiring, notices
 installer/tests/             # installer, unittest
 src/services/web-client/__tests__/   # Vitest
 scripts/integration-checks/          # live-stack checks, by hand

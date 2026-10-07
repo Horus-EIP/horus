@@ -1,0 +1,6290 @@
+{
+ "how": "Package sets: the service's requirements lock file, or uv pip compile for Python 3.11 on x86_64-manylinux_2_28 (the images' Python and platform) when there is none. Licences: each package's own metadata (importlib.metadata of a local environment, else the PyPI JSON API for that exact version); components.yaml python_overrides where the metadata has none.",
+ "services": {
+  "agent": {
+   "requirements-gpu.txt": [
+    {
+     "licence": "Apache",
+     "name": "accelerate",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/accelerate",
+     "version": "1.15.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "annotated-doc",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fastapi/annotated-doc",
+     "version": "0.0.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "annotated-types",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/annotated-types/annotated-types",
+     "version": "0.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "anyio",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/agronholm/anyio",
+     "version": "4.15.1"
+    },
+    {
+     "licence": "Apache 2",
+     "name": "async-timeout",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/aio-libs/async-timeout",
+     "version": "5.0.1"
+    },
+    {
+     "licence": "Apache License, Version 2.0",
+     "name": "bcrypt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pyca/bcrypt/",
+     "version": "3.2.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "bitsandbytes",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/bitsandbytes-foundation/bitsandbytes",
+     "version": "0.50.2"
+    },
+    {
+     "licence": "BSD",
+     "name": "blis",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/cython-blis",
+     "version": "1.3.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "catalogue",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/catalogue",
+     "version": "2.0.10"
+    },
+    {
+     "licence": "MPL-2.0",
+     "name": "certifi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/certifi/python-certifi",
+     "version": "2026.7.22"
+    },
+    {
+     "licence": "MIT-0",
+     "name": "cffi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-cffi/cffi",
+     "version": "2.1.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "charset-normalizer",
+     "source": "metadata, installed environment",
+     "url": "https://charset-normalizer.readthedocs.io/",
+     "version": "3.5.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "click",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/click/",
+     "version": "8.5.0"
+    },
+    {
+     "licence": "MIT License",
+     "name": "cloudpathlib",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/drivendataorg/cloudpathlib",
+     "version": "0.26.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "confection",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/confection",
+     "version": "1.3.3"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "coverage",
+     "source": "metadata, installed environment",
+     "url": "https://coverage.readthedocs.io/en/7.16.2",
+     "version": "7.16.2"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "cuda-bindings",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/NVIDIA/cuda-python",
+     "version": "13.4.3"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "cuda-pathfinder",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/NVIDIA/cuda-python",
+     "version": "1.8.3"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-CUDA-Toolkit-EULA",
+     "name": "cuda-toolkit",
+     "source": "project page, no licence in the package metadata",
+     "url": "https://docs.nvidia.com/cuda/eula/",
+     "version": "13.0.3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "curated-tokenizers",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/explosion/curated-tokenizers",
+     "version": "0.0.10"
+    },
+    {
+     "licence": "MIT",
+     "name": "curated-transformers",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/explosion/curated-transformers",
+     "version": "0.1.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "cymem",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/cymem",
+     "version": "2.0.13"
+    },
+    {
+     "licence": "Apache License, Version 2.0",
+     "name": "distro",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-distro/distro",
+     "version": "1.9.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "en-core-web-sm",
+     "source": "metadata, installed environment",
+     "url": "https://explosion.ai",
+     "version": "3.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "en-core-web-trf",
+     "source": "spaCy model meta, meta/en_core_web_trf-3.8.0.json; not on PyPI",
+     "url": "https://github.com/explosion/spacy-models",
+     "version": "3.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "fastapi",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/fastapi/fastapi",
+     "version": "0.142.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "filelock",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/tox-dev/py-filelock",
+     "version": "4.0.12"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "fsspec",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fsspec/filesystem_spec",
+     "version": "2026.9.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "googleapis-common-protos",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/googleapis/google-cloud-python/tree/main/packages/googleapis-common-protos",
+     "version": "1.75.5"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "grpcio",
+     "source": "metadata, installed environment",
+     "url": "https://grpc.io",
+     "version": "1.84.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "h11",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-hyper/h11",
+     "version": "0.16.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "hf-xet",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/huggingface/xet-core",
+     "version": "1.7.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpcore",
+     "source": "metadata, installed environment",
+     "url": "https://www.encode.io/httpcore/",
+     "version": "1.0.9"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpcore2",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/httpx2",
+     "version": "2.13.1"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpx",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/encode/httpx",
+     "version": "0.28.1"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpx2",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/httpx2",
+     "version": "2.13.1"
+    },
+    {
+     "licence": "Apache",
+     "name": "huggingface-hub",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/huggingface_hub",
+     "version": "0.36.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "idna",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/kjd/idna",
+     "version": "3.20"
+    },
+    {
+     "licence": "MIT",
+     "name": "iniconfig",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/pytest-dev/iniconfig",
+     "version": "2.3.1"
+    },
+    {
+     "licence": "BSD License",
+     "name": "jinja2",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/jinja/",
+     "version": "3.1.6"
+    },
+    {
+     "licence": "Modified BSD License",
+     "name": "jsonpatch",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/stefankoegl/python-json-patch.git",
+     "version": "1.33"
+    },
+    {
+     "licence": "Modified BSD License",
+     "name": "jsonpointer",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/stefankoegl/python-json-pointer",
+     "version": "3.2.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "langchain",
+     "source": "metadata, installed environment",
+     "url": "https://docs.langchain.com/",
+     "version": "1.4.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "langchain-core",
+     "source": "metadata, PyPI",
+     "url": "https://docs.langchain.com/",
+     "version": "1.6.7"
+    },
+    {
+     "licence": "MIT",
+     "name": "langchain-protocol",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/langchain-ai/agent-protocol/tree/main/streaming",
+     "version": "0.0.19"
+    },
+    {
+     "licence": "MIT",
+     "name": "langgraph",
+     "source": "metadata, PyPI",
+     "url": "https://docs.langchain.com/oss/python/langgraph/overview",
+     "version": "1.2.14"
+    },
+    {
+     "licence": "MIT",
+     "name": "langgraph-checkpoint",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint",
+     "version": "4.2.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "langgraph-prebuilt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/langchain-ai/langgraph/tree/main/libs/prebuilt",
+     "version": "1.1.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "langgraph-sdk",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/langchain-ai/langgraph/tree/main/libs/sdk-py",
+     "version": "0.4.6"
+    },
+    {
+     "licence": "MIT",
+     "name": "langsmith",
+     "source": "metadata, installed environment",
+     "url": "https://smith.langchain.com/",
+     "version": "0.14.4"
+    },
+    {
+     "licence": "MIT License",
+     "name": "markdown-it-py",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/executablebooks/markdown-it-py",
+     "version": "4.2.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "markupsafe",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/markupsafe/",
+     "version": "3.0.4"
+    },
+    {
+     "licence": "MIT License",
+     "name": "mdurl",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/executablebooks/mdurl",
+     "version": "0.1.2"
+    },
+    {
+     "licence": "BSD",
+     "name": "mpmath",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fredrik-johansson/mpmath",
+     "version": "1.3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "murmurhash",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/murmurhash",
+     "version": "1.0.15"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "networkx",
+     "source": "metadata, installed environment",
+     "url": "https://networkx.org/",
+     "version": "3.6.1"
+    },
+    {
+     "licence": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0",
+     "name": "numpy",
+     "source": "metadata, installed environment",
+     "url": "https://numpy.org",
+     "version": "2.4.6"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cublas",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "13.1.1.3"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cuda-cupti",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "13.0.85"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cuda-nvrtc",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "13.0.88"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-CUDA-Toolkit-EULA",
+     "name": "nvidia-cuda-runtime",
+     "source": "project page, no licence in the package metadata",
+     "url": "https://docs.nvidia.com/cuda/eula/",
+     "version": "13.0.96"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-cuDNN-SLA",
+     "name": "nvidia-cudnn-cu13",
+     "source": "project page, no licence in the package metadata",
+     "url": "https://docs.nvidia.com/deeplearning/cudnn/latest/reference/eula.html",
+     "version": "9.24.0.43"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cufft",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "12.0.0.61"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cufile",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "1.15.1.6"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-curand",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "10.4.0.35"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cusolver",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "12.0.4.66"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cusparse",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "12.6.3.3"
+    },
+    {
+     "licence": "NVIDIA Proprietary Software",
+     "name": "nvidia-cusparselt-cu13",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cusparselt",
+     "version": "0.8.1"
+    },
+    {
+     "licence": "Apache-2.0 AND BSD-3-Clause",
+     "name": "nvidia-nccl-cu13",
+     "source": "project page, LICENSE.txt, no licence in the package metadata",
+     "url": "https://github.com/NVIDIA/nccl",
+     "version": "2.30.7"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-nvjitlink",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "13.4.92"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-NVSHMEM-SLA",
+     "name": "nvidia-nvshmem-cu13",
+     "source": "project page, no licence in the package metadata",
+     "url": "https://docs.nvidia.com/nvshmem/api/sla.html",
+     "version": "3.4.5"
+    },
+    {
+     "licence": "Apache 2.0",
+     "name": "nvidia-nvtx",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "13.0.85"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-api",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-api",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-distro",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/opentelemetry-distro",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-http-transport",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-http-transport",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-common",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-common",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-common",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-common",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-grpc",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-grpc",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-http",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-http",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/opentelemetry-instrumentation",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-proto",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-proto",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-sdk",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-sdk",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-semantic-conventions",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-semantic-conventions",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "MPL-2.0 AND (Apache-2.0 OR MIT)",
+     "name": "orjson",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/ijl/orjson",
+     "version": "3.13.0"
+    },
+    {
+     "licence": "Apache-2.0 OR MIT",
+     "name": "ormsgpack",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/ormsgpack/ormsgpack",
+     "version": "1.12.2"
+    },
+    {
+     "licence": "Apache-2.0 OR BSD-2-Clause",
+     "name": "packaging",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pypa/packaging",
+     "version": "26.3"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "pika",
+     "source": "metadata, installed environment",
+     "url": "https://pika.readthedocs.io",
+     "version": "1.4.4"
+    },
+    {
+     "licence": "MIT",
+     "name": "pluggy",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/pluggy/",
+     "version": "1.6.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "preshed",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/preshed",
+     "version": "3.0.13"
+    },
+    {
+     "licence": "Apache-2.0 AND BSD-2-Clause",
+     "name": "prometheus-client",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/prometheus/client_python",
+     "version": "0.26.0"
+    },
+    {
+     "licence": "3-Clause BSD License",
+     "name": "protobuf",
+     "source": "metadata, installed environment",
+     "url": "https://developers.google.com/protocol-buffers/",
+     "version": "7.36.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "psutil",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/giampaolo/psutil",
+     "version": "7.2.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "pycparser",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/eliben/pycparser",
+     "version": "3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/pydantic",
+     "version": "2.13.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic-core",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic",
+     "version": "2.46.5"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "pygments",
+     "source": "metadata, installed environment",
+     "url": "https://pygments.org",
+     "version": "2.21.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "pypdf",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/py-pdf/pypdf",
+     "version": "6.19.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pytest",
+     "source": "metadata, installed environment",
+     "url": "https://docs.pytest.org/en/latest/",
+     "version": "9.1.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "pytest-asyncio",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pytest-dev/pytest-asyncio",
+     "version": "1.4.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pytest-cov",
+     "source": "metadata, installed environment",
+     "url": "https://pytest-cov.readthedocs.io/",
+     "version": "7.1.0"
+    },
+    {
+     "licence": "MPL-2.0",
+     "name": "pytest-html",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pytest-dev/pytest-html",
+     "version": "4.2.0"
+    },
+    {
+     "licence": "MPL-2.0",
+     "name": "pytest-metadata",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pytest-dev/pytest-metadata",
+     "version": "3.1.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "python-multipart",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Kludex/python-multipart",
+     "version": "0.0.32"
+    },
+    {
+     "licence": "MIT",
+     "name": "pyyaml",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/yaml/pyyaml",
+     "version": "6.0.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "redis",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/redis/redis-py",
+     "version": "8.1.0"
+    },
+    {
+     "licence": "Apache-2.0 AND CNRI-Python",
+     "name": "regex",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/mrabarnett/mrab-regex",
+     "version": "2026.9.29"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "requests",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/psf/requests",
+     "version": "2.34.2"
+    },
+    {
+     "licence": "Apache 2.0",
+     "name": "requests-toolbelt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/requests/toolbelt",
+     "version": "1.0.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "rich",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Textualize/rich",
+     "version": "15.0.0"
+    },
+    {
+     "licence": "Apache Software License",
+     "name": "safetensors",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/safetensors",
+     "version": "0.8.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "sentencepiece",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/google/sentencepiece",
+     "version": "0.2.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "setuptools",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pypa/setuptools",
+     "version": "84.0.0"
+    },
+    {
+     "licence": "ISC License",
+     "name": "shellingham",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/sarugaku/shellingham",
+     "version": "1.5.4"
+    },
+    {
+     "licence": "MIT License",
+     "name": "smart-open",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/piskvorky/smart_open",
+     "version": "8.0.2"
+    },
+    {
+     "licence": "MIT OR Apache-2.0",
+     "name": "sniffio",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-trio/sniffio",
+     "version": "1.3.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "spacy",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/spaCy",
+     "version": "3.8.16"
+    },
+    {
+     "licence": "MIT",
+     "name": "spacy-curated-transformers",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/explosion/spacy-curated-transformers",
+     "version": "0.3.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "spacy-legacy",
+     "source": "metadata, installed environment",
+     "url": "https://spacy.io",
+     "version": "3.0.12"
+    },
+    {
+     "licence": "MIT",
+     "name": "spacy-loggers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/spacy-loggers",
+     "version": "1.0.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "srsly",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/srsly",
+     "version": "2.5.4"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "starlette",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Kludex/starlette",
+     "version": "1.7.0"
+    },
+    {
+     "licence": "BSD",
+     "name": "sympy",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/sympy/sympy",
+     "version": "1.14.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "tenacity",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/jd/tenacity",
+     "version": "9.2.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "thinc",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/thinc",
+     "version": "8.3.13"
+    },
+    {
+     "licence": "Apache Software License",
+     "name": "tokenizers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/tokenizers",
+     "version": "0.22.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "tomli",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/hukkin/tomli",
+     "version": "2.5.0"
+    },
+    {
+     "licence": "Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT",
+     "name": "torch",
+     "source": "metadata, PyPI",
+     "url": "https://pytorch.org",
+     "version": "2.14.1"
+    },
+    {
+     "licence": "MPL-2.0 AND MIT",
+     "name": "tqdm",
+     "source": "metadata, installed environment",
+     "url": "https://tqdm.github.io",
+     "version": "4.70.1"
+    },
+    {
+     "licence": "Apache 2.0 License",
+     "name": "transformers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/transformers",
+     "version": "4.57.6"
+    },
+    {
+     "licence": "MIT",
+     "name": "triton",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/triton-lang/triton/",
+     "version": "3.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "truststore",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/sethmlarson/truststore",
+     "version": "0.10.4"
+    },
+    {
+     "licence": "MIT",
+     "name": "typer",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/fastapi/typer",
+     "version": "0.27.3"
+    },
+    {
+     "licence": "PSF-2.0",
+     "name": "typing-extensions",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python/typing_extensions",
+     "version": "4.16.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "typing-inspection",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/typing-inspection",
+     "version": "0.4.4"
+    },
+    {
+     "licence": "MIT",
+     "name": "urllib3",
+     "source": "metadata, installed environment",
+     "url": "https://urllib3.readthedocs.io",
+     "version": "2.8.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "uuid-utils",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/aminalaee/uuid-utils",
+     "version": "0.17.1"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "uvicorn",
+     "source": "metadata, installed environment",
+     "url": "https://uvicorn.dev/",
+     "version": "0.54.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "wasabi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/wasabi",
+     "version": "1.1.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "weasel",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/weasel/",
+     "version": "1.0.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "websockets",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-websockets/websockets",
+     "version": "16.1.1"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "wrapt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/GrahamDumpleton/wrapt",
+     "version": "2.5.0"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "xxhash",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/ifduyue/python-xxhash",
+     "version": "4.0.1"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "zstandard",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/indygreg/python-zstandard",
+     "version": "0.25.0"
+    }
+   ],
+   "requirements.txt": [
+    {
+     "licence": "MIT",
+     "name": "annotated-doc",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fastapi/annotated-doc",
+     "version": "0.0.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "annotated-types",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/annotated-types/annotated-types",
+     "version": "0.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "anyio",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/agronholm/anyio",
+     "version": "4.15.1"
+    },
+    {
+     "licence": "Apache 2",
+     "name": "async-timeout",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/aio-libs/async-timeout",
+     "version": "5.0.1"
+    },
+    {
+     "licence": "Apache License, Version 2.0",
+     "name": "bcrypt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pyca/bcrypt/",
+     "version": "3.2.2"
+    },
+    {
+     "licence": "BSD",
+     "name": "blis",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/cython-blis",
+     "version": "1.3.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "catalogue",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/catalogue",
+     "version": "2.0.10"
+    },
+    {
+     "licence": "MPL-2.0",
+     "name": "certifi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/certifi/python-certifi",
+     "version": "2026.7.22"
+    },
+    {
+     "licence": "MIT-0",
+     "name": "cffi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-cffi/cffi",
+     "version": "2.1.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "charset-normalizer",
+     "source": "metadata, installed environment",
+     "url": "https://charset-normalizer.readthedocs.io/",
+     "version": "3.5.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "click",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/click/",
+     "version": "8.5.0"
+    },
+    {
+     "licence": "MIT License",
+     "name": "cloudpathlib",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/drivendataorg/cloudpathlib",
+     "version": "0.26.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "confection",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/confection",
+     "version": "1.3.3"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "coverage",
+     "source": "metadata, installed environment",
+     "url": "https://coverage.readthedocs.io/en/7.16.2",
+     "version": "7.16.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "cymem",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/cymem",
+     "version": "2.0.13"
+    },
+    {
+     "licence": "Apache License, Version 2.0",
+     "name": "distro",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-distro/distro",
+     "version": "1.9.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "en-core-web-sm",
+     "source": "metadata, installed environment",
+     "url": "https://explosion.ai",
+     "version": "3.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "fastapi",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/fastapi/fastapi",
+     "version": "0.142.4"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "googleapis-common-protos",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/googleapis/google-cloud-python/tree/main/packages/googleapis-common-protos",
+     "version": "1.75.5"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "grpcio",
+     "source": "metadata, installed environment",
+     "url": "https://grpc.io",
+     "version": "1.84.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "h11",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-hyper/h11",
+     "version": "0.16.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpcore",
+     "source": "metadata, installed environment",
+     "url": "https://www.encode.io/httpcore/",
+     "version": "1.0.9"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpcore2",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/httpx2",
+     "version": "2.13.1"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpx",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/encode/httpx",
+     "version": "0.28.1"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpx2",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/httpx2",
+     "version": "2.13.1"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "idna",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/kjd/idna",
+     "version": "3.20"
+    },
+    {
+     "licence": "MIT",
+     "name": "iniconfig",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/pytest-dev/iniconfig",
+     "version": "2.3.1"
+    },
+    {
+     "licence": "BSD License",
+     "name": "jinja2",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/jinja/",
+     "version": "3.1.6"
+    },
+    {
+     "licence": "Modified BSD License",
+     "name": "jsonpatch",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/stefankoegl/python-json-patch.git",
+     "version": "1.33"
+    },
+    {
+     "licence": "Modified BSD License",
+     "name": "jsonpointer",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/stefankoegl/python-json-pointer",
+     "version": "3.2.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "langchain",
+     "source": "metadata, installed environment",
+     "url": "https://docs.langchain.com/",
+     "version": "1.4.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "langchain-core",
+     "source": "metadata, PyPI",
+     "url": "https://docs.langchain.com/",
+     "version": "1.6.7"
+    },
+    {
+     "licence": "MIT",
+     "name": "langchain-protocol",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/langchain-ai/agent-protocol/tree/main/streaming",
+     "version": "0.0.19"
+    },
+    {
+     "licence": "MIT",
+     "name": "langgraph",
+     "source": "metadata, PyPI",
+     "url": "https://docs.langchain.com/oss/python/langgraph/overview",
+     "version": "1.2.14"
+    },
+    {
+     "licence": "MIT",
+     "name": "langgraph-checkpoint",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint",
+     "version": "4.2.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "langgraph-prebuilt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/langchain-ai/langgraph/tree/main/libs/prebuilt",
+     "version": "1.1.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "langgraph-sdk",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/langchain-ai/langgraph/tree/main/libs/sdk-py",
+     "version": "0.4.6"
+    },
+    {
+     "licence": "MIT",
+     "name": "langsmith",
+     "source": "metadata, installed environment",
+     "url": "https://smith.langchain.com/",
+     "version": "0.14.4"
+    },
+    {
+     "licence": "MIT License",
+     "name": "markdown-it-py",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/executablebooks/markdown-it-py",
+     "version": "4.2.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "markupsafe",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/markupsafe/",
+     "version": "3.0.4"
+    },
+    {
+     "licence": "MIT License",
+     "name": "mdurl",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/executablebooks/mdurl",
+     "version": "0.1.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "murmurhash",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/murmurhash",
+     "version": "1.0.15"
+    },
+    {
+     "licence": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0",
+     "name": "numpy",
+     "source": "metadata, installed environment",
+     "url": "https://numpy.org",
+     "version": "2.4.6"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-api",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-api",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-distro",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/opentelemetry-distro",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-http-transport",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-http-transport",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-common",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-common",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-common",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-common",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-grpc",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-grpc",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-http",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-http",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/opentelemetry-instrumentation",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-proto",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-proto",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-sdk",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-sdk",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-semantic-conventions",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-semantic-conventions",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "MPL-2.0 AND (Apache-2.0 OR MIT)",
+     "name": "orjson",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/ijl/orjson",
+     "version": "3.13.0"
+    },
+    {
+     "licence": "Apache-2.0 OR MIT",
+     "name": "ormsgpack",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/ormsgpack/ormsgpack",
+     "version": "1.12.2"
+    },
+    {
+     "licence": "Apache-2.0 OR BSD-2-Clause",
+     "name": "packaging",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pypa/packaging",
+     "version": "26.3"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "pika",
+     "source": "metadata, installed environment",
+     "url": "https://pika.readthedocs.io",
+     "version": "1.4.4"
+    },
+    {
+     "licence": "MIT",
+     "name": "pluggy",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/pluggy/",
+     "version": "1.6.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "preshed",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/preshed",
+     "version": "3.0.13"
+    },
+    {
+     "licence": "Apache-2.0 AND BSD-2-Clause",
+     "name": "prometheus-client",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/prometheus/client_python",
+     "version": "0.26.0"
+    },
+    {
+     "licence": "3-Clause BSD License",
+     "name": "protobuf",
+     "source": "metadata, installed environment",
+     "url": "https://developers.google.com/protocol-buffers/",
+     "version": "7.36.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "pycparser",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/eliben/pycparser",
+     "version": "3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/pydantic",
+     "version": "2.13.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic-core",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic",
+     "version": "2.46.5"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "pygments",
+     "source": "metadata, installed environment",
+     "url": "https://pygments.org",
+     "version": "2.21.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "pypdf",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/py-pdf/pypdf",
+     "version": "6.19.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pytest",
+     "source": "metadata, installed environment",
+     "url": "https://docs.pytest.org/en/latest/",
+     "version": "9.1.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "pytest-asyncio",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pytest-dev/pytest-asyncio",
+     "version": "1.4.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pytest-cov",
+     "source": "metadata, installed environment",
+     "url": "https://pytest-cov.readthedocs.io/",
+     "version": "7.1.0"
+    },
+    {
+     "licence": "MPL-2.0",
+     "name": "pytest-html",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pytest-dev/pytest-html",
+     "version": "4.2.0"
+    },
+    {
+     "licence": "MPL-2.0",
+     "name": "pytest-metadata",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pytest-dev/pytest-metadata",
+     "version": "3.1.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "python-multipart",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Kludex/python-multipart",
+     "version": "0.0.32"
+    },
+    {
+     "licence": "MIT",
+     "name": "pyyaml",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/yaml/pyyaml",
+     "version": "6.0.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "redis",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/redis/redis-py",
+     "version": "8.1.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "requests",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/psf/requests",
+     "version": "2.34.2"
+    },
+    {
+     "licence": "Apache 2.0",
+     "name": "requests-toolbelt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/requests/toolbelt",
+     "version": "1.0.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "rich",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Textualize/rich",
+     "version": "15.0.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "setuptools",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pypa/setuptools",
+     "version": "84.0.0"
+    },
+    {
+     "licence": "ISC License",
+     "name": "shellingham",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/sarugaku/shellingham",
+     "version": "1.5.4"
+    },
+    {
+     "licence": "MIT License",
+     "name": "smart-open",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/piskvorky/smart_open",
+     "version": "8.0.2"
+    },
+    {
+     "licence": "MIT OR Apache-2.0",
+     "name": "sniffio",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-trio/sniffio",
+     "version": "1.3.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "spacy",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/spaCy",
+     "version": "3.8.16"
+    },
+    {
+     "licence": "MIT",
+     "name": "spacy-legacy",
+     "source": "metadata, installed environment",
+     "url": "https://spacy.io",
+     "version": "3.0.12"
+    },
+    {
+     "licence": "MIT",
+     "name": "spacy-loggers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/spacy-loggers",
+     "version": "1.0.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "srsly",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/srsly",
+     "version": "2.5.4"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "starlette",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Kludex/starlette",
+     "version": "1.7.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "tenacity",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/jd/tenacity",
+     "version": "9.2.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "thinc",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/thinc",
+     "version": "8.3.13"
+    },
+    {
+     "licence": "MIT",
+     "name": "tomli",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/hukkin/tomli",
+     "version": "2.5.0"
+    },
+    {
+     "licence": "MPL-2.0 AND MIT",
+     "name": "tqdm",
+     "source": "metadata, installed environment",
+     "url": "https://tqdm.github.io",
+     "version": "4.70.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "truststore",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/sethmlarson/truststore",
+     "version": "0.10.4"
+    },
+    {
+     "licence": "MIT",
+     "name": "typer",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/fastapi/typer",
+     "version": "0.27.3"
+    },
+    {
+     "licence": "PSF-2.0",
+     "name": "typing-extensions",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python/typing_extensions",
+     "version": "4.16.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "typing-inspection",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/typing-inspection",
+     "version": "0.4.4"
+    },
+    {
+     "licence": "MIT",
+     "name": "urllib3",
+     "source": "metadata, installed environment",
+     "url": "https://urllib3.readthedocs.io",
+     "version": "2.8.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "uuid-utils",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/aminalaee/uuid-utils",
+     "version": "0.17.1"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "uvicorn",
+     "source": "metadata, installed environment",
+     "url": "https://uvicorn.dev/",
+     "version": "0.54.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "wasabi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/wasabi",
+     "version": "1.1.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "weasel",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/weasel/",
+     "version": "1.0.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "websockets",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-websockets/websockets",
+     "version": "16.1.1"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "wrapt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/GrahamDumpleton/wrapt",
+     "version": "2.5.0"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "xxhash",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/ifduyue/python-xxhash",
+     "version": "4.0.1"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "zstandard",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/indygreg/python-zstandard",
+     "version": "0.25.0"
+    }
+   ]
+  },
+  "knowledge-store": {
+   "requirements-gpu.txt": [
+    {
+     "licence": "MIT",
+     "name": "agent-detector",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/patrick91/agent-detector",
+     "version": "2.0.0"
+    },
+    {
+     "licence": "PSF-2.0",
+     "name": "aiohappyeyeballs",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/aio-libs/aiohappyeyeballs",
+     "version": "2.7.1"
+    },
+    {
+     "licence": "Apache-2.0 AND MIT",
+     "name": "aiohttp",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/aio-libs/aiohttp",
+     "version": "3.14.4"
+    },
+    {
+     "licence": "MIT",
+     "name": "aiohttp-retry",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/inyutin/aiohttp_retry",
+     "version": "2.9.1"
+    },
+    {
+     "licence": "Apache 2.0",
+     "name": "aiosignal",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/aio-libs/aiosignal",
+     "version": "1.4.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "annotated-doc",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fastapi/annotated-doc",
+     "version": "0.0.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "annotated-types",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/annotated-types/annotated-types",
+     "version": "0.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "anyio",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/agronholm/anyio",
+     "version": "4.15.1"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "asgiref",
+     "source": "metadata, installed environment",
+     "url": "https://asgi.readthedocs.io/",
+     "version": "3.12.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "attrs",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-attrs/attrs",
+     "version": "26.1.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "backoff",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/litl/backoff",
+     "version": "2.2.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "bcrypt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pyca/bcrypt/",
+     "version": "5.0.0"
+    },
+    {
+     "licence": "BSD",
+     "name": "blis",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/cython-blis",
+     "version": "1.3.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "build",
+     "source": "metadata, installed environment",
+     "url": "https://build.pypa.io",
+     "version": "1.6.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "catalogue",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/catalogue",
+     "version": "2.0.10"
+    },
+    {
+     "licence": "MPL-2.0",
+     "name": "certifi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/certifi/python-certifi",
+     "version": "2026.7.22"
+    },
+    {
+     "licence": "MIT-0",
+     "name": "cffi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-cffi/cffi",
+     "version": "2.1.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "charset-normalizer",
+     "source": "metadata, installed environment",
+     "url": "https://charset-normalizer.readthedocs.io/",
+     "version": "3.5.2"
+    },
+    {
+     "licence": "Apache Software License",
+     "name": "chromadb",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/chroma-core/chroma",
+     "version": "1.5.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "click",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/click/",
+     "version": "8.5.0"
+    },
+    {
+     "licence": "MIT License",
+     "name": "cloudpathlib",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/drivendataorg/cloudpathlib",
+     "version": "0.26.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "confection",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/confection",
+     "version": "1.3.3"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "coverage",
+     "source": "metadata, installed environment",
+     "url": "https://coverage.readthedocs.io/en/7.16.2",
+     "version": "7.16.2"
+    },
+    {
+     "licence": "Apache-2.0 OR BSD-3-Clause",
+     "name": "cryptography",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pyca/cryptography",
+     "version": "50.0.2"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "cuda-bindings",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/NVIDIA/cuda-python",
+     "version": "13.4.3"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "cuda-pathfinder",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/NVIDIA/cuda-python",
+     "version": "1.8.3"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-CUDA-Toolkit-EULA",
+     "name": "cuda-toolkit",
+     "source": "project page, no licence in the package metadata",
+     "url": "https://docs.nvidia.com/cuda/eula/",
+     "version": "13.0.3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "curated-tokenizers",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/explosion/curated-tokenizers",
+     "version": "0.0.10"
+    },
+    {
+     "licence": "MIT",
+     "name": "curated-transformers",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/explosion/curated-transformers",
+     "version": "0.1.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "cymem",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/cymem",
+     "version": "2.0.13"
+    },
+    {
+     "licence": "0BSD",
+     "name": "detect-installer",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/detect-installer/",
+     "version": "0.2.1"
+    },
+    {
+     "licence": "Apache License, Version 2.0",
+     "name": "distro",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-distro/distro",
+     "version": "1.9.0"
+    },
+    {
+     "licence": "ISC",
+     "name": "dnspython",
+     "source": "metadata, installed environment",
+     "url": "https://www.dnspython.org",
+     "version": "2.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "durationpy",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/icholy/durationpy",
+     "version": "0.11"
+    },
+    {
+     "licence": "Unlicense",
+     "name": "email-validator",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/JoshData/python-email-validator",
+     "version": "2.3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "en-core-web-sm",
+     "source": "metadata, installed environment",
+     "url": "https://explosion.ai",
+     "version": "3.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "en-core-web-trf",
+     "source": "spaCy model meta, meta/en_core_web_trf-3.8.0.json; not on PyPI",
+     "url": "https://github.com/explosion/spacy-models",
+     "version": "3.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "fastapi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fastapi/fastapi",
+     "version": "0.128.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "fastapi-cli",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fastapi/fastapi-cli",
+     "version": "0.0.32"
+    },
+    {
+     "licence": "MIT",
+     "name": "fastapi-cloud-cli",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fastapilabs/fastapi-cloud-cli",
+     "version": "0.26.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "fastar",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/DoctorJohn/fastar",
+     "version": "0.12.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "fastembed",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/qdrant/fastembed",
+     "version": "0.8.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "filelock",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/tox-dev/py-filelock",
+     "version": "4.0.12"
+    },
+    {
+     "licence": "Apache 2.0",
+     "name": "flatbuffers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/google/flatbuffers",
+     "version": "25.12.19"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "frozenlist",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/aio-libs/frozenlist",
+     "version": "1.8.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "fsspec",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fsspec/filesystem_spec",
+     "version": "2026.9.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "googleapis-common-protos",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/googleapis/google-cloud-python/tree/main/packages/googleapis-common-protos",
+     "version": "1.75.5"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "grpcio",
+     "source": "metadata, installed environment",
+     "url": "https://grpc.io",
+     "version": "1.84.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "h11",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-hyper/h11",
+     "version": "0.16.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "hf-xet",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/huggingface/xet-core",
+     "version": "1.7.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpcore",
+     "source": "metadata, installed environment",
+     "url": "https://www.encode.io/httpcore/",
+     "version": "1.0.9"
+    },
+    {
+     "licence": "MIT",
+     "name": "httptools",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/MagicStack/httptools",
+     "version": "0.8.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpx",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/encode/httpx",
+     "version": "0.28.1"
+    },
+    {
+     "licence": "Apache",
+     "name": "huggingface-hub",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/huggingface_hub",
+     "version": "0.36.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "idna",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/kjd/idna",
+     "version": "3.20"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "importlib-resources",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python/importlib_resources",
+     "version": "7.1.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "iniconfig",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/pytest-dev/iniconfig",
+     "version": "2.3.1"
+    },
+    {
+     "licence": "BSD License",
+     "name": "itsdangerous",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/itsdangerous/",
+     "version": "2.2.0"
+    },
+    {
+     "licence": "BSD License",
+     "name": "jinja2",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/jinja/",
+     "version": "3.1.6"
+    },
+    {
+     "licence": "MIT",
+     "name": "jsonschema",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-jsonschema/jsonschema",
+     "version": "4.26.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "jsonschema-specifications",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-jsonschema/jsonschema-specifications",
+     "version": "2025.9.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "kubernetes",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/kubernetes-client/python",
+     "version": "37.0.0"
+    },
+    {
+     "licence": "MIT License",
+     "name": "loguru",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Delgan/loguru",
+     "version": "0.7.3"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "lxml",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/lxml/lxml",
+     "version": "6.1.3"
+    },
+    {
+     "licence": "MIT License",
+     "name": "markdown-it-py",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/executablebooks/markdown-it-py",
+     "version": "4.2.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "markupsafe",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/markupsafe/",
+     "version": "3.0.4"
+    },
+    {
+     "licence": "MIT License",
+     "name": "mdurl",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/executablebooks/mdurl",
+     "version": "0.1.2"
+    },
+    {
+     "licence": "MIT License",
+     "name": "mmh3",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/mmh3/",
+     "version": "5.3.1"
+    },
+    {
+     "licence": "BSD",
+     "name": "mpmath",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fredrik-johansson/mpmath",
+     "version": "1.3.0"
+    },
+    {
+     "licence": "Apache License 2.0",
+     "name": "multidict",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/aio-libs/multidict",
+     "version": "6.9.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "murmurhash",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/murmurhash",
+     "version": "1.0.15"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "networkx",
+     "source": "metadata, installed environment",
+     "url": "https://networkx.org/",
+     "version": "3.6.1"
+    },
+    {
+     "licence": "BSD License",
+     "name": "numpy",
+     "source": "metadata, installed environment",
+     "url": "https://numpy.org",
+     "version": "1.26.4"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cublas",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "13.1.1.3"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cuda-cupti",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "13.0.85"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cuda-nvrtc",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "13.0.88"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-CUDA-Toolkit-EULA",
+     "name": "nvidia-cuda-runtime",
+     "source": "project page, no licence in the package metadata",
+     "url": "https://docs.nvidia.com/cuda/eula/",
+     "version": "13.0.96"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-cuDNN-SLA",
+     "name": "nvidia-cudnn-cu13",
+     "source": "project page, no licence in the package metadata",
+     "url": "https://docs.nvidia.com/deeplearning/cudnn/latest/reference/eula.html",
+     "version": "9.24.0.43"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cufft",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "12.0.0.61"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cufile",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "1.15.1.6"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-curand",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "10.4.0.35"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cusolver",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "12.0.4.66"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cusparse",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "12.6.3.3"
+    },
+    {
+     "licence": "NVIDIA Proprietary Software",
+     "name": "nvidia-cusparselt-cu13",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cusparselt",
+     "version": "0.8.1"
+    },
+    {
+     "licence": "Apache-2.0 AND BSD-3-Clause",
+     "name": "nvidia-nccl-cu13",
+     "source": "project page, LICENSE.txt, no licence in the package metadata",
+     "url": "https://github.com/NVIDIA/nccl",
+     "version": "2.30.7"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-nvjitlink",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "13.4.92"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-NVSHMEM-SLA",
+     "name": "nvidia-nvshmem-cu13",
+     "source": "project page, no licence in the package metadata",
+     "url": "https://docs.nvidia.com/nvshmem/api/sla.html",
+     "version": "3.4.5"
+    },
+    {
+     "licence": "Apache 2.0",
+     "name": "nvidia-nvtx",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "13.0.85"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "oauthlib",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/oauthlib/oauthlib",
+     "version": "4.0.0"
+    },
+    {
+     "licence": "MIT License",
+     "name": "onnxruntime",
+     "source": "metadata, installed environment",
+     "url": "https://onnxruntime.ai",
+     "version": "1.30.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-api",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-api",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-distro",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/opentelemetry-distro",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-http-transport",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-http-transport",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-common",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-common",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-common",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-common",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-grpc",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-grpc",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-http",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-http",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/opentelemetry-instrumentation",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation-asgi",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-asgi",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation-fastapi",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-fastapi",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation-logging",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-logging",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-proto",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-proto",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-sdk",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-sdk",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-semantic-conventions",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-semantic-conventions",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-util-http",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/util/opentelemetry-util-http",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "MPL-2.0 AND (Apache-2.0 OR MIT)",
+     "name": "orjson",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/ijl/orjson",
+     "version": "3.13.0"
+    },
+    {
+     "licence": "Apache License, Version 2.0",
+     "name": "overrides",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/mkorpela/overrides",
+     "version": "7.7.0"
+    },
+    {
+     "licence": "Apache-2.0 OR BSD-2-Clause",
+     "name": "packaging",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pypa/packaging",
+     "version": "26.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "pdf2image",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Belval/pdf2image",
+     "version": "1.17.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pdfminer-six",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pdfminer/pdfminer.six",
+     "version": "20251230"
+    },
+    {
+     "licence": "MIT License",
+     "name": "pdfplumber",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/jsvine/pdfplumber",
+     "version": "0.11.9"
+    },
+    {
+     "licence": "MIT-CMU",
+     "name": "pillow",
+     "source": "metadata, installed environment",
+     "url": "https://python-pillow.github.io",
+     "version": "12.3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pluggy",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/pluggy/",
+     "version": "1.6.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "posthog",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/posthog/posthog-python",
+     "version": "5.4.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "preshed",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/preshed",
+     "version": "3.0.13"
+    },
+    {
+     "licence": "Apache-2.0 AND BSD-2-Clause",
+     "name": "prometheus-client",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/prometheus/client_python",
+     "version": "0.26.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "propcache",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/aio-libs/propcache",
+     "version": "0.5.4"
+    },
+    {
+     "licence": "3-Clause BSD License",
+     "name": "protobuf",
+     "source": "metadata, installed environment",
+     "url": "https://developers.google.com/protocol-buffers/",
+     "version": "7.36.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "py-rust-stemmers",
+     "source": "project page, LICENSE, no licence in the package metadata",
+     "url": "https://github.com/qdrant/py-rust-stemmers",
+     "version": "0.1.8"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "pybase64",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/mayeut/pybase64",
+     "version": "1.5.1"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "pycparser",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/eliben/pycparser",
+     "version": "3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/pydantic",
+     "version": "2.13.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic-core",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic",
+     "version": "2.46.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic-extra-types",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/pydantic-extra-types",
+     "version": "2.11.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic-settings",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/pydantic-settings",
+     "version": "2.15.0"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "pygments",
+     "source": "metadata, installed environment",
+     "url": "https://pygments.org",
+     "version": "2.21.0"
+    },
+    {
+     "licence": "BSD-3-Clause, Apache-2.0, dependency licenses",
+     "name": "pypdfium2",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pypdfium2-team/pypdfium2",
+     "version": "5.14.0"
+    },
+    {
+     "licence": "Apache License Version 2.0",
+     "name": "pypika",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/kayak/pypika",
+     "version": "0.51.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "pyproject-hooks",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pypa/pyproject-hooks",
+     "version": "1.3.3"
+    },
+    {
+     "licence": "Apache License 2.0",
+     "name": "pytesseract",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/madmaze/pytesseract",
+     "version": "0.3.13"
+    },
+    {
+     "licence": "MIT",
+     "name": "pytest",
+     "source": "metadata, installed environment",
+     "url": "https://docs.pytest.org/en/latest/",
+     "version": "9.1.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "pytest-asyncio",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pytest-dev/pytest-asyncio",
+     "version": "1.4.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pytest-cov",
+     "source": "metadata, installed environment",
+     "url": "https://pytest-cov.readthedocs.io/",
+     "version": "7.1.0"
+    },
+    {
+     "licence": "Dual License",
+     "name": "python-dateutil",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/dateutil/dateutil",
+     "version": "2.9.0.post0"
+    },
+    {
+     "licence": "MIT",
+     "name": "python-docx",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-openxml/python-docx",
+     "version": "1.1.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "python-dotenv",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/theskumar/python-dotenv",
+     "version": "1.2.4"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "python-multipart",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Kludex/python-multipart",
+     "version": "0.0.32"
+    },
+    {
+     "licence": "MIT",
+     "name": "pyyaml",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/yaml/pyyaml",
+     "version": "6.0.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "referencing",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-jsonschema/referencing",
+     "version": "0.37.0"
+    },
+    {
+     "licence": "Apache-2.0 AND CNRI-Python",
+     "name": "regex",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/mrabarnett/mrab-regex",
+     "version": "2026.9.29"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "requests",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/psf/requests",
+     "version": "2.34.2"
+    },
+    {
+     "licence": "ISC",
+     "name": "requests-oauthlib",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/requests/requests-oauthlib",
+     "version": "2.0.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "rich",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Textualize/rich",
+     "version": "15.0.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "rich-toolkit",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/rich-toolkit/",
+     "version": "0.20.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "rignore",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/rignore/",
+     "version": "0.8.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "rpds-py",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/crate-py/rpds",
+     "version": "2026.9.1"
+    },
+    {
+     "licence": "Apache Software License",
+     "name": "safetensors",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/safetensors",
+     "version": "0.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "sentry-sdk",
+     "source": "metadata, installed environment",
+     "url": "https://docs.sentry.io/platforms/python/",
+     "version": "2.71.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "setuptools",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pypa/setuptools",
+     "version": "84.0.0"
+    },
+    {
+     "licence": "ISC License",
+     "name": "shellingham",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/sarugaku/shellingham",
+     "version": "1.5.4"
+    },
+    {
+     "licence": "MIT",
+     "name": "six",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/benjaminp/six",
+     "version": "1.17.0"
+    },
+    {
+     "licence": "MIT License",
+     "name": "smart-open",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/piskvorky/smart_open",
+     "version": "8.0.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "spacy",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/spaCy",
+     "version": "3.8.16"
+    },
+    {
+     "licence": "MIT",
+     "name": "spacy-curated-transformers",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/explosion/spacy-curated-transformers",
+     "version": "0.3.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "spacy-legacy",
+     "source": "metadata, installed environment",
+     "url": "https://spacy.io",
+     "version": "3.0.12"
+    },
+    {
+     "licence": "MIT",
+     "name": "spacy-loggers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/spacy-loggers",
+     "version": "1.0.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "srsly",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/srsly",
+     "version": "2.5.4"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "starlette",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Kludex/starlette",
+     "version": "0.50.0"
+    },
+    {
+     "licence": "BSD",
+     "name": "sympy",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/sympy/sympy",
+     "version": "1.14.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "tenacity",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/jd/tenacity",
+     "version": "9.2.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "thinc",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/thinc",
+     "version": "8.3.13"
+    },
+    {
+     "licence": "Apache Software License",
+     "name": "tokenizers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/tokenizers",
+     "version": "0.22.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "tomli",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/hukkin/tomli",
+     "version": "2.5.0"
+    },
+    {
+     "licence": "Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT",
+     "name": "torch",
+     "source": "metadata, PyPI",
+     "url": "https://pytorch.org",
+     "version": "2.14.1"
+    },
+    {
+     "licence": "MPL-2.0 AND MIT",
+     "name": "tqdm",
+     "source": "metadata, installed environment",
+     "url": "https://tqdm.github.io",
+     "version": "4.70.1"
+    },
+    {
+     "licence": "Apache 2.0 License",
+     "name": "transformers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/transformers",
+     "version": "4.57.6"
+    },
+    {
+     "licence": "MIT",
+     "name": "triton",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/triton-lang/triton/",
+     "version": "3.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "typer",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/fastapi/typer",
+     "version": "0.27.3"
+    },
+    {
+     "licence": "PSF-2.0",
+     "name": "typing-extensions",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python/typing_extensions",
+     "version": "4.16.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "typing-inspection",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/typing-inspection",
+     "version": "0.4.4"
+    },
+    {
+     "licence": "BSD-3-Clause AND TCL",
+     "name": "ujson",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/ultrajson/ultrajson",
+     "version": "6.0.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "urllib3",
+     "source": "metadata, installed environment",
+     "url": "https://urllib3.readthedocs.io",
+     "version": "2.8.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "uvicorn",
+     "source": "metadata, installed environment",
+     "url": "https://www.uvicorn.org/",
+     "version": "0.34.0"
+    },
+    {
+     "licence": "MIT License",
+     "name": "uvloop",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/MagicStack/uvloop",
+     "version": "0.23.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "wasabi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/wasabi",
+     "version": "1.1.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "watchfiles",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/samuelcolvin/watchfiles",
+     "version": "1.3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "weasel",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/weasel/",
+     "version": "1.0.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "websocket-client",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/websocket-client/websocket-client/",
+     "version": "1.9.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "websockets",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-websockets/websockets",
+     "version": "17.2"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "wrapt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/GrahamDumpleton/wrapt",
+     "version": "2.5.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "yarl",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/aio-libs/yarl",
+     "version": "1.25.1"
+    }
+   ],
+   "requirements.txt": [
+    {
+     "licence": "MIT",
+     "name": "agent-detector",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/patrick91/agent-detector",
+     "version": "2.0.0"
+    },
+    {
+     "licence": "PSF-2.0",
+     "name": "aiohappyeyeballs",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/aio-libs/aiohappyeyeballs",
+     "version": "2.7.1"
+    },
+    {
+     "licence": "Apache-2.0 AND MIT",
+     "name": "aiohttp",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/aio-libs/aiohttp",
+     "version": "3.14.4"
+    },
+    {
+     "licence": "MIT",
+     "name": "aiohttp-retry",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/inyutin/aiohttp_retry",
+     "version": "2.9.1"
+    },
+    {
+     "licence": "Apache 2.0",
+     "name": "aiosignal",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/aio-libs/aiosignal",
+     "version": "1.4.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "annotated-doc",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fastapi/annotated-doc",
+     "version": "0.0.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "annotated-types",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/annotated-types/annotated-types",
+     "version": "0.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "anyio",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/agronholm/anyio",
+     "version": "4.15.1"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "asgiref",
+     "source": "metadata, installed environment",
+     "url": "https://asgi.readthedocs.io/",
+     "version": "3.12.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "attrs",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-attrs/attrs",
+     "version": "26.1.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "backoff",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/litl/backoff",
+     "version": "2.2.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "bcrypt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pyca/bcrypt/",
+     "version": "5.0.0"
+    },
+    {
+     "licence": "BSD",
+     "name": "blis",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/cython-blis",
+     "version": "1.3.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "build",
+     "source": "metadata, installed environment",
+     "url": "https://build.pypa.io",
+     "version": "1.6.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "catalogue",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/catalogue",
+     "version": "2.0.10"
+    },
+    {
+     "licence": "MPL-2.0",
+     "name": "certifi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/certifi/python-certifi",
+     "version": "2026.7.22"
+    },
+    {
+     "licence": "MIT-0",
+     "name": "cffi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-cffi/cffi",
+     "version": "2.1.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "charset-normalizer",
+     "source": "metadata, installed environment",
+     "url": "https://charset-normalizer.readthedocs.io/",
+     "version": "3.5.2"
+    },
+    {
+     "licence": "Apache Software License",
+     "name": "chromadb",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/chroma-core/chroma",
+     "version": "1.5.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "click",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/click/",
+     "version": "8.5.0"
+    },
+    {
+     "licence": "MIT License",
+     "name": "cloudpathlib",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/drivendataorg/cloudpathlib",
+     "version": "0.26.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "confection",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/confection",
+     "version": "1.3.3"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "coverage",
+     "source": "metadata, installed environment",
+     "url": "https://coverage.readthedocs.io/en/7.16.2",
+     "version": "7.16.2"
+    },
+    {
+     "licence": "Apache-2.0 OR BSD-3-Clause",
+     "name": "cryptography",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pyca/cryptography",
+     "version": "50.0.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "cymem",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/cymem",
+     "version": "2.0.13"
+    },
+    {
+     "licence": "0BSD",
+     "name": "detect-installer",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/detect-installer/",
+     "version": "0.2.1"
+    },
+    {
+     "licence": "Apache License, Version 2.0",
+     "name": "distro",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-distro/distro",
+     "version": "1.9.0"
+    },
+    {
+     "licence": "ISC",
+     "name": "dnspython",
+     "source": "metadata, installed environment",
+     "url": "https://www.dnspython.org",
+     "version": "2.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "durationpy",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/icholy/durationpy",
+     "version": "0.11"
+    },
+    {
+     "licence": "Unlicense",
+     "name": "email-validator",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/JoshData/python-email-validator",
+     "version": "2.3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "en-core-web-sm",
+     "source": "metadata, installed environment",
+     "url": "https://explosion.ai",
+     "version": "3.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "fastapi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fastapi/fastapi",
+     "version": "0.128.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "fastapi-cli",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fastapi/fastapi-cli",
+     "version": "0.0.32"
+    },
+    {
+     "licence": "MIT",
+     "name": "fastapi-cloud-cli",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fastapilabs/fastapi-cloud-cli",
+     "version": "0.26.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "fastar",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/DoctorJohn/fastar",
+     "version": "0.12.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "fastembed",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/qdrant/fastembed",
+     "version": "0.8.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "filelock",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/tox-dev/py-filelock",
+     "version": "4.0.12"
+    },
+    {
+     "licence": "Apache 2.0",
+     "name": "flatbuffers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/google/flatbuffers",
+     "version": "25.12.19"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "frozenlist",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/aio-libs/frozenlist",
+     "version": "1.8.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "fsspec",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fsspec/filesystem_spec",
+     "version": "2026.9.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "googleapis-common-protos",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/googleapis/google-cloud-python/tree/main/packages/googleapis-common-protos",
+     "version": "1.75.5"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "grpcio",
+     "source": "metadata, installed environment",
+     "url": "https://grpc.io",
+     "version": "1.84.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "h11",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-hyper/h11",
+     "version": "0.16.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "hf-xet",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/huggingface/xet-core",
+     "version": "1.7.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpcore",
+     "source": "metadata, installed environment",
+     "url": "https://www.encode.io/httpcore/",
+     "version": "1.0.9"
+    },
+    {
+     "licence": "MIT",
+     "name": "httptools",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/MagicStack/httptools",
+     "version": "0.8.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpx",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/encode/httpx",
+     "version": "0.28.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "huggingface-hub",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/huggingface/huggingface_hub",
+     "version": "1.33.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "idna",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/kjd/idna",
+     "version": "3.20"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "importlib-resources",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python/importlib_resources",
+     "version": "7.1.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "iniconfig",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/pytest-dev/iniconfig",
+     "version": "2.3.1"
+    },
+    {
+     "licence": "BSD License",
+     "name": "itsdangerous",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/itsdangerous/",
+     "version": "2.2.0"
+    },
+    {
+     "licence": "BSD License",
+     "name": "jinja2",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/jinja/",
+     "version": "3.1.6"
+    },
+    {
+     "licence": "MIT",
+     "name": "jsonschema",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-jsonschema/jsonschema",
+     "version": "4.26.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "jsonschema-specifications",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-jsonschema/jsonschema-specifications",
+     "version": "2025.9.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "kubernetes",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/kubernetes-client/python",
+     "version": "37.0.0"
+    },
+    {
+     "licence": "MIT License",
+     "name": "loguru",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Delgan/loguru",
+     "version": "0.7.3"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "lxml",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/lxml/lxml",
+     "version": "6.1.3"
+    },
+    {
+     "licence": "MIT License",
+     "name": "markdown-it-py",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/executablebooks/markdown-it-py",
+     "version": "4.2.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "markupsafe",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/markupsafe/",
+     "version": "3.0.4"
+    },
+    {
+     "licence": "MIT License",
+     "name": "mdurl",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/executablebooks/mdurl",
+     "version": "0.1.2"
+    },
+    {
+     "licence": "MIT License",
+     "name": "mmh3",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/mmh3/",
+     "version": "5.3.1"
+    },
+    {
+     "licence": "Apache License 2.0",
+     "name": "multidict",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/aio-libs/multidict",
+     "version": "6.9.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "murmurhash",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/murmurhash",
+     "version": "1.0.15"
+    },
+    {
+     "licence": "BSD License",
+     "name": "numpy",
+     "source": "metadata, installed environment",
+     "url": "https://numpy.org",
+     "version": "1.26.4"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "oauthlib",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/oauthlib/oauthlib",
+     "version": "4.0.0"
+    },
+    {
+     "licence": "MIT License",
+     "name": "onnxruntime",
+     "source": "metadata, installed environment",
+     "url": "https://onnxruntime.ai",
+     "version": "1.30.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-api",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-api",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-distro",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/opentelemetry-distro",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-http-transport",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-http-transport",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-common",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-common",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-common",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-common",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-grpc",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-grpc",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-http",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-http",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/opentelemetry-instrumentation",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation-asgi",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-asgi",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation-fastapi",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-fastapi",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation-logging",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-logging",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-proto",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-proto",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-sdk",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-sdk",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-semantic-conventions",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-semantic-conventions",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-util-http",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/util/opentelemetry-util-http",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "MPL-2.0 AND (Apache-2.0 OR MIT)",
+     "name": "orjson",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/ijl/orjson",
+     "version": "3.13.0"
+    },
+    {
+     "licence": "Apache License, Version 2.0",
+     "name": "overrides",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/mkorpela/overrides",
+     "version": "7.7.0"
+    },
+    {
+     "licence": "Apache-2.0 OR BSD-2-Clause",
+     "name": "packaging",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pypa/packaging",
+     "version": "26.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "pdf2image",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Belval/pdf2image",
+     "version": "1.17.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pdfminer-six",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pdfminer/pdfminer.six",
+     "version": "20251230"
+    },
+    {
+     "licence": "MIT License",
+     "name": "pdfplumber",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/jsvine/pdfplumber",
+     "version": "0.11.9"
+    },
+    {
+     "licence": "MIT-CMU",
+     "name": "pillow",
+     "source": "metadata, installed environment",
+     "url": "https://python-pillow.github.io",
+     "version": "12.3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pluggy",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/pluggy/",
+     "version": "1.6.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "posthog",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/posthog/posthog-python",
+     "version": "5.4.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "preshed",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/preshed",
+     "version": "3.0.13"
+    },
+    {
+     "licence": "Apache-2.0 AND BSD-2-Clause",
+     "name": "prometheus-client",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/prometheus/client_python",
+     "version": "0.26.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "propcache",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/aio-libs/propcache",
+     "version": "0.5.4"
+    },
+    {
+     "licence": "3-Clause BSD License",
+     "name": "protobuf",
+     "source": "metadata, installed environment",
+     "url": "https://developers.google.com/protocol-buffers/",
+     "version": "7.36.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "py-rust-stemmers",
+     "source": "project page, LICENSE, no licence in the package metadata",
+     "url": "https://github.com/qdrant/py-rust-stemmers",
+     "version": "0.1.8"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "pybase64",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/mayeut/pybase64",
+     "version": "1.5.1"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "pycparser",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/eliben/pycparser",
+     "version": "3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/pydantic",
+     "version": "2.13.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic-core",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic",
+     "version": "2.46.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic-extra-types",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/pydantic-extra-types",
+     "version": "2.11.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic-settings",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/pydantic-settings",
+     "version": "2.15.0"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "pygments",
+     "source": "metadata, installed environment",
+     "url": "https://pygments.org",
+     "version": "2.21.0"
+    },
+    {
+     "licence": "BSD-3-Clause, Apache-2.0, dependency licenses",
+     "name": "pypdfium2",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pypdfium2-team/pypdfium2",
+     "version": "5.14.0"
+    },
+    {
+     "licence": "Apache License Version 2.0",
+     "name": "pypika",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/kayak/pypika",
+     "version": "0.51.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "pyproject-hooks",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pypa/pyproject-hooks",
+     "version": "1.3.3"
+    },
+    {
+     "licence": "Apache License 2.0",
+     "name": "pytesseract",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/madmaze/pytesseract",
+     "version": "0.3.13"
+    },
+    {
+     "licence": "MIT",
+     "name": "pytest",
+     "source": "metadata, installed environment",
+     "url": "https://docs.pytest.org/en/latest/",
+     "version": "9.1.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "pytest-asyncio",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pytest-dev/pytest-asyncio",
+     "version": "1.4.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pytest-cov",
+     "source": "metadata, installed environment",
+     "url": "https://pytest-cov.readthedocs.io/",
+     "version": "7.1.0"
+    },
+    {
+     "licence": "Dual License",
+     "name": "python-dateutil",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/dateutil/dateutil",
+     "version": "2.9.0.post0"
+    },
+    {
+     "licence": "MIT",
+     "name": "python-docx",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-openxml/python-docx",
+     "version": "1.1.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "python-dotenv",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/theskumar/python-dotenv",
+     "version": "1.2.4"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "python-multipart",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Kludex/python-multipart",
+     "version": "0.0.32"
+    },
+    {
+     "licence": "MIT",
+     "name": "pyyaml",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/yaml/pyyaml",
+     "version": "6.0.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "referencing",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-jsonschema/referencing",
+     "version": "0.37.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "requests",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/psf/requests",
+     "version": "2.34.2"
+    },
+    {
+     "licence": "ISC",
+     "name": "requests-oauthlib",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/requests/requests-oauthlib",
+     "version": "2.0.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "rich",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Textualize/rich",
+     "version": "15.0.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "rich-toolkit",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/rich-toolkit/",
+     "version": "0.20.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "rignore",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/rignore/",
+     "version": "0.8.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "rpds-py",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/crate-py/rpds",
+     "version": "2026.9.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "sentry-sdk",
+     "source": "metadata, installed environment",
+     "url": "https://docs.sentry.io/platforms/python/",
+     "version": "2.71.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "setuptools",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pypa/setuptools",
+     "version": "84.0.0"
+    },
+    {
+     "licence": "ISC License",
+     "name": "shellingham",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/sarugaku/shellingham",
+     "version": "1.5.4"
+    },
+    {
+     "licence": "MIT",
+     "name": "six",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/benjaminp/six",
+     "version": "1.17.0"
+    },
+    {
+     "licence": "MIT License",
+     "name": "smart-open",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/piskvorky/smart_open",
+     "version": "8.0.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "spacy",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/spaCy",
+     "version": "3.8.16"
+    },
+    {
+     "licence": "MIT",
+     "name": "spacy-legacy",
+     "source": "metadata, installed environment",
+     "url": "https://spacy.io",
+     "version": "3.0.12"
+    },
+    {
+     "licence": "MIT",
+     "name": "spacy-loggers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/spacy-loggers",
+     "version": "1.0.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "srsly",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/srsly",
+     "version": "2.5.4"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "starlette",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Kludex/starlette",
+     "version": "0.50.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "tenacity",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/jd/tenacity",
+     "version": "9.2.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "thinc",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/thinc",
+     "version": "8.3.13"
+    },
+    {
+     "licence": "Apache Software License",
+     "name": "tokenizers",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/huggingface/tokenizers",
+     "version": "0.23.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "tomli",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/hukkin/tomli",
+     "version": "2.5.0"
+    },
+    {
+     "licence": "MPL-2.0 AND MIT",
+     "name": "tqdm",
+     "source": "metadata, installed environment",
+     "url": "https://tqdm.github.io",
+     "version": "4.70.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "typer",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/fastapi/typer",
+     "version": "0.27.3"
+    },
+    {
+     "licence": "PSF-2.0",
+     "name": "typing-extensions",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python/typing_extensions",
+     "version": "4.16.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "typing-inspection",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/typing-inspection",
+     "version": "0.4.4"
+    },
+    {
+     "licence": "BSD-3-Clause AND TCL",
+     "name": "ujson",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/ultrajson/ultrajson",
+     "version": "6.0.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "urllib3",
+     "source": "metadata, installed environment",
+     "url": "https://urllib3.readthedocs.io",
+     "version": "2.8.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "uvicorn",
+     "source": "metadata, installed environment",
+     "url": "https://www.uvicorn.org/",
+     "version": "0.34.0"
+    },
+    {
+     "licence": "MIT License",
+     "name": "uvloop",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/MagicStack/uvloop",
+     "version": "0.23.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "wasabi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/wasabi",
+     "version": "1.1.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "watchfiles",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/samuelcolvin/watchfiles",
+     "version": "1.3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "weasel",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/explosion/weasel/",
+     "version": "1.0.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "websocket-client",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/websocket-client/websocket-client/",
+     "version": "1.9.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "websockets",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-websockets/websockets",
+     "version": "17.2"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "wrapt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/GrahamDumpleton/wrapt",
+     "version": "2.5.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "yarl",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/aio-libs/yarl",
+     "version": "1.25.1"
+    }
+   ]
+  },
+  "mas": {
+   "requirements-cpu.txt": [
+    {
+     "licence": "MIT",
+     "name": "alembic",
+     "source": "metadata, installed environment",
+     "url": "https://alembic.sqlalchemy.org",
+     "version": "1.20.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "annotated-doc",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fastapi/annotated-doc",
+     "version": "0.0.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "annotated-types",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/annotated-types/annotated-types",
+     "version": "0.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "anyio",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/agronholm/anyio",
+     "version": "4.15.1"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "asgiref",
+     "source": "metadata, installed environment",
+     "url": "https://asgi.readthedocs.io/",
+     "version": "3.12.1"
+    },
+    {
+     "licence": "Apache 2",
+     "name": "async-timeout",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/aio-libs/async-timeout",
+     "version": "5.0.1"
+    },
+    {
+     "licence": "Apache License, Version 2.0",
+     "name": "bcrypt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pyca/bcrypt/",
+     "version": "3.2.2"
+    },
+    {
+     "licence": "MPL-2.0",
+     "name": "certifi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/certifi/python-certifi",
+     "version": "2026.7.22"
+    },
+    {
+     "licence": "MIT-0",
+     "name": "cffi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-cffi/cffi",
+     "version": "2.1.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "charset-normalizer",
+     "source": "metadata, installed environment",
+     "url": "https://charset-normalizer.readthedocs.io/",
+     "version": "3.5.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "click",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/click/",
+     "version": "8.5.0"
+    },
+    {
+     "licence": "BSD License",
+     "name": "colorama",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/tartley/colorama",
+     "version": "0.4.6"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "coverage",
+     "source": "metadata, installed environment",
+     "url": "https://coverage.readthedocs.io/en/7.16.2",
+     "version": "7.16.2"
+    },
+    {
+     "licence": "Apache-2.0 OR BSD-3-Clause",
+     "name": "cryptography",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pyca/cryptography",
+     "version": "50.0.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "ecdsa",
+     "source": "metadata, installed environment",
+     "url": "http://github.com/tlsfuzzer/python-ecdsa",
+     "version": "0.19.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "fastapi",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/fastapi/fastapi",
+     "version": "0.136.3"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "fastembed",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/qdrant/fastembed",
+     "version": "0.8.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "filelock",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/tox-dev/py-filelock",
+     "version": "4.0.12"
+    },
+    {
+     "licence": "Apache 2.0",
+     "name": "flatbuffers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/google/flatbuffers",
+     "version": "25.12.19"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "fsspec",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fsspec/filesystem_spec",
+     "version": "2026.9.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "googleapis-common-protos",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/googleapis/google-cloud-python/tree/main/packages/googleapis-common-protos",
+     "version": "1.75.5"
+    },
+    {
+     "licence": "BSD",
+     "name": "graphlib",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/bruth/graphlib/",
+     "version": "0.9.5"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "grpcio",
+     "source": "metadata, installed environment",
+     "url": "https://grpc.io",
+     "version": "1.84.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "h11",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-hyper/h11",
+     "version": "0.16.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "hf-xet",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/huggingface/xet-core",
+     "version": "1.7.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpcore",
+     "source": "metadata, installed environment",
+     "url": "https://www.encode.io/httpcore/",
+     "version": "1.0.9"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpx",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/encode/httpx",
+     "version": "0.28.1"
+    },
+    {
+     "licence": "Apache",
+     "name": "huggingface-hub",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/huggingface_hub",
+     "version": "0.36.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "idna",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/kjd/idna",
+     "version": "3.20"
+    },
+    {
+     "licence": "MIT",
+     "name": "iniconfig",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/pytest-dev/iniconfig",
+     "version": "2.3.1"
+    },
+    {
+     "licence": "MIT License",
+     "name": "loguru",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Delgan/loguru",
+     "version": "0.7.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "mako",
+     "source": "metadata, installed environment",
+     "url": "https://www.makotemplates.org/",
+     "version": "1.4.3"
+    },
+    {
+     "licence": "MIT License",
+     "name": "markdown-it-py",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/executablebooks/markdown-it-py",
+     "version": "4.2.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "markupsafe",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/markupsafe/",
+     "version": "3.0.4"
+    },
+    {
+     "licence": "MIT License",
+     "name": "mdurl",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/executablebooks/mdurl",
+     "version": "0.1.2"
+    },
+    {
+     "licence": "MIT License",
+     "name": "mmh3",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/mmh3/",
+     "version": "5.3.1"
+    },
+    {
+     "licence": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0",
+     "name": "numpy",
+     "source": "metadata, installed environment",
+     "url": "https://numpy.org",
+     "version": "2.4.6"
+    },
+    {
+     "licence": "MIT License",
+     "name": "onnxruntime",
+     "source": "metadata, installed environment",
+     "url": "https://onnxruntime.ai",
+     "version": "1.30.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-api",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-api",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-http-transport",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-http-transport",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-common",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-common",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-common",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-common",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-grpc",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-grpc",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-http",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-http",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/opentelemetry-instrumentation",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation-asgi",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-asgi",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation-fastapi",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-fastapi",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-proto",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-proto",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-sdk",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-sdk",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-semantic-conventions",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-semantic-conventions",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-util-http",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/util/opentelemetry-util-http",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0 OR BSD-2-Clause",
+     "name": "packaging",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pypa/packaging",
+     "version": "26.3"
+    },
+    {
+     "licence": "BSD",
+     "name": "passlib",
+     "source": "metadata, installed environment",
+     "url": "https://passlib.readthedocs.io",
+     "version": "1.7.4"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "pika",
+     "source": "metadata, installed environment",
+     "url": "https://pika.readthedocs.io",
+     "version": "1.4.4"
+    },
+    {
+     "licence": "MIT-CMU",
+     "name": "pillow",
+     "source": "metadata, installed environment",
+     "url": "https://python-pillow.github.io",
+     "version": "12.3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pluggy",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/pluggy/",
+     "version": "1.6.0"
+    },
+    {
+     "licence": "Apache-2.0 AND BSD-2-Clause",
+     "name": "prometheus-client",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/prometheus/client_python",
+     "version": "0.26.0"
+    },
+    {
+     "licence": "ISC",
+     "name": "prometheus-fastapi-instrumentator",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/trallnag/prometheus-fastapi-instrumentator",
+     "version": "8.1.0"
+    },
+    {
+     "licence": "3-Clause BSD License",
+     "name": "protobuf",
+     "source": "metadata, installed environment",
+     "url": "https://developers.google.com/protocol-buffers/",
+     "version": "7.36.2"
+    },
+    {
+     "licence": "LGPL with exceptions",
+     "name": "psycopg2-binary",
+     "source": "metadata, PyPI",
+     "url": "https://psycopg.org/",
+     "version": "2.9.10"
+    },
+    {
+     "licence": "MIT",
+     "name": "py-rust-stemmers",
+     "source": "project page, LICENSE, no licence in the package metadata",
+     "url": "https://github.com/qdrant/py-rust-stemmers",
+     "version": "0.1.8"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "pyasn1",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pyasn1/pyasn1",
+     "version": "0.6.4"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "pycparser",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/eliben/pycparser",
+     "version": "3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/pydantic",
+     "version": "2.13.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic-core",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic",
+     "version": "2.46.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic-settings",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/pydantic-settings",
+     "version": "2.15.0"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "pygments",
+     "source": "metadata, installed environment",
+     "url": "https://pygments.org",
+     "version": "2.21.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pytest",
+     "source": "metadata, installed environment",
+     "url": "https://docs.pytest.org/en/latest/",
+     "version": "9.1.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "pytest-asyncio",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pytest-dev/pytest-asyncio",
+     "version": "1.4.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pytest-cov",
+     "source": "metadata, installed environment",
+     "url": "https://pytest-cov.readthedocs.io/",
+     "version": "7.1.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "python-dotenv",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/theskumar/python-dotenv",
+     "version": "1.2.4"
+    },
+    {
+     "licence": "MIT",
+     "name": "python-jose",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/mpdavis/python-jose/",
+     "version": "3.5.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "python-multipart",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Kludex/python-multipart",
+     "version": "0.0.32"
+    },
+    {
+     "licence": "MIT",
+     "name": "pyyaml",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/yaml/pyyaml",
+     "version": "6.0.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "redis",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/redis/redis-py",
+     "version": "8.1.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "requests",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/psf/requests",
+     "version": "2.34.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "rich",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Textualize/rich",
+     "version": "15.0.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "rsa",
+     "source": "metadata, installed environment",
+     "url": "https://stuvel.eu/rsa",
+     "version": "4.9.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "six",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/benjaminp/six",
+     "version": "1.17.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "sqlalchemy",
+     "source": "metadata, PyPI",
+     "url": "https://www.sqlalchemy.org",
+     "version": "2.1.4"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "starlette",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Kludex/starlette",
+     "version": "1.7.0"
+    },
+    {
+     "licence": "MIT OR Apache-2.0",
+     "name": "structlog",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/hynek/structlog",
+     "version": "26.1.0"
+    },
+    {
+     "licence": "Apache Software License",
+     "name": "tokenizers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/tokenizers",
+     "version": "0.22.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "tomli",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/hukkin/tomli",
+     "version": "2.5.0"
+    },
+    {
+     "licence": "MPL-2.0 AND MIT",
+     "name": "tqdm",
+     "source": "metadata, installed environment",
+     "url": "https://tqdm.github.io",
+     "version": "4.70.1"
+    },
+    {
+     "licence": "PSF-2.0",
+     "name": "typing-extensions",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python/typing_extensions",
+     "version": "4.16.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "typing-inspection",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/typing-inspection",
+     "version": "0.4.4"
+    },
+    {
+     "licence": "MIT",
+     "name": "urllib3",
+     "source": "metadata, installed environment",
+     "url": "https://urllib3.readthedocs.io",
+     "version": "2.8.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "uvicorn",
+     "source": "metadata, installed environment",
+     "url": "https://uvicorn.dev/",
+     "version": "0.54.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "websockets",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-websockets/websockets",
+     "version": "17.2"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "wrapt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/GrahamDumpleton/wrapt",
+     "version": "2.5.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "wsproto",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-hyper/wsproto/",
+     "version": "1.3.2"
+    }
+   ],
+   "requirements-gpu.txt": [
+    {
+     "licence": "Apache",
+     "name": "accelerate",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/accelerate",
+     "version": "1.15.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "alembic",
+     "source": "metadata, installed environment",
+     "url": "https://alembic.sqlalchemy.org",
+     "version": "1.20.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "annotated-doc",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fastapi/annotated-doc",
+     "version": "0.0.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "annotated-types",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/annotated-types/annotated-types",
+     "version": "0.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "anyio",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/agronholm/anyio",
+     "version": "4.15.1"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "asgiref",
+     "source": "metadata, installed environment",
+     "url": "https://asgi.readthedocs.io/",
+     "version": "3.12.1"
+    },
+    {
+     "licence": "Apache 2",
+     "name": "async-timeout",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/aio-libs/async-timeout",
+     "version": "5.0.1"
+    },
+    {
+     "licence": "Apache License, Version 2.0",
+     "name": "bcrypt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pyca/bcrypt/",
+     "version": "3.2.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "bitsandbytes",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/bitsandbytes-foundation/bitsandbytes",
+     "version": "0.50.2"
+    },
+    {
+     "licence": "MPL-2.0",
+     "name": "certifi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/certifi/python-certifi",
+     "version": "2026.7.22"
+    },
+    {
+     "licence": "MIT-0",
+     "name": "cffi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-cffi/cffi",
+     "version": "2.1.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "charset-normalizer",
+     "source": "metadata, installed environment",
+     "url": "https://charset-normalizer.readthedocs.io/",
+     "version": "3.5.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "click",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/click/",
+     "version": "8.5.0"
+    },
+    {
+     "licence": "BSD License",
+     "name": "colorama",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/tartley/colorama",
+     "version": "0.4.6"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "coverage",
+     "source": "metadata, installed environment",
+     "url": "https://coverage.readthedocs.io/en/7.16.2",
+     "version": "7.16.2"
+    },
+    {
+     "licence": "Apache-2.0 OR BSD-3-Clause",
+     "name": "cryptography",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pyca/cryptography",
+     "version": "50.0.2"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "cuda-bindings",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/NVIDIA/cuda-python",
+     "version": "13.4.3"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "cuda-pathfinder",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/NVIDIA/cuda-python",
+     "version": "1.8.3"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-CUDA-Toolkit-EULA",
+     "name": "cuda-toolkit",
+     "source": "project page, no licence in the package metadata",
+     "url": "https://docs.nvidia.com/cuda/eula/",
+     "version": "13.0.3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "ecdsa",
+     "source": "metadata, installed environment",
+     "url": "http://github.com/tlsfuzzer/python-ecdsa",
+     "version": "0.19.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "fastapi",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/fastapi/fastapi",
+     "version": "0.136.3"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "fastembed",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/qdrant/fastembed",
+     "version": "0.8.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "filelock",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/tox-dev/py-filelock",
+     "version": "4.0.12"
+    },
+    {
+     "licence": "Apache 2.0",
+     "name": "flatbuffers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/google/flatbuffers",
+     "version": "25.12.19"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "fsspec",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fsspec/filesystem_spec",
+     "version": "2026.9.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "googleapis-common-protos",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/googleapis/google-cloud-python/tree/main/packages/googleapis-common-protos",
+     "version": "1.75.5"
+    },
+    {
+     "licence": "BSD",
+     "name": "graphlib",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/bruth/graphlib/",
+     "version": "0.9.5"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "grpcio",
+     "source": "metadata, installed environment",
+     "url": "https://grpc.io",
+     "version": "1.84.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "h11",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-hyper/h11",
+     "version": "0.16.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "hf-transfer",
+     "source": "project page, LICENSE, no licence in the package metadata",
+     "url": "https://github.com/huggingface/hf_transfer",
+     "version": "0.1.9"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "hf-xet",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/huggingface/xet-core",
+     "version": "1.7.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpcore",
+     "source": "metadata, installed environment",
+     "url": "https://www.encode.io/httpcore/",
+     "version": "1.0.9"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpx",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/encode/httpx",
+     "version": "0.28.1"
+    },
+    {
+     "licence": "Apache",
+     "name": "huggingface-hub",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/huggingface_hub",
+     "version": "0.36.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "idna",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/kjd/idna",
+     "version": "3.20"
+    },
+    {
+     "licence": "MIT",
+     "name": "iniconfig",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/pytest-dev/iniconfig",
+     "version": "2.3.1"
+    },
+    {
+     "licence": "BSD License",
+     "name": "jinja2",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/jinja/",
+     "version": "3.1.6"
+    },
+    {
+     "licence": "MIT License",
+     "name": "loguru",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Delgan/loguru",
+     "version": "0.7.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "mako",
+     "source": "metadata, installed environment",
+     "url": "https://www.makotemplates.org/",
+     "version": "1.4.3"
+    },
+    {
+     "licence": "MIT License",
+     "name": "markdown-it-py",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/executablebooks/markdown-it-py",
+     "version": "4.2.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "markupsafe",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/markupsafe/",
+     "version": "3.0.4"
+    },
+    {
+     "licence": "MIT License",
+     "name": "mdurl",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/executablebooks/mdurl",
+     "version": "0.1.2"
+    },
+    {
+     "licence": "MIT License",
+     "name": "mmh3",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/mmh3/",
+     "version": "5.3.1"
+    },
+    {
+     "licence": "BSD",
+     "name": "mpmath",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fredrik-johansson/mpmath",
+     "version": "1.3.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "networkx",
+     "source": "metadata, installed environment",
+     "url": "https://networkx.org/",
+     "version": "3.6.1"
+    },
+    {
+     "licence": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0",
+     "name": "numpy",
+     "source": "metadata, installed environment",
+     "url": "https://numpy.org",
+     "version": "2.4.6"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cublas",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "13.1.1.3"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cuda-cupti",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "13.0.85"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cuda-nvrtc",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "13.0.88"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-CUDA-Toolkit-EULA",
+     "name": "nvidia-cuda-runtime",
+     "source": "project page, no licence in the package metadata",
+     "url": "https://docs.nvidia.com/cuda/eula/",
+     "version": "13.0.96"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-cuDNN-SLA",
+     "name": "nvidia-cudnn-cu13",
+     "source": "project page, no licence in the package metadata",
+     "url": "https://docs.nvidia.com/deeplearning/cudnn/latest/reference/eula.html",
+     "version": "9.24.0.43"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cufft",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "12.0.0.61"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cufile",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "1.15.1.6"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-curand",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "10.4.0.35"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cusolver",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "12.0.4.66"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-cusparse",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "12.6.3.3"
+    },
+    {
+     "licence": "NVIDIA Proprietary Software",
+     "name": "nvidia-cusparselt-cu13",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cusparselt",
+     "version": "0.8.1"
+    },
+    {
+     "licence": "Apache-2.0 AND BSD-3-Clause",
+     "name": "nvidia-nccl-cu13",
+     "source": "project page, LICENSE.txt, no licence in the package metadata",
+     "url": "https://github.com/NVIDIA/nccl",
+     "version": "2.30.7"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-Proprietary",
+     "name": "nvidia-nvjitlink",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "13.4.92"
+    },
+    {
+     "licence": "LicenseRef-NVIDIA-NVSHMEM-SLA",
+     "name": "nvidia-nvshmem-cu13",
+     "source": "project page, no licence in the package metadata",
+     "url": "https://docs.nvidia.com/nvshmem/api/sla.html",
+     "version": "3.4.5"
+    },
+    {
+     "licence": "Apache 2.0",
+     "name": "nvidia-nvtx",
+     "source": "metadata, PyPI",
+     "url": "https://developer.nvidia.com/cuda-zone",
+     "version": "13.0.85"
+    },
+    {
+     "licence": "MIT License",
+     "name": "onnxruntime",
+     "source": "metadata, installed environment",
+     "url": "https://onnxruntime.ai",
+     "version": "1.30.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-api",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-api",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-http-transport",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-http-transport",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-common",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-common",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-common",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-common",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-grpc",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-grpc",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-http",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-http",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/opentelemetry-instrumentation",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation-asgi",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-asgi",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation-fastapi",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-fastapi",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-proto",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-proto",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-sdk",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-sdk",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-semantic-conventions",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-semantic-conventions",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-util-http",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/util/opentelemetry-util-http",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0 OR BSD-2-Clause",
+     "name": "packaging",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pypa/packaging",
+     "version": "26.3"
+    },
+    {
+     "licence": "BSD",
+     "name": "passlib",
+     "source": "metadata, installed environment",
+     "url": "https://passlib.readthedocs.io",
+     "version": "1.7.4"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "pika",
+     "source": "metadata, installed environment",
+     "url": "https://pika.readthedocs.io",
+     "version": "1.4.4"
+    },
+    {
+     "licence": "MIT-CMU",
+     "name": "pillow",
+     "source": "metadata, installed environment",
+     "url": "https://python-pillow.github.io",
+     "version": "12.3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pluggy",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/pluggy/",
+     "version": "1.6.0"
+    },
+    {
+     "licence": "Apache-2.0 AND BSD-2-Clause",
+     "name": "prometheus-client",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/prometheus/client_python",
+     "version": "0.26.0"
+    },
+    {
+     "licence": "ISC",
+     "name": "prometheus-fastapi-instrumentator",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/trallnag/prometheus-fastapi-instrumentator",
+     "version": "8.1.0"
+    },
+    {
+     "licence": "3-Clause BSD License",
+     "name": "protobuf",
+     "source": "metadata, installed environment",
+     "url": "https://developers.google.com/protocol-buffers/",
+     "version": "7.36.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "psutil",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/giampaolo/psutil",
+     "version": "7.2.2"
+    },
+    {
+     "licence": "LGPL with exceptions",
+     "name": "psycopg2-binary",
+     "source": "metadata, PyPI",
+     "url": "https://psycopg.org/",
+     "version": "2.9.10"
+    },
+    {
+     "licence": "MIT",
+     "name": "py-rust-stemmers",
+     "source": "project page, LICENSE, no licence in the package metadata",
+     "url": "https://github.com/qdrant/py-rust-stemmers",
+     "version": "0.1.8"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "pyasn1",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pyasn1/pyasn1",
+     "version": "0.6.4"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "pycparser",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/eliben/pycparser",
+     "version": "3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/pydantic",
+     "version": "2.13.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic-core",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic",
+     "version": "2.46.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic-settings",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/pydantic-settings",
+     "version": "2.15.0"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "pygments",
+     "source": "metadata, installed environment",
+     "url": "https://pygments.org",
+     "version": "2.21.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pytest",
+     "source": "metadata, installed environment",
+     "url": "https://docs.pytest.org/en/latest/",
+     "version": "9.1.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "pytest-asyncio",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pytest-dev/pytest-asyncio",
+     "version": "1.4.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pytest-cov",
+     "source": "metadata, installed environment",
+     "url": "https://pytest-cov.readthedocs.io/",
+     "version": "7.1.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "python-dotenv",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/theskumar/python-dotenv",
+     "version": "1.2.4"
+    },
+    {
+     "licence": "MIT",
+     "name": "python-jose",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/mpdavis/python-jose/",
+     "version": "3.5.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "python-multipart",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Kludex/python-multipart",
+     "version": "0.0.32"
+    },
+    {
+     "licence": "MIT",
+     "name": "pyyaml",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/yaml/pyyaml",
+     "version": "6.0.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "redis",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/redis/redis-py",
+     "version": "8.1.0"
+    },
+    {
+     "licence": "Apache-2.0 AND CNRI-Python",
+     "name": "regex",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/mrabarnett/mrab-regex",
+     "version": "2026.9.29"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "requests",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/psf/requests",
+     "version": "2.34.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "rich",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Textualize/rich",
+     "version": "15.0.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "rsa",
+     "source": "metadata, installed environment",
+     "url": "https://stuvel.eu/rsa",
+     "version": "4.9.1"
+    },
+    {
+     "licence": "Apache Software License",
+     "name": "safetensors",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/safetensors",
+     "version": "0.8.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "sentencepiece",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/google/sentencepiece",
+     "version": "0.2.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "setuptools",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pypa/setuptools",
+     "version": "84.0.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "six",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/benjaminp/six",
+     "version": "1.17.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "sqlalchemy",
+     "source": "metadata, PyPI",
+     "url": "https://www.sqlalchemy.org",
+     "version": "2.1.4"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "starlette",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Kludex/starlette",
+     "version": "1.7.0"
+    },
+    {
+     "licence": "MIT OR Apache-2.0",
+     "name": "structlog",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/hynek/structlog",
+     "version": "26.1.0"
+    },
+    {
+     "licence": "BSD",
+     "name": "sympy",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/sympy/sympy",
+     "version": "1.14.0"
+    },
+    {
+     "licence": "Apache Software License",
+     "name": "tokenizers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/tokenizers",
+     "version": "0.22.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "tomli",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/hukkin/tomli",
+     "version": "2.5.0"
+    },
+    {
+     "licence": "Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT",
+     "name": "torch",
+     "source": "metadata, PyPI",
+     "url": "https://pytorch.org",
+     "version": "2.14.1"
+    },
+    {
+     "licence": "MPL-2.0 AND MIT",
+     "name": "tqdm",
+     "source": "metadata, installed environment",
+     "url": "https://tqdm.github.io",
+     "version": "4.70.1"
+    },
+    {
+     "licence": "Apache 2.0 License",
+     "name": "transformers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/transformers",
+     "version": "4.57.6"
+    },
+    {
+     "licence": "MIT",
+     "name": "triton",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/triton-lang/triton/",
+     "version": "3.8.0"
+    },
+    {
+     "licence": "PSF-2.0",
+     "name": "typing-extensions",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python/typing_extensions",
+     "version": "4.16.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "typing-inspection",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/typing-inspection",
+     "version": "0.4.4"
+    },
+    {
+     "licence": "MIT",
+     "name": "urllib3",
+     "source": "metadata, installed environment",
+     "url": "https://urllib3.readthedocs.io",
+     "version": "2.8.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "uvicorn",
+     "source": "metadata, installed environment",
+     "url": "https://uvicorn.dev/",
+     "version": "0.54.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "websockets",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-websockets/websockets",
+     "version": "17.2"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "wrapt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/GrahamDumpleton/wrapt",
+     "version": "2.5.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "wsproto",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-hyper/wsproto/",
+     "version": "1.3.2"
+    }
+   ],
+   "requirements.txt": [
+    {
+     "licence": "MIT",
+     "name": "alembic",
+     "source": "metadata, installed environment",
+     "url": "https://alembic.sqlalchemy.org",
+     "version": "1.20.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "annotated-doc",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fastapi/annotated-doc",
+     "version": "0.0.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "annotated-types",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/annotated-types/annotated-types",
+     "version": "0.8.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "anyio",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/agronholm/anyio",
+     "version": "4.15.1"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "asgiref",
+     "source": "metadata, installed environment",
+     "url": "https://asgi.readthedocs.io/",
+     "version": "3.12.1"
+    },
+    {
+     "licence": "Apache 2",
+     "name": "async-timeout",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/aio-libs/async-timeout",
+     "version": "5.0.1"
+    },
+    {
+     "licence": "Apache License, Version 2.0",
+     "name": "bcrypt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pyca/bcrypt/",
+     "version": "3.2.2"
+    },
+    {
+     "licence": "MPL-2.0",
+     "name": "certifi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/certifi/python-certifi",
+     "version": "2026.7.22"
+    },
+    {
+     "licence": "MIT-0",
+     "name": "cffi",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-cffi/cffi",
+     "version": "2.1.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "charset-normalizer",
+     "source": "metadata, installed environment",
+     "url": "https://charset-normalizer.readthedocs.io/",
+     "version": "3.5.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "click",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/click/",
+     "version": "8.5.0"
+    },
+    {
+     "licence": "BSD License",
+     "name": "colorama",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/tartley/colorama",
+     "version": "0.4.6"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "coverage",
+     "source": "metadata, installed environment",
+     "url": "https://coverage.readthedocs.io/en/7.16.2",
+     "version": "7.16.2"
+    },
+    {
+     "licence": "Apache-2.0 OR BSD-3-Clause",
+     "name": "cryptography",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pyca/cryptography",
+     "version": "50.0.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "ecdsa",
+     "source": "metadata, installed environment",
+     "url": "http://github.com/tlsfuzzer/python-ecdsa",
+     "version": "0.19.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "fastapi",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/fastapi/fastapi",
+     "version": "0.136.3"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "fastembed",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/qdrant/fastembed",
+     "version": "0.8.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "filelock",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/tox-dev/py-filelock",
+     "version": "4.0.12"
+    },
+    {
+     "licence": "Apache 2.0",
+     "name": "flatbuffers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/google/flatbuffers",
+     "version": "25.12.19"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "fsspec",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/fsspec/filesystem_spec",
+     "version": "2026.9.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "googleapis-common-protos",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/googleapis/google-cloud-python/tree/main/packages/googleapis-common-protos",
+     "version": "1.75.5"
+    },
+    {
+     "licence": "BSD",
+     "name": "graphlib",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/bruth/graphlib/",
+     "version": "0.9.5"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "grpcio",
+     "source": "metadata, installed environment",
+     "url": "https://grpc.io",
+     "version": "1.84.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "h11",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-hyper/h11",
+     "version": "0.16.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "hf-xet",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/huggingface/xet-core",
+     "version": "1.7.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpcore",
+     "source": "metadata, installed environment",
+     "url": "https://www.encode.io/httpcore/",
+     "version": "1.0.9"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "httpx",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/encode/httpx",
+     "version": "0.28.1"
+    },
+    {
+     "licence": "Apache",
+     "name": "huggingface-hub",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/huggingface_hub",
+     "version": "0.36.2"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "idna",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/kjd/idna",
+     "version": "3.20"
+    },
+    {
+     "licence": "MIT",
+     "name": "iniconfig",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/pytest-dev/iniconfig",
+     "version": "2.3.1"
+    },
+    {
+     "licence": "MIT License",
+     "name": "loguru",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Delgan/loguru",
+     "version": "0.7.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "mako",
+     "source": "metadata, installed environment",
+     "url": "https://www.makotemplates.org/",
+     "version": "1.4.3"
+    },
+    {
+     "licence": "MIT License",
+     "name": "markdown-it-py",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/executablebooks/markdown-it-py",
+     "version": "4.2.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "markupsafe",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pallets/markupsafe/",
+     "version": "3.0.4"
+    },
+    {
+     "licence": "MIT License",
+     "name": "mdurl",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/executablebooks/mdurl",
+     "version": "0.1.2"
+    },
+    {
+     "licence": "MIT License",
+     "name": "mmh3",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/mmh3/",
+     "version": "5.3.1"
+    },
+    {
+     "licence": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0",
+     "name": "numpy",
+     "source": "metadata, installed environment",
+     "url": "https://numpy.org",
+     "version": "2.4.6"
+    },
+    {
+     "licence": "MIT License",
+     "name": "onnxruntime",
+     "source": "metadata, installed environment",
+     "url": "https://onnxruntime.ai",
+     "version": "1.30.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-api",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-api",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-http-transport",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-http-transport",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-common",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-common",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-common",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-common",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-grpc",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-grpc",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-exporter-otlp-proto-http",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/exporter/opentelemetry-exporter-otlp-proto-http",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/opentelemetry-instrumentation",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation-asgi",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-asgi",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-instrumentation-fastapi",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation/opentelemetry-instrumentation-fastapi",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-proto",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-proto",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-sdk",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-sdk",
+     "version": "1.45.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-semantic-conventions",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python/tree/main/opentelemetry-semantic-conventions",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "opentelemetry-util-http",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/util/opentelemetry-util-http",
+     "version": "0.66b1"
+    },
+    {
+     "licence": "Apache-2.0 OR BSD-2-Clause",
+     "name": "packaging",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pypa/packaging",
+     "version": "26.3"
+    },
+    {
+     "licence": "BSD",
+     "name": "passlib",
+     "source": "metadata, installed environment",
+     "url": "https://passlib.readthedocs.io",
+     "version": "1.7.4"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "pika",
+     "source": "metadata, installed environment",
+     "url": "https://pika.readthedocs.io",
+     "version": "1.4.4"
+    },
+    {
+     "licence": "MIT-CMU",
+     "name": "pillow",
+     "source": "metadata, installed environment",
+     "url": "https://python-pillow.github.io",
+     "version": "12.3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pluggy",
+     "source": "metadata, installed environment",
+     "url": "https://pypi.org/project/pluggy/",
+     "version": "1.6.0"
+    },
+    {
+     "licence": "Apache-2.0 AND BSD-2-Clause",
+     "name": "prometheus-client",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/prometheus/client_python",
+     "version": "0.26.0"
+    },
+    {
+     "licence": "ISC",
+     "name": "prometheus-fastapi-instrumentator",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/trallnag/prometheus-fastapi-instrumentator",
+     "version": "8.1.0"
+    },
+    {
+     "licence": "3-Clause BSD License",
+     "name": "protobuf",
+     "source": "metadata, installed environment",
+     "url": "https://developers.google.com/protocol-buffers/",
+     "version": "7.36.2"
+    },
+    {
+     "licence": "LGPL with exceptions",
+     "name": "psycopg2-binary",
+     "source": "metadata, PyPI",
+     "url": "https://psycopg.org/",
+     "version": "2.9.10"
+    },
+    {
+     "licence": "MIT",
+     "name": "py-rust-stemmers",
+     "source": "project page, LICENSE, no licence in the package metadata",
+     "url": "https://github.com/qdrant/py-rust-stemmers",
+     "version": "0.1.8"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "pyasn1",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pyasn1/pyasn1",
+     "version": "0.6.4"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "pycparser",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/eliben/pycparser",
+     "version": "3.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/pydantic",
+     "version": "2.13.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic-core",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic",
+     "version": "2.46.5"
+    },
+    {
+     "licence": "MIT",
+     "name": "pydantic-settings",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/pydantic-settings",
+     "version": "2.15.0"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "pygments",
+     "source": "metadata, installed environment",
+     "url": "https://pygments.org",
+     "version": "2.21.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pytest",
+     "source": "metadata, installed environment",
+     "url": "https://docs.pytest.org/en/latest/",
+     "version": "9.1.1"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "pytest-asyncio",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pytest-dev/pytest-asyncio",
+     "version": "1.4.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "pytest-cov",
+     "source": "metadata, installed environment",
+     "url": "https://pytest-cov.readthedocs.io/",
+     "version": "7.1.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "python-dotenv",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/theskumar/python-dotenv",
+     "version": "1.2.4"
+    },
+    {
+     "licence": "MIT",
+     "name": "python-jose",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/mpdavis/python-jose/",
+     "version": "3.5.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "python-multipart",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Kludex/python-multipart",
+     "version": "0.0.32"
+    },
+    {
+     "licence": "MIT",
+     "name": "pyyaml",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/yaml/pyyaml",
+     "version": "6.0.3"
+    },
+    {
+     "licence": "MIT",
+     "name": "redis",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/redis/redis-py",
+     "version": "8.1.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "requests",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/psf/requests",
+     "version": "2.34.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "rich",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Textualize/rich",
+     "version": "15.0.0"
+    },
+    {
+     "licence": "Apache-2.0",
+     "name": "rsa",
+     "source": "metadata, installed environment",
+     "url": "https://stuvel.eu/rsa",
+     "version": "4.9.1"
+    },
+    {
+     "licence": "MIT",
+     "name": "six",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/benjaminp/six",
+     "version": "1.17.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "sqlalchemy",
+     "source": "metadata, PyPI",
+     "url": "https://www.sqlalchemy.org",
+     "version": "2.1.4"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "starlette",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/Kludex/starlette",
+     "version": "1.7.0"
+    },
+    {
+     "licence": "MIT OR Apache-2.0",
+     "name": "structlog",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/hynek/structlog",
+     "version": "26.1.0"
+    },
+    {
+     "licence": "Apache Software License",
+     "name": "tokenizers",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/huggingface/tokenizers",
+     "version": "0.22.2"
+    },
+    {
+     "licence": "MIT",
+     "name": "tomli",
+     "source": "metadata, PyPI",
+     "url": "https://github.com/hukkin/tomli",
+     "version": "2.5.0"
+    },
+    {
+     "licence": "MPL-2.0 AND MIT",
+     "name": "tqdm",
+     "source": "metadata, installed environment",
+     "url": "https://tqdm.github.io",
+     "version": "4.70.1"
+    },
+    {
+     "licence": "PSF-2.0",
+     "name": "typing-extensions",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python/typing_extensions",
+     "version": "4.16.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "typing-inspection",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/pydantic/typing-inspection",
+     "version": "0.4.4"
+    },
+    {
+     "licence": "MIT",
+     "name": "urllib3",
+     "source": "metadata, installed environment",
+     "url": "https://urllib3.readthedocs.io",
+     "version": "2.8.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "uvicorn",
+     "source": "metadata, installed environment",
+     "url": "https://uvicorn.dev/",
+     "version": "0.54.0"
+    },
+    {
+     "licence": "BSD-3-Clause",
+     "name": "websockets",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-websockets/websockets",
+     "version": "17.2"
+    },
+    {
+     "licence": "BSD-2-Clause",
+     "name": "wrapt",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/GrahamDumpleton/wrapt",
+     "version": "2.5.0"
+    },
+    {
+     "licence": "MIT",
+     "name": "wsproto",
+     "source": "metadata, installed environment",
+     "url": "https://github.com/python-hyper/wsproto/",
+     "version": "1.3.2"
+    }
+   ]
+  }
+ }
+}
