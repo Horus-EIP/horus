@@ -25,6 +25,7 @@ export interface ChatResponse<T = void> {
   error?: string;
   /** True when the underlying request was aborted (navigation or timeout). */
   aborted?: boolean;
+  status?: number;
 }
 
 export interface Conversation {
@@ -348,6 +349,7 @@ export const chatApi = {
         ok: false,
         error: response.error || "Failed to fetch task details",
         aborted: response.aborted,
+        status: response.status,
       };
     }
 

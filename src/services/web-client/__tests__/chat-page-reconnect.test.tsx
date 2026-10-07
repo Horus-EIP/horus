@@ -1018,3 +1018,73 @@ describe("chat page attachments", () => {
     expect(attachmentCount()).toBe("0");
   });
 });
+
+describe("chat page polling a task the server refuses", () => {
+  function pollsOf(taskId: string) {
+    return chatApiMock.getTask.mock.calls.filter(([id]) => id === taskId).length;
+  }
+
+  async function renderWaitingChat() {
+    render(
+      <MantineProvider>
+        <ChatPage />
+      </MantineProvider>
+    );
+    await waitForOpenSockets(1);
+    await screen.findByLabelText("Stop generating");
+    await waitFor(() => expect(pollsOf("root-7")).toBeGreaterThan(0));
+  }
+
+  async function waitPolls(count: number) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1700 * count));
+    });
+  }
+
+  beforeEach(() => {
+    installMockWebSocket();
+    navigation.conversation = "42";
+    localStorage.setItem("auth_token", "token");
+    Object.values(chatApiMock).forEach((fn) => fn.mockReset());
+    notification.info.mockReset();
+    chatApiMock.getConversations.mockResolvedValue({ ok: true, data: [] });
+    chatApiMock.getHistory.mockResolvedValue({
+      ok: true,
+      data: {
+        items: [{ role: "user", message: "Summarise the Q4 report", timestamp: "2026-10-05T09:30:00" }],
+        nextCursor: null,
+      },
+    });
+    chatApiMock.getRunningTasksForConversation.mockResolvedValue({ ok: true, data: [runningRoot] });
+    chatApiMock.getTask.mockResolvedValue({ ok: true, data: rootDetail("running") });
+    chatApiMock.getTaskEvents.mockResolvedValue(storedEvents([]));
+    agentApiMock.getAgents.mockResolvedValue({ ok: true, data: [] });
+  });
+
+  it.each([403, 404])("stops polling and drops the spinner when the poll answers %i", async (status) => {
+    await renderWaitingChat();
+    chatApiMock.getTask.mockResolvedValue({ ok: false, error: "refused", status });
+
+    await waitFor(() => expect(screen.queryByLabelText("Stop generating")).not.toBeInTheDocument(), {
+      timeout: 3000,
+    });
+    const pollsWhenDropped = pollsOf("root-7");
+    await waitPolls(1);
+
+    expect(pollsOf("root-7")).toBe(pollsWhenDropped);
+    expect(notification.info).toHaveBeenCalledTimes(1);
+    expect(notification.info).toHaveBeenCalledWith("This task is no longer available.");
+  });
+
+  it("keeps polling through a network error", async () => {
+    await renderWaitingChat();
+    chatApiMock.getTask.mockResolvedValue({ ok: false, error: "Network error" });
+    const pollsBefore = pollsOf("root-7");
+
+    await waitPolls(2);
+
+    expect(pollsOf("root-7")).toBeGreaterThanOrEqual(pollsBefore + 2);
+    expect(screen.getByLabelText("Stop generating")).toBeInTheDocument();
+    expect(notification.info).not.toHaveBeenCalled();
+  });
+});

@@ -117,7 +117,7 @@ function ChatPageContent() {
   workingTaskIdRef.current = workingTaskId;
 
   const { user } = useAuth();
-  const { error: notifyError, success: notifySuccess } = useNotification();
+  const { error: notifyError, success: notifySuccess, info: notifyInfo } = useNotification();
   const notifyErrorRef = useRef(notifyError);
   notifyErrorRef.current = notifyError;
 
@@ -397,7 +397,18 @@ function ChatPageContent() {
 
     const tick = async () => {
       const r = await chatApi.getTask(workingTaskId);
-      if (cancelled || !r.ok || !r.data) return;
+      if (cancelled) return;
+      if (!r.ok && (r.status === 403 || r.status === 404)) {
+        cancelled = true;
+        setIsLoading(false);
+        setWorkingTaskId(null);
+        setWorkingTaskDetail(null);
+        setStreamingByTaskId({});
+        setTaskProgress(null);
+        notifyInfo('This task is no longer available.');
+        return;
+      }
+      if (!r.ok || !r.data) return;
       setWorkingTaskDetail(r.data);
       if (isFinishedTask(r.data) && String(r.data.conversation_id) === conversationIdRef.current) {
         void resyncTasks();
@@ -410,7 +421,7 @@ function ChatPageContent() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [workingTaskId, isLoading, resyncTasks]);
+  }, [workingTaskId, isLoading, resyncTasks, notifyInfo]);
 
   useEffect(() => {
     const el = scrollContainerRef.current;
