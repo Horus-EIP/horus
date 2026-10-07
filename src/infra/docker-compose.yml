@@ -421,14 +421,14 @@ services:
     restart: unless-stopped
 
   # =============================================================================
-  # ADMIN TOOLS
+  # DEVELOPMENT TOOLS: `docker compose --profile dev-tools up` starts them.
+  # The installer never does, so they are not part of a tester's or customer's stack.
   # =============================================================================
 
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
-    # Opt-in: `docker compose --profile admin up` to start.
-    profiles: ["admin"]
+    profiles: ["dev-tools"]
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     env_file:
@@ -446,7 +446,7 @@ services:
   redisinsight:
     image: redis/redisinsight:latest
     container_name: redisinsight
-    profiles: ["admin"]
+    profiles: ["dev-tools"]
     depends_on:
       - redis
     ports:

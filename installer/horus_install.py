@@ -1067,8 +1067,6 @@ def build_parser() -> argparse.ArgumentParser:
                    help="only download and check the language model of --profile "
                         "(default cpu-standard), then exit; Docker is not needed")
     p.add_argument("--skip-smoke", action="store_true", help="do not run the smoke test")
-    p.add_argument("--admin-profile", action="store_true",
-                   help="also start pgadmin and redisinsight (Compose profile 'admin')")
     p.add_argument("--timeout", type=int, default=1800, metavar="SECONDS",
                    help="how long to wait for services to become healthy (default 1800)")
     p.add_argument("--non-interactive", action="store_true",
@@ -1315,7 +1313,7 @@ def _dispatch(log: Log, args) -> int:
     registry = image_source(args, infra)
     preflight.run_engine_checks(log)
     probe, name, reasons = decide_profile(log, args, registry)
-    preflight.run_install_checks(log, infra, want_admin_profile=args.admin_profile,
+    preflight.run_install_checks(log, infra,
                                  skip_disk_check=args.skip_disk_check,
                                  image_registry=registry,
                                  cpu_profile=profiles.is_cpu_profile(name))

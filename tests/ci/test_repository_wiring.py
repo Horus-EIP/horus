@@ -27,6 +27,7 @@ import images  # noqa: E402
 needs_yaml = unittest.skipUnless(yaml is not None, "needs PyYAML to read the CI files")
 
 LIBRARY_SWITCHES = {"SENTENCE_TRANSFORMERS_": "sentence-transformers"}
+DEV_TOOLS = ("pgadmin", "redisinsight")
 
 
 def project_name(requirement: str) -> str:
@@ -133,6 +134,44 @@ class EvalWorkflowTriggers(unittest.TestCase):
             for folder in folders:
                 with self.subTest(event=event, folder=folder):
                     self.assertIn(f"{folder}/**", triggers[event]["paths"])
+
+
+def compose_service(name: str) -> str:
+    lines = (INFRA / "docker-compose.yml").read_text(encoding="utf-8").splitlines()
+    start = lines.index(f"  {name}:")
+    block = []
+    for line in lines[start + 1:]:
+        if line.strip() and not line.startswith("   "):
+            break
+        block.append(line)
+    return "\n".join(block)
+
+
+def installer_sources() -> list[Path]:
+    return [
+        *sorted((REPO / "installer").glob("*.py")),
+        *sorted((REPO / "desktop" / "src-tauri" / "src").glob("*.rs")),
+        *sorted(path for path in (REPO / "packaging").iterdir() if path.is_file()),
+        REPO / "stack-up.sh",
+    ]
+
+
+class DevTools(unittest.TestCase):
+    def test_pgadmin_and_redisinsight_start_only_with_the_dev_tools_profile(self):
+        for name in DEV_TOOLS:
+            with self.subTest(name):
+                self.assertRegex(compose_service(name), r'(?m)^    profiles: \["dev-tools"\]$')
+
+    def test_the_installer_never_turns_the_profile_on(self):
+        for path in installer_sources():
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            with self.subTest(path.relative_to(REPO).as_posix()):
+                self.assertNotIn("dev-tools", text)
+                self.assertNotIn("COMPOSE_PROFILES", text)
+
+    def test_the_env_file_the_installer_copies_sets_no_profile(self):
+        text = (INFRA / ".env.example").read_text(encoding="utf-8")
+        self.assertNotRegex(text, r"(?m)^\s*COMPOSE_PROFILES\s*=")
 
 
 class GitIgnore(unittest.TestCase):

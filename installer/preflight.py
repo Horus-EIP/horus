@@ -117,19 +117,17 @@ def network_hosts(image_registry: str | None,
     return _labelled_once(hosts)
 
 PORTS = [
-    (3000, "web-client", None, None),
-    (8000, "mas (API)", None, None),
-    (8001, "agent", None, None),
-    (8080, "knowledge_store", None, None),
-    (18000, "vllm", "VLLM_HOST_PORT", None),
-    (5432, "postgres", "DB_PORT", None),
-    (6379, "redis", "REDIS_PORT", None),
-    (5672, "rabbitmq (AMQP)", "RABBITMQ_PORT", None),
-    (15672, "rabbitmq (management UI)", None, None),
-    (4317, "tempo (OTLP gRPC)", None, None),
-    (4318, "tempo (OTLP HTTP)", None, None),
-    (5433, "pgadmin", None, "admin"),
-    (5540, "redisinsight", None, "admin"),
+    (3000, "web-client", None),
+    (8000, "mas (API)", None),
+    (8001, "agent", None),
+    (8080, "knowledge_store", None),
+    (18000, "vllm", "VLLM_HOST_PORT"),
+    (5432, "postgres", "DB_PORT"),
+    (6379, "redis", "REDIS_PORT"),
+    (5672, "rabbitmq (AMQP)", "RABBITMQ_PORT"),
+    (15672, "rabbitmq (management UI)", None),
+    (4317, "tempo (OTLP gRPC)", None),
+    (4318, "tempo (OTLP HTTP)", None),
 ]
 
 def check_python(log: Log) -> None:
@@ -507,7 +505,7 @@ def ports_of_this_install(log: Log, infra: Path) -> set[int]:
                 published.add(port)
     return published
 
-def check_ports(log: Log, infra: Path, want_admin_profile: bool = False) -> dict:
+def check_ports(log: Log, infra: Path) -> dict:
     log.step("6/6  Ports")
     env_ports = _read_env_ports(infra / ".env")
     if env_ports:
@@ -515,14 +513,13 @@ def check_ports(log: Log, infra: Path, want_admin_profile: bool = False) -> dict
     ours = ports_of_this_install(log, infra)
 
     busy, report = [], {}
-    for default, service, env_key, profile in PORTS:
+    for default, service, env_key in PORTS:
         port = default
         if env_key and env_ports.get(env_key, "").isdigit():
             port = int(env_ports[env_key])
-        optional = profile is not None and not want_admin_profile
 
         free = _port_free(port)
-        report[str(port)] = {"service": service, "free": free, "optional": optional}
+        report[str(port)] = {"service": service, "free": free}
         if free:
             continue
         if port in ours:
@@ -533,11 +530,8 @@ def check_ports(log: Log, infra: Path, want_admin_profile: bool = False) -> dict
         who = _holder(port)
         report[str(port)]["holder"] = who
         label = f"port {port} ({service})" + (f" held by {who}" if who else " is in use")
-        if optional:
-            log.warn(label + "  [only needed with --profile admin, continuing]")
-        else:
-            log.fail(label)
-            busy.append((port, service, who))
+        log.fail(label)
+        busy.append((port, service, who))
 
     if busy:
         lines = []
@@ -555,7 +549,7 @@ def check_ports(log: Log, infra: Path, want_admin_profile: bool = False) -> dict
             "If it is another project's containers:\n"
             "  docker ps        then    docker stop <name>",
         )
-    required = len([p for p in PORTS if p[3] is None])
+    required = len(PORTS)
     if any(entry.get("held_by_this_install") for entry in report.values()):
         log.ok(f"all {required} required ports are free or this install's own")
     else:
@@ -566,7 +560,7 @@ def run_engine_checks(log: Log) -> dict:
     check_python(log)
     return {"docker_version": check_docker(log), "compose_version": check_compose(log)}
 
-def run_install_checks(log: Log, infra: Path, want_admin_profile: bool = False,
+def run_install_checks(log: Log, infra: Path,
                        skip_disk_check: bool = False,
                        image_registry: str | None = None,
                        cpu_profile: bool = False) -> dict:
@@ -581,7 +575,7 @@ def run_install_checks(log: Log, infra: Path, want_admin_profile: bool = False,
         summary["disk"] = check_disk(log)
     llama_image = model_server_image(infra) if cpu_profile else None
     summary["network"] = check_network(log, network_hosts(image_registry, llama_image))
-    summary["ports"] = check_ports(log, infra, want_admin_profile)
+    summary["ports"] = check_ports(log, infra)
     log.say("")
     log.say("  " + "Preflight passed.")
     return summary

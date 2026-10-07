@@ -184,7 +184,7 @@ This document describes the monitoring stack shipped with **`src/infra/docker-co
 | Traces | Grafana Tempo receives OTLP from application containers; viewed at **`/admin/traces`** in the web client (trace search + span waterfall) |
 | Logs | Grafana Loki ingests stdout/stderr from **all Docker Compose services** via Promtail (Docker service discovery); viewed at **`/admin/logs`** in the web client |
 | Visualization | Web client admin pages (`/admin/logs`, `/admin/metrics`, `/admin/traces`), backed by Loki, Prometheus, and Tempo; require the `admin` role |
-| Admin UIs | PgAdmin, RedisInsight, RabbitMQ management plugin |
+| Admin UIs | RabbitMQ management plugin; PgAdmin and RedisInsight as development tools (Compose profile `dev-tools`) |
 
 The default Compose file does **not** include SigNoz, a standalone OpenTelemetry Collector service, PostgreSQL Exporter, or Metabase. If you add those services, extend this document accordingly.
 
@@ -268,6 +268,8 @@ When services run on the host (not only in Docker), raw Prometheus text format i
 | Knowledge Store | http://localhost:8080/metrics/ |
 
 ---
+
+PgAdmin and RedisInsight are development tools: they start only with `docker compose --profile dev-tools up`, and the installer never starts them. PgAdmin ships with default credentials and RedisInsight has no login, so keep them off customer machines.
 
 ### PgAdmin 4
 

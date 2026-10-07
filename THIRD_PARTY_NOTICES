@@ -3830,7 +3830,7 @@ The tag is the one the Compose files or Dockerfiles name.
 - dpage/pgadmin4 latest
   Licence: PostgreSQL (source: project page)
   https://www.pgadmin.org/licence/
-  development tool in the Compose profile admin; the installer never starts it; used by src/infra/docker-compose.yml
+  development tool in the Compose profile dev-tools; the installer never starts it; used by src/infra/docker-compose.yml
 - ghcr.io/ggml-org/llama.cpp server-b11382
   Licence: MIT (source: project page, LICENSE)
   https://github.com/ggml-org/llama.cpp
@@ -3870,7 +3870,7 @@ The tag is the one the Compose files or Dockerfiles name.
 - redis/redisinsight latest
   Licence: SSPL-1.0 (source: project page, LICENSE)
   https://github.com/RedisInsight/RedisInsight
-  development tool in the Compose profile admin; the installer never starts it, and it is not for customers; used by src/infra/docker-compose.yml
+  development tool in the Compose profile dev-tools; the installer never starts it, and it is not for customers; used by src/infra/docker-compose.yml
 - valkey/valkey 9.1.2
   Licence: BSD-3-Clause (source: project page, COPYING at 9.1.2)
   https://github.com/valkey-io/valkey

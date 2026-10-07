@@ -56,12 +56,12 @@ images:
     licence: PostgreSQL
     source: project page
     url: https://www.pgadmin.org/licence/
-    note: development tool in the Compose profile admin; the installer never starts it
+    note: development tool in the Compose profile dev-tools; the installer never starts it
   redis/redisinsight:
     licence: SSPL-1.0
     source: project page, LICENSE
     url: https://github.com/RedisInsight/RedisInsight
-    note: development tool in the Compose profile admin; the installer never starts it, and it is not for customers
+    note: development tool in the Compose profile dev-tools; the installer never starts it, and it is not for customers
   grafana/loki:
     licence: AGPL-3.0-only
     source: project page, LICENSING.md at v3.4.2

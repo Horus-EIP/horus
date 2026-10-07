@@ -95,7 +95,7 @@ cd src/infra
 docker compose up --build
 ```
 
-The first run downloads and builds the images, then the language models download on first start: expect 1.5 to 2 hours in all. The beta installer does not build: it pulls the prebuilt, signed images of the release instead (see [Prebuilt images](operations.md#prebuilt-images)), unless it runs with `--build-from-source`. Builds from this folder keep local image names as long as `HORUS_REGISTRY` stays unset in `.env`. The stack includes PostgreSQL, Redis, RabbitMQ, MAS, Agent, Knowledge Store, Web Client, PgAdmin, RedisInsight, and the observability backends Prometheus, Loki, and Tempo (all internal). Logs, metrics, and traces are viewed from the admin-only observability pages in the web client (`/admin/logs`, `/admin/metrics`, `/admin/traces`). See **`src/infra/docker-compose.yml`** for the authoritative list.
+The first run downloads and builds the images, then the language models download on first start: expect 1.5 to 2 hours in all. The beta installer does not build: it pulls the prebuilt, signed images of the release instead (see [Prebuilt images](operations.md#prebuilt-images)), unless it runs with `--build-from-source`. Builds from this folder keep local image names as long as `HORUS_REGISTRY` stays unset in `.env`. The stack includes PostgreSQL, Valkey (the `redis` service), RabbitMQ, MAS, Agent, Knowledge Store, Web Client, and the observability backends Prometheus, Loki, and Tempo (all internal). The development tools PgAdmin and RedisInsight start only with `docker compose --profile dev-tools up`; the installer never starts them. Logs, metrics, and traces are viewed from the admin-only observability pages in the web client (`/admin/logs`, `/admin/metrics`, `/admin/traces`). See **`src/infra/docker-compose.yml`** for the authoritative list.
 
 #### Step 4: Verify containers
 
@@ -137,8 +137,8 @@ docker compose exec redis valkey-cli -a "$REDIS_PASSWORD" ping
 | Service | URL | Notes |
 |---------|-----|--------|
 | RabbitMQ management | http://localhost:15672 | User/password from `RABBITMQ_USER` / `RABBITMQ_PASSWORD` |
-| PgAdmin | http://localhost:5433 | `PGADMIN_DEFAULT_EMAIL` / `PGADMIN_DEFAULT_PASSWORD` |
-| RedisInsight | http://localhost:5540 | Configure connection to host `redis` from inside Docker |
+| PgAdmin | http://localhost:5433 | Only with `--profile dev-tools`. `PGADMIN_DEFAULT_EMAIL` / `PGADMIN_DEFAULT_PASSWORD` |
+| RedisInsight | http://localhost:5540 | Only with `--profile dev-tools`. Configure connection to host `redis` from inside Docker |
 | MAS API docs | http://localhost:8000/docs | When `mas` is running |
 | Web client | http://localhost:3000 | When `web-client` is running |
 | Logs | http://localhost:3000/admin/logs | Admin-only (requires `admin` role); backed by Loki |
@@ -389,10 +389,9 @@ docker compose up --build -d
 
 ## Services are now available (host ports from docker-compose.yml):
 ## - PostgreSQL: localhost:${DB_PORT:-5432}
-## - Redis: localhost:${REDIS_PORT:-6379}
+## - Valkey (service redis): localhost:${REDIS_PORT:-6379}
 ## - RabbitMQ: AMQP localhost:${RABBITMQ_PORT:-5672}, UI http://localhost:15672
-## - PgAdmin: http://localhost:5433
-## - RedisInsight: http://localhost:5540
+## - PgAdmin and RedisInsight: only with docker compose --profile dev-tools up (ports 5433, 5540)
 ## - Web client: http://localhost:3000 (observability lives here: /admin/logs, /admin/metrics, /admin/traces — admin role required)
 ## - Prometheus, Loki, Tempo: no host ports by default (internal-only backends); view logs/metrics/traces from the admin pages above or add a port mapping (see docs/operations.md)
 ```
