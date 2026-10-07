@@ -22,12 +22,15 @@ EVAL_TESTS = REPO / "tests" / "eval"
 RESEARCH_NOTE = "tech-watch/IGPU_NPU_RESEARCH.md"
 
 sys.path.insert(0, str(REPO / "installer"))
+sys.path.insert(0, str(REPO / "scripts" / "licences"))
 import images  # noqa: E402
+import third_party_notices  # noqa: E402
 
 needs_yaml = unittest.skipUnless(yaml is not None, "needs PyYAML to read the CI files")
 
 LIBRARY_SWITCHES = {"SENTENCE_TRANSFORMERS_": "sentence-transformers"}
 DEV_TOOLS = ("pgadmin", "redisinsight")
+EXACT_TAG = r"\d+\.\d+\.\d+|^\d+\.\d+$|-b\d+$"
 
 
 def project_name(requirement: str) -> str:
@@ -172,6 +175,17 @@ class DevTools(unittest.TestCase):
     def test_the_env_file_the_installer_copies_sets_no_profile(self):
         text = (INFRA / ".env.example").read_text(encoding="utf-8")
         self.assertNotRegex(text, r"(?m)^\s*COMPOSE_PROFILES\s*=")
+
+
+class ImageTags(unittest.TestCase):
+    def test_every_image_names_an_exact_version(self):
+        images = third_party_notices.used_images()
+        self.assertTrue(images)
+        for image, where in sorted(images.items()):
+            tag = third_party_notices.tag_of(image)
+            with self.subTest(f"{image} in {', '.join(sorted(where))}"):
+                self.assertNotEqual(tag, "latest")
+                self.assertRegex(tag, EXACT_TAG)
 
 
 class GitIgnore(unittest.TestCase):

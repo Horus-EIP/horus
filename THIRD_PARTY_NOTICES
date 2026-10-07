@@ -3815,7 +3815,7 @@ cargo metadata --locked on desktop/src-tauri; licences from each crate's Cargo.t
 Pulled unmodified and run as their own containers next to Horus's services.
 The tag is the one the Compose files or Dockerfiles name.
 
-- dpage/pgadmin4 latest
+- dpage/pgadmin4 9.18.0
   Licence: PostgreSQL (source: project page)
   https://www.pgadmin.org/licence/
   development tool in the Compose profile dev-tools; the installer never starts it; used by src/infra/docker-compose.yml
@@ -3835,19 +3835,19 @@ The tag is the one the Compose files or Dockerfiles name.
   Licence: AGPL-3.0-only (source: project page, LICENSE at v2.6.0)
   https://github.com/grafana/tempo
   AGPL, run as a separate process, unmodified; Horus only sends it traces over OTLP; used by src/infra/docker-compose.yml
-- node 20-alpine
+- node 20.20.2-alpine
   Licence: MIT, and the Alpine packages of the image under their own licences (source: project page, LICENSE)
   https://github.com/nodejs/node/blob/main/LICENSE
   base image of the web-client image; used by src/services/web-client/Dockerfile
-- postgres latest
+- postgres 18.6
   Licence: PostgreSQL (source: project page)
   https://www.postgresql.org/about/licence/
   used by src/infra/docker-compose.yml
-- prom/prometheus latest
+- prom/prometheus v3.15.0
   Licence: Apache-2.0 (source: project page, LICENSE)
   https://github.com/prometheus/prometheus
   used by src/infra/docker-compose.yml
-- python 3.11-slim
+- python 3.11.17-slim
   Licence: PSF-2.0, and the Debian packages of the image under their own licences (source: project page)
   https://docs.python.org/3.11/license.html
   base image of the MAS, agent and knowledge-store images; used by src/services/agent/Dockerfile, src/services/knowledge-store/Dockerfile, src/services/mas/Dockerfile
@@ -3855,7 +3855,7 @@ The tag is the one the Compose files or Dockerfiles name.
   Licence: MPL-2.0 (source: project page, LICENSE at v4.1.2)
   https://github.com/rabbitmq/rabbitmq-server
   separate process, unmodified; Horus talks to it over AMQP; used by src/infra/docker-compose.yml
-- redis/redisinsight latest
+- redis/redisinsight 3.8.0
   Licence: SSPL-1.0 (source: project page, LICENSE)
   https://github.com/RedisInsight/RedisInsight
   development tool in the Compose profile dev-tools; the installer never starts it, and it is not for customers; used by src/infra/docker-compose.yml

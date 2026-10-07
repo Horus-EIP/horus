@@ -1,11 +1,11 @@
-FROM node:20-alpine AS deps
+FROM node:20.20.2-alpine AS deps
 WORKDIR /app
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 COPY package*.json ./
 COPY .npmrc ./
 RUN npm ci
 
-FROM node:20-alpine AS builder
+FROM node:20.20.2-alpine AS builder
 WORKDIR /app
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 COPY --from=deps /app/node_modules ./node_modules
@@ -21,7 +21,7 @@ ENV NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX=${NEXT_PUBLIC_KNOWLEDGE_STORE_API_PRE
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-FROM node:20-alpine AS runner
+FROM node:20.20.2-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

@@ -1684,10 +1684,10 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 | **Agent** | AI Processing, RAG Pipeline | FastAPI; llama-server or vLLM over HTTP, Transformers in the GPU image |
 | **Knowledge Store** | Document Storage, Vector Search | FastAPI, ChromaDB, FastEmbed |
 | **Web Client** | User Interface | Next.js 16, React 19 |
-| **PostgreSQL** | Relational Data | PostgreSQL 15+ |
+| **PostgreSQL** | Relational Data | PostgreSQL 18.6 |
 | **Valkey** (service `redis`) | Caching, Sessions, Task Event Streams | Valkey 9.1 |
-| **RabbitMQ** | Message Broker | RabbitMQ 3.12+ |
-| **Prometheus** | Metrics Collection | Prometheus 2.x |
+| **RabbitMQ** | Message Broker | RabbitMQ 4.1.2 |
+| **Prometheus** | Metrics Collection | Prometheus 3.15.0 |
 | **Loki** | Log aggregation backend | Grafana Loki |
 | **Tempo** | Distributed tracing backend | Grafana Tempo |
 | **Admin Observability Pages** | In-app logs/metrics/traces UI (`/admin/logs`, `/admin/metrics`, `/admin/traces`) | Next.js (web client) |
@@ -1756,9 +1756,9 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 |-----------|------------|---------|
 | Container Runtime | Docker | 24.x |
 | Orchestration | Docker Compose | 2.x |
-| Database | PostgreSQL | 15+ |
+| Database | PostgreSQL | 18.6 |
 | Cache | Valkey (Redis protocol) | 9.1 |
-| Message Broker | RabbitMQ | 3.12+ |
+| Message Broker | RabbitMQ | 4.1.2 |
 | Vector Database | ChromaDB | 1.5 |
 
 #### 4.4 Observability

@@ -1,5 +1,5 @@
 # Builder stage
-FROM python:3.11-slim AS builder
+FROM python:3.11.17-slim AS builder
 
 WORKDIR /build
 
@@ -35,7 +35,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --timeout=120 --retries=10 --require-hashes -r requirements-image.txt
 
 # Final image
-FROM python:3.11-slim
+FROM python:3.11.17-slim
 
 WORKDIR /app
 

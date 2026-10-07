@@ -84,7 +84,7 @@ class Images(unittest.TestCase):
     def test_build_stages_are_not_images(self):
         used = notices.used_images()
         self.assertNotIn("builder", used)
-        self.assertIn("python:3.11-slim", used)
+        self.assertIn("python:3.11.17-slim", used)
 
 
 class WebClient(unittest.TestCase):
