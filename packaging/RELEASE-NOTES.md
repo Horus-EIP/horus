@@ -8,7 +8,7 @@ leaves it.
 | **Docker Desktop** | installed **and running** |
 | **Python 3.11+** | only used to run the installer |
 | **NVIDIA GPU** | strongly recommended — see Known limitations |
-| **Memory without a GPU** | at least 13.5 GiB for Docker (15.0 GiB for the larger CPU profile). On Windows Docker gets only half of the RAM unless you raise it, so in practice that takes a 24 GB machine. Planning figures, not measured yet: the installer checks them first and stops before any download when the machine is too small |
+| **Memory without a GPU** | at least 13.5 GiB for Docker (15.0 GiB for the larger CPU profile). On Windows Docker gets only half of the RAM unless you raise it, so in practice that takes a 24 GB machine. Planning figures, kept until the run on the 16 GB reference machine (a first run on a development laptop gives 10.5 GiB for the larger CPU profile, see ADR-006): the installer checks them first and stops before any download when the machine is too small |
 | **Free disk** | 150 GB while installing (125 GB with an NVIDIA GPU), settling to 130 GB / 110 GB |
 | **Time** | 1.5 to 2 hours for the first install when testers built the containers; downloading the prebuilt ones has not been timed yet |
 | **Access token** | the one we sent you, saved as `registry-token.txt` next to `START-HERE`, on one line: `USERNAME:TOKEN` |
@@ -22,7 +22,7 @@ leaves it.
    - **macOS** — right-click `START-HERE-macOS.command` → Open
    - **Linux** — `./START-HERE-Linux.sh`
 4. It asks two or three questions, then downloads everything. Horus's own
-   containers come prebuilt and signed, so nothing is built on your machine.
+   containers come prebuilt, so nothing is built on your machine.
    It is not frozen — leave it running.
 5. When it finishes, open Horus from the `app/` folder:
    - Windows: `app/Horus.exe`
@@ -57,7 +57,7 @@ Would rather not bypass an OS warning? Fair. Use the browser at
   of free disk while it builds, settling to 130 GB / 110 GB afterwards
   (measured before that change).
 - All of those figures were measured when testers built the containers. The
-  containers now come prebuilt and signed; the download size, the time and
+  containers now come prebuilt; the download size, the time and
   the disk they need have not been measured yet, so the installer still asks
   for the same free space.
 - The prebuilt containers are built for x86-64 processors. On an Apple

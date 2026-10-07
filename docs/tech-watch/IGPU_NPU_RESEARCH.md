@@ -24,7 +24,7 @@
 - **Who gets them.** The installer treats AMD, Intel and Apple GPUs as unsupported (`UNSUPPORTED_VENDORS` in `installer/hardware.py`), skips the CUDA test and picks a CPU profile. Every laptop with only an iGPU runs `cpu-standard` or `cpu-lean`.
 - **What runs.** The `llm` service in `src/infra/docker-compose.cpu.yml`: `ghcr.io/ggml-org/llama.cpp:server-b11382`, Qwen3-4B-Instruct-2507 Q4_K_M (2.33 GiB), `--ctx-size 8192 --parallel 1 --load-mode mmap --cache-ram 1024 --threads N`. `LLM_SERVER_IMAGE` overrides the image of `llm` and of the `llm-model` download step.
 - **Where the wait is.** The CPU profiles retrieve up to five passages under a 6,000-character cap, about 1,500 to 2,000 tokens, and the whole prompt is read before the first word of the answer (`AGENT_MAX_CONTEXT_CHARS` in `installer/profiles.py`). Reading a prompt is arithmetic-bound. Generating is bound by memory bandwidth. An iGPU brings more parallel arithmetic but uses the same memory, so the gain should be in prompt reading and small in generation.
-- **What is measured.** Nothing on llama-server yet: B-91 delivered the tools and ADR-006, and its `cpu16` runs are still to do. The spike below does not need them, because it compares the CPU and the iGPU of one laptop.
+- **What is measured.** B-91 delivered the tools and ADR-006. llama-server has run once on a CPU, a development laptop's, recorded in ADR-006 and `benchmarks/cpu-laptop-2026-10-06.json`; the `cpu16` runs are still to do. The spike below does not need them, because it compares the CPU and the iGPU of one laptop.
 
 ## Earlier NPU work in this repository
 

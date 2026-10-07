@@ -22,7 +22,7 @@ TO INSTALL
   macOS    RIGHT-CLICK   START-HERE-macOS.command  and choose Open
   Linux    run           ./START-HERE-Linux.sh
 It asks two or three questions, then downloads and starts everything.
-Our containers come prebuilt and signed: nothing is built on your
+Our containers come prebuilt: nothing is built on your
 machine. When testers built them, the first run took 1.5 to 2 hours;
 downloading them instead has not been timed yet. Then it downloads an
 AI model. It is NOT frozen. Leave it running and it will finish. A

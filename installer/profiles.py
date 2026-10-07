@@ -465,7 +465,7 @@ _add(Profile(
     trigger=_lean_trigger(),
     runs_vllm=False,
     summary="The cpu-standard model with a 4,096-token context and a q8_0 KV "
-            "cache, for less memory. Untested.",
+            "cache, for less memory. Measured once, on a development laptop: see the notes.",
     settings={**_cpu_common(), **_lean_server_settings()},
     notes=(
         "ADR-006 option B: the same llama-server and Qwen3-4B-Instruct-2507 "
@@ -483,7 +483,11 @@ _add(Profile(
         f"benchmarks/cpu-laptop-2026-10-06.json and {LOW_RAM_ADR}: a "
         "development laptop with 64 GB of RAM, on its CPU. The whole stack "
         "peaked at 8.34 GiB on cpu-standard and 6.21 GiB on cpu-lean, which "
-        "the ADR's decision rule turns into 10.5 and 8.5 GiB. The thresholds "
+        "the ADR's decision rule turns into 10.5 and 8.5 GiB. On the first 30 "
+        "questions of that run cpu-lean answered in a median of 33.2 s, 1.87 times "
+        "cpu-standard, and failed the ADR's timing condition, so the ADR would "
+        "turn it off (CPU_LEAN_SUPPORTED = False) if the reference machine "
+        "confirms it. The thresholds "
         f"stay at {CPU_STANDARD_MIN_GIB:.1f} and {CPU_LEAN_MIN_GIB:.1f} GiB until "
         "the run on the 16 GB reference machine. The timeouts and thread counts "
         "are still reasoned, not measured - if this profile behaves oddly, "

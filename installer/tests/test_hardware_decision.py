@@ -333,6 +333,13 @@ class MemoryDecision(unittest.TestCase):
         self.assertNotIn("benchmarked", notes)
         self.assertNotIn("has not been timed", notes)
 
+    def test_the_lean_notes_say_it_failed_the_timing_condition_on_that_run(self):
+        lean = profiles.get("cpu-lean")
+        notes = " ".join(lean.notes)
+        self.assertIn("a median of 33.2 s, 1.87 times cpu-standard", notes)
+        self.assertIn("failed the ADR's timing condition", notes)
+        self.assertNotIn("Untested", lean.summary)
+
     def test_the_lean_profile_is_described_by_its_thresholds(self):
         trigger = profiles.get("cpu-lean").trigger
         self.assertIn(f"{profiles.CPU_LEAN_MIN_GIB:.1f}", trigger)

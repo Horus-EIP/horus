@@ -606,11 +606,12 @@ def pull_and_build(log: Log, infra: Path, no_build: bool = False,
         log.say("  the images download one at a time, the containers build, then the")
         log.say("  language model downloads. It is not frozen.")
     else:
-        log.say("  This is the long part. Horus's own images come prebuilt and signed,")
-        log.say("  so nothing is built here: the images download one at a time, then")
-        log.say("  the language model downloads. It is not frozen. A first install that")
-        log.say(f"  built the images here took {FIRST_INSTALL_TIME}; downloading them")
-        log.say("  instead has not been timed yet.")
+        log.say("  This is the long part. Horus's own images come prebuilt, so nothing")
+        log.say("  is built here: the images download one at a time, then the language")
+        log.say("  model downloads. It is not frozen. The release workflow signs the")
+        log.say("  images, but the installer does not check the signature yet. A first")
+        log.say(f"  install that built the images here took {FIRST_INSTALL_TIME};")
+        log.say("  downloading them instead has not been timed yet.")
     log.say("")
 
     leftovers = pull_images(log, infra, from_source)
@@ -752,7 +753,8 @@ def describe_images(registry: str | None, profile_name: str) -> str:
     names = ",".join(images.image_repository(service).removeprefix("horus-")
                      for service in images.APP_SERVICES)
     flavor = profiles.image_flavor(profile_name)
-    return f"{registry}/horus-{{{names}}}:{VERSION}-{flavor}, prebuilt and signed"
+    return (f"{registry}/horus-{{{names}}}:{VERSION}-{flavor}, prebuilt (signed by the "
+            "release workflow; the installer does not check the signature yet)")
 
 def sign_in_to_registry(log: Log, args, registry: str) -> None:
     credentials = images.read_credentials(
@@ -1041,8 +1043,9 @@ def build_parser() -> argparse.ArgumentParser:
                         "secret (signs everyone out). A backup is always kept.")
     p.add_argument("--build-from-source", action="store_true",
                    help="build Horus's own images on this machine instead of downloading "
-                        "the prebuilt, signed ones (contributors; same as "
-                        f"{images.BUILD_FROM_SOURCE_KEY}=1)")
+                        "the prebuilt ones, which the release workflow signs; the "
+                        "installer does not check the signature yet (contributors; "
+                        f"same as {images.BUILD_FROM_SOURCE_KEY}=1)")
     p.add_argument("--no-build", action="store_true",
                    help="with --build-from-source, start without rebuilding the images "
                         "(faster re-run)")

@@ -694,6 +694,18 @@ class PrebuiltImagePulls(FakeDockerCase):
         self.assertTrue(line.endswith("(prebuilt)"), line)
         self.assertNotIn("signed", line)
 
+    def test_the_installer_says_it_does_not_check_the_signature_yet(self):
+        out, _raised = self.run_it(FakeDocker(config=compose_config(PREBUILT)))
+        said = " ".join(out.split())
+        described = horus_install.describe_images("ghcr.io/acme", "cpu-standard")
+        helped = " ".join(horus_install.build_parser().format_help().split())
+        for text in (said, described, helped):
+            with self.subTest(text[:40]):
+                self.assertIn("the installer does not check the signature yet", text)
+                self.assertIn("prebuilt", text)
+                self.assertNotIn("prebuilt and signed", text)
+                self.assertNotIn("prebuilt, signed", text)
+
     def test_images_an_earlier_install_built_are_named_once_the_stack_runs(self):
         docker = FakeDocker(config=compose_config({**PULLABLE, **PREBUILT}),
                             local_images={"infra-mas"})
