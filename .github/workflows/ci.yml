@@ -156,13 +156,13 @@ jobs:
   test-mas:
     name: Tests · MAS
     runs-on: ubuntu-latest
-    # No service containers. The suite is MOSTLY hermetic: SQLite stands in for
-    # Postgres, fakeredis for Redis, RabbitMQ is mocked. It is not fully hermetic
-    # yet: test_config, test_auth_helpers, test_rabbitmq_manager and test_auth read
-    # through core.config, which falls back to an all-None DummySettings when the
-    # required settings are absent, so they need the .env written by the step below.
-    # That step is a WORKAROUND; making the suite genuinely hermetic is tracked in
-    # docs/eip/post-beta.md.
+    # No service containers: SQLite stands in for Postgres, fakeredis for Redis,
+    # and RabbitMQ is mocked. One gap is left: core/config.py builds its settings
+    # when it is imported, from the environment and from src/infra/.env, and falls
+    # back to DummySettings (None for every setting) when a required one is
+    # missing. test_config, test_auth_helpers, test_rabbitmq_manager and test_auth
+    # read through it, so the step below copies .env.example to src/infra/.env.
+    # It is a workaround until those tests set the settings they need themselves.
     steps:
       - uses: actions/checkout@v4
 
@@ -184,7 +184,7 @@ jobs:
           python scripts/ci/check-cpu-image.py packages.txt \
             --requirements src/services/mas/requirements.txt
 
-      - name: Provide test configuration (workaround, see docs/eip/post-beta.md)
+      - name: Provide test configuration (workaround, see the comment of this job)
         run: cp src/infra/.env.example src/infra/.env
 
       - name: Run MAS tests with coverage

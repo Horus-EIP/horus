@@ -8,11 +8,9 @@ Running Horus in dev/staging/prod: deployment, monitoring, secrets, and the per-
 
 ### Repository branches
 
-Typical layout (confirm with your team):
-
-- **`main`** — release-ready code  
-- **`develop`** or similar — integration branch for features  
-- **Feature branches** — often named `issue-<id>-<short-description>`  
+- **`Sprint#1_September2026_Tek5`**: the working branch until later in the year, where `master` would be. Start from it and open pull requests against it ([CONTRIBUTING.md](../CONTRIBUTING.md#branches)).  
+- **`master`**: the default branch on GitHub.  
+- **Feature branches**: `issue-<number>-<short-description>`.  
 
 This repository’s canonical remote is the project GitHub org; avoid unapproved mirrors.
 
@@ -20,7 +18,7 @@ This repository’s canonical remote is the project GitHub org; avoid unapproved
 
 ### CI pipeline
 
-Continuous integration is defined in **`.github/workflows/ci.yml`** at the repository root. It runs on every pull request, on pushes to `master`, `main` and `pre-release-fix`, and by hand. The jobs use Python **3.13**, except the knowledge-store tests.
+Continuous integration is defined in **`.github/workflows/ci.yml`** at the repository root. It runs on every pull request, on pushes to `master`, `main`, `pre-release-fix` and `Sprint#1_September2026_Tek5`, and by hand. The jobs use Python **3.13**, except the knowledge-store tests.
 
 **Summary**
 
@@ -93,7 +91,7 @@ cp .env.example .env   # once, then edit
 docker compose up --build -d
 ```
 
-Services are defined in **`src/infra/docker-compose.yml`**. See [Configuration](../getting-started/configuration.md) and [Monitoring](monitoring.md) for URLs and observability.
+Services are defined in **`src/infra/docker-compose.yml`**. See [Configuration](getting-started.md#12-factor-configuration-management) and [Monitoring](#monitoring-and-observability) for URLs and observability.
 
 On a machine without an NVIDIA GPU, add the CPU overlay. The installer does this for the `cpu-*` profiles by writing `COMPOSE_FILE` to `.env`:
 
@@ -556,7 +554,7 @@ LLM_AUTOINIT=1
 
 #### CI/CD Integration (GitHub Actions)
 
-Store secrets in GitHub repository settings and reference in workflows:
+Store secrets in GitHub repository settings and reference in workflows. An example (Horus has no deploy workflow):
 
 ```yaml
 ## .github/workflows/deploy-staging.yml
@@ -564,7 +562,7 @@ name: Deploy to Staging
 
 on:
   push:
-    branches: [develop]
+    branches: ['Sprint#1_September2026_Tek5']
 
 jobs:
   deploy:
@@ -1040,13 +1038,13 @@ TLS_KEY_PATH=/etc/ssl/staging-key.pem
 #### Deployment Process
 
 ```bash
-## GitHub Actions Workflow
+## GitHub Actions Workflow (an example: Horus has no deploy workflow)
 ## .github/workflows/deploy-staging.yml
 
 name: Deploy to Staging
 on:
   push:
-    branches: [develop]
+    branches: ['Sprint#1_September2026_Tek5']
 
 jobs:
   deploy:

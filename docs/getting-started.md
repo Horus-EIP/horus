@@ -145,7 +145,7 @@ docker compose exec redis redis-cli -a "$REDIS_PASSWORD" ping
 | Metrics | http://localhost:3000/admin/metrics | Admin-only; backed by Prometheus (Task Queue Depth, Task Errors Rate, Active Agents) |
 | Traces | http://localhost:3000/admin/traces | Admin-only; backed by Tempo (trace search + span waterfall) |
 
-**Prometheus** is not published on the host in the default Compose file. View metrics from the admin **Metrics** page (http://localhost:3000/admin/metrics) or see [Monitoring](../operations/monitoring.md).
+**Prometheus** is not published on the host in the default Compose file. View metrics from the admin **Metrics** page (http://localhost:3000/admin/metrics) or see [Monitoring](operations.md#monitoring-and-observability).
 
 There is **no** Metabase or PostgreSQL Exporter service in the default `docker-compose.yml`.
 
@@ -241,22 +241,22 @@ Run from `src/services/mas` with `PYTHONPATH` including that directory, or use t
 
 ### Development workflow
 
-1. Create a branch from your team’s integration branch.  
+1. Create a branch from `Sprint#1_September2026_Tek5` ([branches](../CONTRIBUTING.md#branches)).  
 2. Make changes and run tests locally.  
-3. Commit using [commit convention](../contributing/commit-convention.md).  
+3. Commit using the [commit convention](../CONTRIBUTING.md#commits).  
 4. Open a pull request and request review.  
 
 ---
 
 ### Further reading
 
-- [Architecture overview](../architecture/overview.md)  
-- [Configuration](configuration.md)  
-- [RBAC](../security/rbac.md)  
-- [Secrets management](../operations/secrets-management.md)  
-- [Workflow](../contributing/workflow.md)  
-- [Testing policy](../contributing/testing-policy.md)  
-- [Troubleshooting (extended)](troubleshooting.md)  
+- [Architecture overview](architecture.md)  
+- [Configuration](#12-factor-configuration-management)  
+- [RBAC](security.md#role-based-access-control-rbac)  
+- [Secrets management](operations.md#secrets-management-guide)  
+- [Contributing](../CONTRIBUTING.md)  
+- [Test strategy](../TESTING.md)  
+- [Troubleshooting (extended)](#troubleshooting-guide)  
 
 ---
 
@@ -274,7 +274,7 @@ Run from `src/services/mas` with `PYTHONPATH` including that directory, or use t
 
 ### Need help?
 
-1. See [Troubleshooting](troubleshooting.md) and logs: `docker compose logs <service>`.  
+1. See [Troubleshooting](#troubleshooting-guide) and logs: `docker compose logs <service>`.  
 2. Confirm `src/infra/.env` matches **`src/infra/.env.example`**.  
 3. Open an issue or ask your team channel.  
 

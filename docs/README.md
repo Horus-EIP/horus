@@ -12,7 +12,7 @@ One file per topic. Use Ctrl+F inside any of them — they're long on purpose.
 | [Operations](operations.md) | Deployment, monitoring, secrets, environment matrix. |
 | [Security & Compliance](security.md) | RBAC matrix, security audit, data protection, telemetry. |
 | [Contributing](../CONTRIBUTING.md) | How to take part: Contributor Agreement, branches, commits, pull requests, tests. |
-| [Contributing rules](contributing.md) | Workflow, code style, commit convention, testing policy, docs audit. |
+| [Code Style](contributing.md) | Comments, docstrings, file organisation, tests. |
 | [Demo](demo.md) | Live-demo script, copy-paste cheatsheet, post-demo action plan. |
 | [Changelog](../CHANGELOG.md) | Reverse-chronological log of every commit, grouped by month. |
 

@@ -57,7 +57,7 @@ nav:
   - Operations: operations.md
   - Security & Compliance: security.md
   - Validation & Error Handling: validation-and-error-handling.md
-  - Contributing: contributing.md
+  - Code Style: contributing.md
   - Demo: demo.md
   - Changelog: ../CHANGELOG.md
   - EIP Deliverables:

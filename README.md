@@ -61,7 +61,7 @@ docs/                     Project documentation (MkDocs site)
   api-reference.md        MAS, Knowledge Store, WebSocket APIs
   operations.md           Deployment, monitoring, secrets, env matrix
   security.md             RBAC, audit, data protection, telemetry
-  contributing.md         Workflow, style, commits, tests, docs audit
+  contributing.md         Code style
   demo.md                 Live-demo script + cheatsheet + action plan
   adr/                    Architecture decision records (one per file)
   assets/                 Presentations + research PDFs
@@ -143,7 +143,8 @@ Full documentation lives under [`docs/`](docs/) and is published as a browsable 
 | API Reference (MAS, Knowledge Store, WebSocket) | [docs/api-reference.md](docs/api-reference.md) |
 | Operations (deployment, monitoring, secrets, env) | [docs/operations.md](docs/operations.md) |
 | Security & Compliance (RBAC, audit, data, telemetry) | [docs/security.md](docs/security.md) |
-| Contributing (workflow, style, commits, tests) | [docs/contributing.md](docs/contributing.md) |
+| Contributing (agreement, branches, commits, pull requests) | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Code style | [docs/contributing.md](docs/contributing.md) |
 | Demo (script, cheatsheet, action plan) | [docs/demo.md](docs/demo.md) |
 | Changelog (commit log, monthly) | [CHANGELOG.md](CHANGELOG.md) |
 | Beta test plan | [beta_test_plan.md](beta_test_plan.md) |
