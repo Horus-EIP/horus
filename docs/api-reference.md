@@ -366,7 +366,7 @@ Update an agent's status to active and refresh its `last_heartbeat` timestamp. C
 
 #### GET /tasks/list
 
-Retrieve all tasks stored in the database.
+Retrieve the top-level tasks (the subtasks of a multi-agent chain are left out). Admins and managers get every user's tasks. Other roles (`user`, and `system`, which no Horus service logs in as) get only the tasks they own: their `owner_username`, or, for a task without one, a conversation they own.
 
 **Auth:** JWT Bearer (requires `task:read` permission)
 
@@ -503,7 +503,7 @@ The user message is saved to the conversation when the task is queued, before ro
 
 The task, its result and its subtasks. `result` is the final answer (the aggregated answer for the root of a chain) and `sources` the passages it cites; a chain's root keeps every source of its steps, each once.
 
-**Auth:** JWT Bearer (requires `task:read` permission)
+**Auth:** JWT Bearer (requires `task:read` permission). Only the task's owner, a manager or an admin can read it; anyone else gets `403`. A task's owner is the user in its `owner_username` (the user who queued it); for a task without one, the owner of its root task, then the owner of its conversation. An unknown id gets `404` first.
 
 **Response 200:**
 
@@ -535,7 +535,23 @@ The task, its result and its subtasks. `result` is the final answer (the aggrega
 
 | Code | Detail |
 |------|--------|
+| `403` | `Only the task's owner, a manager or an admin can read this task` |
 | `404` | `Task not found` |
+
+---
+
+#### GET /tasks/conversation/{conversation_id}/running
+
+The conversation's top-level tasks that are not finished yet (`queued`, `pending` or `running`), newest first. The chat page calls it when it opens a conversation, to pick up a request that is still running.
+
+**Auth:** JWT Bearer (requires `task:read` permission). Only the conversation's owner, a manager or an admin; anyone else gets `403`. An unknown conversation gets `404` first.
+
+**Response 200:** a list of `{id, status, agent_id, conversation_id, query, created_at, parent_task_id}`, empty when nothing runs.
+
+| Code | Detail |
+|------|--------|
+| `403` | `Only the conversation's owner, a manager or an admin can list its running tasks` |
+| `404` | `Conversation not found` |
 
 ---
 
@@ -543,7 +559,7 @@ The task, its result and its subtasks. `result` is the final answer (the aggrega
 
 Replay the events stored for a task. MAS sends every per-task WebSocket frame through one publish function, which gives it the next `seq` of the task (Redis `INCR horus:task:{task_id}:seq`), appends it to the Redis stream `horus:task:{task_id}:events` (kept 24 h after the last event, trimmed to about 10,000 entries) and only then sends it to the connected sockets. Events are therefore stored even when nobody is connected.
 
-**Auth:** JWT Bearer (requires `task:read` permission). Only the task's owner (the user who queued it, or for older tasks the owner of its conversation) or an admin can read the events; anyone else gets `403`.
+**Auth:** JWT Bearer (requires `task:read` permission). Only the task's owner, a manager or an admin can read the events; anyone else gets `403`. A task's owner is the user in its `owner_username` (the user who queued it); for a task without one, the owner of its root task, then the owner of its conversation.
 
 **Query parameters:**
 
@@ -598,7 +614,7 @@ Token deltas (`reasoning.delta` steps) are stored as `token` events. The agent a
 
 | Code | Detail |
 |------|--------|
-| `403` | `Only the task's owner or an admin can read its events` |
+| `403` | `Only the task's owner, a manager or an admin can read its events` |
 | `404` | `Task not found` |
 | `503` | `The task event store is unavailable` (Redis is down). |
 

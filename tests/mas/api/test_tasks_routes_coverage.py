@@ -264,7 +264,10 @@ class TestRunningForConversation:
             conversation_id=7,
             created_at=datetime(2024, 5, 1, 12, 0, 0),
         )
-        fake = _FakeSession(all_map={"Task": [row]})
+        fake = _FakeSession(
+            first_map={"Conversations": SimpleNamespace(owner_username="user")},
+            all_map={"Task": [row]},
+        )
         client = make_fake_client(fake, current_user=as_user)
         r = client.get("/tasks/conversation/7/running")
         assert r.status_code == 200
@@ -278,7 +281,10 @@ class TestRunningForConversation:
         row = _task(id="run-2", created_at=None)
         # created_at default is a datetime; force None explicitly.
         row.created_at = None
-        fake = _FakeSession(all_map={"Task": [row]})
+        fake = _FakeSession(
+            first_map={"Conversations": SimpleNamespace(owner_username="user")},
+            all_map={"Task": [row]},
+        )
         client = make_fake_client(fake, current_user=as_user)
         r = client.get("/tasks/conversation/1/running")
         assert r.status_code == 200

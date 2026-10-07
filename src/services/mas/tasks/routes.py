@@ -21,7 +21,7 @@ from starlette.concurrency import run_in_threadpool
 
 from agents.registry_tool_functions import create_agent
 from auth.auth_tool_functions import PermissionChecker, verify_agent_api_key
-from auth.permissions import Permission, Role
+from auth.permissions import Permission
 from conversations.conversation_tool_functions import add_messages
 from core.logger import get_logger, log_agent_operation
 from core.memory_usage import peak_rss_mb
@@ -69,6 +69,14 @@ from tasks.openapi_docs import (
 )
 from tasks.router import route_task
 from tasks.status import IN_PROGRESS_STATUSES, TaskStatus, is_final_status
+from tasks.task_access import (
+    RUNNING_TASKS_REFUSED,
+    TASK_EVENTS_REFUSED,
+    TASK_READ_REFUSED,
+    may_read_conversation_tasks,
+    may_read_task,
+    root_tasks_visible_to,
+)
 from tasks.task_jobs import task_jobs
 from tasks.task_tool_functions import (
     aggregate_results,
@@ -607,17 +615,22 @@ def update_task_queue_depth(depth: int):
     description=(
         "Retrieve top-level tasks from the database. Excludes subtasks of a "
         "chain (rows whose ``parent_task_id`` is set) so the user-facing list "
-        "shows one row per original demand, not per chain step. Requires "
-        "TASK_READ permission."
+        "shows one row per original demand, not per chain step. Admins and "
+        "managers get every task; other roles get the tasks they own, directly "
+        "or through a conversation they own. Requires TASK_READ permission."
     ),
     status_code=200,
     dependencies=[Depends(PermissionChecker(Permission.TASK_READ))],
 )
-def list_tasks(db: Session = Depends(get_db)):
+def list_tasks(
+    user: Annotated[dict, Depends(PermissionChecker(Permission.TASK_READ))],
+    db: Session = Depends(get_db),
+):
     # Tree model: each multi-agent chain is one root Task with N subtask
     # children. The list view wants just the roots — clicking through opens
     # the detail page which shows the chain underneath.
-    tasks = db.query(Task).filter(Task.parent_task_id.is_(None)).all()
+    roots = db.query(Task).filter(Task.parent_task_id.is_(None))
+    tasks = root_tasks_visible_to(user, roots).all()
     logger.info("Listing root tasks", count=len(tasks))
     return tasks
 
@@ -670,14 +683,24 @@ def _isoformat_or_none(moment) -> str | None:
         "mount so a user who navigates away and back still sees the "
         "in-progress spinner + working-agents bar instead of a stale chat "
         "that looks finished. Subtasks (rows with parent_task_id) are "
-        "excluded — only the user-visible root surfaces."
+        "excluded — only the user-visible root surfaces. Allowed for the "
+        "conversation's owner, a manager or an admin."
     ),
     status_code=200,
     dependencies=[Depends(PermissionChecker(Permission.TASK_READ))],
 )
 def list_running_tasks_for_conversation(
-    conversation_id: int, db: Session = Depends(get_db)
+    conversation_id: int,
+    user: Annotated[dict, Depends(PermissionChecker(Permission.TASK_READ))],
+    db: Session = Depends(get_db),
 ):
+    conversation = (
+        db.query(Conversations).filter(Conversations.id == conversation_id).first()
+    )
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if not may_read_conversation_tasks(user, conversation):
+        raise HTTPException(status_code=403, detail=RUNNING_TASKS_REFUSED)
     rows = (
         db.query(Task)
         .filter(
@@ -707,14 +730,24 @@ def list_running_tasks_for_conversation(
 @router.get(
     "/{task_id}",
     summary="Get task details",
-    description="Returns a task, optional result, and child subtasks. Requires TASK_READ.",
+    description=(
+        "Returns a task, optional result, and child subtasks. Allowed for the "
+        "task's owner, a manager or an admin; a task without an owner belongs to "
+        "the owner of its root task, then of its conversation. Requires TASK_READ."
+    ),
     status_code=200,
     dependencies=[Depends(PermissionChecker(Permission.TASK_READ))],
 )
-def get_task_detail(task_id: str, db: Session = Depends(get_db)):
+def get_task_detail(
+    task_id: str,
+    user: Annotated[dict, Depends(PermissionChecker(Permission.TASK_READ))],
+    db: Session = Depends(get_db),
+):
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    if not may_read_task(user, task, db):
+        raise HTTPException(status_code=403, detail=TASK_READ_REFUSED)
     tr = db.query(TaskResult).filter(TaskResult.task_id == task_id).first()
     children = (
         db.query(Task)
@@ -1487,20 +1520,6 @@ async def _dispatch_chain(
     }
 
 
-def _may_read_task_events(user: dict, task: Task, db: Session) -> bool:
-    if user.get("role") == Role.ADMIN.value:
-        return True
-    owner = task.owner_username
-    if owner is None and task.conversation_id is not None:
-        conversation = (
-            db.query(Conversations)
-            .filter(Conversations.id == task.conversation_id)
-            .first()
-        )
-        owner = conversation.owner_username if conversation is not None else None
-    return owner is not None and owner == user.get("username")
-
-
 @router.get(
     "/{task_id}/events",
     summary="Replay the stored events of a task",
@@ -1508,8 +1527,8 @@ def _may_read_task_events(user: dict, task: Task, db: Session) -> bool:
         "Returns the events stored for the task with ``seq`` greater than "
         "``since``, oldest first. Every per-task WebSocket frame is stored "
         "for 24 h, so a client that was disconnected can call this with the "
-        "last ``seq`` it saw and replay what it missed. Allowed only for the "
-        "task's owner or an admin."
+        "last ``seq`` it saw and replay what it missed. Allowed for the "
+        "task's owner, a manager or an admin."
     ),
     status_code=200,
     dependencies=[Depends(PermissionChecker(Permission.TASK_READ))],
@@ -1524,10 +1543,8 @@ async def get_task_events(
     task = db.query(Task).filter(Task.id == task_id).first()
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    if not _may_read_task_events(user, task, db):
-        raise HTTPException(
-            status_code=403, detail="Only the task's owner or an admin can read its events"
-        )
+    if not may_read_task(user, task, db):
+        raise HTTPException(status_code=403, detail=TASK_EVENTS_REFUSED)
     try:
         events = await run_in_threadpool(read_task_events, task_id, since, limit)
     except Exception as exc:

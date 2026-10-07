@@ -12,6 +12,7 @@ from tasks.idempotency import IDEMPOTENCY_TTL_SECONDS, idempotency_record_key
 from tasks.task_jobs import task_jobs
 
 QUESTION = "Summarise the Q4 2025 financial report"
+OTHER_USER = {"id": 4, "user_id": "4", "username": "other", "role": "user"}
 
 
 def _chat_task(**over):
@@ -370,10 +371,13 @@ class TestTaskEventsEndpoint:
     ):
         _owned_task(routing_db, "t-1", owner="user")
 
-        async with mas_client(as_manager) as client:
+        async with mas_client(OTHER_USER) as client:
             response = await client.get("/tasks/t-1/events")
+        async with mas_client(as_manager) as client:
+            managed = await client.get("/tasks/t-1/events")
 
         assert response.status_code == 403
+        assert managed.status_code == 200
 
     async def test_an_admin_reads_any_task_events(self, routing_db, mas_client, as_admin):
         _owned_task(routing_db, "t-1", owner="user")
@@ -386,13 +390,13 @@ class TestTaskEventsEndpoint:
         assert len(response.json()["events"]) == 1
 
     async def test_a_task_without_an_owner_belongs_to_its_conversation_owner(
-        self, routing_db, mas_client, as_user, as_manager
+        self, routing_db, mas_client, as_user
     ):
         _owned_task(routing_db, "legacy", owner=None, conversation_id=7)
 
         async with mas_client(as_user) as client:
             mine = await client.get("/tasks/legacy/events")
-        async with mas_client(as_manager) as client:
+        async with mas_client(OTHER_USER) as client:
             theirs = await client.get("/tasks/legacy/events")
 
         assert mine.status_code == 200

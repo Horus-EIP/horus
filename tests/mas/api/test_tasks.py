@@ -14,6 +14,7 @@ Routes under test (``src/services/mas/tasks/routes.py``):
 from __future__ import annotations
 
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -50,6 +51,9 @@ class TestTaskRead:
         assert r.status_code == 200
 
     def test_running_for_conversation_returns_200(self, make_client, mock_db, as_user):
+        mock_db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            owner_username="user"
+        )
         mock_db.query.return_value.filter.return_value.all.return_value = []
         client = make_client(router, current_user=as_user)
         r = client.get("/tasks/conversation/1/running")
