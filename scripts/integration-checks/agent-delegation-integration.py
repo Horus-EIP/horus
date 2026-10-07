@@ -16,11 +16,11 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
+from ai_agents.agent_tools import TOOL_DEFINITIONS
 from ai_agents.calculator_tool import CalculatorTool
 from ai_agents.delegation_handler import DelegationHandler
 from ai_agents.rag_pipeline import RAGPipeline
 from ai_agents.react_agent import (
-    TOOL_DESCRIPTIONS,
     ReactAgent,
     StepType,
 )
@@ -99,14 +99,14 @@ def react_agent_with_delegation(
 
 class TestDelegateToolRegistration:
     def test_delegate_in_tool_descriptions(self):
-        assert "delegate" in TOOL_DESCRIPTIONS
+        assert "delegate" in TOOL_DEFINITIONS
 
     def test_delegate_handler_registered(self, react_agent_with_delegation):
         assert "delegate" in react_agent_with_delegation._tool_handlers
 
     def test_delegate_in_system_prompt(self):
-        assert "delegate" in TOOL_DESCRIPTIONS
-        assert "agent type" in TOOL_DESCRIPTIONS["delegate"].lower()
+        assert "delegate" in TOOL_DEFINITIONS
+        assert "agent type" in TOOL_DEFINITIONS["delegate"].lower()
 
 
 # ---------------------------------------------------------------------------
