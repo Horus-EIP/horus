@@ -4,6 +4,7 @@ Functions prefixed with ``_`` take an explicit ``Session`` and are safe to
 call from background tasks. Public variants are used by FastAPI routes.
 """
 
+import asyncio
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -140,7 +141,7 @@ def _batch_update_agent_status_internal(agent_statuses: dict, db: Session) -> bo
 # ============================================================================
 
 
-def create_agent(
+async def create_agent(
     name: str, skills: list, description: str, db: Session, Agent_type: AgentTypes
 ) -> tuple[str, str]:
     """Register a new agent and return ``(agent_id, plaintext_api_key)``.
@@ -169,7 +170,9 @@ def create_agent(
         logger.info(f"Agent created successfully: {agent_id} ({name})")
 
         # Shared pool queue for this specialization (all workers of this type consume it).
-        rabbitmq_instance.ensure_work_queue(work_queue_name_for_agent_type(Agent_type))
+        await asyncio.to_thread(
+            rabbitmq_instance.ensure_work_queue, work_queue_name_for_agent_type(Agent_type)
+        )
 
         _skill_cache_upsert(agent_id, name, skills, description)
         return agent_id, api_key

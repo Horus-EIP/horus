@@ -1147,7 +1147,7 @@ async def _route_by_selection(
                 + ". Backed by the General-Assistant worker pool."
             )
             try:
-                new_id, new_key = create_agent(
+                new_id, new_key = await create_agent(
                     name=spec_name,
                     skills=missing_skills,
                     description=spec_desc,

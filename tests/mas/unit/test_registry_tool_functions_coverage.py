@@ -12,7 +12,9 @@ Manager exclusion, agent-type string normalisation, liveness window).
 
 from __future__ import annotations
 
+import asyncio
 import sys
+import threading
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -267,9 +269,9 @@ class TestBatchUpdateInternal:
 
 
 class TestCreateAgent:
-    def test_success_returns_id_and_plaintext_key(self):
+    async def test_success_returns_id_and_plaintext_key(self):
         db = MagicMock()
-        agent_id, api_key = rtf.create_agent(
+        agent_id, api_key = await rtf.create_agent(
             "ResearchBot", ["search"], "desc", db, AgentTypes.RESEARCHER
         )
         assert isinstance(agent_id, str) and len(agent_id) > 0
@@ -287,10 +289,10 @@ class TestCreateAgent:
         assert stored.api_key != api_key
         assert rtf.bcrypt_context.verify(api_key, stored.api_key)
 
-    def test_failure_rolls_back_and_returns_none_none(self):
+    async def test_failure_rolls_back_and_returns_none_none(self):
         db = MagicMock()
         db.commit.side_effect = RuntimeError("db down")
-        agent_id, api_key = rtf.create_agent(
+        agent_id, api_key = await rtf.create_agent(
             "Bot", ["s"], "d", db, AgentTypes.GENERAL
         )
         assert agent_id is None and api_key is None
@@ -298,6 +300,25 @@ class TestCreateAgent:
         # Side effects must NOT fire on the failure path.
         rtf.rabbitmq_instance.ensure_work_queue.assert_not_called()
         rtf._skill_cache_upsert.assert_not_called()
+
+    async def test_the_work_queue_is_declared_off_the_event_loop(self, monkeypatch):
+        broker = MagicMock()
+        release = threading.Event()
+        waits: list[bool] = []
+        broker.ensure_work_queue.side_effect = lambda _queue: waits.append(release.wait(timeout=2))
+        monkeypatch.setattr(rtf, "rabbitmq_instance", broker)
+
+        async def another_request():
+            release.set()
+
+        (agent_id, _api_key), _ = await asyncio.gather(
+            rtf.create_agent("Bot", ["s"], "d", MagicMock(), AgentTypes.GENERAL),
+            another_request(),
+        )
+
+        assert waits == [True]
+        assert agent_id
+        broker.ensure_work_queue.assert_called_once_with("horus.work.general")
 
 
 # --------------------------------------------------------------------------- #
