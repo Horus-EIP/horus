@@ -185,7 +185,7 @@ This generates three layers of documentation:
 
 ## Contributing
 
-All work must start as a GitHub Issue. See [docs/contributing.md](docs/contributing.md) for branch naming, commit conventions, code style, and pull request guidelines.
+All work starts as a GitHub issue, and contributions need a signed Horus Contributor Agreement. [CONTRIBUTING.md](CONTRIBUTING.md) says how to get one and how to send a change: branches, commits, pull requests and tests.
 
 ## License
 
@@ -194,6 +194,7 @@ Horus is **closed-source, proprietary software** (all rights reserved). Having a
 - Terms: [LICENSE](LICENSE) (Horus Proprietary Software Licence v2, 30/09/2026)
 - Why Horus is closed source: [ADR-004](docs/adr/ADR-004-closed-source-licence.md)
 - Third-party open-source components keep their own licences: [dependency licence inventory](docs/eip/dependency-licence-inventory.xlsx)
+- Contributions are accepted only under a signed Contributor Agreement ([LICENSE](LICENSE), section 9).
 
 ## Authors
 

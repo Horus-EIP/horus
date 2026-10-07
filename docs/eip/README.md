@@ -11,7 +11,7 @@ If you arrived here from the MkDocs sidebar or a jury hand-out, start with [obje
 | Objective | What the guide asks for | Where it lives |
 |-----------|--------------------------|----------------|
 | **1 — Tech Watch** | Active monitoring, comparative briefs, POCs, decision rationale, community engagement | [tech-watch.md](tech-watch.md) + [community-contributions.md](community-contributions.md) + [../adr/](../adr/) + [../assets/research/](../assets/research/) + [../../CHANGELOG.md](../../CHANGELOG.md) |
-| **2 — Structure, document, harden the architecture** | Clear architecture, complete README, quality + reliability + minimal security | [../README.md](../README.md) + [../architecture.md](../architecture.md) + [../operations.md](../operations.md) + [../contributing.md](../contributing.md) + [../security.md](../security.md) + [../../greenlight/code-quality-review/](../../greenlight/code-quality-review/) |
+| **2 — Structure, document, harden the architecture** | Clear architecture, complete README, quality + reliability + minimal security | [../README.md](../README.md) + [../architecture.md](../architecture.md) + [../operations.md](../operations.md) + [../../CONTRIBUTING.md](../../CONTRIBUTING.md) + [../contributing.md](../contributing.md) + [../security.md](../security.md) + [../../greenlight/code-quality-review/](../../greenlight/code-quality-review/) |
 | **A — Protect and valorize the technology** | Legal protection, technical protection, security review, valorization | [protection-plan.md](protection-plan.md) + [diffusion-strategy.md](diffusion-strategy.md) + [../security.md](../security.md) + [../ip_protection/](../ip_protection/) (NDAs + OTS proof — not in published site) |
 | **D — Measure, test, optimize performance** | KPIs, load/stress tests, before/after, dashboards, analysis | [performance.md](performance.md) + [../../scripts/perf/](../../scripts/perf/) + [../../greenlight/grafana-screenshots/](../../greenlight/grafana-screenshots/) |
 
@@ -39,6 +39,7 @@ These are working artifacts the jury will want to see, but they belong in the lo
 | Artifact | Why it's not in this folder | Where to find it |
 |----------|----------------------------|------------------|
 | `CHANGELOG.md` | Convention dictates root-of-repo so GitHub renders it; tooling expects it there | [../../CHANGELOG.md](../../CHANGELOG.md) |
+| `CONTRIBUTING.md` | At the root of the repo, so GitHub shows it next to issues and pull requests | [../../CONTRIBUTING.md](../../CONTRIBUTING.md) |
 | ADRs | Industry-standard pattern is one file per decision under `docs/adr/` | [../adr/](../adr/) |
 | Research dossiers (5 PDFs) | Binary assets grouped with presentation slides | [../assets/research/mas/](../assets/research/mas/) |
 | Signed NDAs + OpenTimestamps proof | Confidential — `ip_protection/` is excluded from the published MkDocs site | [../ip_protection/](../ip_protection/) |
