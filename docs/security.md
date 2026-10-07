@@ -130,7 +130,26 @@ Complete permission mapping for all roles:
 | `data:export` | Yes | Yes | No | No |
 | `system:config` | Yes | No | No | No |
 
-Source of truth: `src/services/mas/auth/permissions.py` (`ROLE_PERMISSION`). The **manager** role includes `task:read`, which grants WebSocket chat access (see WebSocket API documentation).
+Source of truth: `src/services/mas/auth/permissions.py` (`ROLE_PERMISSION`). These permissions say which routes a role may call; [Who can see what](#who-can-see-what) says which tasks and conversations it then reaches.
+
+---
+
+### Who can see what
+
+The permissions above open the task and conversation routes to several roles; ownership then narrows what each role reaches. Source of truth: `src/services/mas/tasks/task_access.py`, `src/services/mas/conversations/routes.py` and `src/services/mas/chat/routes.py`.
+
+| Role | Read a task and its events | `GET /tasks/list` | Conversation history and chat WebSocket | Cancel a task | Create a task in a conversation |
+|:-----|:---------------------------|:------------------|:-----------------------------------------|:--------------|:--------------------------------|
+| `admin` | any | every task | any conversation | any | any conversation |
+| `manager` | any | every task | only their own | any | only their own |
+| `user` | the tasks they own, and every task in a conversation they own | the same tasks | only their own | the same tasks as they read | only their own |
+| `system` | as `user` | as `user` | only their own | no (`task:delete` missing) | no (`task:create` missing) |
+
+- A task's owner is its `owner_username` (the user who queued it), else the owner of its root task. A subtask therefore belongs to whoever owns its chain.
+- `GET /tasks/conversation/{id}/running` is for the conversation's owner, a manager or an admin. The agent routes (`/claim`, `/task-result/`, `/task-step/`, `/abandoned-claims`) use the agent's API key, not a role.
+- No Horus service logs in as `system`: the agents log in as the super user and use their API key on the agent routes.
+- **A conversation's owner reads and cancels every task in it, whoever posted it.** An admin may post into a user's conversation; the answer reaches the user's chat and history anyway, so refusing them the task protected nothing.
+- **Managers read every task but not other users' conversations.** A task carries what oversight needs (the question, its status, the answer, the timings and the sources); reading or watching a whole chat live gives more access than that. Least privilege.
 
 ---
 

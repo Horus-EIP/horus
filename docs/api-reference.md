@@ -364,6 +364,8 @@ Update an agent's status to active and refresh its `last_heartbeat` timestamp. C
 
 ### 4. Tasks
 
+Who may read, list, cancel and create which task, role by role, is in [Who can see what](security.md#who-can-see-what).
+
 #### GET /tasks/list
 
 Retrieve the top-level tasks (the subtasks of a multi-agent chain are left out). Admins and managers get every user's tasks. Other roles (`user`, and `system`, which no Horus service logs in as) get the tasks they own by `owner_username` and every task in a conversation they own, whoever posted it.
@@ -804,7 +806,7 @@ Create a new conversation channel. Returns the auto-generated conversation ID.
 
 #### GET /conversations/get_history/{chat_id}
 
-Retrieve the complete message history for a conversation. Only the owner or an admin can access; a manager cannot read another user's conversation.
+Retrieve the complete message history for a conversation. Only the owner or an admin can access; a manager cannot read another user's conversation (see [Who can see what](security.md#who-can-see-what)).
 
 **Auth:** JWT Bearer (requires `task:read` permission)
 
@@ -2214,7 +2216,7 @@ ws://localhost:8000/chat/1/?token=eyJhbGciOiJIUzI1NiI...
 
 #### Required permission
 
-The connection handler checks `Permission.TASK_READ` (see `src/services/mas/auth/permissions.py` in the repository). In the current mapping **`admin`**, **`manager`**, **`user`**, and **`system`** all include `TASK_READ`, so every role can open this WebSocket. Access is still narrowed by the ownership check in step 5: a non-admin may only open conversations they own.
+The connection handler checks `Permission.TASK_READ` (see `src/services/mas/auth/permissions.py` in the repository). In the current mapping **`admin`**, **`manager`**, **`user`**, and **`system`** all include `TASK_READ`, so every role can open this WebSocket. Access is still narrowed by the ownership check in step 5: a non-admin, a manager included, may only open conversations they own (see [Who can see what](security.md#who-can-see-what)).
 
 ---
 
