@@ -50,7 +50,25 @@ vi.mock("@/components/auth/auth-provider", () => ({
 }));
 
 vi.mock("@/components/tasks/file-attachments", () => ({
-  FileAttachments: () => null,
+  FileAttachments: ({
+    value,
+    onChange,
+  }: {
+    value: { attached: Array<{ filename: string; doc_id?: string }>; inline: unknown[] };
+    onChange: (next: { attached: Array<{ filename: string; doc_id?: string }>; inline: unknown[] }) => void;
+  }) => (
+    <div>
+      <span data-testid="attachment-count">{value.attached.length + value.inline.length}</span>
+      <button
+        type="button"
+        onClick={() =>
+          onChange({ attached: [...value.attached, { filename: "q4.pdf", doc_id: "doc-q4" }], inline: value.inline })
+        }
+      >
+        Attach the Q4 report
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("@/lib/chat/api", () => ({
@@ -857,5 +875,146 @@ describe("chat page switching conversation while a task runs", () => {
 
     expect(screen.queryByText(ANSWER)).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Stop generating")).not.toBeInTheDocument();
+  });
+});
+
+describe("chat page attachments", () => {
+  const travelHistory = {
+    ok: true,
+    data: {
+      items: [{ role: "user", message: "What is the travel policy?", timestamp: "2026-10-05T10:00:00" }],
+      nextCursor: null,
+    },
+  };
+
+  function renderChat() {
+    return render(
+      <MantineProvider>
+        <ChatPage />
+      </MantineProvider>
+    );
+  }
+
+  async function switchTo(view: ReturnType<typeof renderChat>, conversation: string) {
+    navigation.conversation = conversation;
+    view.rerender(
+      <MantineProvider>
+        <ChatPage />
+      </MantineProvider>
+    );
+    if (conversation === "43") await screen.findByText("What is the travel policy?");
+  }
+
+  function attachmentCount() {
+    return screen.getByTestId("attachment-count").textContent;
+  }
+
+  function typeAndSend(text: string) {
+    fireEvent.change(screen.getByPlaceholderText("Type a message..."), { target: { value: text } });
+    fireEvent.click(screen.getByLabelText("Send message"));
+  }
+
+  function heldCreate() {
+    let answer: (value: unknown) => void = () => {};
+    chatApiMock.createTask.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+    return (value: unknown) => answer(value);
+  }
+
+  beforeEach(() => {
+    installMockWebSocket();
+    navigation.conversation = "42";
+    localStorage.setItem("auth_token", "token");
+    Object.values(chatApiMock).forEach((fn) => fn.mockReset());
+    notification.error.mockReset();
+    chatApiMock.getConversations.mockResolvedValue({ ok: true, data: [] });
+    chatApiMock.getHistory.mockImplementation(async (conversationId: string) =>
+      conversationId === "43" ? travelHistory : { ok: true, data: { items: [], nextCursor: null } }
+    );
+    chatApiMock.getRunningTasksForConversation.mockResolvedValue({ ok: true, data: [] });
+    chatApiMock.getTask.mockResolvedValue({ ok: false, error: "not yet" });
+    chatApiMock.getTaskEvents.mockResolvedValue(storedEvents([], "root-9"));
+    chatApiMock.createTask.mockResolvedValue({
+      ok: true,
+      data: { task_id: "root-9", status: "queued", conversation_id: 43 },
+    });
+    agentApiMock.getAgents.mockResolvedValue({ ok: true, data: [] });
+  });
+
+  afterEach(() => {
+    navigation.conversation = "42";
+  });
+
+  it("does not carry the files of a message sent before switching into the next conversation", async () => {
+    const view = renderChat();
+    await waitForOpenSockets(1);
+    fireEvent.click(screen.getByText("Attach the Q4 report"));
+    const answerFirst = heldCreate();
+    typeAndSend("Summarise this report");
+    await screen.findByLabelText("Stop generating");
+
+    await switchTo(view, "43");
+    expect(attachmentCount()).toBe("0");
+    await act(async () => {
+      answerFirst({ ok: true, data: { task_id: "root-8", status: "queued", conversation_id: 42 } });
+    });
+    typeAndSend("What is the hotel limit?");
+
+    await waitFor(() => expect(chatApiMock.createTask).toHaveBeenCalledTimes(2));
+    expect(chatApiMock.createTask.mock.calls[0][0].attached_files).toEqual([
+      { filename: "q4.pdf", doc_id: "doc-q4" },
+    ]);
+    expect(chatApiMock.createTask.mock.calls[1][0]).toMatchObject({
+      conversation_id: "43",
+      attached_files: [],
+      inline_files: [],
+    });
+  });
+
+  it("empties the picker while a message is sent and gives the files back when the send fails", async () => {
+    renderChat();
+    await waitForOpenSockets(1);
+    fireEvent.click(screen.getByText("Attach the Q4 report"));
+    const answer = heldCreate();
+    typeAndSend("Summarise this report");
+
+    await waitFor(() => expect(attachmentCount()).toBe("0"));
+    await act(async () => {
+      answer({ ok: false, error: "Failed to create task" });
+    });
+
+    expect(attachmentCount()).toBe("1");
+    expect(notification.error).toHaveBeenCalledWith("Your message could not be sent. Please try again.");
+  });
+
+  it("empties the picker when the user switches conversation", async () => {
+    const view = renderChat();
+    await waitForOpenSockets(1);
+    fireEvent.click(screen.getByText("Attach the Q4 report"));
+    expect(attachmentCount()).toBe("1");
+
+    await switchTo(view, "43");
+
+    expect(attachmentCount()).toBe("0");
+  });
+
+  it("stays quiet in the new conversation when a send from the old one fails", async () => {
+    const view = renderChat();
+    await waitForOpenSockets(1);
+    fireEvent.click(screen.getByText("Attach the Q4 report"));
+    const answer = heldCreate();
+    typeAndSend("Summarise this report");
+    await screen.findByLabelText("Stop generating");
+
+    await switchTo(view, "43");
+    await act(async () => {
+      answer({ ok: false, error: "Failed to create task" });
+    });
+
+    expect(notification.error).not.toHaveBeenCalled();
+    expect(attachmentCount()).toBe("0");
   });
 });

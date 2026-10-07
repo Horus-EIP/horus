@@ -356,6 +356,7 @@ function ChatPageContent() {
     setWorkingTaskId(null);
     setWorkingTaskDetail(null);
     setStreamingByTaskId({});
+    setAttachments({ attached: [], inline: [] });
   }, [conversationId]);
 
   useEffect(() => {
@@ -564,12 +565,14 @@ function ChatPageContent() {
     // ``['knowledge_retrieval']``, which short-circuited routing onto the
     // General-Assistant for every chat message and starved the specialists.
     const sentFrom = conversationIdRef.current;
+    const sentAttachments = attachments;
+    setAttachments({ attached: [], inline: [] });
     const result = await chatApi.createTask({
       demand,
       conversation_id: String(conversationId),
       skills_required: [],
-      attached_files: attachments.attached,
-      inline_files: attachments.inline,
+      attached_files: sentAttachments.attached,
+      inline_files: sentAttachments.inline,
     });
 
     if (conversationIdRef.current !== sentFrom) return;
@@ -579,6 +582,9 @@ function ChatPageContent() {
       notifyError('Your message could not be sent. Please try again.');
       setMessages((prev) =>
         prev.map((msg) => (msg.id === userMessageId ? { ...msg, status: 'error' } : msg))
+      );
+      setAttachments((current) =>
+        current.attached.length || current.inline.length ? current : sentAttachments
       );
       setIsLoading(false);
       return;
@@ -593,9 +599,6 @@ function ChatPageContent() {
         msg.id === userMessageId ? { ...msg, status: 'sent', taskId: newTaskId } : msg
       )
     );
-    // Attachments are scoped to a single message — clear them after dispatch
-    // so the next one starts clean unless the user picks again.
-    setAttachments({ attached: [], inline: [] });
   };
 
   // Stop the in-flight chat: cancel the running task on the backend (which
