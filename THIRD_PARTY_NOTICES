@@ -121,14 +121,10 @@ The last line of each entry names the requirements files that install it.
   Licence: MIT (source: spaCy model meta, meta/en_core_web_trf-3.8.0.json; not on PyPI)
   https://github.com/explosion/spacy-models
   requirements-gpu.txt
-- fastapi 0.142.3
-  Licence: MIT (source: metadata, PyPI)
-  https://github.com/fastapi/fastapi
-  requirements-gpu.txt
 - fastapi 0.142.4
   Licence: MIT (source: metadata, PyPI)
   https://github.com/fastapi/fastapi
-  requirements.txt
+  requirements-gpu.txt, requirements.txt
 - filelock 4.0.12
   Licence: MIT (source: metadata, PyPI)
   https://github.com/tox-dev/py-filelock
@@ -821,11 +817,7 @@ The last line of each entry names the requirements files that install it.
 - huggingface-hub 0.36.2
   Licence: Apache (source: metadata, installed environment)
   https://github.com/huggingface/huggingface_hub
-  requirements-gpu.txt
-- huggingface-hub 1.33.0
-  Licence: Apache-2.0 (source: metadata, PyPI)
-  https://github.com/huggingface/huggingface_hub
-  requirements.txt
+  requirements-gpu.txt, requirements.txt
 - idna 3.20
   Licence: BSD-3-Clause (source: metadata, installed environment)
   https://github.com/kjd/idna
@@ -1261,11 +1253,7 @@ The last line of each entry names the requirements files that install it.
 - tokenizers 0.22.2
   Licence: Apache Software License (source: metadata, installed environment)
   https://github.com/huggingface/tokenizers
-  requirements-gpu.txt
-- tokenizers 0.23.2
-  Licence: Apache Software License (source: metadata, PyPI)
-  https://github.com/huggingface/tokenizers
-  requirements.txt
+  requirements-gpu.txt, requirements.txt
 - tomli 2.5.0
   Licence: MIT (source: metadata, PyPI)
   https://github.com/hukkin/tomli

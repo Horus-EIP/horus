@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
-COPY requirements.txt requirements-gpu.txt ./
+COPY requirements.lock requirements-gpu.lock ./
 
 # Install build dependencies for grpcio and other packages.
 # --no-install-recommends avoids manpages/man-db triggers that often yield apt exit 100 in slim images.
@@ -18,8 +18,8 @@ RUN apt-get update -o Acquire::Retries=5 \
 
 ARG TORCH_INDEX_URL=https://pypi.org/simple
 RUN case "$TORCH_INDEX_URL" in \
-        https://download.pytorch.org/whl/cpu) cp requirements.txt requirements-image.txt ;; \
-        *) cp requirements-gpu.txt requirements-image.txt ;; \
+        https://download.pytorch.org/whl/cpu) cp requirements.lock requirements-image.txt ;; \
+        *) cp requirements-gpu.lock requirements-image.txt ;; \
     esac
 
 RUN --mount=type=cache,target=/root/.cache/pip \
@@ -32,7 +32,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # ML wheels (torch ~500MB) don't abort on a slow/flaky network read timeout, and a
 # completed download is reused on the next rebuild instead of re-fetched.
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --use-deprecated=legacy-resolver --timeout=120 --retries=10 -r requirements-image.txt
+    pip install --use-deprecated=legacy-resolver --timeout=120 --retries=10 --require-hashes -r requirements-image.txt
 
 # Install OpenTelemetry auto-instrumentation
 RUN opentelemetry-bootstrap --action=install

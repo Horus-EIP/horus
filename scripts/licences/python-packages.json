@@ -183,7 +183,7 @@
      "name": "fastapi",
      "source": "metadata, PyPI",
      "url": "https://github.com/fastapi/fastapi",
-     "version": "0.142.3"
+     "version": "0.142.4"
     },
     {
      "licence": "MIT",
@@ -3358,11 +3358,11 @@
      "version": "0.28.1"
     },
     {
-     "licence": "Apache-2.0",
+     "licence": "Apache",
      "name": "huggingface-hub",
-     "source": "metadata, PyPI",
+     "source": "metadata, installed environment",
      "url": "https://github.com/huggingface/huggingface_hub",
-     "version": "1.33.0"
+     "version": "0.36.2"
     },
     {
      "licence": "BSD-3-Clause",
@@ -3976,9 +3976,9 @@
     {
      "licence": "Apache Software License",
      "name": "tokenizers",
-     "source": "metadata, PyPI",
+     "source": "metadata, installed environment",
      "url": "https://github.com/huggingface/tokenizers",
-     "version": "0.23.2"
+     "version": "0.22.2"
     },
     {
      "licence": "MIT",

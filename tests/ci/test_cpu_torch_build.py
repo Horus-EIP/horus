@@ -32,6 +32,8 @@ DEFAULT_INDEX = "https://pypi.org/simple"
 CPU_IMAGE_JOB = "cpu-images"
 CPU_REQUIREMENTS = "requirements.txt"
 GPU_REQUIREMENTS = "requirements-gpu.txt"
+CPU_LOCK = "requirements.lock"
+GPU_LOCK = "requirements-gpu.lock"
 
 TORCH_SERVICES = {
     "mas": SERVICES / "mas",
@@ -44,6 +46,9 @@ CPU_REQUIREMENT_FILES = (
     SERVICES / "mas" / "requirements-cpu.txt",
 )
 GPU_REQUIREMENT_FILES = tuple(context / GPU_REQUIREMENTS for context in TORCH_SERVICES.values())
+REQUIREMENT_FILES = tuple(sorted(SERVICES.glob("*/requirements*.txt")))
+LOCK_ENTRY = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)(?:==(\S+)|\s+@\s+(\S+))")
+EXACT_PIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(?:\[[^\]]*\])?==(\S+)")
 
 NEEDS_TORCH = {
     "torch", "sentence-transformers", "transformers", "accelerate", "bitsandbytes",
@@ -93,6 +98,33 @@ def projects(path: Path) -> set[str]:
 
 def included(path: Path) -> list[str]:
     return [line.split(None, 1)[1] for line in requirement_lines(path) if line.startswith("-r ")]
+
+
+def declared(path: Path) -> list[str]:
+    lines = []
+    for line in requirement_lines(path):
+        if line.startswith("-r "):
+            lines += declared(path.parent / line.split(None, 1)[1])
+        elif not line.startswith("-"):
+            lines.append(line)
+    return lines
+
+
+def lock_entries(path: Path) -> dict[str, dict]:
+    entries: dict[str, dict] = {}
+    current = None
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        if not raw.strip() or raw.startswith("#"):
+            continue
+        if raw[0] not in " \t":
+            match = LOCK_ENTRY.match(raw)
+            if match is None:
+                raise AssertionError(f"{path.name}: cannot read {raw!r}")
+            current = project_name(match.group(1))
+            entries[current] = {"version": match.group(2) or match.group(3), "hashes": 0}
+        elif "--hash=sha256:" in raw:
+            entries[current]["hashes"] += 1
+    return entries
 
 
 def torch_requirements(path: Path) -> list[str]:
@@ -245,6 +277,43 @@ class RequirementSets(unittest.TestCase):
                 self.assertRegex(pins[0], r"^fastembed==\d+(?:\.\d+)*$")
 
 
+class LockFiles(unittest.TestCase):
+    def test_every_requirements_file_has_a_lock_next_to_it(self):
+        for path in REQUIREMENT_FILES:
+            with self.subTest(str(path.relative_to(REPO))):
+                self.assertTrue(path.with_suffix(".lock").is_file())
+
+    def test_every_locked_package_is_pinned_and_hashed(self):
+        for path in REQUIREMENT_FILES:
+            lock = path.with_suffix(".lock")
+            for name, entry in lock_entries(lock).items():
+                with self.subTest(f"{lock.relative_to(REPO)} {name}"):
+                    self.assertTrue(entry["version"])
+                    self.assertGreater(entry["hashes"], 0)
+
+    def test_each_lock_holds_what_its_requirements_file_asks_for(self):
+        for path in REQUIREMENT_FILES:
+            entries = lock_entries(path.with_suffix(".lock"))
+            for line in declared(path):
+                name = project_name(line)
+                with self.subTest(f"{path.relative_to(REPO)} {name}"):
+                    self.assertIn(name, entries)
+                    pin = EXACT_PIN.fullmatch(line.replace(" ", ""))
+                    if pin:
+                        self.assertEqual(entries[name]["version"], pin.group(1))
+
+    def test_the_cpu_and_gpu_locks_agree_on_every_shared_package(self):
+        for context in TORCH_SERVICES.values():
+            gpu = lock_entries(context / GPU_LOCK)
+            for lock in sorted(context.glob("requirements*.lock")):
+                if lock.name == GPU_LOCK:
+                    continue
+                for name, entry in lock_entries(lock).items():
+                    with self.subTest(f"{lock.relative_to(REPO)} {name}"):
+                        self.assertIn(name, gpu)
+                        self.assertEqual(entry["version"], gpu[name]["version"])
+
+
 @needs_yaml
 class CiTestJobs(unittest.TestCase):
     @classmethod
@@ -319,18 +388,18 @@ class DockerfileRequirementSets(unittest.TestCase):
         for name, context in TORCH_SERVICES.items():
             with self.subTest(name):
                 copies = [rest for _, keyword, rest in instructions(context / "Dockerfile")
-                          if keyword == "COPY" and GPU_REQUIREMENTS in rest]
+                          if keyword == "COPY" and GPU_LOCK in rest]
                 self.assertEqual(len(copies), 1, copies)
-                self.assertIn(CPU_REQUIREMENTS, copies[0].split())
+                self.assertIn(CPU_LOCK, copies[0].split())
 
     def test_the_cpu_torch_index_picks_the_cpu_set_and_any_other_the_gpu_set(self):
         for name, context in TORCH_SERVICES.items():
             with self.subTest(name):
-                self.assertEqual(chosen_requirements(context, CPU_TORCH_INDEX), CPU_REQUIREMENTS)
-                self.assertEqual(chosen_requirements(context, DEFAULT_INDEX), GPU_REQUIREMENTS)
+                self.assertEqual(chosen_requirements(context, CPU_TORCH_INDEX), CPU_LOCK)
+                self.assertEqual(chosen_requirements(context, DEFAULT_INDEX), GPU_LOCK)
                 self.assertEqual(
                     chosen_requirements(context, "https://download.pytorch.org/whl/cu128"),
-                    GPU_REQUIREMENTS,
+                    GPU_LOCK,
                 )
 
     def test_the_chosen_set_is_what_torch_and_the_requirements_are_installed_from(self):
@@ -361,6 +430,12 @@ class DockerfileRequirementSets(unittest.TestCase):
                 install = requirements_install(instructions(context / "Dockerfile"))[2]
                 options = {token.split("=", 1)[0] for token in install.split()}
                 self.assertFalse(options & REINSTALLING_PIP_OPTIONS, install)
+
+    def test_the_requirements_install_checks_every_hash(self):
+        for name, context in TORCH_SERVICES.items():
+            with self.subTest(name):
+                install = requirements_install(instructions(context / "Dockerfile"))[2]
+                self.assertIn("--require-hashes", install.split())
 
     def test_the_embedders_are_baked_in_with_fastembed(self):
         for name in FASTEMBED_SERVICES:
@@ -491,7 +566,7 @@ class ComposeCpuOverlay(unittest.TestCase):
             for name, context in TORCH_SERVICES.items():
                 with self.subTest(f"{profile} {name}"):
                     chosen = chosen_requirements(context, self.resolved_index(profile, name, context))
-                    self.assertEqual(chosen, CPU_REQUIREMENTS if cpu else GPU_REQUIREMENTS)
+                    self.assertEqual(chosen, CPU_LOCK if cpu else GPU_LOCK)
                     self.assertEqual(bool(torch_requirements(context / chosen)), not cpu)
 
 

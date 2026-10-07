@@ -101,6 +101,22 @@ with the request id, and the client gets a fixed message.
 - How errors are reported and inputs validated: [docs/validation-and-error-handling.md](docs/validation-and-error-handling.md).
 - Version numbers and releases: [VERSIONING.md](VERSIONING.md).
 
+### Dependencies and lock files
+
+The images install the Python packages from lock files, with exact versions and hashes: `requirements.lock` and `requirements-gpu.lock` next to each service's `requirements.txt` and `requirements-gpu.txt` (MAS also has `requirements-cpu.lock`). They are compiled for Python 3.11 on Linux x86-64, the Python of the images. The CI test jobs still install the `.txt` files.
+
+To add, remove or upgrade a Python dependency:
+
+1. Edit the `requirements*.txt` file.
+2. Run `scripts/dev/lock-requirements.sh`, which needs [uv](https://docs.astral.sh/uv/). It keeps every locked version it can; add `--upgrade-package NAME` to move one package, or `--upgrade` to move them all. It compiles the GPU lock first and the CPU lock against it, so both install the same versions.
+3. Update the licence data and `THIRD_PARTY_NOTICES`, with `--python-env` once for each local environment that has the packages installed (the rest is read from PyPI):
+
+   ```bash
+   python scripts/licences/third_party_notices.py --refresh python --python-env PATH/TO/python
+   ```
+
+4. Commit the `.txt` and `.lock` files, `scripts/licences/python-packages.json` and `THIRD_PARTY_NOTICES` together.
+
 ---
 
 ## 5. Code from elsewhere and AI tools

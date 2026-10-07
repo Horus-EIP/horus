@@ -524,8 +524,8 @@ def render(report: Report) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate THIRD_PARTY_NOTICES at the repository root.")
     parser.add_argument("--check", action="store_true", help="exit 1 if THIRD_PARTY_NOTICES or its data is out of date")
-    parser.add_argument("--refresh", action="store_true",
-                        help="re-read the Python and Rust licence data before writing")
+    parser.add_argument("--refresh", nargs="?", const="all", choices=("all", "python", "rust"),
+                        help="re-read the Python and/or Rust licence data before writing (default: all)")
     parser.add_argument("--python-env", action="append", default=[], metavar="PYTHON",
                         help="with --refresh: a Python interpreter whose installed packages give licence metadata "
                              "(repeat for each service environment; default: this interpreter)")
@@ -533,8 +533,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="with --refresh: the cargo executable (default: cargo on PATH)")
     args = parser.parse_args(argv)
 
-    if args.refresh:
+    if args.refresh in ("all", "python"):
         refresh_python(args.python_env or [sys.executable])
+    if args.refresh in ("all", "rust"):
         refresh_rust(args.cargo)
 
     report = Report()
