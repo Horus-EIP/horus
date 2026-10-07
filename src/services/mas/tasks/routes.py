@@ -903,7 +903,9 @@ async def create_new_task(
         conversation = (
             db.query(Conversations).filter(Conversations.id == task.conversation_id).first()
         )
-        if conversation is not None and not may_add_task_to(user, conversation):
+        if conversation is None:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        if not may_add_task_to(user, conversation):
             raise HTTPException(status_code=403, detail=NEW_TASK_REFUSED)
 
     files_payload = _build_files_payload(task)

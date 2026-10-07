@@ -435,7 +435,7 @@ Queue a new task. The task is stored with status `queued` and the call answers `
 
 The `task_id` returned here is the one to follow for the whole request: a single-agent task keeps it, and a multi-agent chain uses it as the Manager-owned root of its subtasks.
 
-**Auth:** JWT Bearer (requires `task:create` permission). A `conversation_id` must be a conversation of the user who posts, unless that user is an admin; anyone else gets `403`, checked before the `Idempotency-Key`, so a replayed key cannot get around it. A task without a `conversation_id` is accepted as before.
+**Auth:** JWT Bearer (requires `task:create` permission). A `conversation_id` must be a conversation of the user who posts, unless that user is an admin; anyone else gets `403`, and an unknown `conversation_id` gets `404`, both checked before the `Idempotency-Key`, so a replayed key cannot get around them. A task without a `conversation_id` is accepted as before.
 
 **Headers:**
 
@@ -494,6 +494,7 @@ The user message is saved to the conversation when the task is queued, before ro
 | `400` | Invalid base64 in an inline file. Nothing is stored. |
 | `401` | `Authentication Failed` |
 | `403` | `Only the conversation's owner or an admin can add a task to it`. Nothing is stored. |
+| `404` | `Conversation not found`: the `conversation_id` does not exist. Nothing is stored and the `Idempotency-Key` stays free. |
 | `413` | Inline file too large. Nothing is stored. |
 | `422` | Request body or `Idempotency-Key` validation error. |
 | `500` | `Failed to create task` (the queued task could not be stored). |

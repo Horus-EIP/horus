@@ -203,6 +203,26 @@ class TestCreatingATask:
         assert replayed.status_code == 403
         assert "task_id" not in replayed.json()
 
+    async def test_an_unknown_conversation_is_404_and_does_not_use_up_the_key(
+        self, tasks, mas_client, stays_queued
+    ):
+        headers = {"Idempotency-Key": "first-try"}
+        tasks_before = tasks.query(Task).count()
+
+        missing = await _post(mas_client, OWNER, 999, headers)
+
+        assert missing.status_code == 404
+        assert missing.json()["detail"] == "Conversation not found"
+        tasks.expire_all()
+        assert tasks.query(Task).count() == tasks_before
+
+        retried = await _post(mas_client, OWNER, 7, headers)
+
+        assert retried.status_code == 202
+        assert retried.headers.get("Idempotent-Replayed") is None
+        tasks.expire_all()
+        assert tasks.query(Task).count() == tasks_before + 1
+
 
 WHO_CANCELS = [(OWNER, 200), (OTHER, 403), (MANAGER, 200), (ADMIN, 200), (SYSTEM, 403)]
 
