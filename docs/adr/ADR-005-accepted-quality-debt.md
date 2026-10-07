@@ -74,11 +74,11 @@ The debt as recorded on 24/09/2026. The Decision column says where each item sta
 
 | # | Debt | Better way | Why we didn't | Cost | Risk if we leave it | Decision |
 |---|---|---|---|---|---|---|
-| C1 | **Unpinned Python dependencies**; images on `latest` and `redis:7` | Lock files (`uv pip compile`), pinned tags and a CI licence gate | Easier upgrades during development | S | Silent breakage or licence changes (Redis 7.4 went RSALv2/SSPL) | **Open.** Repay by 0.2.0 (ADR-004) |
+| C1 | **Unpinned Python dependencies**; images on `latest` and `redis:7` | Lock files (`uv pip compile`), pinned tags and a CI licence gate | Easier upgrades during development | S | Silent breakage or licence changes (Redis 7.4 went RSALv2/SSPL) | **Repaid**, not released yet (`b816e70`, `a820a0d`, `ade67e9`; Valkey instead of Redis in `9b72084`) |
 | C2 | **Test tools installed in production images** (pytest, pytest-cov, pytest-asyncio; pytest-html in the agent) | A `requirements-dev.txt` for tests only | One requirements file per service was simpler | XS | Bigger images, more licences to declare | **Open.** Repay by 0.1.2 |
 | C3 | **The MAS image is single-stage** and keeps compilers (`build-essential`, `g++`); pip runs with `--use-deprecated=legacy-resolver` | Multi-stage build (like the knowledge store); fix the conflicts the legacy resolver hides | The legacy resolver unblocked a dependency conflict quickly | S–M | Larger image; the resolver may install incompatible versions | **Open.** Repay by 0.2.0 |
 | C4 | **passlib 1.7.4 + `bcrypt<4.0`** in MAS, `bcrypt==3.2.2` pinned in the agent. passlib has had no release since 2020 and clashes with recent bcrypt. | Use `bcrypt` directly (or a maintained wrapper), with one version everywhere | Works today; it touches password hashing, so it needs care | S | Stuck on old crypto packages; future security fixes may be blocked | **Open.** Repay by 0.3.0 (before pilots) |
-| C5 | **The Python version is not consistent**: the README badge says 3.13, ruff targets `py313`, CI runs 3.13, and the Docker images use `python:3.11-slim` | One supported version, the same everywhere | Each part was set up at a different time | XS–S | "Works on my machine" bugs; lint rules for a version we don't run | **Open.** Repay by 0.1.2 (pick 3.11 or upgrade the images) |
+| C5 | **The Python version is not consistent**: the README badge says 3.13, ruff targets `py313`, CI runs 3.13, and the Docker images use `python:3.11-slim` | One supported version, the same everywhere | Each part was set up at a different time | XS–S | "Works on my machine" bugs; lint rules for a version we don't run | **Part repaid**: the README says 3.11 (`8dc2410`). The rest by 0.1.2 (pick 3.11 or upgrade the images) |
 | C6 | **Unused or odd dependencies**: PyMuPDF (AGPL, never imported) in the knowledge store; the PyPI `graphlib` package in MAS next to the standard-library `graphlib` | Remove them | Nobody cleaned the requirements after refactors | XS | PyMuPDF is the only licence blocker (ADR-004) | **Part repaid**: PyMuPDF removed (`a2e5807`). `graphlib` by 0.1.2 |
 | C7 | **Promtail** (log shipper) is end-of-life since March 2026 | Grafana Alloy | Still works | S | No more security fixes | **Open.** Repay by 0.2.0 |
 
@@ -98,8 +98,8 @@ The debt as recorded on 24/09/2026. The Decision column says where each item sta
 
 | # | Debt | Better way | Why we didn't | Cost | Risk if we leave it | Decision |
 |---|---|---|---|---|---|---|
-| E1 | **Stale docs**: `docs/contributing.md` (branch from `develop`, two approvals, a link to a missing onboarding guide, a CI job that no longer exists), the README CI badge on a deleted branch (`pre-release-fix`), `ci.yml` pointing to a missing `docs/eip/post-beta.md`, and README-FIRST giving 10–30 min for the first install | One pass to align the docs with reality | Docs weren't updated when the branch model and CI changed | S | Newcomers and external contributors follow wrong instructions; testers underestimate install time (T5) | **Part repaid** (`78bb12e`, `8f11aaa`, `2dbffb9`). The rest by 0.1.2 (before the calls for contributions) |
-| E2 | **The branch model changed on 24/09** but isn't documented | A short "Branching and CI" section | The cleanup was just done | XS | Contributors don't know where to branch from | **Open.** Repay by 0.1.2 |
+| E1 | **Stale docs**: `docs/contributing.md` (branch from `develop`, two approvals, a link to a missing onboarding guide, a CI job that no longer exists), the README CI badge on a deleted branch (`pre-release-fix`), `ci.yml` pointing to a missing `docs/eip/post-beta.md`, and README-FIRST giving 10–30 min for the first install | One pass to align the docs with reality | Docs weren't updated when the branch model and CI changed | S | Newcomers and external contributors follow wrong instructions; testers underestimate install time (T5) | **Repaid**, not released yet (`78bb12e`, `8f11aaa`, `2dbffb9`, `beed5fd`) |
+| E2 | **The branch model changed on 24/09** but isn't documented | A short "Branching and CI" section | The cleanup was just done | XS | Contributors don't know where to branch from | **Repaid**, not released yet (`fd7ad5f`, `beed5fd`) |
 | E3 | **Very large squash merges** (e.g. #197: 803 files) | Small PRs per issue | That merge consolidated a year of branches into `master` (one-off) | — | Hard to show it was reviewed | **Accept as a one-off.** Rule going forward: one issue = one PR |
 | E4 | **Test strategy, versioning and debt were never written down** | `TESTING.md`, `VERSIONING.md`, this ADR | Priority went to features before the beta | — | — | **Repaid**: `VERSIONING.md` (`b4e63c2`), `TESTING.md` (`2dbffb9`) and this ADR |
 
@@ -107,7 +107,7 @@ The debt as recorded on 24/09/2026. The Decision column says where each item sta
 
 ## Status on 07/10/2026
 
-Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at that commit.
+Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at that commit. C1, E1 and E2 were repaid later that day by the Objective 1 commits named below, and C5 in part.
 
 ### Repaid
 
@@ -116,6 +116,9 @@ Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at 
 | D3 | `8d1da93` (B-59) | `src/infra/docker-compose.yml` declares a `healthcheck` for `web-client` (line 142), `agent` (line 224) and `knowledge_store` (line 343). Listed under 0.1.2 in `CHANGELOG.md` (line 130). |
 | D4 | `fd4ae36` (B-63), `85f3d89` | The agent stores only answers that are not empty, degenerate, the spiral fallback or a refusal, and keys them on the knowledge store's corpus version, which every upload, delete and scan changes. `85f3d89` adds the context cap to the key. `CHANGELOG.md` line 45. |
 | D5 | `ef05b6b` (B-64), with `fd8778b` (B-93) and `9ea8dae` | MAS's uvicorn runs with `--ws-ping-interval 20 --ws-ping-timeout 120` (`src/services/mas/entrypoint.sh`, line 20); the chain close-out runs in a worker thread; the web client fetches a result that finished while the socket was down. `CHANGELOG.md` line 41. |
+| C1 | `b816e70`, `a820a0d`, `ade67e9`, `9b72084` | Each `requirements*.txt` has a `requirements*.lock` with hashes, and the images install from it with `--require-hashes`; every image tag in the Compose files and Dockerfiles names an exact version; the CI job `licences` fails on GPL, AGPL or SSPL in our own processes; Valkey 9.1.2 (BSD-3-Clause) replaced `redis:7`. |
+| E1 | `78bb12e`, `8f11aaa`, `2dbffb9`, `beed5fd` | README-FIRST gives 1.5 to 2 hours, the README badge shows the working branch, `docs/contributing.md` is the code-style page only (no `develop`, two-approval, onboarding or `test-integration` rule left), and `ci.yml` explains its `.env` workaround itself. |
+| E2 | `fd7ad5f`, `beed5fd` | "Branches" in `CONTRIBUTING.md` and "Repository branches" in `docs/operations.md` say to start from `Sprint#1_September2026_Tek5`. |
 | E4 | `b4e63c2`, `2dbffb9` | `VERSIONING.md` and `TESTING.md` are at the repository root, checked against the code on 07/10/2026; this ADR is in `docs/adr/`. |
 | D6 | `2cdc325` (B-51) | `VERSION` is `0.1.2`; `desktop/package.json`, `desktop/src-tauri/tauri.conf.json`, `desktop/src-tauri/Cargo.toml` and `src/services/web-client/package.json` say `0.1.2`; the knowledge store reports `HORUS_VERSION` (`src/services/knowledge-store/app/main.py`, line 112); the CI job `versions` runs `scripts/ci/check-versions.py` (`.github/workflows/ci.yml`, lines 66–80). |
 
@@ -125,8 +128,8 @@ Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at 
 |---|---|---|---|
 | B2 | `084a1c2` (B-54); first runs `858dcb3`, `1daf376` | 100 questions in `tests/eval/testset.yaml`, 10 of them `not_in_corpus`, and the runner `scripts/eval/run-eval.py`. First runs on 06/10/2026 on the development laptop: 93 of 100 correct on CPU, 96 of 100 on the 8 GB GPU (`CHANGELOG.md`, line 29). | The runs are by hand, not on the GPU VM and not a release step. `.github/workflows/eval-testset.yml` only checks the set and the runner, with no model. |
 | C6 | `a2e5807` | PyMuPDF is gone from `src/services/knowledge-store/requirements.txt`. | The PyPI `graphlib` is still in `src/services/mas/requirements.txt` (line 38); `src/services/mas/tasks/decomposition.py` (line 10) imports the standard-library one. |
-| D1 | `736fdc2` (B-66), `9739864` (B-90), `5055cd2` (B-96) | The installer pulls prebuilt images: nothing builds on the customer's machine. The CPU profiles run one model server, llama-server, for MAS and every agent, and the CPU images contain no torch. | The installer still asks for 150 GB free, 125 GB with a GPU (`installer/preflight.py`, lines 29–30), because time and disk peak of a prebuilt install are not measured yet (`docs/operations.md`, line 82). Without a GPU, Docker needs at least 13.5 GiB (`installer/profiles.py`, line 22). The GPU profiles keep the 1.5B router model in MAS next to vLLM (`installer/profiles.py`, line 324). Loki, Promtail, Tempo and Prometheus always run. |
-| E1 | `78bb12e` (B-58), `8f11aaa` (B-118), `2dbffb9` | README-FIRST gives 1.5 to 2 hours (`packaging/README-FIRST.txt`, line 26). The README CI badge shows `Sprint#1_September2026_Tek5` (`README.md`, line 3). The "Testing policy" section of `docs/contributing.md`, which named a CI job `test-integration` that `ci.yml` does not have, now links to `TESTING.md`. | `docs/contributing.md` still says to branch from `develop` (lines 19 and 62), asks for two approvals (lines 64 and 198) and links `../getting-started/onboarding.md`, which does not exist (line 13). `.github/workflows/ci.yml` still points to `docs/eip/post-beta.md`, which does not exist (lines 165 and 187). |
+| D1 | `736fdc2` (B-66), `9739864` (B-90), `5055cd2` (B-96) | The installer pulls prebuilt images: nothing builds on the customer's machine. The CPU profiles run one model server, llama-server, for MAS and every agent, and the CPU images contain no torch. | The installer still asks for 150 GB free, 125 GB with a GPU (`installer/preflight.py`, lines 29–30), because time and disk peak of a prebuilt install are not measured yet (`docs/operations.md`, line 82). Without a GPU, Docker needs at least 13.5 GiB (`installer/profiles.py`, line 22). The GPU profiles still name the 1.5B router in `LLM_MODEL_ID` (`installer/profiles.py`, line 324), but with `LLM_BACKEND=vllm` MAS never loads it. Loki, Promtail, Tempo and Prometheus always run. |
+| C5 | `8dc2410` | The README badge and its stack table say Python 3.11, the Python of the images. | `pyproject.toml` targets `py313` and the MAS and agent CI jobs run 3.13. |
 
 ### Still open
 
@@ -140,14 +143,11 @@ Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at 
 | B1 | `ci.yml` (lines 315–320) says the integration tests run only by hand. |
 | B3 | `src/services/knowledge-store/tests/test_corpus_safety.py` is still there; CI runs `tests/knowledge_store` only (`ci.yml`, line 295). |
 | B4 | The repository records no ATP after v7 (18/09/2026, `docs/eip/regressions.md`), so the rule has not been applied yet. |
-| C1 | `src/infra/docker-compose.yml` uses `postgres:latest` (line 379), `redis:7` (line 403), `dpage/pgadmin4:latest` (line 427), `redis/redisinsight:latest` (line 446) and `prom/prometheus:latest` (line 511). No lock file. A few pins were added: torch 2.14.1 (`c0f89b3`), fastembed 0.8.1 (`5055cd2`), PyYAML below 7 (`34c0857`), SQLAlchemy below 2.2 (`6851af5`), and the actions of `images.yml` at commit SHAs (`f3db7d7`). |
 | C2 | pytest is still in `src/services/mas/requirements.txt` (lines 1–3), `src/services/agent/requirements.txt` (lines 7–10) and `src/services/knowledge-store/requirements.txt` (lines 23–25). |
 | C3 | `src/services/mas/Dockerfile`: one `FROM` (line 1), `build-essential` and `g++` (lines 14–15), `--use-deprecated=legacy-resolver` (line 35). |
 | C4 | `src/services/mas/requirements.txt` lines 23–24; `src/services/agent/requirements.txt` line 18. passlib hashes the passwords in `src/services/mas/auth/auth_tool_functions.py` (line 10). |
-| C5 | `README.md` line 4 (3.13), `pyproject.toml` line 25 (`py313`), `ci.yml` line 15 (3.13), but 3.11 in the knowledge-store CI job (line 271, since `5055cd2`), `images.yml`, `desktop-release.yml` and all three Python Dockerfiles. |
 | C7 | `src/infra/docker-compose.yml` line 481: `grafana/promtail:3.4.2`. |
 | D2 | `packaging/build_bundle.py` (lines 27–31) still puts the service source in the ZIP; `docs/operations.md` (line 79) lists it as not done. The images are signed by `images.yml`, but the installer does not check the signature (`docs/operations.md`, line 80). |
-| E2 | Nothing documents it. `master` has not moved since `af04a29` (26/09/2026); the team works on `Sprint#1_September2026_Tek5`, where CI runs since `8f11aaa` (`ci.yml`, line 5). `archive/Year_2025-2026` also exists. |
 
 The accepted items still hold: B904 is still ignored (`pyproject.toml`, line 51), the coverage gates are still 85 / 90 / 85 % (`ci.yml`, lines 198, 247 and 298), and the stack still runs `grafana/loki:3.4.2` and `grafana/tempo:2.6.0` (`src/infra/docker-compose.yml`, lines 469 and 496). For E3, the work since 24/09 is in small commits, most named after a backlog item; merging `Sprint#1_September2026_Tek5` into `master` as one squash would repeat it.
 
@@ -157,13 +157,13 @@ The accepted items still hold: B904 is still ignored (`pyproject.toml`, line 51)
 
 | Repay by | Items | Estimated cost |
 |---|---|---|
-| **0.1.2** (not tagged yet) | A1, A3, A6, B3, C2, C5, E2; the rest of C6 and E1 | Under 3 d by the cost scale (S: A1, E1; XS: A3, A6, B3, C2, C6, E2; XS–S: C5). Fixing the 20 lint errors before `npm run lint` can gate CI is not estimated. |
-| **0.2.0** (end of Oct) | A2 (start), A5, C1, C3, C7, D2; the rest of B2 and D1 | A2, A5, C1, C3 and C7: about 2.5 to 5 d by the cost scale. B2 (M) and D1 + D2 (L) are part repaid and not re-estimated. |
+| **0.1.2** (not tagged yet) | A1, A3, A6, B3, C2; the rest of C5 and C6 | Under 2.5 d by the cost scale (S: A1; XS: A3, A6, B3, C2, C6; XS–S: C5). Fixing the 20 lint errors before `npm run lint` can gate CI is not estimated. |
+| **0.2.0** (end of Oct) | A2 (start), A5, C3, C7, D2; the rest of B2 and D1 | A2, A5, C3 and C7: about 2 to 5 d by the cost scale. B2 (M) and D1 + D2 (L) are part repaid and not re-estimated. |
 | **0.3.0** (Dec) | C4, D1 (slimmer profile) | ~3 d (24/09 estimate) |
 | **1.0.0** (Feb 2027) | B1 (E2E in CI) | ~3–5 d |
 | **Next ATP** | B4 | XS |
 | **Accepted** | A4, A7 (gates), D7, E3 | — |
-| **Repaid** | D3, D6 (in 0.1.2); D4, D5, E4 (not released yet) | — |
+| **Repaid** | D3, D6 (in 0.1.2); C1, D4, D5, E1, E2, E4 (not released yet) | — |
 
 **Why this order:**
 

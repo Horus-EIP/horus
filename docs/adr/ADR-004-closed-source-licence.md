@@ -113,7 +113,7 @@ The inventory covers 1,463 third-party components as of 26/09/2026 (`docs/eip/de
 | Permissive (MIT, BSD, Apache-2.0, ISC, Zlib, Unicode…) | 1,403 | None. We must keep their notices. |
 | Weak copyleft (LGPL, MPL-2.0) | 39 | None when used unmodified. Examples: psycopg2, libvips via sharp, certifi, tqdm, 5 Rust crates. |
 | Strong copyleft (GPL, AGPL) | 4 | None. Loki, Tempo, poppler and GCC run as **separate, unmodified programs**. That is aggregation, so our code is not affected. We add their licence text and a source link. **The only blocker found, PyMuPDF (AGPL, installed but never imported), was removed from the knowledge-store requirements on 26/09/2026.** |
-| Source-available (RSALv2 / SSPL) | 2 | The Redis 7.4 image allows use inside Horus, but we plan to switch to Valkey (BSD) to avoid legal friction with customers. RedisInsight is kept out of customer builds. |
+| Source-available (RSALv2 / SSPL) | 2 | The Redis 7.4 image allows use inside Horus, but we plan to switch to Valkey (BSD) to avoid legal friction with customers. RedisInsight is kept out of customer builds. Done on 07/10/2026: Valkey 9.1.2 replaced Redis (`9b72084`), and RedisInsight starts only with the Compose profile `dev-tools`, which the installer never uses (`01df0ee`). |
 | NVIDIA proprietary (CUDA wheels) | 15 | Follow NVIDIA's terms. Check redistribution before the AI-box offer. |
 | AI models (Qwen, BGE, MiniLM, spaCy, T5, DistilBART) | 10 | All Apache-2.0 or MIT. Commercial use is allowed. |
 
@@ -250,7 +250,7 @@ This fits the business model exactly:
   - **Assign the rights to the company** once it is created.
   - This is also the mentor's "rights assignment contracts so the project survives independently of each member".
 - **Check Epitech's EIP rules** for any clause about the IP of student projects.
-- We take on the **license-compliance work**: THIRD_PARTY_NOTICES, keeping copyleft components unmodified and separate, and a licence check in CI.
+- We take on the **license-compliance work**: THIRD_PARTY_NOTICES, keeping copyleft components unmodified and separate, and a licence check in CI. The first and the last are in place since 07/10/2026 (`2df368e`, `ade67e9`).
 
 ### Risks we accept
 
