@@ -34,6 +34,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - The knowledge store re-embeds every stored document once on its first start (passages instead of whole files, FastEmbed instead of sentence-transformers). `KNOWLEDGE_STORE_REINDEX_ON_STARTUP=0` turns it off.
 - RabbitMQ work queues get a length limit: an empty queue declared by an older version is deleted and declared again; a queue that still holds tasks is kept and limited by MAS until it drains.
 - The CPU profiles download a 2.5 GB GGUF for llama-server instead of the in-process 1.5B router and 4B worker. Docker Compose 2.33.0 or later is required.
+- Tasks are now read, created and cancelled per owner (B-110): a `user` sees and cancels only their own tasks and posts only into their own conversations, a `manager` reads and cancels every task but posts only into their own conversations, and an `admin` can do everything. A client that read other users' tasks with the `user` role now gets `403`.
 
 ### Fixed
 
@@ -62,6 +63,14 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
   - The evaluation runner did not renew its login token while polling a task, so a finished task could be reported as a timeout (`72b0b49`)
   - Answers lost their superscripts and fractions (`10⁶ m²` became `106 m2`); only full-width forms are folded now (B-62, `c6afebf`)
   - The installer said its images were signed although it checks no signature, the CPU profiles said nothing had been measured, and the candidates summary named a 100-question evaluation for a 20-question run (`5496787`)
+- Who can read and change which task (B-110):
+  - Any user could read any task, its result, its events and the running tasks of any conversation, and `GET /tasks/list` returned everyone's tasks; now only the task's owner (or the owner of its root task, then of its conversation), a manager or an admin, and the list holds a user's own tasks (`94228c2`)
+  - Any user could post into another user's conversation and cancel another user's task; posting now needs the conversation's owner or an admin, cancelling the task's owner, a manager or an admin, and a replayed `Idempotency-Key` cannot get around it (`11667e0`)
+- Follow-ups of the B-106 review (B-111):
+  - Registering an agent declared its work queue on the event loop, so a RabbitMQ alarm could still freeze MAS; the declaration now runs in a worker thread (B-94, `0c23b80`)
+  - Switching conversation while a request ran kept its spinner and its task poll in the new conversation; the turn is cleared and the new conversation's running tasks are adopted (`d2fff7e`)
+  - `npm run typecheck` pointed at a missing tsconfig and `npm run lint` used the `next lint` that Next.js 16 removed and crashed on its config; both run now, and the small lint findings in files this branch changed are fixed (`cc10222`)
+  - The installer and the tester documents said the images were signed; they now say the release workflow signs them but nothing checks the signature yet. The cpu-lean notes add that it failed the ADR-006 timing condition on the laptop run (`ff7556d`)
 
 ### Added
 
@@ -90,6 +99,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - The actions in `.github/workflows/images.yml` run at pinned commit SHAs (`f3db7d7`)
 - The ADR on machines under 16 GB is ADR-006; ADR-005 is the quality-debt ADR (`d4cdf34`)
 - The README calls the CPU memory thresholds planning figures kept until the reference-machine run, and `.env.example` documents `KNOWLEDGE_STORE_EMBED_THREADS` and `KNOWLEDGE_STORE_REINDEX_ON_STARTUP` (`590547a`)
+- The F25 web and agent tests have their What / How / When block and are in the regression log, and the docs nav lists the validation and error-handling guide, the community outreach plan and Noah's who-made-what page (`67d9afb`)
 
 ## 0.1.2 (unreleased)
 
