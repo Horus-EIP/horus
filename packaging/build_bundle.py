@@ -37,6 +37,7 @@ SOURCE_INCLUDE = [
 SOURCE_FILES = [
     "stack-up.sh",
     "LICENSE",
+    "THIRD_PARTY_NOTICES",
 ]
 
 PRUNE_DIRS = {

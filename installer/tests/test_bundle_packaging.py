@@ -295,6 +295,14 @@ class BundleShipsTheVersion(unittest.TestCase):
         self.assertIn("horus/models/manifest.json", names)
         self.assertIn("installer/model_manager.py", names)
 
+    def test_the_third_party_notices_ship_next_to_the_licence(self):
+        with zipfile.ZipFile(self.zip_path) as zf:
+            names = set(zf.namelist())
+            shipped = zf.read("horus/THIRD_PARTY_NOTICES").decode("utf-8")
+        self.assertIn("horus/LICENSE", names)
+        committed = (REPO / "THIRD_PARTY_NOTICES").read_text(encoding="utf-8")
+        self.assertEqual(shipped.replace("\r\n", "\n"), committed)
+
     def test_no_downloaded_model_file_ships(self):
         with zipfile.ZipFile(self.zip_path) as zf:
             names = zf.namelist()
