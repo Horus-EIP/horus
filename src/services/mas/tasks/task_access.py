@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Query, Session
 
 from auth.permissions import Role
@@ -8,9 +8,18 @@ from db.models import Conversations, Task
 
 ROLES_THAT_READ_EVERY_TASK = frozenset({Role.ADMIN.value, Role.MANAGER.value})
 
-TASK_READ_REFUSED = "Only the task's owner, a manager or an admin can read this task"
-TASK_EVENTS_REFUSED = "Only the task's owner, a manager or an admin can read its events"
-TASK_CANCEL_REFUSED = "Only the task's owner, a manager or an admin can cancel this task"
+TASK_READ_REFUSED = (
+    "Only the task's owner, the owner of its conversation, a manager or an admin can read "
+    "this task"
+)
+TASK_EVENTS_REFUSED = (
+    "Only the task's owner, the owner of its conversation, a manager or an admin can read "
+    "its events"
+)
+TASK_CANCEL_REFUSED = (
+    "Only the task's owner, the owner of its conversation, a manager or an admin can "
+    "cancel this task"
+)
 RUNNING_TASKS_REFUSED = (
     "Only the conversation's owner, a manager or an admin can list its running tasks"
 )
@@ -53,23 +62,19 @@ def _conversation_owner(conversation_id: int | None, db: Session) -> str | None:
     return conversation.owner_username if conversation is not None else None
 
 
-def task_owner(task: Task, db: Session) -> str | None:
-    if task.owner_username:
-        return task.owner_username
-    root = _root_of(task, db)
-    if root.owner_username:
-        return root.owner_username
-    conversation_id = (
-        task.conversation_id if task.conversation_id is not None else root.conversation_id
-    )
-    return _conversation_owner(conversation_id, db)
-
-
 def may_read_task(user: dict, task: Task, db: Session) -> bool:
     if reads_every_task(user):
         return True
-    owner = task_owner(task, db)
-    return bool(owner) and owner == user.get("username")
+    username = user.get("username")
+    if not username:
+        return False
+    root = _root_of(task, db)
+    if (task.owner_username or root.owner_username) == username:
+        return True
+    conversation_id = (
+        task.conversation_id if task.conversation_id is not None else root.conversation_id
+    )
+    return _conversation_owner(conversation_id, db) == username
 
 
 def may_cancel_task(user: dict, task: Task, db: Session) -> bool:
@@ -89,10 +94,6 @@ def root_tasks_visible_to(user: dict, query: Query) -> Query:
         return query
     username = user.get("username")
     owned_conversations = select(Conversations.id).where(Conversations.owner_username == username)
-    unowned = or_(Task.owner_username.is_(None), Task.owner_username == "")
     return query.filter(
-        or_(
-            Task.owner_username == username,
-            and_(unowned, Task.conversation_id.in_(owned_conversations)),
-        )
+        or_(Task.owner_username == username, Task.conversation_id.in_(owned_conversations))
     )

@@ -366,7 +366,7 @@ Update an agent's status to active and refresh its `last_heartbeat` timestamp. C
 
 #### GET /tasks/list
 
-Retrieve the top-level tasks (the subtasks of a multi-agent chain are left out). Admins and managers get every user's tasks. Other roles (`user`, and `system`, which no Horus service logs in as) get only the tasks they own: their `owner_username`, or, for a task without one, a conversation they own.
+Retrieve the top-level tasks (the subtasks of a multi-agent chain are left out). Admins and managers get every user's tasks. Other roles (`user`, and `system`, which no Horus service logs in as) get the tasks they own by `owner_username` and every task in a conversation they own, whoever posted it.
 
 **Auth:** JWT Bearer (requires `task:read` permission)
 
@@ -505,7 +505,7 @@ The user message is saved to the conversation when the task is queued, before ro
 
 The task, its result and its subtasks. `result` is the final answer (the aggregated answer for the root of a chain) and `sources` the passages it cites; a chain's root keeps every source of its steps, each once.
 
-**Auth:** JWT Bearer (requires `task:read` permission). Only the task's owner, a manager or an admin can read it; anyone else gets `403`. A task's owner is the user in its `owner_username` (the user who queued it); for a task without one, the owner of its root task, then the owner of its conversation. An unknown id gets `404` first.
+**Auth:** JWT Bearer (requires `task:read` permission). Only the task's owner, the owner of its conversation, a manager or an admin can read it; anyone else gets `403`. A task's owner is the user in its `owner_username` (the user who queued it); for a task without one, the owner of its root task. The owner of the task's conversation (its own, else its root task's) may read it too, whoever posted it, for example an admin. An unknown id gets `404` first.
 
 **Response 200:**
 
@@ -537,7 +537,7 @@ The task, its result and its subtasks. `result` is the final answer (the aggrega
 
 | Code | Detail |
 |------|--------|
-| `403` | `Only the task's owner, a manager or an admin can read this task` |
+| `403` | `Only the task's owner, the owner of its conversation, a manager or an admin can read this task` |
 | `404` | `Task not found` |
 
 ---
@@ -561,7 +561,7 @@ The conversation's top-level tasks that are not finished yet (`queued`, `pending
 
 Replay the events stored for a task. MAS sends every per-task WebSocket frame through one publish function, which gives it the next `seq` of the task (Redis `INCR horus:task:{task_id}:seq`), appends it to the Redis stream `horus:task:{task_id}:events` (kept 24 h after the last event, trimmed to about 10,000 entries) and only then sends it to the connected sockets. Events are therefore stored even when nobody is connected.
 
-**Auth:** JWT Bearer (requires `task:read` permission). Only the task's owner, a manager or an admin can read the events; anyone else gets `403`. A task's owner is the user in its `owner_username` (the user who queued it); for a task without one, the owner of its root task, then the owner of its conversation.
+**Auth:** JWT Bearer (requires `task:read` permission). Only the task's owner, the owner of its conversation, a manager or an admin can read the events; anyone else gets `403`. A task's owner is the user in its `owner_username` (the user who queued it); for a task without one, the owner of its root task. The owner of the task's conversation (its own, else its root task's) may read it too, whoever posted it, for example an admin.
 
 **Query parameters:**
 
@@ -616,7 +616,7 @@ Token deltas (`reasoning.delta` steps) are stored as `token` events. The agent a
 
 | Code | Detail |
 |------|--------|
-| `403` | `Only the task's owner, a manager or an admin can read its events` |
+| `403` | `Only the task's owner, the owner of its conversation, a manager or an admin can read its events` |
 | `404` | `Task not found` |
 | `503` | `The task event store is unavailable` (Redis is down). |
 
@@ -738,7 +738,7 @@ Called once by an agent worker when it starts, after it registered. Every task s
 
 Cancel a queued or running task. Updates its status to CANCELED and sends a high-priority cancellation signal to the assigned agent via RabbitMQ. For a top-level task an `error` event (`status: "cancelled"`) is stored and sent to the conversation. A task cancelled while it is still being routed is never dispatched.
 
-**Auth:** JWT Bearer (requires `task:delete` permission). Only the task's owner (as for `GET /tasks/{task_id}`), a manager or an admin can cancel it; anyone else gets `403`. An unknown id gets `404` first. `PATCH /tasks/{task_id}/cancel` is the same route.
+**Auth:** JWT Bearer (requires `task:delete` permission). Only the task's owner or the owner of its conversation (as for `GET /tasks/{task_id}`), a manager or an admin can cancel it; anyone else gets `403`. An unknown id gets `404` first. `PATCH /tasks/{task_id}/cancel` is the same route.
 
 **Path parameters:**
 
@@ -762,7 +762,7 @@ Cancel a queued or running task. Updates its status to CANCELED and sends a high
 |------|--------|
 | `400` | `Cannot interrupt a completed task` |
 | `401` | `Authentication Failed` |
-| `403` | `Only the task's owner, a manager or an admin can cancel this task` |
+| `403` | `Only the task's owner, the owner of its conversation, a manager or an admin can cancel this task` |
 | `404` | `Task not found` |
 | `500` | `Error Canceling task: ...` |
 

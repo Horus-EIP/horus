@@ -618,8 +618,8 @@ def update_task_queue_depth(depth: int):
         "Retrieve top-level tasks from the database. Excludes subtasks of a "
         "chain (rows whose ``parent_task_id`` is set) so the user-facing list "
         "shows one row per original demand, not per chain step. Admins and "
-        "managers get every task; other roles get the tasks they own, directly "
-        "or through a conversation they own. Requires TASK_READ permission."
+        "managers get every task; other roles get the tasks they own and every "
+        "task in a conversation they own. Requires TASK_READ permission."
     ),
     status_code=200,
     dependencies=[Depends(PermissionChecker(Permission.TASK_READ))],
@@ -734,8 +734,8 @@ def list_running_tasks_for_conversation(
     summary="Get task details",
     description=(
         "Returns a task, optional result, and child subtasks. Allowed for the "
-        "task's owner, a manager or an admin; a task without an owner belongs to "
-        "the owner of its root task, then of its conversation. Requires TASK_READ."
+        "task's owner (else its root task's), the owner of its conversation, a "
+        "manager or an admin. Requires TASK_READ."
     ),
     status_code=200,
     dependencies=[Depends(PermissionChecker(Permission.TASK_READ))],
@@ -1539,7 +1539,7 @@ async def _dispatch_chain(
         "``since``, oldest first. Every per-task WebSocket frame is stored "
         "for 24 h, so a client that was disconnected can call this with the "
         "last ``seq`` it saw and replay what it missed. Allowed for the "
-        "task's owner, a manager or an admin."
+        "task's owner, the owner of its conversation, a manager or an admin."
     ),
     status_code=200,
     dependencies=[Depends(PermissionChecker(Permission.TASK_READ))],
@@ -2454,7 +2454,7 @@ async def _publish_cancellation(task_id: str, db: Session) -> None:
 @router.patch(
     "/task-cancel/{task_id}",
     summary="Cancel a running task",
-    description="Interrupts a running task by updating its status to CANCELED and sending a high-priority cancellation signal to the assigned agent via RabbitMQ. Allowed for the task's owner, a manager or an admin. Requires TASK_DELETE permission.",
+    description="Interrupts a running task by updating its status to CANCELED and sending a high-priority cancellation signal to the assigned agent via RabbitMQ. Allowed for the task's owner, the owner of its conversation, a manager or an admin. Requires TASK_DELETE permission.",
     status_code=200,
     tags=["Tasks"],
     dependencies=[Depends(PermissionChecker(Permission.TASK_DELETE))],

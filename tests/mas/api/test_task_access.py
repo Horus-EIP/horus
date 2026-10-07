@@ -73,7 +73,8 @@ class TestReadingOneTask:
         response = await _get(mas_client, OTHER, "/tasks/mine")
 
         assert response.json()["detail"] == (
-            "Only the task's owner, a manager or an admin can read this task"
+            "Only the task's owner, the owner of its conversation, a manager or an admin "
+            "can read this task"
         )
 
     async def test_a_task_owned_through_its_conversation_is_read_by_that_owner(
@@ -248,7 +249,8 @@ class TestCancellingATask:
 
         assert response.status_code == 403
         assert response.json()["detail"] == (
-            "Only the task's owner, a manager or an admin can cancel this task"
+            "Only the task's owner, the owner of its conversation, a manager or an admin "
+            "can cancel this task"
         )
 
     async def test_the_owner_cancels_a_subtask_that_has_no_owner_of_its_own(
@@ -258,3 +260,57 @@ class TestCancellingATask:
 
     async def test_an_unknown_task_is_404_before_any_ownership_check(self, tasks, mas_client):
         assert (await self._cancel(mas_client, OTHER, "/tasks/task-cancel/missing")).status_code == 404
+
+
+@pytest.fixture
+def admin_posted(tasks):
+    tasks.add_all(
+        [
+            Task(id="admin-in-mine", agent_id="manager", status="running",
+                 query="Posted by an admin", conversation_id=7, owner_username="admin"),
+            Task(id="admin-step", agent_id="agent-finance", status="running", query="Step 1",
+                 conversation_id=None, owner_username=None, parent_task_id="admin-in-mine"),
+            Task(id="loop-a", agent_id="agent-finance", status="running", query="Loop A",
+                 conversation_id=None, owner_username=None, parent_task_id="loop-b"),
+            Task(id="loop-b", agent_id="agent-finance", status="running", query="Loop B",
+                 conversation_id=None, owner_username="user", parent_task_id="loop-a"),
+        ]
+    )
+    tasks.commit()
+    return tasks
+
+
+class TestTheConversationOwnersTasks:
+    @pytest.mark.parametrize(
+        "path", ["/tasks/admin-in-mine", "/tasks/admin-in-mine/events", "/tasks/admin-step"]
+    )
+    async def test_the_owner_of_the_conversation_reads_a_task_an_admin_posted_in_it(
+        self, admin_posted, mas_client, path
+    ):
+        assert (await _get(mas_client, OWNER, path)).status_code == 200
+        assert (await _get(mas_client, OTHER, path)).status_code == 403
+
+    async def test_the_owner_of_the_conversation_cancels_it(self, admin_posted, mas_client):
+        with patch("tasks.task_crud.rabbitmq_instance"):
+            async with mas_client(OTHER) as client:
+                refused = await client.patch("/tasks/task-cancel/admin-in-mine")
+            async with mas_client(OWNER) as client:
+                cancelled = await client.patch("/tasks/task-cancel/admin-in-mine")
+
+        assert refused.status_code == 403
+        assert cancelled.status_code == 200
+
+    async def test_it_is_in_the_conversation_owners_task_list_only(self, admin_posted, mas_client):
+        async with mas_client(OWNER) as client:
+            mine = {task["id"] for task in (await client.get("/tasks/list")).json()}
+        async with mas_client(OTHER) as client:
+            theirs = {task["id"] for task in (await client.get("/tasks/list")).json()}
+
+        assert "admin-in-mine" in mine
+        assert "admin-in-mine" not in theirs
+
+    async def test_a_cycle_in_the_parent_chain_ends_with_the_right_answer(
+        self, admin_posted, mas_client
+    ):
+        assert (await _get(mas_client, OWNER, "/tasks/loop-a")).status_code == 200
+        assert (await _get(mas_client, OTHER, "/tasks/loop-a")).status_code == 403

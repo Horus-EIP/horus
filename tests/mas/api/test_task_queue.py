@@ -406,15 +406,18 @@ class TestTaskEventsEndpoint:
         assert mine.status_code == 200
         assert theirs.status_code == 403
 
-    async def test_a_standalone_task_without_an_owner_is_admin_only(
-        self, routing_db, mas_client, as_user
+    async def test_a_standalone_task_without_an_owner_is_for_managers_and_admins_only(
+        self, routing_db, mas_client, as_user, as_manager
     ):
         _owned_task(routing_db, "orphan", owner=None, conversation_id=None)
 
         async with mas_client(as_user) as client:
             response = await client.get("/tasks/orphan/events")
+        async with mas_client(as_manager) as client:
+            managed = await client.get("/tasks/orphan/events")
 
         assert response.status_code == 403
+        assert managed.status_code == 200
 
     async def test_unknown_task_events_return_404(self, mas_client, as_admin):
         async with mas_client(as_admin) as client:
