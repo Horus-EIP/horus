@@ -34,7 +34,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - The knowledge store re-embeds every stored document once on its first start (passages instead of whole files, FastEmbed instead of sentence-transformers). `KNOWLEDGE_STORE_REINDEX_ON_STARTUP=0` turns it off.
 - RabbitMQ work queues get a length limit: an empty queue declared by an older version is deleted and declared again; a queue that still holds tasks is kept and limited by MAS until it drains.
 - The CPU profiles download a 2.5 GB GGUF for llama-server instead of the in-process 1.5B router and 4B worker. Docker Compose 2.33.0 or later is required.
-- Tasks are now read, created and cancelled per owner (B-110): a `user` sees and cancels only their own tasks and posts only into their own conversations, a `manager` reads and cancels every task but posts only into their own conversations, and an `admin` can do everything. A client that read other users' tasks with the `user` role now gets `403`.
+- Tasks are now read, created and cancelled per owner (B-110): a `user` sees and cancels their own tasks and every task in a conversation they own, and posts only into their own conversations; a `manager` reads and cancels every task but posts only into, and reads the history and chat of, their own conversations; an `admin` can do everything. A client that read other users' tasks with the `user` role now gets `403`, and reading another user's conversation history answers `403` instead of `404`. The full matrix is in `docs/security.md` ("Who can see what").
 
 ### Fixed
 
@@ -71,6 +71,14 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
   - Switching conversation while a request ran kept its spinner and its task poll in the new conversation; the turn is cleared and the new conversation's running tasks are adopted (`d2fff7e`)
   - `npm run typecheck` pointed at a missing tsconfig and `npm run lint` used the `next lint` that Next.js 16 removed and crashed on its config; both run now, and the small lint findings in files this branch changed are fixed (`cc10222`)
   - The installer and the tester documents said the images were signed; they now say the release workflow signs them but nothing checks the signature yet. The cpu-lean notes add that it failed the ADR-006 timing condition on the laptop run (`ff7556d`)
+- Found by the review of B-110 and B-111:
+  - `scripts/integration-checks/mas-agents-persistence.py` called the now-async `create_agent` without waiting for it (`804aa9a`), and `agent-delegation-integration.py` imported the tool definitions under their pre-B-99 name (`cada13a`)
+  - A file attached to a message sent just before switching conversation stayed in the picker and went out with the next message in the other conversation; the picker is emptied when the message leaves and when the conversation changes (`e5246bf`)
+  - Creating a task in a conversation that does not exist failed with `500`; it answers `404` and leaves the `Idempotency-Key` free (`a6f06d7`)
+- Access decisions after that review:
+  - A conversation's owner can read and cancel every task in it, whoever posted it, for example an admin; the chat page no longer re-asks such a task every 1.6 s (`7e5275f`)
+  - The chat page stops polling a task the server answers `403` or `404` for, drops its spinner and says the task is no longer available (`94f4bc0`)
+  - Managers keep reading every task but not other users' conversations: the history route answers `403` with an explicit message and the chat WebSocket gives its reason when it refuses (`aca0a9c`)
 
 ### Added
 
@@ -100,6 +108,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - The ADR on machines under 16 GB is ADR-006; ADR-005 is the quality-debt ADR (`d4cdf34`)
 - The README calls the CPU memory thresholds planning figures kept until the reference-machine run, and `.env.example` documents `KNOWLEDGE_STORE_EMBED_THREADS` and `KNOWLEDGE_STORE_REINDEX_ON_STARTUP` (`590547a`)
 - The F25 web and agent tests have their What / How / When block and are in the regression log, and the docs nav lists the validation and error-handling guide, the community outreach plan and Noah's who-made-what page (`67d9afb`)
+- `docs/security.md` has one "Who can see what" matrix of roles against tasks, the task list, conversations and chat, cancelling and creating, with the two access decisions and why; `docs/api-reference.md` links to it (`ba9023f`)
 
 ## 0.1.2 (unreleased)
 
