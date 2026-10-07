@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, main, pre-release-fix]
+    branches: [master, main, pre-release-fix, 'Sprint#1_September2026_Tek5']
   pull_request:
   workflow_dispatch:
 
