@@ -682,3 +682,180 @@ describe("chat page following a task it adopted on load", () => {
     expect(screen.getByText("What is the travel policy?")).toBeInTheDocument();
   });
 });
+
+describe("chat page switching conversation while a task runs", () => {
+  const otherHistory = {
+    ok: true,
+    data: {
+      items: [{ role: "user", message: "What is the travel policy?", timestamp: "2026-10-05T10:00:00" }],
+      nextCursor: null,
+    },
+  };
+
+  function renderChat() {
+    return render(
+      <MantineProvider>
+        <ChatPage />
+      </MantineProvider>
+    );
+  }
+
+  async function switchTo(view: ReturnType<typeof renderChat>, conversation: string) {
+    navigation.conversation = conversation;
+    view.rerender(
+      <MantineProvider>
+        <ChatPage />
+      </MantineProvider>
+    );
+  }
+
+  function pollsOf(taskId: string) {
+    return chatApiMock.getTask.mock.calls.filter(([id]) => id === taskId).length;
+  }
+
+  beforeEach(() => {
+    installMockWebSocket();
+    navigation.conversation = "42";
+    localStorage.setItem("auth_token", "token");
+    Object.values(chatApiMock).forEach((fn) => fn.mockReset());
+    chatApiMock.getConversations.mockResolvedValue({ ok: true, data: [] });
+    chatApiMock.getHistory.mockImplementation(async (conversationId: string) =>
+      conversationId === "43"
+        ? otherHistory
+        : {
+            ok: true,
+            data: {
+              items: [
+                { role: "user", message: "Summarise the Q4 report", timestamp: "2026-10-05T09:30:00" },
+              ],
+              nextCursor: null,
+            },
+          }
+    );
+    chatApiMock.getRunningTasksForConversation.mockImplementation(async (conversationId: string) => ({
+      ok: true,
+      data: conversationId === "42" ? [runningRoot] : [],
+    }));
+    chatApiMock.getTask.mockResolvedValue({ ok: true, data: rootDetail("running") });
+    chatApiMock.getTaskEvents.mockResolvedValue(storedEvents([]));
+    agentApiMock.getAgents.mockResolvedValue({
+      ok: true,
+      data: [{ id: "agent-finance", name: "Finance-Analyst" }],
+    });
+  });
+
+  afterEach(() => {
+    navigation.conversation = "42";
+  });
+
+  it("leaves no spinner and stops the old task's poll after switching away", async () => {
+    const view = renderChat();
+    await screen.findByLabelText("Stop generating");
+    await waitFor(() => expect(pollsOf("root-7")).toBeGreaterThan(0));
+
+    await switchTo(view, "43");
+    await screen.findByText("What is the travel policy?");
+
+    await waitFor(() => expect(screen.queryByLabelText("Stop generating")).not.toBeInTheDocument());
+    expect(screen.getByLabelText("Send message")).toBeInTheDocument();
+    const pollsAfterSwitch = pollsOf("root-7");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1800));
+    });
+    expect(pollsOf("root-7")).toBe(pollsAfterSwitch);
+  });
+
+  it("adopts the task again when switching back while it still runs", async () => {
+    const view = renderChat();
+    await screen.findByLabelText("Stop generating");
+    await switchTo(view, "43");
+    await screen.findByText("What is the travel policy?");
+    await waitFor(() => expect(screen.queryByLabelText("Stop generating")).not.toBeInTheDocument());
+    const replaysBefore = chatApiMock.getTaskEvents.mock.calls.length;
+
+    await switchTo(view, "42");
+
+    await screen.findByLabelText("Stop generating");
+    await waitFor(() => expect(chatApiMock.getTaskEvents.mock.calls.length).toBeGreaterThan(replaysBefore));
+    expect(chatApiMock.getTaskEvents).toHaveBeenLastCalledWith("root-7", 0);
+  });
+
+  it("shows the answer once when the task finished while the user was away", async () => {
+    const view = renderChat();
+    await screen.findByLabelText("Stop generating");
+    await switchTo(view, "43");
+    await screen.findByText("What is the travel policy?");
+
+    chatApiMock.getRunningTasksForConversation.mockResolvedValue({ ok: true, data: [] });
+    chatApiMock.getTask.mockResolvedValue({ ok: true, data: rootDetail("completed", ANSWER) });
+    chatApiMock.getHistory.mockImplementation(async (conversationId: string) =>
+      conversationId === "43"
+        ? otherHistory
+        : {
+            ok: true,
+            data: {
+              items: [
+                { role: "user", message: "Summarise the Q4 report", timestamp: "2026-10-05T09:30:00" },
+                {
+                  role: "agent",
+                  message: ANSWER,
+                  timestamp: "2026-10-05T09:33:00",
+                  agentId: "agent-finance",
+                  agentName: "Finance-Analyst",
+                  messageId: 90,
+                },
+              ],
+              nextCursor: null,
+            },
+          }
+    );
+
+    await switchTo(view, "42");
+
+    await screen.findByText(ANSWER);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1800));
+    });
+    expect(screen.getAllByText(ANSWER)).toHaveLength(1);
+    expect(screen.queryByLabelText("Stop generating")).not.toBeInTheDocument();
+  });
+
+  it("does not follow a task sent from the conversation the user has left", async () => {
+    chatApiMock.getRunningTasksForConversation.mockResolvedValue({ ok: true, data: [] });
+    chatApiMock.getTaskEvents.mockImplementation(async (taskId: string) =>
+      storedEvents(
+        taskId === "root-9"
+          ? [{ type: "task_complete", event_type: "result", content: ANSWER, agent_id: "agent-finance" }]
+          : [],
+        taskId
+      )
+    );
+    let answerCreate: (value: unknown) => void = () => {};
+    chatApiMock.createTask.mockImplementation(
+      () => new Promise((resolve) => {
+        answerCreate = resolve;
+      })
+    );
+    const view = renderChat();
+    await waitForOpenSockets(1);
+    fireEvent.change(screen.getByPlaceholderText("Type a message..."), {
+      target: { value: "What was Q4 2025 revenue?" },
+    });
+    fireEvent.click(screen.getByLabelText("Send message"));
+    await screen.findByLabelText("Stop generating");
+
+    await switchTo(view, "43");
+    await screen.findByText("What is the travel policy?");
+    await act(async () => {
+      answerCreate({ ok: true, data: { task_id: "root-9", status: "queued", conversation_id: 42 } });
+    });
+    latestSocket().dropFromServer();
+    await waitFor(() => expect(MockWebSocket.instances.length).toBeGreaterThan(1));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    });
+
+    expect(screen.queryByText(ANSWER)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Stop generating")).not.toBeInTheDocument();
+  });
+});

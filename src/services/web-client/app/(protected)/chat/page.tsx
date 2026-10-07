@@ -352,6 +352,10 @@ function ChatPageContent() {
   useEffect(() => {
     eventLogRef.current = new TaskEventLog();
     setTaskProgress(null);
+    setIsLoading(false);
+    setWorkingTaskId(null);
+    setWorkingTaskDetail(null);
+    setStreamingByTaskId({});
   }, [conversationId]);
 
   useEffect(() => {
@@ -559,6 +563,7 @@ function ChatPageContent() {
     // the catch-all path when nothing matches. Previously hardcoded to
     // ``['knowledge_retrieval']``, which short-circuited routing onto the
     // General-Assistant for every chat message and starved the specialists.
+    const sentFrom = conversationIdRef.current;
     const result = await chatApi.createTask({
       demand,
       conversation_id: String(conversationId),
@@ -566,6 +571,8 @@ function ChatPageContent() {
       attached_files: attachments.attached,
       inline_files: attachments.inline,
     });
+
+    if (conversationIdRef.current !== sentFrom) return;
 
     const newTaskId = result.ok ? result.data?.task_id : undefined;
     if (!newTaskId) {
