@@ -274,7 +274,8 @@ class TestTaskCompletionTime:
 
 class TestFinalStatusTransitions:
     def test_cancel_records_completion_time(self, make_db_client, task_db, as_user):
-        _add_task(task_db, task_id="t1")
+        _add_task(task_db, task_id="t1").owner_username = "user"
+        task_db.commit()
         client = make_db_client(current_user=as_user)
 
         with patch("tasks.task_crud.rabbitmq_instance"):

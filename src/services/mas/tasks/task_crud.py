@@ -12,6 +12,7 @@ from core.rabbitmq_tool import rabbitmq_instance
 from db.models import Task, TaskResult
 from tasks.demo_log import pretty_log
 from tasks.status import TaskStatus
+from tasks.task_access import TASK_CANCEL_REFUSED, may_cancel_task
 
 logger = get_logger("task_tool_functions")
 
@@ -137,7 +138,9 @@ def validating_task_results(
         )
 
 
-async def interrupt_task(task_id: str, db: Session, reason: str | None = None):
+async def interrupt_task(
+    task_id: str, db: Session, reason: str | None = None, *, user: dict | None = None
+):
     """Cancel an in-flight task and notify its agent via RabbitMQ."""
     pretty_log(f"INTERRUPT SIGNAL RECEIVED FOR TASK {task_id}", "🛑")
     cancel_reason = reason or "User requested cancellation"
@@ -145,6 +148,8 @@ async def interrupt_task(task_id: str, db: Session, reason: str | None = None):
         task = db.query(Task).filter(Task.id == task_id).first()
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
+        if user is not None and not may_cancel_task(user, task, db):
+            raise HTTPException(status_code=403, detail=TASK_CANCEL_REFUSED)
         if task.status in [
             TaskStatus.COMPLETED.value,
             TaskStatus.FAILED.value,

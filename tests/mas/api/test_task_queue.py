@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from core.task_events import publish_task_event, read_task_events
-from db.models import Task, TaskResult
+from db.models import Conversations, Task, TaskResult
 from tasks import routes
 from tasks.idempotency import IDEMPOTENCY_TTL_SECONDS, idempotency_record_key
 from tasks.task_jobs import task_jobs
@@ -260,9 +260,13 @@ class TestIdempotencyKey:
         self, submit_task, routing_db, as_user, as_manager, routed_to_finance
     ):
         headers = {"Idempotency-Key": "submit-1"}
+        routing_db.add(Conversations(id=9, owner_username="manager", name="Team review"))
+        routing_db.commit()
 
         mine = await submit_task(_chat_task(), user=as_user, headers=headers)
-        theirs = await submit_task(_chat_task(), user=as_manager, headers=headers)
+        theirs = await submit_task(
+            _chat_task(conversation_id=9), user=as_manager, headers=headers
+        )
 
         assert mine.response.json()["task_id"] != theirs.response.json()["task_id"]
         assert routing_db.query(Task).count() == 2

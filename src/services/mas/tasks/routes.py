@@ -70,9 +70,11 @@ from tasks.openapi_docs import (
 from tasks.router import route_task
 from tasks.status import IN_PROGRESS_STATUSES, TaskStatus, is_final_status
 from tasks.task_access import (
+    NEW_TASK_REFUSED,
     RUNNING_TASKS_REFUSED,
     TASK_EVENTS_REFUSED,
     TASK_READ_REFUSED,
+    may_add_task_to,
     may_read_conversation_tasks,
     may_read_task,
     root_tasks_visible_to,
@@ -872,8 +874,9 @@ def _message_id(message: Any) -> int | None:
         "background job; follow them on the conversation WebSocket or with "
         "``GET /tasks/{task_id}/events``. An ``Idempotency-Key`` header makes "
         "retries safe: the same key from the same user returns the same "
-        "task_id for 24 h and never creates a second task. Requires "
-        "TASK_CREATE permission."
+        "task_id for 24 h and never creates a second task. A conversation_id "
+        "must be a conversation of the poster, unless the poster is an admin. "
+        "Requires TASK_CREATE permission."
     ),
     status_code=202,
     tags=["Tasks"],
@@ -896,6 +899,12 @@ async def create_new_task(
 ):
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
+    if task.conversation_id is not None:
+        conversation = (
+            db.query(Conversations).filter(Conversations.id == task.conversation_id).first()
+        )
+        if conversation is not None and not may_add_task_to(user, conversation):
+            raise HTTPException(status_code=403, detail=NEW_TASK_REFUSED)
 
     files_payload = _build_files_payload(task)
     task_id = str(uuid.uuid4())
@@ -2443,7 +2452,7 @@ async def _publish_cancellation(task_id: str, db: Session) -> None:
 @router.patch(
     "/task-cancel/{task_id}",
     summary="Cancel a running task",
-    description="Interrupts a running task by updating its status to CANCELED and sending a high-priority cancellation signal to the assigned agent via RabbitMQ. Requires TASK_DELETE permission.",
+    description="Interrupts a running task by updating its status to CANCELED and sending a high-priority cancellation signal to the assigned agent via RabbitMQ. Allowed for the task's owner, a manager or an admin. Requires TASK_DELETE permission.",
     status_code=200,
     tags=["Tasks"],
     dependencies=[Depends(PermissionChecker(Permission.TASK_DELETE))],
@@ -2465,7 +2474,7 @@ async def cancel_task(
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
     try:
-        if await interrupt_task(task_id, db):
+        if await interrupt_task(task_id, db, user=user):
             log_agent_operation(
                 "system",
                 "TASK_CANCEL",

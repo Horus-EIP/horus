@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
-from db.models import Conversations, Task
+from db.models import Conversations, Messages, Task
+from tasks import routes
+from tasks.task_jobs import task_jobs
 
 
 def _user(user_id: int, username: str, role: str) -> dict:
@@ -22,6 +26,7 @@ WHO_READS_IDS = ["owner", "another-user", "manager", "admin", "system"]
 @pytest.fixture
 def tasks(routing_db):
     routing_db.add(Conversations(id=8, owner_username="other", name="Travel"))
+    routing_db.add(Conversations(id=9, owner_username="manager", name="Team review"))
     routing_db.add_all(
         [
             Task(id="mine", agent_id="manager", status="running", query="Q4 revenue?",
@@ -132,3 +137,104 @@ class TestTaskList:
         assert await self._listed(mas_client, user) == {
             "mine", "via-conversation", "theirs", "standalone",
         }
+
+
+@pytest.fixture
+def stays_queued(monkeypatch):
+    async def no_routing(*_args, **_kwargs):
+        return {}
+
+    monkeypatch.setattr(routes, "run_routing_job", no_routing)
+
+
+async def _post(mas_client, user: dict, conversation_id: int | None, headers: dict | None = None):
+    body = {"demand": "What was Q4 2025 revenue?", "conversation_id": conversation_id,
+            "skills_required": []}
+    async with mas_client(user) as client:
+        response = await client.post("/tasks/new_task/", json=body, headers=headers or {})
+    await task_jobs.drain()
+    return response
+
+
+WHO_POSTS = [
+    (OWNER, 7, 202), (OTHER, 7, 403), (MANAGER, 7, 403), (MANAGER, 9, 202),
+    (ADMIN, 8, 202), (SYSTEM, 7, 403),
+]
+WHO_POSTS_IDS = [
+    "owner", "another-user", "manager-elsewhere", "manager-own", "admin-anywhere", "system",
+]
+
+
+class TestCreatingATask:
+    @pytest.mark.parametrize(("user", "conversation_id", "expected"), WHO_POSTS, ids=WHO_POSTS_IDS)
+    async def test_only_the_conversation_owner_or_an_admin_posts_into_it(
+        self, tasks, mas_client, stays_queued, user, conversation_id, expected
+    ):
+        tasks_before = tasks.query(Task).count()
+
+        response = await _post(mas_client, user, conversation_id)
+
+        assert response.status_code == expected
+        tasks.expire_all()
+        assert tasks.query(Task).count() == tasks_before + (1 if expected == 202 else 0)
+
+    async def test_a_refused_post_adds_no_message_and_says_why(self, tasks, mas_client, stays_queued):
+        response = await _post(mas_client, OTHER, 7)
+
+        assert response.json()["detail"] == (
+            "Only the conversation's owner or an admin can add a task to it"
+        )
+        assert tasks.query(Messages).filter(Messages.conversation_id == 7).count() == 0
+
+    async def test_a_task_without_a_conversation_is_still_accepted(
+        self, tasks, mas_client, stays_queued
+    ):
+        assert (await _post(mas_client, OTHER, None)).status_code == 202
+
+    async def test_a_replayed_idempotency_key_does_not_get_around_the_check(
+        self, tasks, mas_client, stays_queued
+    ):
+        headers = {"Idempotency-Key": "same-key"}
+
+        own = await _post(mas_client, OTHER, 8, headers)
+        replayed = await _post(mas_client, OTHER, 7, headers)
+
+        assert own.status_code == 202
+        assert replayed.status_code == 403
+        assert "task_id" not in replayed.json()
+
+
+WHO_CANCELS = [(OWNER, 200), (OTHER, 403), (MANAGER, 200), (ADMIN, 200), (SYSTEM, 403)]
+
+
+class TestCancellingATask:
+    async def _cancel(self, mas_client, user: dict, path: str):
+        with patch("tasks.task_crud.rabbitmq_instance"):
+            async with mas_client(user) as client:
+                return await client.patch(path)
+
+    @pytest.mark.parametrize(("user", "expected"), WHO_CANCELS, ids=WHO_READS_IDS)
+    async def test_only_the_owner_a_manager_or_an_admin_cancels(
+        self, tasks, mas_client, user, expected
+    ):
+        response = await self._cancel(mas_client, user, "/tasks/task-cancel/mine")
+
+        assert response.status_code == expected
+        tasks.expire_all()
+        assert tasks.get(Task, "mine").status == ("canceled" if expected == 200 else "running")
+
+    async def test_the_alternate_path_checks_the_same_way(self, tasks, mas_client):
+        response = await self._cancel(mas_client, OTHER, "/tasks/mine/cancel")
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == (
+            "Only the task's owner, a manager or an admin can cancel this task"
+        )
+
+    async def test_the_owner_cancels_a_subtask_that_has_no_owner_of_its_own(
+        self, tasks, mas_client
+    ):
+        assert (await self._cancel(mas_client, OWNER, "/tasks/task-cancel/my-step")).status_code == 200
+
+    async def test_an_unknown_task_is_404_before_any_ownership_check(self, tasks, mas_client):
+        assert (await self._cancel(mas_client, OTHER, "/tasks/task-cancel/missing")).status_code == 404

@@ -435,7 +435,7 @@ Queue a new task. The task is stored with status `queued` and the call answers `
 
 The `task_id` returned here is the one to follow for the whole request: a single-agent task keeps it, and a multi-agent chain uses it as the Manager-owned root of its subtasks.
 
-**Auth:** JWT Bearer (requires `task:create` permission)
+**Auth:** JWT Bearer (requires `task:create` permission). A `conversation_id` must be a conversation of the user who posts, unless that user is an admin; anyone else gets `403`, checked before the `Idempotency-Key`, so a replayed key cannot get around it. A task without a `conversation_id` is accepted as before.
 
 **Headers:**
 
@@ -493,6 +493,7 @@ The user message is saved to the conversation when the task is queued, before ro
 |------|--------|
 | `400` | Invalid base64 in an inline file. Nothing is stored. |
 | `401` | `Authentication Failed` |
+| `403` | `Only the conversation's owner or an admin can add a task to it`. Nothing is stored. |
 | `413` | Inline file too large. Nothing is stored. |
 | `422` | Request body or `Idempotency-Key` validation error. |
 | `500` | `Failed to create task` (the queued task could not be stored). |
@@ -736,7 +737,7 @@ Called once by an agent worker when it starts, after it registered. Every task s
 
 Cancel a queued or running task. Updates its status to CANCELED and sends a high-priority cancellation signal to the assigned agent via RabbitMQ. For a top-level task an `error` event (`status: "cancelled"`) is stored and sent to the conversation. A task cancelled while it is still being routed is never dispatched.
 
-**Auth:** JWT Bearer (requires `task:delete` permission)
+**Auth:** JWT Bearer (requires `task:delete` permission). Only the task's owner (as for `GET /tasks/{task_id}`), a manager or an admin can cancel it; anyone else gets `403`. An unknown id gets `404` first. `PATCH /tasks/{task_id}/cancel` is the same route.
 
 **Path parameters:**
 
@@ -760,6 +761,7 @@ Cancel a queued or running task. Updates its status to CANCELED and sends a high
 |------|--------|
 | `400` | `Cannot interrupt a completed task` |
 | `401` | `Authentication Failed` |
+| `403` | `Only the task's owner, a manager or an admin can cancel this task` |
 | `404` | `Task not found` |
 | `500` | `Error Canceling task: ...` |
 

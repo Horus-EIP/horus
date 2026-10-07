@@ -10,9 +10,11 @@ ROLES_THAT_READ_EVERY_TASK = frozenset({Role.ADMIN.value, Role.MANAGER.value})
 
 TASK_READ_REFUSED = "Only the task's owner, a manager or an admin can read this task"
 TASK_EVENTS_REFUSED = "Only the task's owner, a manager or an admin can read its events"
+TASK_CANCEL_REFUSED = "Only the task's owner, a manager or an admin can cancel this task"
 RUNNING_TASKS_REFUSED = (
     "Only the conversation's owner, a manager or an admin can list its running tasks"
 )
+NEW_TASK_REFUSED = "Only the conversation's owner or an admin can add a task to it"
 
 
 def role_of(user: dict) -> str:
@@ -22,6 +24,10 @@ def role_of(user: dict) -> str:
 
 def reads_every_task(user: dict) -> bool:
     return role_of(user) in ROLES_THAT_READ_EVERY_TASK
+
+
+def is_admin(user: dict) -> bool:
+    return role_of(user) == Role.ADMIN.value
 
 
 def owns_conversation(user: dict, conversation: Conversations) -> bool:
@@ -66,8 +72,16 @@ def may_read_task(user: dict, task: Task, db: Session) -> bool:
     return bool(owner) and owner == user.get("username")
 
 
+def may_cancel_task(user: dict, task: Task, db: Session) -> bool:
+    return may_read_task(user, task, db)
+
+
 def may_read_conversation_tasks(user: dict, conversation: Conversations) -> bool:
     return reads_every_task(user) or owns_conversation(user, conversation)
+
+
+def may_add_task_to(user: dict, conversation: Conversations) -> bool:
+    return is_admin(user) or owns_conversation(user, conversation)
 
 
 def root_tasks_visible_to(user: dict, query: Query) -> Query:
