@@ -1685,7 +1685,7 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 | **Knowledge Store** | Document Storage, Vector Search | FastAPI, ChromaDB, FastEmbed |
 | **Web Client** | User Interface | Next.js 16, React 19 |
 | **PostgreSQL** | Relational Data | PostgreSQL 15+ |
-| **Redis** | Caching, Sessions, Task Event Streams | Redis 7+ |
+| **Valkey** (service `redis`) | Caching, Sessions, Task Event Streams | Valkey 9.1 |
 | **RabbitMQ** | Message Broker | RabbitMQ 3.12+ |
 | **Prometheus** | Metrics Collection | Prometheus 2.x |
 | **Loki** | Log aggregation backend | Grafana Loki |
@@ -1757,7 +1757,7 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 | Container Runtime | Docker | 24.x |
 | Orchestration | Docker Compose | 2.x |
 | Database | PostgreSQL | 15+ |
-| Cache | Redis | 7+ |
+| Cache | Valkey (Redis protocol) | 9.1 |
 | Message Broker | RabbitMQ | 3.12+ |
 | Vector Database | ChromaDB | 1.5 |
 

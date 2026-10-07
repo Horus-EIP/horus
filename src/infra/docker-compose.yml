@@ -400,18 +400,19 @@ services:
       retries: 5
 
   redis:
-    image: redis:7
+    image: valkey/valkey:9.1.2
     container_name: redis
     ports:
       - "${REDIS_PORT:-6379}:6379"
     env_file:
       - .env
-    command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${REDIS_PASSWORD}"]
+    command: ["valkey-server", "/usr/local/etc/valkey/valkey.conf", "--requirepass", "${REDIS_PASSWORD}"]
     volumes:
-      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
-      - redis_data:/data
+      - ./redis.conf:/usr/local/etc/valkey/valkey.conf:ro
+      # Valkey refuses the RDB files Redis 7.4 wrote, so it starts on a new volume.
+      - valkey_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD", "valkey-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -532,7 +533,7 @@ volumes:
     driver: local
   pgadmin_data:
     driver: local
-  redis_data:
+  valkey_data:
   redisinsight_data:
   tempo_data:
   prometheus_data:

@@ -47,11 +47,11 @@ images:
     licence: PostgreSQL
     source: project page
     url: https://www.postgresql.org/about/licence/
-  redis:
-    licence: RSALv2 OR SSPL-1.0
-    source: project page, Redis 7.4 and later; 7.2 and earlier were BSD-3-Clause
-    url: https://redis.io/legal/licenses/
-    note: source-available, not open source; separate process, unmodified
+  valkey/valkey:
+    licence: BSD-3-Clause
+    source: project page, COPYING at 9.1.2
+    url: https://github.com/valkey-io/valkey
+    note: the cache, Compose service redis; separate process, unmodified
   dpage/pgadmin4:
     licence: PostgreSQL
     source: project page

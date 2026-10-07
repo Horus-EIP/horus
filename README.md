@@ -94,7 +94,7 @@ graph TB
     Agent -->|REST| KS[Knowledge Store<br/>FastAPI :8080]
     KS --- Chroma[(ChromaDB)]
     MAS --- PG[(PostgreSQL<br/>:5432)]
-    MAS --- Redis[(Redis<br/>:6379)]
+    MAS --- Redis[(Valkey<br/>:6379)]
     MAS -->|OpenAI-compatible API| LLM[Model server<br/>vLLM on GPU, llama-server on CPU]
     Agent -->|OpenAI-compatible API| LLM
     MAS -.->|OTLP| Tempo[Tempo]
@@ -114,7 +114,7 @@ graph TB
 | Language model | Qwen3-4B-Instruct-2507: vLLM 0.23.0 (AWQ) on an NVIDIA GPU, llama.cpp llama-server b11382 (Q4_K_M GGUF) on the CPU |
 | Retrieval | ChromaDB 1.5.2, FastEmbed 0.8.1 on ONNX Runtime (BAAI/bge-base-en-v1.5 in the knowledge store, all-MiniLM-L6-v2 for MAS routing), LangChain tools in the agent |
 | Messaging | RabbitMQ 4.1 (pika) |
-| Data | PostgreSQL, Redis 7 |
+| Data | PostgreSQL, Valkey 9.1 (Redis protocol; the Compose service is still called `redis`) |
 | Observability | Prometheus, Loki, Tempo, OpenTelemetry (viewed in the web client's `/admin` pages) |
 | Auth | JWT + bcrypt, OAuth2 password flow, four roles (admin, manager, user, system) |
 | Install | Python installer (`installer/`), Tauri desktop app (`desktop/`) |
@@ -154,7 +154,7 @@ greenlight/               EIP greenlight deliverables
 | Knowledge Store | http://localhost:8080 | Bound to 127.0.0.1 only. Swagger at `/docs` (`root_path` is only for proxies) |
 | vLLM | http://localhost:18000 | GPU profiles only (`VLLM_HOST_PORT`). The CPU model server publishes no port |
 | RabbitMQ UI | http://localhost:15672 | `RABBITMQ_USER` / `RABBITMQ_PASSWORD` in `.env` |
-| PostgreSQL, Redis, RabbitMQ (AMQP) | 5432, 6379, 5672 | `DB_PORT`, `REDIS_PORT`, `RABBITMQ_PORT` |
+| PostgreSQL, Valkey, RabbitMQ (AMQP) | 5432, 6379, 5672 | `DB_PORT`, `REDIS_PORT`, `RABBITMQ_PORT` |
 | Tempo (OTLP) | 4317 (gRPC), 4318 (HTTP) | |
 | Observability | http://localhost:3000/admin/logs · /admin/metrics · /admin/traces | Admin role, in the web client |
 | PgAdmin | http://localhost:5433 | Development tool, only with `docker compose --profile admin up` |

@@ -124,10 +124,10 @@ A service is only marked `unhealthy` after that start window, so `(health: start
 docker compose exec postgres psql -U postgres -d mas_db -c "SELECT version();"
 ```
 
-**Redis** (password from `REDIS_PASSWORD` in `.env`):
+**Valkey**, the `redis` service (password from `REDIS_PASSWORD` in `.env`):
 
 ```bash
-docker compose exec redis redis-cli -a "$REDIS_PASSWORD" ping
+docker compose exec redis valkey-cli -a "$REDIS_PASSWORD" ping
 ```
 
 ---
@@ -370,7 +370,7 @@ postgres:
     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
 redis:
-  command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${REDIS_PASSWORD}"]
+  command: ["valkey-server", "/usr/local/etc/valkey/valkey.conf", "--requirepass", "${REDIS_PASSWORD}"]
 ```
 
 #### Quick Start with Docker Compose

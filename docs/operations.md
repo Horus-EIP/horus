@@ -179,7 +179,7 @@ This document describes the monitoring stack shipped with **`src/infra/docker-co
 
 | Layer | Components |
 |-------|------------|
-| Data stores | PostgreSQL, Redis, RabbitMQ, ChromaDB (Knowledge Store volume) |
+| Data stores | PostgreSQL, Valkey (service `redis`), RabbitMQ, ChromaDB (Knowledge Store volume) |
 | Metrics | Prometheus scrapes MAS, Agent, and Knowledge Store `/metrics` endpoints; viewed at **`/admin/metrics`** in the web client |
 | Traces | Grafana Tempo receives OTLP from application containers; viewed at **`/admin/traces`** in the web client (trace search + span waterfall) |
 | Logs | Grafana Loki ingests stdout/stderr from **all Docker Compose services** via Promtail (Docker service discovery); viewed at **`/admin/logs`** in the web client |
@@ -623,8 +623,8 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   redis:
-    image: redis:7
-    command: redis-server --requirepass $(cat /run/secrets/redis_password)
+    image: valkey/valkey:9.1.2
+    command: valkey-server --requirepass $(cat /run/secrets/redis_password)
     secrets:
       - redis_password
 

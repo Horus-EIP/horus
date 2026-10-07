@@ -3871,10 +3871,10 @@ The tag is the one the Compose files or Dockerfiles name.
   Licence: SSPL-1.0 (source: project page, LICENSE)
   https://github.com/RedisInsight/RedisInsight
   development tool in the Compose profile admin; the installer never starts it, and it is not for customers; used by src/infra/docker-compose.yml
-- redis 7
-  Licence: RSALv2 OR SSPL-1.0 (source: project page, Redis 7.4 and later; 7.2 and earlier were BSD-3-Clause)
-  https://redis.io/legal/licenses/
-  source-available, not open source; separate process, unmodified; used by src/infra/docker-compose.yml
+- valkey/valkey 9.1.2
+  Licence: BSD-3-Clause (source: project page, COPYING at 9.1.2)
+  https://github.com/valkey-io/valkey
+  the cache, Compose service redis; separate process, unmodified; used by src/infra/docker-compose.yml
 - vllm/vllm-openai v0.23.0
   Licence: Apache-2.0 (source: project page, LICENSE at v0.23.0)
   https://github.com/vllm-project/vllm
