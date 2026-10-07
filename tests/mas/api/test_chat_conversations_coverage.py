@@ -745,6 +745,22 @@ class TestChatWebSocketRoute:
                 ws.send_text("ping")
         fake_delete.assert_not_called()
 
+    def test_a_manager_cannot_open_another_users_chat(self, make_client, mock_db):
+        from starlette.websockets import WebSocketDisconnect  # noqa: PLC0415
+
+        conv = _make_conv(owner_username="someone-else")
+        mock_db.query.return_value.filter.return_value.first.return_value = conv
+        client = make_client(chat_router)
+        with patch(
+            "chat.routes.get_current_user_from_token",
+            return_value=_token_user(role="manager", username="manager", uid="2"),
+        ):
+            with pytest.raises(WebSocketDisconnect) as exc:
+                with client.websocket_connect("/chat/1/?token=abc"):
+                    pass
+        assert exc.value.code == 1008
+        assert exc.value.reason == "Only the conversation's owner or an admin can open its chat"
+
     def test_admin_can_connect_to_foreign_conversation(self, make_client, mock_db):
         conv = _make_conv(owner_username="someone-else")
         mock_db.query.return_value.filter.return_value.first.return_value = conv
@@ -880,12 +896,20 @@ class TestGetHistoryRoute:
         r = client.get("/conversations/get_history/9999")
         assert r.status_code == 404
 
-    def test_non_owner_non_admin_gets_404(self, make_client, mock_db, as_user):
+    def test_non_owner_non_admin_gets_403(self, make_client, mock_db, as_user):
         conv = _make_conv(owner_username="someone-else")
         mock_db.query.return_value.filter.return_value.first.return_value = conv
         client = make_client(conv_router, current_user=as_user)
         r = client.get("/conversations/get_history/1")
-        assert r.status_code == 404
+        assert r.status_code == 403
+
+    def test_a_manager_cannot_read_another_users_history(self, make_client, mock_db, as_manager):
+        conv = _make_conv(owner_username="someone-else")
+        mock_db.query.return_value.filter.return_value.first.return_value = conv
+        client = make_client(conv_router, current_user=as_manager)
+        r = client.get("/conversations/get_history/1")
+        assert r.status_code == 403
+        assert r.json()["detail"] == "Only the conversation's owner or an admin can read it"
 
     def test_non_int_chat_id_422(self, make_client, mock_db, as_user):
         # Path is declared {chat_id:int}; a non-int segment doesn't match -> 404,

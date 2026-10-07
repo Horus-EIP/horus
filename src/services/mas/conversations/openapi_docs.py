@@ -244,6 +244,10 @@ GET_HISTORY_RESPONSES = {
                         "summary": "User lacks TASK_READ permission",
                         "value": {"detail": "Insufficient permissions"},
                     },
+                    "not_owner": {
+                        "summary": "Neither the conversation's owner nor an admin (managers included)",
+                        "value": {"detail": "Only the conversation's owner or an admin can read it"},
+                    },
                 }
             }
         },

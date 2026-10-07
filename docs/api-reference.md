@@ -804,7 +804,7 @@ Create a new conversation channel. Returns the auto-generated conversation ID.
 
 #### GET /conversations/get_history/{chat_id}
 
-Retrieve the complete message history for a conversation. Only the owner or an admin can access.
+Retrieve the complete message history for a conversation. Only the owner or an admin can access; a manager cannot read another user's conversation.
 
 **Auth:** JWT Bearer (requires `task:read` permission)
 
@@ -848,8 +848,8 @@ Retrieve the complete message history for a conversation. Only the owner or an a
 | Code | Detail |
 |------|--------|
 | `401` | `Authentication Failed` |
-| `403` | Insufficient permissions. |
-| `404` | `Conversation {chat_id} not found` -- does not exist or not owned by caller. |
+| `403` | Insufficient permissions, or `Only the conversation's owner or an admin can read it`. |
+| `404` | `Conversation {chat_id} not found` -- the conversation does not exist. |
 | `500` | Database error. |
 
 ---
@@ -2209,8 +2209,8 @@ ws://localhost:8000/chat/1/?token=eyJhbGciOiJIUzI1NiI...
 2. The token is decoded and validated (signature, expiration, blacklist check).
 3. The user's role is checked for `TASK_READ` permission.
 4. The conversation is verified to exist in the database.
-5. Ownership is verified: the user must be the conversation owner or an admin.
-6. If any check fails, the connection is closed with code `1008` (Policy Violation).
+5. Ownership is verified: the user must be the conversation owner or an admin; a manager is refused for another user's conversation.
+6. If any check fails, the connection is closed with code `1008` (Policy Violation). The ownership refusal carries the reason `Only the conversation's owner or an admin can open its chat`.
 
 #### Required permission
 

@@ -76,7 +76,10 @@ async def chat_websocket(
             logger.warning(
                 f"Unauthorized access to conversation {conversation_id} by user {username}"
             )
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            await websocket.close(
+                code=status.WS_1008_POLICY_VIOLATION,
+                reason="Only the conversation's owner or an admin can open its chat",
+            )
             return
 
     except Exception as e:
