@@ -191,6 +191,15 @@ class TestResolveAttachedFiles:
         assert "report.pdf" in out[0]["text"]
 
     async def test_knowledge_store_ref_with_doc_id_is_resolved_by_its_doc_id(self):
+        """Regression F25 (B-48).
+
+        What: two knowledge-store documents can share a filename, so an attached
+        ref must reach the copy the user picked, by its doc_id.
+        How: resolve a ref that carries a doc_id and check the client fetches
+        that id and never searches by filename.
+        When: found in ATP v7 (18/09/2026), fixed in 0b93375; resolved by doc_id
+        since 8670bec (B-97), which renamed this test.
+        """
         files = [
             {"source": "knowledge_store", "filename": "report.pdf", "doc_id": "abc123"}
         ]

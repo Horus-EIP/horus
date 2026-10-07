@@ -98,6 +98,14 @@ beforeAll(() => {
   window.HTMLElement.prototype.scrollIntoView = () => {};
 });
 
+// Regression F25 (B-48).
+// What: /tasks/new and the chat file picker crashed ("Duplicate options are not
+// supported") when two knowledge-store documents shared a filename, because the
+// picker used the title as the option value.
+// How: render the picker with same-named documents and check that each copy is its
+// own option, labelled by upload time and size, attached by its document id, and
+// that an upload with a stored name warns and is added as its own copy.
+// When: found in ATP v7 (18/09/2026), fixed in 0b93375.
 describe("regression F25 duplicate knowledge-store file names", () => {
   beforeEach(() => {
     vi.restoreAllMocks();

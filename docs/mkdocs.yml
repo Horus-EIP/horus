@@ -56,6 +56,7 @@ nav:
   - API Reference: api-reference.md
   - Operations: operations.md
   - Security & Compliance: security.md
+  - Validation & Error Handling: validation-and-error-handling.md
   - Contributing: contributing.md
   - Demo: demo.md
   - Changelog: ../CHANGELOG.md
@@ -67,8 +68,10 @@ nav:
       - Tech Watch (Point 1): eip/tech-watch.md
       - Tech Watch — Integrated GPUs and NPUs: tech-watch/IGPU_NPU_RESEARCH.md
       - Community Contributions (Point 1): eip/community-contributions.md
+      - Community Outreach: eip/community-outreach.md
       - Protection Plan (Point A): eip/protection-plan.md
       - Diffusion Strategy (Point A): eip/diffusion-strategy.md
+      - Who Made What — Noah: who-made-what-noah.md
       - Code-vs-Docs Audit (archived): eip/code-vs-docs-audit.md
   - ADRs:
       - ADR-001 RabbitMQ: adr/ADR-001-rabbitmq.md
