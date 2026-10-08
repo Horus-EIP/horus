@@ -1063,7 +1063,12 @@ def do_stop(log: Log, infra: Path) -> int:
     log.say(f"    cd {infra} && docker compose start")
     return EXIT_OK
 
-RETIRED_VOLUMES = ("redis_data", "redisinsight_data")
+LEFT_BEHIND_VOLUMES = {
+    "redis_data": "the cache of Redis, which Valkey replaced",
+    "redisinsight_data": "the settings of RedisInsight, which was removed",
+    "pgadmin_data": "the settings of PgAdmin, whose profile is off",
+    "vllm_hf_cache": "the GPU model weights, which a reinstall downloads again",
+}
 PROJECT_LABEL = "com.docker.compose.project"
 VOLUME_ROWS = '{{.Name}} {{.Label "com.docker.compose.volume"}}'
 
@@ -1073,11 +1078,15 @@ def interactive_terminal() -> bool:
     except (ValueError, AttributeError):
         return False
 
-def named_project(log: Log, infra: Path) -> str:
+def named_project(log: Log, infra: Path) -> tuple[str, dict[str, dict]]:
     if not explicit_project_name(infra):
-        return ""
-    config = compose_config(log, infra)
-    return config[0] if config else ""
+        return "", {}
+    return compose_config(log, infra) or ("", {})
+
+def volumes_in_use(services: dict[str, dict]) -> set[str]:
+    return {str(mount.get("source")) for spec in services.values()
+            for mount in spec.get("volumes") or []
+            if isinstance(mount, dict) and mount.get("type") == "volume"}
 
 def project_volumes(log: Log, project: str) -> list[tuple[str, str]]:
     if not project:
@@ -1089,8 +1098,21 @@ def project_volumes(log: Log, project: str) -> list[tuple[str, str]]:
     rows = (line.split() for line in res.out.splitlines())
     return [(row[0], row[1]) for row in rows if len(row) == 2]
 
-def retired_volumes(log: Log, project: str) -> list[str]:
-    return [name for name, key in project_volumes(log, project) if key in RETIRED_VOLUMES]
+def volumes_left_behind(log: Log, project: str,
+                        services: dict[str, dict]) -> list[tuple[str, str]]:
+    in_use = volumes_in_use(services)
+    return [(name, key) for name, key in project_volumes(log, project)
+            if key in LEFT_BEHIND_VOLUMES and key not in in_use]
+
+def volume_sizes(log: Log) -> dict[str, str]:
+    res = run(["docker", "system", "df", "--verbose", "--format", "json"], log, timeout=300,
+              log_output=False)
+    try:
+        rows = json.loads(res.out).get("Volumes") if res.ok else None
+    except (ValueError, AttributeError):
+        rows = None
+    return {str(row.get("Name")): str(row.get("Size")) for row in rows or []
+            if isinstance(row, dict) and row.get("Size")}
 
 def project_containers(log: Log, project: str) -> list[str]:
     res = run(["docker", "ps", "--all", "--filter", f"label={PROJECT_LABEL}={project}",
@@ -1112,21 +1134,23 @@ def remove_containers_of_turned_off_profiles(log: Log, project: str) -> bool:
     log.ok("Removed " + ", ".join(left))
     return True
 
-def point_out_volumes_of_turned_off_profiles(log: Log, project: str) -> None:
-    left = [name for name, key in project_volumes(log, project) if key not in RETIRED_VOLUMES]
+def point_out_other_volumes(log: Log, project: str, offered: list[str]) -> None:
+    left = [name for name, _key in project_volumes(log, project) if name not in offered]
     if not left:
         return
     log.say("")
-    log.say("  These volumes belong to services whose profile is off, so")
-    log.say("  `down --volumes` kept them. Delete them with:")
+    log.say("  Docker also kept these volumes of this install. Delete them with:")
     log.say("    docker volume rm " + " ".join(left))
 
-def agrees_to_delete_retired_volumes(log: Log, retired: list[str],
-                                     non_interactive: bool) -> bool:
+def agrees_to_delete_left_behind(log: Log, left: list[tuple[str, str]], sizes: dict[str, str],
+                                 non_interactive: bool) -> bool:
     log.say("")
-    log.say("  Older versions of Horus left these volumes, which nothing uses now:")
-    for name in retired:
-        log.say(f"    {name}")
+    log.say("  `down --volumes` keeps these volumes: an older version of Horus")
+    log.say("  left them, or only a service whose profile is off uses them.")
+    width = max(len(name) for name, _key in left)
+    for name, key in left:
+        size = sizes.get(name, "size unknown")
+        log.say(f"    {name:<{width}}  {size:>12}  {LEFT_BEHIND_VOLUMES[key]}")
     if non_interactive or not interactive_terminal():
         return False
     try:
@@ -1136,18 +1160,18 @@ def agrees_to_delete_retired_volumes(log: Log, retired: list[str],
         return False
     return answer.strip().lower() in ("y", "yes")
 
-def delete_retired_volumes(log: Log, retired: list[str]) -> None:
-    res = run(["docker", "volume", "rm", *retired], log, timeout=120)
+def delete_volumes(log: Log, names: list[str]) -> None:
+    res = run(["docker", "volume", "rm", *names], log, timeout=120)
     if res.ok:
-        log.ok("Deleted " + ", ".join(retired))
+        log.ok("Deleted " + ", ".join(names))
         return
     log.warn(f"`docker volume rm` failed ({res.first_line() or 'no output'}); "
              "delete them later with:")
-    log.say("    docker volume rm " + " ".join(retired))
+    log.say("    docker volume rm " + " ".join(names))
 
-def point_out_retired_volumes(log: Log, retired: list[str]) -> None:
+def point_out_volumes(log: Log, names: list[str]) -> None:
     log.say("  Left alone. Delete them later with:")
-    log.say("    docker volume rm " + " ".join(retired))
+    log.say("    docker volume rm " + " ".join(names))
 
 def do_uninstall(log: Log, infra: Path, assume_yes: bool, non_interactive: bool = False) -> int:
     log.step("Uninstall Horus")
@@ -1180,10 +1204,11 @@ def do_uninstall(log: Log, infra: Path, assume_yes: bool, non_interactive: bool 
             return EXIT_OK
 
     log.info("uninstall confirmed")
-    project = named_project(log, infra)
-    retired = retired_volumes(log, project)
-    delete_retired = bool(retired) and agrees_to_delete_retired_volumes(
-        log, retired, non_interactive)
+    project, services = named_project(log, infra)
+    left = volumes_left_behind(log, project, services)
+    offered = [name for name, _key in left]
+    delete_left = bool(left) and agrees_to_delete_left_behind(
+        log, left, volume_sizes(log), non_interactive)
     down = compose(["down", "--volumes", "--rmi", "all"] + orphan_removal(infra))
     code = _stream(down, log, infra, "down")
     if code == 0 and remove_containers_of_turned_off_profiles(log, project):
@@ -1192,14 +1217,14 @@ def do_uninstall(log: Log, infra: Path, assume_yes: bool, non_interactive: bool 
         log.warn("Some resources could not be removed; see the log for detail")
         log.say("  You can finish manually with:")
         log.say(f"    cd {infra} && " + " ".join(compose(["down", "-v", "--rmi", "all"] + orphan_removal(infra))))
-        if retired:
-            log.say("    docker volume rm " + " ".join(retired))
+        if offered:
+            log.say("    docker volume rm " + " ".join(offered))
         return EXIT_UNINSTALL_FAILED
-    if delete_retired:
-        delete_retired_volumes(log, retired)
-    elif retired:
-        point_out_retired_volumes(log, retired)
-    point_out_volumes_of_turned_off_profiles(log, project)
+    if delete_left:
+        delete_volumes(log, offered)
+    elif offered:
+        point_out_volumes(log, offered)
+    point_out_other_volumes(log, project, offered)
     log.say("")
     log.ok("Horus removed.")
     log.say("  The source folder and this installer are still here; delete them")

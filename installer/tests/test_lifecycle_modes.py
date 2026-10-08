@@ -427,8 +427,9 @@ class FakeDocker:
 
     def __init__(self, config=None, pulls=(), ups=((0, ""),), ps=((),), local_images=(),
                  builds=(), vanishing=None, image_ids=None, downs=(), volumes=(),
-                 volume_rm=0, declared=(), containers=(), container_rm=0):
+                 volume_rm=0, declared=(), containers=(), container_rm=0, sizes=None):
         self.config = config
+        self.sizes = sizes
         self.declared = set(declared)
         self.containers = list(containers)
         self.container_rm = container_rm
@@ -517,6 +518,12 @@ class FakeDocker:
                 return Result(self.volume_rm, "", "Error response from daemon: volume is in use")
             self.volumes = [volume for volume in self.volumes if volume[0] not in cmd[3:]]
             return Result(0, "\n".join(cmd[3:]), "")
+        if cmd[1:3] == ["system", "df"]:
+            self.history.append("system df")
+            if self.sizes is None:
+                return Result(1, "", "Error response from daemon: unavailable")
+            rows = [{"Name": name, "Size": size} for name, size in self.sizes.items()]
+            return Result(0, json.dumps({"Images": [], "Volumes": rows}), "")
         if cmd[1] == "ps":
             label, _, value = cmd[cmd.index("--filter") + 1].removeprefix("label=").partition("=")
             self.history.append("ps " + value)
@@ -1326,9 +1333,9 @@ class UninstallCase(FakeDockerCase):
         self.prompts: list[str] = []
         self.history_at_each_question: list[list[str]] = []
 
-    def docker(self, **kwargs):
-        return FakeDocker(config={"name": PROJECT, "services": {}},
-                          declared={"postgresql_data"}, **kwargs)
+    def docker(self, services=None, **kwargs):
+        kwargs.setdefault("declared", {"postgresql_data"})
+        return FakeDocker(config={"name": PROJECT, "services": services or {}}, **kwargs)
 
     def uninstall(self, docker, answers=(), terminal=True, non_interactive=False,
                   assume_yes=True):
@@ -1365,7 +1372,8 @@ class UninstallOffersTheVolumesOlderVersionsLeft(UninstallCase):
     def test_the_question_comes_before_the_stack_comes_down(self):
         docker = self.docker(volumes=LEFT_VOLUMES)
         self.uninstall(docker, answers=["n"])
-        self.assertEqual(self.history_at_each_question, [["config", f"volume ls {PROJECT}"]])
+        self.assertEqual(self.history_at_each_question,
+                         [["config", f"volume ls {PROJECT}", "system df"]])
 
     def test_no_keeps_the_volume_and_says_how_to_delete_it_later(self):
         docker = self.docker(volumes=LEFT_VOLUMES)
@@ -1425,7 +1433,8 @@ class UninstallOffersTheVolumesOlderVersionsLeft(UninstallCase):
         docker = self.docker(volumes=LEFT_VOLUMES[1:])
         _code, out = self.uninstall(docker)
         self.assertEqual(self.prompts, [])
-        self.assertNotIn("Older versions", out)
+        self.assertNotIn("keeps these volumes", out)
+        self.assertNotIn("system df", docker.history)
 
     def test_a_failed_down_deletes_no_volume_even_after_a_yes(self):
         docker = self.docker(volumes=LEFT_VOLUMES, downs=[1])
@@ -1544,14 +1553,79 @@ class UninstallRemovesEveryContainerOfTheProject(UninstallCase):
         self.assertEqual(code, EXIT_UNINSTALL_FAILED)
         self.assertIn("docker compose down -v --rmi all --remove-orphans", out)
 
-    def test_a_volume_only_a_turned_off_profile_declares_is_pointed_out_and_kept(self):
-        docker = self.docker(containers=LEFT_CONTAINERS, volumes=[*LEFT_VOLUMES, PGADMIN_VOLUME])
+VLLM_VOLUME = (f"{PROJECT}_vllm_hf_cache", PROJECT, "vllm_hf_cache")
+OTHER_VLLM_VOLUME = ("horus_other_vllm_hf_cache", "horus_other", "vllm_hf_cache")
+TURNED_OFF_VOLUMES = (*LEFT_VOLUMES, PGADMIN_VOLUME, VLLM_VOLUME, OTHER_VLLM_VOLUME)
+SIZES = {OLD_REDIS_VOLUME: "1.709MB", PGADMIN_VOLUME[0]: "45.2MB", VLLM_VOLUME[0]: "3.46GB",
+         OTHER_VLLM_VOLUME[0]: "3.46GB"}
+OFFERED = f"{OLD_REDIS_VOLUME} {PGADMIN_VOLUME[0]} {VLLM_VOLUME[0]}"
+VLLM_ON = {"vllm": {"volumes": [{"type": "volume", "source": "vllm_hf_cache",
+                                 "target": "/root/.cache/huggingface"}]}}
+
+class UninstallOffersTheVolumesOfTurnedOffProfiles(UninstallCase):
+
+    def offered_line(self, out, volume):
+        return next(line for line in out.splitlines() if line.strip().startswith(volume[0]))
+
+    def test_they_join_the_old_redis_volume_in_the_same_question(self):
+        docker = self.docker(volumes=TURNED_OFF_VOLUMES, sizes=SIZES)
+        code, out = self.uninstall(docker, answers=["y"])
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(len(self.prompts), 1)
+        self.assertEqual(docker.deleted_volumes(), [f"volume rm {OFFERED}"])
+        self.assertLess(docker.history.index(DOWN), docker.history.index(f"volume rm {OFFERED}"))
+        self.assertIn(OTHER_VLLM_VOLUME, docker.volumes)
+
+    def test_each_volume_is_listed_with_its_size_and_what_it_holds(self):
+        docker = self.docker(volumes=TURNED_OFF_VOLUMES, sizes=SIZES)
         _code, out = self.uninstall(docker, answers=["n"])
-        self.assertIn(f"docker volume rm {PROJECT}_pgadmin_data", out)
-        self.assertNotIn(f"{PROJECT}_postgresql_data", out)
-        self.assertNotIn("horus_other_redis_data", out)
-        self.assertIn(PGADMIN_VOLUME, docker.volumes)
+        vllm = self.offered_line(out, VLLM_VOLUME)
+        self.assertIn("3.46GB", vllm)
+        self.assertIn("the GPU model weights, which a reinstall downloads again", vllm)
+        self.assertIn("45.2MB", self.offered_line(out, PGADMIN_VOLUME))
+        self.assertIn("PgAdmin", self.offered_line(out, PGADMIN_VOLUME))
+        self.assertIn("1.709MB", self.offered_line(out, (OLD_REDIS_VOLUME,)))
+        self.assertNotIn(OTHER_VLLM_VOLUME[0], out)
+
+    def test_no_keeps_them_and_prints_one_command(self):
+        docker = self.docker(volumes=TURNED_OFF_VOLUMES, sizes=SIZES)
+        code, out = self.uninstall(docker, answers=["n"])
+        self.assertEqual(code, EXIT_OK)
         self.assertEqual(docker.deleted_volumes(), [])
+        self.assertIn(f"docker volume rm {OFFERED}", out)
+        self.assertIn(VLLM_VOLUME, docker.volumes)
+
+    def test_a_cache_a_service_that_is_on_uses_is_left_to_down(self):
+        docker = self.docker(services=VLLM_ON, volumes=TURNED_OFF_VOLUMES, sizes=SIZES,
+                             declared={"postgresql_data", "vllm_hf_cache"})
+        _code, out = self.uninstall(docker, answers=["y"])
+        self.assertNotIn(VLLM_VOLUME[0], out)
+        self.assertEqual(docker.deleted_volumes(),
+                         [f"volume rm {OLD_REDIS_VOLUME} {PGADMIN_VOLUME[0]}"])
+        self.assertNotIn(VLLM_VOLUME, docker.volumes)
+
+    def test_a_size_docker_cannot_tell_still_asks(self):
+        docker = self.docker(volumes=TURNED_OFF_VOLUMES)
+        _code, out = self.uninstall(docker, answers=["y"])
+        self.assertIn("size unknown", self.offered_line(out, VLLM_VOLUME))
+        self.assertEqual(docker.deleted_volumes(), [f"volume rm {OFFERED}"])
+
+    def test_a_run_without_a_terminal_lists_them_and_deletes_none(self):
+        docker = self.docker(volumes=TURNED_OFF_VOLUMES, sizes=SIZES)
+        code, out = self.uninstall(docker, terminal=False)
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(self.prompts, [])
+        self.assertEqual(docker.deleted_volumes(), [])
+        self.assertIn("3.46GB", out)
+        self.assertIn(f"docker volume rm {OFFERED}", out)
+
+    def test_a_volume_it_does_not_know_is_pointed_out_after_the_uninstall(self):
+        unknown = (f"{PROJECT}_grafana_data", PROJECT, "grafana_data")
+        docker = self.docker(volumes=[*TURNED_OFF_VOLUMES, unknown], sizes=SIZES)
+        _code, out = self.uninstall(docker, answers=["y"])
+        self.assertNotIn(unknown[0], out.split("Deleted")[0])
+        self.assertIn(f"docker volume rm {unknown[0]}", out)
+        self.assertIn(unknown, docker.volumes)
 
 class UninstallKnowsWhenTheRunIsUnattended(unittest.TestCase):
 
