@@ -1,4 +1,12 @@
-venv/
-.git/
-__pycache__/
-.pytest_cache/
+chroma_data/*
+!chroma_data/.gitkeep
+documents/
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.venv
+**/venv
+**/*.log
+**/.env

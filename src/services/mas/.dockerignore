@@ -1,1 +1,16 @@
 models/
+offload/
+logs/
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.venv
+**/venv
+**/*.gguf
+**/*.log
+**/.env
+.coverage
+htmlcov/
+rapport.html
