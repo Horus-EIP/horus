@@ -37,7 +37,7 @@ Each row = one technology we evaluated. Status meanings:
 | FastAPI | Web framework | 2025-05 | TLDR AI + GitHub trending | Adopted | [ADR-003](../adr/ADR-003-fastapi.md) — async-first, OpenAPI for free, ecosystem |
 | OpenTelemetry → Tempo | Distributed tracing | 2025-08 | OpenTelemetry blog | Adopted | Compose stack — replaced Jaeger when Tempo's Grafana integration matured |
 | Loki + Promtail | Log aggregation | 2026-04 | Grafana blog | Adopted | Compose stack — single Grafana UI for logs/metrics/traces (see commit `dbc8f5b`) |
-| Grafana Alloy | Log shipping | 2026-09 | Grafana docs (Promtail end of life on 2026-03-02) | Adopted | Replaced Promtail in the Compose stack (B-122); same labels for `/admin/logs` ([ADR-005](../adr/ADR-005-accepted-quality-debt.md), C7) |
+| Grafana Alloy | Log shipping | 2026-09 | Grafana docs (Promtail end of life on 2026-03-02) | Adopted | Replaced Promtail in the Compose stack (B-67); same labels for `/admin/logs` ([ADR-005](../adr/ADR-005-accepted-quality-debt.md), C7) |
 | Qwen3-4B-Instruct (HF) | LLM | 2026-02 | Hugging Face trending | Adopted | Default decision model for the Agent service |
 | BAAI/bge-base-en-v1.5 | Embedding model | 2025-08 | MTEB leaderboard | Adopted | Knowledge Store default — beat e5-base on internal corpus |
 | ReAct agent pattern | Reasoning | 2026-02 | arXiv 2210.03629 + LangChain docs | Adopted | `src/services/agent/app/ai_agents/react_agent.py` |

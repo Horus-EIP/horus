@@ -45,7 +45,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 ### Fixed
 
-- `compare-benchmarks.py` crashed on every llama-bench report (B-124, `3711a7b`)
+- `compare-benchmarks.py` crashed on every llama-bench report (B-122, `3711a7b`)
 - `ruff` failed CI on a `dict()` call in the agent (C408, `0ebc769`)
 - Valkey answered on every network interface with the password every install shipped, `redis_password`; it is bound to 127.0.0.1 and gets a generated password (B-123, `d586e09`)
 - A local build of the agent image sent the git-ignored `app/models` folder (7.6 GB of model snapshots) to Docker and baked it into the image: its build context went from 8.06 GB to 715 kB. The other images' `.dockerignore` files leave out caches, `.env` files, logs and the local Chroma index too (B-126, `5b8a9ae`)
@@ -116,7 +116,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - CI job `licences`: fails on GPL, AGPL or SSPL among the Python packages, the web client's production dependencies and the desktop app's crates, warns on LGPL, and keeps reviewed exceptions in `scripts/licences/allowlist.yaml` (B-09, `ade67e9`)
 - The full licence texts in `LICENSES/` (SPDX licence list v3.29.0, plus each component's own licence file when its licence carries a copyright line) and every NOTICE a component ships in `NOTICES/`, fastembed's and onnxruntime's among them. Each entry of `THIRD_PARTY_NOTICES` names its files, `--check` fails on a missing text or NOTICE, and the release ZIP and every image (`/usr/share/doc/horus/`) carry all three (B-120, `79ac576`)
 - Section 7 of `THIRD_PARTY_NOTICES`, "Source code of GPL and LGPL components": the GPL and LGPL system packages of each image with their exact versions (`--refresh system`; 69 in mas and agent, 114 in knowledge-store, 11 in web-client), psycopg2-binary and sharp's libvips, where their source is, and a three-year written offer at the maintainers' addresses. `scripts/licences/fetch-gpl-sources.py` downloads the exact sources of an image into one archive (B-121, `f3bb793`)
-- `opensource/horus-bench-kit/`, horus-bench-kit 0.1.0 under Apache-2.0: `hbk-eval` with an `openai` target for any OpenAI-compatible endpoint, `hbk-llama-bench`, `hbk-compare`, `hbk-model-candidates` and `hbk-contract-probe`, standard library only, Python 3.10 or later, with documented result formats and its own example test set (B-124, `3711a7b`). ADR-007 makes it open source and amends ADR-004 for that folder only (`fb6169d`). The CI job `bench-kit` installs it fresh on Python 3.10 and 3.13, runs its tests and builds its zip, and `tests/ci/test_bench_kit.py` fails when it holds Horus content (`d9fff20`)
+- `opensource/horus-bench-kit/`, horus-bench-kit 0.1.0 under Apache-2.0: `hbk-eval` with an `openai` target for any OpenAI-compatible endpoint, `hbk-llama-bench`, `hbk-compare`, `hbk-model-candidates` and `hbk-contract-probe`, standard library only, Python 3.10 or later, with documented result formats and its own example test set (B-122, `3711a7b`). ADR-007 makes it open source and amends ADR-004 for that folder only (`fb6169d`). The CI job `bench-kit` installs it fresh on Python 3.10 and 3.13, runs its tests and builds its zip, and `tests/ci/test_bench_kit.py` fails when it holds Horus content (`d9fff20`)
 
 ### Changed
 
@@ -137,9 +137,9 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - The README says what Horus does and does not do, gives the requirements from the installer's code and ADR-006, puts the tester path first and shows the evaluation runs of 06/10/2026 (B-31, `8dc2410`)
 - `docs/contributing.md` holds the code style only: branching from `develop`, two approvals, squash merges, the `test-integration` job and the links to missing pages are gone, `ci.yml` explains its `.env` workaround itself, and `scripts/docs.sh` no longer overwrites the MkDocs nav (B-32, B-33, `beed5fd`)
 - ADR-004 and ADR-005 mark what this work repaid (`e3ca092`)
-- The MAS image is a multi-stage build: `build-essential` and `g++` stay in the builder stage, the final stage installs no system package (its healthcheck uses Python instead of curl), and pip resolves the lock without the legacy resolver. The CPU image went from 1.32 GB to 877 MB. Test tools moved to each service's `requirements-test.txt`, which only CI installs, so no image ships pytest any more (B-121, B-46, `9a00c78`); ADR-005 C2 and C3 repaid
-- Grafana Alloy v1.20.1 replaces Promtail, which reached end of life: the same Loki labels, so `/admin/logs` is unchanged, and a container without a Compose service label is no longer sent to Loki at all (B-122, `79679bc`); ADR-005 C7 repaid
-- `scripts/eval/` and `scripts/benchmarks/` run on the bench kit, with every Horus value in two profile modules; their outputs stay byte for byte the same, which golden tests check (B-124, `00329ef`)
+- The MAS image is a multi-stage build: `build-essential` and `g++` stay in the builder stage, the final stage installs no system package (its healthcheck uses Python instead of curl), and pip resolves the lock without the legacy resolver. The CPU image went from 1.32 GB to 877 MB. Test tools moved to each service's `requirements-test.txt`, which only CI installs, so no image ships pytest any more (B-67, B-46, `9a00c78`); ADR-005 C2 and C3 repaid
+- Grafana Alloy v1.20.1 replaces Promtail, which reached end of life: the same Loki labels, so `/admin/logs` is unchanged, and a container without a Compose service label is no longer sent to Loki at all (B-67, `79679bc`); ADR-005 C7 repaid
+- `scripts/eval/` and `scripts/benchmarks/` run on the bench kit, with every Horus value in two profile modules; their outputs stay byte for byte the same, which golden tests check (B-122, `00329ef`)
 - The licence inventory marks the GPL source offer, the MAS build tools and the test tools done (`a006984`)
 - `LICENSE` 2.1 (08/10/2026): `opensource/horus-bench-kit/` is not part of the Software and keeps its own Apache-2.0 licence; nothing else in the licence changed (B-122, `e9ba604`)
 - Alloy reads only the containers of its own Compose project (`com.docker.compose.project` equal to `COMPOSE_PROJECT_NAME`, passed to Alloy as `HORUS_COMPOSE_PROJECT`): a second Horus install or any other Compose project on the same Docker host no longer reaches this install's Loki. The labels are unchanged, so `/admin/logs` is too (B-125, `b35d01f`)
@@ -148,7 +148,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 ### Removed
 
-- RedisInsight (SSPL), whose connection was never set up; `docs/operations.md` shows how to open `valkey-cli` in the `redis` container instead (B-123, `17b0cce`)
+- RedisInsight (SSPL), whose connection was never set up; `docs/operations.md` shows how to open `valkey-cli` in the `redis` container instead (B-08, `17b0cce`)
 
 ## 0.1.2 (unreleased)
 
