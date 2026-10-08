@@ -61,22 +61,50 @@ def dockerignore(service: str) -> list[str]:
     return read_patterns(path.read_text(encoding="utf-8")) if path.is_file() else []
 
 
-def pattern_regex(pattern: str) -> re.Pattern:
-    out, at = "", 0
+DOCKER_ESCAPED = ".+()|{}$"
+
+
+def compiled_pattern(pattern: str) -> tuple[str, re.Pattern | None]:
+    regex, kind, at = "^", "exact", 0
     while at < len(pattern):
-        if pattern.startswith("**/", at):
-            out, at = out + "(.*/)?", at + 3
-        elif pattern.startswith("**", at):
-            out, at = out + ".*", at + 2
-        elif pattern[at] == "*":
-            out, at = out + "[^/]*", at + 1
-        elif pattern[at] == "?":
-            out, at = out + "[^/]", at + 1
-        elif pattern[at] in "[]":
-            out, at = out + pattern[at], at + 1
+        first, ch, at = at == 0, pattern[at], at + 1
+        if ch == "*" and pattern.startswith("*", at):
+            at += 1
+            if pattern.startswith("/", at):
+                at += 1
+            if at < len(pattern):
+                regex, kind = regex + "(.*/)?", "regex"
+            elif kind == "exact":
+                kind = "prefix"
+            else:
+                regex, kind = regex + ".*", "regex"
+            if first:
+                kind = "suffix"
+        elif ch == "*":
+            regex, kind = regex + "[^/]*", "regex"
+        elif ch == "?":
+            regex, kind = regex + "[^/]", "regex"
+        elif ch in DOCKER_ESCAPED:
+            regex += "\\" + ch
+        elif ch == "\\" and at < len(pattern):
+            regex, kind, at = regex + "\\" + pattern[at], "regex", at + 1
+        elif ch in "[]":
+            regex, kind = regex + ch, "regex"
         else:
-            out, at = out + re.escape(pattern[at]), at + 1
-    return re.compile(out + r"\Z")
+            regex += ch
+    return kind, re.compile(regex + "$") if kind == "regex" else None
+
+
+def docker_match(pattern: str, path: str) -> bool:
+    kind, regex = compiled_pattern(pattern)
+    if kind == "exact":
+        return path == pattern
+    if kind == "prefix":
+        return path.startswith(pattern[:-2])
+    if kind == "suffix":
+        suffix = pattern[2:]
+        return path.endswith(suffix) or (suffix[:1] == "/" and path == suffix[1:])
+    return bool(regex.search(path))
 
 
 def path_and_parents(path: str) -> list[str]:
@@ -90,8 +118,8 @@ def left_out(patterns: list[str], path: str) -> bool:
         exclusion = pattern.startswith("!")
         if exclusion != excluded:
             continue
-        regex = pattern_regex(pattern.removeprefix("!"))
-        if any(regex.match(candidate) for candidate in path_and_parents(path)):
+        body = pattern.removeprefix("!")
+        if any(docker_match(body, candidate) for candidate in path_and_parents(path)):
             excluded = not exclusion
     return excluded
 
@@ -110,7 +138,7 @@ def copied_sources(service: str) -> list[str]:
 
 
 def copied(sources: list[str], path: str) -> bool:
-    return any(source == "." or any(pattern_regex(source).match(candidate)
+    return any(source == "." or any(docker_match(source, candidate)
                                     for candidate in path_and_parents(path))
                for source in sources)
 
@@ -147,6 +175,28 @@ class IgnoreHelper(unittest.TestCase):
         chroma = ["chroma_data/*", "!chroma_data/.gitkeep"]
         self.assertFalse(left_out(chroma, "chroma_data/.gitkeep"))
         self.assertTrue(left_out(chroma, "chroma_data/chroma.sqlite3"))
+
+    def test_a_double_star_matches_like_docker(self):
+        self.assertTrue(left_out(["**/__pycache__"], "__pycache__/a.pyc"))
+        self.assertFalse(left_out(["**/__pycache__"], "app/my__pycache__"))
+        self.assertTrue(left_out(["**.log"], "app/sub/debug.log"))
+        self.assertTrue(left_out(["app/**/*.gguf"], "app/model.gguf"))
+        self.assertTrue(left_out(["app/**/*.gguf"], "app/a/b/model.gguf"))
+        self.assertTrue(left_out(["app/**"], "app/models/config.json"))
+        self.assertFalse(left_out(["app/**"], "app.py"))
+        self.assertTrue(left_out(["app/**.py"], "app/sub/.py"))
+        self.assertFalse(left_out(["app/**.py"], "app/main.py"))
+        self.assertTrue(left_out(["app/**/models/**"], "app/x/models/llm/config.json"))
+
+    def test_a_bracket_range_matches_like_docker(self):
+        self.assertTrue(left_out(["logs/mas_2026[01][0-9]*.log"], "logs/mas_20261008.log"))
+        self.assertFalse(left_out(["logs/mas_2026[01][0-9]*.log"], "logs/mas_20262008.log"))
+        self.assertTrue(left_out(["*.py[cod]"], "main.pyc"))
+        self.assertFalse(left_out(["*.py[cod]"], "main.py-"))
+        self.assertTrue(left_out(["[^.]*.md"], "README.md"))
+        self.assertFalse(left_out(["[^.]*.md"], ".notes.md"))
+        self.assertTrue(left_out(["v[a-c].txt"], "vb.txt"))
+        self.assertFalse(left_out(["v[a-c].txt"], "vd.txt"))
 
 
 class BuildContexts(unittest.TestCase):
