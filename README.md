@@ -223,7 +223,7 @@ Horus is **closed-source, proprietary software** (all rights reserved). Having a
 
 ## Authors
 
-- **Loup Marquez** -- loup.m.marquez@gmail.com
+- **Loup Marquez** -- loup.marquez@epitech.eu
 - **Matheus Lopez** -- matheus.lopez@epitech.eu
 - **Noah Gibelli** -- noah.gibelli@epitech.eu
 

@@ -4,13 +4,13 @@ Horus is a self-hosted platform where several AI agents answer questions from an
 
 This page says how to take part: what to sign first, how work is tracked and how to send a change.
 
-Contact: **contact@lothmar.com**
+Contact, the three maintainers: **loup.marquez@epitech.eu**, **noah.gibelli@epitech.eu** and **matheus.lopez@epitech.eu**.
 
 ---
 
 ## 1. Before you start
 
-1. **Sign the Contributor Agreement.** Nobody outside the team gets access to the code or the private documents before signing it. It covers confidentiality and, if you send work, the transfer of the rights in it; in return you get credit in [CONTRIBUTORS.md](CONTRIBUTORS.md), code review and a reference. Ask for it at contact@lothmar.com.
+1. **Sign the Contributor Agreement.** Nobody outside the team gets access to the code or the private documents before signing it. It covers confidentiality and, if you send work, the transfer of the rights in it; in return you get credit in [CONTRIBUTORS.md](CONTRIBUTORS.md), code review and a reference. Ask one of the maintainers for it (addresses under Contact above).
 2. **Get access.** Once the agreement is signed by you and by the three maintainers, a maintainer gives you access to the repository. Turn on two-factor authentication on your GitHub account.
 3. **Set up the project.** Follow [docs/getting-started.md](docs/getting-started.md). The short version is in the [README](README.md#quickstart).
 
@@ -23,7 +23,7 @@ Contributing is voluntary and unpaid. You choose what you work on and when, and 
 - All work is tracked in **GitHub issues**. Start from an issue, or open one before you write code.
 - Issues labelled **`good first issue`** are small, self-contained and have the files to look at in their description.
 - Say in the issue that you are taking it, so that two people don't do the same work.
-- Not sure where to start? Ask in the issue, or write to contact@lothmar.com.
+- Not sure where to start? Ask in the issue, or write to one of the maintainers.
 
 ---
 
@@ -132,4 +132,4 @@ To add, remove or upgrade a Python dependency:
 
 - **Bugs:** open an issue with the steps to reproduce, what you expected, what happened, your OS, Docker version and hardware profile, and the relevant logs. For the installer, attach `install-log.txt` and `horus-profile.json`: they are written next to the START-HERE files, or at the repository root when you run `installer/horus_install.py` from a clone.
 - **Ideas:** open an issue labelled `enhancement` with the problem it solves.
-- **Security issues:** don't open a public issue. Write to contact@lothmar.com with the details; we answer within a week.
+- **Security issues:** don't open a public issue. Write to the three maintainers (addresses under Contact above) with the details; we answer within a week.
