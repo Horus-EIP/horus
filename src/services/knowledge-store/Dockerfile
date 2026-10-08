@@ -73,6 +73,10 @@ ENV OTEL_TRACES_EXPORTER=otlp
 ENV OTEL_METRICS_EXPORTER=none
 ENV OTEL_LOGS_EXPORTER=none
 
+COPY --from=notices THIRD_PARTY_NOTICES /usr/share/doc/horus/THIRD_PARTY_NOTICES
+COPY --from=notices LICENSES /usr/share/doc/horus/LICENSES
+COPY --from=notices NOTICES /usr/share/doc/horus/NOTICES
+
 EXPOSE 8080
 
 CMD ["opentelemetry-instrument", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]

@@ -40,6 +40,8 @@ services:
     build:
       context: ../services/mas
       dockerfile: Dockerfile
+      additional_contexts:
+        notices: ../..
     container_name: mas
     restart: unless-stopped
     mem_limit: ${MAS_MEM_LIMIT:-14g}
@@ -123,6 +125,8 @@ services:
     build:
       context: ../services/web-client
       dockerfile: Dockerfile
+      additional_contexts:
+        notices: ../..
       args:
         ORCHESTRATOR_URL: http://mas:8000
         NEXT_PUBLIC_KNOWLEDGE_STORE_URL: http://localhost:8080
@@ -165,6 +169,8 @@ services:
     build:
       context: ../services/agent
       dockerfile: Dockerfile
+      additional_contexts:
+        notices: ../..
     container_name: agent
     restart: unless-stopped
     mem_limit: ${AGENT_MEM_LIMIT:-12g}
@@ -305,6 +311,8 @@ services:
     build:
       context: ../services/knowledge-store
       dockerfile: Dockerfile
+      additional_contexts:
+        notices: ../..
     container_name: knowledge_store
     restart: unless-stopped
     mem_limit: ${KNOWLEDGE_STORE_MEM_LIMIT:-6g}

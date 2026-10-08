@@ -109,13 +109,14 @@ To add, remove or upgrade a Python dependency:
 
 1. Edit the `requirements*.txt` file.
 2. Run `scripts/dev/lock-requirements.sh`, which needs [uv](https://docs.astral.sh/uv/). It keeps every locked version it can; add `--upgrade-package NAME` to move one package, or `--upgrade` to move them all. It compiles the GPU lock first and the CPU lock against it, so both install the same versions.
-3. Update the licence data and `THIRD_PARTY_NOTICES`, with `--python-env` once for each local environment that has the packages installed (the rest is read from PyPI):
+3. Update the licence data, with `--python-env` once for each local environment that has the packages installed (the rest is read from PyPI). Then fetch the licence texts and NOTICE files into `LICENSES/` and `NOTICES/`, and rewrite `THIRD_PARTY_NOTICES`; this step needs the network:
 
    ```bash
    python scripts/licences/third_party_notices.py --refresh python --python-env PATH/TO/python
+   python scripts/licences/third_party_notices.py --refresh files
    ```
 
-4. Commit the `.txt` and `.lock` files, `scripts/licences/python-packages.json` and `THIRD_PARTY_NOTICES` together. The CI job `licences` fails when they are out of date.
+4. Commit the `.txt` and `.lock` files, `scripts/licences/python-packages.json` and `licence-files.json`, `LICENSES/`, `NOTICES/` and `THIRD_PARTY_NOTICES` together. The CI job `licences` fails when they are out of date, when a licence in use has no text in `LICENSES/`, or when a NOTICE a component ships is missing from `NOTICES/`.
 
 ---
 

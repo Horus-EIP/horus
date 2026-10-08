@@ -32,6 +32,8 @@ SOURCE_INCLUDE = [
     "src/infra",
     "demo_assets",
     "models",
+    "LICENSES",
+    "NOTICES",
 ]
 
 SOURCE_FILES = [

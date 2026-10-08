@@ -3,18 +3,25 @@
 from __future__ import annotations
 
 import argparse
+import datetime
+import fnmatch
 import json
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import tomllib
 import urllib.error
 import urllib.request
+import zipfile
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import licence_files  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
@@ -22,12 +29,20 @@ NOTICES = REPO / "THIRD_PARTY_NOTICES"
 PYTHON_DATA = HERE / "python-packages.json"
 RUST_DATA = HERE / "rust-crates.json"
 COMPONENTS = HERE / "components.yaml"
+FILES_DATA = HERE / "licence-files.json"
+LICENSES_DIR = REPO / "LICENSES"
+COMPONENT_LICENCES = LICENSES_DIR / "components"
+NOTICES_DIR = REPO / "NOTICES"
+NODE_MODULES = REPO / "src" / "services" / "web-client" / "node_modules"
+CARGO_REGISTRY = Path.home() / ".cargo" / "registry"
+ECOSYSTEMS = ("python", "web", "rust")
 VERSION_FILE = REPO / "VERSION"
 WEB_LOCK = REPO / "src" / "services" / "web-client" / "package-lock.json"
 CARGO_MANIFEST = REPO / "desktop" / "src-tauri" / "Cargo.toml"
 CARGO_LOCK = CARGO_MANIFEST.with_name("Cargo.lock")
 MODEL_MANIFEST = REPO / "models" / "manifest.json"
 WEB_RUNTIME_ROOTS = ("next",)
+WEB_IMAGE_PLATFORM = {"os": "linux", "cpu": "x64"}
 COMPOSE_FILES = sorted((REPO / "src" / "infra").glob("docker-compose*.yml"))
 SERVICES = {
     "mas": REPO / "src" / "services" / "mas",
@@ -72,6 +87,9 @@ class Entry:
     url: str
     source: str = "metadata"
     note: str = ""
+    spdx: str = ""
+    copies: tuple[str, ...] = ()
+    notices: tuple[str, ...] = ()
 
 
 @dataclass
@@ -308,18 +326,30 @@ def lock_path(packages: dict, start: str, name: str) -> str | None:
         base = base[:cut] if cut >= 0 else ""
 
 
+def runs_in_web_image(info: dict, path: str = "", packages: dict | None = None) -> bool:
+    if not all(not info.get(field) or wanted in info[field] for field, wanted in WEB_IMAGE_PLATFORM.items()):
+        return False
+    musl = (path.replace("-linux-", "-linuxmusl-").replace("-gnu", "-musl"),
+            path.replace("-gnu", "-musl"))
+    return not (info.get("os") == ["linux"] and "musl" not in path
+                and any(other != path and other in (packages or {}) for other in musl))
+
+
 def web_runtime_paths(packages: dict) -> set[str]:
     roots = list(packages[""].get("dependencies", {})) + list(WEB_RUNTIME_ROOTS)
     pending = [lock_path(packages, "", name) for name in roots]
     seen: set[str] = set()
     while pending:
         path = pending.pop()
-        if path is None or path in seen:
+        if path is None or path in seen or not runs_in_web_image(packages[path], path, packages):
             continue
         seen.add(path)
         info = packages[path]
+        optional_peers = {name for name, meta in (info.get("peerDependenciesMeta") or {}).items()
+                          if meta.get("optional")}
         for kind in ("dependencies", "optionalDependencies", "peerDependencies"):
-            pending.extend(lock_path(packages, path, name) for name in info.get(kind, {}))
+            pending.extend(lock_path(packages, path, name) for name in info.get(kind, {})
+                           if not (kind == "peerDependencies" and name in optional_peers))
     return seen
 
 
@@ -408,7 +438,7 @@ def image_entries(components: dict, report: Report) -> list[Entry]:
         note = f"{note}; " if note else ""
         entries.append(Entry(
             repository, tag_of(image), info["licence"], info["url"], info["source"],
-            f"{note}used by {', '.join(sorted(where))}",
+            f"{note}used by {', '.join(sorted(where))}", info.get("spdx", ""),
         ))
     return entries
 
@@ -421,16 +451,304 @@ def model_entries(components: dict, report: Report) -> list[Entry]:
         if source not in models:
             report.add(f"models/manifest.json model {source} has no entry in components.yaml models")
     return [
-        Entry(model_id, model.get("revision", ""), model["licence"], model["url"], model["source"], model.get("note", ""))
+        Entry(model_id, model.get("revision", ""), model["licence"], model["url"], model["source"],
+              model.get("note", ""), model.get("spdx", ""))
         for model_id, model in sorted(models.items())
     ]
 
 
 def component_entries(components: dict) -> list[Entry]:
     return [
-        Entry(name, info.get("version", ""), info["licence"], info["url"], info["source"], info.get("note", ""))
+        Entry(name, info.get("version", ""), info["licence"], info["url"], info["source"],
+              info.get("note", ""), info.get("spdx", ""))
         for name, info in sorted((components.get("components") or {}).items())
     ]
+
+
+def key_of(name: str, version: str) -> str:
+    return f"{name} {version}"
+
+
+def locked_urls() -> dict[str, str]:
+    urls = {}
+    for folder in SERVICES.values():
+        for lock in sorted(folder.glob("requirements*.lock")):
+            for line in lock.read_text(encoding="utf-8").splitlines():
+                match = DIRECT_URL.match(line.strip())
+                if match:
+                    urls[normalise(match.group(1))] = match.group(2)
+    return urls
+
+
+def python_components() -> dict[str, dict]:
+    found = {}
+    urls = locked_urls()
+    for files in read_json(PYTHON_DATA)["services"].values():
+        for rows in files.values():
+            for row in rows:
+                found[key_of(row["name"], row["version"])] = {
+                    "name": row["name"], "version": row["version"], "licence": row["licence"],
+                    "url": urls.get(normalise(row["name"])), "repository": row["url"],
+                }
+    return found
+
+
+def web_components() -> dict[str, dict]:
+    packages = read_json(WEB_LOCK)["packages"]
+    found = {}
+    for path in sorted(web_runtime_paths(packages)):
+        info = packages[path]
+        name = path.split("node_modules/")[-1]
+        found[key_of(name, info.get("version", ""))] = {
+            "name": name, "version": info.get("version", ""), "licence": info.get("license") or "",
+            "path": path, "info": info, "repository": npm_repository(path),
+        }
+    return found
+
+
+def npm_repository(path: str) -> str:
+    manifest = NODE_MODULES.parent / path / "package.json"
+    if not manifest.is_file():
+        return ""
+    repository = json.loads(manifest.read_text(encoding="utf-8")).get("repository") or ""
+    if isinstance(repository, dict):
+        repository = repository.get("url", "")
+    if repository.startswith("github:"):
+        repository = "https://github.com/" + repository.split(":", 1)[1]
+    elif re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
+        repository = "https://github.com/" + repository
+    return repository
+
+
+def rust_components() -> dict[str, dict]:
+    return {
+        key_of(crate["name"], crate["version"]): {
+            "name": crate["name"], "version": crate["version"], "licence": crate["licence"],
+            "repository": crate["url"]}
+        for crate in read_json(RUST_DATA)["crates"]
+    }
+
+
+def component_files(ecosystem: str, item: dict) -> tuple[str, dict, dict]:
+    if ecosystem == "python":
+        return licence_files.python_files(item["name"], item["version"], item["url"])
+    if ecosystem == "web":
+        return licence_files.npm_files(item["path"], item["info"], NODE_MODULES)
+    return licence_files.crate_files(item["name"], item["version"], CARGO_REGISTRY)
+
+
+def resolve_spdx(raw: str, override: dict, aliases: dict, texts: list[str], ids: tuple[set, set]) -> str:
+    if override.get("spdx"):
+        return override["spdx"]
+    if raw in aliases:
+        return aliases[raw]
+    candidate = re.sub(r"\s*/\s*", " OR ", raw.strip())
+    if licence_files.valid_expression(candidate, *ids):
+        return candidate
+    found = {licence_files.identify(text) for text in texts} - {None}
+    return found.pop() if len(found) == 1 else ""
+
+
+def write_files(folder: Path, stem: str, files: dict[str, bytes]) -> list[str]:
+    written = []
+    for name, data in licence_files.target_names(stem, licence_files.distinct(files)):
+        target = folder / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data.replace(b"\r\n", b"\n"))
+        written.append(target.relative_to(REPO).as_posix())
+    return written
+
+
+def overrides_for(components: dict, ecosystem: str) -> dict[str, dict]:
+    key = {"python": "python_overrides", "web": "web_overrides", "rust": "rust_overrides"}[ecosystem]
+    return {normalise(name): value for name, value in (components.get(key) or {}).items()}
+
+
+def override_for(overrides: dict[str, dict], name: str) -> dict:
+    exact = overrides.get(normalise(name))
+    if exact is not None:
+        return exact
+    for pattern, value in sorted(overrides.items()):
+        if "*" in pattern and fnmatch.fnmatchcase(normalise(name), pattern):
+            return value
+    return {}
+
+
+def refresh_files(report: Report) -> None:
+    components = read_components()
+    aliases = components.get("spdx_aliases") or {}
+    ids = licence_files.spdx_ids()
+    for folder in (COMPONENT_LICENCES, NOTICES_DIR):
+        if folder.exists():
+            shutil.rmtree(folder)
+    records: dict[str, dict] = {}
+    shipped: dict[str, dict[str, bytes]] = {}
+    sources = {"python": python_components(), "web": web_components(), "rust": rust_components()}
+    for ecosystem in ECOSYSTEMS:
+        overrides = overrides_for(components, ecosystem)
+        records[ecosystem] = {}
+        for key, item in sorted(sources[ecosystem].items()):
+            try:
+                record, licences = component_record(ecosystem, item, override_for(overrides, item["name"]),
+                                                    aliases, ids, report)
+            except (OSError, ValueError, zipfile.BadZipFile, tarfile.TarError) as error:
+                report.add(f"{ecosystem}: {key}: cannot read its files: {error}")
+                continue
+            shipped[f"{ecosystem} {key}"] = licences
+            records[ecosystem][key] = record
+    write_licence_texts(components, records, shipped, report)
+    FILES_DATA.write_text(json.dumps({
+        "how": ("Licence and NOTICE files read from each component's own distribution: the wheel on PyPI "
+                "(only the needed members, by HTTP range requests) or its sdist when the wheel has none, "
+                "node_modules or the npm tarball named in package-lock.json for the web client, the cargo "
+                "registry for the desktop app. When a component whose licence carries a copyright line "
+                "ships no licence file, the licence file of its repository is used, and the file says so. "
+                f"Licence texts from the SPDX licence list {licence_files.SPDX_LIST_VERSION}."),
+        "spdx_list": licence_files.SPDX_LIST_VERSION,
+        **records,
+    }, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def component_record(ecosystem: str, item: dict, override: dict, aliases: dict, ids: tuple[set, set],
+                     report: Report) -> tuple[dict, dict[str, bytes]]:
+    key = key_of(item["name"], item["version"])
+    label, licences, notices = component_files(ecosystem, item)
+    record = {"spdx": "", "from": label, "copies": [], "notices": []}
+    spdx = resolve_spdx(item["licence"], override, aliases, primary_texts(licences), ids)
+    if not licences and (override.get("licence_url") or not spdx or licence_files.needs_own_copy(spdx)):
+        found = repository_licence(item, override)
+        if found:
+            source, data = found
+            name = f"{item['name']} {item['version']}"
+            header = (f"No licence file ships with {name}. This is the licence file of its "
+                      f"repository: {source}\n\n").encode("utf-8")
+            licences = {source.rsplit("/", 1)[-1]: header + data}
+            record["licence_from"] = source
+            spdx = spdx or resolve_spdx(item["licence"], override, aliases, [data.decode("utf-8", "replace")], ids)
+    record["spdx"] = spdx
+    if not spdx:
+        report.add(f"{ecosystem}: {key} licence {item['licence']!r} has no SPDX id; add it to "
+                   "spdx_aliases or an override in components.yaml")
+    stem = f"{licence_files.safe_name(item['name'])}-{item['version']}"
+    kept = {source: data for source, data in licences.items() if not licence_files.generic_licence(data)}
+    if kept and (licence_files.needs_own_copy(spdx) or override.get("own_copy")):
+        record["copies"] = write_files(COMPONENT_LICENCES / ecosystem, stem, kept)
+    if override.get("notice_url"):
+        url = override["notice_url"].format(version=item["version"])
+        header = f"The third-party notices of {item['name']} {item['version']}, from {url}\n\n".encode("utf-8")
+        notices = {**notices, url.rsplit("/", 1)[-1]: header + licence_files.fetch(url, timeout=60)}
+        record["notice_from"] = url
+    if notices:
+        record["notices"] = write_files(NOTICES_DIR / ecosystem, stem, notices)
+    if not licences:
+        record["no_licence_file"] = True
+    return record, licences
+
+
+def primary_texts(licences: dict[str, bytes]) -> list[str]:
+    if not licences:
+        return []
+    depth = min(source.count("/") for source in licences)
+    return [data.decode("utf-8", "replace") for source, data in licences.items() if source.count("/") == depth]
+
+
+def repository_licence(item: dict, override: dict) -> tuple[str, bytes] | None:
+    if override.get("licence_url"):
+        url = override["licence_url"].format(version=item["version"])
+        return url, licence_files.text_of(licence_files.fetch(url, timeout=60))
+    return licence_files.github_licence(override.get("repository") or item.get("repository") or "")
+
+
+def expressions_in_use(components: dict, records: dict) -> set[str]:
+    found = set()
+    for ecosystem in ECOSYSTEMS:
+        found.update(record["spdx"] for record in records.get(ecosystem, {}).values() if record["spdx"])
+    for section in ("images", "components"):
+        found.update(info.get("spdx", "") for info in (components.get(section) or {}).values())
+    found.update(model.get("spdx", "") for model in components.get("models") or [])
+    found.update(gpl.get("spdx", "") for gpl in components.get("system_packages") or [])
+    return {expression for expression in found if expression}
+
+
+def write_licence_texts(components: dict, records: dict, shipped: dict, report: Report) -> None:
+    refs = components.get("licence_refs") or {}
+    wanted = set()
+    for expression in expressions_in_use(components, records):
+        licences, exceptions = licence_files.split_expression(expression)
+        wanted.update(licences + exceptions)
+    for old in LICENSES_DIR.glob("*.txt"):
+        old.unlink()
+    LICENSES_DIR.mkdir(exist_ok=True)
+    for identifier in sorted(wanted):
+        target = LICENSES_DIR / f"{identifier}.txt"
+        if identifier.startswith("LicenseRef-"):
+            text = licence_ref_text(identifier, refs.get(identifier), shipped)
+            if text is None:
+                report.add(f"{identifier} has no source in components.yaml licence_refs")
+                continue
+            target.write_text(text, encoding="utf-8", newline="\n")
+        else:
+            target.write_bytes(licence_files.spdx_text(identifier).replace(b"\r\n", b"\n"))
+
+
+def licence_ref_text(identifier: str, ref: dict | None, shipped: dict) -> str | None:
+    if not ref:
+        return None
+    today = datetime.date.today().isoformat()
+    if "component" in ref:
+        matches = sorted(key for key, files in shipped.items() if key.startswith(f"{ref['component']} ") and files)
+        if not matches:
+            return None
+        source, data = sorted(shipped[matches[0]].items())[0]
+        header = f"{identifier}: the text {matches[0]} ships as {source}.\n\n"
+        return header + data.decode("utf-8", "replace").replace("\r\n", "\n")
+    if "image" in ref:
+        text = subprocess.run(
+            ["docker", "run", "--rm", "--entrypoint", "cat", ref["image"], ref["path"]],
+            capture_output=True, text=True, encoding="utf-8", check=True,
+        ).stdout
+        return f"{identifier}: the text shipped in {ref['image']} at {ref['path']}, read on {today}.\n\n{text}"
+    text = licence_files.text_of(licence_files.fetch(ref["url"], timeout=60)).decode("utf-8", "replace")
+    return f"{identifier}: text of {ref['url']}, retrieved on {today}.\n\n{text}"
+
+
+def attach_files(ecosystem: str, entries: list[Entry], records: dict, report: Report) -> list[Entry]:
+    attached = []
+    for entry in entries:
+        record = records.get(ecosystem, {}).get(key_of(entry.name, entry.version))
+        if record is None:
+            report.add(f"{ecosystem}: {entry.name} {entry.version} has no licence files recorded; "
+                       "run --refresh files")
+            attached.append(entry)
+            continue
+        attached.append(replace(entry, spdx=record["spdx"], copies=tuple(record["copies"]),
+                                notices=tuple(record["notices"])))
+    return attached
+
+
+def check_licence_files(components: dict, records: dict, report: Report) -> None:
+    referenced = set()
+    for ecosystem in ECOSYSTEMS:
+        for key, record in records.get(ecosystem, {}).items():
+            for path in record["copies"] + record["notices"]:
+                referenced.add(path)
+                if not (REPO / path).is_file():
+                    report.add(f"{ecosystem}: {key}: {path} is missing; run --refresh files")
+    for expression in sorted(expressions_in_use(components, records)):
+        licences, exceptions = licence_files.split_expression(expression)
+        for identifier in licences + exceptions:
+            if not (LICENSES_DIR / f"{identifier}.txt").is_file():
+                report.add(f"licence {identifier} is in use but LICENSES/{identifier}.txt is missing")
+    for folder in (COMPONENT_LICENCES, NOTICES_DIR):
+        for path in sorted(folder.rglob("*")) if folder.exists() else []:
+            relative = path.relative_to(REPO).as_posix()
+            if path.is_file() and relative not in referenced:
+                report.add(f"{relative} belongs to no listed component; run --refresh files")
+
+
+def text_paths(spdx: str) -> list[str]:
+    licences, exceptions = licence_files.split_expression(spdx)
+    return [f"LICENSES/{identifier}.txt" for identifier in dict.fromkeys(licences + exceptions)]
 
 
 def lines_for(entries: Iterable[Entry]) -> list[str]:
@@ -442,18 +760,36 @@ def lines_for(entries: Iterable[Entry]) -> list[str]:
         lines.append(f"  {entry.url}")
         if entry.note:
             lines.append(f"  {entry.note}")
+        if entry.spdx:
+            lines.append(f"  Licence text ({entry.spdx}): {', '.join(text_paths(entry.spdx))}")
+        if entry.copies:
+            lines.append(f"  Its own licence file: {', '.join(entry.copies)}")
+        if entry.notices:
+            lines.append(f"  NOTICE: {', '.join(entry.notices)}")
     return lines
+
+
+def entries_with_spdx(entries: list[Entry], section: str, report: Report) -> list[Entry]:
+    for entry in entries:
+        if not entry.spdx:
+            report.add(f"{section}: {entry.name} has no spdx in components.yaml")
+    return entries
 
 
 def render(report: Report) -> str:
     components = read_components()
     version = VERSION_FILE.read_text(encoding="utf-8").strip()
-    python = python_entries(report)
-    web = web_entries()
-    rust = rust_entries(report)
-    images = image_entries(components, report)
-    models = model_entries(components, report)
-    others = component_entries(components)
+    records = read_json(FILES_DATA) if FILES_DATA.is_file() else {}
+    if not records:
+        report.add("scripts/licences/licence-files.json is missing; run --refresh files")
+    python = {service: attach_files("python", entries, records, report)
+              for service, entries in python_entries(report).items()}
+    web = attach_files("web", web_entries(), records, report)
+    rust = attach_files("rust", rust_entries(report), records, report)
+    images = entries_with_spdx(image_entries(components, report), "images", report)
+    models = entries_with_spdx(model_entries(components, report), "models", report)
+    others = entries_with_spdx(component_entries(components), "components", report)
+    check_licence_files(components, records, report)
     out = [
         f"THIRD-PARTY NOTICES FOR HORUS {version}",
         "",
@@ -468,6 +804,13 @@ def render(report: Report) -> str:
         "Each entry gives the licence and where it was read: the package's own",
         "metadata where it has one, else the licence inventory",
         "(docs/eip/dependency-licence-inventory.xlsx) or the project page.",
+        "",
+        "The full licence texts are in LICENSES/, one file per licence, named by its",
+        f"SPDX id and taken from the SPDX licence list {records.get('spdx_list', licence_files.SPDX_LIST_VERSION)}.",
+        "Licences that carry a copyright line (MIT, BSD, ISC and similar) also keep each",
+        "component's own licence file in LICENSES/components/. Every NOTICE or",
+        "third-party notices file a component ships is in NOTICES/. Each entry names",
+        "its files.",
         "",
         "",
         "1. Python packages, per service",
@@ -524,8 +867,9 @@ def render(report: Report) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate THIRD_PARTY_NOTICES at the repository root.")
     parser.add_argument("--check", action="store_true", help="exit 1 if THIRD_PARTY_NOTICES or its data is out of date")
-    parser.add_argument("--refresh", nargs="?", const="all", choices=("all", "python", "rust"),
-                        help="re-read the Python and/or Rust licence data before writing (default: all)")
+    parser.add_argument("--refresh", nargs="?", const="all", choices=("all", "python", "rust", "files"),
+                        help="re-read the Python and/or Rust licence data, or fetch the licence texts and "
+                             "NOTICE files (files), before writing (default: all)")
     parser.add_argument("--python-env", action="append", default=[], metavar="PYTHON",
                         help="with --refresh: a Python interpreter whose installed packages give licence metadata "
                              "(repeat for each service environment; default: this interpreter)")
@@ -537,8 +881,10 @@ def main(argv: list[str] | None = None) -> int:
         refresh_python(args.python_env or [sys.executable])
     if args.refresh in ("all", "rust"):
         refresh_rust(args.cargo)
-
     report = Report()
+    if args.refresh in ("all", "files"):
+        refresh_files(report)
+
     text = render(report)
     if args.check:
         current = NOTICES.read_text(encoding="utf-8") if NOTICES.is_file() else ""

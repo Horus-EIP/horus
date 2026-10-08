@@ -303,6 +303,15 @@ class BundleShipsTheVersion(unittest.TestCase):
         committed = (REPO / "THIRD_PARTY_NOTICES").read_text(encoding="utf-8")
         self.assertEqual(shipped.replace("\r\n", "\n"), committed)
 
+    def test_every_licence_text_and_notice_ships_with_them(self):
+        with zipfile.ZipFile(self.zip_path) as zf:
+            names = set(zf.namelist())
+        for folder in ("LICENSES", "NOTICES"):
+            for path in sorted((REPO / folder).rglob("*")):
+                if path.is_file():
+                    with self.subTest(path.relative_to(REPO).as_posix()):
+                        self.assertIn("horus/" + path.relative_to(REPO).as_posix(), names)
+
     def test_no_downloaded_model_file_ships(self):
         with zipfile.ZipFile(self.zip_path) as zf:
             names = zf.namelist()

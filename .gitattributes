@@ -5,3 +5,5 @@ Dockerfile text eol=lf
 *.dockerfile text eol=lf
 *.bat text eol=crlf
 *.cmd text eol=crlf
+LICENSES/** -text
+NOTICES/** -text

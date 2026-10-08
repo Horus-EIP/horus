@@ -3,7 +3,9 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -19,6 +21,7 @@ spec = importlib.util.spec_from_file_location("third_party_notices", SCRIPT)
 notices = importlib.util.module_from_spec(spec)
 sys.modules["third_party_notices"] = notices
 spec.loader.exec_module(notices)
+files = notices.licence_files
 
 needs_yaml = unittest.skipUnless(yaml is not None, "needs PyYAML to read scripts/licences/*.yaml")
 
@@ -95,6 +98,92 @@ class WebClient(unittest.TestCase):
         self.assertNotIn("vitest", names)
         self.assertTrue(all(entry.licence != "UNKNOWN" for entry in entries))
 
+    def test_optional_peers_and_other_platforms_are_left_out(self):
+        names = {entry.name for entry in notices.web_entries()}
+        self.assertNotIn("@playwright/test", names)
+        self.assertNotIn("@img/sharp-win32-x64", names)
+        self.assertNotIn("@next/swc-darwin-arm64", names)
+        self.assertIn("@img/sharp-libvips-linuxmusl-x64", names)
+        self.assertNotIn("@img/sharp-libvips-linux-x64", names)
+        self.assertNotIn("@next/swc-linux-x64-gnu", names)
+
+    def test_a_package_for_another_platform_does_not_run_in_the_image(self):
+        linux = {"os": ["linux"], "cpu": ["x64"]}
+        packages = {"node_modules/@x/bin-linux-x64-gnu": linux, "node_modules/@x/bin-linux-x64-musl": linux}
+        self.assertTrue(notices.runs_in_web_image({}))
+        self.assertTrue(notices.runs_in_web_image(linux))
+        self.assertFalse(notices.runs_in_web_image({"os": ["darwin"], "cpu": ["arm64"]}))
+        self.assertFalse(notices.runs_in_web_image({"cpu": ["wasm32"]}))
+        self.assertFalse(notices.runs_in_web_image(linux, "node_modules/@x/bin-linux-x64-gnu", packages))
+        self.assertTrue(notices.runs_in_web_image(linux, "node_modules/@x/bin-linux-x64-musl", packages))
+
+
+class LicenceFiles(unittest.TestCase):
+    def test_licence_and_notice_files_are_found_by_name(self):
+        classify = files.classify
+        self.assertEqual(classify("fastembed-0.8.1.dist-info/licenses/NOTICE"), "notice")
+        self.assertEqual(classify("onnxruntime/ThirdPartyNotices.txt"), "notice")
+        self.assertEqual(classify("torch-2.14.1.dist-info/licenses/third_party/fmt/LICENSE"), "licence")
+        self.assertEqual(classify("pypdfium2-5.14.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/icu.txt"),
+                         "licence")
+        self.assertEqual(classify("package/LICENSE-MIT"), "licence")
+        self.assertEqual(classify("package/license.md"), "licence")
+        self.assertEqual(classify("package/dist/compiled/react/LICENSE"), "licence")
+        self.assertIsNone(classify("package/lib/license.js"))
+        self.assertIsNone(classify("package/test/fixtures/LICENSE"))
+
+    def test_the_licence_is_recognised_from_its_text(self):
+        bsd3 = ("Redistribution and use in source and binary forms, with or without modification ... "
+                "Neither the name of the copyright holder nor the names of its contributors")
+        self.assertEqual(files.identify(bsd3), "BSD-3-Clause")
+        self.assertEqual(files.identify("Redistribution and use in source and binary forms"), "BSD-2-Clause")
+        self.assertEqual(files.identify("Permission is hereby granted, free of charge, to any person"), "MIT")
+        self.assertEqual(files.identify("Apache License\nVersion 2.0, January 2004"), "Apache-2.0")
+        self.assertIsNone(files.identify("All rights reserved."))
+
+    def test_expressions_are_split_into_licences_and_exceptions(self):
+        self.assertEqual(files.split_expression("(MIT OR Apache-2.0) AND Unicode-3.0"),
+                         (["MIT", "Apache-2.0", "Unicode-3.0"], []))
+        self.assertEqual(files.split_expression("GPL-3.0-or-later WITH GCC-exception-3.1"),
+                         (["GPL-3.0-or-later"], ["GCC-exception-3.1"]))
+
+    def test_licences_with_a_copyright_line_keep_the_component_copy(self):
+        self.assertTrue(files.needs_own_copy("MIT"))
+        self.assertTrue(files.needs_own_copy("Apache-2.0 OR MIT"))
+        self.assertTrue(files.needs_own_copy("BSD-3-Clause"))
+        self.assertTrue(files.needs_own_copy("LicenseRef-NVIDIA-Proprietary"))
+        self.assertFalse(files.needs_own_copy("Apache-2.0"))
+        self.assertFalse(files.needs_own_copy("LGPL-3.0-or-later"))
+
+    def test_a_generic_apache_text_is_not_copied_but_a_combined_file_is(self):
+        apache = b"Apache License\nVersion 2.0, January 2004\nTERMS AND CONDITIONS"
+        self.assertTrue(files.generic_licence(apache))
+        self.assertFalse(files.generic_licence(apache + b"\nPermission is hereby granted, free of charge"))
+        self.assertFalse(files.generic_licence(b"Copyright (c) 2024 Someone\nPermission is hereby granted"))
+
+    def test_an_expression_is_valid_only_with_known_ids(self):
+        ids = ({"MIT", "Apache-2.0", "GPL-3.0-or-later"}, {"GCC-exception-3.1"})
+        self.assertTrue(files.valid_expression("MIT OR Apache-2.0", *ids))
+        self.assertTrue(files.valid_expression("GPL-3.0-or-later WITH GCC-exception-3.1", *ids))
+        self.assertTrue(files.valid_expression("LicenseRef-NVIDIA-Proprietary", *ids))
+        self.assertFalse(files.valid_expression("MIT License", *ids))
+        self.assertFalse(files.valid_expression("BSD", *ids))
+
+    def test_file_names_are_safe_and_distinct(self):
+        self.assertEqual(files.safe_name("@img/sharp-libvips-linuxmusl-x64"), "img+sharp-libvips-linuxmusl-x64")
+        named = files.target_names("crate-1.0", [("crate-1.0/LICENSE-MIT", b"a"), ("crate-1.0/LICENSE-APACHE", b"b")])
+        self.assertEqual([name for name, _ in named], ["crate-1.0.LICENSE-MIT.txt", "crate-1.0.LICENSE-APACHE.txt"])
+        self.assertEqual(files.target_names("pkg-2", [("pkg-2/LICENSE", b"a")]), [("pkg-2.txt", b"a")])
+
+    def test_identical_files_are_kept_once(self):
+        kept = files.distinct({"a/LICENSE": b"same\r\n", "a/sub/LICENSE": b"same\n", "a/COPYING": b"other"})
+        self.assertEqual([source for source, _ in kept], ["a/COPYING", "a/LICENSE"])
+
+    def test_a_licence_page_becomes_plain_text(self):
+        page = b"<!DOCTYPE html><html><head><style>x{}</style></head><body><p>Terms &amp; conditions</p></body></html>"
+        self.assertEqual(files.text_of(page), b"Terms & conditions\n")
+        self.assertEqual(files.text_of(b"plain text"), b"plain text")
+
 
 @needs_yaml
 class CommittedNotices(unittest.TestCase):
@@ -108,6 +197,33 @@ class CommittedNotices(unittest.TestCase):
         report = notices.Report()
         notices.render(report)
         self.assertEqual(report.stale, [])
+
+    def test_every_entry_names_its_licence_text(self):
+        text = (REPO / "THIRD_PARTY_NOTICES").read_text(encoding="utf-8")
+        self.assertIn("NOTICE: NOTICES/python/fastembed-0.8.1", text)
+        self.assertIn("NOTICE: NOTICES/python/onnxruntime-1.30.0", text)
+        entries = text.count("\n- ")
+        self.assertEqual(text.count("  Licence text ("), entries)
+
+    def test_a_missing_licence_text_or_notice_fails_the_check(self):
+        records = json.loads(notices.FILES_DATA.read_text(encoding="utf-8"))
+        components = notices.read_components()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            patched = {"REPO": root, "LICENSES_DIR": root / "LICENSES",
+                       "COMPONENT_LICENCES": root / "LICENSES" / "components", "NOTICES_DIR": root / "NOTICES"}
+            saved = {name: getattr(notices, name) for name in patched}
+            try:
+                for name, value in patched.items():
+                    setattr(notices, name, value)
+                report = notices.Report()
+                notices.check_licence_files(components, records, report)
+            finally:
+                for name, value in saved.items():
+                    setattr(notices, name, value)
+        problems = "\n".join(report.stale)
+        self.assertIn("LICENSES/MIT.txt is missing", problems)
+        self.assertIn("NOTICES/python/fastembed-0.8.1", problems)
 
 
 if __name__ == "__main__":

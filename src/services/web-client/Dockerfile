@@ -39,6 +39,10 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+COPY --from=notices THIRD_PARTY_NOTICES /usr/share/doc/horus/THIRD_PARTY_NOTICES
+COPY --from=notices LICENSES /usr/share/doc/horus/LICENSES
+COPY --from=notices NOTICES /usr/share/doc/horus/NOTICES
+
 USER nextjs
 EXPOSE 3000
 CMD ["node", "server.js"]

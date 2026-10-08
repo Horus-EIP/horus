@@ -31,6 +31,8 @@ needs_yaml = unittest.skipUnless(yaml is not None, "needs PyYAML to read the CI 
 LIBRARY_SWITCHES = {"SENTENCE_TRANSFORMERS_": "sentence-transformers"}
 DEV_TOOLS = ("pgadmin", "redisinsight")
 EXACT_TAG = r"\d+\.\d+\.\d+|^\d+\.\d+$|-b\d+$"
+IMAGE_SERVICES = ("mas", "agent", "knowledge-store", "web-client")
+NOTICE_PATHS = ("THIRD_PARTY_NOTICES", "LICENSES", "NOTICES")
 
 
 def project_name(requirement: str) -> str:
@@ -175,6 +177,34 @@ class DevTools(unittest.TestCase):
     def test_the_env_file_the_installer_copies_sets_no_profile(self):
         text = (INFRA / ".env.example").read_text(encoding="utf-8")
         self.assertNotRegex(text, r"(?m)^\s*COMPOSE_PROFILES\s*=")
+
+
+def final_stage(dockerfile: Path) -> list[str]:
+    lines = [line.strip() for line in dockerfile.read_text(encoding="utf-8").splitlines()]
+    starts = [index for index, line in enumerate(lines) if line.upper().startswith("FROM ")]
+    return lines[starts[-1]:]
+
+
+class LicenceFilesInImages(unittest.TestCase):
+    def test_every_image_copies_the_notices_in_its_final_stage(self):
+        for service in IMAGE_SERVICES:
+            stage = final_stage(SERVICES / service / "Dockerfile")
+            for name in NOTICE_PATHS:
+                with self.subTest(f"{service} {name}"):
+                    self.assertIn(f"COPY --from=notices {name} /usr/share/doc/horus/{name}", stage)
+
+    def test_every_image_build_gets_the_repository_root_as_the_notices_context(self):
+        text = (INFRA / "docker-compose.yml").read_text(encoding="utf-8")
+        for service in IMAGE_SERVICES:
+            with self.subTest(service):
+                self.assertRegex(text, rf"context: \.\./services/{re.escape(service)}\n"
+                                       r"\s+dockerfile: Dockerfile\n"
+                                       r"\s+additional_contexts:\n\s+notices: \.\./\.\.\n")
+
+    def test_the_notices_exist_at_the_repository_root(self):
+        self.assertTrue((REPO / "THIRD_PARTY_NOTICES").is_file())
+        self.assertTrue((REPO / "LICENSES").is_dir())
+        self.assertTrue((REPO / "NOTICES").is_dir())
 
 
 class ImageTags(unittest.TestCase):
