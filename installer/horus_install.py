@@ -1073,11 +1073,13 @@ def interactive_terminal() -> bool:
     except (ValueError, AttributeError):
         return False
 
-def retired_volumes(log: Log, infra: Path) -> list[str]:
+def named_project(log: Log, infra: Path) -> str:
     if not explicit_project_name(infra):
-        return []
+        return ""
     config = compose_config(log, infra)
-    project = config[0] if config else ""
+    return config[0] if config else ""
+
+def project_volumes(log: Log, project: str) -> list[tuple[str, str]]:
     if not project:
         return []
     res = run(["docker", "volume", "ls", "--filter", f"label={PROJECT_LABEL}={project}",
@@ -1085,7 +1087,39 @@ def retired_volumes(log: Log, infra: Path) -> list[str]:
     if not res.ok:
         return []
     rows = (line.split() for line in res.out.splitlines())
-    return [row[0] for row in rows if len(row) == 2 and row[1] in RETIRED_VOLUMES]
+    return [(row[0], row[1]) for row in rows if len(row) == 2]
+
+def retired_volumes(log: Log, project: str) -> list[str]:
+    return [name for name, key in project_volumes(log, project) if key in RETIRED_VOLUMES]
+
+def project_containers(log: Log, project: str) -> list[str]:
+    res = run(["docker", "ps", "--all", "--filter", f"label={PROJECT_LABEL}={project}",
+               "--format", "{{.Names}}"], log, timeout=60)
+    return res.out.split() if res.ok else []
+
+def remove_containers_of_turned_off_profiles(log: Log, project: str) -> bool:
+    if not project:
+        return False
+    left = project_containers(log, project)
+    if not left:
+        return False
+    log.say("  Removing the containers of services whose profile is off: " + ", ".join(left))
+    res = run(["docker", "rm", "--force", "--volumes", *left], log, timeout=300)
+    if not res.ok:
+        log.warn(f"`docker rm` failed ({res.first_line() or 'no output'}); remove them later with:")
+        log.say("    docker rm --force --volumes " + " ".join(left))
+        return False
+    log.ok("Removed " + ", ".join(left))
+    return True
+
+def point_out_volumes_of_turned_off_profiles(log: Log, project: str) -> None:
+    left = [name for name, key in project_volumes(log, project) if key not in RETIRED_VOLUMES]
+    if not left:
+        return
+    log.say("")
+    log.say("  These volumes belong to services whose profile is off, so")
+    log.say("  `down --volumes` kept them. Delete them with:")
+    log.say("    docker volume rm " + " ".join(left))
 
 def agrees_to_delete_retired_volumes(log: Log, retired: list[str],
                                      non_interactive: bool) -> bool:
@@ -1146,13 +1180,14 @@ def do_uninstall(log: Log, infra: Path, assume_yes: bool, non_interactive: bool 
             return EXIT_OK
 
     log.info("uninstall confirmed")
-    retired = retired_volumes(log, infra)
+    project = named_project(log, infra)
+    retired = retired_volumes(log, project)
     delete_retired = bool(retired) and agrees_to_delete_retired_volumes(
         log, retired, non_interactive)
-    code = _stream(
-        compose(["down", "--volumes", "--rmi", "all"] + orphan_removal(infra)),
-        log, infra, "down",
-    )
+    down = compose(["down", "--volumes", "--rmi", "all"] + orphan_removal(infra))
+    code = _stream(down, log, infra, "down")
+    if code == 0 and remove_containers_of_turned_off_profiles(log, project):
+        code = _stream(down, log, infra, "down (again)")
     if code != 0:
         log.warn("Some resources could not be removed; see the log for detail")
         log.say("  You can finish manually with:")
@@ -1164,6 +1199,7 @@ def do_uninstall(log: Log, infra: Path, assume_yes: bool, non_interactive: bool 
         delete_retired_volumes(log, retired)
     elif retired:
         point_out_retired_volumes(log, retired)
+    point_out_volumes_of_turned_off_profiles(log, project)
     log.say("")
     log.ok("Horus removed.")
     log.say("  The source folder and this installer are still here; delete them")

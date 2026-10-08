@@ -427,8 +427,11 @@ class FakeDocker:
 
     def __init__(self, config=None, pulls=(), ups=((0, ""),), ps=((),), local_images=(),
                  builds=(), vanishing=None, image_ids=None, downs=(), volumes=(),
-                 volume_rm=0):
+                 volume_rm=0, declared=(), containers=(), container_rm=0):
         self.config = config
+        self.declared = set(declared)
+        self.containers = list(containers)
+        self.container_rm = container_rm
         self.pulls = list(pulls)
         self.builds = list(builds)
         self.ups = list(ups)
@@ -472,7 +475,12 @@ class FakeDocker:
         if cmd[2] == "build":
             return self.builds.pop(0) if self.builds else 0
         if cmd[2] == "down":
-            return self.downs.pop(0) if self.downs else 0
+            code = self.downs.pop(0) if self.downs else 0
+            if code == 0 and "--volumes" in cmd:
+                project = (self.config or {}).get("name")
+                self.volumes = [volume for volume in self.volumes
+                                if not (volume[1] == project and volume[2] in self.declared)]
+            return code
         code, line = self.ups.pop(0)
         watched(line, watch_for, found)
         return code
@@ -509,6 +517,17 @@ class FakeDocker:
                 return Result(self.volume_rm, "", "Error response from daemon: volume is in use")
             self.volumes = [volume for volume in self.volumes if volume[0] not in cmd[3:]]
             return Result(0, "\n".join(cmd[3:]), "")
+        if cmd[1] == "ps":
+            label, _, value = cmd[cmd.index("--filter") + 1].removeprefix("label=").partition("=")
+            self.history.append("ps " + value)
+            rows = [name for name, labels in self.containers if labels.get(label) == value]
+            return Result(0, "\n".join(rows), "")
+        if cmd[1] == "rm":
+            self.history.append(" ".join(cmd[1:]))
+            if self.container_rm != 0:
+                return Result(self.container_rm, "", "Error response from daemon: cannot remove")
+            self.containers = [row for row in self.containers if row[0] not in cmd[4:]]
+            return Result(0, "\n".join(cmd[4:]), "")
         raise AssertionError(f"unexpected command {cmd}")
 
     def pulled(self) -> list[str]:
@@ -1299,7 +1318,7 @@ LEFT_VOLUMES = (
 UNNAMED_DOWN = "down --volumes --rmi all"
 DOWN = UNNAMED_DOWN + ORPHANS
 
-class UninstallOffersTheVolumesOlderVersionsLeft(FakeDockerCase):
+class UninstallCase(FakeDockerCase):
 
     def setUp(self) -> None:
         super().setUp()
@@ -1308,7 +1327,8 @@ class UninstallOffersTheVolumesOlderVersionsLeft(FakeDockerCase):
         self.history_at_each_question: list[list[str]] = []
 
     def docker(self, **kwargs):
-        return FakeDocker(config={"name": PROJECT, "services": {}}, **kwargs)
+        return FakeDocker(config={"name": PROJECT, "services": {}},
+                          declared={"postgresql_data"}, **kwargs)
 
     def uninstall(self, docker, answers=(), terminal=True, non_interactive=False,
                   assume_yes=True):
@@ -1330,6 +1350,8 @@ class UninstallOffersTheVolumesOlderVersionsLeft(FakeDockerCase):
             code = horus_install.do_uninstall(self.log, self.infra, assume_yes,
                                               non_interactive=non_interactive)
         return code, buf.getvalue()
+
+class UninstallOffersTheVolumesOlderVersionsLeft(UninstallCase):
 
     def test_yes_deletes_the_old_redis_volume_once_the_stack_is_down(self):
         docker = self.docker(volumes=LEFT_VOLUMES)
@@ -1438,7 +1460,8 @@ class UninstallOffersTheVolumesOlderVersionsLeft(FakeDockerCase):
     def test_the_uninstall_still_removes_orphans_and_the_declared_volumes(self):
         docker = self.docker()
         self.uninstall(docker)
-        self.assertEqual(docker.history, ["config", f"volume ls {PROJECT}", DOWN])
+        self.assertEqual(docker.history, ["config", f"volume ls {PROJECT}", DOWN,
+                                          f"ps {PROJECT}", f"volume ls {PROJECT}"])
 
     def test_the_volumes_are_looked_for_under_the_name_compose_resolves(self):
         self.infra = write_env(self.tmp, "COMPOSE_PROJECT_NAME=${HORUS_NAME}\n")
@@ -1453,6 +1476,82 @@ class UninstallOffersTheVolumesOlderVersionsLeft(FakeDockerCase):
         self.assertEqual(code, EXIT_UNINSTALL_FAILED)
         self.assertEqual(self.prompts, [])
         self.assertEqual(docker.history, [])
+
+PROJECT_LABEL = "com.docker.compose.project"
+LEFT_CONTAINERS = (
+    (f"{PROJECT}-pgadmin-1", {PROJECT_LABEL: PROJECT}),
+    (f"{PROJECT}-vllm-1", {PROJECT_LABEL: PROJECT}),
+    ("horus_other-pgadmin-1", {PROJECT_LABEL: "horus_other"}),
+    ("someone-elses-container", {}),
+)
+REMOVE_LEFT = f"rm --force --volumes {PROJECT}-pgadmin-1 {PROJECT}-vllm-1"
+PGADMIN_VOLUME = (f"{PROJECT}_pgadmin_data", PROJECT, "pgadmin_data")
+
+class UninstallRemovesEveryContainerOfTheProject(UninstallCase):
+
+    def test_the_containers_of_turned_off_profiles_go_after_the_down(self):
+        docker = self.docker(containers=LEFT_CONTAINERS)
+        code, out = self.uninstall(docker)
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(docker.history, ["config", f"volume ls {PROJECT}", DOWN,
+                                          f"ps {PROJECT}", REMOVE_LEFT, DOWN,
+                                          f"volume ls {PROJECT}"])
+        self.assertIn(f"Removed {PROJECT}-pgadmin-1, {PROJECT}-vllm-1", out)
+
+    def test_other_projects_and_plain_containers_are_never_touched(self):
+        docker = self.docker(containers=LEFT_CONTAINERS)
+        self.uninstall(docker)
+        self.assertEqual([name for name, _labels in docker.containers],
+                         ["horus_other-pgadmin-1", "someone-elses-container"])
+
+    def test_nothing_is_removed_when_the_down_left_no_container(self):
+        docker = self.docker(containers=LEFT_CONTAINERS[2:])
+        self.uninstall(docker)
+        self.assertEqual(docker.history.count(DOWN), 1)
+        self.assertFalse(any(entry.startswith("rm ") for entry in docker.history))
+
+    def test_without_a_project_name_no_container_is_looked_for(self):
+        self.infra = write_env(self.tmp, "COMPOSE_FILE=docker-compose.yml\n")
+        docker = self.docker(containers=LEFT_CONTAINERS)
+        code, _out = self.uninstall(docker)
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(docker.history, [UNNAMED_DOWN])
+        self.assertEqual(len(docker.containers), len(LEFT_CONTAINERS))
+
+    def test_the_containers_are_looked_for_under_the_name_compose_resolves(self):
+        self.infra = write_env(self.tmp, "COMPOSE_PROJECT_NAME=${HORUS_NAME}\n")
+        docker = self.docker(containers=LEFT_CONTAINERS)
+        self.uninstall(docker)
+        self.assertIn(REMOVE_LEFT, docker.history)
+
+    def test_a_failed_down_removes_no_container(self):
+        docker = self.docker(containers=LEFT_CONTAINERS, downs=[1])
+        code, _out = self.uninstall(docker)
+        self.assertEqual(code, EXIT_UNINSTALL_FAILED)
+        self.assertNotIn(f"ps {PROJECT}", docker.history)
+
+    def test_a_container_docker_will_not_remove_is_reported_with_the_command(self):
+        docker = self.docker(containers=LEFT_CONTAINERS, container_rm=1)
+        code, out = self.uninstall(docker)
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(docker.history.count(DOWN), 1)
+        self.assertIn("cannot remove", out)
+        self.assertIn(f"docker {REMOVE_LEFT}", out)
+
+    def test_a_failed_second_down_fails_the_uninstall(self):
+        docker = self.docker(containers=LEFT_CONTAINERS, downs=[0, 1])
+        code, out = self.uninstall(docker)
+        self.assertEqual(code, EXIT_UNINSTALL_FAILED)
+        self.assertIn("docker compose down -v --rmi all --remove-orphans", out)
+
+    def test_a_volume_only_a_turned_off_profile_declares_is_pointed_out_and_kept(self):
+        docker = self.docker(containers=LEFT_CONTAINERS, volumes=[*LEFT_VOLUMES, PGADMIN_VOLUME])
+        _code, out = self.uninstall(docker, answers=["n"])
+        self.assertIn(f"docker volume rm {PROJECT}_pgadmin_data", out)
+        self.assertNotIn(f"{PROJECT}_postgresql_data", out)
+        self.assertNotIn("horus_other_redis_data", out)
+        self.assertIn(PGADMIN_VOLUME, docker.volumes)
+        self.assertEqual(docker.deleted_volumes(), [])
 
 class UninstallKnowsWhenTheRunIsUnattended(unittest.TestCase):
 
