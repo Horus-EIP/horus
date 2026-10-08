@@ -102,7 +102,7 @@ docker compose up --build -d
 
 Services are defined in **`src/infra/docker-compose.yml`**. See [Configuration](getting-started.md#12-factor-configuration-management) and [Monitoring](#monitoring-and-observability) for URLs and observability.
 
-Only `web-client` (3000) is published on every interface; every other published port is bound to 127.0.0.1 (table in [Network security](security.md#63-network-security)). The browser calls MAS (`ws://<page host>:8000`) and the knowledge store (`http://localhost:8080`) directly, so the web client works fully only in a browser on the machine that runs the stack.
+Every published port is bound to 127.0.0.1, `web-client` (3000) included; `HORUS_WEB_BIND=0.0.0.0` in `.env` publishes 3000 on every interface instead (table and what that means in [Network security](security.md#63-network-security)). The browser calls MAS (`ws://<page host>:8000`) and the knowledge store (`http://localhost:8080`) directly, so the web client works fully only in a browser on the machine that runs the stack.
 
 On a machine without an NVIDIA GPU, add the CPU overlay. The installer does this for the `cpu-*` profiles by writing `COMPOSE_FILE` to `.env`:
 
@@ -164,7 +164,7 @@ Before the hardware decision the installer checks Python 3.11 or newer, the Dock
 
   An older Compose stops the installer with exit code 13 and the update steps. A version string with no `x.y.z` in it (some builds print a commit hash) only gets a warning. The table is `COMPOSE_FEATURES` in `installer/preflight.py`; `installer/tests/test_preflight_requirements.py` fails when the compose files stop using one of these features.
 - **Network.** The hosts every install needs (Docker Hub and Hugging Face), then the image source: PyPI, npm and Debian when building from source, or the registry of the prebuilt images (see [Prebuilt images](#prebuilt-images)). On a `cpu-*` profile it also checks the registry of the llama.cpp server image, `ghcr.io` and `pkg-containers.githubusercontent.com` by default, even when the Horus images come from elsewhere or are built from source. `LLM_SERVER_IMAGE`, from the environment or `src/infra/.env` as for Compose, moves that check to its own registry; an image on Docker Hub adds nothing. A host that serves both is checked once.
-- **Ports.** Every port in `PORTS` (`installer/preflight.py`) must be free on 127.0.0.1 and ::1, or held by this install's own containers. Every port but 3000 is published on 127.0.0.1 only; `tests/ci/test_published_ports.py` fails when the compose file publishes a port that `PORTS` does not check.
+- **Ports.** Every port in `PORTS` (`installer/preflight.py`) must be free on 127.0.0.1 and ::1, or held by this install's own containers. Every port is published on 127.0.0.1 only, 3000 included unless `HORUS_WEB_BIND` says otherwise; `tests/ci/test_published_ports.py` fails when the compose file publishes a port that `PORTS` does not check.
 
 #### Upgrades and uninstall
 

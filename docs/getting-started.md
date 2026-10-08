@@ -386,7 +386,7 @@ bash init-env.sh   # skips if .env already exists
 nano .env          # optional: tune values for local/production
 docker compose up --build -d
 
-## Services are now available on this machine only (every host port but 3000 is bound to 127.0.0.1):
+## Services are now available on this machine only (every host port is bound to 127.0.0.1; HORUS_WEB_BIND=0.0.0.0 in .env opens 3000 to the network):
 ## - PostgreSQL: 127.0.0.1:${DB_PORT:-5432}
 ## - Valkey (service redis): 127.0.0.1:${REDIS_PORT:-6379}
 ## - RabbitMQ: AMQP 127.0.0.1:${RABBITMQ_PORT:-5672}, UI http://localhost:15672
