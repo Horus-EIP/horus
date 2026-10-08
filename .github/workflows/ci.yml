@@ -61,7 +61,7 @@ jobs:
         run: pip install ruff==0.16.6
 
       - name: Run ruff
-        run: ruff check src tests scripts installer packaging
+        run: ruff check src tests scripts installer packaging opensource
 
   versions:
     name: Version numbers match VERSION
@@ -100,6 +100,38 @@ jobs:
 
       - name: No GPL, AGPL or SSPL in the Python packages, web client or desktop app
         run: python scripts/licences/check_licences.py
+
+  bench-kit:
+    name: Bench kit (standalone, Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install the kit in a fresh environment, from its own folder
+        run: |
+          python -m venv "$RUNNER_TEMP/kit-venv"
+          "$RUNNER_TEMP/kit-venv/bin/pip" install "./opensource/horus-bench-kit[test]"
+
+      - name: Run the kit's tests against the installed package
+        run: >-
+          "$RUNNER_TEMP/kit-venv/bin/python" -m pytest opensource/horus-bench-kit/tests
+          -o pythonpath= -q -p no:cacheprovider
+
+      - name: Build the zip, which refuses to when a publishing check fails
+        run: '"$RUNNER_TEMP/kit-venv/bin/python" opensource/horus-bench-kit/scripts/make-zip.py --out "$RUNNER_TEMP/kit-zip"'
+
+      - name: The kit stays free of Horus content
+        run: |
+          pip install pyyaml
+          python -m unittest tests.ci.test_bench_kit -v
 
   cpu-build-wiring:
     name: CPU build wiring
