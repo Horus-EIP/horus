@@ -810,19 +810,19 @@ class DecisionMakingAgent:
         # discourages echoing tokens already seen; no_repeat_ngram_size hard-bans
         # repeating any 4-gram; bad_words_ids physically prevents the
         # self-correcting loop by blocking the tokens that start it.
-        gen_kwargs: dict[str, Any] = dict(
-            input_ids=input_ids,
-            attention_mask=attn_mask,
-            max_new_tokens=max_new,
-            do_sample=False,
-            repetition_penalty=1.2,
-            no_repeat_ngram_size=4,
-            bad_words_ids=bad_words_ids if bad_words_ids else None,
-            stopping_criteria=stopping,
-            return_dict_in_generate=True,
-            pad_token_id=tok.eos_token_id,
-            eos_token_id=tok.eos_token_id,
-        )
+        gen_kwargs: dict[str, Any] = {
+            "input_ids": input_ids,
+            "attention_mask": attn_mask,
+            "max_new_tokens": max_new,
+            "do_sample": False,
+            "repetition_penalty": 1.2,
+            "no_repeat_ngram_size": 4,
+            "bad_words_ids": bad_words_ids if bad_words_ids else None,
+            "stopping_criteria": stopping,
+            "return_dict_in_generate": True,
+            "pad_token_id": tok.eos_token_id,
+            "eos_token_id": tok.eos_token_id,
+        }
 
         if _stream_tokens_enabled() and TextIteratorStreamer is not None:
             # Streams confirmed-clean tokens to the client as reasoning.delta
