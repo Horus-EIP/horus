@@ -75,8 +75,8 @@ The debt as recorded on 24/09/2026. The Decision column says where each item sta
 | # | Debt | Better way | Why we didn't | Cost | Risk if we leave it | Decision |
 |---|---|---|---|---|---|---|
 | C1 | **Unpinned Python dependencies**; images on `latest` and `redis:7` | Lock files (`uv pip compile`), pinned tags and a CI licence gate | Easier upgrades during development | S | Silent breakage or licence changes (Redis 7.4 went RSALv2/SSPL) | **Repaid**, not released yet (`b816e70`, `a820a0d`, `ade67e9`; Valkey instead of Redis in `9b72084`) |
-| C2 | **Test tools installed in production images** (pytest, pytest-cov, pytest-asyncio; pytest-html in the agent) | A `requirements-dev.txt` for tests only | One requirements file per service was simpler | XS | Bigger images, more licences to declare | **Open.** Repay by 0.1.2 |
-| C3 | **The MAS image is single-stage** and keeps compilers (`build-essential`, `g++`); pip runs with `--use-deprecated=legacy-resolver` | Multi-stage build (like the knowledge store); fix the conflicts the legacy resolver hides | The legacy resolver unblocked a dependency conflict quickly | S–M | Larger image; the resolver may install incompatible versions | **Open.** Repay by 0.2.0 |
+| C2 | **Test tools installed in production images** (pytest, pytest-cov, pytest-asyncio; pytest-html in the agent) | A `requirements-dev.txt` for tests only | One requirements file per service was simpler | XS | Bigger images, more licences to declare | **Repaid**, not released yet (B-46) |
+| C3 | **The MAS image is single-stage** and keeps compilers (`build-essential`, `g++`); pip runs with `--use-deprecated=legacy-resolver` | Multi-stage build (like the knowledge store); fix the conflicts the legacy resolver hides | The legacy resolver unblocked a dependency conflict quickly | S–M | Larger image; the resolver may install incompatible versions | **Repaid**, not released yet (B-121) |
 | C4 | **passlib 1.7.4 + `bcrypt<4.0`** in MAS, `bcrypt==3.2.2` pinned in the agent. passlib has had no release since 2020 and clashes with recent bcrypt. | Use `bcrypt` directly (or a maintained wrapper), with one version everywhere | Works today; it touches password hashing, so it needs care | S | Stuck on old crypto packages; future security fixes may be blocked | **Open.** Repay by 0.3.0 (before pilots) |
 | C5 | **The Python version is not consistent**: the README badge says 3.13, ruff targets `py313`, CI runs 3.13, and the Docker images use `python:3.11-slim` | One supported version, the same everywhere | Each part was set up at a different time | XS–S | "Works on my machine" bugs; lint rules for a version we don't run | **Part repaid**: the README says 3.11 (`8dc2410`). The rest by 0.1.2 (pick 3.11 or upgrade the images) |
 | C6 | **Unused or odd dependencies**: PyMuPDF (AGPL, never imported) in the knowledge store; the PyPI `graphlib` package in MAS next to the standard-library `graphlib` | Remove them | Nobody cleaned the requirements after refactors | XS | PyMuPDF is the only licence blocker (ADR-004) | **Part repaid**: PyMuPDF removed (`a2e5807`). `graphlib` by 0.1.2 |
@@ -107,7 +107,7 @@ The debt as recorded on 24/09/2026. The Decision column says where each item sta
 
 ## Status on 07/10/2026
 
-Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at that commit. C1, E1 and E2 were repaid later that day by the Objective 1 commits named below, and C5 in part.
+Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at that commit. C1, E1 and E2 were repaid later that day by the Objective 1 commits named below, and C5 in part. C2 and C3 were repaid on 08/10/2026.
 
 ### Repaid
 
@@ -120,6 +120,8 @@ Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at 
 | E1 | `78bb12e`, `8f11aaa`, `2dbffb9`, `beed5fd` | README-FIRST gives 1.5 to 2 hours, the README badge shows the working branch, `docs/contributing.md` is the code-style page only (no `develop`, two-approval, onboarding or `test-integration` rule left), and `ci.yml` explains its `.env` workaround itself. |
 | E2 | `fd7ad5f`, `beed5fd` | "Branches" in `CONTRIBUTING.md` and "Repository branches" in `docs/operations.md` say to start from `Sprint#1_September2026_Tek5`. |
 | E4 | `b4e63c2`, `2dbffb9` | `VERSIONING.md` and `TESTING.md` are at the repository root, checked against the code on 07/10/2026; this ADR is in `docs/adr/`. |
+| C2 | B-46, 08/10/2026 | Each service's test tools are in its `requirements-test.txt`, which `scripts/dev/lock-requirements.sh` does not lock and only the CI test jobs install; no lock file names pytest, coverage or fakeredis, and `tests/ci/test_cpu_torch_build.py` checks it. |
+| C3 | B-121, 08/10/2026 | `src/services/mas/Dockerfile` has a builder stage with `build-essential` and `g++`, and a final stage that copies the virtual environment and installs no system package; pip resolves the lock with its default resolver and `pip check` passes in the image. The CPU image went from 1.32 GB to 877 MB. |
 | D6 | `2cdc325` (B-51) | `VERSION` is `0.1.2`; `desktop/package.json`, `desktop/src-tauri/tauri.conf.json`, `desktop/src-tauri/Cargo.toml` and `src/services/web-client/package.json` say `0.1.2`; the knowledge store reports `HORUS_VERSION` (`src/services/knowledge-store/app/main.py`, line 112); the CI job `versions` runs `scripts/ci/check-versions.py` (`.github/workflows/ci.yml`, lines 66–80). |
 
 ### Part repaid
@@ -143,8 +145,6 @@ Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at 
 | B1 | `ci.yml` (lines 315–320) says the integration tests run only by hand. |
 | B3 | `src/services/knowledge-store/tests/test_corpus_safety.py` is still there; CI runs `tests/knowledge_store` only (`ci.yml`, line 295). |
 | B4 | The repository records no ATP after v7 (18/09/2026, `docs/eip/regressions.md`), so the rule has not been applied yet. |
-| C2 | pytest is still in `src/services/mas/requirements.txt` (lines 1–3), `src/services/agent/requirements.txt` (lines 7–10) and `src/services/knowledge-store/requirements.txt` (lines 23–25). |
-| C3 | `src/services/mas/Dockerfile`: one `FROM` (line 1), `build-essential` and `g++` (lines 14–15), `--use-deprecated=legacy-resolver` (line 35). |
 | C4 | `src/services/mas/requirements.txt` lines 23–24; `src/services/agent/requirements.txt` line 18. passlib hashes the passwords in `src/services/mas/auth/auth_tool_functions.py` (line 10). |
 | C7 | `src/infra/docker-compose.yml` line 481: `grafana/promtail:3.4.2`. |
 | D2 | `packaging/build_bundle.py` (lines 27–31) still puts the service source in the ZIP; `docs/operations.md` (line 79) lists it as not done. The images are signed by `images.yml`, but the installer does not check the signature (`docs/operations.md`, line 80). |
@@ -157,13 +157,13 @@ The accepted items still hold: B904 is still ignored (`pyproject.toml`, line 51)
 
 | Repay by | Items | Estimated cost |
 |---|---|---|
-| **0.1.2** (not tagged yet) | A1, A3, A6, B3, C2; the rest of C5 and C6 | Under 2.5 d by the cost scale (S: A1; XS: A3, A6, B3, C2, C6; XS–S: C5). Fixing the 20 lint errors before `npm run lint` can gate CI is not estimated. |
-| **0.2.0** (end of Oct) | A2 (start), A5, C3, C7, D2; the rest of B2 and D1 | A2, A5, C3 and C7: about 2 to 5 d by the cost scale. B2 (M) and D1 + D2 (L) are part repaid and not re-estimated. |
+| **0.1.2** (not tagged yet) | A1, A3, A6, B3; the rest of C5 and C6 | Under 2.5 d by the cost scale (S: A1; XS: A3, A6, B3, C6; XS–S: C5). Fixing the 20 lint errors before `npm run lint` can gate CI is not estimated. |
+| **0.2.0** (end of Oct) | A2 (start), A5, C7, D2; the rest of B2 and D1 | A2, A5 and C7: about 1.5 to 3 d by the cost scale. B2 (M) and D1 + D2 (L) are part repaid and not re-estimated. |
 | **0.3.0** (Dec) | C4, D1 (slimmer profile) | ~3 d (24/09 estimate) |
 | **1.0.0** (Feb 2027) | B1 (E2E in CI) | ~3–5 d |
 | **Next ATP** | B4 | XS |
 | **Accepted** | A4, A7 (gates), D7, E3 | — |
-| **Repaid** | D3, D6 (in 0.1.2); C1, D4, D5, E1, E2, E4 (not released yet) | — |
+| **Repaid** | D3, D6 (in 0.1.2); C1, C2, C3, D4, D5, E1, E2, E4 (not released yet) | — |
 
 **Why this order:**
 

@@ -211,14 +211,6 @@
    "notices": [],
    "spdx": "MIT"
   },
-  "coverage 7.16.2": {
-   "copies": [],
-   "from": "coverage-7.16.2-py3-none-any.whl",
-   "notices": [
-    "NOTICES/python/coverage-7.16.2.txt"
-   ],
-   "spdx": "Apache-2.0"
-  },
   "cryptography 50.0.2": {
    "copies": [
     "LICENSES/components/python/cryptography-50.0.2.LICENSE.txt",
@@ -518,14 +510,6 @@
    "from": "importlib_resources-7.1.0-py3-none-any.whl",
    "notices": [],
    "spdx": "Apache-2.0"
-  },
-  "iniconfig 2.3.1": {
-   "copies": [
-    "LICENSES/components/python/iniconfig-2.3.1.txt"
-   ],
-   "from": "iniconfig-2.3.1-py3-none-any.whl",
-   "notices": [],
-   "spdx": "MIT"
   },
   "itsdangerous 2.2.0": {
    "copies": [
@@ -1082,14 +1066,6 @@
    "notices": [],
    "spdx": "MIT-CMU"
   },
-  "pluggy 1.6.0": {
-   "copies": [
-    "LICENSES/components/python/pluggy-1.6.0.txt"
-   ],
-   "from": "pluggy-1.6.0-py3-none-any.whl",
-   "notices": [],
-   "spdx": "MIT"
-  },
   "posthog 5.4.0": {
    "copies": [
     "LICENSES/components/python/posthog-5.4.0.txt"
@@ -1278,41 +1254,6 @@
    "from": "pytesseract-0.3.13-py3-none-any.whl",
    "notices": [],
    "spdx": "Apache-2.0"
-  },
-  "pytest 9.1.1": {
-   "copies": [
-    "LICENSES/components/python/pytest-9.1.1.txt"
-   ],
-   "from": "pytest-9.1.1-py3-none-any.whl",
-   "notices": [],
-   "spdx": "MIT"
-  },
-  "pytest-asyncio 1.4.0": {
-   "copies": [],
-   "from": "pytest_asyncio-1.4.0-py3-none-any.whl",
-   "notices": [],
-   "spdx": "Apache-2.0"
-  },
-  "pytest-cov 7.1.0": {
-   "copies": [
-    "LICENSES/components/python/pytest-cov-7.1.0.AUTHORS.rst.txt",
-    "LICENSES/components/python/pytest-cov-7.1.0.LICENSE.txt"
-   ],
-   "from": "pytest_cov-7.1.0-py3-none-any.whl",
-   "notices": [],
-   "spdx": "MIT"
-  },
-  "pytest-html 4.2.0": {
-   "copies": [],
-   "from": "pytest_html-4.2.0-py3-none-any.whl",
-   "notices": [],
-   "spdx": "MPL-2.0"
-  },
-  "pytest-metadata 3.1.1": {
-   "copies": [],
-   "from": "pytest_metadata-3.1.1-py3-none-any.whl",
-   "notices": [],
-   "spdx": "MPL-2.0"
   },
   "python-dateutil 2.9.0.post0": {
    "copies": [],
@@ -1619,14 +1560,6 @@
    "from": "tokenizers-0.22.2-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl, licence from tokenizers-0.22.2.tar.gz",
    "notices": [],
    "spdx": "Apache-2.0"
-  },
-  "tomli 2.5.0": {
-   "copies": [
-    "LICENSES/components/python/tomli-2.5.0.txt"
-   ],
-   "from": "tomli-2.5.0-py3-none-any.whl",
-   "notices": [],
-   "spdx": "MIT"
   },
   "torch 2.14.1": {
    "copies": [

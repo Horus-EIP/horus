@@ -46,7 +46,10 @@ CPU_REQUIREMENT_FILES = (
     SERVICES / "mas" / "requirements-cpu.txt",
 )
 GPU_REQUIREMENT_FILES = tuple(context / GPU_REQUIREMENTS for context in TORCH_SERVICES.values())
-REQUIREMENT_FILES = tuple(sorted(SERVICES.glob("*/requirements*.txt")))
+TEST_REQUIREMENTS = "requirements-test.txt"
+REQUIREMENT_FILES = tuple(sorted(path for path in SERVICES.glob("*/requirements*.txt")
+                                 if path.name != TEST_REQUIREMENTS))
+TEST_TOOLS = {"pytest", "pytest-cov", "pytest-asyncio", "pytest-html", "coverage", "fakeredis"}
 LOCK_ENTRY = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)(?:==(\S+)|\s+@\s+(\S+))")
 EXACT_PIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(?:\[[^\]]*\])?==(\S+)")
 
@@ -314,6 +317,33 @@ class LockFiles(unittest.TestCase):
                         self.assertEqual(entry["version"], gpu[name]["version"])
 
 
+class ProductionImages(unittest.TestCase):
+    def test_no_test_tool_is_locked_for_an_image(self):
+        for context in TORCH_SERVICES.values():
+            for lock in (context / CPU_LOCK, context / GPU_LOCK):
+                with self.subTest(str(lock.relative_to(REPO))):
+                    self.assertEqual(set(lock_entries(lock)) & TEST_TOOLS, set())
+
+    def test_every_service_keeps_its_test_tools_apart(self):
+        for context in TORCH_SERVICES.values():
+            with self.subTest(context.name):
+                self.assertTrue(projects(context / TEST_REQUIREMENTS) & TEST_TOOLS)
+                self.assertNotIn(TEST_REQUIREMENTS, (context / "Dockerfile").read_text(encoding="utf-8"))
+
+    def test_no_compiler_is_installed_in_a_final_stage(self):
+        for name, context in TORCH_SERVICES.items():
+            steps = instructions(context / "Dockerfile")
+            final = max(stage for stage, _, _ in steps)
+            installs = " ".join(rest for stage, keyword, rest in steps if stage == final and keyword == "RUN")
+            with self.subTest(name):
+                self.assertIsNone(re.search(r"\b(build-essential|gcc|g\+\+|python3-dev|make)\b", installs), installs)
+
+    def test_pip_resolves_the_locks_with_its_default_resolver(self):
+        for name, context in TORCH_SERVICES.items():
+            with self.subTest(name):
+                self.assertNotIn("legacy-resolver", (context / "Dockerfile").read_text(encoding="utf-8"))
+
+
 @needs_yaml
 class CiTestJobs(unittest.TestCase):
     @classmethod
@@ -346,6 +376,12 @@ class CiTestJobs(unittest.TestCase):
                     self.assertNotIn("--extra-index-url", install)
                 else:
                     self.assertIn(f"--extra-index-url {index}", install)
+
+    def test_the_test_jobs_install_the_test_requirements_with_the_service(self):
+        for job, (requirements, _, _) in TEST_JOBS.items():
+            folder = requirements.rsplit("/", 1)[0]
+            with self.subTest(job):
+                self.assertIn(f"-r {folder}/{TEST_REQUIREMENTS}", self.requirements_install(job))
 
     def test_the_installed_packages_are_checked_before_the_tests_run(self):
         for job, (requirements, _, _) in TEST_JOBS.items():

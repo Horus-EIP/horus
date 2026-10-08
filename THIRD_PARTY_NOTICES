@@ -114,12 +114,6 @@ The last line of each entry names the requirements files that install it.
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/confection-1.3.3.txt
-- coverage 7.16.2
-  Licence: Apache-2.0 (source: metadata, installed environment)
-  https://coverage.readthedocs.io/en/7.16.2
-  requirements-gpu.txt, requirements.txt
-  Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
-  NOTICE: NOTICES/python/coverage-7.16.2.txt
 - cuda-bindings 13.4.3
   Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/NVIDIA/cuda-python
@@ -244,12 +238,6 @@ The last line of each entry names the requirements files that install it.
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/idna-3.20.txt
-- iniconfig 2.3.1
-  Licence: MIT (source: metadata, PyPI)
-  https://github.com/pytest-dev/iniconfig
-  requirements-gpu.txt, requirements.txt
-  Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/python/iniconfig-2.3.1.txt
 - jinja2 3.1.6
   Licence: BSD License (source: metadata, installed environment)
   https://github.com/pallets/jinja/
@@ -531,12 +519,6 @@ The last line of each entry names the requirements files that install it.
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/pika-1.4.4.txt
-- pluggy 1.6.0
-  Licence: MIT (source: metadata, installed environment)
-  https://pypi.org/project/pluggy/
-  requirements-gpu.txt, requirements.txt
-  Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/python/pluggy-1.6.0.txt
 - preshed 3.0.13
   Licence: MIT (source: metadata, installed environment)
   https://github.com/explosion/preshed
@@ -591,33 +573,6 @@ The last line of each entry names the requirements files that install it.
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/pypdf-6.19.0.txt
-- pytest 9.1.1
-  Licence: MIT (source: metadata, installed environment)
-  https://docs.pytest.org/en/latest/
-  requirements-gpu.txt, requirements.txt
-  Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/python/pytest-9.1.1.txt
-- pytest-asyncio 1.4.0
-  Licence: Apache-2.0 (source: metadata, installed environment)
-  https://github.com/pytest-dev/pytest-asyncio
-  requirements-gpu.txt, requirements.txt
-  Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
-- pytest-cov 7.1.0
-  Licence: MIT (source: metadata, installed environment)
-  https://pytest-cov.readthedocs.io/
-  requirements-gpu.txt, requirements.txt
-  Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/python/pytest-cov-7.1.0.AUTHORS.rst.txt, LICENSES/components/python/pytest-cov-7.1.0.LICENSE.txt
-- pytest-html 4.2.0
-  Licence: MPL-2.0 (source: metadata, installed environment)
-  https://github.com/pytest-dev/pytest-html
-  requirements-gpu.txt, requirements.txt
-  Licence text (MPL-2.0): LICENSES/MPL-2.0.txt
-- pytest-metadata 3.1.1
-  Licence: MPL-2.0 (source: metadata, installed environment)
-  https://github.com/pytest-dev/pytest-metadata
-  requirements-gpu.txt, requirements.txt
-  Licence text (MPL-2.0): LICENSES/MPL-2.0.txt
 - python-multipart 0.0.32
   Licence: Apache-2.0 (source: metadata, installed environment)
   https://github.com/Kludex/python-multipart
@@ -750,12 +705,6 @@ The last line of each entry names the requirements files that install it.
   https://github.com/huggingface/tokenizers
   requirements-gpu.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
-- tomli 2.5.0
-  Licence: MIT (source: metadata, PyPI)
-  https://github.com/hukkin/tomli
-  requirements-gpu.txt, requirements.txt
-  Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/python/tomli-2.5.0.txt
 - torch 2.14.1
   Licence: Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT (source: metadata, PyPI)
   https://pytorch.org
@@ -990,12 +939,6 @@ The last line of each entry names the requirements files that install it.
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/confection-1.3.3.txt
-- coverage 7.16.2
-  Licence: Apache-2.0 (source: metadata, installed environment)
-  https://coverage.readthedocs.io/en/7.16.2
-  requirements-gpu.txt, requirements.txt
-  Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
-  NOTICE: NOTICES/python/coverage-7.16.2.txt
 - cryptography 50.0.2
   Licence: Apache-2.0 OR BSD-3-Clause (source: metadata, installed environment)
   https://github.com/pyca/cryptography
@@ -1182,12 +1125,6 @@ The last line of each entry names the requirements files that install it.
   https://github.com/python/importlib_resources
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
-- iniconfig 2.3.1
-  Licence: MIT (source: metadata, PyPI)
-  https://github.com/pytest-dev/iniconfig
-  requirements-gpu.txt, requirements.txt
-  Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/python/iniconfig-2.3.1.txt
 - itsdangerous 2.2.0
   Licence: BSD License (source: metadata, installed environment)
   https://github.com/pallets/itsdangerous/
@@ -1504,12 +1441,6 @@ The last line of each entry names the requirements files that install it.
   https://python-pillow.github.io
   requirements-gpu.txt, requirements.txt
   Licence text (MIT-CMU): LICENSES/MIT-CMU.txt
-- pluggy 1.6.0
-  Licence: MIT (source: metadata, installed environment)
-  https://pypi.org/project/pluggy/
-  requirements-gpu.txt, requirements.txt
-  Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/python/pluggy-1.6.0.txt
 - posthog 5.4.0
   Licence: MIT (source: metadata, installed environment)
   https://github.com/posthog/posthog-python
@@ -1610,23 +1541,6 @@ The last line of each entry names the requirements files that install it.
   https://github.com/madmaze/pytesseract
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
-- pytest 9.1.1
-  Licence: MIT (source: metadata, installed environment)
-  https://docs.pytest.org/en/latest/
-  requirements-gpu.txt, requirements.txt
-  Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/python/pytest-9.1.1.txt
-- pytest-asyncio 1.4.0
-  Licence: Apache-2.0 (source: metadata, installed environment)
-  https://github.com/pytest-dev/pytest-asyncio
-  requirements-gpu.txt, requirements.txt
-  Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
-- pytest-cov 7.1.0
-  Licence: MIT (source: metadata, installed environment)
-  https://pytest-cov.readthedocs.io/
-  requirements-gpu.txt, requirements.txt
-  Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/python/pytest-cov-7.1.0.AUTHORS.rst.txt, LICENSES/components/python/pytest-cov-7.1.0.LICENSE.txt
 - python-dateutil 2.9.0.post0
   Licence: Dual License (source: metadata, installed environment)
   https://github.com/dateutil/dateutil
@@ -1796,12 +1710,6 @@ The last line of each entry names the requirements files that install it.
   https://github.com/huggingface/tokenizers
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
-- tomli 2.5.0
-  Licence: MIT (source: metadata, PyPI)
-  https://github.com/hukkin/tomli
-  requirements-gpu.txt, requirements.txt
-  Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/python/tomli-2.5.0.txt
 - torch 2.14.1
   Licence: Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT (source: metadata, PyPI)
   https://pytorch.org
@@ -1993,12 +1901,6 @@ The last line of each entry names the requirements files that install it.
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/colorama-0.4.6.txt
-- coverage 7.16.2
-  Licence: Apache-2.0 (source: metadata, installed environment)
-  https://coverage.readthedocs.io/en/7.16.2
-  requirements-cpu.txt, requirements-gpu.txt, requirements.txt
-  Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
-  NOTICE: NOTICES/python/coverage-7.16.2.txt
 - cryptography 50.0.2
   Licence: Apache-2.0 OR BSD-3-Clause (source: metadata, installed environment)
   https://github.com/pyca/cryptography
@@ -2087,18 +1989,6 @@ The last line of each entry names the requirements files that install it.
   https://github.com/huggingface/xet-core
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
-- httpcore 1.0.9
-  Licence: BSD-3-Clause (source: metadata, installed environment)
-  https://www.encode.io/httpcore/
-  requirements-cpu.txt, requirements-gpu.txt, requirements.txt
-  Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
-  Its own licence file: LICENSES/components/python/httpcore-1.0.9.txt
-- httpx 0.28.1
-  Licence: BSD-3-Clause (source: metadata, installed environment)
-  https://github.com/encode/httpx
-  requirements-cpu.txt, requirements-gpu.txt, requirements.txt
-  Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
-  Its own licence file: LICENSES/components/python/httpx-0.28.1.txt
 - huggingface-hub 0.36.2
   Licence: Apache (source: metadata, installed environment)
   https://github.com/huggingface/huggingface_hub
@@ -2110,12 +2000,6 @@ The last line of each entry names the requirements files that install it.
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/idna-3.20.txt
-- iniconfig 2.3.1
-  Licence: MIT (source: metadata, PyPI)
-  https://github.com/pytest-dev/iniconfig
-  requirements-cpu.txt, requirements-gpu.txt, requirements.txt
-  Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/python/iniconfig-2.3.1.txt
 - jinja2 3.1.6
   Licence: BSD License (source: metadata, installed environment)
   https://github.com/pallets/jinja/
@@ -2365,12 +2249,6 @@ The last line of each entry names the requirements files that install it.
   https://python-pillow.github.io
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT-CMU): LICENSES/MIT-CMU.txt
-- pluggy 1.6.0
-  Licence: MIT (source: metadata, installed environment)
-  https://pypi.org/project/pluggy/
-  requirements-cpu.txt, requirements-gpu.txt, requirements.txt
-  Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/python/pluggy-1.6.0.txt
 - prometheus-client 0.26.0
   Licence: Apache-2.0 AND BSD-2-Clause (source: metadata, installed environment)
   https://github.com/prometheus/client_python
@@ -2443,23 +2321,6 @@ The last line of each entry names the requirements files that install it.
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-2-Clause): LICENSES/BSD-2-Clause.txt
   Its own licence file: LICENSES/components/python/pygments-2.21.0.AUTHORS.txt, LICENSES/components/python/pygments-2.21.0.LICENSE.txt
-- pytest 9.1.1
-  Licence: MIT (source: metadata, installed environment)
-  https://docs.pytest.org/en/latest/
-  requirements-cpu.txt, requirements-gpu.txt, requirements.txt
-  Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/python/pytest-9.1.1.txt
-- pytest-asyncio 1.4.0
-  Licence: Apache-2.0 (source: metadata, installed environment)
-  https://github.com/pytest-dev/pytest-asyncio
-  requirements-cpu.txt, requirements-gpu.txt, requirements.txt
-  Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
-- pytest-cov 7.1.0
-  Licence: MIT (source: metadata, installed environment)
-  https://pytest-cov.readthedocs.io/
-  requirements-cpu.txt, requirements-gpu.txt, requirements.txt
-  Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/python/pytest-cov-7.1.0.AUTHORS.rst.txt, LICENSES/components/python/pytest-cov-7.1.0.LICENSE.txt
 - python-dotenv 1.2.4
   Licence: BSD-3-Clause (source: metadata, installed environment)
   https://github.com/theskumar/python-dotenv
@@ -2564,12 +2425,6 @@ The last line of each entry names the requirements files that install it.
   https://github.com/huggingface/tokenizers
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
-- tomli 2.5.0
-  Licence: MIT (source: metadata, PyPI)
-  https://github.com/hukkin/tomli
-  requirements-cpu.txt, requirements-gpu.txt, requirements.txt
-  Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/python/tomli-2.5.0.txt
 - torch 2.14.1
   Licence: Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT (source: metadata, PyPI)
   https://pytorch.org

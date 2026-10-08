@@ -110,13 +110,6 @@
     },
     {
      "licence": "Apache-2.0",
-     "name": "coverage",
-     "source": "metadata, installed environment",
-     "url": "https://coverage.readthedocs.io/en/7.16.2",
-     "version": "7.16.2"
-    },
-    {
-     "licence": "Apache-2.0",
      "name": "cuda-bindings",
      "source": "metadata, PyPI",
      "url": "https://github.com/NVIDIA/cuda-python",
@@ -268,13 +261,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/kjd/idna",
      "version": "3.20"
-    },
-    {
-     "licence": "MIT",
-     "name": "iniconfig",
-     "source": "metadata, PyPI",
-     "url": "https://github.com/pytest-dev/iniconfig",
-     "version": "2.3.1"
     },
     {
      "licence": "BSD License",
@@ -621,13 +607,6 @@
     },
     {
      "licence": "MIT",
-     "name": "pluggy",
-     "source": "metadata, installed environment",
-     "url": "https://pypi.org/project/pluggy/",
-     "version": "1.6.0"
-    },
-    {
-     "licence": "MIT",
      "name": "preshed",
      "source": "metadata, installed environment",
      "url": "https://github.com/explosion/preshed",
@@ -688,41 +667,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/py-pdf/pypdf",
      "version": "6.19.0"
-    },
-    {
-     "licence": "MIT",
-     "name": "pytest",
-     "source": "metadata, installed environment",
-     "url": "https://docs.pytest.org/en/latest/",
-     "version": "9.1.1"
-    },
-    {
-     "licence": "Apache-2.0",
-     "name": "pytest-asyncio",
-     "source": "metadata, installed environment",
-     "url": "https://github.com/pytest-dev/pytest-asyncio",
-     "version": "1.4.0"
-    },
-    {
-     "licence": "MIT",
-     "name": "pytest-cov",
-     "source": "metadata, installed environment",
-     "url": "https://pytest-cov.readthedocs.io/",
-     "version": "7.1.0"
-    },
-    {
-     "licence": "MPL-2.0",
-     "name": "pytest-html",
-     "source": "metadata, installed environment",
-     "url": "https://github.com/pytest-dev/pytest-html",
-     "version": "4.2.0"
-    },
-    {
-     "licence": "MPL-2.0",
-     "name": "pytest-metadata",
-     "source": "metadata, installed environment",
-     "url": "https://github.com/pytest-dev/pytest-metadata",
-     "version": "3.1.1"
     },
     {
      "licence": "Apache-2.0",
@@ -884,13 +828,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/huggingface/tokenizers",
      "version": "0.22.2"
-    },
-    {
-     "licence": "MIT",
-     "name": "tomli",
-     "source": "metadata, PyPI",
-     "url": "https://github.com/hukkin/tomli",
-     "version": "2.5.0"
     },
     {
      "licence": "Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT",
@@ -1105,13 +1042,6 @@
      "version": "1.3.3"
     },
     {
-     "licence": "Apache-2.0",
-     "name": "coverage",
-     "source": "metadata, installed environment",
-     "url": "https://coverage.readthedocs.io/en/7.16.2",
-     "version": "7.16.2"
-    },
-    {
      "licence": "MIT",
      "name": "cymem",
      "source": "metadata, installed environment",
@@ -1194,13 +1124,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/kjd/idna",
      "version": "3.20"
-    },
-    {
-     "licence": "MIT",
-     "name": "iniconfig",
-     "source": "metadata, PyPI",
-     "url": "https://github.com/pytest-dev/iniconfig",
-     "version": "2.3.1"
     },
     {
      "licence": "BSD License",
@@ -1428,13 +1351,6 @@
     },
     {
      "licence": "MIT",
-     "name": "pluggy",
-     "source": "metadata, installed environment",
-     "url": "https://pypi.org/project/pluggy/",
-     "version": "1.6.0"
-    },
-    {
-     "licence": "MIT",
      "name": "preshed",
      "source": "metadata, installed environment",
      "url": "https://github.com/explosion/preshed",
@@ -1488,41 +1404,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/py-pdf/pypdf",
      "version": "6.19.0"
-    },
-    {
-     "licence": "MIT",
-     "name": "pytest",
-     "source": "metadata, installed environment",
-     "url": "https://docs.pytest.org/en/latest/",
-     "version": "9.1.1"
-    },
-    {
-     "licence": "Apache-2.0",
-     "name": "pytest-asyncio",
-     "source": "metadata, installed environment",
-     "url": "https://github.com/pytest-dev/pytest-asyncio",
-     "version": "1.4.0"
-    },
-    {
-     "licence": "MIT",
-     "name": "pytest-cov",
-     "source": "metadata, installed environment",
-     "url": "https://pytest-cov.readthedocs.io/",
-     "version": "7.1.0"
-    },
-    {
-     "licence": "MPL-2.0",
-     "name": "pytest-html",
-     "source": "metadata, installed environment",
-     "url": "https://github.com/pytest-dev/pytest-html",
-     "version": "4.2.0"
-    },
-    {
-     "licence": "MPL-2.0",
-     "name": "pytest-metadata",
-     "source": "metadata, installed environment",
-     "url": "https://github.com/pytest-dev/pytest-metadata",
-     "version": "3.1.1"
     },
     {
      "licence": "Apache-2.0",
@@ -1642,13 +1523,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/explosion/thinc",
      "version": "8.3.13"
-    },
-    {
-     "licence": "MIT",
-     "name": "tomli",
-     "source": "metadata, PyPI",
-     "url": "https://github.com/hukkin/tomli",
-     "version": "2.5.0"
     },
     {
      "licence": "MPL-2.0 AND MIT",
@@ -1907,13 +1781,6 @@
      "version": "1.3.3"
     },
     {
-     "licence": "Apache-2.0",
-     "name": "coverage",
-     "source": "metadata, installed environment",
-     "url": "https://coverage.readthedocs.io/en/7.16.2",
-     "version": "7.16.2"
-    },
-    {
      "licence": "Apache-2.0 OR BSD-3-Clause",
      "name": "cryptography",
      "source": "metadata, installed environment",
@@ -2143,13 +2010,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/python/importlib_resources",
      "version": "7.1.0"
-    },
-    {
-     "licence": "MIT",
-     "name": "iniconfig",
-     "source": "metadata, PyPI",
-     "url": "https://github.com/pytest-dev/iniconfig",
-     "version": "2.3.1"
     },
     {
      "licence": "BSD License",
@@ -2545,13 +2405,6 @@
     },
     {
      "licence": "MIT",
-     "name": "pluggy",
-     "source": "metadata, installed environment",
-     "url": "https://pypi.org/project/pluggy/",
-     "version": "1.6.0"
-    },
-    {
-     "licence": "MIT",
      "name": "posthog",
      "source": "metadata, installed environment",
      "url": "https://github.com/posthog/posthog-python",
@@ -2668,27 +2521,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/madmaze/pytesseract",
      "version": "0.3.13"
-    },
-    {
-     "licence": "MIT",
-     "name": "pytest",
-     "source": "metadata, installed environment",
-     "url": "https://docs.pytest.org/en/latest/",
-     "version": "9.1.1"
-    },
-    {
-     "licence": "Apache-2.0",
-     "name": "pytest-asyncio",
-     "source": "metadata, installed environment",
-     "url": "https://github.com/pytest-dev/pytest-asyncio",
-     "version": "1.4.0"
-    },
-    {
-     "licence": "MIT",
-     "name": "pytest-cov",
-     "source": "metadata, installed environment",
-     "url": "https://pytest-cov.readthedocs.io/",
-     "version": "7.1.0"
     },
     {
      "licence": "Dual License",
@@ -2892,13 +2724,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/huggingface/tokenizers",
      "version": "0.22.2"
-    },
-    {
-     "licence": "MIT",
-     "name": "tomli",
-     "source": "metadata, PyPI",
-     "url": "https://github.com/hukkin/tomli",
-     "version": "2.5.0"
     },
     {
      "licence": "Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT",
@@ -3183,13 +3008,6 @@
      "version": "1.3.3"
     },
     {
-     "licence": "Apache-2.0",
-     "name": "coverage",
-     "source": "metadata, installed environment",
-     "url": "https://coverage.readthedocs.io/en/7.16.2",
-     "version": "7.16.2"
-    },
-    {
      "licence": "Apache-2.0 OR BSD-3-Clause",
      "name": "cryptography",
      "source": "metadata, installed environment",
@@ -3377,13 +3195,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/python/importlib_resources",
      "version": "7.1.0"
-    },
-    {
-     "licence": "MIT",
-     "name": "iniconfig",
-     "source": "metadata, PyPI",
-     "url": "https://github.com/pytest-dev/iniconfig",
-     "version": "2.3.1"
     },
     {
      "licence": "BSD License",
@@ -3660,13 +3471,6 @@
     },
     {
      "licence": "MIT",
-     "name": "pluggy",
-     "source": "metadata, installed environment",
-     "url": "https://pypi.org/project/pluggy/",
-     "version": "1.6.0"
-    },
-    {
-     "licence": "MIT",
      "name": "posthog",
      "source": "metadata, installed environment",
      "url": "https://github.com/posthog/posthog-python",
@@ -3783,27 +3587,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/madmaze/pytesseract",
      "version": "0.3.13"
-    },
-    {
-     "licence": "MIT",
-     "name": "pytest",
-     "source": "metadata, installed environment",
-     "url": "https://docs.pytest.org/en/latest/",
-     "version": "9.1.1"
-    },
-    {
-     "licence": "Apache-2.0",
-     "name": "pytest-asyncio",
-     "source": "metadata, installed environment",
-     "url": "https://github.com/pytest-dev/pytest-asyncio",
-     "version": "1.4.0"
-    },
-    {
-     "licence": "MIT",
-     "name": "pytest-cov",
-     "source": "metadata, installed environment",
-     "url": "https://pytest-cov.readthedocs.io/",
-     "version": "7.1.0"
     },
     {
      "licence": "Dual License",
@@ -3979,13 +3762,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/huggingface/tokenizers",
      "version": "0.22.2"
-    },
-    {
-     "licence": "MIT",
-     "name": "tomli",
-     "source": "metadata, PyPI",
-     "url": "https://github.com/hukkin/tomli",
-     "version": "2.5.0"
     },
     {
      "licence": "MPL-2.0 AND MIT",
@@ -4181,13 +3957,6 @@
      "version": "0.4.6"
     },
     {
-     "licence": "Apache-2.0",
-     "name": "coverage",
-     "source": "metadata, installed environment",
-     "url": "https://coverage.readthedocs.io/en/7.16.2",
-     "version": "7.16.2"
-    },
-    {
      "licence": "Apache-2.0 OR BSD-3-Clause",
      "name": "cryptography",
      "source": "metadata, installed environment",
@@ -4272,20 +4041,6 @@
      "version": "1.7.0"
     },
     {
-     "licence": "BSD-3-Clause",
-     "name": "httpcore",
-     "source": "metadata, installed environment",
-     "url": "https://www.encode.io/httpcore/",
-     "version": "1.0.9"
-    },
-    {
-     "licence": "BSD-3-Clause",
-     "name": "httpx",
-     "source": "metadata, installed environment",
-     "url": "https://github.com/encode/httpx",
-     "version": "0.28.1"
-    },
-    {
      "licence": "Apache",
      "name": "huggingface-hub",
      "source": "metadata, installed environment",
@@ -4298,13 +4053,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/kjd/idna",
      "version": "3.20"
-    },
-    {
-     "licence": "MIT",
-     "name": "iniconfig",
-     "source": "metadata, PyPI",
-     "url": "https://github.com/pytest-dev/iniconfig",
-     "version": "2.3.1"
     },
     {
      "licence": "MIT License",
@@ -4489,13 +4237,6 @@
      "version": "12.3.0"
     },
     {
-     "licence": "MIT",
-     "name": "pluggy",
-     "source": "metadata, installed environment",
-     "url": "https://pypi.org/project/pluggy/",
-     "version": "1.6.0"
-    },
-    {
      "licence": "Apache-2.0 AND BSD-2-Clause",
      "name": "prometheus-client",
      "source": "metadata, installed environment",
@@ -4571,27 +4312,6 @@
      "source": "metadata, installed environment",
      "url": "https://pygments.org",
      "version": "2.21.0"
-    },
-    {
-     "licence": "MIT",
-     "name": "pytest",
-     "source": "metadata, installed environment",
-     "url": "https://docs.pytest.org/en/latest/",
-     "version": "9.1.1"
-    },
-    {
-     "licence": "Apache-2.0",
-     "name": "pytest-asyncio",
-     "source": "metadata, installed environment",
-     "url": "https://github.com/pytest-dev/pytest-asyncio",
-     "version": "1.4.0"
-    },
-    {
-     "licence": "MIT",
-     "name": "pytest-cov",
-     "source": "metadata, installed environment",
-     "url": "https://pytest-cov.readthedocs.io/",
-     "version": "7.1.0"
     },
     {
      "licence": "BSD-3-Clause",
@@ -4683,13 +4403,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/huggingface/tokenizers",
      "version": "0.22.2"
-    },
-    {
-     "licence": "MIT",
-     "name": "tomli",
-     "source": "metadata, PyPI",
-     "url": "https://github.com/hukkin/tomli",
-     "version": "2.5.0"
     },
     {
      "licence": "MPL-2.0 AND MIT",
@@ -4848,13 +4561,6 @@
      "version": "0.4.6"
     },
     {
-     "licence": "Apache-2.0",
-     "name": "coverage",
-     "source": "metadata, installed environment",
-     "url": "https://coverage.readthedocs.io/en/7.16.2",
-     "version": "7.16.2"
-    },
-    {
      "licence": "Apache-2.0 OR BSD-3-Clause",
      "name": "cryptography",
      "source": "metadata, installed environment",
@@ -4967,20 +4673,6 @@
      "version": "1.7.0"
     },
     {
-     "licence": "BSD-3-Clause",
-     "name": "httpcore",
-     "source": "metadata, installed environment",
-     "url": "https://www.encode.io/httpcore/",
-     "version": "1.0.9"
-    },
-    {
-     "licence": "BSD-3-Clause",
-     "name": "httpx",
-     "source": "metadata, installed environment",
-     "url": "https://github.com/encode/httpx",
-     "version": "0.28.1"
-    },
-    {
      "licence": "Apache",
      "name": "huggingface-hub",
      "source": "metadata, installed environment",
@@ -4993,13 +4685,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/kjd/idna",
      "version": "3.20"
-    },
-    {
-     "licence": "MIT",
-     "name": "iniconfig",
-     "source": "metadata, PyPI",
-     "url": "https://github.com/pytest-dev/iniconfig",
-     "version": "2.3.1"
     },
     {
      "licence": "BSD License",
@@ -5310,13 +4995,6 @@
      "version": "12.3.0"
     },
     {
-     "licence": "MIT",
-     "name": "pluggy",
-     "source": "metadata, installed environment",
-     "url": "https://pypi.org/project/pluggy/",
-     "version": "1.6.0"
-    },
-    {
      "licence": "Apache-2.0 AND BSD-2-Clause",
      "name": "prometheus-client",
      "source": "metadata, installed environment",
@@ -5399,27 +5077,6 @@
      "source": "metadata, installed environment",
      "url": "https://pygments.org",
      "version": "2.21.0"
-    },
-    {
-     "licence": "MIT",
-     "name": "pytest",
-     "source": "metadata, installed environment",
-     "url": "https://docs.pytest.org/en/latest/",
-     "version": "9.1.1"
-    },
-    {
-     "licence": "Apache-2.0",
-     "name": "pytest-asyncio",
-     "source": "metadata, installed environment",
-     "url": "https://github.com/pytest-dev/pytest-asyncio",
-     "version": "1.4.0"
-    },
-    {
-     "licence": "MIT",
-     "name": "pytest-cov",
-     "source": "metadata, installed environment",
-     "url": "https://pytest-cov.readthedocs.io/",
-     "version": "7.1.0"
     },
     {
      "licence": "BSD-3-Clause",
@@ -5546,13 +5203,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/huggingface/tokenizers",
      "version": "0.22.2"
-    },
-    {
-     "licence": "MIT",
-     "name": "tomli",
-     "source": "metadata, PyPI",
-     "url": "https://github.com/hukkin/tomli",
-     "version": "2.5.0"
     },
     {
      "licence": "Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT",
@@ -5718,13 +5368,6 @@
      "version": "0.4.6"
     },
     {
-     "licence": "Apache-2.0",
-     "name": "coverage",
-     "source": "metadata, installed environment",
-     "url": "https://coverage.readthedocs.io/en/7.16.2",
-     "version": "7.16.2"
-    },
-    {
      "licence": "Apache-2.0 OR BSD-3-Clause",
      "name": "cryptography",
      "source": "metadata, installed environment",
@@ -5809,20 +5452,6 @@
      "version": "1.7.0"
     },
     {
-     "licence": "BSD-3-Clause",
-     "name": "httpcore",
-     "source": "metadata, installed environment",
-     "url": "https://www.encode.io/httpcore/",
-     "version": "1.0.9"
-    },
-    {
-     "licence": "BSD-3-Clause",
-     "name": "httpx",
-     "source": "metadata, installed environment",
-     "url": "https://github.com/encode/httpx",
-     "version": "0.28.1"
-    },
-    {
      "licence": "Apache",
      "name": "huggingface-hub",
      "source": "metadata, installed environment",
@@ -5835,13 +5464,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/kjd/idna",
      "version": "3.20"
-    },
-    {
-     "licence": "MIT",
-     "name": "iniconfig",
-     "source": "metadata, PyPI",
-     "url": "https://github.com/pytest-dev/iniconfig",
-     "version": "2.3.1"
     },
     {
      "licence": "MIT License",
@@ -6026,13 +5648,6 @@
      "version": "12.3.0"
     },
     {
-     "licence": "MIT",
-     "name": "pluggy",
-     "source": "metadata, installed environment",
-     "url": "https://pypi.org/project/pluggy/",
-     "version": "1.6.0"
-    },
-    {
      "licence": "Apache-2.0 AND BSD-2-Clause",
      "name": "prometheus-client",
      "source": "metadata, installed environment",
@@ -6108,27 +5723,6 @@
      "source": "metadata, installed environment",
      "url": "https://pygments.org",
      "version": "2.21.0"
-    },
-    {
-     "licence": "MIT",
-     "name": "pytest",
-     "source": "metadata, installed environment",
-     "url": "https://docs.pytest.org/en/latest/",
-     "version": "9.1.1"
-    },
-    {
-     "licence": "Apache-2.0",
-     "name": "pytest-asyncio",
-     "source": "metadata, installed environment",
-     "url": "https://github.com/pytest-dev/pytest-asyncio",
-     "version": "1.4.0"
-    },
-    {
-     "licence": "MIT",
-     "name": "pytest-cov",
-     "source": "metadata, installed environment",
-     "url": "https://pytest-cov.readthedocs.io/",
-     "version": "7.1.0"
     },
     {
      "licence": "BSD-3-Clause",
@@ -6220,13 +5814,6 @@
      "source": "metadata, installed environment",
      "url": "https://github.com/huggingface/tokenizers",
      "version": "0.22.2"
-    },
-    {
-     "licence": "MIT",
-     "name": "tomli",
-     "source": "metadata, PyPI",
-     "url": "https://github.com/hukkin/tomli",
-     "version": "2.5.0"
     },
     {
      "licence": "MPL-2.0 AND MIT",

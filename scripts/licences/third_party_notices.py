@@ -49,6 +49,7 @@ SERVICES = {
     "agent": REPO / "src" / "services" / "agent",
     "knowledge-store": REPO / "src" / "services" / "knowledge-store",
 }
+TEST_REQUIREMENTS = "requirements-test.txt"
 IMAGE_PYTHON = "3.11"
 IMAGE_PLATFORM = "x86_64-manylinux_2_28"
 OWN_IMAGES = re.compile(r"(^|/)horus-[a-z-]+(:|$)")
@@ -149,7 +150,7 @@ def project_url(home: str, urls: Iterable[str], name: str) -> str:
 
 
 def requirement_files(service_dir: Path) -> list[Path]:
-    return sorted(service_dir.glob("requirements*.txt"))
+    return sorted(path for path in service_dir.glob("requirements*.txt") if path.name != TEST_REQUIREMENTS)
 
 
 def lock_file(requirements: Path) -> Path:

@@ -1,10 +1,6 @@
-pytest
-pytest-cov
-pytest-asyncio
 uvicorn
 pika
 fastapi<0.137
-httpx
 websockets
 wsproto
 protobuf>=5.26

@@ -99,7 +99,7 @@ services:
       # HTTP is only accepted after lifespan completes (DB + RabbitMQ); this gates dependents.
       # Use a generous timeout: a single Uvicorn worker can be busy with HF/LLM I/O; short
       # timeouts falsely mark the service unhealthy while chat requests are still in flight.
-      test: ["CMD", "curl", "-f", "-m", "25", "-X", "POST", "http://localhost:8000/rabbitmq/heartbeat"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen(urllib.request.Request('http://localhost:8000/rabbitmq/heartbeat', method='POST'), timeout=25)"]
       interval: 15s
       timeout: 30s
       retries: 5

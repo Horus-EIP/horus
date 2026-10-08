@@ -17,7 +17,7 @@ for service in mas agent knowledge-store; do
     cd "$REPO_ROOT/src/services/$service"
     compile requirements-gpu.txt -o requirements-gpu.lock
     for requirements in requirements*.txt; do
-        [ "$requirements" = requirements-gpu.txt ] && continue
+        case "$requirements" in requirements-gpu.txt | requirements-test.txt) continue ;; esac
         compile "$requirements" --constraint requirements-gpu.lock -o "${requirements%.txt}.lock"
     done
     echo "locked src/services/$service"

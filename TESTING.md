@@ -163,7 +163,7 @@ These are rules, not suggestions. The reviewer checks them before approving a PR
 
 ## 6. How to run the tests
 
-Install each service's requirements and `pytest-cov` as `.github/workflows/ci.yml` does. CI uses Python 3.13, and 3.11 for the knowledge store.
+Install each service's requirements and its `requirements-test.txt` (pytest and the other test tools, kept out of the images) as `.github/workflows/ci.yml` does. CI uses Python 3.13, and 3.11 for the knowledge store.
 
 ```bash
 # Python, from the repository root (each service has its own pytest.ini)

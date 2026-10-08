@@ -103,7 +103,7 @@ with the request id, and the client gets a fixed message.
 
 ### Dependencies and lock files
 
-The images install the Python packages from lock files, with exact versions and hashes: `requirements.lock` and `requirements-gpu.lock` next to each service's `requirements.txt` and `requirements-gpu.txt` (MAS also has `requirements-cpu.lock`). They are compiled for Python 3.11 on Linux x86-64, the Python of the images. The CI test jobs still install the `.txt` files.
+The images install the Python packages from lock files, with exact versions and hashes: `requirements.lock` and `requirements-gpu.lock` next to each service's `requirements.txt` and `requirements-gpu.txt` (MAS also has `requirements-cpu.lock`). They are compiled for Python 3.11 on Linux x86-64, the Python of the images. The CI test jobs still install the `.txt` files. Test tools (pytest and its plugins, and packages only the tests import, such as fakeredis) go in the service's `requirements-test.txt`, which only CI and your own environment install: it has no lock and never reaches an image.
 
 To add, remove or upgrade a Python dependency:
 

@@ -110,7 +110,7 @@ Every application service declares a healthcheck, so wait until `mas`, `agent`, 
 
 | Service | Probe | Allowed first start |
 |---------|-------|---------------------|
-| `mas` | `POST /rabbitmq/heartbeat` (curl) | 15 min (router model download) |
+| `mas` | `POST /rabbitmq/heartbeat` (python) | 15 min (router model download) |
 | `agent` | `GET /health` on :8001 (python) | 30 min (decision model download and load) |
 | `knowledge_store` | `GET /health` on :8080 (python) | 10 min |
 | `web-client` | `GET /api/health` on :3000 (wget) | 2 min |

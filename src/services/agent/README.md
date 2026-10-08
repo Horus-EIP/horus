@@ -204,6 +204,7 @@ cd src/services/agent
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements-gpu.txt --extra-index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements-test.txt   # to run the tests
 ```
 
 ### Run
