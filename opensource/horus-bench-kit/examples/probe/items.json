@@ -1,0 +1,64 @@
+{
+  "items": [
+    {
+      "id": "cl-01",
+      "category": "supported",
+      "question": "The garden gate opens at 7:00 am on weekdays.",
+      "context_file": "../corpus/garden-handbook.txt",
+      "expected": {"verdict": "supported"},
+      "patterns": {"reason": ["\\b7(?::00)?\\s*(?:am|a\\.m\\.)"]}
+    },
+    {
+      "id": "cl-02",
+      "category": "refuted",
+      "question": "Each plot holder gives 20 volunteer hours per season.",
+      "context_file": "../corpus/garden-handbook.txt",
+      "expected": {"verdict": "refuted"},
+      "patterns": {"reason": ["\\b(?:12|twelve)\\b"]}
+    },
+    {
+      "id": "cl-03",
+      "category": "refuted",
+      "question": "The shared compost bins are emptied on Sunday evenings.",
+      "context_file": "../corpus/garden-handbook.txt",
+      "expected": {"verdict": "refuted"},
+      "patterns": {"reason": ["\\bsaturdays?\\b"]}
+    },
+    {
+      "id": "cl-04",
+      "category": "supported",
+      "question": "A full plot costs $80 per season.",
+      "context_file": "../corpus/plot-fees.txt",
+      "expected": {"verdict": "supported"}
+    },
+    {
+      "id": "cl-05",
+      "category": "refuted",
+      "question": "Members who pay their fee before 1 March get a 15% discount.",
+      "context_file": "../corpus/plot-fees.txt",
+      "expected": {"verdict": "refuted"},
+      "patterns": {"reason": ["\\b10\\s*%"]}
+    },
+    {
+      "id": "cl-06",
+      "category": "supported",
+      "question": "Borrowing the rotary tiller needs a $25 deposit.",
+      "context_file": "../corpus/tool-shed.txt",
+      "expected": {"verdict": "supported"}
+    },
+    {
+      "id": "cl-07",
+      "category": "not_stated",
+      "question": "The garden keeps a beehive behind the shed.",
+      "context_file": "../corpus/garden-handbook.txt",
+      "expected": {"verdict": "not_stated"}
+    },
+    {
+      "id": "cl-08",
+      "category": "not_stated",
+      "question": "Seeds are sold to members at the spring meeting.",
+      "context_file": "../corpus/plot-fees.txt",
+      "expected": {"verdict": "not_stated"}
+    }
+  ]
+}

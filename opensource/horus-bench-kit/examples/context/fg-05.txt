@@ -1,0 +1,7 @@
+[tool-shed.txt]
+Large tools
+The rotary tiller and the hedge trimmer are lent on booking with the shed coordinator. The rotary tiller needs a $25 deposit, paid back when the tiller comes back clean and working. A member can keep the tiller for two days at most.
+
+[garden-handbook.txt]
+Who to ask
+The garden coordinator, Marta Lindqvist, handles new members and the waiting list. The shed coordinator, Ines Okafor, looks after the tool shed and lends the large tools.

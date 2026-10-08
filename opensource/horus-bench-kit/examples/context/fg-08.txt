@@ -1,0 +1,7 @@
+[tool-shed.txt]
+Opening of the shed
+The shed is open whenever the garden gate is open. Members put the shed key back in the key box by the door.
+
+[garden-handbook.txt]
+Opening hours
+On weekdays the gate opens at 7:00 am and closes at 8:30 pm. At weekends it opens at 8:00 am and closes at sunset. The last member to leave locks the gate with the code given at the spring meeting.

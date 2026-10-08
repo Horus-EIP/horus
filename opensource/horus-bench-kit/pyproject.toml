@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "horus-bench-kit"
+version = "0.1.0"
+description = "Benchmark and evaluation tools for local language models: llama-bench runs, model screening, JSON contract probes, question-answering test sets, scoring, reports and comparisons."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [
+    { name = "Loup Marquez-Luttringer" },
+    { name = "Noah Gibelli" },
+    { name = "Matheus Lopez" },
+]
+keywords = ["llm", "benchmark", "evaluation", "rag", "llama.cpp", "openai-compatible"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = []
+
+[project.optional-dependencies]
+yaml = ["PyYAML>=6"]
+test = ["pytest>=8", "PyYAML>=6"]
+
+[project.scripts]
+hbk-eval = "horus_bench_kit.cli.eval:main"
+hbk-llama-bench = "horus_bench_kit.cli.llama_bench:main"
+hbk-compare = "horus_bench_kit.cli.compare:main"
+hbk-model-candidates = "horus_bench_kit.cli.candidates:main"
+hbk-contract-probe = "horus_bench_kit.cli.contract_probe:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+horus_bench_kit = ["data/*.sh"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4"]
+ignore = [
+    "E501",
+    "E701",
+    "E731",
+    "W291",
+    "W292",
+    "W293",
+    "B007",
+    "B008",
+    "B904",
+    "C416",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["horus_bench_kit"]
