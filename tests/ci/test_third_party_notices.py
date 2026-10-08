@@ -22,6 +22,11 @@ notices = importlib.util.module_from_spec(spec)
 sys.modules["third_party_notices"] = notices
 spec.loader.exec_module(notices)
 files = notices.licence_files
+system = notices.system_packages
+
+fetch_spec = importlib.util.spec_from_file_location("fetch_gpl_sources", SCRIPT.with_name("fetch-gpl-sources.py"))
+fetch = importlib.util.module_from_spec(fetch_spec)
+fetch_spec.loader.exec_module(fetch)
 
 needs_yaml = unittest.skipUnless(yaml is not None, "needs PyYAML to read scripts/licences/*.yaml")
 
@@ -202,8 +207,8 @@ class CommittedNotices(unittest.TestCase):
         text = (REPO / "THIRD_PARTY_NOTICES").read_text(encoding="utf-8")
         self.assertIn("NOTICE: NOTICES/python/fastembed-0.8.1", text)
         self.assertIn("NOTICE: NOTICES/python/onnxruntime-1.30.0", text)
-        entries = text.count("\n- ")
-        self.assertEqual(text.count("  Licence text ("), entries)
+        components = text.split("\n7. Source code of GPL and LGPL components")[0]
+        self.assertEqual(components.count("  Licence text ("), components.count("\n- "))
 
     def test_a_missing_licence_text_or_notice_fails_the_check(self):
         records = json.loads(notices.FILES_DATA.read_text(encoding="utf-8"))
@@ -224,6 +229,111 @@ class CommittedNotices(unittest.TestCase):
         problems = "\n".join(report.stale)
         self.assertIn("LICENSES/MIT.txt is missing", problems)
         self.assertIn("NOTICES/python/fastembed-0.8.1", problems)
+
+
+DEP5_HEADER = "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/\n\n"
+
+
+class SystemPackages(unittest.TestCase):
+    def test_the_gpl_files_of_a_machine_readable_copyright_are_listed(self):
+        text = DEP5_HEADER + ("Files: *\nLicense: GPL-2+\n\nFiles: lib/*\nLicense: LGPL-2.1+ and MIT\n\n"
+                              "Files: debian/*\nLicense: GPL-3+\n")
+        self.assertEqual(system.debian_licences(text), ["GPL-2+", "LGPL-2.1+"])
+
+    def test_packaging_files_and_permissive_choices_are_left_out(self):
+        text = DEP5_HEADER + ("Files: *\nLicense: BSD-3-clause\n\nFiles: debian/*\nLicense: GPL-2+\n\n"
+                              "Files: lib/cap_text.c\nLicense: BSD-3-clause or GPL-2\n")
+        self.assertEqual(system.debian_licences(text), [])
+
+    def test_build_files_under_an_exception_are_left_out_but_not_the_main_licence(self):
+        build = DEP5_HEADER + "Files: *\nLicense: MIT\n\nFiles: m4/libtool.m4\nLicense: GPL-2+ with Libtool exception\n"
+        runtime = DEP5_HEADER + "Files: *\nLicense: GPL-3+ with GCC-exception-3.1\n"
+        self.assertEqual(system.debian_licences(build), [])
+        self.assertEqual(system.debian_licences(runtime), ["GPL-3+ with GCC-exception-3.1"])
+
+    def test_a_free_text_copyright_is_classified_by_its_words(self):
+        lgpl = "It is distributed under the GNU Lesser General Public License, version 2.1 or later."
+        self.assertEqual(system.debian_licences(lgpl), ["LGPL"])
+        self.assertEqual(system.debian_licences("Permission is hereby granted, free of charge"), [])
+
+    def test_alpine_expressions_are_split_and_choices_left_out(self):
+        self.assertEqual(system.alpine_licences("MIT AND BSD-2-Clause AND GPL-2.0-or-later"), ["GPL-2.0-or-later"])
+        self.assertEqual(system.alpine_licences("Apache-2.0 OR GPL-2.0-only"), [])
+        self.assertEqual(system.alpine_licences("MIT"), [])
+
+    def test_licence_names_map_to_the_spdx_texts(self):
+        names = ["GPL-2+", "LGPL-2.1+-with-link-exception", "GPL-3+ with Bison exception", "GPL-2", "LGPL-3.0+",
+                 "GPL-2.0-only", "GPL", "SMAIL-GPL"]
+        self.assertEqual(system.spdx_texts(names), ["GPL-2.0-only", "GPL-2.0-or-later", "GPL-3.0-or-later",
+                                                    "LGPL-2.1-or-later", "LGPL-3.0-or-later"])
+
+    def test_the_final_stage_of_a_dockerfile_gives_the_recipe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dockerfile = Path(tmp) / "Dockerfile"
+            dockerfile.write_text(
+                "FROM python:3.11.17-slim AS builder\nRUN apt-get install -y build-essential\n\n"
+                "FROM python:3.11.17-slim\n# runtime\nRUN apt-get update && apt-get install -y \\\n"
+                "    --no-install-recommends \\\n    # PDF\n    poppler-utils \\\n\n    tesseract-ocr \\\n"
+                "    && rm -rf /var/lib/apt/lists/*\nRUN chmod +x entrypoint.sh\n", encoding="utf-8")
+            self.assertEqual(system.recipe(dockerfile),
+                             {"from": "python:3.11.17-slim", "installs": ["poppler-utils", "tesseract-ocr"]})
+
+    @needs_yaml
+    def test_a_changed_final_stage_makes_the_list_stale(self):
+        data = json.loads(notices.SYSTEM_DATA.read_text(encoding="utf-8"))
+        data["images"]["knowledge-store"]["recipe"]["installs"] = ["poppler-utils"]
+        del data["images"]["web-client"]
+        report = notices.Report()
+        notices.check_system(data, report)
+        problems = "\n".join(report.stale)
+        self.assertIn("knowledge-store: the final stage of its Dockerfile changed", problems)
+        self.assertIn("has no web-client image", problems)
+
+    def test_the_committed_list_matches_the_dockerfiles(self):
+        report = notices.Report()
+        notices.check_system(notices.system_data(), report)
+        self.assertEqual(report.stale, [])
+
+    def test_the_offer_uses_the_contact_addresses_of_the_licence(self):
+        self.assertEqual(notices.offer_addresses(notices.Report()),
+                         ["loup.marquez@epitech.eu", "noah.gibelli@epitech.eu", "matheus.lopez@epitech.eu"])
+
+    def test_the_committed_notices_carry_the_written_offer(self):
+        text = (REPO / "THIRD_PARTY_NOTICES").read_text(encoding="utf-8")
+        offer = text.split("\n7. Source code of GPL and LGPL components\n")[1]
+        flat = " ".join(offer.split())
+        for expected in ("For three years from our last distribution", "no more than our cost of sending it",
+                         "https://snapshot.debian.org/", "scripts/licences/fetch-gpl-sources.py",
+                         "loup.marquez@epitech.eu, noah.gibelli@epitech.eu and matheus.lopez@epitech.eu",
+                         "- poppler-utils ", "- busybox ", "- psycopg2-binary ", "- @img/sharp-libvips-linuxmusl-x64 ",
+                         "https://pypi.org/project/psycopg2-binary/"):
+            self.assertIn(expected, flat)
+        for identifier in ("GPL-2.0-only", "GPL-3.0-or-later", "LGPL-2.1-or-later"):
+            self.assertTrue((notices.LICENSES_DIR / f"{identifier}.txt").is_file(), identifier)
+
+
+class FetchGplSources(unittest.TestCase):
+    def test_debian_files_come_from_the_main_archives(self):
+        listing = {"fileinfo": {
+            "aa11": [{"archive_name": "debian-debug", "name": "x.dsc", "size": 1},
+                     {"archive_name": "debian", "name": "bash_5.2.37-2.dsc", "size": 2162}],
+            "bb22": [{"archive_name": "debian-security", "name": "bash_5.2.37.orig.tar.xz", "size": 5600932}],
+        }}
+        self.assertEqual(fetch.choose_debian_files(listing), [
+            {"name": "bash_5.2.37-2.dsc", "size": 2162, "sha1": "aa11", "url": "https://snapshot.debian.org/file/aa11"},
+            {"name": "bash_5.2.37.orig.tar.xz", "size": 5600932, "sha1": "bb22",
+             "url": "https://snapshot.debian.org/file/bb22"},
+        ])
+
+    def test_remote_alpine_sources_keep_their_sha512_and_local_patches_stay_in_aports(self):
+        out = ("busybox-1.37.0.tar.bz2::https://busybox.net/downloads/busybox-1.37.0.tar.bz2\n"
+               "https://example.org/extra-1.0.tar.gz\nfix-mount.patch\n--\n"
+               "aaa  busybox-1.37.0.tar.bz2\nbbb  extra-1.0.tar.gz\nccc  fix-mount.patch\n")
+        self.assertEqual(fetch.parse_apkbuild_sources(out), [
+            {"name": "busybox-1.37.0.tar.bz2", "url": "https://busybox.net/downloads/busybox-1.37.0.tar.bz2",
+             "sha512": "aaa"},
+            {"name": "extra-1.0.tar.gz", "url": "https://example.org/extra-1.0.tar.gz", "sha512": "bbb"},
+        ])
 
 
 if __name__ == "__main__":

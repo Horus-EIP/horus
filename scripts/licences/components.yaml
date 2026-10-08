@@ -69,6 +69,38 @@ licence_refs:
     image: nvidia/cuda:12.4.0-base-ubuntu22.04
     path: /NGC-DL-CONTAINER-LICENSE
 
+system_overrides:
+  cairo:
+    licence: LGPL-2.1 or MPL-1.1
+    reason: Copyright file not machine-readable. Both choices require the source, so the package stays in the offer.
+  debian-archive-keyring:
+    licence: GPL-2+
+    reason: Copyright file not machine-readable; "covered by the GNU GPL, version 2 or any later version".
+  gcc-14:
+    licence: GPL-3+ with GCC-exception-3.1
+    reason: Copyright file not machine-readable; the runtime libraries carry the GCC Runtime Library Exception 3.1.
+  gnutls28:
+    licence: LGPL-2.1+, GPL-3+
+    reason: Copyright file not machine-readable; LGPL-2.1+ library, GPL-3+ extra tools.
+  krb5:
+    licence: ""
+    reason: MIT-style licences; the one GPL file is "BSD or GPL-2+" at our choice, and we take BSD.
+  libgcrypt20:
+    licence: LGPL-2.1+, GPL-2+
+    reason: Copyright file not machine-readable; LGPL-2.1+ library, GPL-2+ manual and tools.
+  libksba:
+    licence: LGPL-3+ or GPL-2+
+    reason: Copyright file not machine-readable; both choices are copyleft.
+  libtasn1-6:
+    licence: LGPL-2.1+, GPL-3+
+    reason: Copyright file not machine-readable; LGPL-2.1+ library, GPL-3+ tools and build files.
+  libxcrypt:
+    licence: LGPL-2.1+
+    reason: Copyright file not machine-readable; "the overall license is the GNU LGPL, version 2.1 or later".
+  rtmpdump:
+    licence: LGPL-2.1+, GPL-2+
+    reason: Copyright file not machine-readable; LGPL-2.1+ librtmp, GPL-2+ tools.
+
 images:
   rabbitmq:
     licence: MPL-2.0

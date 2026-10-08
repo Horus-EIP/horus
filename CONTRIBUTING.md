@@ -118,6 +118,8 @@ To add, remove or upgrade a Python dependency:
 
 4. Commit the `.txt` and `.lock` files, `scripts/licences/python-packages.json` and `licence-files.json`, `LICENSES/`, `NOTICES/` and `THIRD_PARTY_NOTICES` together. The CI job `licences` fails when they are out of date, when a licence in use has no text in `LICENSES/`, or when a NOTICE a component ships is missing from `NOTICES/`.
 
+When you change a Dockerfile's base image or the system packages its final stage installs, the list of GPL and LGPL system packages in `THIRD_PARTY_NOTICES` has to follow: build the four CPU images and run `--refresh system` ([Prebuilt images](docs/operations.md#prebuilt-images) in `docs/operations.md`). The CI job `licences` fails until then.
+
 ---
 
 ## 5. Code from elsewhere and AI tools

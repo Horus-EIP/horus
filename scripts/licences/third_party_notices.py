@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import textwrap
 import tomllib
 import urllib.error
 import urllib.request
@@ -22,6 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import licence_files  # noqa: E402
+import system_packages  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
@@ -30,6 +32,8 @@ PYTHON_DATA = HERE / "python-packages.json"
 RUST_DATA = HERE / "rust-crates.json"
 COMPONENTS = HERE / "components.yaml"
 FILES_DATA = HERE / "licence-files.json"
+SYSTEM_DATA = HERE / "system-packages.json"
+LICENCE = REPO / "LICENSE"
 LICENSES_DIR = REPO / "LICENSES"
 COMPONENT_LICENCES = LICENSES_DIR / "components"
 NOTICES_DIR = REPO / "NOTICES"
@@ -50,6 +54,9 @@ SERVICES = {
     "knowledge-store": REPO / "src" / "services" / "knowledge-store",
 }
 TEST_REQUIREMENTS = "requirements-test.txt"
+IMAGE_SOURCES = {**SERVICES, "web-client": REPO / "src" / "services" / "web-client"}
+OFFER_LIBRARIES = ("psycopg2-binary", "@img/sharp-libvips-")
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 IMAGE_PYTHON = "3.11"
 IMAGE_PLATFORM = "x86_64-manylinux_2_28"
 OWN_IMAGES = re.compile(r"(^|/)horus-[a-z-]+(:|$)")
@@ -667,7 +674,8 @@ def expressions_in_use(components: dict, records: dict) -> set[str]:
     for section in ("images", "components"):
         found.update(info.get("spdx", "") for info in (components.get(section) or {}).values())
     found.update(model.get("spdx", "") for model in components.get("models") or [])
-    found.update(gpl.get("spdx", "") for gpl in components.get("system_packages") or [])
+    found.update(text for image in system_data().get("images", {}).values()
+                 for row in image["packages"] for text in row["texts"])
     return {expression for expression in found if expression}
 
 
@@ -777,6 +785,173 @@ def entries_with_spdx(entries: list[Entry], section: str, report: Report) -> lis
     return entries
 
 
+def system_data() -> dict:
+    return read_json(SYSTEM_DATA) if SYSTEM_DATA.is_file() else {}
+
+
+def refresh_system(images: list[str], report: Report) -> None:
+    refs = dict(item.split("=", 1) for item in images if "=" in item)
+    missing = sorted(set(IMAGE_SOURCES) - set(refs))
+    if missing:
+        report.add(f"--refresh system reads built images: add --image NAME=IMAGE for {', '.join(missing)}")
+        return
+    overrides = read_components().get("system_overrides") or {}
+    found = {}
+    for name, folder in IMAGE_SOURCES.items():
+        try:
+            info, problems = system_packages.image_packages(refs[name], overrides)
+        except (OSError, subprocess.CalledProcessError) as error:
+            report.add(f"{name}: cannot read the packages of {refs[name]} with docker: {error}")
+            continue
+        for problem in problems:
+            report.add(problem)
+        found[name] = {"os": info["os"], "kind": info["kind"], "packages": info["packages"],
+                       "recipe": system_packages.recipe(folder / "Dockerfile")}
+    if report.stale:
+        return
+    SYSTEM_DATA.write_text(json.dumps({
+        "how": ("GPL and LGPL operating-system packages of each image, read with dpkg-query and the copyright "
+                "files in /usr/share/doc (Debian) or from /lib/apk/db/installed (Alpine). recipe is the base "
+                "image and the system packages of the Dockerfile's final stage when the images were read."),
+        "read_on": datetime.date.today().isoformat(),
+        "images": found,
+    }, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    known = licence_files.spdx_ids()[0]
+    for identifier in sorted({text for image in found.values() for row in image["packages"] for text in row["texts"]}):
+        target = LICENSES_DIR / f"{identifier}.txt"
+        if identifier not in known:
+            report.add(f"system packages: {identifier} is not an SPDX licence id")
+        elif not target.is_file():
+            target.write_bytes(licence_files.spdx_text(identifier).replace(b"\r\n", b"\n"))
+
+
+def check_system(data: dict, report: Report) -> None:
+    images = data.get("images", {})
+    for name, folder in IMAGE_SOURCES.items():
+        if name not in images:
+            report.add(f"scripts/licences/system-packages.json has no {name} image; build the images and run "
+                       "--refresh system")
+        elif images[name]["recipe"] != system_packages.recipe(folder / "Dockerfile"):
+            report.add(f"{name}: the final stage of its Dockerfile changed since its system packages were read; "
+                       "build the images and run --refresh system")
+
+
+def offer_addresses(report: Report) -> list[str]:
+    text = LICENCE.read_text(encoding="utf-8")
+    contact = re.search(r"^16\. CONTACT$(.*?)(?=^\d+\. |\Z)", text, re.M | re.S)
+    addresses = EMAIL.findall(contact.group(1)) if contact else []
+    if not addresses:
+        report.add("LICENSE section 16 names no contact address for the written offer")
+    return addresses
+
+
+def paragraph(text: str) -> list[str]:
+    return textwrap.wrap(text, 79, break_on_hyphens=False, break_long_words=False) + [""]
+
+
+def indented(text: str) -> list[str]:
+    return textwrap.wrap(text, 79, initial_indent="  ", subsequent_indent="  ", break_on_hyphens=False,
+                         break_long_words=False)
+
+
+def listed_with(names: list[str]) -> str:
+    return ", ".join(names[:-1]) + (" and " if len(names) > 1 else "") + names[-1]
+
+
+def system_lines(images: dict, kind: str) -> list[str]:
+    grouped: dict[tuple[str, str], tuple[dict, list[str]]] = {}
+    for name, image in sorted(images.items()):
+        if image["kind"] != kind:
+            continue
+        for row in image["packages"]:
+            grouped.setdefault((row["name"], row["version"]), (row, []))[1].append(name)
+    lines = []
+    for (name, version), (row, found_in) in sorted(grouped.items()):
+        if kind == "alpine":
+            origin = f" (aport {row['source']} at commit {row['commit'][:12]})"
+        elif (row["source"], row["source_version"]) == (name, version):
+            origin = ""
+        elif row["source_version"] == version:
+            origin = f" (source {row['source']})"
+        else:
+            origin = f" (source {row['source']} {row['source_version']})"
+        lines.append(f"- {name} {version}{origin}")
+        lines += indented(f"Licence: {row['licence']}. Images: {', '.join(found_in)}.")
+    return lines
+
+
+def library_lines(python: dict[str, list[Entry]], web: list[Entry]) -> list[str]:
+    found: dict[tuple[str, str], tuple[Entry, list[str]]] = {}
+    for service, entries in python.items():
+        for entry in entries:
+            if entry.name == OFFER_LIBRARIES[0]:
+                found.setdefault((entry.name, entry.version), (entry, []))[1].append(f"Python, {service}")
+    for entry in web:
+        if entry.name.startswith(OFFER_LIBRARIES[1]):
+            found.setdefault((entry.name, entry.version), (entry, []))[1].append("web client")
+    lines = []
+    for (name, version), (entry, used_by) in sorted(found.items()):
+        if name == OFFER_LIBRARIES[0]:
+            source = f"https://pypi.org/project/{name}/{version}/#files"
+        else:
+            source = (f"https://www.npmjs.com/package/{name}/v/{version}, whose versions.json names the libvips "
+                      "release; its source is at https://github.com/libvips/libvips/releases")
+        lines.append(f"- {name} {version} ({'; '.join(used_by)})")
+        lines += indented(f"Licence: {entry.spdx or entry.licence}. Source: {source}")
+    return lines
+
+
+def offer_section(data: dict, python: dict[str, list[Entry]], web: list[Entry], report: Report) -> list[str]:
+    images = data.get("images", {})
+    texts = sorted({text for image in images.values() for row in image["packages"] for text in row["texts"]})
+    addresses = offer_addresses(report)
+    systems = {kind: sorted({image["os"] for image in images.values() if image["kind"] == kind})
+               for kind in ("debian", "alpine")}
+    out = ["", "", "7. Source code of GPL and LGPL components", ""]
+    out += paragraph(
+        "Our images, horus-mas, horus-agent, horus-knowledge-store and horus-web-client, contain "
+        "operating-system packages from Debian and Alpine Linux licensed under the GNU GPL or the GNU LGPL "
+        "(7.1 and 7.2). They run as separate programs, or are system libraries that the Python and Node.js "
+        "runtimes load; Horus's own code does not link them. Two libraries among our dependencies are under "
+        "the LGPL too (7.3): psycopg2-binary, and the prebuilt libvips that sharp loads.")
+    out += ["Where the source is:", ""]
+    for item in (
+        "Debian packages: the source package of each version listed below (.dsc, original and Debian "
+        "tarballs) is on https://snapshot.debian.org/, which keeps every version Debian has published.",
+        "Alpine packages: the build recipe and patches at the aports commit listed for each package, in "
+        "https://gitlab.alpinelinux.org/alpine/aports, and the upstream archives it names, mirrored at "
+        "https://distfiles.alpinelinux.org/distfiles/.",
+        "psycopg2-binary: its source distribution on PyPI; sharp's libvips: its package on npm. 7.3 gives "
+        "the links.",
+    ):
+        wrapped = textwrap.wrap(item, 77, break_on_hyphens=False, break_long_words=False)
+        out += [f"- {wrapped[0]}"] + [f"  {line}" for line in wrapped[1:]]
+    out += [""]
+    out += ["Written offer:", ""]
+    out += paragraph(
+        "For three years from our last distribution of a given version of Horus, we will give anyone who "
+        "asks a complete machine-readable copy of the corresponding source code of the GPL and LGPL "
+        "components of that version, for no more than our cost of sending it. Write to one of the "
+        f"maintainers, at the addresses of section 16 of LICENSE: {listed_with(addresses or ['?'])}. Name "
+        "the version of Horus and the image. scripts/licences/fetch-gpl-sources.py gathers the exact sources "
+        "of the system packages of any of our images into one archive (docs/operations.md).")
+    out += paragraph(
+        f"The versions below were read with dpkg-query, and from the apk database, in CPU images built on "
+        f"{data.get('read_on', '?')} from this repository; the GPU images install the same system packages. "
+        "An image built on another day can carry later Debian or Alpine security updates, and the script "
+        "reads the exact list from the image it is given. The licence names are those of each package's "
+        "copyright file (Debian) or package database (Alpine). The full texts are in LICENSES/ "
+        f"({', '.join(texts)}), and the Debian images also keep each package's copyright file in "
+        "/usr/share/doc/<package>/.")
+    out += [f"7.1 Debian packages ({', '.join(systems['debian'])})", ""]
+    out += system_lines(images, "debian")
+    out += ["", "", f"7.2 Alpine packages ({', '.join(systems['alpine'])})", ""]
+    out += system_lines(images, "alpine")
+    out += ["", "", "7.3 LGPL libraries among our dependencies", ""]
+    out += library_lines(python, web)
+    return out
+
+
 def render(report: Report) -> str:
     components = read_components()
     version = VERSION_FILE.read_text(encoding="utf-8").strip()
@@ -790,6 +965,8 @@ def render(report: Report) -> str:
     images = entries_with_spdx(image_entries(components, report), "images", report)
     models = entries_with_spdx(model_entries(components, report), "models", report)
     others = entries_with_spdx(component_entries(components), "components", report)
+    system = system_data()
+    check_system(system, report)
     check_licence_files(components, records, report)
     out = [
         f"THIRD-PARTY NOTICES FOR HORUS {version}",
@@ -862,20 +1039,25 @@ def render(report: Report) -> str:
         "",
     ]
     out += lines_for(others)
+    out += offer_section(system, python, web, report)
     return "\n".join(out).rstrip() + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate THIRD_PARTY_NOTICES at the repository root.")
     parser.add_argument("--check", action="store_true", help="exit 1 if THIRD_PARTY_NOTICES or its data is out of date")
-    parser.add_argument("--refresh", nargs="?", const="all", choices=("all", "python", "rust", "files"),
-                        help="re-read the Python and/or Rust licence data, or fetch the licence texts and "
-                             "NOTICE files (files), before writing (default: all)")
+    parser.add_argument("--refresh", nargs="?", const="all", choices=("all", "python", "rust", "files", "system"),
+                        help="re-read the Python and/or Rust licence data, fetch the licence texts and "
+                             "NOTICE files (files), or list the GPL and LGPL system packages of the built "
+                             "images (system, not part of all), before writing (default: all)")
     parser.add_argument("--python-env", action="append", default=[], metavar="PYTHON",
                         help="with --refresh: a Python interpreter whose installed packages give licence metadata "
                              "(repeat for each service environment; default: this interpreter)")
     parser.add_argument("--cargo", default=shutil.which("cargo") or "cargo",
                         help="with --refresh: the cargo executable (default: cargo on PATH)")
+    parser.add_argument("--image", action="append", default=[], metavar="NAME=IMAGE",
+                        help="with --refresh system: the built image of mas, agent, knowledge-store and "
+                             "web-client (repeat for each)")
     args = parser.parse_args(argv)
 
     if args.refresh in ("all", "python"):
@@ -885,6 +1067,8 @@ def main(argv: list[str] | None = None) -> int:
     report = Report()
     if args.refresh in ("all", "files"):
         refresh_files(report)
+    if args.refresh == "system":
+        refresh_system(args.image, report)
 
     text = render(report)
     if args.check:

@@ -24,7 +24,7 @@ Continuous integration is defined in **`.github/workflows/ci.yml`** at the repos
 
 1. **`lint`**: `ruff check src tests scripts installer packaging` with ruff 0.16.6.
 2. **`versions`**: the `tests/ci` unit tests, then `scripts/ci/check-versions.py` compares every version number with `VERSION`.
-3. **`licences`**: the tests of the licence scripts, then `scripts/licences/third_party_notices.py --check` (fails when `THIRD_PARTY_NOTICES` or its data is out of date) and `scripts/licences/check_licences.py` (fails on GPL, AGPL or SSPL among the Python packages, the web client's production dependencies and the desktop app's crates; LGPL is a warning; reviewed exceptions are in `scripts/licences/allowlist.yaml`).
+3. **`licences`**: the tests of the licence scripts, then `scripts/licences/third_party_notices.py --check` (fails when `THIRD_PARTY_NOTICES` or its data is out of date, including the list of GPL and LGPL system packages after a Dockerfile change) and `scripts/licences/check_licences.py` (fails on GPL, AGPL or SSPL among the Python packages, the web client's production dependencies and the desktop app's crates; LGPL is a warning; reviewed exceptions are in `scripts/licences/allowlist.yaml`).
 4. **`test-mas`**: installs `src/services/mas/requirements.txt`, the CPU set, with `requirements-test.txt` (the test tools, which the images leave out), and fails if it brought in torch or a CUDA package. Then `pytest -c tests/mas/pytest.ini tests/mas -m "not requires_stack"`, with `tests/mas/test_integration.py` ignored and 85% coverage required. No service containers: SQLite, fakeredis and mocks stand in for Postgres, Redis and RabbitMQ, and the job copies `.env.example` to `src/infra/.env` for the tests that read settings.
 5. **`test-agent`**: installs `src/services/agent/requirements-gpu.txt` and `requirements-test.txt` with `https://download.pytorch.org/whl/cpu` as an extra index, because its tests cover the in-process model code, and fails unless torch is the pinned CPU build. Then `tests/agent`, with 90% coverage required.
 6. **`test-knowledge-store`**: Python 3.11, the Python of its image. Installs `src/services/knowledge-store/requirements.txt` and `requirements-test.txt`, fails on torch or a CUDA package, then `tests/knowledge_store` with 85% coverage required.
@@ -62,6 +62,14 @@ cosign verify \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   ghcr.io/epitechpromo2027/horus-mas:0.1.2-cpu
 ```
+
+**GPL and LGPL sources.** The images contain GPL and LGPL packages from Debian and Alpine, so each release comes with the written offer in section 7 of `THIRD_PARTY_NOTICES`, also in `/usr/share/doc/horus/` in every image: for three years after we last distribute a version, its source on request. To answer a request, run `scripts/licences/fetch-gpl-sources.py` on the image concerned. It reads the package list from the image, downloads each source package (from snapshot.debian.org for Debian, the aports repository and the Alpine distfiles for Alpine), checks its hash and writes one tar archive with a `PACKAGES.tsv` and a `SOURCES.tsv`. Add `--dry-run` to see the list and the size first. It needs Docker and the network; the knowledge-store image needs about 350 MB.
+
+```bash
+python scripts/licences/fetch-gpl-sources.py ghcr.io/epitechpromo2027/horus-knowledge-store:0.1.2-cpu --out gpl-sources
+```
+
+When a Dockerfile's base image or the system packages of its final stage change, build the four CPU images and run `scripts/licences/third_party_notices.py --refresh system --image mas=IMAGE --image agent=IMAGE --image knowledge-store=IMAGE --image web-client=IMAGE` so that the list in `THIRD_PARTY_NOTICES` follows; `--check` fails until then.
 
 **Installer.** By default it never builds:
 
