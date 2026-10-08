@@ -906,8 +906,8 @@ async def main() -> int:
         except Exception:  # noqa: BLE001
             pass
     parser = argparse.ArgumentParser(description="Horus end-to-end LLM pipeline benchmark")
-    parser.add_argument("--mas-url", default=os.environ.get("MAS_URL", "http://localhost:8000"))
-    parser.add_argument("--ks-url", default=os.environ.get("KS_URL", "http://localhost:8080"))
+    parser.add_argument("--mas-url", default=os.environ.get("MAS_URL", "http://127.0.0.1:8000"))
+    parser.add_argument("--ks-url", default=os.environ.get("KS_URL", "http://127.0.0.1:8080"))
     parser.add_argument("--username", default=os.environ.get("SUPER_USER_USERNAME", "admin"))
     parser.add_argument("--password", default=os.environ.get("SUPER_USER_PASSWORD", "secret"))
     parser.add_argument("--token", default=None, help="Bearer JWT (skips /auth/token)")

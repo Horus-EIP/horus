@@ -167,7 +167,7 @@ Install each service's requirements and its `requirements-test.txt` (pytest and 
 
 ```bash
 # Python, from the repository root (each service has its own pytest.ini)
-cp src/infra/.env.example src/infra/.env   # only if you have none: some MAS tests read settings, as in CI
+bash src/infra/init-env.sh   # creates src/infra/.env only when missing, with a generated JWT_SECRET_KEY and REDIS_PASSWORD: some MAS tests read settings
 pytest -c tests/mas/pytest.ini tests/mas -m "not requires_stack"
 pytest -c tests/agent/pytest.ini tests/agent
 pytest -c tests/knowledge_store/pytest.ini tests/knowledge_store

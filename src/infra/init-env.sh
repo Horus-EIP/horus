@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create .env from .env.example and set JWT_SECRET_KEY to a random value.
+# Create .env from .env.example and set JWT_SECRET_KEY and REDIS_PASSWORD to random values.
 # If .env already exists, does nothing (exit 0) so wrapper scripts can call this safely.
 #
 # Usage: from this directory: ./init-env.sh   or: bash init-env.sh
@@ -58,37 +58,43 @@ cp "$EXAMPLE" "$TARGET"
 # 64 hex chars. openssl is the usual source; fall back so a machine without it
 # (some minimal Windows/Git-Bash setups) still gets a real random secret rather
 # than silently keeping the placeholder.
-if command -v openssl >/dev/null 2>&1; then
-  SECRET="$(openssl rand -hex 32)"
-elif command -v python3 >/dev/null 2>&1; then
-  SECRET="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
-elif command -v python >/dev/null 2>&1; then
-  SECRET="$(python -c 'import secrets; print(secrets.token_hex(32))')"
-elif [[ -r /dev/urandom ]]; then
-  SECRET="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-else
-  echo "Error: no way to generate a random secret (need openssl, python3, or /dev/urandom)"
-  exit 1
-fi
-
-if command -v perl >/dev/null 2>&1; then
-  perl -i -pe "s/^JWT_SECRET_KEY=.*/JWT_SECRET_KEY=$SECRET/" "$TARGET"
-else
-  # macOS / Linux sed (no perl)
-  if [[ "$(uname -s)" == Darwin ]]; then
-    sed -i '' "s/^JWT_SECRET_KEY=.*/JWT_SECRET_KEY=$SECRET/" "$TARGET"
+random_hex() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import secrets; print(secrets.token_hex(32))'
+  elif command -v python >/dev/null 2>&1; then
+    python -c 'import secrets; print(secrets.token_hex(32))'
+  elif [[ -r /dev/urandom ]]; then
+    head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'
   else
-    sed -i "s/^JWT_SECRET_KEY=.*/JWT_SECRET_KEY=$SECRET/" "$TARGET"
+    echo "Error: no way to generate a random secret (need openssl, python3, or /dev/urandom)" >&2
+    return 1
   fi
-fi
+}
 
-if ! grep -q "^JWT_SECRET_KEY=$SECRET\$" "$TARGET"; then
-  echo "Error: failed to write JWT_SECRET_KEY into $TARGET"
-  exit 1
-fi
+set_key() {
+  local key="$1" value="$2"
+  if command -v perl >/dev/null 2>&1; then
+    perl -i -pe "s/^${key}=.*/${key}=${value}/" "$TARGET"
+  elif [[ "$(uname -s)" == Darwin ]]; then
+    sed -i '' "s/^${key}=.*/${key}=${value}/" "$TARGET"
+  else
+    sed -i "s/^${key}=.*/${key}=${value}/" "$TARGET"
+  fi
+  if ! grep -q "^${key}=${value}\$" "$TARGET"; then
+    echo "Error: failed to write ${key} into $TARGET"
+    exit 1
+  fi
+}
+
+JWT_SECRET="$(random_hex)"
+VALKEY_PASSWORD="$(random_hex)"
+set_key JWT_SECRET_KEY "$JWT_SECRET"
+set_key REDIS_PASSWORD "$VALKEY_PASSWORD"
 
 # The file holds database, broker and admin passwords. Owner-only where the OS supports it.
 chmod 600 "$TARGET" 2>/dev/null || true
 
-say "Created $TARGET with a generated JWT_SECRET_KEY (64 hex chars)."
+say "Created $TARGET with a generated JWT_SECRET_KEY and REDIS_PASSWORD (64 hex chars each)."
 say "Next: docker compose up --build from this directory, or ./stack-up.sh from the top of this folder, then sign in in the web UI."

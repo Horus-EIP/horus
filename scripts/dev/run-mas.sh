@@ -1,6 +1,6 @@
 #!/bin/bash
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MAS_DIR="$REPO_ROOT/src/services/mas"
 
 # Colors for output
@@ -18,16 +18,16 @@ if [ -f "$REPO_ROOT/src/infra/.env" ]; then
     export $(grep -v '^#' "$REPO_ROOT/src/infra/.env" | sed 's/#.*//g' | xargs)
     # Override DB_HOST for local execution if it's set to a container name
     if [ "$DB_HOST" = "postgres" ]; then
-        export DB_HOST=localhost
-        echo -e "${YELLOW}🔄 Overriding DB_HOST to localhost${NC}"
+        export DB_HOST=127.0.0.1
+        echo -e "${YELLOW}🔄 Overriding DB_HOST to 127.0.0.1${NC}"
     fi
     if [ "$REDIS_HOST" = "redis" ]; then
-        export REDIS_HOST=localhost
-        echo -e "${YELLOW}🔄 Overriding REDIS_HOST to localhost${NC}"
+        export REDIS_HOST=127.0.0.1
+        echo -e "${YELLOW}🔄 Overriding REDIS_HOST to 127.0.0.1${NC}"
     fi
     if [ "$RABBITMQ_HOST" = "rabbitmq" ]; then
-        export RABBITMQ_HOST=localhost
-        echo -e "${YELLOW}🔄 Overriding RABBITMQ_HOST to localhost${NC}"
+        export RABBITMQ_HOST=127.0.0.1
+        echo -e "${YELLOW}🔄 Overriding RABBITMQ_HOST to 127.0.0.1${NC}"
     fi
 fi
 
@@ -55,4 +55,4 @@ echo -e "${GREEN}✅ Database initialized successfully.${NC}"
 echo -e "${GREEN}🚀 Starting Uvicorn Server...${NC}"
 # Disable LLM auto-init for faster local startup by default, unless specified
 export LLM_AUTOINIT=${LLM_AUTOINIT:-0}
-uvicorn main:app --host 0.0.0.0 --port 8000 --ws-ping-interval 20 --ws-ping-timeout 120
+uvicorn main:app --host "${MAS_BIND_HOST:-127.0.0.1}" --port 8000 --ws-ping-interval 20 --ws-ping-timeout 120

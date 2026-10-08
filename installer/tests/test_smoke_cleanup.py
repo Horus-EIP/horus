@@ -75,7 +75,7 @@ class TestTheSmokeTestLeavesNoDocumentBehind(unittest.TestCase):
 
         self.run_smoke(store)
 
-        self.assertIn(("DELETE", "http://localhost:8080/smoke-doc"), store.calls)
+        self.assertIn(("DELETE", smoke.DEFAULT_BASE_URLS["ks"] + "/smoke-doc"), store.calls)
         self.assertEqual(store.titles, [])
 
     def test_the_demo_document_it_uploaded_is_deleted_when_a_later_step_fails(self):
@@ -84,7 +84,7 @@ class TestTheSmokeTestLeavesNoDocumentBehind(unittest.TestCase):
         with self.assertRaises(InstallError):
             self.run_smoke(store, failing_step="step_chat")
 
-        self.assertIn(("DELETE", "http://localhost:8080/smoke-doc"), store.calls)
+        self.assertIn(("DELETE", smoke.DEFAULT_BASE_URLS["ks"] + "/smoke-doc"), store.calls)
 
     def test_a_document_that_was_already_indexed_is_left_alone(self):
         store = FakeKnowledgeStore(already_indexed=True)

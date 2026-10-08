@@ -83,10 +83,10 @@ git checkout <your-working-branch>
 
 ```bash
 cd src/infra
-cp .env.example .env
+bash init-env.sh
 ```
 
-Review values in `.env`. Defaults are suitable for many local setups. Important keys include `POSTGRES_*`, `REDIS_PASSWORD`, `RABBITMQ_*`, `JWT_SECRET_KEY`, and `SUPER_USER_*`. Never commit `.env`; only `.env.example` is tracked.
+`init-env.sh` writes a random `JWT_SECRET_KEY` and `REDIS_PASSWORD`; if you copy `.env.example` by hand instead, set both (`openssl rand -hex 32`): with an empty password Valkey refuses the other containers. Review the other values in `.env`. Defaults are suitable for many local setups. Important keys include `POSTGRES_*`, `REDIS_PASSWORD`, `RABBITMQ_*`, `JWT_SECRET_KEY`, and `SUPER_USER_*`. Never commit `.env`; only `.env.example` is tracked.
 
 #### Step 3: Start the stack
 
@@ -127,7 +127,7 @@ docker compose exec postgres psql -U postgres -d mas_db -c "SELECT version();"
 **Valkey**, the `redis` service (password from `REDIS_PASSWORD` in `.env`):
 
 ```bash
-docker compose exec redis valkey-cli -a "$REDIS_PASSWORD" ping
+docker compose exec redis sh -c 'VALKEYCLI_AUTH="$REDIS_PASSWORD" valkey-cli ping'
 ```
 
 ---
@@ -190,7 +190,7 @@ source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-From the repo root, with `DB_HOST`, `REDIS_HOST`, and `RABBITMQ_HOST` pointing at localhost (see CI workflow for patterns):
+From the repo root, with `DB_HOST`, `REDIS_HOST`, and `RABBITMQ_HOST` pointing at 127.0.0.1, where Compose publishes their ports (on Windows `localhost` adds about 2 s to every connection):
 
 ```bash
 bash scripts/dev/run-mas.sh
@@ -382,14 +382,14 @@ chmod +x stack-up.sh && ./stack-up.sh -d
 ## Option B — manual steps (from src/infra)
 cd src/infra
 bash init-env.sh   # skips if .env already exists
-## (Alternative: cp .env.example .env && set JWT_SECRET_KEY manually, e.g. openssl rand -hex 32)
+## (Alternative: cp .env.example .env && set JWT_SECRET_KEY and REDIS_PASSWORD manually, e.g. openssl rand -hex 32 for each)
 nano .env          # optional: tune values for local/production
 docker compose up --build -d
 
-## Services are now available (host ports from docker-compose.yml):
-## - PostgreSQL: localhost:${DB_PORT:-5432}
-## - Valkey (service redis): localhost:${REDIS_PORT:-6379}
-## - RabbitMQ: AMQP localhost:${RABBITMQ_PORT:-5672}, UI http://localhost:15672
+## Services are now available on this machine only (every host port but 3000 is bound to 127.0.0.1):
+## - PostgreSQL: 127.0.0.1:${DB_PORT:-5432}
+## - Valkey (service redis): 127.0.0.1:${REDIS_PORT:-6379}
+## - RabbitMQ: AMQP 127.0.0.1:${RABBITMQ_PORT:-5672}, UI http://localhost:15672
 ## - PgAdmin: only with docker compose --profile dev-tools up (port 5433)
 ## - Web client: http://localhost:3000 (observability lives here: /admin/logs, /admin/metrics, /admin/traces — admin role required)
 ## - Prometheus, Loki, Tempo: no host ports by default (internal-only backends); view logs/metrics/traces from the admin pages above or add a port mapping (see docs/operations.md)

@@ -27,8 +27,8 @@ services:
     logging: *logging
     restart: unless-stopped
     ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "15672:15672"
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:15672:15672"
     networks:
       - horus-net
     environment:
@@ -122,7 +122,7 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     networks:
       - horus-net
     volumes:
@@ -256,7 +256,7 @@ services:
         condition: service_healthy
         required: false
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     networks:
       - horus-net
     # Reach the vLLM server running on the host/WSL (Phase 4, LLM_BACKEND=vllm).
@@ -306,7 +306,7 @@ services:
     volumes:
       - vllm_hf_cache:/root/.cache/huggingface
     ports:
-      - "${VLLM_HOST_PORT:-18000}:8000"
+      - "127.0.0.1:${VLLM_HOST_PORT:-18000}:8000"
     restart: unless-stopped
     networks:
       - horus-net
@@ -411,7 +411,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     command: postgres -c 'shared_preload_libraries=pg_stat_statements' -c 'pg_stat_statements.track=all'
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     networks:
       - horus-net
     healthcheck:
@@ -425,7 +425,7 @@ services:
     container_name: redis
     logging: *logging
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     env_file:
       - .env
     command: ["valkey-server", "/usr/local/etc/valkey/valkey.conf", "--requirepass", "${REDIS_PASSWORD}"]
@@ -434,7 +434,7 @@ services:
       # Valkey refuses the RDB files Redis 7.4 wrote, so it starts on a new volume.
       - valkey_data:/data
     healthcheck:
-      test: ["CMD", "valkey-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD", "sh", "-c", "test -n \"$$1\" && VALKEYCLI_AUTH=\"$$1\" valkey-cli ping", "sh", "${REDIS_PASSWORD}"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -462,7 +462,7 @@ services:
     depends_on:
       - postgres
     ports:
-      - "5433:80"
+      - "127.0.0.1:5433:80"
     networks:
       - horus-net
 
@@ -522,8 +522,8 @@ services:
       - ./observability/tempo.yaml:/etc/tempo.yaml:ro
       - tempo_data:/var/tempo
     ports:
-      - "4317:4317"     # OTLP gRPC
-      - "4318:4318"     # OTLP HTTP
+      - "127.0.0.1:4317:4317"     # OTLP gRPC
+      - "127.0.0.1:4318:4318"     # OTLP HTTP
     networks:
       - horus-net
     restart: unless-stopped

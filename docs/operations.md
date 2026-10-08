@@ -73,7 +73,7 @@ When a Dockerfile's base image or the system packages of its final stage change,
 
 **Installer.** By default it never builds:
 
-1. It writes `HORUS_REGISTRY` (from `--registry`, the `HORUS_REGISTRY` variable, the previous install, or the default) and `HORUS_VERSION` to `.env`. Preflight checks that registry's host instead of PyPI, npm and Debian, and for GHCR also `pkg-containers.githubusercontent.com`, which serves the image layers: a proxy or firewall has to let both through. The `cpu-*` profiles need both GHCR hosts in any case, for the llama.cpp server image (see [Installer preflight](#installer-preflight)).
+1. It writes `HORUS_REGISTRY` (from `--registry`, the `HORUS_REGISTRY` variable, the previous install, or the default) and `HORUS_VERSION` to `.env`. Preflight checks that registry's host instead of PyPI, npm and Debian, and for GHCR also `pkg-containers.githubusercontent.com`, which serves the image layers: a proxy or firewall has to let both through. The `cpu-*` profiles need both GHCR hosts in any case, for the llama.cpp server image (see [Installer preflight](#installer-preflight)). It also writes `REDIS_PASSWORD`: a generated 64-hex-character password on a first install, and in place of the `redis_password` earlier releases shipped or an empty value; any other value is kept. When it changes, the `docker compose up -d` of step 4 recreates `redis`, `mas` and `agent` with it.
 2. If it is given a token, it signs Docker in with `docker login <host> --username <user> --password-stdin`, the token on stdin. The token comes from `--registry-token-file PATH`, from `HORUS_REGISTRY_TOKEN` (with `HORUS_REGISTRY_USERNAME` or `--registry-user`), or from `registry-token.txt` next to START-HERE, written as `USERNAME:TOKEN` on one line. It never reaches `install-log.txt`, `.env` or `horus-profile.json`, and no flag takes the token itself, so it stays out of shell history and process lists. The bundle builder never archives a `registry-token.txt`. Docker keeps the sign-in in its credential store like any `docker login`; `docker logout ghcr.io` removes it. On GHCR the token is a personal access token (classic) with `read:packages`. A refused sign-in stops with exit code 47.
 3. It pulls the Horus images first, then the third-party ones, one at a time with 3 tries each. It checks that each Horus image is really on the machine afterwards (`docker image inspect`), because `docker compose pull` can report success for a service that also has a `build:` section. When the registry refuses an image it stops at once with exit code 41 and says how to give it the token.
 4. It starts the stack with `docker compose up -d --no-build`. `--start` and `--restart` also pass `--no-build` while `.env` has `HORUS_REGISTRY`. It then names the Horus images this install does not use, with the `docker image rm` command that frees their space: images an earlier source install built (`<project>-mas` and so on), and other releases or the other flavor of `<registry>/horus-*` (another tag of the image in use is left out). It removes nothing itself. At the end it offers to prune Docker's build cache when more than 1 GB of it is left from earlier source builds, as the source path does.
@@ -96,11 +96,13 @@ Build and run the full stack from the infra directory:
 
 ```bash
 cd src/infra
-cp .env.example .env   # once, then edit
+bash init-env.sh       # once: creates .env with a generated JWT secret and Valkey password
 docker compose up --build -d
 ```
 
 Services are defined in **`src/infra/docker-compose.yml`**. See [Configuration](getting-started.md#12-factor-configuration-management) and [Monitoring](#monitoring-and-observability) for URLs and observability.
+
+Only `web-client` (3000) is published on every interface; every other published port is bound to 127.0.0.1 (table in [Network security](security.md#63-network-security)). The browser calls MAS (`ws://<page host>:8000`) and the knowledge store (`http://localhost:8080`) directly, so the web client works fully only in a browser on the machine that runs the stack.
 
 On a machine without an NVIDIA GPU, add the CPU overlay. The installer does this for the `cpu-*` profiles by writing `COMPOSE_FILE` to `.env`:
 
@@ -162,6 +164,7 @@ Before the hardware decision the installer checks Python 3.11 or newer, the Dock
 
   An older Compose stops the installer with exit code 13 and the update steps. A version string with no `x.y.z` in it (some builds print a commit hash) only gets a warning. The table is `COMPOSE_FEATURES` in `installer/preflight.py`; `installer/tests/test_preflight_requirements.py` fails when the compose files stop using one of these features.
 - **Network.** The hosts every install needs (Docker Hub and Hugging Face), then the image source: PyPI, npm and Debian when building from source, or the registry of the prebuilt images (see [Prebuilt images](#prebuilt-images)). On a `cpu-*` profile it also checks the registry of the llama.cpp server image, `ghcr.io` and `pkg-containers.githubusercontent.com` by default, even when the Horus images come from elsewhere or are built from source. `LLM_SERVER_IMAGE`, from the environment or `src/infra/.env` as for Compose, moves that check to its own registry; an image on Docker Hub adds nothing. A host that serves both is checked once.
+- **Ports.** Every port in `PORTS` (`installer/preflight.py`) must be free on 127.0.0.1 and ::1, or held by this install's own containers. Every port but 3000 is published on 127.0.0.1 only; `tests/ci/test_published_ports.py` fails when the compose file publishes a port that `PORTS` does not check.
 
 ---
 
@@ -225,7 +228,7 @@ The **Metrics** page replicates the former "MAS Overview" dashboard: Task Queue 
 The backends run **inside** the Docker network and are **not** published to the host by default:
 
 - **Prometheus** at `http://prometheus:9090` (internal-only).
-- **Tempo** at `http://tempo:3200` for trace queries (internal-only); only the Tempo OTLP ports `4317` / `4318` are published.
+- **Tempo** at `http://tempo:3200` for trace queries (internal-only); only the Tempo OTLP ports `4317` / `4318` are published, on 127.0.0.1.
 - **Loki** at `http://loki:3100` for log queries (internal-only; labels include `compose_service`, `compose_project`, `container`).
 
 #### Log retention and integrity (Loki)
@@ -268,7 +271,7 @@ Inside the Docker network, targets should include `mas:8000`, `agent:8001`, and 
 
 | Item | Value |
 |------|--------|
-| OTLP gRPC (from apps) | `tempo:4317` inside the network; host ports `4317` / `4318` are published for optional external collectors |
+| OTLP gRPC (from apps) | `tempo:4317` inside the network; host ports `4317` / `4318` are published on 127.0.0.1, for a collector or a service run on this machine |
 | App env | `OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317` (set per service in Compose) |
 
 View traces in the web client **`/admin/traces`** page (trace search + span waterfall), backed by Tempo.
@@ -300,7 +303,7 @@ Register a server with host `postgres`, port `5432`, database `postgres` (or you
 
 ### Valkey (`redis` service)
 
-From `src/infra`, `docker compose exec redis sh -c 'VALKEYCLI_AUTH="$REDIS_PASSWORD" valkey-cli'` opens `valkey-cli` with the password the container reads from `.env`, without putting it on the command line.
+From `src/infra`, `docker compose exec redis sh -c 'VALKEYCLI_AUTH="$REDIS_PASSWORD" valkey-cli'` opens `valkey-cli` with the password the container reads from `.env`, without putting it on the command line. `REDIS_PASSWORD` is generated by the installer and by `init-env.sh`, and the port answers on 127.0.0.1 only.
 
 ---
 

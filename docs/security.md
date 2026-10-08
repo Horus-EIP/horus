@@ -780,6 +780,9 @@ READ_ONLY_ROOTFS true
 
 - Secrets supplied via environment variables in development  
 - Local `.env` (not committed) for Compose  
+- The installer and `src/infra/init-env.sh` generate `JWT_SECRET_KEY` and `REDIS_PASSWORD` (64 hex characters each) into `src/infra/.env`, and the installer also generates `CORPUS_SCAN_TOKEN`; `.env.example` leaves `REDIS_PASSWORD` empty. On an install that still has the password earlier releases shipped (`redis_password`) or an empty one, the installer writes a generated one, and the `docker compose up -d` it ends with recreates `redis`, `mas` and `agent` with it.
+- `POSTGRES_PASSWORD`, `RABBITMQ_PASSWORD` and `PGADMIN_DEFAULT_PASSWORD` still ship as defaults; their ports answer on 127.0.0.1 only (see 6.3 for the Linux Engine caveat).
+- `SUPER_USER_PASSWORD` (admin/admin) does not have that protection. The web client on port 3000 answers on every interface and forwards every `/api/orchestrator/*` request to MAS, `/auth/token` included, so any machine that reaches port 3000 can sign in as admin. Set `SUPER_USER_PASSWORD` in `src/infra/.env` before the first start: MAS creates the admin account only once, and the agent signs in with the same value (`ORCHESTRATOR_PASSWORD`).
 
 **Recommendations:**
 - Use Docker secrets for production
@@ -788,13 +791,21 @@ READ_ONLY_ROOTFS true
 
 #### 6.3 Network Security
 
-| Service | Exposed Port | Recommendation |
-|---------|--------------|----------------|
-| MAS | 8000 | Expose via reverse proxy |
-| Web Client | 3000 | Expose via reverse proxy |
-| PostgreSQL | 5432 | Internal only |
-| RabbitMQ | 5672 | Internal only |
-| Redis | 6379 | Internal only |
+| Service | Host port | Bound to | Reached from the host by |
+|---|---|---|---|
+| Web client | 3000 | every interface | the browser, the desktop app |
+| MAS | 8000 | 127.0.0.1 | the browser's chat WebSocket, the installer's smoke test, scripts |
+| Knowledge store | 8080 | 127.0.0.1 | the browser (`NEXT_PUBLIC_KNOWLEDGE_STORE_URL`), the smoke test, scripts |
+| Agent | 8001 | 127.0.0.1 | `scripts/perf/prompt-tokens.py` (metrics) |
+| vLLM (GPU profiles) | 18000 (`VLLM_HOST_PORT`) | 127.0.0.1 | debugging only; it has no API key |
+| PostgreSQL | 5432 (`DB_PORT`) | 127.0.0.1 | MAS run on the host |
+| Valkey | 6379 (`REDIS_PORT`) | 127.0.0.1 | MAS run on the host |
+| RabbitMQ AMQP / management | 5672 (`RABBITMQ_PORT`) / 15672 | 127.0.0.1 | MAS run on the host / the browser |
+| Tempo OTLP | 4317, 4318 | 127.0.0.1 | services run on the host |
+| PgAdmin (`dev-tools` profile) | 5433 | 127.0.0.1 | the browser |
+| Prometheus, Loki, Tempo queries, llama-server | none | not published | containers on `horus-net` only |
+
+Only the web client is reachable from other machines, provided Docker Engine is 28.0 or newer on Linux: on older Engines, hosts on the same network segment can reach ports published to 127.0.0.1 (moby/moby#45610, fixed in 28.0.0). Binding 8000 to 127.0.0.1 does not take the MAS REST API off the network: the web client proxies all of it under `/api/orchestrator`. Opened from another machine the web client signs in and shows its pages, but chat and the knowledge store do not work: the chat socket and the knowledge-store calls go to ports that answer on 127.0.0.1 only, and the knowledge store accepts only the origins `http://localhost:3000` and `http://127.0.0.1:3000`. `tests/ci/test_published_ports.py` fails when another port is published on every interface.
 
 ---
 

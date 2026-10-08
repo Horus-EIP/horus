@@ -332,5 +332,11 @@ class TestMiscParsing(unittest.TestCase):
         self.assertEqual(smoke._extract_text(None), "")
         self.assertEqual(smoke._extract_text({}), "")
 
+class SmokeAddresses(unittest.TestCase):
+    def test_the_smoke_test_calls_the_address_the_ports_are_published_on(self):
+        for name, url in smoke.DEFAULT_BASE_URLS.items():
+            with self.subTest(name):
+                self.assertTrue(url.startswith("http://127.0.0.1:"), url)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

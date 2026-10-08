@@ -663,8 +663,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--category", type=lambda raw: [p.strip() for p in raw.split(",") if p.strip()]
     )
     parser.add_argument("--limit", type=int)
-    parser.add_argument("--mas-url", default=os.environ.get("MAS_URL", "http://localhost:8000"))
-    parser.add_argument("--ks-url", default=os.environ.get("KS_URL", "http://localhost:8080"))
+    parser.add_argument("--mas-url", default=os.environ.get("MAS_URL", "http://127.0.0.1:8000"))
+    parser.add_argument("--ks-url", default=os.environ.get("KS_URL", "http://127.0.0.1:8080"))
     parser.add_argument("--username", default=os.environ.get("SUPER_USER_USERNAME", "admin"))
     parser.add_argument("--password", default=os.environ.get("SUPER_USER_PASSWORD", "secret"))
     parser.add_argument("--token", default=os.environ.get("MAS_TOKEN"))

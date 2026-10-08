@@ -5,6 +5,7 @@ import io
 import json
 import os
 import re
+import socket
 import sys
 import tempfile
 import unittest
@@ -160,6 +161,14 @@ class PortsHeldByThisInstall(LogCase):
             self.ports({8000}, "", "nginx (PID 3)")
 
         self.assertEqual(caught.exception.code, EXIT_PORTS_BUSY)
+
+
+class PortProbe(unittest.TestCase):
+    def test_a_port_published_on_127_0_0_1_only_counts_as_busy(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+            server.bind(("127.0.0.1", 0))
+            server.listen()
+            self.assertFalse(preflight._port_free(server.getsockname()[1]))
 
 
 class ModelServerRegistry(LogCase):

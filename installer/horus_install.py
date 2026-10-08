@@ -162,6 +162,8 @@ def _parse_env(text: str) -> list[tuple[str | None, str]]:
             out.append((stripped.split("=", 1)[0].strip(), line))
     return out
 
+GENERATED_SECRETS = ("JWT_SECRET_KEY", "REDIS_PASSWORD")
+
 def _bootstrap_env(log: Log, infra: Path, reset: bool) -> None:
     env_path = infra / ".env"
     if env_path.is_file() and not reset:
@@ -193,11 +195,9 @@ def _bootstrap_env(log: Log, infra: Path, reset: bool) -> None:
         _backup_env(log, env_path)
     try:
         text = example.read_text(encoding="utf-8")
-        secret = secrets.token_hex(32)
-        lines = [
-            f"JWT_SECRET_KEY={secret}" if ln.startswith("JWT_SECRET_KEY=") else ln
-            for ln in text.splitlines()
-        ]
+        generated = {key: secrets.token_hex(32) for key in GENERATED_SECRETS}
+        lines = [f"{key}={generated[key]}" if key in generated else line
+                 for key, line in _parse_env(text)]
         env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         _lock_down(env_path)
         log.ok("Generated src/infra/.env (built-in equivalent of init-env.sh)")
@@ -312,6 +312,22 @@ def corpus_scan_token(log: Log, infra: Path) -> str:
             pass
     log.info("Generated a new CORPUS_SCAN_TOKEN")
     return secrets.token_urlsafe(32)
+
+OLD_VALKEY_PASSWORDS = frozenset({"", "redis_password"})
+
+def valkey_password(log: Log, infra: Path) -> str:
+    import secrets
+
+    existing = smoke.read_env(infra / ".env").get("REDIS_PASSWORD", "")
+    if existing not in OLD_VALKEY_PASSWORDS:
+        log.info("Reusing the existing REDIS_PASSWORD")
+        return existing
+    if existing:
+        log.ok("Replacing the default Valkey password with a generated one: redis, mas "
+               "and the agent restart with it when the stack starts")
+    else:
+        log.info("Generated a new REDIS_PASSWORD")
+    return secrets.token_hex(32)
 
 def _stream(cmd: list[str], log: Log, cwd: Path, label: str,
             heartbeat: int = 30, watch_for: tuple[str, ...] = (),
@@ -1335,6 +1351,7 @@ def _dispatch(log: Log, args) -> int:
         env.update(model_plan.env(repo))
     env["HORUS_CORPUS_DIR"] = choice["corpus_dir"]
     env["CORPUS_SCAN_TOKEN"] = corpus_scan_token(log, infra)
+    env["REDIS_PASSWORD"] = valkey_password(log, infra)
     env["HORUS_VERSION"] = VERSION
     if registry is not None:
         env[images.REGISTRY_KEY] = registry

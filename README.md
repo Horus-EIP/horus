@@ -63,7 +63,7 @@ Or, on a machine with an NVIDIA GPU, with Docker Compose directly:
 
 ```bash
 cd src/infra
-./init-env.sh             # creates .env from .env.example with a random JWT secret
+./init-env.sh             # creates .env from .env.example with a random JWT secret and Valkey password
 docker compose up --build
 ```
 
@@ -151,13 +151,15 @@ greenlight/               EIP greenlight deliverables
 | Web Client | http://localhost:3000 | Dashboard, chat, knowledge store UI |
 | MAS API | http://localhost:8000 | Swagger at `/docs` |
 | Agent | http://localhost:8001 | |
-| Knowledge Store | http://localhost:8080 | Bound to 127.0.0.1 only. Swagger at `/docs` (`root_path` is only for proxies) |
+| Knowledge Store | http://localhost:8080 | Swagger at `/docs` (`root_path` is only for proxies) |
 | vLLM | http://localhost:18000 | GPU profiles only (`VLLM_HOST_PORT`). The CPU model server publishes no port |
 | RabbitMQ UI | http://localhost:15672 | `RABBITMQ_USER` / `RABBITMQ_PASSWORD` in `.env` |
 | PostgreSQL, Valkey, RabbitMQ (AMQP) | 5432, 6379, 5672 | `DB_PORT`, `REDIS_PORT`, `RABBITMQ_PORT` |
 | Tempo (OTLP) | 4317 (gRPC), 4318 (HTTP) | |
 | Observability | http://localhost:3000/admin/logs · /admin/metrics · /admin/traces | Admin role, in the web client |
 | PgAdmin | http://localhost:5433 | Development tool, only with `docker compose --profile dev-tools up` |
+
+Only the web client listens on every network interface. Every other port is published on 127.0.0.1, so it answers on this machine only; Prometheus, Loki, Tempo's query port and the CPU model server are not published at all. From scripts, use `127.0.0.1` rather than `localhost`: on Windows a client that tries `::1` first waits about 2 s per connection before it falls back to 127.0.0.1.
 
 ## Running tests
 

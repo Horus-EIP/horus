@@ -27,8 +27,8 @@ from common import (
 )
 
 DEFAULT_BASE_URLS = {
-    "mas": "http://localhost:8000",
-    "ks": "http://localhost:8080",
+    "mas": "http://127.0.0.1:8000",
+    "ks": "http://127.0.0.1:8080",
 }
 
 DEFAULT_TIMEOUT = 1200
@@ -1044,8 +1044,8 @@ def step_check_answer(steps: Steps, answer: str, require_quality: bool = True) -
             "There are two causes and the search below tells them apart.\n"
             "\n"
             "Check the document is indexed and findable:\n"
-            "  curl http://localhost:8080/file\n"
-            '  curl "http://localhost:8080/?query=Q4%202025%20revenue&n_results=5"\n'
+            "  curl http://127.0.0.1:8080/file\n"
+            '  curl "http://127.0.0.1:8080/?query=Q4%202025%20revenue&n_results=5"\n'
             "\n"
             "If the search returns NOTHING, retrieval is the problem. Reset the\n"
             "store and reinstall:\n"
