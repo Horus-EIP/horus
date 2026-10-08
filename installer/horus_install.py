@@ -373,9 +373,25 @@ PULL_ATTEMPTS = 3
 PULL_BACKOFF_SECONDS = 15
 ONE_IMAGE_AT_A_TIME = {"COMPOSE_PARALLEL_LIMIT": "1"}
 NO_BUILD = "--no-build"
+REMOVE_ORPHANS = "--remove-orphans"
+PROJECT_NAME_KEY = "COMPOSE_PROJECT_NAME"
+IGNORE_ORPHANS_KEY = "COMPOSE_IGNORE_ORPHANS"
 
 def compose(args: list[str]) -> list[str]:
     return ["docker", "compose"] + args
+
+def compose_setting(infra: Path, key: str) -> str:
+    if key in os.environ:
+        return os.environ[key].strip()
+    return smoke.read_env(infra / ".env").get(key, "").strip()
+
+def explicit_project_name(infra: Path) -> str:
+    return compose_setting(infra, PROJECT_NAME_KEY)
+
+def orphan_removal(infra: Path) -> list[str]:
+    if compose_setting(infra, IGNORE_ORPHANS_KEY).lower() in ("1", "t", "true"):
+        return []
+    return [REMOVE_ORPHANS] if explicit_project_name(infra) else []
 
 def compose_config(log: Log, infra: Path) -> tuple[str, dict[str, dict]] | None:
     res = run(compose(["config", "--format", "json"]), log, timeout=90, cwd=infra,
@@ -590,7 +606,7 @@ def up_waiting_out_a_dependency_abort(log: Log, infra: Path, up: list[str],
             wait_for_health(log, infra, starting, timeout=timeout)
         else:
             log.info("no service is still starting; starting the rest straight away")
-        up = ["up", "-d"] + [flag for flag in up if flag == NO_BUILD]
+        up = ["up", "-d"] + [flag for flag in up if flag in (NO_BUILD, REMOVE_ORPHANS)]
         seen.clear()
         code = _stream(compose(up), log, infra, "up (second attempt)",
                        watch_for=(DEPENDENCY_ABORT,), found=seen)
@@ -637,7 +653,7 @@ def pull_and_build(log: Log, infra: Path, no_build: bool = False,
         before_start()
 
     log.step("Starting the stack")
-    first_up = ["up", "-d"] if from_source else ["up", "-d", NO_BUILD]
+    first_up = (["up", "-d"] if from_source else ["up", "-d", NO_BUILD]) + orphan_removal(infra)
     up, code = up_waiting_out_a_dependency_abort(log, infra, first_up, timeout)
     if code != 0:
         raise InstallError(
@@ -891,8 +907,12 @@ def installed_from_registry(infra: Path) -> bool:
 
 def start_command(infra: Path, build: bool = False) -> list[str]:
     if build:
-        return ["up", "-d", "--build"]
-    return ["up", "-d", NO_BUILD] if installed_from_registry(infra) else ["up", "-d"]
+        up = ["up", "-d", "--build"]
+    elif installed_from_registry(infra):
+        up = ["up", "-d", NO_BUILD]
+    else:
+        up = ["up", "-d"]
+    return up + orphan_removal(infra)
 
 def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
     require_installed(infra)
@@ -970,7 +990,59 @@ def do_stop(log: Log, infra: Path) -> int:
     log.say(f"    cd {infra} && docker compose start")
     return EXIT_OK
 
-def do_uninstall(log: Log, infra: Path, assume_yes: bool) -> int:
+RETIRED_VOLUMES = ("redis_data", "redisinsight_data")
+PROJECT_LABEL = "com.docker.compose.project"
+VOLUME_ROWS = '{{.Name}} {{.Label "com.docker.compose.volume"}}'
+
+def interactive_terminal() -> bool:
+    try:
+        return bool(sys.stdin) and sys.stdin.isatty()
+    except (ValueError, AttributeError):
+        return False
+
+def retired_volumes(log: Log, infra: Path) -> list[str]:
+    if not explicit_project_name(infra):
+        return []
+    config = compose_config(log, infra)
+    project = config[0] if config else ""
+    if not project:
+        return []
+    res = run(["docker", "volume", "ls", "--filter", f"label={PROJECT_LABEL}={project}",
+               "--format", VOLUME_ROWS], log, timeout=60)
+    if not res.ok:
+        return []
+    rows = (line.split() for line in res.out.splitlines())
+    return [row[0] for row in rows if len(row) == 2 and row[1] in RETIRED_VOLUMES]
+
+def agrees_to_delete_retired_volumes(log: Log, retired: list[str],
+                                     non_interactive: bool) -> bool:
+    log.say("")
+    log.say("  Older versions of Horus left these volumes, which nothing uses now:")
+    for name in retired:
+        log.say(f"    {name}")
+    if non_interactive or not interactive_terminal():
+        return False
+    try:
+        answer = input("  Delete them too? [y/N]: ")
+    except (EOFError, KeyboardInterrupt):
+        log.say("")
+        return False
+    return answer.strip().lower() in ("y", "yes")
+
+def delete_retired_volumes(log: Log, retired: list[str]) -> None:
+    res = run(["docker", "volume", "rm", *retired], log, timeout=120)
+    if res.ok:
+        log.ok("Deleted " + ", ".join(retired))
+        return
+    log.warn(f"`docker volume rm` failed ({res.first_line() or 'no output'}); "
+             "delete them later with:")
+    log.say("    docker volume rm " + " ".join(retired))
+
+def point_out_retired_volumes(log: Log, retired: list[str]) -> None:
+    log.say("  Left alone. Delete them later with:")
+    log.say("    docker volume rm " + " ".join(retired))
+
+def do_uninstall(log: Log, infra: Path, assume_yes: bool, non_interactive: bool = False) -> int:
     log.step("Uninstall Horus")
     log.say("")
     log.say(red("  This removes the containers, the downloaded images, AND the"))
@@ -987,7 +1059,7 @@ def do_uninstall(log: Log, infra: Path, assume_yes: bool) -> int:
     log.say("")
 
     if not assume_yes:
-        if not sys.stdin or not sys.stdin.isatty():
+        if non_interactive or not interactive_terminal():
             log.fail("Refusing to uninstall without confirmation on a "
                      "non-interactive terminal. Pass --yes if you really mean it.")
             return EXIT_UNINSTALL_FAILED
@@ -1001,15 +1073,24 @@ def do_uninstall(log: Log, infra: Path, assume_yes: bool) -> int:
             return EXIT_OK
 
     log.info("uninstall confirmed")
+    retired = retired_volumes(log, infra)
+    delete_retired = bool(retired) and agrees_to_delete_retired_volumes(
+        log, retired, non_interactive)
     code = _stream(
-        compose(["down", "--volumes", "--rmi", "all", "--remove-orphans"]),
+        compose(["down", "--volumes", "--rmi", "all"] + orphan_removal(infra)),
         log, infra, "down",
     )
     if code != 0:
         log.warn("Some resources could not be removed; see the log for detail")
         log.say("  You can finish manually with:")
-        log.say(f"    cd {infra} && docker compose down -v --rmi all")
+        log.say(f"    cd {infra} && " + " ".join(compose(["down", "-v", "--rmi", "all"] + orphan_removal(infra))))
+        if retired:
+            log.say("    docker volume rm " + " ".join(retired))
         return EXIT_UNINSTALL_FAILED
+    if delete_retired:
+        delete_retired_volumes(log, retired)
+    elif retired:
+        point_out_retired_volumes(log, retired)
     log.say("")
     log.ok("Horus removed.")
     log.say("  The source folder and this installer are still here; delete them")
@@ -1320,7 +1401,7 @@ def _dispatch(log: Log, args) -> int:
     if args.stop:
         return do_stop(log, infra)
     if args.uninstall:
-        return do_uninstall(log, infra, args.yes)
+        return do_uninstall(log, infra, args.yes, non_interactive=args.non_interactive)
     if args.dry_run:
         return do_dry_run(log, args, repo)
     if args.download_model:

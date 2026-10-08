@@ -348,6 +348,7 @@ class EmulatedImagesWarning(TempDirCase):
 class SwitchingImageSourceRewritesTheEnv(TempDirCase):
     def setUp(self) -> None:
         super().setUp()
+        os.environ.pop(horus_install.PROJECT_NAME_KEY, None)
         self.infra = self.tmp / "src" / "infra"
         self.infra.mkdir(parents=True)
         (self.infra / ".env").write_text("HORUS_REGISTRY=ghcr.io/acme\n", encoding="utf-8")

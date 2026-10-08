@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -19,6 +20,8 @@ from common import (  # noqa: E402
     EXIT_COMPOSE_UP_FAILED,
     EXIT_HEALTH_TIMEOUT,
     EXIT_NOT_INSTALLED,
+    EXIT_OK,
+    EXIT_UNINSTALL_FAILED,
     Events,
     InstallError,
     Log,
@@ -402,6 +405,9 @@ UNNAMED = {"mas": {"build": {"context": "../services/mas"}}}
 
 UP = "up -d --no-build"
 SOURCE_UP = "up -d"
+ORPHANS = " --remove-orphans"
+PROJECT = "horus_verify"
+NAMED_PROJECT = f"COMPOSE_PROJECT_NAME={PROJECT}\n"
 
 REFUSED = 'Error response from daemon: Head "https://ghcr.io/v2/acme/horus-mas/manifests/0.1.2-cpu": unauthorized'
 
@@ -420,11 +426,15 @@ def watched(line, watch_for, found):
 class FakeDocker:
 
     def __init__(self, config=None, pulls=(), ups=((0, ""),), ps=((),), local_images=(),
-                 builds=(), vanishing=None, image_ids=None):
+                 builds=(), vanishing=None, image_ids=None, downs=(), volumes=(),
+                 volume_rm=0):
         self.config = config
         self.pulls = list(pulls)
         self.builds = list(builds)
         self.ups = list(ups)
+        self.downs = list(downs)
+        self.volumes = list(volumes)
+        self.volume_rm = volume_rm
         self.ps = [list(rows) for rows in ps]
         self.local_images = set(local_images)
         self.vanishing = dict(vanishing or {})
@@ -461,6 +471,8 @@ class FakeDocker:
             return code
         if cmd[2] == "build":
             return self.builds.pop(0) if self.builds else 0
+        if cmd[2] == "down":
+            return self.downs.pop(0) if self.downs else 0
         code, line = self.ups.pop(0)
         watched(line, watch_for, found)
         return code
@@ -486,6 +498,17 @@ class FakeDocker:
                     for image in sorted(self.local_images)
                     if image.rpartition(":")[0] == repository]
             return Result(0, "\n".join(rows), "")
+        if cmd[1:3] == ["volume", "ls"]:
+            owner = cmd[cmd.index("--filter") + 1].rpartition("=")[2]
+            self.history.append("volume ls " + owner)
+            rows = [f"{name} {key}" for name, project, key in self.volumes if project == owner]
+            return Result(0, "\n".join(rows), "")
+        if cmd[1:3] == ["volume", "rm"]:
+            self.history.append(" ".join(cmd[1:]))
+            if self.volume_rm != 0:
+                return Result(self.volume_rm, "", "Error response from daemon: volume is in use")
+            self.volumes = [volume for volume in self.volumes if volume[0] not in cmd[3:]]
+            return Result(0, "\n".join(cmd[3:]), "")
         raise AssertionError(f"unexpected command {cmd}")
 
     def pulled(self) -> list[str]:
@@ -496,6 +519,9 @@ class FakeDocker:
 
     def built(self) -> list[str]:
         return [entry for entry in self.history if entry.startswith("build")]
+
+    def deleted_volumes(self) -> list[str]:
+        return [entry for entry in self.history if entry.startswith("volume rm")]
 
 class FakeDockerCase(unittest.TestCase):
 
@@ -510,6 +536,11 @@ class FakeDockerCase(unittest.TestCase):
         sleeper = mock.patch.object(horus_install.time, "sleep")
         self.sleep = sleeper.start()
         self.addCleanup(sleeper.stop)
+        environment = mock.patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        os.environ.pop(horus_install.PROJECT_NAME_KEY, None)
+        os.environ.pop(horus_install.IGNORE_ORPHANS_KEY, None)
 
     def run_it(self, docker, **kwargs):
         horus_install._stream = docker.stream
@@ -1028,6 +1059,27 @@ class StartWaitsOutADependencyAbort(FakeDockerCase):
         self.start_it(docker)
         self.assertEqual(docker.started(), [SOURCE_UP])
 
+    def test_a_start_in_a_named_project_removes_orphans(self):
+        self.infra = write_env(self.tmp, "COMPOSE_FILE=docker-compose.yml\n" + NAMED_PROJECT)
+        docker = FakeDocker()
+        _code, _out, raised = self.start_it(docker)
+        self.assertIsNone(raised)
+        self.assertEqual(docker.started(), [SOURCE_UP + ORPHANS])
+
+    def test_a_prebuilt_start_in_a_named_project_removes_orphans_on_both_attempts(self):
+        self.infra = write_env(self.tmp, "COMPOSE_FILE=docker-compose.yml\n"
+                                         "HORUS_REGISTRY=ghcr.io/acme\n" + NAMED_PROJECT)
+        docker = FakeDocker(ups=[(1, ABORT), (0, "")])
+        _code, _out, raised = self.start_it(docker)
+        self.assertIsNone(raised)
+        self.assertEqual(docker.started(), [UP + ORPHANS, UP + ORPHANS])
+
+    def test_a_start_with_build_keeps_removing_orphans_but_does_not_rebuild(self):
+        self.infra = write_env(self.tmp, "COMPOSE_FILE=docker-compose.yml\n" + NAMED_PROJECT)
+        docker = FakeDocker(ups=[(1, ABORT), (0, "")])
+        self.start_it(docker, build=True)
+        self.assertEqual(docker.started(), ["up -d --build" + ORPHANS, SOURCE_UP + ORPHANS])
+
 class RestartFallsBackWithoutBuilding(FakeDockerCase):
 
     def setUp(self) -> None:
@@ -1053,6 +1105,70 @@ class RestartFallsBackWithoutBuilding(FakeDockerCase):
     def test_a_source_install_falls_back_to_a_plain_up(self):
         history = self.restart("COMPOSE_FILE=docker-compose.yml\n")
         self.assertEqual(history, ["restart", SOURCE_UP])
+
+    def test_the_fallback_up_in_a_named_project_removes_orphans(self):
+        history = self.restart("HORUS_REGISTRY=ghcr.io/acme\n" + NAMED_PROJECT)
+        self.assertEqual(history, ["restart", UP + ORPHANS])
+
+class OrphansGoOnlyInANamedProject(FakeDockerCase):
+
+    def name_the_project(self, body: str = NAMED_PROJECT) -> None:
+        (self.tmp / ".env").write_text(body, encoding="utf-8")
+
+    def started_by_an_install(self, **kwargs) -> list[str]:
+        docker = FakeDocker(config=compose_config(PULLABLE))
+        _out, raised = self.run_it(docker, **kwargs)
+        self.assertIsNone(raised)
+        return docker.started()
+
+    def test_an_install_in_a_named_project_removes_orphans(self):
+        self.name_the_project()
+        self.assertEqual(self.started_by_an_install(), [UP + ORPHANS])
+
+    def test_a_source_install_in_a_named_project_removes_orphans(self):
+        self.name_the_project()
+        self.assertEqual(self.started_by_an_install(from_source=True), [SOURCE_UP + ORPHANS])
+
+    def test_the_second_attempt_after_a_dependency_abort_still_removes_orphans(self):
+        self.name_the_project()
+        docker = FakeDocker(config=compose_config({}), ups=[(1, ABORT), (0, "")])
+        _out, raised = self.run_it(docker)
+        self.assertIsNone(raised)
+        self.assertEqual(docker.started(), [UP + ORPHANS, UP + ORPHANS])
+
+    def test_without_a_project_name_orphans_are_left_alone(self):
+        self.assertEqual(self.started_by_an_install(), [UP])
+
+    def test_an_empty_project_name_is_no_project_name(self):
+        self.name_the_project("COMPOSE_PROJECT_NAME=\n")
+        self.assertEqual(self.started_by_an_install(), [UP])
+
+    def test_a_deactivated_project_name_is_no_project_name(self):
+        self.name_the_project("#[horus-installer-unset] " + NAMED_PROJECT)
+        self.assertEqual(self.started_by_an_install(), [UP])
+
+    def test_the_shell_variable_names_the_project_like_compose(self):
+        os.environ[horus_install.PROJECT_NAME_KEY] = "horus_shell"
+        self.assertEqual(self.started_by_an_install(), [UP + ORPHANS])
+
+    def test_an_empty_shell_variable_hides_the_env_file_like_compose(self):
+        self.name_the_project()
+        os.environ[horus_install.PROJECT_NAME_KEY] = ""
+        self.assertEqual(self.started_by_an_install(), [UP])
+
+    def test_compose_ignore_orphans_in_the_env_file_leaves_the_flag_out(self):
+        self.name_the_project(NAMED_PROJECT + "COMPOSE_IGNORE_ORPHANS=true\n")
+        self.assertEqual(self.started_by_an_install(), [UP])
+
+    def test_compose_ignore_orphans_in_the_shell_leaves_the_flag_out(self):
+        self.name_the_project()
+        os.environ[horus_install.IGNORE_ORPHANS_KEY] = "1"
+        self.assertEqual(self.started_by_an_install(), [UP])
+
+    def test_a_false_shell_value_wins_over_the_env_file_like_compose(self):
+        self.name_the_project(NAMED_PROJECT + "COMPOSE_IGNORE_ORPHANS=true\n")
+        os.environ[horus_install.IGNORE_ORPHANS_KEY] = "false"
+        self.assertEqual(self.started_by_an_install(), [UP + ORPHANS])
 
 class FirstInstallTime(FakeDockerCase):
 
@@ -1172,6 +1288,196 @@ class ReclaimBuildCache(unittest.TestCase):
     def test_a_prebuilt_install_with_a_small_cache_says_nothing_about_it(self):
         self.stub([500 * 1024**2])
         self.assertNotIn("build cache", self.succeed(built_here=False))
+
+
+OLD_REDIS_VOLUME = f"{PROJECT}_redis_data"
+LEFT_VOLUMES = (
+    (OLD_REDIS_VOLUME, PROJECT, "redis_data"),
+    (f"{PROJECT}_postgresql_data", PROJECT, "postgresql_data"),
+    ("horus_other_redis_data", "horus_other", "redis_data"),
+)
+UNNAMED_DOWN = "down --volumes --rmi all"
+DOWN = UNNAMED_DOWN + ORPHANS
+
+class UninstallOffersTheVolumesOlderVersionsLeft(FakeDockerCase):
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.infra = write_env(self.tmp, NAMED_PROJECT)
+        self.prompts: list[str] = []
+        self.history_at_each_question: list[list[str]] = []
+
+    def docker(self, **kwargs):
+        return FakeDocker(config={"name": PROJECT, "services": {}}, **kwargs)
+
+    def uninstall(self, docker, answers=(), terminal=True, non_interactive=False,
+                  assume_yes=True):
+        horus_install._stream = docker.stream
+        horus_install.run = docker.run
+        replies = list(answers)
+
+        def answer(prompt):
+            self.prompts.append(prompt)
+            self.history_at_each_question.append(list(docker.history))
+            reply = replies.pop(0)
+            if isinstance(reply, BaseException):
+                raise reply
+            return reply
+
+        buf = io.StringIO()
+        with mock.patch.object(horus_install, "interactive_terminal", return_value=terminal), \
+                mock.patch("builtins.input", answer), contextlib.redirect_stdout(buf):
+            code = horus_install.do_uninstall(self.log, self.infra, assume_yes,
+                                              non_interactive=non_interactive)
+        return code, buf.getvalue()
+
+    def test_yes_deletes_the_old_redis_volume_once_the_stack_is_down(self):
+        docker = self.docker(volumes=LEFT_VOLUMES)
+        code, out = self.uninstall(docker, answers=["y"])
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(docker.deleted_volumes(), [f"volume rm {OLD_REDIS_VOLUME}"])
+        self.assertLess(docker.history.index(DOWN),
+                        docker.history.index(f"volume rm {OLD_REDIS_VOLUME}"))
+        self.assertIn(f"Deleted {OLD_REDIS_VOLUME}", out)
+
+    def test_the_question_comes_before_the_stack_comes_down(self):
+        docker = self.docker(volumes=LEFT_VOLUMES)
+        self.uninstall(docker, answers=["n"])
+        self.assertEqual(self.history_at_each_question, [["config", f"volume ls {PROJECT}"]])
+
+    def test_no_keeps_the_volume_and_says_how_to_delete_it_later(self):
+        docker = self.docker(volumes=LEFT_VOLUMES)
+        code, out = self.uninstall(docker, answers=["n"])
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(docker.deleted_volumes(), [])
+        self.assertIn(f"docker volume rm {OLD_REDIS_VOLUME}", out)
+
+    def test_just_pressing_enter_keeps_the_volume(self):
+        docker = self.docker(volumes=LEFT_VOLUMES)
+        self.uninstall(docker, answers=[""])
+        self.assertEqual(docker.deleted_volumes(), [])
+
+    def test_the_end_of_input_keeps_the_volume(self):
+        docker = self.docker(volumes=LEFT_VOLUMES)
+        code, _out = self.uninstall(docker, answers=[EOFError()])
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(docker.deleted_volumes(), [])
+
+    def test_a_non_interactive_run_never_asks_and_never_deletes(self):
+        docker = self.docker(volumes=LEFT_VOLUMES)
+        code, out = self.uninstall(docker, non_interactive=True)
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(self.prompts, [])
+        self.assertEqual(docker.deleted_volumes(), [])
+        self.assertIn(f"docker volume rm {OLD_REDIS_VOLUME}", out)
+
+    def test_without_a_terminal_the_yes_flag_deletes_no_old_volume(self):
+        docker = self.docker(volumes=LEFT_VOLUMES)
+        code, _out = self.uninstall(docker, terminal=False)
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(self.prompts, [])
+        self.assertEqual(docker.deleted_volumes(), [])
+
+    def test_only_this_projects_retired_volumes_are_offered(self):
+        docker = self.docker(volumes=LEFT_VOLUMES)
+        _code, out = self.uninstall(docker, answers=["y"])
+        self.assertNotIn("horus_other_redis_data", out)
+        self.assertNotIn(f"{PROJECT}_postgresql_data", out)
+        self.assertEqual(docker.deleted_volumes(), [f"volume rm {OLD_REDIS_VOLUME}"])
+
+    def test_the_redisinsight_volume_is_offered_with_the_redis_one(self):
+        insight = f"{PROJECT}_redisinsight_data"
+        docker = self.docker(volumes=[*LEFT_VOLUMES, (insight, PROJECT, "redisinsight_data")])
+        self.uninstall(docker, answers=["y"])
+        self.assertEqual(docker.deleted_volumes(), [f"volume rm {OLD_REDIS_VOLUME} {insight}"])
+
+    def test_without_a_project_name_no_volume_is_looked_for_and_no_orphan_is_removed(self):
+        self.infra = write_env(self.tmp, "COMPOSE_FILE=docker-compose.yml\n")
+        docker = self.docker(volumes=LEFT_VOLUMES)
+        code, _out = self.uninstall(docker, answers=["y"])
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(self.prompts, [])
+        self.assertEqual(docker.history, [UNNAMED_DOWN])
+
+    def test_nothing_is_asked_when_no_old_volume_is_left(self):
+        docker = self.docker(volumes=LEFT_VOLUMES[1:])
+        _code, out = self.uninstall(docker)
+        self.assertEqual(self.prompts, [])
+        self.assertNotIn("Older versions", out)
+
+    def test_a_failed_down_deletes_no_volume_even_after_a_yes(self):
+        docker = self.docker(volumes=LEFT_VOLUMES, downs=[1])
+        code, out = self.uninstall(docker, answers=["y"])
+        self.assertEqual(code, EXIT_UNINSTALL_FAILED)
+        self.assertEqual(docker.deleted_volumes(), [])
+        self.assertIn("docker compose down -v --rmi all --remove-orphans", out)
+        self.assertIn(f"docker volume rm {OLD_REDIS_VOLUME}", out)
+
+    def test_a_volume_docker_will_not_delete_is_reported_with_the_command(self):
+        docker = self.docker(volumes=LEFT_VOLUMES, volume_rm=1)
+        code, out = self.uninstall(docker, answers=["y"])
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("volume is in use", out)
+        self.assertIn(f"docker volume rm {OLD_REDIS_VOLUME}", out)
+
+    def test_cancelling_the_uninstall_looks_for_nothing_else(self):
+        docker = self.docker(volumes=LEFT_VOLUMES)
+        code, out = self.uninstall(docker, answers=["no"], assume_yes=False)
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("Cancelled", out)
+        self.assertEqual(docker.history, [])
+        self.assertEqual(len(self.prompts), 1)
+
+    def test_typing_delete_then_yes_deletes_the_old_volume(self):
+        docker = self.docker(volumes=LEFT_VOLUMES)
+        code, _out = self.uninstall(docker, answers=["DELETE", "y"], assume_yes=False)
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("Type DELETE", self.prompts[0])
+        self.assertEqual(docker.deleted_volumes(), [f"volume rm {OLD_REDIS_VOLUME}"])
+
+    def test_the_uninstall_still_removes_orphans_and_the_declared_volumes(self):
+        docker = self.docker()
+        self.uninstall(docker)
+        self.assertEqual(docker.history, ["config", f"volume ls {PROJECT}", DOWN])
+
+    def test_the_volumes_are_looked_for_under_the_name_compose_resolves(self):
+        self.infra = write_env(self.tmp, "COMPOSE_PROJECT_NAME=${HORUS_NAME}\n")
+        docker = self.docker(volumes=LEFT_VOLUMES)
+        self.uninstall(docker, answers=["y"])
+        self.assertIn(f"volume ls {PROJECT}", docker.history)
+        self.assertEqual(docker.deleted_volumes(), [f"volume rm {OLD_REDIS_VOLUME}"])
+
+    def test_an_unattended_uninstall_without_yes_refuses_without_asking(self):
+        docker = self.docker(volumes=LEFT_VOLUMES)
+        code, _out = self.uninstall(docker, non_interactive=True, assume_yes=False)
+        self.assertEqual(code, EXIT_UNINSTALL_FAILED)
+        self.assertEqual(self.prompts, [])
+        self.assertEqual(docker.history, [])
+
+class UninstallKnowsWhenTheRunIsUnattended(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.repo = Path(self._tmp.name)
+        self.log = Log(self.repo / "install-log.txt")
+        self.addCleanup(self.log.close, 0)
+
+    def uninstall_called_with(self, argv):
+        args = horus_install.build_parser().parse_args(argv)
+        with mock.patch.object(horus_install, "find_repo", return_value=self.repo), \
+                mock.patch.object(horus_install, "banner"), \
+                mock.patch.object(horus_install, "do_uninstall", return_value=EXIT_OK) as uninstall:
+            horus_install._dispatch(self.log, args)
+        return uninstall.call_args
+
+    def test_non_interactive_reaches_the_uninstall(self):
+        call = self.uninstall_called_with(["--uninstall", "--yes", "--non-interactive"])
+        self.assertTrue(call.kwargs["non_interactive"])
+
+    def test_an_ordinary_uninstall_may_ask(self):
+        call = self.uninstall_called_with(["--uninstall"])
+        self.assertFalse(call.kwargs["non_interactive"])
 
 
 if __name__ == "__main__":
