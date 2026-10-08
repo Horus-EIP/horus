@@ -9,6 +9,7 @@ import httpx
 import pytest
 from eval_report import build_report, question_record
 from eval_scoring import ROUTE_AGENT, ROUTE_DIRECT, ROUTE_NONE
+from horus_bench_kit.target import Target
 
 RUNNER_PATH = Path(__file__).resolve().parents[2] / "scripts" / "eval" / "run-eval.py"
 
@@ -487,6 +488,35 @@ class TestProgressLine:
         assert line.startswith("[  1/100] fin-01")
         assert "12.50s" in line
         assert "answer=yes source=no route=-" in line
+
+
+class TestTargets:
+    def test_both_targets_follow_the_kit_target_protocol(self, runner):
+        assert isinstance(runner.ChatTarget(None, "x"), Target)
+        assert isinstance(runner.RetrievalTarget("http://ks:8080", 50), Target)
+
+    def test_each_chat_question_gets_its_own_named_conversation(self, runner):
+        names = []
+
+        class Client:
+            async def ask(self, question, conversation_name):
+                names.append(conversation_name)
+                return {"mode": "chat", "status": "ok"}
+
+        asyncio.run(runner.ChatTarget(Client(), "cpu16 / q8").ask("Hi?", item_id="direct-01"))
+        assert names == ["eval-cpu16-q8-direct-01"]
+
+    def test_the_retrieval_target_queries_the_knowledge_store_through_retrieve(self, runner, monkeypatch):
+        asked = []
+
+        def retrieve(ks_url, question, top_k):
+            asked.append((ks_url, question, top_k))
+            return {"mode": "retrieval", "status": "ok"}
+
+        monkeypatch.setattr(runner, "retrieve", retrieve)
+        outcome = asyncio.run(runner.RetrievalTarget("http://ks:8080", 50).ask("Hotel limit?", item_id="exp-01"))
+        assert asked == [("http://ks:8080", "Hotel limit?", 50)]
+        assert outcome == {"mode": "retrieval", "status": "ok"}
 
 
 VERIFIED_SHA256 = "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597"

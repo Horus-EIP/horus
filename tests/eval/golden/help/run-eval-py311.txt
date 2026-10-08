@@ -1,0 +1,57 @@
+usage: run-eval.py [-h] [--label LABEL] [--mode {chat,retrieval}]
+                   [--testset TESTSET] [--out-dir OUT_DIR] [--ids IDS]
+                   [--category CATEGORY] [--limit LIMIT] [--mas-url MAS_URL]
+                   [--ks-url KS_URL] [--username USERNAME]
+                   [--password PASSWORD] [--token TOKEN]
+                   [--event-timeout EVENT_TIMEOUT]
+                   [--submit-timeout SUBMIT_TIMEOUT]
+                   [--poll-interval POLL_INTERVAL] [--agent-wait AGENT_WAIT]
+                   [--top-k TOP_K] [--no-warmup] [--skip-corpus-check]
+                   [--corpus-token CORPUS_TOKEN] [--sample-resources]
+                   [--sample-interval SAMPLE_INTERVAL]
+                   [--swap-container SWAP_CONTAINER]
+                   [--llm-container LLM_CONTAINER]
+                   [--llama-cpp-build LLAMA_CPP_BUILD]
+                   [--model-name MODEL_NAME] [--model-file MODEL_FILE]
+                   [--model-sha256 MODEL_SHA256] [--reference REFERENCE]
+                   [--cpu-model CPU_MODEL] [--ram RAM] [--ram-speed RAM_SPEED]
+                   [--disk-type DISK_TYPE] [--resummarize REPORT_JSON]
+
+Run the Horus evaluation test set against a live stack.
+
+options:
+  -h, --help            show this help message and exit
+  --label LABEL         Run label, used in benchmarks/<label>-<date>.json
+  --mode {chat,retrieval}
+  --testset TESTSET
+  --out-dir OUT_DIR
+  --ids IDS
+  --category CATEGORY
+  --limit LIMIT
+  --mas-url MAS_URL
+  --ks-url KS_URL
+  --username USERNAME
+  --password PASSWORD
+  --token TOKEN
+  --event-timeout EVENT_TIMEOUT
+  --submit-timeout SUBMIT_TIMEOUT
+  --poll-interval POLL_INTERVAL
+  --agent-wait AGENT_WAIT
+  --top-k TOP_K
+  --no-warmup
+  --skip-corpus-check
+  --corpus-token CORPUS_TOKEN
+  --sample-resources
+  --sample-interval SAMPLE_INTERVAL
+  --swap-container SWAP_CONTAINER
+  --llm-container LLM_CONTAINER
+  --llama-cpp-build LLAMA_CPP_BUILD
+  --model-name MODEL_NAME
+  --model-file MODEL_FILE
+  --model-sha256 MODEL_SHA256
+  --reference REFERENCE
+  --cpu-model CPU_MODEL
+  --ram RAM
+  --ram-speed RAM_SPEED
+  --disk-type DISK_TYPE
+  --resummarize REPORT_JSON

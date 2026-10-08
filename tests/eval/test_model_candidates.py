@@ -8,50 +8,26 @@ from model_candidates import (
     CANDIDATE_CONTAINER,
     DEFAULT_CATALOG,
     REPORT_KIND,
-    Variant,
     all_variants,
-    bench_speeds,
     build_number,
     build_report,
     candidate_network,
     candidate_run_command,
     catalog_problems,
-    contract_headline,
     download_url,
     eval_headline,
     load_catalog,
     markdown_summary,
-    parse_container_env,
-    parse_container_inspect,
-    parse_memory_limit,
-    parse_process_memory,
     response_cache_finding,
     select_variants,
-    server_args,
     setting_enabled,
     variant_gate,
     variant_summary,
-    written_report,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = REPO_ROOT / "models" / "manifest.json"
 PLAN_CANDIDATES = {"Spark-X2.5-4B", "NeoHorse-1-4B", "Agents-A1-4B", "Ling-3.0-tiny", "gemma-4-E4B"}
-STACK_ARGS = [
-    "--model", "/models/qwen3-4b-instruct-2507-Q4_K_M.gguf",
-    "--alias", "qwen3-4b",
-    "--host", "0.0.0.0",
-    "--port", "8080",
-    "--ctx-size", "8192",
-    "--parallel", "1",
-    "--cache-type-k", "f16",
-    "--cache-type-v", "f16",
-    "--flash-attn", "auto",
-    "--load-mode", "mmap",
-    "--cache-ram", "1024",
-    "--threads", "4",
-    "--metrics",
-]
 
 
 @pytest.fixture(scope="module")
@@ -66,6 +42,20 @@ def variant_by_id(catalog, gguf_id):
 class TestCatalog:
     def test_the_versioned_catalog_is_valid(self, catalog):
         assert catalog_problems(catalog) == []
+
+    def test_a_candidate_needs_its_plan_name(self, catalog):
+        missing = copy.deepcopy(catalog)
+        del missing["candidates"][2]["plan_name"]
+        assert catalog_problems(missing) == [f"candidate {missing['candidates'][2]['id']}: missing plan_name"]
+        renamed = copy.deepcopy(catalog)
+        renamed["candidates"][2]["name"] = renamed["candidates"][2].pop("plan_name")
+        assert catalog_problems(renamed) == [f"candidate {renamed['candidates'][2]['id']}: missing plan_name"]
+
+    def test_the_variants_show_the_plan_name_even_next_to_a_name(self, catalog):
+        named = copy.deepcopy(catalog)
+        named["candidates"][2]["name"] = "Another name"
+        variant = next(v for v in select_variants(named) if v.candidate["id"] == named["candidates"][2]["id"])
+        assert variant.name == named["candidates"][2]["plan_name"]
 
     def test_it_holds_the_baseline_and_the_five_plan_candidates(self, catalog):
         names = {c["plan_name"] for c in catalog["candidates"] if c["role"] == "candidate"}
@@ -112,67 +102,12 @@ class TestCatalog:
             assert len(defaults) == 1, candidate["id"]
             assert defaults[0]["publisher"] == "model author", candidate["id"]
 
-    def test_download_urls_pin_the_revision(self, catalog):
-        for variant in all_variants(catalog):
-            gguf = variant.gguf
-            assert variant.url == f"https://huggingface.co/{gguf['repo']}/resolve/{gguf['revision']}/{gguf['upstream_file']}"
-
-
-class TestCatalogProblems:
-    def broken(self, catalog, mutate):
+class TestGate:
+    def test_a_build_newer_than_the_stack_pin_is_gated_with_the_stack_wording(self, catalog):
         copied = copy.deepcopy(catalog)
-        mutate(copied)
-        return catalog_problems(copied)
-
-    def test_duplicate_files_and_ids_are_refused(self, catalog):
-        def duplicate(c):
-            c["candidates"][1]["ggufs"][0]["file"] = c["candidates"][0]["ggufs"][0]["file"]
-            c["candidates"][2]["id"] = c["candidates"][1]["id"]
-
-        problems = self.broken(catalog, duplicate)
-        assert "gguf files must be unique: qwen3-4b-instruct-2507-Q4_K_M.gguf" in problems
-        assert "candidate ids must be unique: spark-x2.5-4b" in problems
-
-    def test_a_build_newer_than_the_pin_is_refused(self, catalog):
-        problems = self.broken(catalog, lambda c: c["candidates"][1]["llama_cpp"].update(since_build=99999))
-        assert problems == ["candidate spark-x2.5-4b: needs llama.cpp b99999, newer than the pinned b11382"]
-
-    def test_hashes_revisions_and_sizes_are_checked(self, catalog):
-        def damage(c):
-            gguf = c["candidates"][1]["ggufs"][0]
-            gguf.update(sha256="ABC", revision="main", size_bytes=0, file="../x.gguf", default="yes")
-
-        problems = self.broken(catalog, damage)
-        label = "candidate spark-x2.5-4b gguf spark-x2.5-4b-q4km"
-        assert f"{label}: sha256 must be 64 lower-case hexadecimal characters" in problems
-        assert f"{label}: revision must be a 40-character commit id" in problems
-        assert f"{label}: size_bytes must be a positive whole number" in problems
-        assert f"{label}: file must be a plain .gguf file name" in problems
-        assert f"{label}: default must be true or false" in problems
-
-    def test_missing_fields_images_and_baseline_are_reported(self, catalog):
-        def strip(c):
-            del c["candidates"][1]["licence_statement"]
-            c["candidates"][0]["role"] = "candidate"
-            c["llama_cpp"]["bench_image"] = "ghcr.io/ggml-org/llama.cpp:full"
-
-        problems = self.broken(catalog, strip)
-        assert "candidate spark-x2.5-4b: missing licence_statement" in problems
-        assert "the catalog needs a baseline candidate" in problems
-        assert "llama_cpp.bench_image must be tagged with the pinned build b11382" in problems
-
-    def test_a_candidate_without_a_default_gguf_is_reported(self, catalog):
-        def no_default(c):
-            for gguf in c["candidates"][2]["ggufs"]:
-                gguf["default"] = False
-
-        assert self.broken(catalog, no_default) == ["candidate neohorse-1-4b: at least one gguf must be a default"]
-
-    def test_a_licence_outside_the_list_is_gated(self, catalog):
-        copied = copy.deepcopy(catalog)
-        copied["candidates"][5]["licence"] = "Gemma"
-        variant = next(v for v in all_variants(copied) if v.candidate["id"] == "gemma-4-e4b-it")
-        assert variant_gate(variant, copied) == ["the licence Gemma is not one of Apache-2.0, MIT"]
+        copied["candidates"][1]["llama_cpp"]["since_build"] = 99999
+        variant = next(v for v in all_variants(copied) if v.candidate["id"] == "spark-x2.5-4b")
+        assert variant_gate(variant, copied) == ["needs llama.cpp b99999, the stack pins b11382"]
 
 
 class TestSelection:
@@ -188,44 +123,11 @@ class TestSelection:
             "gemma-4-e4b-it-qat-q4_0",
         ]
 
-    def test_only_takes_candidate_or_gguf_ids(self, catalog):
-        assert [v.id for v in select_variants(catalog, ["neohorse-1-4b"])] == ["neohorse-1-4b-q4km"]
-        assert [v.id for v in select_variants(catalog, ["neohorse-1-4b"], all_quants=True)] == [
-            "neohorse-1-4b-q4km",
-            "neohorse-1-4b-q5km",
-        ]
-        assert [v.id for v in select_variants(catalog, ["gemma-4-e4b-it-q5km", "qwen3-4b-q4km"])] == [
-            "qwen3-4b-q4km",
-            "gemma-4-e4b-it-q5km",
-        ]
-
-    def test_an_unknown_id_is_an_error(self, catalog):
-        with pytest.raises(ValueError, match="unknown candidate or gguf id: phi-5"):
-            select_variants(catalog, ["phi-5"])
-
     def test_all_quants_selects_every_file(self, catalog):
         assert len(select_variants(catalog, all_quants=True)) == 14
 
 
 class TestServerCommand:
-    def test_the_stack_arguments_are_kept_with_the_candidate_model_and_reasoning(self):
-        args = server_args(STACK_ARGS, "ling-3.0-tiny-Q4_K_M.gguf", "off")
-        assert args[:2] == ["--model", "/models/ling-3.0-tiny-Q4_K_M.gguf"]
-        assert args[2:-2] == STACK_ARGS[2:]
-        assert args[-2:] == ["--reasoning", "off"]
-
-    def test_short_and_equals_forms_and_an_earlier_reasoning_flag_are_replaced(self):
-        args = server_args(["-m", "/models/a.gguf", "--port=8080", "--reasoning=on", "-rea", "auto"], "b.gguf", "auto")
-        assert args == ["--model", "/models/b.gguf", "--port=8080", "--reasoning", "auto"]
-        assert server_args(["--model=/models/a.gguf", "--metrics"], "b.gguf", "on") == [
-            "--model", "/models/b.gguf", "--metrics", "--reasoning", "on",
-        ]
-
-    def test_without_a_model_flag_one_is_added(self):
-        assert server_args(["--port", "8080"], "b.gguf", "off") == [
-            "--model", "/models/b.gguf", "--port", "8080", "--reasoning", "off",
-        ]
-
     def test_the_candidate_joins_the_stack_network_as_llm(self):
         command = candidate_run_command(
             image="ghcr.io/ggml-org/llama.cpp:server-b11382",
@@ -250,52 +152,6 @@ class TestServerCommand:
         assert candidate_network([]) is None
 
 
-def test_parse_container_inspect_reads_what_the_runner_reuses():
-    text = json.dumps(
-        [
-            {
-                "Name": "/llm",
-                "RestartCount": 0,
-                "State": {"Running": True, "OOMKilled": False},
-                "Config": {"Image": "ghcr.io/ggml-org/llama.cpp:server-b11382", "Cmd": STACK_ARGS},
-                "HostConfig": {"Memory": 6442450944},
-                "NetworkSettings": {"Networks": {"infra_horus-net": {}}},
-                "Mounts": [{"Source": "/home/u/horus/models", "Destination": "/models"}],
-            }
-        ]
-    )
-    assert parse_container_inspect(text) == {
-        "name": "llm",
-        "image": "ghcr.io/ggml-org/llama.cpp:server-b11382",
-        "args": STACK_ARGS,
-        "networks": ["infra_horus-net"],
-        "memory_bytes": 6442450944,
-        "running": True,
-        "oom_killed": False,
-        "restart_count": 0,
-        "models_source": "<models-dir>",
-    }
-    assert parse_container_inspect("[]") is None
-    assert parse_container_inspect(None) is None
-    assert parse_container_inspect(json.dumps([{"HostConfig": {"Memory": 0}}]))["memory_bytes"] is None
-    assert parse_container_inspect(json.dumps([{"Mounts": []}]))["models_source"] is None
-    volume = {"Type": "volume", "Name": "infra_llm_models", "Source": "/var/lib/docker/volumes/infra_llm_models/_data", "Destination": "/models"}
-    assert parse_container_inspect(json.dumps([{"Mounts": [volume]}]))["models_source"] == "infra_llm_models"
-
-
-def test_parse_container_env_reads_the_variables_the_container_was_given():
-    text = json.dumps([{"Config": {"Env": ["PATH=/usr/bin", "AGENT_RESPONSE_CACHE=1", "EMPTY=", "LLM_VLLM_URL=http://llm:8080/v1?a=b", "BARE"]}}])
-    assert parse_container_env(text) == {
-        "PATH": "/usr/bin",
-        "AGENT_RESPONSE_CACHE": "1",
-        "EMPTY": "",
-        "LLM_VLLM_URL": "http://llm:8080/v1?a=b",
-    }
-    assert parse_container_env(json.dumps([{"Config": {"Env": None}}])) == {}
-    assert parse_container_env("[]") is None
-    assert parse_container_env(None) is None
-
-
 @pytest.mark.parametrize(
     ("value", "enabled"),
     [("1", True), ("true", True), (" Yes ", True), ("ON", True), ("0", False), ("false", False), ("", False), (None, False), ("2", False)],
@@ -314,33 +170,6 @@ def test_response_cache_finding_names_a_cache_that_is_on_or_cannot_be_checked():
     assert response_cache_finding(None, "horus-agent") == (
         "could not read the environment of the 'horus-agent' container to see whether its response cache is off"
     )
-
-
-def test_parse_process_memory_reads_the_peak_and_the_mapped_model():
-    status = "Name:\tllama-server\nVmHWM:\t 5242880 kB\nVmRSS:\t 4194304 kB\nRssAnon:\t 1048576 kB\nRssFile:\t 3145728 kB\n"
-    assert parse_process_memory(status) == {
-        "name": "llama-server",
-        "vm_hwm_bytes": 5 * 2**30,
-        "vm_rss_bytes": 4 * 2**30,
-        "rss_anon_bytes": 2**30,
-        "rss_file_bytes": 3 * 2**30,
-    }
-    assert parse_process_memory("") is None
-
-
-@pytest.mark.parametrize(
-    ("text", "expected"),
-    [("6g", 6 * 2**30), ("6144m", 6 * 2**30), ("6442450944", 6442450944), ("1.5G", int(1.5 * 2**30)), ("6gb", 6 * 2**30), ("lots", None), (None, None)],
-)
-def test_parse_memory_limit(text, expected):
-    assert parse_memory_limit(text) == expected
-
-
-def test_written_report_takes_the_last_path_a_tool_printed():
-    lines = ["[info] 94 question(s), writing /b/x-eval-2026-10-06.json", "[ 1/94] ...", "[done] wrote /b/x-eval-2026-10-06.json"]
-    assert written_report(lines) == "/b/x-eval-2026-10-06.json"
-    assert written_report(["[info] 5 question(s), writing C:\\b\\y.json", "[error] stopped"]) == "C:\\b\\y.json"
-    assert written_report(["nothing"]) is None
 
 
 def bench_report(file):
@@ -406,17 +235,6 @@ def contract_report():
 
 
 class TestAggregation:
-    def test_bench_speeds_keep_the_fastest_thread_count_for_the_catalogs_cache_type(self):
-        speeds = bench_speeds(bench_report("x.gguf"))
-        assert [(s["test"], s["depth"], s["tps"], s["threads"]) for s in speeds] == [
-            ("pp512", 0, 90.0, 8),
-            ("pp512", 4096, 60.0, 8),
-            ("pp2048", 0, 75.0, 8),
-            ("tg128", 0, 13.5, 8),
-            ("tg128", 4096, 10.5, 8),
-        ]
-        assert bench_speeds(None) == []
-
     def test_eval_headline_reads_the_candidate_container(self):
         headline = eval_headline(eval_report())
         assert headline["answer_correct_auto"]["pct"] == 71.0
@@ -458,10 +276,6 @@ class TestAggregation:
         assert report["kind"] == REPORT_KIND
         assert report["machine"] == {}
         json.dumps(report)
-
-    def test_contract_headline_is_none_without_a_probe(self):
-        assert contract_headline(None) is None
-
 
 class TestMarkdown:
     def report(self, catalog):

@@ -1,16 +1,24 @@
 import importlib.util
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from horus_bench_kit.cli import llama_bench as kit_cli
+from horus_bench_kit.shell import Shell
 
 BENCH_DIR = Path(__file__).resolve().parents[2] / "scripts" / "benchmarks"
 Q4 = "qwen3-4b-instruct-2507-Q4_K_M.gguf"
 Q5 = "qwen3-4b-instruct-2507-Q5_K_M.gguf"
 Q4_SHA256 = "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597"
 Q5_SHA256 = "5bde5e9d883622acb02bf77fe7dcbc56a8b9a9ad4be78a72ca23a532658b4ecb"
+HOST_FACTS = {
+    "cpu_model": ("AMD Ryzen 5 5600U", "/proc/cpuinfo"),
+    "physical_cores": (6, "/proc/cpuinfo"),
+    "avx2": (True, "/proc/cpuinfo"),
+    "ram_total_bytes": (16 * 2**30, "/proc/meminfo"),
+    "disk_type": ("NVMe SSD", "lsblk"),
+}
 
 
 @pytest.fixture(scope="module")
@@ -44,15 +52,17 @@ def bench_rows(model=Q4):
     return rows
 
 
-class FakeDocker:
-    def __init__(self, listing):
-        self.listing = listing
-        self.commands = []
+class FakeDocker(Shell):
+    def __init__(self, *listings, rows=None):
+        self.listings = list(listings)
+        self.rows = rows if rows is not None else bench_rows(Q4) + bench_rows(Q5)
+        self.launched = []
+        self.host_paths = []
 
     def run_text(self, argv, timeout=60.0):
-        self.commands.append(list(argv))
+        argv = list(argv)
         if "find" in argv:
-            return self.listing
+            return self.listings.pop(0) if len(self.listings) > 1 else self.listings[0]
         if "sha256sum" in argv:
             sums = {Q4: Q4_SHA256, Q5: Q5_SHA256}
             return "".join(f"{sums[path.rsplit('/', 1)[-1]]}  {path}\n" for path in argv if path.startswith("/models/"))
@@ -64,93 +74,82 @@ class FakeDocker:
             return "abc1234\n"
         return None
 
+    def run(self, argv):
+        self.launched.append(list(argv))
+        return 0
 
-@pytest.fixture
-def host_facts(bench_runner, monkeypatch):
-    collected = {
-        "cpu_model": ("AMD Ryzen 5 5600U", "/proc/cpuinfo"),
-        "physical_cores": (6, "/proc/cpuinfo"),
-        "avx2": (True, "/proc/cpuinfo"),
-        "ram_total_bytes": (16 * 2**30, "/proc/meminfo"),
-        "disk_type": ("NVMe SSD", "lsblk"),
-    }
-    paths = []
+    def run_captured(self, argv):
+        self.launched.append(list(argv))
+        return 0, json.dumps(self.rows)
 
-    def collect(path):
-        paths.append(path)
-        return collected
+    def collect_host(self, disk_path=None):
+        self.host_paths.append(disk_path)
+        return dict(HOST_FACTS)
 
-    monkeypatch.setattr(bench_runner, "collect_host", collect)
-    monkeypatch.setattr(bench_runner, "docker_facts", lambda: {"mem_total_bytes": 16 * 2**30, "root_dir": "/var/lib/docker"})
-    return paths
+    def docker_facts(self):
+        return {"mem_total_bytes": 16 * 2**30, "root_dir": "/var/lib/docker"}
 
 
-def run_main(bench_runner, monkeypatch, *argv):
-    monkeypatch.setattr(sys, "argv", ["run-llama-bench.py", *argv])
-    return bench_runner.main()
+class NoDocker(Shell):
+    def run_text(self, argv, timeout=60.0):
+        pytest.fail("docker was called")
+
+    def run(self, argv):
+        pytest.fail("a process was started")
+
+    def run_captured(self, argv):
+        pytest.fail("a process was started")
 
 
 class TestArguments:
-    def parse(self, bench_runner, *argv):
-        return bench_runner.build_parser().parse_args(list(argv))
-
     def test_defaults_are_the_plans_matrix_and_reference(self, bench_runner):
-        args = self.parse(bench_runner, "--models-dir", "models")
+        args = kit_cli.build_parser(bench_runner.LLAMA_BENCH).parse_args(["--models-dir", "models"])
         assert args.reference == "cpu16"
         assert args.image == "ghcr.io/ggml-org/llama.cpp:full-b11382"
+        assert args.fetch_image == "ghcr.io/ggml-org/llama.cpp:server-b11382"
         assert (args.prompts, args.generations, args.depths) == ("512,2048", "128", "0,4096")
         assert (args.cache_types_k, args.cache_types_v, args.threads) == ("f16,q8_0", "f16,q8_0", "4,8")
-        assert bench_runner.argument_errors(args) == []
+        assert Path(args.out_dir) == BENCH_DIR.parents[1] / "benchmarks"
+        assert kit_cli.argument_errors(args, bench_runner.LLAMA_BENCH) == []
 
-    def test_a_models_location_is_required_unless_enriching_a_saved_run(self, bench_runner):
-        assert bench_runner.argument_errors(self.parse(bench_runner)) == [
-            "give --models-dir or --models-volume (or --from-json to enrich a saved run)"
-        ]
-        assert bench_runner.argument_errors(self.parse(bench_runner, "--from-json", "raw.json")) == []
 
-    def test_fetch_needs_a_location_and_repetitions_must_be_positive(self, bench_runner):
-        args = self.parse(bench_runner, "--from-json", "raw.json", "--fetch", "--repetitions", "0")
-        assert bench_runner.argument_errors(args) == [
-            "--fetch needs --models-dir or --models-volume",
-            "--repetitions must be at least 1",
-        ]
+class TestErrorsStayUncaught:
+    def test_a_missing_saved_run_raises(self, bench_runner, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            bench_runner.main(["--from-json", str(tmp_path / "missing.json"), "--dry-run"], shell=NoDocker())
 
-    def test_dir_and_volume_are_exclusive(self, bench_runner):
-        with pytest.raises(SystemExit):
-            self.parse(bench_runner, "--models-dir", "m", "--models-volume", "v")
+    def test_a_broken_saved_run_raises(self, bench_runner, tmp_path):
+        raw = tmp_path / "raw.json"
+        raw.write_text("[1, 2", encoding="utf-8")
+        with pytest.raises(ValueError):
+            bench_runner.main(["--from-json", str(raw), "--dry-run"], shell=NoDocker())
+
+    def test_a_program_that_cannot_start_raises(self, bench_runner):
+        shell = bench_runner.HorusShell()
+        with pytest.raises(FileNotFoundError):
+            shell.run(["hbk-test-no-such-program"])
+        with pytest.raises(FileNotFoundError):
+            shell.run_captured(["hbk-test-no-such-program"])
 
 
 class TestDryRun:
-    def test_prints_the_commands_without_running_docker(self, bench_runner, monkeypatch, capsys, tmp_path):
-        monkeypatch.setattr(bench_runner, "run_text", lambda *a, **k: pytest.fail("docker was called"))
-        monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("docker was called"))
-        assert run_main(bench_runner, monkeypatch, "--models-dir", str(tmp_path), "--dry-run") == 0
+    def test_prints_the_commands_for_the_two_known_models_without_running_docker(self, bench_runner, capsys, tmp_path):
+        assert bench_runner.main(["--models-dir", str(tmp_path), "--fetch", "--dry-run"], shell=NoDocker()) == 0
         lines = capsys.readouterr().out.splitlines()
+        assert [f"LLM_GGUF_FILE={Q4}" in lines[0], f"LLM_GGUF_FILE={Q5}" in lines[1]] == [True, True]
+        assert lines[0].endswith("ghcr.io/ggml-org/llama.cpp:server-b11382 /opt/horus/fetch-model.sh")
+        assert "src/infra/llm/fetch-model.sh:/opt/horus/fetch-model.sh:ro" in lines[0].replace("\\", "/")
         assert lines[-1].endswith(f"--bench -m /models/{Q4} -m /models/{Q5} -p 512,2048 -n 128 -d 0,4096 "
                                   "-ctk f16,q8_0 -ctv f16,q8_0 -t 4,8 -r 5 -o json --progress")
 
 
 class TestRun:
-    def test_benchmark_is_run_and_saved_with_build_hashes_and_machine(
-        self, bench_runner, monkeypatch, tmp_path, host_facts, capsys
-    ):
+    def test_benchmark_is_run_and_saved_with_build_hashes_and_machine(self, bench_runner, tmp_path, capsys):
         docker = FakeDocker(f"2497281120 {Q4}\n2889514080 {Q5}\n")
-        monkeypatch.setattr(bench_runner, "run_text", docker.run_text)
-        launched = []
-
-        def fake_run(command, **kwargs):
-            launched.append(command)
-            rows = bench_rows(Q4) + bench_rows(Q5)
-            return subprocess.CompletedProcess(command, 0, stdout=json.dumps(rows))
-
-        monkeypatch.setattr(subprocess, "run", fake_run)
         out_dir = tmp_path / "benchmarks"
         models = tmp_path / "models"
-        status = run_main(
-            bench_runner, monkeypatch,
-            "--models-dir", str(models), "--out-dir", str(out_dir), "--ram-speed", "3200 MT/s",
-        )
-        assert status == 0
+        argv = ["--models-dir", str(models), "--out-dir", str(out_dir), "--ram-speed", "3200 MT/s"]
+        assert bench_runner.main(argv, shell=docker) == 0
         [saved] = list(out_dir.iterdir())
         assert saved.name.startswith("cpu16-") and saved.suffix == ".json"
         report = json.loads(saved.read_text(encoding="utf-8"))
@@ -159,130 +158,33 @@ class TestRun:
         assert report["llama_cpp"]["image_digest"].endswith("a" * 64)
         assert [model["sha256"] for model in report["models"]] == [Q4_SHA256, Q5_SHA256]
         assert all(model["matches_known_sha256"] for model in report["models"])
-        assert report["models"][1]["size_bytes"] == 2889514080
-        assert report["machine"]["cpu_model"] == "AMD Ryzen 5 5600U"
+        assert report["models"][1]["known_source"].endswith("/Qwen3-4B-Instruct-2507-Q5_K_M.gguf")
+        assert report["machine"]["reference"] == "cpu16"
         assert report["machine"]["ram_speed"] == "3200 MT/s"
-        assert report["machine"]["docker"]["mem_total_bytes"] == 16 * 2**30
         assert report["run"]["git_commit"] == "abc1234"
-        assert launched[0][3:5] == ["-v", f"{models.resolve()}:/models:ro"]
-        assert report["run"]["command"] == [*launched[0][:4], "<models-dir>:/models:ro", *launched[0][5:]]
-        assert len(report["results"]) == 4
-        assert host_facts == [models.resolve()]
+        assert report["run"]["command"] == [*docker.launched[0][:4], "<models-dir>:/models:ro", *docker.launched[0][5:]]
+        assert docker.host_paths == [models.resolve()]
         output = capsys.readouterr().out
-        assert "Horus containers are running (llm)" in output
+        assert "[warn] Horus containers are running (llm) and compete for CPU and RAM" in output
         assert "[done] wrote" in output
 
-    def test_missing_model_stops_before_the_benchmark(self, bench_runner, monkeypatch, tmp_path, host_facts, capsys):
-        monkeypatch.setattr(bench_runner, "run_text", FakeDocker(f"2497281120 {Q4}\n").run_text)
-        monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("llama-bench must not start"))
-        status = run_main(bench_runner, monkeypatch, "--models-dir", str(tmp_path), "--out-dir", str(tmp_path / "out"))
-        assert status == 1
-        assert f"{Q5}: not found in" in capsys.readouterr().out
+    def test_a_missing_default_model_stops_before_the_benchmark(self, bench_runner, tmp_path, capsys):
+        docker = FakeDocker(f"2497281120 {Q4}\n")
+        argv = ["--models-dir", str(tmp_path), "--out-dir", str(tmp_path / "out")]
+        assert bench_runner.main(argv, shell=docker) == 1
+        output = capsys.readouterr().out
+        assert f"{Q5}: not found in" in output
+        assert "[error] pass --fetch to download the known models, see benchmarks/README.md" in output
+        assert docker.launched == []
         assert not (tmp_path / "out").exists()
 
-    def test_fetch_downloads_a_missing_known_model(self, bench_runner, monkeypatch, tmp_path, host_facts):
-        listings = iter([f"2497281120 {Q4}\n", f"2497281120 {Q4}\n2889514080 {Q5}\n"])
-        docker = FakeDocker("")
-        monkeypatch.setattr(
-            bench_runner, "run_text",
-            lambda argv, timeout=60.0: next(listings) if "find" in argv else docker.run_text(argv, timeout),
-        )
-        launched = []
-
-        def fake_run(command, **kwargs):
-            launched.append(command)
-            if "--bench" in command:
-                return subprocess.CompletedProcess(command, 0, stdout=json.dumps(bench_rows()))
-            return subprocess.CompletedProcess(command, 0)
-
-        monkeypatch.setattr(subprocess, "run", fake_run)
+    def test_fetch_downloads_a_missing_known_model_with_the_stack_script(self, bench_runner, tmp_path):
+        docker = FakeDocker(f"2497281120 {Q4}\n", f"2497281120 {Q4}\n2889514080 {Q5}\n", rows=bench_rows())
         models = tmp_path / "new-models"
-        status = run_main(
-            bench_runner, monkeypatch, "--models-dir", str(models), "--fetch", "--out-dir", str(tmp_path / "out")
-        )
-        assert status == 0
+        argv = ["--models-dir", str(models), "--fetch", "--out-dir", str(tmp_path / "out")]
+        assert bench_runner.main(argv, shell=docker) == 0
         assert models.is_dir()
-        assert f"LLM_GGUF_FILE={Q5}" in launched[0]
-        assert "--bench" in launched[1]
-
-    def test_unreadable_output_is_kept_for_diagnosis(self, bench_runner, monkeypatch, tmp_path, host_facts, capsys):
-        monkeypatch.setattr(bench_runner, "run_text", FakeDocker(f"1 {Q4}\n1 {Q5}\n").run_text)
-        monkeypatch.setattr(bench_runner.tempfile, "gettempdir", lambda: str(tmp_path))
-        monkeypatch.setattr(
-            subprocess, "run", lambda command, **kwargs: subprocess.CompletedProcess(command, 1, stdout="oops")
-        )
-        status = run_main(bench_runner, monkeypatch, "--models-dir", str(tmp_path), "--out-dir", str(tmp_path / "out"))
-        assert status == 1
-        assert "llama-bench exited with 1" in capsys.readouterr().out
-        assert [path.read_text() for path in tmp_path.glob("llama-bench-cpu16-*.txt")] == ["oops"]
-
-
-class TestFromJson:
-    def test_a_saved_raw_run_is_enriched_without_running_llama_bench(
-        self, bench_runner, monkeypatch, tmp_path, host_facts
-    ):
-        raw = tmp_path / "raw.json"
-        raw.write_text(json.dumps(bench_rows(Q4)), encoding="utf-8")
-        monkeypatch.setattr(bench_runner, "run_text", FakeDocker(f"2497281120 {Q4}\n").run_text)
-        monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("llama-bench must not start"))
-        status = run_main(
-            bench_runner, monkeypatch,
-            "--from-json", str(raw), "--models-volume", "infra_llm_models",
-            "--label", "cpu16 q4 only", "--out-dir", str(tmp_path / "out"),
-        )
-        assert status == 0
-        [saved] = list((tmp_path / "out").iterdir())
-        assert saved.name.startswith("cpu16-q4-only-")
-        report = json.loads(saved.read_text(encoding="utf-8"))
-        assert report["run"]["from_json"] == "raw.json"
-        assert report["run"]["command"] is None
-        assert report["run"]["models_location"] == {"dir": None, "volume": "infra_llm_models"}
-        assert [model["file"] for model in report["models"]] == [Q4]
-        assert report["models"][0]["sha256"] == Q4_SHA256
-
-    def test_without_a_models_location_the_hashes_stay_empty(
-        self, bench_runner, monkeypatch, tmp_path, host_facts, capsys
-    ):
-        raw = tmp_path / "raw.json"
-        raw.write_text(json.dumps(bench_rows(Q4)), encoding="utf-8")
-        monkeypatch.setattr(bench_runner, "run_text", FakeDocker("").run_text)
-        status = run_main(bench_runner, monkeypatch, "--from-json", str(raw), "--out-dir", str(tmp_path / "out"))
-        assert status == 0
-        report = json.loads(next((tmp_path / "out").iterdir()).read_text(encoding="utf-8"))
-        assert report["models"][0]["sha256"] is None
-        assert "SHA-256 is not recorded" in capsys.readouterr().out
-
-
-class TestRecordedPaths:
-    def test_the_report_keeps_no_part_of_the_host_models_folder(
-        self, bench_runner, monkeypatch, tmp_path, host_facts, host_folder, host_folder_leaks
-    ):
-        monkeypatch.setattr(bench_runner, "run_text", FakeDocker(f"2497281120 {Q4}\n").run_text)
-        launched = []
-
-        def fake_run(command, **kwargs):
-            launched.append(command)
-            return subprocess.CompletedProcess(command, 0, stdout=json.dumps(bench_rows(Q4)))
-
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        status = run_main(
-            bench_runner, monkeypatch, "--models-dir", host_folder, "--model", Q4, "--out-dir", str(tmp_path / "out")
-        )
-        assert status == 0
-        assert host_folder_leaks(" ".join(launched[0])) != []
-        text = next((tmp_path / "out").iterdir()).read_text(encoding="utf-8")
-        report = json.loads(text)
-        assert report["run"]["models_location"] == {"dir": "<models-dir>", "volume": None}
-        assert "<models-dir>:/models:ro" in report["run"]["command"]
-        assert [model["file"] for model in report["models"]] == [Q4]
-        assert host_folder_leaks(text) == []
-
-    def test_a_saved_raw_run_is_recorded_by_its_file_name(self, bench_runner, monkeypatch, tmp_path, host_facts):
-        raw = tmp_path / "raw.json"
-        raw.write_text(json.dumps(bench_rows(Q4)), encoding="utf-8")
-        monkeypatch.setattr(bench_runner, "run_text", FakeDocker("").run_text)
-        status = run_main(bench_runner, monkeypatch, "--from-json", str(raw), "--out-dir", str(tmp_path / "out"))
-        assert status == 0
-        text = next((tmp_path / "out").iterdir()).read_text(encoding="utf-8")
-        assert json.loads(text)["run"]["from_json"] == "raw.json"
-        assert tmp_path.name not in text
+        fetch, bench = docker.launched
+        assert f"LLM_GGUF_FILE={Q5}" in fetch
+        assert fetch[-1] == "/opt/horus/fetch-model.sh"
+        assert "--bench" in bench

@@ -1,27 +1,32 @@
 from __future__ import annotations
 
 import re
-import statistics
-from collections import Counter
+import sys
+from pathlib import Path
 from typing import Any
 
-from eval_scoring import (
-    answer_correct,
-    detect_fallback,
-    expected_route,
-    expected_sources,
-    final_status,
-    missing_patterns,
-    route_correct,
-    source_check,
-)
-from eval_stack import LLM_PROCESS_NAME, LLM_ROUTING_METHOD
-from eval_testset import CATEGORIES
+KIT_SRC = Path(__file__).resolve().parents[2] / "opensource" / "horus-bench-kit" / "src"
+if str(KIT_SRC) not in sys.path:
+    sys.path.insert(0, str(KIT_SRC))
 
-REPORT_KIND = "horus-eval"
-SCHEMA_VERSION = 2
-REVIEWER_SLOTS = 2
-COMPLETE_TIMING_SOURCES = frozenset({"websocket", "http"})
+from eval_stack import LLM_PROCESS_NAME  # noqa: E402
+from horus_bench_kit import report as kit  # noqa: E402
+from horus_bench_kit.report import (  # noqa: E402, F401
+    COMPLETE_TIMING_SOURCES,
+    REVIEWER_SLOTS,
+    blank_review,
+    manual_review_summary,
+    rank_summary,
+)
+from horus_bench_kit.stats import rate, stats  # noqa: E402, F401
+from horus_eval_profile import EVAL_KIND as REPORT_KIND  # noqa: E402, F401
+from horus_eval_profile import (  # noqa: E402, F401
+    EVAL_PROFILE,
+    OUTCOME_FIELDS,
+    llm_summary,
+    routing_summary,
+)
+from horus_eval_profile import EVAL_SCHEMA_VERSION as SCHEMA_VERSION  # noqa: E402, F401
 
 _DOCKER_SIZE = re.compile(r"^\s*([0-9]*\.?[0-9]+)\s*([KMGT]?i?B)\s*$", re.IGNORECASE)
 _DOCKER_UNITS = {
@@ -37,202 +42,12 @@ _DOCKER_UNITS = {
 }
 
 
-def blank_review() -> list[dict[str, Any]]:
-    return [{"reviewer": None, "answer_correct": None, "comment": None} for _ in range(REVIEWER_SLOTS)]
-
-
 def question_record(item: dict[str, Any], outcome: dict[str, Any]) -> dict[str, Any]:
-    answer = outcome.get("answer")
-    chat_mode = outcome.get("mode", "chat") == "chat"
-    observed_route = outcome.get("observed_route")
-    status, error = final_status(outcome.get("status", "error"), outcome.get("error"), answer)
-    sources = source_check(
-        item,
-        retrieval_steps=outcome.get("retrieval_steps"),
-        retrieved_sources=outcome.get("retrieved_sources"),
-        cited_sources=outcome.get("cited_sources"),
-        events_complete=outcome.get("timing_source") in COMPLETE_TIMING_SOURCES,
-    )
-    return {
-        "id": item["id"],
-        "category": item["category"],
-        "difficulty": item["difficulty"],
-        "question": item["question"],
-        "expected_answer": item["expected_answer"],
-        "expected_source": expected_sources(item) or None,
-        "expected_route": expected_route(item),
-        "status": status,
-        "error": error,
-        "conversation_id": outcome.get("conversation_id"),
-        "task_id": outcome.get("task_id"),
-        "observed_route": observed_route,
-        "answered_by": outcome.get("answered_by"),
-        "models": list(outcome.get("models") or []),
-        "devices": list(outcome.get("devices") or []),
-        "timing_source": outcome.get("timing_source"),
-        "submit_http_s": outcome.get("submit_http_s"),
-        "first_event_s": outcome.get("first_event_s"),
-        "dispatch_s": outcome.get("dispatch_s"),
-        "routing_decision": outcome.get("routing_decision"),
-        "retrieval_s": outcome.get("retrieval_s"),
-        "reasoning_start_s": outcome.get("reasoning_start_s"),
-        "ttft_s": outcome.get("ttft_s"),
-        "total_s": outcome.get("total_s"),
-        "llm": outcome.get("llm"),
-        "resources": outcome.get("resources"),
-        "answer": answer,
-        "retrieval_steps": outcome.get("retrieval_steps"),
-        "retrieved_sources": outcome.get("retrieved_sources"),
-        "cited_sources": outcome.get("cited_sources"),
-        "fallback": detect_fallback(answer),
-        "answer_correct_auto": answer_correct(item, answer) if chat_mode else None,
-        "missing_patterns": missing_patterns(item["answer_patterns"], answer) if chat_mode else None,
-        **sources,
-        "route_correct": route_correct(item, observed_route) if chat_mode else None,
-        "review": blank_review() if chat_mode else None,
-    }
-
-
-def rate(flags: list[bool | None]) -> dict[str, Any]:
-    known = [flag for flag in flags if flag is not None]
-    correct = sum(1 for flag in known if flag)
-    return {
-        "n": len(known),
-        "correct": correct,
-        "pct": round(100.0 * correct / len(known), 1) if known else None,
-    }
-
-
-def stats(values: list[float | None]) -> dict[str, Any]:
-    known = sorted(value for value in values if value is not None)
-    if not known:
-        return {"n": 0}
-    return {
-        "n": len(known),
-        "mean": round(statistics.mean(known), 3),
-        "median": round(statistics.median(known), 3),
-        "p90": round(known[min(int(len(known) * 0.9), len(known) - 1)], 3),
-        "min": round(known[0], 3),
-        "max": round(known[-1], 3),
-        "sum": round(sum(known), 3),
-    }
-
-
-def manual_review_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
-    reviewable = [record for record in records if record.get("review")]
-    reviewed = [
-        record
-        for record in reviewable
-        if all(slot.get("answer_correct") is not None for slot in record["review"])
-    ]
-    agreed_correct = sum(
-        1 for record in reviewed if all(slot["answer_correct"] is True for slot in record["review"])
-    )
-    disagreements = [
-        record["id"]
-        for record in reviewed
-        if len({bool(slot["answer_correct"]) for slot in record["review"]}) > 1
-    ]
-    return {
-        "reviewed": len(reviewed),
-        "pending": len(reviewable) - len(reviewed),
-        "agreed_correct": agreed_correct,
-        "disagreements": disagreements,
-        "answer_correct_pct": round(100.0 * agreed_correct / len(reviewed), 1) if reviewed else None,
-    }
-
-
-def rank_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
-    ranks = [rank for record in records for rank in record.get("source_ranks") or []]
-    return {
-        **stats([rank for rank in ranks if rank is not None]),
-        "first": sum(1 for rank in ranks if rank == 1),
-        "not_retrieved": sum(1 for rank in ranks if rank is None),
-    }
-
-
-def _throughput(tokens: float, seconds: float) -> float | None:
-    return round(tokens / seconds, 2) if seconds > 0 else None
-
-
-def llm_summary(records: list[dict[str, Any]]) -> dict[str, Any] | None:
-    usages = [
-        r["llm"] for r in records if isinstance(r.get("llm"), dict) and "prompt_s" in r["llm"]
-    ]
-    restarts = sum(1 for r in records if isinstance(r.get("llm"), dict) and r["llm"].get("restarted"))
-    if not usages and not restarts:
-        return None
-
-    def total(key: str) -> float:
-        return sum(usage.get(key) or 0 for usage in usages)
-
-    return {
-        "questions": len(usages),
-        "server_restarts": restarts,
-        "prompt_s": stats([usage.get("prompt_s") for usage in usages]),
-        "prompt_tokens": stats([usage.get("prompt_tokens") for usage in usages]),
-        "generation_s": stats([usage.get("generation_s") for usage in usages]),
-        "generated_tokens": stats([usage.get("generated_tokens") for usage in usages]),
-        "prompt_tps": _throughput(total("prompt_tokens"), total("prompt_s")),
-        "generation_tps": _throughput(total("generated_tokens"), total("generation_s")),
-    }
-
-
-def routing_summary(records: list[dict[str, Any]]) -> dict[str, Any] | None:
-    probed = [r["routing_decision"] for r in records if isinstance(r.get("routing_decision"), dict)]
-    observed = [probe for probe in probed if "decisions" in probe]
-    restarts = sum(1 for probe in probed if probe.get("restarted"))
-    if not observed and not restarts:
-        return None
-    single = [probe for probe in observed if probe["decisions"] == 1]
-    methods = Counter(method for probe in single for method in probe.get("methods") or {})
-    without_llm = [probe for probe in single if LLM_ROUTING_METHOD not in (probe.get("methods") or {})]
-    return {
-        "questions": len(observed),
-        "mas_restarts": restarts,
-        "decided_once": len(single),
-        "without_decision": sum(1 for probe in observed if probe["decisions"] == 0),
-        "several_decisions": sum(1 for probe in observed if probe["decisions"] > 1),
-        "methods": dict(sorted(methods.items())),
-        "llm_pct": round(100.0 * methods[LLM_ROUTING_METHOD] / len(single), 1) if single else None,
-        "decision_s": stats([probe.get("seconds") for probe in single]),
-        "decision_s_without_llm": stats([probe.get("seconds") for probe in without_llm]),
-    }
-
-
-def _group_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
-    return {
-        "questions": len(records),
-        "answer_correct_auto": rate([r.get("answer_correct_auto") for r in records]),
-        "source_correct_auto": rate([r.get("source_correct_auto") for r in records]),
-        "source_rank": rank_summary(records),
-        "route_correct": rate([r.get("route_correct") for r in records]),
-        "total_s": stats([r.get("total_s") for r in records]),
-    }
+    return kit.question_record(item, outcome, EVAL_PROFILE)
 
 
 def build_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
-    summary = _group_summary(records)
-    summary["status"] = dict(Counter(r.get("status") for r in records))
-    summary["fallbacks"] = dict(Counter(r["fallback"] for r in records if r.get("fallback")))
-    summary["source_basis"] = dict(
-        Counter(
-            r.get("source_basis") or "not_observable"
-            for r in records
-            if r.get("category") != "not_in_corpus"
-        )
-    )
-    summary["ttft_s"] = stats([r.get("ttft_s") for r in records])
-    summary["dispatch_s"] = stats([r.get("dispatch_s") for r in records])
-    summary["routing"] = routing_summary(records)
-    summary["llm"] = llm_summary(records)
-    summary["manual_review"] = manual_review_summary(records)
-    summary["by_category"] = {
-        category: _group_summary([r for r in records if r.get("category") == category])
-        for category in CATEGORIES
-        if any(r.get("category") == category for r in records)
-    }
-    return summary
+    return kit.build_summary(records, EVAL_PROFILE)
 
 
 def build_report(
@@ -247,25 +62,19 @@ def build_report(
     machine: dict[str, Any] | None = None,
     resources: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
-        "kind": REPORT_KIND,
-        "schema_version": SCHEMA_VERSION,
-        "label": label,
-        "run": run,
-        "testset": testset,
+    sections = {
         "llama_cpp": {"build": llama_cpp_build, "server": llama_server},
         "model": {"name": None, "file": None, "sha256": None, **(model or {})},
         "machine": machine or {},
         "resources": resources,
-        "summary": build_summary(records),
-        "questions": records,
     }
+    return kit.build_report(
+        label=label, run=run, testset=testset, records=records, sections=sections, profile=EVAL_PROFILE
+    )
 
 
 def resummarize(report: dict[str, Any]) -> dict[str, Any]:
-    if report.get("kind") != REPORT_KIND:
-        raise ValueError(f"not a {REPORT_KIND} report (kind={report.get('kind')!r})")
-    return {**report, "summary": build_summary(report.get("questions") or [])}
+    return kit.resummarize(report, EVAL_PROFILE)
 
 
 def parse_docker_size(text: str) -> int | None:

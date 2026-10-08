@@ -1,0 +1,41 @@
+usage: run-llama-bench.py [-h] [--models-dir MODELS_DIR |
+                          --models-volume MODELS_VOLUME] [--model MODELS]
+                          [--fetch] [--reference REFERENCE] [--label LABEL]
+                          [--image IMAGE] [--fetch-image FETCH_IMAGE]
+                          [--prompts PROMPTS] [--generations GENERATIONS]
+                          [--depths DEPTHS] [--cache-types-k CACHE_TYPES_K]
+                          [--cache-types-v CACHE_TYPES_V] [--threads THREADS]
+                          [--repetitions REPETITIONS] [--from-json RAW_JSON]
+                          [--cpu-model CPU_MODEL] [--ram RAM]
+                          [--ram-speed RAM_SPEED] [--disk-type DISK_TYPE]
+                          [--out-dir OUT_DIR] [--dry-run]
+
+Run llama-bench in the pinned llama.cpp image and save the enriched result.
+
+options:
+  -h, --help            show this help message and exit
+  --models-dir MODELS_DIR
+                        Host folder that holds the GGUF files.
+  --models-volume MODELS_VOLUME
+                        Docker volume that holds the GGUF files.
+  --model MODELS        GGUF file name inside the models folder or volume;
+                        repeat for several.
+  --fetch
+  --reference REFERENCE
+  --label LABEL
+  --image IMAGE
+  --fetch-image FETCH_IMAGE
+  --prompts PROMPTS
+  --generations GENERATIONS
+  --depths DEPTHS
+  --cache-types-k CACHE_TYPES_K
+  --cache-types-v CACHE_TYPES_V
+  --threads THREADS
+  --repetitions REPETITIONS
+  --from-json RAW_JSON
+  --cpu-model CPU_MODEL
+  --ram RAM
+  --ram-speed RAM_SPEED
+  --disk-type DISK_TYPE
+  --out-dir OUT_DIR
+  --dry-run

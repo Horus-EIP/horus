@@ -1,83 +1,41 @@
 from __future__ import annotations
 
-import json
 import re
+import sys
+from pathlib import Path
 from typing import Any
 
+KIT_SRC = Path(__file__).resolve().parents[2] / "opensource" / "horus-bench-kit" / "src"
+if str(KIT_SRC) not in sys.path:
+    sys.path.insert(0, str(KIT_SRC))
+
+from horus_bench_kit.llama_server import (  # noqa: E402, F401
+    COUNTED_LLM_VALUES,
+    DEFAULT_CACHE_TYPE,
+    INTEGER_SETTINGS,
+    LLM_COUNTERS,
+    MEMORY_STAT_FIELDS,
+    PROMETHEUS_LINE,
+    SERVER_FLAGS,
+    build_tag,
+    llm_usage,
+    parse_memory_events,
+    parse_memory_stat,
+    parse_process_status,
+    parse_prometheus,
+    parse_props,
+    parse_server_args,
+    parse_whole_number,
+)
+from horus_bench_kit.llama_server import DEFAULT_PORT as LLM_PORT  # noqa: E402, F401
+from horus_bench_kit.llama_server import SERVER_PROCESS_NAME as LLM_PROCESS_NAME  # noqa: E402, F401
+
 LLM_CONTAINER = "llm"
-LLM_PORT = 8080
-DEFAULT_CACHE_TYPE = "f16"
-LLM_COUNTERS = {
-    "prompt_tokens": "llamacpp:prompt_tokens_total",
-    "prompt_s": "llamacpp:prompt_seconds_total",
-    "generated_tokens": "llamacpp:tokens_predicted_total",
-    "generation_s": "llamacpp:tokens_predicted_seconds_total",
-    "decode_calls": "llamacpp:n_decode_total",
-}
-COUNTED_LLM_VALUES = frozenset({"prompt_tokens", "generated_tokens", "decode_calls"})
-SERVER_FLAGS = {
-    "-m": "model",
-    "--model": "model",
-    "-a": "alias",
-    "--alias": "alias",
-    "--port": "port",
-    "-c": "ctx_size",
-    "--ctx-size": "ctx_size",
-    "-ctk": "cache_type_k",
-    "--cache-type-k": "cache_type_k",
-    "-ctv": "cache_type_v",
-    "--cache-type-v": "cache_type_v",
-    "-cram": "cache_ram_mib",
-    "--cache-ram": "cache_ram_mib",
-    "-t": "threads",
-    "--threads": "threads",
-    "-np": "parallel",
-    "--parallel": "parallel",
-    "-fa": "flash_attn",
-    "--flash-attn": "flash_attn",
-    "--load-mode": "load_mode",
-}
-INTEGER_SETTINGS = frozenset({"port", "ctx_size", "cache_ram_mib", "threads", "parallel"})
 ROUTING_HISTOGRAM = "mas_routing_decision_seconds"
 ROUTING_HISTOGRAM_FIELDS = {f"{ROUTING_HISTOGRAM}_count": "count", f"{ROUTING_HISTOGRAM}_sum": "seconds"}
 LLM_ROUTING_METHOD = "llm"
-LLM_PROCESS_NAME = "llama-server"
-MEMORY_STAT_FIELDS = ("anon", "file", "active_file", "inactive_file", "file_mapped")
 
-_PROMETHEUS_LINE = re.compile(r"^([A-Za-z_:][A-Za-z0-9_:]*)(\{[^}]*\})?\s+(\S+)")
 _PROMETHEUS_LABEL = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)="((?:[^"\\]|\\.)*)"')
-_BUILD = re.compile(r"(?:^|[^0-9A-Za-z])b?(\d{3,})(?:$|[^0-9])")
-
-
-def parse_prometheus(text: str | None) -> dict[str, float]:
-    values: dict[str, float] = {}
-    for line in (text or "").splitlines():
-        match = _PROMETHEUS_LINE.match(line.strip())
-        if not match or match.group(2):
-            continue
-        try:
-            values[match.group(1)] = float(match.group(3))
-        except ValueError:
-            continue
-    return values
-
-
-def llm_usage(before: dict[str, float] | None, after: dict[str, float] | None) -> dict[str, Any] | None:
-    if not before or not after:
-        return None
-    usage: dict[str, Any] = {}
-    for key, name in LLM_COUNTERS.items():
-        if name not in before or name not in after:
-            continue
-        delta = after[name] - before[name]
-        if delta < 0:
-            return {"restarted": True}
-        usage[key] = int(round(delta)) if key in COUNTED_LLM_VALUES else round(delta, 3)
-    if "prompt_s" not in usage:
-        return None
-    usage["prompt_tps"] = _rate(usage.get("prompt_tokens"), usage.get("prompt_s"))
-    usage["generation_tps"] = _rate(usage.get("generated_tokens"), usage.get("generation_s"))
-    return usage
 
 
 def parse_routing_decisions(text: str | None) -> dict[str, dict[str, float]] | None:
@@ -85,7 +43,7 @@ def parse_routing_decisions(text: str | None) -> dict[str, dict[str, float]] | N
         return None
     decisions: dict[str, dict[str, float]] = {}
     for line in text.splitlines():
-        match = _PROMETHEUS_LINE.match(line.strip())
+        match = PROMETHEUS_LINE.match(line.strip())
         field = ROUTING_HISTOGRAM_FIELDS.get(match.group(1)) if match else None
         method = dict(_PROMETHEUS_LABEL.findall(match.group(2) or "")).get("method") if field else None
         if method is None:
@@ -117,94 +75,3 @@ def routing_decision(
             methods[method] = int(round(count))
             seconds += later.get("seconds", 0.0) - earlier.get("seconds", 0.0)
     return {"decisions": sum(methods.values()), "methods": methods, "seconds": round(max(seconds, 0.0), 4)}
-
-
-def _rate(tokens: float | None, seconds: float | None) -> float | None:
-    if not tokens or not seconds:
-        return None
-    return round(tokens / seconds, 2)
-
-
-def parse_server_args(args: list[Any] | None) -> dict[str, Any]:
-    settings: dict[str, Any] = {}
-    items = [str(arg) for arg in args or []]
-    index = 0
-    while index < len(items):
-        flag, value = items[index], None
-        if flag.startswith("--") and "=" in flag:
-            flag, value = flag.split("=", 1)
-        key = SERVER_FLAGS.get(flag)
-        if key and value is None and index + 1 < len(items):
-            index += 1
-            value = items[index]
-        if key and value is not None:
-            settings[key] = int(value) if key in INTEGER_SETTINGS and _is_integer(value) else value
-        index += 1
-    settings.setdefault("cache_type_k", DEFAULT_CACHE_TYPE)
-    settings.setdefault("cache_type_v", DEFAULT_CACHE_TYPE)
-    return settings
-
-
-def _is_integer(value: str) -> bool:
-    return value.lstrip("-").isdigit()
-
-
-def parse_props(text: str | None) -> dict[str, Any]:
-    try:
-        props = json.loads(text or "")
-    except ValueError:
-        return {}
-    if not isinstance(props, dict):
-        return {}
-    generation = props.get("default_generation_settings")
-    generation = generation if isinstance(generation, dict) else {}
-    return {
-        "build_info": props.get("build_info"),
-        "model_path": props.get("model_path"),
-        "n_ctx": generation.get("n_ctx") or props.get("n_ctx"),
-        "total_slots": props.get("total_slots"),
-    }
-
-
-def build_tag(text: str | None) -> str | None:
-    match = _BUILD.search(text or "")
-    return f"b{match.group(1)}" if match else None
-
-
-def parse_whole_number(text: str | None) -> int | None:
-    value = (text or "").strip()
-    return int(value) if value.isdigit() else None
-
-
-def _name_counts(text: str | None) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    for line in (text or "").splitlines():
-        parts = line.split()
-        if len(parts) == 2 and parts[1].isdigit():
-            counts[parts[0]] = int(parts[1])
-    return counts
-
-
-def parse_memory_events(text: str | None) -> dict[str, int]:
-    return _name_counts(text)
-
-
-def parse_memory_stat(text: str | None) -> dict[str, int] | None:
-    counts = _name_counts(text)
-    if any(field not in counts for field in MEMORY_STAT_FIELDS):
-        return None
-    return {field: counts[field] for field in MEMORY_STAT_FIELDS}
-
-
-def parse_process_status(text: str | None) -> dict[str, Any] | None:
-    fields = {}
-    for line in (text or "").splitlines():
-        key, _, rest = line.partition(":")
-        fields[key.strip()] = rest.split()
-    if not fields.get("Name"):
-        return None
-    rss_file = fields.get("RssFile") or []
-    return {
-        "name": " ".join(fields["Name"]),
-        "rss_file_bytes": int(rss_file[0]) * 1024 if rss_file and rss_file[0].isdigit() else None,
-    }

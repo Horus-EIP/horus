@@ -9,14 +9,20 @@ import os
 import sys
 import threading
 import time
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
-from eval_events import Observation, apply_event
-from eval_files import is_sha256, report_path, safe_label, write_json
-from eval_report import (
+
+KIT_SRC = Path(__file__).resolve().parents[2] / "opensource" / "horus-bench-kit" / "src"
+if str(KIT_SRC) not in sys.path:
+    sys.path.insert(0, str(KIT_SRC))
+
+from eval_events import Observation, apply_event  # noqa: E402
+from eval_files import is_sha256, report_path, safe_label, write_json  # noqa: E402
+from eval_report import (  # noqa: E402
     ResourcePeaks,
     build_report,
     llm_mapped_outside_docker_stats,
@@ -27,8 +33,8 @@ from eval_report import (
     resummarize,
     titles_from_query_result,
 )
-from eval_scoring import ROUTE_AGENT, ROUTE_DIRECT, ROUTE_NONE
-from eval_stack import (
+from eval_scoring import ROUTE_AGENT, ROUTE_DIRECT, ROUTE_NONE  # noqa: E402
+from eval_stack import (  # noqa: E402
     LLM_CONTAINER,
     LLM_PORT,
     build_tag,
@@ -43,7 +49,7 @@ from eval_stack import (
     parse_whole_number,
     routing_decision,
 )
-from eval_testset import (
+from eval_testset import (  # noqa: E402
     CATEGORIES,
     DEFAULT_TESTSET_PATH,
     IN_CORPUS_CATEGORIES,
@@ -55,9 +61,14 @@ from eval_testset import (
     select_items,
     validate_testset,
 )
+from horus_bench_kit import host  # noqa: E402
+from horus_bench_kit.cli.eval import utf8_output  # noqa: E402
+from horus_bench_kit.files import TIMESTAMP_FORMAT, now_utc  # noqa: E402
+from horus_bench_kit.target import observed_values, progress_line, run_items  # noqa: E402, F401
+from horus_bench_kit.target import testset_info as testset_section  # noqa: E402
+from horus_eval_profile import WARMUP_QUESTION  # noqa: E402
 
 PERF_DIR = Path(__file__).resolve().parent.parent / "perf"
-BENCHMARKS_DIR = Path(__file__).resolve().parent.parent / "benchmarks"
 DEFAULT_OUT_DIR = REPO_ROOT / "benchmarks"
 DEFAULT_SWAP_CONTAINER = "mas"
 TOKEN_REFRESH_S = 600.0
@@ -66,7 +77,6 @@ TERMINAL_TASK_STATUSES = frozenset({"completed", "failed", "cancelled", "cancele
 ACCEPTED_SUBMIT_STATUSES = frozenset({200, 202})
 ROUTES_BY_EVENT_ROUTE = {"direct_answer": ROUTE_DIRECT, "agent": ROUTE_AGENT, "none": ROUTE_NONE}
 CANCELED_TASK_STATUSES = frozenset({"cancelled", "canceled"})
-WARMUP_QUESTION = "In one sentence, what kinds of documents are in the knowledge store?"
 LATE_EVENT_GRACE_S = 3.0
 CORPUS_POLL_INTERVAL_S = 5.0
 SERVER_SETTINGS = (
@@ -94,11 +104,6 @@ def load_script(path: Path, module_name: str) -> Any:
 
 pipeline = load_script(PERF_DIR / "benchmark-pipeline.py", "benchmark_pipeline")
 quality = load_script(PERF_DIR / "quality-benchmark.py", "quality_benchmark")
-host = sys.modules.get("bench_host") or load_script(BENCHMARKS_DIR / "bench_host.py", "bench_host")
-
-
-def now_utc() -> str:
-    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def observation_fields(observation: Observation) -> dict[str, Any]:
@@ -619,34 +624,30 @@ def model_info(args: argparse.Namespace, llama_server: dict[str, Any] | None) ->
 
 def testset_info(args: argparse.Namespace, testset: dict[str, Any], items: list[dict]) -> dict:
     path = Path(args.testset).resolve()
-    try:
-        shown = path.relative_to(REPO_ROOT).as_posix()
-    except ValueError:
-        shown = path.name
-    return {
-        "path": shown,
-        "version": str(testset["version"]),
-        "sha256": file_sha256(path),
-        "corpus": testset["corpus"],
-        "items_total": len(testset["items"]),
-        "items_run": len(items),
-        "filters": {"ids": args.ids, "categories": args.category, "limit": args.limit},
-    }
+    filters = {"ids": args.ids, "categories": args.category, "limit": args.limit}
+    return testset_section(path, testset, items, filters, root=REPO_ROOT, sha256=file_sha256(path))
 
 
-def progress_line(index: int, total: int, record: dict[str, Any]) -> str:
-    def flag(value: bool | None) -> str:
-        return "-" if value is None else ("yes" if value else "no")
+class ChatTarget:
+    name = "chat"
 
-    seconds = record.get("total_s")
-    shown = f"{seconds:8.2f}s" if isinstance(seconds, (int, float)) else "       ?s"
-    return (
-        f"[{index:3}/{total}] {record['id']:10} {record['status']:7} {shown}  "
-        f"answer={flag(record.get('answer_correct_auto'))} "
-        f"source={flag(record.get('source_correct_auto'))} "
-        f"route={flag(record.get('route_correct'))}"
-        + (f"  ({record['error']})" if record.get("error") else "")
-    )
+    def __init__(self, client: EvalClient, label: str) -> None:
+        self.client = client
+        self.label = label
+
+    async def ask(self, question: str, *, item_id: str, files: Sequence[Path] = ()) -> dict[str, Any]:
+        return await self.client.ask(question, f"eval-{safe_label(self.label)}-{item_id}")
+
+
+class RetrievalTarget:
+    name = "retrieval"
+
+    def __init__(self, ks_url: str, top_k: int) -> None:
+        self.ks_url = ks_url
+        self.top_k = top_k
+
+    async def ask(self, question: str, *, item_id: str, files: Sequence[Path] = ()) -> dict[str, Any]:
+        return await asyncio.to_thread(retrieve, self.ks_url, question, self.top_k)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -738,7 +739,7 @@ async def run_questions(
         args.ks_url, testset, args.corpus_token
     ):
         return None
-    client = None
+    target: ChatTarget | RetrievalTarget = RetrievalTarget(args.ks_url, args.top_k)
     if args.mode == "chat":
         client = EvalClient(
             args.mas_url,
@@ -752,41 +753,12 @@ async def run_questions(
         if not args.no_warmup:
             print(f"[info] warmup (not scored): {WARMUP_QUESTION}")
             await client.ask(WARMUP_QUESTION, f"eval-warmup-{safe_label(args.label)}")
-    records: list[dict[str, Any]] = []
-    if probes:
-        await probes.start()
-    for index, item in enumerate(items, 1):
-        if probes:
-            await probes.before()
-        if client is not None:
-            name = f"eval-{safe_label(args.label)}-{item['id']}"
-            outcome = await client.ask(item["question"], name)
-        else:
-            outcome = await asyncio.to_thread(retrieve, args.ks_url, item["question"], args.top_k)
-        if probes:
-            await probes.after(outcome)
-        record = question_record(item, outcome)
-        records.append(record)
-        print(progress_line(index, len(items), record))
-        on_record(records)
-    return records
-
-
-def observed_values(records: list[dict[str, Any]], field: str) -> list[str]:
-    values: list[str] = []
-    for record in records:
-        for value in record.get(field) or []:
-            if value not in values:
-                values.append(value)
-    return values
+        target = ChatTarget(client, args.label)
+    return await run_items(target, items, record=question_record, on_record=on_record, hooks=probes)
 
 
 def main() -> int:
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, ValueError):
-            pass
+    utf8_output()
     args = build_parser().parse_args()
     errors = argument_errors(args)
     if errors:
@@ -825,7 +797,7 @@ def main() -> int:
     docker = host.docker_facts()
     run = {
         "mode": args.mode,
-        "started_at": started_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "started_at": started_at.strftime(TIMESTAMP_FORMAT),
         "finished_at": None,
         "completed": False,
         "git_commit": pipeline.git_commit(),

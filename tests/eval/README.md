@@ -6,21 +6,21 @@
 python -m pytest tests/eval -q -p no:cacheprovider
 ```
 
-These tests are hermetic. They check the set itself and unit-test the runner's scoring and report building. CI runs them (`.github/workflows/eval-testset.yml`) whenever `demo_assets/`, `tests/eval/`, `scripts/eval/`, `scripts/benchmarks/` or the reused `scripts/perf/` scripts change.
+These tests are hermetic. They check the set itself and the Horus side of the evaluation: the agent's fallback texts and the MAS watchdog, the B-98 contract records, the stack sections of the report and the runner. The generic scoring, test-set checks, report building and benchmark engine live in the open-source kit in `opensource/horus-bench-kit/` and are tested there (`python -m pytest opensource/horus-bench-kit -q -p no:cacheprovider`). CI runs both (`.github/workflows/eval-testset.yml`) whenever `demo_assets/`, `tests/eval/`, `scripts/eval/`, `scripts/benchmarks/`, `opensource/horus-bench-kit/` or the reused `scripts/perf/` scripts change.
 
-The same folder tests the benchmark tooling of `scripts/benchmarks/` (`pytest.ini` puts both script folders on the path), with Docker, the host queries and llama-server replaced by fakes:
+The same folder tests the benchmark tooling of `scripts/benchmarks/` (`pytest.ini` puts both script folders and the kit's `src/` on the path), with Docker, the host queries and llama-server replaced by fakes:
 
 | Test file | What it covers |
 |---|---|
-| `test_bench_host.py` | CPU, RAM, disk and Docker facts parsed from Linux, Windows and macOS outputs, and the `machine` block. |
-| `test_bench_llama.py` | The plan's llama-bench command, the pinned image and model hashes against the CPU stack, parsing and the enriched report. |
-| `test_llama_bench_runner.py` | `run-llama-bench.py` end to end: run, fetch, missing models, `--from-json`, `--dry-run`. |
-| `test_bench_compare.py` | `compare-benchmarks.py`: the §10 table, changes, warnings, the 2026-09-01 baseline, llama-bench selection. |
-| `test_eval_stack.py` | llama-server `/metrics`, `/props`, command-line and `/proc/1/status` parsing, the MAS router histogram, and the cgroup files (`memory.peak`, `memory.events`, `memory.stat`). |
-| `test_eval_contract.py` | B-102 JSON reliability: the schema checker, how each reply fails, the status, answer and source scores of a reply, and the probe summary. |
+| `test_bench_llama.py` | The plan's llama-bench command, the pinned image and the known Q4_K_M and Q5_K_M models against the CPU stack, the stack's fetch script mounted at `/opt/horus/fetch-model.sh`, and the kit's copy of that script differing from it only in its messages. |
+| `test_llama_bench_runner.py` | `run-llama-bench.py` with a fake Docker shell: the Horus defaults, a run, a missing model, `--fetch`, `--dry-run`, and the errors that still stop it with a traceback as before (an unreadable `--from-json` file, a program that cannot start). |
+| `test_bench_compare.py` | `compare-benchmarks.py`: the §10 table, changes, the Horus warnings, the 2026-09-01 baseline, a committed llama-bench report. |
+| `test_eval_stack.py` | The MAS router histogram (`mas_routing_decision_seconds`). |
+| `test_eval_contract.py` | B-102 JSON reliability of the B-98 answer: the status, answer and source scores of a reply, the record keys and the probe summary. |
 | `test_agent_contract_probe.py` | `scripts/eval/agent-contract-probe.py` with a fake agent, knowledge store and llama-server. One test runs it in a subprocess against the agent's real `answer_contract` and checks that the checker accepts the schema it builds; it is skipped where the agent's packages are not installed, as in CI. |
-| `test_model_candidates.py` | `scripts/benchmarks/model-candidates.yaml` (licences, pinned revisions, builds, defaults, the baseline matching B-91 and the manifest), the candidate server command, the parsers and the summary tables. |
-| `test_model_candidates_runner.py` | `run-model-candidates.py` end to end with fake Docker, tools and installer: every step, a failed download, a model that does not load, a missing stack, `--resume`, `--resummarize`, `--dry-run`, and the installer's real downloader adopting a file already in place. |
+| `test_model_candidates.py` | `scripts/benchmarks/model-candidates.yaml` (licences, pinned revisions, builds, defaults, the baseline matching B-91 and the manifest), the stack-pin gate, the candidate server command on the stack network, the response-cache check and the summary tables. |
+| `test_model_candidates_runner.py` | `run-model-candidates.py` end to end with a fake Docker shell, tools and installer: every step, a failed download, a model that does not load, a missing stack, `--resume`, `--resummarize`, `--dry-run`, and the installer's real downloader adopting a file already in place. |
+| `test_golden_outputs.py` | Today's code against the committed results, byte for byte (line endings aside; the reports were written with Python 3.11, and from Python 3.12 on `sum()` adds floats with compensation, so there a `sum` statistic may differ from the committed one in its third decimal): every `horus-eval` report resummarised and rebuilt from its records, the summary of every `horus-contract-probe` report, `run-model-candidates.py --resummarize` of `model-candidates-2026-10-06`, four `compare-benchmarks.py` tables kept in `golden/`, and the `--help` text of `run-eval.py`, `run-llama-bench.py`, `run-model-candidates.py` and `compare-benchmarks.py` (`golden/help/`, one file per Python version, since argparse wraps usage lines differently from one version to another; other versions skip). |
 
 ## Contents
 

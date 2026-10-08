@@ -1,24 +1,67 @@
 import json
 
-import pytest
 from eval_contract import (
-    FAILURE_EMPTY,
-    FAILURE_NO_SCHEMA,
     FAILURE_NOT_JSON,
-    FAILURE_NOT_OBJECT,
-    FAILURE_REQUEST,
     FAILURE_RETRIEVAL,
-    FAILURE_SCHEMA,
     FAILURE_TRUNCATED,
     REPORT_KIND,
     build_contract_report,
-    check_reply,
     cited_titles,
     contract_summary,
     probe_items,
     reply_record,
-    schema_violations,
 )
+
+REPLY_KEYS = [
+    "id",
+    "category",
+    "question",
+    "expected_status",
+    "json_valid",
+    "failure",
+    "violations",
+    "status",
+    "status_correct",
+    "answer",
+    "blank_answer",
+    "answer_correct_auto",
+    "cited_sources",
+    "source_correct_auto",
+    "error",
+    "finish_reason",
+    "thought_first",
+    "labels",
+    "retrieved_titles",
+    "wall_s",
+    "prompt_tokens",
+    "completion_tokens",
+    "cached_tokens",
+    "prompt_n",
+    "prompt_ms",
+    "predicted_n",
+    "predicted_ms",
+    "prompt_tps",
+    "generation_tps",
+    "content",
+    "reasoning_chars",
+]
+SUMMARY_KEYS = [
+    "replies",
+    "json_valid",
+    "status_correct",
+    "answer_correct_auto",
+    "source_correct_auto",
+    "failures",
+    "thought_first",
+    "truncated",
+    "blank_answers",
+    "wall_s",
+    "prompt_tokens",
+    "completion_tokens",
+    "prompt_tps",
+    "generation_tps",
+    "by_category",
+]
 
 
 def answer_schema(labels):
@@ -68,86 +111,10 @@ def reply(content, **overrides):
 GOOD = {"status": "ok", "answer": "The US hotel limit is $250 per night.", "sources": ["S1"]}
 
 
-class TestSchemaViolations:
-    def test_the_b98_shape_is_valid(self):
-        assert schema_violations(GOOD, answer_schema(["S1", "S2"])) == []
-
-    def test_a_missing_required_key_is_reported(self):
-        assert schema_violations({"status": "ok", "answer": "x"}, answer_schema(["S1"])) == ["$: missing 'sources'"]
-
-    def test_an_extra_key_is_rejected_when_additional_properties_is_false(self):
-        assert schema_violations({**GOOD, "reason": "none"}, answer_schema(["S1"])) == ["$: 'reason' is not allowed"]
-
-    def test_a_status_outside_the_enum_is_reported(self):
-        assert schema_violations({**GOOD, "status": "failed"}, answer_schema(["S1"])) == [
-            "$.status: 'failed' is not one of ['ok', 'not_found']"
-        ]
-
-    def test_a_label_that_was_not_shown_is_reported(self):
-        assert schema_violations({**GOOD, "sources": ["S1", "S9"]}, answer_schema(["S1"])) == [
-            "$.sources[1]: 'S9' is not one of ['S1']"
-        ]
-
-    def test_without_passages_a_sources_field_is_not_allowed(self):
-        assert schema_violations(GOOD, answer_schema([])) == ["$: 'sources' is not allowed"]
-        assert schema_violations({"status": "not_found", "answer": "No."}, answer_schema([])) == []
-
-    def test_types_are_json_types(self):
-        schema = {"type": "object", "properties": {"n": {"type": "integer"}, "f": {"type": "number"}}}
-        assert schema_violations({"n": 3, "f": 2}, schema) == []
-        assert schema_violations({"n": True, "f": "2"}, schema) == [
-            "$.n: expected integer, found boolean",
-            "$.f: expected number, found string",
-        ]
-        assert schema_violations("text", {"type": ["object", "null"]}) == ["$: expected object or null, found string"]
-
-    def test_enum_does_not_confuse_booleans_and_numbers(self):
-        assert schema_violations(True, {"enum": [1]}) == ["$: True is not one of [1]"]
-        assert schema_violations(1, {"enum": [1.0]}) == []
-
-    def test_lengths_and_const_are_checked(self):
-        schema = {"type": "array", "minItems": 1, "maxItems": 2, "items": {"type": "string", "maxLength": 2}}
-        assert schema_violations([], schema) == ["$: 0 items, at least 1 expected"]
-        assert schema_violations(["a", "bcd", "e"], schema) == [
-            "$: 3 items, at most 2 expected",
-            "$[1]: 3 characters, at most 2 expected",
-        ]
-        assert schema_violations("x", {"const": "y"}) == ["$: 'x' is not 'y'"]
-
-    def test_an_unsupported_keyword_makes_the_reply_invalid_rather_than_unchecked(self):
-        assert schema_violations("x", {"type": "string", "pattern": "^x$"}) == [
-            "$: the checker does not support pattern"
-        ]
-
-    def test_annotations_are_ignored(self):
-        assert schema_violations("x", {"type": "string", "title": "Answer", "description": "d"}) == []
-
-
-class TestCheckReply:
-    @pytest.mark.parametrize(
-        ("overrides", "failure"),
-        [
-            ({"error": "HTTP 500: boom", "content": None}, FAILURE_REQUEST),
-            ({"content": ""}, FAILURE_EMPTY),
-            ({"content": "  \n"}, FAILURE_EMPTY),
-            ({"content": "", "finish_reason": "length"}, FAILURE_TRUNCATED),
-            ({"content": '{"status": "ok", "answer": "The US ho', "finish_reason": "length"}, FAILURE_TRUNCATED),
-            ({"content": "<think>hotel</think>\n" + json.dumps(GOOD)}, FAILURE_NOT_JSON),
-            ({"content": "```json\n" + json.dumps(GOOD) + "\n```"}, FAILURE_NOT_JSON),
-            ({"content": json.dumps([GOOD])}, FAILURE_NOT_OBJECT),
-            ({"content": json.dumps({"status": "ok", "answer": "x"})}, FAILURE_SCHEMA),
-            ({"content": json.dumps(GOOD), "schema": None}, FAILURE_NO_SCHEMA),
-        ],
-    )
-    def test_failures_are_classified(self, overrides, failure):
-        assert check_reply({**reply(GOOD), **overrides})[1] == failure
-
-    def test_a_valid_reply_parses_strictly_with_surrounding_whitespace(self):
-        data, failure, violations = check_reply(reply("\n " + json.dumps(GOOD) + "\n"))
-        assert (data, failure, violations) == (GOOD, None, [])
-
-
 class TestReplyRecord:
+    def test_the_record_keeps_the_contract_probe_keys_in_order(self, make_item):
+        assert list(reply_record(make_item(), reply(GOOD))) == REPLY_KEYS
+
     def test_a_correct_cited_answer(self, make_item):
         record = reply_record(make_item(), reply(GOOD))
         assert record["json_valid"] is True
@@ -238,6 +205,7 @@ class TestSummary:
 
     def test_rates_failures_and_speed(self, make_item):
         summary = contract_summary(self.records(make_item))
+        assert list(summary) == SUMMARY_KEYS
         assert summary["replies"] == 5
         assert summary["json_valid"] == {"n": 4, "correct": 3, "pct": 75.0}
         assert summary["failures"] == {FAILURE_TRUNCATED: 1, FAILURE_RETRIEVAL: 1}

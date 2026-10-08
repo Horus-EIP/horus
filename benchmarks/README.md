@@ -17,13 +17,15 @@ Five kinds of file live here, told apart by their `kind`:
 | `horus-model-candidates` | `scripts/benchmarks/run-model-candidates.py` | The B-102 comparison of the model candidates with the Qwen3-4B baseline, one entry per GGUF, pointing at the three reports below. See [Model candidates](#model-candidates-b-102). |
 | `horus-contract-probe` | `scripts/benchmarks/run-model-candidates.py` | The raw replies of one model to the B-98 answer request, each checked against the JSON schema it was sent with. |
 
-`scripts/benchmarks/compare-benchmarks.py` reads all three, and also a bare llama-bench JSON array, and prints the §10 metrics table.
+`scripts/benchmarks/compare-benchmarks.py` reads the llama-bench, evaluation and recorded files, and also a bare llama-bench JSON array, and prints the §10 metrics table. It does not read the model-candidates summary or the contract reports.
 
 Never edit a measured number by hand. Re-run instead.
 
+The generic engine of these tools is the open-source [horus-bench-kit](../opensource/horus-bench-kit/README.md) (Apache-2.0), in `opensource/horus-bench-kit/`: scoring, test-set checks, report building, llama-bench, machine facts, the JSON contract checker, the comparison table and the candidate runner. The Horus scripts are thin wrappers that give it the Horus defaults, kinds, rows and texts (`scripts/eval/horus_eval_profile.py`, `scripts/benchmarks/horus_profile.py`), and they find the kit in this checkout, so nothing has to be installed. The kit's [FORMATS.md](../opensource/horus-bench-kit/docs/FORMATS.md) documents every key of the generic formats; this page keeps what is specific to Horus.
+
 ## File names
 
-`<label>-<YYYY-MM-DD>.json`, where the date is the UTC date the run started. A second run with the same label on the same day gets `-2`, `-3`, ... and never overwrites the first.
+`<label>-<YYYY-MM-DD>.json`, where the date is the UTC date the run started. A second run with the same label on the same day gets `-2`, `-3`, ... and never overwrites the first (the kit's [conventions](../opensource/horus-bench-kit/docs/FORMATS.md#conventions)).
 
 - llama-bench: the label defaults to the reference machine, so the plan's file is `cpu16-<date>.json`. Give `--label` for a variant, e.g. `cpu16-b11500`.
 - Evaluations: start with `eval-`, then the machine and what changed, e.g. `eval-cpu16-standard`, `eval-cpu16-lean`, `eval-gpu8-vllm`.
@@ -79,32 +81,11 @@ If llama-bench fails or prints something that is not its JSON, nothing is writte
 
 ### llama-bench report format
 
-```json
-{
-  "kind": "horus-llama-bench",
-  "schema_version": 1,
-  "label": "cpu16",
-  "run": {},
-  "llama_cpp": {},
-  "models": [],
-  "machine": {},
-  "summary": [],
-  "results": []
-}
-```
-
-| Field | Meaning |
-|---|---|
-| `run` | `started_at`, `finished_at`, `duration_s`, `git_commit`, `from_json` (the raw file's name, or `null`), `models_location` (`dir`, always `<models-dir>`, or `volume`), `command` (the exact `docker run`, with the host folder written `<models-dir>`), `matrix`. |
-| `llama_cpp` | `image`, `image_digest` (from `docker image inspect`), `build` (`b` + the `build_number` llama-bench wrote into its rows), `build_number`, `build_commit`, `image_tag_matches` (the image tag names the same build). |
-| `models[]` | `file`, `size_bytes`, `sha256` (computed in the container with `sha256sum`), `known_source`, `matches_known_sha256` (`false` for a file of our own, such as the one `scripts/models/convert-qwen3-4b-gguf.sh` builds). |
-| `machine` | See [Machine](#machine). |
-| `summary[]` | One row per result: `model`, `model_type`, `test` (`pp512`, `pp2048`, `tg128`), `n_depth`, `type_k`, `type_v`, `n_threads`, `flash_attn`, `avg_ts` and `stddev_ts` in tokens per second. |
-| `results[]` | llama-bench's rows, unchanged. |
+The report is the kit's [`horus-llama-bench`](../opensource/horus-bench-kit/docs/FORMATS.md#horus-llama-bench) version 1, documented key by key there: `run`, `llama_cpp`, `models`, `machine`, a `summary` list and llama-bench's own rows under `results`. For Horus, `run.git_commit` is the commit of this checkout, `models[].known_source` is the unsloth download URL of the table above, and `matches_known_sha256` is `false` for a file of our own, such as the one `scripts/models/convert-qwen3-4b-gguf.sh` builds.
 
 ## Machine
 
-Both kinds of run collect the same `machine` block on the host that runs the script:
+Both kinds of run collect the same `machine` block on the host that runs the script (the kit's [Machine](../opensource/horus-bench-kit/docs/FORMATS.md#machine) gives the key order):
 
 | Field | Linux | Windows | macOS |
 |---|---|---|---|
@@ -160,6 +141,8 @@ It prints Markdown, ready for a pull request: the machines, builds, models and t
 
 The llama-bench rows of the §10 table show one model (`--model`, a part of its file name; default the first in the file), one KV cache type for K and V (`--kv`, default `f16`) and the fastest thread count (`--threads` to fix one). Install time and peak disk are measured on a clean VM and are not in these files, so their rows stay empty.
 
+The table is the kit's `hbk-compare` with the Horus rows, the `horus-eval` and `horus-recorded` kinds and their warnings registered through a profile ([Registering a product's kinds](../opensource/horus-bench-kit/docs/FORMATS.md#registering-a-products-kinds)). Any other kind, or a newer `schema_version` than these tools read, is refused.
+
 | §10 metric | Read from |
 |---|---|
 | Prompt processing and generation (tokens/s) | llama-bench `summary`: pp512, pp2048, tg128, at depth 0 and 4,096 |
@@ -191,6 +174,8 @@ The llama-bench rows of the §10 table show one model (`--model`, a part of its 
 
 Schema version 2 added `llama_cpp.server`, `model.sha256_source`, the detected `machine` fields, the per-question `dispatch_s`, `routing_decision`, `llm` and `resources`, the cgroup, page cache, llama-server, restart, start-of-questions, ADR-006 `P` and Docker-host swap fields of `resources`, and `summary.dispatch_s`, `summary.routing` and `summary.llm`. Version 1 files still compare.
 
+`horus-eval` is the kit's evaluation report extended through a profile ([Extending the evaluation report](../opensource/horus-bench-kit/docs/FORMATS.md#extending-the-evaluation-report)): the kit's core keys keep their places, and Horus adds the four stack sections above, 17 outcome fields per question, three summary sections, the agent's fallback texts and the MAS watchdog rule. `run-eval.py --resummarize` refuses another kind, and a `schema_version` newer than 2.
+
 `llama_cpp.build` and every `model` field are `null` when neither the options nor a running `llm` container gave them (for example on the vLLM GPU path).
 
 ### `run`
@@ -208,7 +193,7 @@ Schema version 2 added `llama_cpp.server`, `model.sha256_source`, the detected `
 
 ### `testset`
 
-`path`, `version` and `sha256` (line endings normalised to LF) of the test set file, the `corpus` file hashes it was written against, `items_total`, `items_run`, and the `filters` used.
+`path`, `version` and `sha256` (line endings normalised to LF) of the test set file, the `corpus` file hashes it was written against, `items_total`, `items_run`, and the `filters` used. `path` is relative to the repository, or only the file name for a test set outside it, so a report never names a folder of the machine that ran it.
 
 ### `llama_cpp.server`
 
@@ -239,12 +224,10 @@ Schema version 2 added `llama_cpp.server`, `model.sha256_source`, the detected `
 
 ### `questions[]`
 
-One entry per question, in test set order.
+One entry per question, in test set order, with 38 keys: the kit's [core keys](../opensource/horus-bench-kit/docs/FORMATS.md#questions), and the 17 Horus outcome fields from `conversation_id` to `resources` between `error` and `answer`. The table gives the keys whose meaning is Horus's own; the others mean what the kit says.
 
 | Field | Meaning |
 |---|---|
-| `id`, `category`, `difficulty`, `question`, `expected_answer` | Copied from the test set. |
-| `expected_source` | List of document file names, or `null` for greetings, arithmetic and questions the corpus cannot answer. |
 | `expected_route`, `observed_route` | `DIRECT_ANSWER` (MAS answered without an agent), `AGENT` (a task was dispatched) or `NONE` (MAS could not route the question and replied with a message). Read from the `route` of the final WebSocket event; servers older than B-93 gave it in the HTTP response. |
 | `status` | `ok`, `error` or `timeout`. `error` holds the reason. `timeout` also covers a task stopped by the MAS `TASK_TIMEOUT` watchdog: its notice arrives as the answer over the WebSocket, or polling finds the task `canceled`. |
 | `conversation_id`, `task_id`, `answered_by` | Where to look the run up in the UI or the database. |
@@ -257,34 +240,23 @@ One entry per question, in test set order.
 | `total_s` | Time from submitting the question to the final answer. |
 | `llm` | What llama-server did during the question, from its `/metrics` counters: `prompt_tokens`, `prompt_s` (time spent reading prompts, the server side of the time to first token, summed over every call MAS and the agent made), `generated_tokens`, `generation_s`, `decode_calls`, `prompt_tps`, `generation_tps`. `{"restarted": true}` when the counters went down, i.e. llama-server restarted during the question. `null` without an `llm` container or in retrieval mode. |
 | `resources` | The peaks of the samples taken during the question: `samples`, `containers_sum_peak_mem_bytes`, `docker_host_swap_peak_used_bytes`, `swap_peak_used_bytes`. `null` without `--sample-resources` or when no sample fell inside the question. |
-| `answer` | The final answer as received. |
 | `retrieval_steps` | Number of `retrieval.results` steps the agent sent. `null` in retrieval mode. |
 | `retrieved_sources` | One list per retrieval (each `retrieval.results` step, or the single knowledge-store query in retrieval mode): the distinct document titles in rank order, a document ranked by its best passage. `null` when a retrieval returned content without saying which documents it came from, which the agent still does when it reads a file named in the question or falls back to the document list. |
 | `cited_sources` | Titles in the `sources` of the final answer event, or `null` when the answer carries no `sources` list (today's answers never do). |
-| `source_basis` | What `source_correct_auto` was decided from: `cited`, `retrieval`, or `null` when it could not be decided. |
-| `source_ranks` | For each expected document, its best rank over `retrieved_sources` (1 = first), `null` when it was never retrieved. |
 | `models`, `devices` | Model and device of every generation for this question. |
 | `fallback` | `spiral` or `timeout` when the answer is the agent's canned fallback text, `task_timeout` when it is the MAS watchdog's notice, else `null`. A fallback is never counted as correct. |
-| `answer_correct_auto` | Every regex in the item's `answer_patterns` matches the answer (case-insensitive, after NFKC normalisation and removing Markdown emphasis). For questions outside the corpus the patterns detect a "the documents do not contain this" reply. `null` in retrieval mode. |
-| `missing_patterns` | The patterns that did not match. |
+| `answer_correct_auto` | The kit's [answer check](../opensource/horus-bench-kit/docs/FORMATS.md#answers). For questions outside the corpus the patterns detect a "the documents do not contain this" reply. `null` in retrieval mode. |
 | `source_correct_auto` | See [Source checking](#source-checking). `null` when it cannot be decided and for questions outside the corpus. |
-| `route_correct` | `observed_route` equals `expected_route`. `null` in retrieval mode or when nothing was observed. |
-| `review` | Two reviewer slots, `{"reviewer": null, "answer_correct": null, "comment": null}`, filled in by hand. `null` in retrieval mode. |
 
 ### `summary`
 
+The kit's [summary](../opensource/horus-bench-kit/docs/FORMATS.md#summary), with three Horus sections between `ttft_s` and `manual_review` in place of the kit's `usage`:
+
 | Field | Meaning |
 |---|---|
-| `questions`, `status` | Number of questions and count per status. |
-| `answer_correct_auto`, `source_correct_auto`, `route_correct` | `{"n", "correct", "pct"}` over the questions where the flag is not `null`. Failed and timed-out questions count as wrong answers; their source is only scored when the events seen before the failure already decide it. |
-| `total_s`, `ttft_s`, `dispatch_s` | `{"n", "mean", "median", "p90", "min", "max", "sum"}` over the questions that have the value. |
+| `dispatch_s` | `{"n", "mean", "median", "p90", "min", "max", "sum"}` over the questions that have the value. |
 | `routing` | `null` without router metrics. Otherwise `questions`, `mas_restarts`, `decided_once` (questions with exactly one decision), `without_decision`, `several_decisions`, `methods` (count per method over `decided_once`), `llm_pct` (share of `decided_once` routed by the LLM fallback), and the statistics of `decision_s` and `decision_s_without_llm`. |
 | `llm` | `null` without server metrics. Otherwise `questions`, `server_restarts`, the same statistics of `prompt_s`, `prompt_tokens`, `generation_s` and `generated_tokens`, and `prompt_tps` and `generation_tps` over the whole run (total tokens over total seconds). |
-| `fallbacks` | Count per fallback kind. |
-| `source_rank` | `stats` of every expected document's `source_ranks` entry that is not `null`, plus `first` (how many were ranked first) and `not_retrieved` (how many were never retrieved). |
-| `source_basis` | Count per `source_basis` over the in-corpus and direct questions (`not_observable` for `null`). |
-| `manual_review` | `reviewed` (both reviewers gave a verdict), `pending`, `agreed_correct` (both said correct), `disagreements` (ids to discuss), `answer_correct_pct` = `agreed_correct / reviewed`. |
-| `by_category` | The same rates, `source_rank` and `total_s` per category. |
 
 ## Model candidates (B-102)
 
@@ -325,10 +297,12 @@ The agent's response cache must be off for the `eval` step. Its key is made of t
 |---|---|
 | `fetch` | Downloads each GGUF into `--models-dir` (default `models/`, where the stack reads its model) with the installer's B-95 downloader (`installer/model_manager.py`): resumable `.part` file, retries, SHA-256 check, then the `.sha256` marker the stack and `run-eval.py` read. When the installer cannot be imported it uses `src/infra/llm/fetch-model.sh` in the server image instead. |
 | `bench` | `run-llama-bench.py` for that one file with the catalog's matrix: pp512, pp2048 and tg128 at depth 0 and 4,096, an f16 KV cache, 4 and 8 threads, 5 repetitions. The KV cache comparison stays B-91's. |
-| `probe` | The B-98 request, sent straight to llama-server for the 94 questions that are not greetings or arithmetic. `scripts/eval/agent-contract-probe.py` is copied into the `agent` container and run with the agent's own code and settings: its knowledge-store retrieval, `SourceCatalog`, `answer_prompt`, `answer_response_format` and `_fit_vllm_prompt` build the request the agent sends (one call, temperature 0, `response_format` `json_schema`, not streamed). The raw reply is kept and checked on the host. One unscored warmup question goes first. It asks as the General-Assistant identity: the persona the agent puts before the system prompt of Finance-Analyst, Compliance-Officer and HR-Assistant is left out, and the `eval` step covers the routed identities. |
+| `probe` | The B-98 request, sent straight to llama-server for the 94 questions that are not greetings or arithmetic. `scripts/eval/agent-contract-probe.py` is copied into the `agent` container and run with the agent's own code and settings: its knowledge-store retrieval, `SourceCatalog`, `answer_prompt`, `answer_response_format` and `_fit_vllm_prompt` build the request the agent sends (one call, temperature 0, `response_format` `json_schema`, not streamed). The raw reply is kept and checked on the host. One unscored warmup question goes first. It asks as the General-Assistant identity: the persona the agent puts before the system prompt of Finance-Analyst, Compliance-Officer and HR-Assistant is left out, and the `eval` step covers the routed identities. The job sent to the probe and the reply lines it prints follow the kit's [probe protocol v1](../opensource/horus-bench-kit/docs/FORMATS.md#probe-protocol-v1). |
 | `eval` | `run-eval.py` with `--llm-container llm-candidate --sample-resources`: the 100 questions through MAS and the agents, as a user asks them. |
 
 For `probe` and `eval` the runner stops the stack's `llm` container, checks that it stopped (otherwise two models would answer under the alias `llm`, and it gives up), and starts `llm-candidate` in its place: the same image (the catalog's pinned `server-b11382`), the same arguments with `--model` replaced and `--reasoning off` added, the same memory limit, on the same Docker network under the alias `llm`, so MAS and the agents reach the candidate at `http://llm:8080` unchanged. It waits for `/health` (up to `--start-timeout`, 900 s), runs the steps, reads llama-server's `/proc/1/status` and the container's cgroup `memory.peak` and `memory.events` after each step, removes the container and goes to the next model. At the end, even after an error or Ctrl-C, it starts `llm` again, and says so when that fails. A model whose architecture llama-server does not know stops while loading; the summary keeps the last lines of its log.
+
+The runner is the kit's `hbk-model-candidates` engine (download, llama-bench, summary, resume and Markdown), with a Horus subclass for what depends on the stack: the installer's downloader, serving each model in place of `llm`, the response-cache check, the probe through the `agent` container and `run-eval.py`.
 
 `--reasoning off` is the default because Spark-X2.5, NeoHorse, Agents-A1 and Ling open a thinking block unless told not to, and the stack's `llm` service passes no reasoning flag (llama-server's default is `auto`). Run once more with `--reasoning auto` to measure them as the stack is configured today; every run records which it used.
 
@@ -351,14 +325,18 @@ For `probe` and `eval` the runner stops the stack's `llm` container, checks that
 
 `model-candidates-<date>.json` and `model-candidates-<date>.md` (the tables, the licence flags and every problem), and next to them the folder `model-candidates-<date>/` with, for each model, `<gguf id>-llama-bench-<date>.json`, `<gguf id>-contract-<date>.json` and `<gguf id>-eval-<date>.json`. The summary is rewritten after every model, so an interrupted run keeps what it measured.
 
+The summary is the kit's [`horus-model-candidates`](../opensource/horus-bench-kit/docs/FORMATS.md#horus-model-candidates) format, documented key by key there. What Horus puts in it:
+
 | Field of the summary | Meaning |
 |---|---|
-| `catalog` | `path`, `version`, `sha256`, `looked_up` and `pinned_build` of the catalog used. |
-| `run` | `started_at` (first pass), `finished_at`, `completed`, `git_commit`, `steps` (every pass together), `reasoning`, `stack_llm` (the `llm` container whose arguments were reused: image, arguments, networks, memory limit), `testset`, and `sessions`: each pass with its steps, options, models folder, server image and memory limit. |
+| `catalog` | `path` relative to the repository, `version`, `sha256`, `looked_up` and `pinned_build` of the catalog used. |
+| `run` | `stack_llm` is the `llm` container whose arguments were reused (image, arguments, networks, memory limit), and `testset.path` is relative to the repository. |
 | `machine` | See [Machine](#machine). |
-| `variants[]` | One per GGUF: the catalog facts (`candidate`, `name`, `licence`, `licence_flags`, `gguf_architecture`, `thinking_default`, `quant`, `file`, `gguf_repo`, `revision`, `publisher`, `size_bytes`, `sha256`), `fetch` (`status`, `method`), `reports` (paths of the three reports, relative to the summary), `llama_bench` (`build`, `speeds`: the fastest thread count of each test and depth, `model_sha256` and whether it matches the catalog), `contract` and `eval` (the headline figures of those reports), `server` (the `docker run` command, the build from `/props`, `n_ctx`, the memory limit and reasoning mode), `memory` (`after_probe` and `after_eval`: llama-server's `VmHWM`, `VmRSS`, `RssAnon` and `RssFile`, the container's `memory.peak` and OOM kills) and `problems`. |
+| `variants[].contract` | The B-98 headline of the contract report: `replies`, `json_valid`, `failures`, `thought_first`, `truncated`, `blank_answers`, `status_correct`, `answer_correct_auto`, `source_correct_auto`, `wall_s`, `completion_tokens`, `prompt_tps`, `generation_tps`. |
+| `variants[].eval` | The kit's evaluation headline, then the figures of the candidate container: `llm_prompt_tps`, `llm_generation_tps`, `stack_peak_mem_bytes`, `containers_sum_peak_mem_bytes`, `llm_peak_mem_bytes`, `llm_lifetime_peak_mem_bytes`, `llm_oom_kills`, `docker_host_swap_growth_bytes`. |
+| `variants[].problems` | Besides the kit's problems, `skipped: needs llama.cpp b<N>, the stack pins b<M>` and the `not served:` reasons of the stack swap. |
 
-The contract report (`horus-contract-probe`) holds `run`, `model`, `llama_server`, `summary` and `replies`, one per question:
+The contract report (`horus-contract-probe`) holds `run` (`started_at`, `finished_at`, `completed`, `agent_container`, `warmup`, `items`), `model`, `llama_server`, `summary` and `replies`, one per question. A reply keeps the kit's [key order](../opensource/horus-bench-kit/docs/FORMATS.md#horus-contract-probe), with the B-98 fields `expected_status`, `status`, `status_correct`, `answer`, `blank_answer`, `answer_correct_auto`, `cited_sources` and `source_correct_auto` in place of the kit's `expected`, `expected_correct`, `patterns_correct` and `missing_patterns`:
 
 | Field of a reply | Meaning |
 |---|---|
@@ -400,19 +378,16 @@ Share cached is all the cached tokens of the 20 calls over all their prompt toke
 
 ## Source checking
 
-Documents are compared by file name without extension. In order:
+The rules are the kit's [source rules](../opensource/horus-bench-kit/docs/FORMATS.md#sources): documents compared by file name without extension, questions outside the corpus not scored, cited sources before retrieved ones, and every expected document within the first N distinct documents of a retrieval, N being the number of expected documents. Being returned somewhere is not enough: a deep enough retrieval returns every document. In Horus terms:
 
-1. **Questions outside the corpus** are not scored (`null`).
-2. **Greetings and arithmetic** are correct when no retrieval happened (`retrieval_steps` is 0) and the answer cites nothing. A greeting the router sent to an agent that queried the knowledge store is wrong.
-3. **Cited sources.** When the final answer carries `sources`, the question is correct when every expected document is cited.
-4. **Retrieved sources.** Otherwise the question is correct when every expected document is among the first N distinct documents of a retrieval, N being the number of expected documents (rank 1 for a one-document question, ranks 1 and 2 for a two-document one). Being returned somewhere is not enough: a deep enough retrieval returns every document. Several passages of one document count as that document once, at the rank of its first passage.
-5. When the WebSocket dropped before the answer (`timing_source` is `poll`) or the question failed, events may be missing, so only what was seen decides: a retrieval that ranks the right documents first is still correct and a retrieval for a greeting is still wrong. Anything else is `null` rather than a guess.
+- The `direct` items are the greetings and arithmetic. They are correct when no retrieval happened (`retrieval_steps` is 0) and the answer cites nothing, so a greeting the router sent to an agent that queried the knowledge store is wrong.
+- Events may be missing when the WebSocket dropped before the answer (`timing_source` is `poll`) or the question failed. Then only what was seen decides: a retrieval that ranks the right documents first is still correct and a retrieval for a greeting is still wrong. Anything else is `null` rather than a guess.
 
 Since B-97 the knowledge-store client keeps each passage's document, so the agent's `retrieval.results` steps carry the number of passages in `chunk_count` and the distinct document titles in rank order in `chunks`, and chat mode scores in-corpus sources from them. Answers still carry no sources until B-98. A question whose retrieval returned no passages (the agent read a file named in the question, or fell back to the document list) gets `source_basis: null` and `source_correct_auto: null`.
 
 ## Manual review
 
-The automatic answer check is a regex heuristic. The plan's "answer correct (%)" is the two-reviewer verdict:
+The automatic answer check is a regex heuristic. The plan's "answer correct (%)" is the two-reviewer verdict (the kit's [manual review](../opensource/horus-bench-kit/docs/FORMATS.md#manual-review)):
 
 1. Each reviewer opens the report, reads every `answer` against `expected_answer` and the source document, and fills their slot in `review` with their name, `true` or `false`, and a comment when it is not obvious. A partially right answer is `false`, with the comment saying what was missing.
 2. Discuss the ids in `summary.manual_review.disagreements` and settle them.

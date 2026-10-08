@@ -10,6 +10,8 @@ on:
       - scripts/benchmarks/**
       - scripts/perf/benchmark-pipeline.py
       - scripts/perf/quality-benchmark.py
+      - opensource/horus-bench-kit/**
+      - opensource/horus-bench-kit/src/**
       - .github/workflows/eval-testset.yml
   pull_request:
     paths:
@@ -19,6 +21,8 @@ on:
       - scripts/benchmarks/**
       - scripts/perf/benchmark-pipeline.py
       - scripts/perf/quality-benchmark.py
+      - opensource/horus-bench-kit/**
+      - opensource/horus-bench-kit/src/**
       - .github/workflows/eval-testset.yml
   workflow_dispatch:
 
@@ -45,3 +49,6 @@ jobs:
 
       - name: Check the test set and the runner
         run: pytest tests/eval -q
+
+      - name: Check the benchmark kit
+        run: pytest opensource/horus-bench-kit -q

@@ -1,0 +1,19 @@
+usage: compare-benchmarks.py [-h] [--before FILE [FILE ...]]
+                             [--after FILE [FILE ...]] [--model MODEL]
+                             [--threads THREADS] [--kv KV] [--out OUT]
+                             [FILE ...]
+
+Print the dev plan's section 10 metrics table for one benchmark run, or the
+difference between two.
+
+positional arguments:
+  FILE                  BEFORE [AFTER]
+
+options:
+  -h, --help            show this help message and exit
+  --before FILE [FILE ...]
+  --after FILE [FILE ...]
+  --model MODEL         llama-bench model shown in the metrics table
+  --threads THREADS     llama-bench thread count shown
+  --kv KV               llama-bench KV cache type shown
+  --out OUT             Also write the Markdown to this file

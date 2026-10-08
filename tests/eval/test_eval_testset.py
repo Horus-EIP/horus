@@ -1,10 +1,9 @@
 import re
 from collections import Counter
 
-import pytest
 from eval_testset import (
+    CANNED_NON_ANSWERS,
     CATEGORIES,
-    IN_CORPUS_CATEGORIES,
     absent_term_errors,
     corpus_errors,
     corpus_problems,
@@ -12,7 +11,6 @@ from eval_testset import (
     expected_sources,
     grounding_errors,
     schema_errors,
-    select_items,
     self_consistency_errors,
     validate_testset,
 )
@@ -81,89 +79,11 @@ class TestShippedTestset:
         assert all(part.isdigit() for part in (major, minor, patch))
 
 
-class TestValidators:
-    def test_schema_flags_missing_fields_and_unknown_values(self, make_testset, make_item):
-        broken = make_item(category="trivia", difficulty="extreme")
-        del broken["expected_answer"]
-        errors = schema_errors(make_testset([broken]))
-        assert any("missing field 'expected_answer'" in e for e in errors)
-        assert any("unknown category 'trivia'" in e for e in errors)
-        assert any("unknown difficulty 'extreme'" in e for e in errors)
-
-    def test_schema_flags_invalid_regex(self, make_testset, make_item):
-        errors = schema_errors(make_testset([make_item(answer_patterns=["(unclosed"])]))
-        assert any("invalid regex" in e for e in errors)
-
-    def test_schema_requires_a_source_for_in_corpus_items(self, make_testset, make_item):
-        errors = schema_errors(make_testset([make_item(expected_source=None)]))
-        assert any("needs expected_source" in e for e in errors)
-
-    def test_schema_requires_absent_terms_and_null_source_outside_the_corpus(
-        self, make_testset, make_item
-    ):
-        item = make_item(category="not_in_corpus")
-        errors = schema_errors(make_testset([item]))
-        assert any("expected_source: null" in e for e in errors)
-        assert any("absent_terms" in e for e in errors)
-
-    def test_schema_limits_evidence_patterns_to_derived_answers(self, make_testset, make_item):
-        item = make_item(evidence_patterns=[r"\$250"])
-        errors = schema_errors(make_testset([item]))
-        assert any("evidence_patterns is only for derived" in e for e in errors)
-
-    def test_duplicates_are_reported(self, make_testset, make_item):
-        errors = duplicate_errors(make_testset([make_item(), make_item()]))
-        assert "duplicate id: 'x-01'" in errors
-        assert any(e.startswith("duplicate question") for e in errors)
-
-    def test_unknown_source_file_is_reported(self, make_testset, make_item, corpus):
-        item = make_item(expected_source="6_Missing.md")
-        errors = corpus_errors(make_testset([item]), corpus)
-        assert errors == ["x-01: expected_source '6_Missing.md' is not in corpus"]
-
-    def test_changed_document_is_reported(self, make_testset, corpus):
-        testset = make_testset([])
-        testset["corpus"] = {**testset["corpus"], "4_Expense_Policy.md": "0" * 64}
-        errors = corpus_errors(testset, corpus)
-        assert len(errors) == 1 and "4_Expense_Policy.md changed" in errors[0]
-
-    def test_pattern_not_in_the_source_document_is_reported(
-        self, make_testset, make_item, documents
-    ):
-        item = make_item(answer_patterns=[r"\$275/night \(US\)"])
-        errors = grounding_errors(make_testset([item]), documents)
-        assert len(errors) == 1 and "does not match 4_Expense_Policy.md" in errors[0]
-
-    def test_derived_answers_are_grounded_by_evidence_patterns(
-        self, make_testset, make_item, documents
-    ):
-        item = make_item(
-            category="numeric",
-            answer_patterns=[r"\b140\b"],
-            evidence_patterns=[r"Breakfast \| \$25/person", r"Lunch \| \$99/person"],
-        )
-        errors = grounding_errors(make_testset([item]), documents)
-        assert len(errors) == 1
-        assert errors[0].startswith("x-01: evidence_patterns") and "Lunch" in errors[0]
-
-    def test_absent_term_found_in_a_document_is_reported(self, make_testset, make_item, documents):
-        item = make_item(category="not_in_corpus", expected_source=None, absent_terms=["YubiKey"])
-        errors = absent_term_errors(make_testset([item]), documents)
-        assert errors == ["x-01: absent term 'YubiKey' appears in 5_IT_Security_Policy.md"]
-
-    def test_absent_terms_match_whole_words_only(self, make_testset, make_item, documents):
-        item = make_item(category="not_in_corpus", expected_source=None, absent_terms=["pet"])
-        assert absent_term_errors(make_testset([item]), documents) == []
-
-    def test_patterns_that_accept_a_refusal_are_reported(self, make_testset, make_item):
+class TestAgentNonAnswers:
+    def test_patterns_that_accept_an_agent_non_answer_are_reported(self, make_testset, make_item):
         item = make_item(answer_patterns=[r"information"], expected_answer="information")
         errors = self_consistency_errors(make_testset([item]))
-        assert any("accept the non-answer" in e for e in errors)
-
-    def test_expected_answer_must_pass_its_own_patterns(self, make_testset, make_item):
-        item = make_item(expected_answer="$300 per night.")
-        errors = self_consistency_errors(make_testset([item]))
-        assert errors == ["x-01: expected_answer fails its own answer_patterns"]
+        assert errors == [f"x-01: answer_patterns accept the non-answer {text!r}" for text in CANNED_NON_ANSWERS]
 
 
 class TestCorpusProblems:
@@ -176,24 +96,3 @@ class TestCorpusProblems:
 
     def test_complete_corpus_has_no_problem(self):
         assert corpus_problems(["a.md"], ["a.md", "other.pdf"]) == []
-
-
-class TestSelectItems:
-    @pytest.fixture
-    def pool(self, make_item):
-        return [
-            make_item(id="a", category="lookup"),
-            make_item(id="b", category="direct"),
-            make_item(id="c", category="lookup"),
-        ]
-
-    def test_without_filters_keeps_everything_in_order(self, pool):
-        assert [i["id"] for i in select_items(pool)] == ["a", "b", "c"]
-
-    def test_filters_by_id_category_and_limit(self, pool):
-        assert [i["id"] for i in select_items(pool, ids=["b", "c"])] == ["b", "c"]
-        assert [i["id"] for i in select_items(pool, categories=["lookup"])] == ["a", "c"]
-        assert [i["id"] for i in select_items(pool, categories=["lookup"], limit=1)] == ["a"]
-
-    def test_in_corpus_categories_exclude_direct_and_refusals(self):
-        assert IN_CORPUS_CATEGORIES == {"lookup", "numeric", "multi_hop"}

@@ -4,21 +4,12 @@ import sys
 from pathlib import Path
 
 import pytest
-from bench_compare import (
-    BenchSelection,
-    Metric,
-    bench_metrics,
-    build_side,
-    compare_markdown,
-    format_change,
-    format_metric,
-    load_document,
-)
-from bench_llama import summary_rows
+from bench_compare import BenchSelection, compare_markdown, load_document
 from eval_report import build_report, question_record
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BASELINE = REPO_ROOT / "benchmarks" / "cpu-transformers-2026-09-01.json"
+BENCHMARKS = REPO_ROOT / "benchmarks"
+BASELINE = BENCHMARKS / "cpu-transformers-2026-09-01.json"
 Q4 = "qwen3-4b-instruct-2507-Q4_K_M.gguf"
 Q5 = "qwen3-4b-instruct-2507-Q5_K_M.gguf"
 GIB = 2**30
@@ -170,11 +161,6 @@ class TestEndToEnd:
         assert table_row(markdown, "KV cache K/V (q8_0 quality check)")[2:] == ["f16/f16", "q8_0/q8_0", "changed"]
         assert "The KV cache differs (f16/f16 before, q8_0/q8_0 after)" in markdown
 
-    def test_different_test_sets_are_flagged(self, tmp_path, make_item):
-        before = write(tmp_path, "a.json", eval_report(make_item, [10.0], testset_sha="a" * 64))
-        after = write(tmp_path, "b.json", eval_report(make_item, [10.0], testset_sha="b" * 64))
-        assert "different test sets" in compare_markdown([before], [after], BenchSelection())
-
     def test_a_peak_missed_between_samples_asks_for_a_shorter_interval(self, tmp_path, make_item):
         unsampled = {"llm": GIB, "mas": GIB // 2, "web_client": None, "agent": None}
         report = eval_report(make_item, [10.0], unsampled=unsampled)
@@ -240,38 +226,11 @@ class TestEndToEnd:
 
 
 class TestLlamaBench:
-    def test_headline_rows_use_f16_kv_the_first_model_and_the_fastest_threads(self):
-        metrics, choice = bench_metrics(summary_rows(bench_rows()), BenchSelection())
-        assert metrics["pp512"] == Metric(200.0, note="t=8")
-        assert metrics["tg128@d4096"] == Metric(10.0, note="t=8")
-        assert "pp2048" not in metrics
-        assert choice == f"{Q4}, KV f16/f16, the fastest thread count"
-
-    def test_selection_by_model_threads_and_kv(self):
-        selection = BenchSelection(model="q5_k_m", threads=4, cache_type="q8_0")
-        metrics, choice = bench_metrics(summary_rows(bench_rows()), selection)
-        assert metrics["pp512"].value == 72.0
-        assert choice == f"{Q5}, KV q8_0/q8_0, 4 threads"
-
-    def test_unknown_model_selects_nothing(self):
-        metrics, choice = bench_metrics(summary_rows(bench_rows()), BenchSelection(model="gemma"))
-        assert metrics == {}
-        assert choice.startswith("no matching model")
-
-    def test_raw_and_enriched_files_compare_row_by_row(self, tmp_path):
-        raw = write(tmp_path, "cpu16-raw.json", bench_rows())
-        slower = [{**row, "avg_ts": row["avg_ts"] / 2} for row in bench_rows()]
-        enriched = write(
-            tmp_path,
-            "cpu16-2026-10-06.json",
-            {"kind": "horus-llama-bench", "label": "cpu16", "llama_cpp": {"build": "b11382"}, "models": [], "results": slower},
-        )
-        markdown = compare_markdown([raw], [enriched], BenchSelection())
-        assert table_row(markdown, "Prompt processing pp512")[2:] == ["200.0 t/s (t=8)", "100.0 t/s (t=8)", "-100.0 t/s (-50%)"]
-        assert "## llama-bench, every configuration" in markdown
-        assert "different machines" not in markdown
-        detail = [line for line in markdown.splitlines() if line.startswith(f"| {Q5} | tg128 | 4096 | q8_0/q8_0 | 4 |")]
-        assert detail == [f"| {Q5} | tg128 | 4096 | q8_0/q8_0 | 4 | 3.60 t/s (± 1.0) | 1.80 t/s (± 1.0) | -1.80 t/s (-50%) |"]
+    def test_a_report_written_by_run_llama_bench_compares(self):
+        markdown = compare_markdown([BENCHMARKS / "cpu-laptop-2026-10-06.json"], None, BenchSelection())
+        assert markdown.startswith("# Benchmark\n")
+        assert table_row(markdown, "Label")[1] == "cpu-laptop"
+        assert table_row(markdown, "Prompt processing pp512")[2:] == ["172.6 t/s (t=12)"]
 
     def test_one_side_may_hold_a_bench_file_and_an_eval_file(self, tmp_path, make_item):
         bench = write(tmp_path, "cpu16.json", bench_rows())
@@ -284,36 +243,11 @@ class TestLlamaBench:
 
 
 class TestInputs:
-    def test_two_files_of_the_same_family_on_one_side_are_refused(self, tmp_path, make_item):
-        documents = [load_document(write(tmp_path, f"{name}.json", eval_report(make_item, [1.0]))) for name in "ab"]
-        with pytest.raises(ValueError, match="at most one llama-bench file and one end-to-end file"):
-            build_side("before", documents, BenchSelection())
-
-    def test_other_json_is_refused(self, tmp_path):
-        with pytest.raises(ValueError, match="not a benchmark file"):
-            load_document(write(tmp_path, "x.json", {"kind": "something"}))
-
     def test_the_committed_baseline_is_a_recorded_result(self):
         document = load_document(BASELINE)
         assert document["kind"] == "horus-recorded"
         assert document["metrics"]["total_median_s"]["value"] == 854.0
         assert document["recorded"]["date"] == "2026-09-01"
-
-
-class TestFormatting:
-    def test_metric_values(self):
-        assert format_metric(None, "s") == "—"
-        assert format_metric(Metric(None, 0), "s") == "—"
-        assert format_metric(Metric(3, 3), "count") == "3 (n=3)"
-        assert format_metric(Metric(12345.678), "t/s") == "12,345.7 t/s"
-        assert format_metric(Metric("f16/f16"), "text") == "f16/f16"
-
-    def test_changes(self):
-        assert format_change(Metric(80.0), Metric(85.5), "%") == "+5.5 pts"
-        assert format_change(Metric(2), Metric(0), "count") == "-2"
-        assert format_change(Metric(0.0), Metric(1.5), "GiB") == "+1.50 GiB"
-        assert format_change(Metric(None), Metric(1.0), "s") == ""
-        assert format_change(Metric("f16/f16"), Metric("f16/f16"), "text") == "same"
 
 
 @pytest.fixture(scope="module")
@@ -327,32 +261,11 @@ def compare_cli():
 
 
 class TestCommandLine:
-    def parse(self, compare_cli, *argv):
-        return compare_cli.build_parser().parse_args(list(argv))
-
-    def test_file_choices(self, compare_cli):
-        assert compare_cli.chosen_files(self.parse(compare_cli, "a.json", "b.json")) == (["a.json"], ["b.json"])
-        assert compare_cli.chosen_files(self.parse(compare_cli, "a.json")) == (["a.json"], [])
-        args = self.parse(compare_cli, "--before", "a.json", "b.json", "--after", "c.json")
-        assert compare_cli.chosen_files(args) == (["a.json", "b.json"], ["c.json"])
-
-    @pytest.mark.parametrize(
-        "argv", [[], ["a.json", "b.json", "c.json"], ["a.json", "--before", "b.json"], ["--after", "a.json"]]
-    )
-    def test_bad_file_choices(self, compare_cli, argv):
-        with pytest.raises(ValueError):
-            compare_cli.chosen_files(self.parse(compare_cli, *argv))
-
-    def test_main_prints_and_writes_the_markdown(self, compare_cli, tmp_path, make_item, monkeypatch, capsys):
+    def test_main_prints_and_writes_the_section_10_markdown(self, compare_cli, tmp_path, make_item, capsys):
         run = write(tmp_path, "eval.json", eval_report(make_item, [10.0]))
         out = tmp_path / "compare.md"
-        monkeypatch.setattr(sys, "argv", ["compare-benchmarks.py", str(BASELINE), str(run), "--out", str(out)])
-        assert compare_cli.main() == 0
+        assert compare_cli.main([str(BASELINE), str(run), "--out", str(out)]) == 0
         printed = capsys.readouterr().out
         assert printed.startswith("# Benchmark comparison")
+        assert "\n## Section 10 metrics\n" in printed
         assert out.read_text(encoding="utf-8") == printed
-
-    def test_main_reports_a_missing_file(self, compare_cli, tmp_path, monkeypatch, capsys):
-        monkeypatch.setattr(sys, "argv", ["compare-benchmarks.py", str(tmp_path / "missing.json")])
-        assert compare_cli.main() == 2
-        assert capsys.readouterr().out.startswith("[error]")
