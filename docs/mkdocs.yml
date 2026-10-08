@@ -81,6 +81,7 @@ nav:
       - ADR-004 Closed-source licence: adr/ADR-004-closed-source-licence.md
       - ADR-005 Accepted quality debt: adr/ADR-005-accepted-quality-debt.md
       - ADR-006 Machines under 16 GB: adr/ADR-006-low-ram-machines.md
+      - ADR-007 Open-source benchmark kit: adr/ADR-007-open-source-benchmark-kit.md
   - Assets:
       - Horus Presentation v8: assets/horus_presentation_v8.pdf
       - Research — Agent Management: assets/research/mas/Agent_Management.pdf

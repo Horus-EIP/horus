@@ -1,5 +1,7 @@
 # ADR-004: Horus stays fully closed source under a proprietary licence
 
+> **Amended on 08/10/2026 by [ADR-007](ADR-007-open-source-benchmark-kit.md):** `opensource/horus-bench-kit/`, our benchmark and evaluation tools, is open source under the Apache License 2.0. The rest of the repository stays closed, as decided below.
+
 **Date:** 2026-09-24
 **Status:** Accepted by the team (24/09/2026). Sent to the study supervisor for validation of the fully closed scope (Tek5 Objective 1, due 30/09/2026).
 **Last updated:** 2026-09-26
