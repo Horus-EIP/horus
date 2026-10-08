@@ -191,7 +191,7 @@ This document describes the monitoring stack shipped with **`src/infra/docker-co
 | Data stores | PostgreSQL, Valkey (service `redis`), RabbitMQ, ChromaDB (Knowledge Store volume) |
 | Metrics | Prometheus scrapes MAS, Agent, and Knowledge Store `/metrics` endpoints; viewed at **`/admin/metrics`** in the web client |
 | Traces | Grafana Tempo receives OTLP from application containers; viewed at **`/admin/traces`** in the web client (trace search + span waterfall) |
-| Logs | Grafana Loki ingests stdout/stderr from **all Docker Compose services** via Grafana Alloy (Docker service discovery, `observability/config.alloy`; containers without a Compose service label are not read); viewed at **`/admin/logs`** in the web client |
+| Logs | Grafana Loki ingests stdout/stderr from **the Docker Compose services of this install** via Grafana Alloy (Docker service discovery, `observability/config.alloy`; Alloy lists only the containers whose `com.docker.compose.project` label is this install's Compose project, so other Compose projects and plain containers on the same Docker host are not read); viewed at **`/admin/logs`** in the web client |
 | Visualization | Web client admin pages (`/admin/logs`, `/admin/metrics`, `/admin/traces`), backed by Loki, Prometheus, and Tempo; require the `admin` role |
 | Admin UIs | RabbitMQ management plugin; PgAdmin as a development tool (Compose profile `dev-tools`); `valkey-cli` in the `redis` container for the cache |
 
@@ -233,6 +233,15 @@ The backends run **inside** the Docker network and are **not** published to the 
 In **`src/infra/observability/loki.yaml`**, the compactor has **`retention_enabled: false`** (no automatic expiry of old logs) and **`limits_config.allow_deletes: false`** (the log-deletion API is off). Loki’s ingest path is append-only: existing lines are not updated in place through the query API.
 
 That is **not** cryptographic immutability: anyone who can remove the Docker volume or files on disk can still destroy data. For strict write-once retention (for example compliance), use object storage with **Object Lock** (or an enterprise log archive) and restrict who can change buckets or Compose volumes.
+
+#### Container log rotation (Docker)
+
+Docker keeps each container's stdout/stderr in `json-file` logs, which `docker logs` and Alloy read. Every service takes the same `logging` block from the `x-logging` anchor at the top of its Compose file: at most `HORUS_LOG_MAX_FILE` files (default 10) of `HORUS_LOG_MAX_SIZE` (default `40m`) each, about 400 MB per container. When the last file is full, Docker deletes the oldest one.
+
+- MAS writes the most: about 50 MB a day when idle on the GPU profile and about 120 MB a day under the installer's tests on the CPU profile (measured 2026-10-08), so `docker logs mas` goes back 3 to 7 days. An error that writes a traceback on every request writes far more: on 2026-09-09 MAS wrote about 500 MB in one hour, and at that rate the limit holds under an hour of MAS. Every other service writes under 5 MB a day.
+- Loki keeps its own copy of every line Alloy shipped (retention is off, see above), including the lines Docker has rotated away. `/admin/logs` looks back at most 24 hours; older lines are read through Loki's API, for example `docker exec loki wget -qO- 'http://localhost:3100/loki/api/v1/query_range?query=%7Bcompose_service%3D%22mas%22%7D&start=<unix-ns>&end=<unix-ns>&limit=1000'`.
+- To change the limits, set `HORUS_LOG_MAX_SIZE` and `HORUS_LOG_MAX_FILE` in `src/infra/.env`, then run `docker compose up -d`. Docker applies logging options only to the containers it creates, and `up -d` recreates the services whose configuration changed; `docker compose restart` does not.
+- YAML anchors do not cross files, so `docker-compose.yml` and `docker-compose.cpu.yml` each define `x-logging: &logging`; `tests/ci/test_repository_wiring.py` (`LogRotation`) checks that the two stay the same and that every service uses the one in its own file.
 
 ---
 

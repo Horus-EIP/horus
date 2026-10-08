@@ -1,3 +1,9 @@
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "${HORUS_LOG_MAX_SIZE:-40m}"
+    max-file: "${HORUS_LOG_MAX_FILE:-10}"
+
 services:
   mas:
     image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-mas:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-cpu}
@@ -46,6 +52,7 @@ services:
   llm-model:
     image: ${LLM_SERVER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-b11382}
     container_name: llm_model
+    logging: *logging
     entrypoint: ["/bin/sh", "/opt/horus/fetch-model.sh"]
     environment:
       - LLM_GGUF_FILE=${LLM_GGUF_FILE:-qwen3-4b-instruct-2507-Q4_K_M.gguf}
@@ -64,6 +71,7 @@ services:
   llm:
     image: ${LLM_SERVER_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-b11382}
     container_name: llm
+    logging: *logging
     restart: unless-stopped
     mem_limit: ${LLM_SERVER_MEM_LIMIT:-6g}
     memswap_limit: ${LLM_SERVER_MEMSWAP_LIMIT:-${LLM_SERVER_MEM_LIMIT:-6g}}

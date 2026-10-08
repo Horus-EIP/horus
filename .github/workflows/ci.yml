@@ -73,6 +73,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Install PyYAML
+        run: pip install pyyaml
+
       - name: Test the version check
         run: python -m unittest discover -s tests/ci -v
 

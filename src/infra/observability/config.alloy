@@ -6,6 +6,11 @@ logging {
 discovery.docker "compose" {
 	host             = "unix:///var/run/docker.sock"
 	refresh_interval = "5s"
+
+	filter {
+		name   = "label"
+		values = ["com.docker.compose.project=" + sys.env("HORUS_COMPOSE_PROJECT")]
+	}
 }
 
 discovery.relabel "compose" {

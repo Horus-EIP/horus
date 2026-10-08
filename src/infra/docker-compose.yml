@@ -10,6 +10,12 @@
 # Eager LLMs: the agent loads the decision model at startup (`AGENT_LAZY_DECISION_MODEL=0`),
 # so the first chat does not pay a one-time load cost (container start is slower instead).
 
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "${HORUS_LOG_MAX_SIZE:-40m}"
+    max-file: "${HORUS_LOG_MAX_FILE:-10}"
+
 services:
   # =============================================================================
   # CORE APPLICATION SERVICES
@@ -18,6 +24,7 @@ services:
   rabbitmq:
     image: rabbitmq:4.1.2-management
     container_name: rabbitmq
+    logging: *logging
     restart: unless-stopped
     ports:
       - "${RABBITMQ_PORT:-5672}:5672"
@@ -43,6 +50,7 @@ services:
       additional_contexts:
         notices: ../..
     container_name: mas
+    logging: *logging
     restart: unless-stopped
     mem_limit: ${MAS_MEM_LIMIT:-14g}
     memswap_limit: ${MAS_MEMSWAP_LIMIT:-${MAS_MEM_LIMIT:-14g}}
@@ -133,6 +141,7 @@ services:
         # Browser calls KS on host port; leave empty unless a gateway adds a path prefix.
         NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX: ${NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX:-}
     container_name: web_client
+    logging: *logging
     restart: unless-stopped
     depends_on:
       mas:
@@ -172,6 +181,7 @@ services:
       additional_contexts:
         notices: ../..
     container_name: agent
+    logging: *logging
     restart: unless-stopped
     mem_limit: ${AGENT_MEM_LIMIT:-12g}
     memswap_limit: ${AGENT_MEMSWAP_LIMIT:-${AGENT_MEM_LIMIT:-12g}}
@@ -264,6 +274,7 @@ services:
   vllm:
     image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.23.0}
     container_name: vllm
+    logging: *logging
     gpus: all
     shm_size: "${VLLM_SHM_SIZE:-4gb}"
     command:
@@ -314,6 +325,7 @@ services:
       additional_contexts:
         notices: ../..
     container_name: knowledge_store
+    logging: *logging
     restart: unless-stopped
     mem_limit: ${KNOWLEDGE_STORE_MEM_LIMIT:-6g}
     memswap_limit: ${KNOWLEDGE_STORE_MEMSWAP_LIMIT:-${KNOWLEDGE_STORE_MEM_LIMIT:-6g}}
@@ -386,6 +398,7 @@ services:
   postgres:
     image: postgres:18.6
     container_name: postgres
+    logging: *logging
     restart: unless-stopped
     volumes:
       - postgresql_data:/var/lib/postgresql
@@ -410,6 +423,7 @@ services:
   redis:
     image: valkey/valkey:9.1.2
     container_name: redis
+    logging: *logging
     ports:
       - "${REDIS_PORT:-6379}:6379"
     env_file:
@@ -436,6 +450,7 @@ services:
   pgadmin:
     image: dpage/pgadmin4:9.18.0
     container_name: pgadmin
+    logging: *logging
     profiles: ["dev-tools"]
     volumes:
       - pgadmin_data:/var/lib/pgadmin
@@ -463,6 +478,7 @@ services:
   loki:
     image: grafana/loki:3.4.2
     container_name: loki
+    logging: *logging
     command: ["-config.file=/etc/loki/loki.yaml"]
     volumes:
       - ./observability/loki.yaml:/etc/loki/loki.yaml:ro
@@ -475,7 +491,10 @@ services:
   alloy:
     image: grafana/alloy:v1.20.1
     container_name: alloy
+    logging: *logging
     command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy/data", "--disable-reporting"]
+    environment:
+      - HORUS_COMPOSE_PROJECT=${COMPOSE_PROJECT_NAME}
     volumes:
       - ./observability/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -497,6 +516,7 @@ services:
   tempo:
     image: grafana/tempo:2.6.0
     container_name: tempo
+    logging: *logging
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./observability/tempo.yaml:/etc/tempo.yaml:ro
@@ -512,6 +532,7 @@ services:
   prometheus:
     image: prom/prometheus:v3.15.0
     container_name: prometheus
+    logging: *logging
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'

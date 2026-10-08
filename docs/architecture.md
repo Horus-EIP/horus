@@ -577,7 +577,7 @@ A complete example with all variables is available at `src/infra/.env.example`.
 | Redis | Caching, session storage |
 | RabbitMQ | Asynchronous message broker for task dispatch |
 | Prometheus | Metrics collection |
-| Loki + Grafana Alloy | Log aggregation backend; Alloy ships the Compose containers' logs to Loki |
+| Loki + Grafana Alloy | Log aggregation backend; Alloy ships the logs of this install's Compose containers to Loki |
 | Tempo | Distributed trace backend |
 | OpenTelemetry | Instrumentation SDK for traces and metrics export |
 | Web client `/admin` pages | In-app observability UI (logs, metrics, traces) backed by Loki/Prometheus/Tempo |

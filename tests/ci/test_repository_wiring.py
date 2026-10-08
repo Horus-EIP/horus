@@ -143,8 +143,8 @@ class EvalWorkflowTriggers(unittest.TestCase):
                     self.assertIn(f"{folder}/**", triggers[event]["paths"])
 
 
-def compose_service(name: str) -> str:
-    lines = (INFRA / "docker-compose.yml").read_text(encoding="utf-8").splitlines()
+def compose_service(name: str, path: Path = INFRA / "docker-compose.yml") -> str:
+    lines = path.read_text(encoding="utf-8").splitlines()
     start = lines.index(f"  {name}:")
     block = []
     for line in lines[start + 1:]:
@@ -184,6 +184,12 @@ class DevTools(unittest.TestCase):
         for path in (*COMPOSE_FILES, INFRA / ".env.example"):
             with self.subTest(path.name):
                 self.assertNotIn("redisinsight", path.read_text(encoding="utf-8").lower())
+
+
+def compose_document(path: Path) -> dict:
+    loader = type("ComposeLoader", (yaml.SafeLoader,), {})
+    loader.add_constructor("!reset", lambda _loader, _node: None)
+    return yaml.load(path.read_text(encoding="utf-8"), Loader=loader)
 
 
 def final_stage(dockerfile: Path) -> list[str]:
@@ -251,6 +257,43 @@ class LogShipping(unittest.TestCase):
         self.assertRegex(self.config, r"targets\s*=\s*discovery\.relabel\.compose\.output")
         self.assertRegex(self.config, r'com_docker_compose_service"\]\s*regex\s*=\s*""\s*action\s*=\s*"drop"')
         self.assertNotIn("relabel_rules", self.config)
+
+    def test_alloy_reads_only_the_containers_of_its_own_compose_project(self):
+        self.assertRegex(self.config, r'filter\s*\{\s*name\s*=\s*"label"\s*values\s*=\s*'
+                                      r'\["com\.docker\.compose\.project=" \+ sys\.env\("HORUS_COMPOSE_PROJECT"\)\]')
+        self.assertIn("- HORUS_COMPOSE_PROJECT=${COMPOSE_PROJECT_NAME}", compose_service("alloy"))
+
+    def test_loki_keeps_the_compose_service_project_and_container_labels(self):
+        for label in ("compose_service", "compose_project", "container"):
+            with self.subTest(label):
+                self.assertRegex(self.config, rf'target_label\s*=\s*"{label}"')
+        self.assertRegex(self.config, r'regex\s*=\s*"__meta_docker_container_id\|compose_service\|'
+                                      r'compose_project\|container"\s*action\s*=\s*"labelkeep"')
+
+
+@needs_yaml
+class LogRotation(unittest.TestCase):
+    def test_docker_rotates_each_log_by_size_and_count(self):
+        logging = compose_document(COMPOSE_FILES[0])["x-logging"]
+        self.assertEqual(logging["driver"], "json-file")
+        self.assertRegex(logging["options"]["max-size"], r"^\$\{HORUS_LOG_MAX_SIZE:-\d+m\}$")
+        self.assertRegex(logging["options"]["max-file"], r"^\$\{HORUS_LOG_MAX_FILE:-\d+\}$")
+
+    def test_every_compose_file_defines_the_same_logging(self):
+        expected = compose_document(COMPOSE_FILES[0])["x-logging"]
+        for path in COMPOSE_FILES:
+            with self.subTest(path.name):
+                self.assertEqual(compose_document(path)["x-logging"], expected)
+
+    def test_every_service_logs_through_the_anchor_of_its_own_file(self):
+        base = compose_document(COMPOSE_FILES[0])["services"]
+        for path in COMPOSE_FILES:
+            for name, spec in compose_document(path)["services"].items():
+                with self.subTest(f"{path.name} {name}"):
+                    if path != COMPOSE_FILES[0] and name in base:
+                        self.assertNotIn("logging", spec)
+                    else:
+                        self.assertIn("    logging: *logging", compose_service(name, path).splitlines())
 
 
 class ImageTags(unittest.TestCase):
