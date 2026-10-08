@@ -191,7 +191,7 @@ This document describes the monitoring stack shipped with **`src/infra/docker-co
 | Data stores | PostgreSQL, Valkey (service `redis`), RabbitMQ, ChromaDB (Knowledge Store volume) |
 | Metrics | Prometheus scrapes MAS, Agent, and Knowledge Store `/metrics` endpoints; viewed at **`/admin/metrics`** in the web client |
 | Traces | Grafana Tempo receives OTLP from application containers; viewed at **`/admin/traces`** in the web client (trace search + span waterfall) |
-| Logs | Grafana Loki ingests stdout/stderr from **all Docker Compose services** via Promtail (Docker service discovery); viewed at **`/admin/logs`** in the web client |
+| Logs | Grafana Loki ingests stdout/stderr from **all Docker Compose services** via Grafana Alloy (Docker service discovery, `observability/config.alloy`; containers without a Compose service label are not read); viewed at **`/admin/logs`** in the web client |
 | Visualization | Web client admin pages (`/admin/logs`, `/admin/metrics`, `/admin/traces`), backed by Loki, Prometheus, and Tempo; require the `admin` role |
 | Admin UIs | RabbitMQ management plugin; PgAdmin and RedisInsight as development tools (Compose profile `dev-tools`) |
 

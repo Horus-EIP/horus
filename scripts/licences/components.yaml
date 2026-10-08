@@ -143,12 +143,12 @@ images:
     source: project page, LICENSING.md at v3.4.2
     url: https://github.com/grafana/loki
     note: AGPL, run as a separate process, unmodified; Horus only calls its HTTP API
-  grafana/promtail:
+  grafana/alloy:
     licence: Apache-2.0
     spdx: Apache-2.0
-    source: project page, LICENSING.md of Loki at v3.4.2 puts clients/, where Promtail lives, under Apache-2.0
-    url: https://github.com/grafana/loki/tree/v3.4.2/clients/cmd/promtail
-    note: separate process, unmodified; end of life since 2026-03-02
+    source: project page, LICENSE at v1.20.1
+    url: https://github.com/grafana/alloy
+    note: separate process, unmodified; reads the Docker socket, read-only, to ship the Compose containers' logs to Loki
   grafana/tempo:
     licence: AGPL-3.0-only
     spdx: AGPL-3.0-only

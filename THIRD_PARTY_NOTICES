@@ -5581,16 +5581,16 @@ The tag is the one the Compose files or Dockerfiles name.
   https://github.com/ggml-org/llama.cpp
   llama-server, the model server of the CPU profiles; separate process, unmodified; used by src/infra/docker-compose.cpu.yml
   Licence text (MIT): LICENSES/MIT.txt
+- grafana/alloy v1.20.1
+  Licence: Apache-2.0 (source: project page, LICENSE at v1.20.1)
+  https://github.com/grafana/alloy
+  separate process, unmodified; reads the Docker socket, read-only, to ship the Compose containers' logs to Loki; used by src/infra/docker-compose.yml
+  Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - grafana/loki 3.4.2
   Licence: AGPL-3.0-only (source: project page, LICENSING.md at v3.4.2)
   https://github.com/grafana/loki
   AGPL, run as a separate process, unmodified; Horus only calls its HTTP API; used by src/infra/docker-compose.yml
   Licence text (AGPL-3.0-only): LICENSES/AGPL-3.0-only.txt
-- grafana/promtail 3.4.2
-  Licence: Apache-2.0 (source: project page, LICENSING.md of Loki at v3.4.2 puts clients/, where Promtail lives, under Apache-2.0)
-  https://github.com/grafana/loki/tree/v3.4.2/clients/cmd/promtail
-  separate process, unmodified; end of life since 2026-03-02; used by src/infra/docker-compose.yml
-  Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - grafana/tempo 2.6.0
   Licence: AGPL-3.0-only (source: project page, LICENSE at v2.6.0)
   https://github.com/grafana/tempo

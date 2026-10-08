@@ -466,13 +466,13 @@ services:
       - horus-net
 
   # =============================================================================
-  # OBSERVABILITY - Tempo + Prometheus + Loki/Promtail
+  # OBSERVABILITY - Tempo + Prometheus + Loki/Alloy
   # Backends only. Logs, metrics, and traces are viewed in the web client's admin
   # pages (/admin/logs, /admin/metrics, /admin/traces) via app/api/{logs,metrics,
   # traces}; Grafana is no longer part of the stack.
   # =============================================================================
 
-  # Always-on observability backends (Loki + Promtail + Tempo + Prometheus).
+  # Always-on observability backends (Loki + Alloy + Tempo + Prometheus).
   # All four start with a plain `docker compose up` and feed the in-app admin pages.
   loki:
     image: grafana/loki:3.4.2
@@ -486,15 +486,22 @@ services:
     restart: unless-stopped
 
   # Reads the Docker API to tail logs from Compose services (requires the socket; treat as privileged).
-  promtail:
-    image: grafana/promtail:3.4.2
-    container_name: promtail
-    command: ["-config.file=/etc/promtail/promtail.yaml"]
+  alloy:
+    image: grafana/alloy:v1.20.1
+    container_name: alloy
+    command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy/data", "--disable-reporting"]
     volumes:
-      - ./observability/promtail.yaml:/etc/promtail/promtail.yaml:ro
+      - ./observability/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy/data
     depends_on:
       - loki
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/12345 && printf 'GET /-/ready HTTP/1.0\r\n\r\n' >&3 && grep -q '200 OK' <&3"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - horus-net
     restart: unless-stopped
@@ -546,6 +553,7 @@ volumes:
   tempo_data:
   prometheus_data:
   loki_data:
+  alloy_data:
   # Per-service LLM caches: populated by bootstrap_llm.py on first container
   # start, persist across rebuilds so model downloads happen exactly once.
   mas_model_cache:

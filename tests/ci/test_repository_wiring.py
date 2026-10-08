@@ -207,6 +207,36 @@ class LicenceFilesInImages(unittest.TestCase):
         self.assertTrue((REPO / "NOTICES").is_dir())
 
 
+class LogShipping(unittest.TestCase):
+    config = (INFRA / "observability" / "config.alloy").read_text(encoding="utf-8")
+
+    def test_alloy_ships_the_logs_and_promtail_is_gone(self):
+        self.assertRegex(compose_service("alloy"), r"(?m)^    image: grafana/alloy:v\d+\.\d+\.\d+$")
+        self.assertFalse((INFRA / "observability" / "promtail.yaml").exists())
+        for path in COMPOSE_FILES:
+            with self.subTest(path.name):
+                self.assertNotIn("promtail", path.read_text(encoding="utf-8").lower())
+
+    def test_alloy_mounts_its_config_and_the_docker_socket_read_only(self):
+        block = compose_service("alloy")
+        self.assertIn("- ./observability/config.alloy:/etc/alloy/config.alloy:ro", block)
+        self.assertIn("- /var/run/docker.sock:/var/run/docker.sock:ro", block)
+
+    def test_loki_gets_the_labels_the_admin_logs_page_queries(self):
+        route = (SERVICES / "web-client" / "app" / "api" / "logs" / "route.ts").read_text(encoding="utf-8")
+        used = set(re.findall(r"label/(\w+)/values|\{(\w+)=|stream\?\.(\w+)", route))
+        labels = {name for match in used for name in match if name}
+        self.assertEqual(labels, {"compose_service", "container"})
+        for label in labels:
+            with self.subTest(label):
+                self.assertRegex(self.config, rf'target_label\s*=\s*"{label}"')
+
+    def test_containers_without_a_compose_service_are_never_read(self):
+        self.assertRegex(self.config, r"targets\s*=\s*discovery\.relabel\.compose\.output")
+        self.assertRegex(self.config, r'com_docker_compose_service"\]\s*regex\s*=\s*""\s*action\s*=\s*"drop"')
+        self.assertNotIn("relabel_rules", self.config)
+
+
 class ImageTags(unittest.TestCase):
     def test_every_image_names_an_exact_version(self):
         images = third_party_notices.used_images()

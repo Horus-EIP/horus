@@ -577,7 +577,7 @@ A complete example with all variables is available at `src/infra/.env.example`.
 | Redis | Caching, session storage |
 | RabbitMQ | Asynchronous message broker for task dispatch |
 | Prometheus | Metrics collection |
-| Loki + Promtail | Log aggregation backend |
+| Loki + Grafana Alloy | Log aggregation backend; Alloy ships the Compose containers' logs to Loki |
 | Tempo | Distributed trace backend |
 | OpenTelemetry | Instrumentation SDK for traces and metrics export |
 | Web client `/admin` pages | In-app observability UI (logs, metrics, traces) backed by Loki/Prometheus/Tempo |
@@ -1934,7 +1934,7 @@ docker cp knowledge_store:/app/chroma_data ./chroma_backup
   - Logs: http://localhost:3000/admin/logs (backed by Loki)
   - Metrics: http://localhost:3000/admin/metrics (backed by Prometheus): Task Queue Depth, Task Errors Rate and Active Agents; p50/p95 of MAS and agent task time, model inference and knowledge store requests and queries; Routing Decisions by Method and Routing Time p95 by Method (`mas_routing_decisions_total`, `mas_routing_decision_seconds`); Agent and MAS Prompt Tokens per Call (`agent_llm_prompt_tokens`, `mas_llm_prompt_tokens`)
   - Traces: http://localhost:3000/admin/traces (backed by Tempo; trace search + span waterfall)
-- **Backends (internal only, not published to the host by default):** Prometheus (`:9090`), Loki (`:3100`), and Tempo (`:3200`) run inside the Docker network. Their config lives in `src/infra/observability/` (`prometheus.yaml`, `loki.yaml`, `promtail.yaml`, `tempo.yaml`).
+- **Backends (internal only, not published to the host by default):** Prometheus (`:9090`), Loki (`:3100`), and Tempo (`:3200`) run inside the Docker network. Their config lives in `src/infra/observability/` (`prometheus.yaml`, `loki.yaml`, `config.alloy`, `tempo.yaml`).
 - **Tempo (OTLP):** applications send traces to `http://tempo:4317` inside the Docker network (OTLP ports `4317`/`4318` are the only observability ports published to the host).
 
 ---

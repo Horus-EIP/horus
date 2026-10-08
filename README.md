@@ -115,7 +115,7 @@ graph TB
 | Retrieval | ChromaDB 1.5.2, FastEmbed 0.8.1 on ONNX Runtime (BAAI/bge-base-en-v1.5 in the knowledge store, all-MiniLM-L6-v2 for MAS routing), LangChain tools in the agent |
 | Messaging | RabbitMQ 4.1 (pika) |
 | Data | PostgreSQL, Valkey 9.1 (Redis protocol; the Compose service is still called `redis`) |
-| Observability | Prometheus, Loki, Tempo, OpenTelemetry (viewed in the web client's `/admin` pages) |
+| Observability | Prometheus, Loki fed by Grafana Alloy, Tempo, OpenTelemetry (viewed in the web client's `/admin` pages) |
 | Auth | JWT + bcrypt, OAuth2 password flow, four roles (admin, manager, user, system) |
 | Install | Python installer (`installer/`), Tauri desktop app (`desktop/`) |
 | Testing | pytest, Vitest, Locust ([TESTING.md](TESTING.md)) |

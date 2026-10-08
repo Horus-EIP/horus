@@ -80,7 +80,7 @@ The debt as recorded on 24/09/2026. The Decision column says where each item sta
 | C4 | **passlib 1.7.4 + `bcrypt<4.0`** in MAS, `bcrypt==3.2.2` pinned in the agent. passlib has had no release since 2020 and clashes with recent bcrypt. | Use `bcrypt` directly (or a maintained wrapper), with one version everywhere | Works today; it touches password hashing, so it needs care | S | Stuck on old crypto packages; future security fixes may be blocked | **Open.** Repay by 0.3.0 (before pilots) |
 | C5 | **The Python version is not consistent**: the README badge says 3.13, ruff targets `py313`, CI runs 3.13, and the Docker images use `python:3.11-slim` | One supported version, the same everywhere | Each part was set up at a different time | XS–S | "Works on my machine" bugs; lint rules for a version we don't run | **Part repaid**: the README says 3.11 (`8dc2410`). The rest by 0.1.2 (pick 3.11 or upgrade the images) |
 | C6 | **Unused or odd dependencies**: PyMuPDF (AGPL, never imported) in the knowledge store; the PyPI `graphlib` package in MAS next to the standard-library `graphlib` | Remove them | Nobody cleaned the requirements after refactors | XS | PyMuPDF is the only licence blocker (ADR-004) | **Part repaid**: PyMuPDF removed (`a2e5807`). `graphlib` by 0.1.2 |
-| C7 | **Promtail** (log shipper) is end-of-life since March 2026 | Grafana Alloy | Still works | S | No more security fixes | **Open.** Repay by 0.2.0 |
+| C7 | **Promtail** (log shipper) is end-of-life since March 2026 | Grafana Alloy | Still works | S | No more security fixes | **Repaid**, not released yet (B-122) |
 
 ### D. Architecture and runtime
 
@@ -107,7 +107,7 @@ The debt as recorded on 24/09/2026. The Decision column says where each item sta
 
 ## Status on 07/10/2026
 
-Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at that commit. C1, E1 and E2 were repaid later that day by the Objective 1 commits named below, and C5 in part. C2 and C3 were repaid on 08/10/2026.
+Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at that commit. C1, E1 and E2 were repaid later that day by the Objective 1 commits named below, and C5 in part. C2, C3 and C7 were repaid on 08/10/2026.
 
 ### Repaid
 
@@ -122,6 +122,7 @@ Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at 
 | E4 | `b4e63c2`, `2dbffb9` | `VERSIONING.md` and `TESTING.md` are at the repository root, checked against the code on 07/10/2026; this ADR is in `docs/adr/`. |
 | C2 | B-46, 08/10/2026 | Each service's test tools are in its `requirements-test.txt`, which `scripts/dev/lock-requirements.sh` does not lock and only the CI test jobs install; no lock file names pytest, coverage or fakeredis, and `tests/ci/test_cpu_torch_build.py` checks it. |
 | C3 | B-121, 08/10/2026 | `src/services/mas/Dockerfile` has a builder stage with `build-essential` and `g++`, and a final stage that copies the virtual environment and installs no system package; pip resolves the lock with its default resolver and `pip check` passes in the image. The CPU image went from 1.32 GB to 877 MB. |
+| C7 | B-122, 08/10/2026 | `src/infra/docker-compose.yml` runs `grafana/alloy:v1.20.1` with `src/infra/observability/config.alloy`, which gives Loki the labels the web client's `/admin/logs` queries (`compose_service`, `container`) and `compose_project`; no Promtail is left. |
 | D6 | `2cdc325` (B-51) | `VERSION` is `0.1.2`; `desktop/package.json`, `desktop/src-tauri/tauri.conf.json`, `desktop/src-tauri/Cargo.toml` and `src/services/web-client/package.json` say `0.1.2`; the knowledge store reports `HORUS_VERSION` (`src/services/knowledge-store/app/main.py`, line 112); the CI job `versions` runs `scripts/ci/check-versions.py` (`.github/workflows/ci.yml`, lines 66–80). |
 
 ### Part repaid
@@ -146,7 +147,6 @@ Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at 
 | B3 | `src/services/knowledge-store/tests/test_corpus_safety.py` is still there; CI runs `tests/knowledge_store` only (`ci.yml`, line 295). |
 | B4 | The repository records no ATP after v7 (18/09/2026, `docs/eip/regressions.md`), so the rule has not been applied yet. |
 | C4 | `src/services/mas/requirements.txt` lines 23–24; `src/services/agent/requirements.txt` line 18. passlib hashes the passwords in `src/services/mas/auth/auth_tool_functions.py` (line 10). |
-| C7 | `src/infra/docker-compose.yml` line 481: `grafana/promtail:3.4.2`. |
 | D2 | `packaging/build_bundle.py` (lines 27–31) still puts the service source in the ZIP; `docs/operations.md` (line 79) lists it as not done. The images are signed by `images.yml`, but the installer does not check the signature (`docs/operations.md`, line 80). |
 
 The accepted items still hold: B904 is still ignored (`pyproject.toml`, line 51), the coverage gates are still 85 / 90 / 85 % (`ci.yml`, lines 198, 247 and 298), and the stack still runs `grafana/loki:3.4.2` and `grafana/tempo:2.6.0` (`src/infra/docker-compose.yml`, lines 469 and 496). For E3, the work since 24/09 is in small commits, most named after a backlog item; merging `Sprint#1_September2026_Tek5` into `master` as one squash would repeat it.
@@ -158,12 +158,12 @@ The accepted items still hold: B904 is still ignored (`pyproject.toml`, line 51)
 | Repay by | Items | Estimated cost |
 |---|---|---|
 | **0.1.2** (not tagged yet) | A1, A3, A6, B3; the rest of C5 and C6 | Under 2.5 d by the cost scale (S: A1; XS: A3, A6, B3, C6; XS–S: C5). Fixing the 20 lint errors before `npm run lint` can gate CI is not estimated. |
-| **0.2.0** (end of Oct) | A2 (start), A5, C7, D2; the rest of B2 and D1 | A2, A5 and C7: about 1.5 to 3 d by the cost scale. B2 (M) and D1 + D2 (L) are part repaid and not re-estimated. |
+| **0.2.0** (end of Oct) | A2 (start), A5, D2; the rest of B2 and D1 | A2 and A5: about 1 to 2.5 d by the cost scale. B2 (M) and D1 + D2 (L) are part repaid and not re-estimated. |
 | **0.3.0** (Dec) | C4, D1 (slimmer profile) | ~3 d (24/09 estimate) |
 | **1.0.0** (Feb 2027) | B1 (E2E in CI) | ~3–5 d |
 | **Next ATP** | B4 | XS |
 | **Accepted** | A4, A7 (gates), D7, E3 | — |
-| **Repaid** | D3, D6 (in 0.1.2); C1, C2, C3, D4, D5, E1, E2, E4 (not released yet) | — |
+| **Repaid** | D3, D6 (in 0.1.2); C1, C2, C3, C7, D4, D5, E1, E2, E4 (not released yet) | — |
 
 **Why this order:**
 
