@@ -604,14 +604,17 @@ def step_login(steps: Steps, mas: str, username: str, password: str, deadline: f
         raise _fail(
             steps,
             f"Login failed for user '{username}' (HTTP {resp.status}).",
-            "The admin account is seeded by the API on first start from\n"
-            "SUPER_USER_USERNAME / SUPER_USER_PASSWORD in src/infra/.env.\n"
-            "A 401 here means those values do not match the account already in\n"
-            "the database - which happens if you changed them after the first\n"
-            "start, because the seeding only runs against an empty database.",
-            "If you changed the admin password after installing, either put the\n"
-            "old one back in src/infra/.env, or wipe the data and reinstall:\n"
-            "  START-HERE (your platform) --uninstall --delete-data\n"
+            "The admin account is created by the API on first start from\n"
+            "SUPER_USER_USERNAME / SUPER_USER_PASSWORD in src/infra/.env, and\n"
+            "an account still on the shipped 'admin' gets that password when\n"
+            "the API starts. A 401 here means the account's password is not the\n"
+            "one in src/infra/.env: it was changed in Horus, or SUPER_USER_PASSWORD\n"
+            "is empty or 'admin', which the API refuses.",
+            "Put the admin account's password in SUPER_USER_PASSWORD in\n"
+            "src/infra/.env, then run:\n"
+            "  START-HERE (your platform) --start\n"
+            "Or wipe the data and reinstall:\n"
+            "  START-HERE (your platform) --uninstall\n"
             "  START-HERE (your platform)",
         )
     token = (resp.json() or {}).get("access_token")

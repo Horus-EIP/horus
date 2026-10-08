@@ -47,6 +47,8 @@ WHEN IT FINISHES
 Open Horus from the app folder here (Linux: install the .deb in it) -
 it starts and stops Horus for you. Or use http://localhost:3000.
 Sign in with the username and password the installer prints at the end.
+It shows a password it generated only once; it is also in
+src/infra/.env, as SUPER_USER_PASSWORD.
 
 ABOUT YOUR FILES
 The installer asks which folders Horus may read and mounts them

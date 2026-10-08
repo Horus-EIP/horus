@@ -223,10 +223,12 @@ On first application startup:
 ## - Role assignments
 ## - Permission mappings
 
-## Environment variables set in .env:
+## Environment variables set in .env (the installer and init-env.sh generate the password):
 SUPER_USER_USERNAME=admin
-SUPER_USER_PASSWORD=admin
+SUPER_USER_PASSWORD=<24 generated characters>
 ```
+
+MAS creates the admin account once, on its first start, and refuses to create it when `SUPER_USER_PASSWORD` is empty or `admin`: it logs an error that says how to set one. On every start it also checks the stored password (`src/services/mas/db/admin_account.py`): an account still on the shipped `admin` gets the `SUPER_USER_PASSWORD` from `.env`, and an account whose password was changed in Horus is never touched. The installer shows a password it generated once, at the end, with the login name, and only on a terminal; it never writes it to `install-log.txt`, the `--json-events` stream or `horus-profile.json`. [Upgrades and uninstall](operations.md#upgrades-and-uninstall) says what an upgrade does.
 
 ##### 2. Creating Users
 
@@ -236,7 +238,7 @@ SUPER_USER_PASSWORD=admin
 ## Get admin token
 TOKEN=$(curl -X POST http://localhost:8000/auth/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=admin&password=admin" \
+  --data-urlencode "username=admin" --data-urlencode "password=$SUPER_USER_PASSWORD" \
   | jq -r '.access_token')
 
 ## Create new user
@@ -780,9 +782,9 @@ READ_ONLY_ROOTFS true
 
 - Secrets supplied via environment variables in development  
 - Local `.env` (not committed) for Compose  
-- The installer and `src/infra/init-env.sh` generate `JWT_SECRET_KEY` and `REDIS_PASSWORD` (64 hex characters each) into `src/infra/.env`, and the installer also generates `CORPUS_SCAN_TOKEN`; `.env.example` leaves `REDIS_PASSWORD` empty. On an install that still has the password earlier releases shipped (`redis_password`) or an empty one, the installer writes a generated one, and the `docker compose up -d` it ends with recreates `redis`, `mas` and `agent` with it.
+- The installer and `src/infra/init-env.sh` generate `JWT_SECRET_KEY` and `REDIS_PASSWORD` (64 hex characters each) and `SUPER_USER_PASSWORD` (24 characters that meet the MAS password policy) into `src/infra/.env`, and the installer also generates `CORPUS_SCAN_TOKEN`; `.env.example` leaves `REDIS_PASSWORD` and `SUPER_USER_PASSWORD` empty. On an install that still has the password earlier releases shipped (`redis_password`) or an empty one, the installer writes a generated one, and the `docker compose up -d` it ends with recreates `redis`, `mas` and `agent` with it.
 - `POSTGRES_PASSWORD`, `RABBITMQ_PASSWORD` and `PGADMIN_DEFAULT_PASSWORD` still ship as defaults; their ports answer on 127.0.0.1 only (see 6.3 for the Linux Engine caveat).
-- `SUPER_USER_PASSWORD` (admin/admin) does not have that protection. The web client on port 3000 answers on every interface and forwards every `/api/orchestrator/*` request to MAS, `/auth/token` included, so any machine that reaches port 3000 can sign in as admin. Set `SUPER_USER_PASSWORD` in `src/infra/.env` before the first start: MAS creates the admin account only once, and the agent signs in with the same value (`ORCHESTRATOR_PASSWORD`).
+- `SUPER_USER_PASSWORD` was `admin` in every release before this one, and no install keeps it now. On an install whose `.env` still has `admin` or an empty value, the installer writes a generated one; on its next start MAS gives it to an account still on `admin` (an account whose password was changed in Horus keeps its own), and the installer shows it once, at the end. The agent signs in with the same value (`ORCHESTRATOR_PASSWORD`), so the account and `.env` must agree: once the stack is up the installer runs `python -m db.admin_account` in the `mas` container and warns when they do not. The web client on port 3000 answers on every interface and forwards every `/api/orchestrator/*` request to MAS, `/auth/token` included, so any machine that reaches port 3000 can try to sign in.
 
 **Recommendations:**
 - Use Docker secrets for production

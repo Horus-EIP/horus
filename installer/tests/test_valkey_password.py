@@ -76,6 +76,12 @@ class ValkeyPassword(InfraCase):
         self.write_env("REDIS_PASSWORD=chosen-by-the-tester\n")
         self.assertEqual(self.password(), "chosen-by-the-tester")
 
+    def test_a_kept_password_is_written_back_exactly_as_it_was_quoted(self):
+        for raw in ('"p#ss word"', "'pa$$word'"):
+            with self.subTest(raw):
+                self.write_env(f"REDIS_PASSWORD={raw}\n")
+                self.assertEqual(self.password(), raw)
+
     def test_the_shipped_default_and_an_empty_password_are_replaced(self):
         for line in (f"REDIS_PASSWORD={OLD_DEFAULT}", f'REDIS_PASSWORD="{OLD_DEFAULT}"',
                      "REDIS_PASSWORD=", "REDIS_PASSWORD=   "):

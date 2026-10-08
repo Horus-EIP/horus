@@ -4,14 +4,11 @@ import sys
 
 from sqlalchemy import text
 
-from auth.auth_tool_functions import bcrypt_context
-from auth.permissions import Role
 from core.config import settings
-from core.hybrid_logging import log_user_action
 from core.logger import get_logger, log_db_operation, log_error, log_success
+from db.admin_account import ensure_admin_account
 from db.database import Base, SessionLocal, engine
 from db.migrate_critical_logs import create_critical_logs_table
-from db.models import Users
 from tasks.status import TaskStatus
 
 logger = get_logger("init_db")
@@ -133,31 +130,7 @@ def init_db():
 
     db = SessionLocal()
     try:
-        admin_user = (
-            db.query(Users).filter_by(username=settings.super_user_username).first()
-        )
-
-        if not admin_user:
-            admin_user = Users(
-                username=settings.super_user_username,
-                hashed_password=bcrypt_context.hash(settings.super_user_password),
-                role=Role.ADMIN.value,
-            )
-            db.add(admin_user)
-            db.commit()
-            db.refresh(admin_user)
-
-            log_success(
-                "init_db", f"Default admin user created: {settings.super_user_username}"
-            )
-
-            log_user_action(
-                "CREATE_ADMIN_USER",
-                user_id=admin_user.id,
-                details=f"Initial admin user created: {settings.super_user_username}",
-            )
-        else:
-            logger.info(f"Admin user already exists: {admin_user.username}")
+        ensure_admin_account(db, settings.super_user_username, settings.super_user_password)
 
         # The five specialist agents are no longer DB-seeded — the agent worker
         # registers them itself at startup as real, heartbeating identities (see

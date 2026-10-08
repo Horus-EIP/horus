@@ -7,6 +7,7 @@ import datetime
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -162,7 +163,29 @@ def _parse_env(text: str) -> list[tuple[str | None, str]]:
             out.append((stripped.split("=", 1)[0].strip(), line))
     return out
 
-GENERATED_SECRETS = ("JWT_SECRET_KEY", "REDIS_PASSWORD")
+ADMIN_USERNAME_KEY = "SUPER_USER_USERNAME"
+ADMIN_PASSWORD_KEY = "SUPER_USER_PASSWORD"
+SHIPPED_ADMIN_PASSWORDS = frozenset({"", "admin"})
+ADMIN_PASSWORD_SHAPE = tuple(re.compile(pattern) for pattern in
+                             ("^[A-Za-z0-9]", "[a-z]", "[A-Z]", "[0-9]", "[-_]"))
+GENERATED_SECRETS = ("JWT_SECRET_KEY", "REDIS_PASSWORD", ADMIN_PASSWORD_KEY)
+
+def generated_admin_password() -> str:
+    while True:
+        candidate = secrets.token_urlsafe(18)
+        if all(shape.search(candidate) for shape in ADMIN_PASSWORD_SHAPE):
+            return candidate
+
+def generated_secret(key: str) -> str:
+    return generated_admin_password() if key == ADMIN_PASSWORD_KEY else secrets.token_hex(32)
+
+def env_line_value(infra: Path, key: str) -> str | None:
+    try:
+        text = (infra / ".env").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    values = [line.split("=", 1)[1].strip() for name, line in _parse_env(text) if name == key]
+    return values[-1] if values else None
 
 def _bootstrap_env(log: Log, infra: Path, reset: bool) -> None:
     env_path = infra / ".env"
@@ -181,8 +204,6 @@ def _bootstrap_env(log: Log, infra: Path, reset: bool) -> None:
         log.warn(f"init-env.sh did not complete ({res.first_line() or 'no output'}); "
                  "falling back to the built-in equivalent")
 
-    import secrets
-
     example = infra / ".env.example"
     if not example.is_file():
         raise InstallError(
@@ -195,7 +216,7 @@ def _bootstrap_env(log: Log, infra: Path, reset: bool) -> None:
         _backup_env(log, env_path)
     try:
         text = example.read_text(encoding="utf-8")
-        generated = {key: secrets.token_hex(32) for key in GENERATED_SECRETS}
+        generated = {key: generated_secret(key) for key in GENERATED_SECRETS}
         lines = [f"{key}={generated[key]}" if key in generated else line
                  for key, line in _parse_env(text)]
         env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -296,8 +317,6 @@ def apply_env(log: Log, infra: Path, updates: dict[str, str], reset: bool) -> Pa
     return env_path
 
 def corpus_scan_token(log: Log, infra: Path) -> str:
-    import secrets
-
     env_path = infra / ".env"
     if env_path.is_file():
         try:
@@ -316,18 +335,72 @@ def corpus_scan_token(log: Log, infra: Path) -> str:
 OLD_VALKEY_PASSWORDS = frozenset({"", "redis_password"})
 
 def valkey_password(log: Log, infra: Path) -> str:
-    import secrets
-
-    existing = smoke.read_env(infra / ".env").get("REDIS_PASSWORD", "")
+    existing = smoke.read_env(infra / ".env").get("REDIS_PASSWORD", "").strip()
     if existing not in OLD_VALKEY_PASSWORDS:
         log.info("Reusing the existing REDIS_PASSWORD")
-        return existing
+        return env_line_value(infra, "REDIS_PASSWORD") or existing
     if existing:
         log.ok("Replacing the default Valkey password with a generated one: redis, mas "
                "and the agent restart with it when the stack starts")
     else:
         log.info("Generated a new REDIS_PASSWORD")
     return secrets.token_hex(32)
+
+def admin_password(log: Log, infra: Path) -> tuple[str, bool]:
+    existing = smoke.read_env(infra / ".env").get(ADMIN_PASSWORD_KEY, "").strip()
+    if existing not in SHIPPED_ADMIN_PASSWORDS:
+        log.info(f"Keeping the {ADMIN_PASSWORD_KEY} in src/infra/.env")
+        return env_line_value(infra, ADMIN_PASSWORD_KEY) or existing, False
+    if existing:
+        log.ok("Replacing the shipped admin password with a generated one. MAS gives it to "
+               "the admin account when it starts; it is shown once, at the end")
+    else:
+        log.info(f"Generated a new {ADMIN_PASSWORD_KEY}; it is shown once, at the end")
+    return generated_admin_password(), True
+
+ADMIN_CHECK = ["exec", "-T", "mas", "python", "-m", "db.admin_account"]
+ADMIN_OUTCOME = re.compile(r"^admin-account: (\w+)$")
+ADMIN_USES_ENV = frozenset({"created", "replaced", "matches"})
+ADMIN_REFUSED = frozenset({"shipped", "refused"})
+ADMIN_NOT_ON_ENV = ADMIN_REFUSED | {"differs"}
+
+def admin_account_outcome(log: Log, infra: Path) -> str:
+    res = run(compose(ADMIN_CHECK), log, timeout=180, cwd=infra, log_output=False,
+              stdin_text="")
+    for line in reversed(res.out.splitlines()):
+        match = ADMIN_OUTCOME.match(line.strip())
+        if match:
+            log.info(f"admin account: {match.group(1)}")
+            return match.group(1)
+    log.info(f"admin account: no outcome (exit {res.code})")
+    return ""
+
+def check_admin_account(log: Log, infra: Path) -> str:
+    outcome = admin_account_outcome(log, infra)
+    username = admin_username(infra)
+    if outcome == "differs":
+        log.warn(f"The password of {username} is not the {ADMIN_PASSWORD_KEY} in src/infra/.env, "
+                 "so Horus kept it: it was changed in Horus.")
+        log.say(f"  The agent signs in with {ADMIN_PASSWORD_KEY}. Put the password of "
+                f"{username} there,")
+        log.say("  then run  START-HERE (your platform) --start")
+    elif outcome in ADMIN_REFUSED:
+        log.warn(f"MAS refused the {ADMIN_PASSWORD_KEY} in src/infra/.env: it is empty or "
+                 "'admin'. Set a password of your own there, then run "
+                 "START-HERE (your platform) --start")
+    elif outcome not in ADMIN_USES_ENV:
+        log.warn(f"Could not check the admin account (`docker compose "
+                 f"{' '.join(ADMIN_CHECK)}` gave no answer). The log has the details.")
+    return outcome
+
+def admin_username(infra: Path) -> str:
+    return smoke.read_env(infra / ".env").get(ADMIN_USERNAME_KEY, "").strip() or "admin"
+
+def terminal_output() -> bool:
+    try:
+        return sys.stdout.isatty()
+    except (ValueError, AttributeError):
+        return False
 
 def _stream(cmd: list[str], log: Log, cwd: Path, label: str,
             heartbeat: int = 30, watch_for: tuple[str, ...] = (),
@@ -1433,6 +1506,7 @@ def _dispatch(log: Log, args) -> int:
     env["HORUS_CORPUS_DIR"] = choice["corpus_dir"]
     env["CORPUS_SCAN_TOKEN"] = corpus_scan_token(log, infra)
     env["REDIS_PASSWORD"] = valkey_password(log, infra)
+    env[ADMIN_PASSWORD_KEY], admin_password_generated = admin_password(log, infra)
     env["HORUS_VERSION"] = VERSION
     if registry is not None:
         env[images.REGISTRY_KEY] = registry
@@ -1452,6 +1526,9 @@ def _dispatch(log: Log, args) -> int:
 
     expect = [*CORE_SERVICES, profiles.model_server(name)]
     wait_for_health(log, infra, expect, timeout=args.timeout)
+    admin_outcome = check_admin_account(log, infra)
+    shown_password = (env[ADMIN_PASSWORD_KEY] if admin_password_generated
+                      and admin_outcome not in ADMIN_NOT_ON_ENV else None)
 
     if args.skip_smoke:
         log.warn("Smoke test skipped (--skip-smoke). Install is unverified.")
@@ -1474,7 +1551,8 @@ def _dispatch(log: Log, args) -> int:
         )
 
     _success(log, infra, name, choice,
-             non_interactive=args.non_interactive, built_here=registry is None)
+             non_interactive=args.non_interactive, built_here=registry is None,
+             admin_password=shown_password, admin_outcome=admin_outcome)
     return EXIT_OK
 
 def main(argv: list[str] | None = None) -> int:
@@ -1498,16 +1576,31 @@ def main(argv: list[str] | None = None) -> int:
         log.close(code)
     return code
 
+def show_admin_password(log: Log, infra: Path, password: str | None, outcome: str = "") -> None:
+    stored = f"{ADMIN_PASSWORD_KEY} in {infra / '.env'}"
+    if outcome in ADMIN_NOT_ON_ENV:
+        log.say("  Password    not the one in .env; see the warning above")
+    elif password and terminal_output():
+        print(f"  Password    {bold(password)}")
+        log.info("The generated admin password was shown on screen; it is not in this log")
+        log.say("              Shown only this once. It is stored as")
+        log.say(f"              {stored}")
+    elif password:
+        log.say(f"  Password    generated, stored as {stored}")
+    else:
+        log.say(f"  Password    the {stored}")
+
 def _success(log: Log, infra: Path, profile_name: str, choice: dict,
-             non_interactive: bool = False, built_here: bool = False) -> None:
-    creds = _read_admin_credentials(infra)
+             non_interactive: bool = False, built_here: bool = False,
+             admin_password: str | None = None, admin_outcome: str = "") -> None:
     log.say("")
     log.say(green("=" * 72))
     log.say(green("  Horus is running."))
     log.say(green("=" * 72))
     log.say("")
     log.say(f"  Open        {bold(WEB_URL)}")
-    log.say(f"  Sign in as  {creds[0]} / {creds[1]}")
+    log.say(f"  Sign in as  {admin_username(infra)}")
+    show_admin_password(log, infra, admin_password, admin_outcome)
     log.say("")
     log.say(f"  Profile     {profile_name}")
     log.say(f"  Documents   {consent.describe(choice)}")
@@ -1589,19 +1682,6 @@ def offer_to_reclaim(log: Log, non_interactive: bool = False, built_here: bool =
     freed = max(0, spare - reclaimable_build_cache(log))
     log.ok(f"Reclaimed {human_bytes(freed)} of build cache.")
     log.say("")
-
-def _read_admin_credentials(infra: Path) -> tuple[str, str]:
-    user, password = "admin", "admin"
-    try:
-        for line in (infra / ".env").read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line.startswith("SUPER_USER_USERNAME="):
-                user = line.split("=", 1)[1].strip() or user
-            elif line.startswith("SUPER_USER_PASSWORD="):
-                password = line.split("=", 1)[1].strip() or password
-    except OSError:
-        pass
-    return user, password
 
 if __name__ == "__main__":
     try:

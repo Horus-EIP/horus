@@ -86,7 +86,7 @@ cd src/infra
 bash init-env.sh
 ```
 
-`init-env.sh` writes a random `JWT_SECRET_KEY` and `REDIS_PASSWORD`; if you copy `.env.example` by hand instead, set both (`openssl rand -hex 32`): with an empty password Valkey refuses the other containers. Review the other values in `.env`. Defaults are suitable for many local setups. Important keys include `POSTGRES_*`, `REDIS_PASSWORD`, `RABBITMQ_*`, `JWT_SECRET_KEY`, and `SUPER_USER_*`. Never commit `.env`; only `.env.example` is tracked.
+`init-env.sh` writes a random `JWT_SECRET_KEY`, `REDIS_PASSWORD` and `SUPER_USER_PASSWORD`, the admin's password, which you read in `.env`; if you copy `.env.example` by hand instead, set all three (`openssl rand -hex 32`): with an empty password Valkey refuses the other containers, and MAS refuses to create the admin account with an empty password or `admin`. Review the other values in `.env`. Defaults are suitable for many local setups. Important keys include `POSTGRES_*`, `REDIS_PASSWORD`, `RABBITMQ_*`, `JWT_SECRET_KEY`, and `SUPER_USER_*`. Never commit `.env`; only `.env.example` is tracked.
 
 #### Step 3: Start the stack
 
@@ -750,16 +750,15 @@ docker restart mas
 ```bash
 ## Get a new token
 curl -X POST http://localhost:8000/auth/token \
-  -d "username=admin&password=admin"
+  --data-urlencode "username=admin" --data-urlencode "password=$SUPER_USER_PASSWORD"
 
 ## Check if user exists (in database)
 docker exec -it postgres psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-mas_db}" -c "SELECT * FROM users;"
 ```
 
-**If admin user doesn't exist:**
+**If admin user doesn't exist:** MAS does not create it while `SUPER_USER_PASSWORD` in `src/infra/.env` is empty or `admin`; its log says so. Set a password there, then recreate MAS and the agent so they read it:
 ```bash
-## Restart MAS to trigger init_db
-docker restart mas
+cd src/infra && docker compose up -d mas agent
 ```
 
 ---
