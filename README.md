@@ -158,7 +158,6 @@ greenlight/               EIP greenlight deliverables
 | Tempo (OTLP) | 4317 (gRPC), 4318 (HTTP) | |
 | Observability | http://localhost:3000/admin/logs · /admin/metrics · /admin/traces | Admin role, in the web client |
 | PgAdmin | http://localhost:5433 | Development tool, only with `docker compose --profile dev-tools up` |
-| RedisInsight | http://localhost:5540 | Development tool, only with `docker compose --profile dev-tools up` |
 
 ## Running tests
 

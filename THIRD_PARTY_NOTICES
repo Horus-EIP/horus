@@ -5621,11 +5621,6 @@ The tag is the one the Compose files or Dockerfiles name.
   https://github.com/rabbitmq/rabbitmq-server
   separate process, unmodified; Horus talks to it over AMQP; used by src/infra/docker-compose.yml
   Licence text (MPL-2.0): LICENSES/MPL-2.0.txt
-- redis/redisinsight 3.8.0
-  Licence: SSPL-1.0 (source: project page, LICENSE)
-  https://github.com/RedisInsight/RedisInsight
-  development tool in the Compose profile dev-tools; the installer never starts it, and it is not for customers; used by src/infra/docker-compose.yml
-  Licence text (SSPL-1.0): LICENSES/SSPL-1.0.txt
 - valkey/valkey 9.1.2
   Licence: BSD-3-Clause (source: project page, COPYING at 9.1.2)
   https://github.com/valkey-io/valkey

@@ -131,12 +131,6 @@ images:
     source: project page
     url: https://www.pgadmin.org/licence/
     note: development tool in the Compose profile dev-tools; the installer never starts it
-  redis/redisinsight:
-    licence: SSPL-1.0
-    spdx: SSPL-1.0
-    source: project page, LICENSE
-    url: https://github.com/RedisInsight/RedisInsight
-    note: development tool in the Compose profile dev-tools; the installer never starts it, and it is not for customers
   grafana/loki:
     licence: AGPL-3.0-only
     spdx: AGPL-3.0-only

@@ -29,7 +29,7 @@ import third_party_notices  # noqa: E402
 needs_yaml = unittest.skipUnless(yaml is not None, "needs PyYAML to read the CI files")
 
 LIBRARY_SWITCHES = {"SENTENCE_TRANSFORMERS_": "sentence-transformers"}
-DEV_TOOLS = ("pgadmin", "redisinsight")
+DEV_TOOLS = ("pgadmin",)
 EXACT_TAG = r"\d+\.\d+\.\d+|^\d+\.\d+$|-b\d+$"
 IMAGE_SERVICES = ("mas", "agent", "knowledge-store", "web-client")
 NOTICE_PATHS = ("THIRD_PARTY_NOTICES", "LICENSES", "NOTICES")
@@ -162,7 +162,7 @@ def installer_sources() -> list[Path]:
 
 
 class DevTools(unittest.TestCase):
-    def test_pgadmin_and_redisinsight_start_only_with_the_dev_tools_profile(self):
+    def test_pgadmin_starts_only_with_the_dev_tools_profile(self):
         for name in DEV_TOOLS:
             with self.subTest(name):
                 self.assertRegex(compose_service(name), r'(?m)^    profiles: \["dev-tools"\]$')
@@ -177,6 +177,11 @@ class DevTools(unittest.TestCase):
     def test_the_env_file_the_installer_copies_sets_no_profile(self):
         text = (INFRA / ".env.example").read_text(encoding="utf-8")
         self.assertNotRegex(text, r"(?m)^\s*COMPOSE_PROFILES\s*=")
+
+    def test_redisinsight_is_gone(self):
+        for path in (*COMPOSE_FILES, INFRA / ".env.example"):
+            with self.subTest(path.name):
+                self.assertNotIn("redisinsight", path.read_text(encoding="utf-8").lower())
 
 
 def final_stage(dockerfile: Path) -> list[str]:

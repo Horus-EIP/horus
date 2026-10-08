@@ -429,8 +429,8 @@ services:
     restart: unless-stopped
 
   # =============================================================================
-  # DEVELOPMENT TOOLS: `docker compose --profile dev-tools up` starts them.
-  # The installer never does, so they are not part of a tester's or customer's stack.
+  # DEVELOPMENT TOOLS: `docker compose --profile dev-tools up` starts PgAdmin.
+  # The installer never does, so it is not part of a tester's or customer's stack.
   # =============================================================================
 
   pgadmin:
@@ -448,20 +448,6 @@ services:
       - postgres
     ports:
       - "5433:80"
-    networks:
-      - horus-net
-
-  redisinsight:
-    image: redis/redisinsight:3.8.0
-    container_name: redisinsight
-    profiles: ["dev-tools"]
-    depends_on:
-      - redis
-    ports:
-      - "5540:5540"
-    restart: unless-stopped
-    volumes:
-      - redisinsight_data:/data
     networks:
       - horus-net
 
@@ -549,7 +535,6 @@ volumes:
   pgadmin_data:
     driver: local
   valkey_data:
-  redisinsight_data:
   tempo_data:
   prometheus_data:
   loki_data:

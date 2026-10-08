@@ -193,7 +193,7 @@ This document describes the monitoring stack shipped with **`src/infra/docker-co
 | Traces | Grafana Tempo receives OTLP from application containers; viewed at **`/admin/traces`** in the web client (trace search + span waterfall) |
 | Logs | Grafana Loki ingests stdout/stderr from **all Docker Compose services** via Grafana Alloy (Docker service discovery, `observability/config.alloy`; containers without a Compose service label are not read); viewed at **`/admin/logs`** in the web client |
 | Visualization | Web client admin pages (`/admin/logs`, `/admin/metrics`, `/admin/traces`), backed by Loki, Prometheus, and Tempo; require the `admin` role |
-| Admin UIs | RabbitMQ management plugin; PgAdmin and RedisInsight as development tools (Compose profile `dev-tools`) |
+| Admin UIs | RabbitMQ management plugin; PgAdmin as a development tool (Compose profile `dev-tools`); `valkey-cli` in the `redis` container for the cache |
 
 The default Compose file does **not** include SigNoz, a standalone OpenTelemetry Collector service, PostgreSQL Exporter, or Metabase. If you add those services, extend this document accordingly.
 
@@ -278,7 +278,7 @@ When services run on the host (not only in Docker), raw Prometheus text format i
 
 ---
 
-PgAdmin and RedisInsight are development tools: they start only with `docker compose --profile dev-tools up`, and the installer never starts them. PgAdmin ships with default credentials and RedisInsight has no login, so keep them off customer machines.
+PgAdmin is a development tool: it starts only with `docker compose --profile dev-tools up`, and the installer never starts it. It ships with default credentials, so keep it off customer machines.
 
 ### PgAdmin 4
 
@@ -289,10 +289,9 @@ Register a server with host `postgres`, port `5432`, database `postgres` (or you
 
 ---
 
-### RedisInsight
+### Valkey (`redis` service)
 
-- **URL:** http://localhost:5540  
-- Add database: host `redis`, port `6379`, password from `REDIS_PASSWORD` in `.env`.
+From `src/infra`, `docker compose exec redis sh -c 'VALKEYCLI_AUTH="$REDIS_PASSWORD" valkey-cli'` opens `valkey-cli` with the password the container reads from `.env`, without putting it on the command line.
 
 ---
 
