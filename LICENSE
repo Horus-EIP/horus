@@ -1,5 +1,5 @@
 HORUS - PROPRIETARY SOFTWARE LICENCE
-Version 2.0 - 30 September 2026
+Version 2.1 - 8 October 2026
 
 Copyright (c) 2025-2026 Loup Marquez-Luttringer, Noah Gibelli, Matheus Lopez.
 All rights reserved.
@@ -11,7 +11,10 @@ All rights reserved.
 
    "Software" means Horus in every form: source code, object code, container
    images, installer, desktop application, configuration files, prompts,
-   documentation and any update, patch or new version of them.
+   documentation and any update, patch or new version of them. The folder
+   opensource/horus-bench-kit/ is not part of the Software: it is licensed
+   separately under the Apache License 2.0, in the LICENSE file of that
+   folder.
 
    "Agreement" means a written agreement signed with the Licensor: a
    Commercial Licence Agreement, an Evaluation Licence, or a Contributor

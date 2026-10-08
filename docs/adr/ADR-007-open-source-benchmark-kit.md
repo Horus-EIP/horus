@@ -59,7 +59,7 @@ A copyleft licence (GPL, AGPL) would keep companies from adopting the kit and ad
 ## Consequences
 
 - This ADR amends ADR-004 for `opensource/horus-bench-kit/` only. The rest of the repository stays under the Horus proprietary licence, and the root `README.md` says so.
-- Before the kit is first published, the root `LICENSE`, which covers Horus in every form, needs a sentence that leaves this folder to its own Apache-2.0 licence, agreed by the three copyright holders. This ADR does not change `LICENSE`.
+- The root `LICENSE`, which covers Horus in every form, leaves this folder to its own Apache-2.0 licence since version 2.1 (08/10/2026), agreed by the three copyright holders: section 1 says `opensource/horus-bench-kit/` is not part of the Software.
 - The kit is our own code, not a third-party component, so `THIRD_PARTY_NOTICES` does not list it.
 - A test in `tests/ci` keeps the kit publishable: it fails when the kit imports anything outside itself, lacks its licence files or the SPDX header on a source file, contains Horus-only content, or gains a dependency that is not permissive. A CI job installs the kit in a fresh environment and runs its tests.
 - Work that touches the kit is open source the moment it is merged: Horus prompts, test sets, results and anything that talks to Horus must stay in `scripts/eval/` and `scripts/benchmarks/`.

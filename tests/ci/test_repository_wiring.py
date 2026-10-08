@@ -5,6 +5,7 @@ import fnmatch
 import re
 import sys
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 try:
@@ -33,6 +34,7 @@ DEV_TOOLS = ("pgadmin",)
 EXACT_TAG = r"\d+\.\d+\.\d+|^\d+\.\d+$|-b\d+$"
 IMAGE_SERVICES = ("mas", "agent", "knowledge-store", "web-client")
 NOTICE_PATHS = ("THIRD_PARTY_NOTICES", "LICENSES", "NOTICES")
+LICENCE_HEADER = re.compile(r"Version (\d+\.\d+) - (\d{1,2} \w+ \d{4})")
 
 
 def project_name(requirement: str) -> str:
@@ -210,6 +212,15 @@ class LicenceFilesInImages(unittest.TestCase):
         self.assertTrue((REPO / "THIRD_PARTY_NOTICES").is_file())
         self.assertTrue((REPO / "LICENSES").is_dir())
         self.assertTrue((REPO / "NOTICES").is_dir())
+
+
+class LicenceCitations(unittest.TestCase):
+    def test_the_readme_cites_the_version_and_date_of_the_licence(self):
+        header = (REPO / "LICENSE").read_text(encoding="utf-8").splitlines()[1]
+        version, dated = LICENCE_HEADER.fullmatch(header).groups()
+        day = datetime.strptime(dated, "%d %B %Y")
+        readme = (REPO / "README.md").read_text(encoding="utf-8")
+        self.assertIn(f"(Horus Proprietary Software Licence v{version}, {day:%d/%m/%Y})", readme)
 
 
 class LogShipping(unittest.TestCase):

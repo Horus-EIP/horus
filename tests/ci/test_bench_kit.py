@@ -16,6 +16,9 @@ except ImportError:
 
 REPO = Path(__file__).resolve().parents[2]
 KIT = REPO / "opensource" / "horus-bench-kit"
+ROOT_LICENCE = REPO / "LICENSE"
+KIT_CARVE_OUT = ("The folder opensource/horus-bench-kit/ is not part of the Software: it is licensed separately "
+                 "under the Apache License 2.0, in the LICENSE file of that folder.")
 PROMPT_SOURCES = (
     REPO / "src" / "services" / "agent" / "app" / "ai_agents" / "answer_contract.py",
     REPO / "src" / "services" / "mas" / "tasks" / "prompts.py",
@@ -111,6 +114,11 @@ class Publishable(unittest.TestCase):
                 self.assertIn(author, licence)
                 self.assertIn(author, notice)
         self.assertEqual(len(notice.strip().splitlines()), 1)
+
+    def test_the_root_licence_leaves_the_kit_out_of_the_software(self):
+        text = ROOT_LICENCE.read_text(encoding="utf-8")
+        definitions = text.split("\n1. DEFINITIONS\n")[1].split("\n2. ")[0]
+        self.assertIn(KIT_CARVE_OUT, " ".join(definitions.split()))
 
     def test_the_checks_catch_each_forbidden_string(self):
         with tempfile.TemporaryDirectory() as tmp:

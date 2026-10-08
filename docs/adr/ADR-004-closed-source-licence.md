@@ -1,6 +1,6 @@
 # ADR-004: Horus stays fully closed source under a proprietary licence
 
-> **Amended on 08/10/2026 by [ADR-007](ADR-007-open-source-benchmark-kit.md):** `opensource/horus-bench-kit/`, our benchmark and evaluation tools, is open source under the Apache License 2.0. The rest of the repository stays closed, as decided below.
+> **Amended on 08/10/2026 by [ADR-007](ADR-007-open-source-benchmark-kit.md):** `opensource/horus-bench-kit/`, our benchmark and evaluation tools, is open source under the Apache License 2.0, and `LICENSE` version 2.1 (08/10/2026) says that folder is not part of the Software. The rest of the repository stays closed, as decided below.
 
 **Date:** 2026-09-24
 **Status:** Accepted by the team (24/09/2026). Sent to the study supervisor for validation of the fully closed scope (Tek5 Objective 1, due 30/09/2026).
@@ -8,7 +8,7 @@
 **Deciders:** Loup Marquez-Luttringer, Noah Gibelli, Matheus Lopez
 **Related:**
 
-- `LICENSE` (Horus Proprietary Software Licence v2)
+- `LICENSE` (Horus Proprietary Software Licence v2.1)
 - `docs/eip/dependency-licence-inventory.xlsx`
 - `docs/eip/protection-plan.md`
 - `docs/eip/diffusion-strategy.md`
@@ -149,7 +149,7 @@ A public project means reviewing public issues and PRs, running security disclos
 
 ## Changes from the previous LICENSE (v1)
 
-The new text is in `LICENSE` (v2, 30/09/2026).
+The new text is in `LICENSE` (v2, 30/09/2026). Version 2.1 (08/10/2026) changes only section 1: `opensource/horus-bench-kit/` is not part of the Software (ADR-007).
 
 1. **Explicit coverage.** It applies to the source code, compiled code, container images, installer, desktop app, configuration and documentation. Holding the source grants no rights.
 2. **Three kinds of written agreement:** commercial, evaluation or contributor. Each has its own scope.
