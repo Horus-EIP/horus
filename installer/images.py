@@ -23,6 +23,7 @@ USERNAME_KEY = "HORUS_REGISTRY_USERNAME"
 TOKEN_FILE_NAME = "registry-token.txt"
 
 APP_SERVICES: tuple[str, ...] = ("mas", "agent", "knowledge_store", "web-client")
+MOCK_SERVICE = "llm-mock"
 CPU_FLAVOR = "cpu"
 GPU_FLAVOR = "gpu"
 

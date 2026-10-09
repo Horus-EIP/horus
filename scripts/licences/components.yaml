@@ -165,7 +165,7 @@ images:
     spdx: PSF-2.0
     source: project page
     url: https://docs.python.org/3.11/license.html
-    note: base image of the MAS, agent and knowledge-store images
+    note: base image of the MAS, agent, knowledge-store and llm-mock images
   node:
     licence: MIT, and the Alpine packages of the image under their own licences
     spdx: MIT

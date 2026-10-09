@@ -420,6 +420,36 @@ jobs:
         if: always()
         run: python scripts/ci/coverage-line.py line "Installer" coverage-installer.xml junit-installer.xml
 
+  test-llm-mock:
+    name: Tests · LLM mock
+    runs-on: ubuntu-24.04
+    outputs:
+      coverage-row: ${{ steps.coverage-line.outputs.row }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: src/services/PYTHON_VERSION
+
+      - name: Install the test tools
+        run: pip install -r src/services/llm-mock/requirements-test.txt
+
+      - name: Run the mock model server's unit tests with coverage
+        run: |
+          pytest -c tests/llm_mock/pytest.ini tests/llm_mock -p no:cacheprovider \
+            --cov=src/services/llm-mock \
+            --cov-branch \
+            --cov-fail-under=90 \
+            --cov-report=xml:coverage-llm-mock.xml \
+            --cov-report=term-missing \
+            --junitxml=junit-llm-mock.xml
+
+      - name: Coverage and test counts in the job summary
+        id: coverage-line
+        if: always()
+        run: python scripts/ci/coverage-line.py line "LLM mock" coverage-llm-mock.xml junit-llm-mock.xml
+
   # ----------------------------------------------------------------------- #
   # Integration tests — moved to scripts/integration-checks/ per
   # tests/TESTING_PLAN.md. They require the live Docker stack and run only
@@ -435,7 +465,7 @@ jobs:
     name: Coverage summary
     runs-on: ubuntu-24.04
     if: always()
-    needs: [test-mas, test-agent, test-knowledge-store, test-installer]
+    needs: [test-mas, test-agent, test-knowledge-store, test-installer, test-llm-mock]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -445,6 +475,8 @@ jobs:
           AGENT: ${{ needs.test-agent.outputs.coverage-row }}
           KNOWLEDGE_STORE: ${{ needs.test-knowledge-store.outputs.coverage-row }}
           INSTALLER: ${{ needs.test-installer.outputs.coverage-row }}
+          LLM_MOCK: ${{ needs.test-llm-mock.outputs.coverage-row }}
         run: >-
           python3 scripts/ci/coverage-line.py collect
           "MAS=$MAS" "Agent=$AGENT" "Knowledge store=$KNOWLEDGE_STORE" "Installer=$INSTALLER"
+          "LLM mock=$LLM_MOCK"

@@ -13,10 +13,10 @@ REPO = Path(__file__).resolve().parents[2]
 SERVICES = REPO / "src" / "services"
 VERSION_FILE = SERVICES / "PYTHON_VERSION"
 VERSION_FILE_INPUT = "src/services/PYTHON_VERSION"
-PYTHON_SERVICES = ("mas", "agent", "knowledge-store")
+PYTHON_SERVICES = ("mas", "agent", "knowledge-store", "llm-mock")
 WORKFLOWS = REPO / ".github" / "workflows"
 JOBS_ON_THE_IMAGE_PYTHON = {
-    "ci.yml": ("test-mas", "test-agent", "test-knowledge-store", "test-installer"),
+    "ci.yml": ("test-mas", "test-agent", "test-knowledge-store", "test-installer", "test-llm-mock"),
     "images.yml": ("plan", "image"),
     "desktop-release.yml": ("verify", "bundle"),
 }

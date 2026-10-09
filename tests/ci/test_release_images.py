@@ -25,6 +25,8 @@ LINUX = {"os": {"platform": "linux"}}
 REGISTRY = "ghcr.io/acme"
 RELEASE = "1.2.3"
 OIDC_ISSUER = "https://token.actions.githubusercontent.com"
+MOCK_OVERLAY = "docker-compose.mock.yml"
+MOCK_COMPOSE_FILES = [profiles.BASE_COMPOSE, profiles.CPU_OVERLAY, MOCK_OVERLAY]
 TORCH_REQUIREMENTS = {
     "mas": "src/services/mas/requirements.txt",
     "agent": "src/services/agent/requirements.txt",
@@ -105,6 +107,7 @@ class ComposeImageNames(unittest.TestCase):
         cls.layers = {
             profiles.BASE_COMPOSE: load_yaml(INFRA / profiles.BASE_COMPOSE)["services"],
             profiles.CPU_OVERLAY: load_yaml(INFRA / profiles.CPU_OVERLAY)["services"],
+            MOCK_OVERLAY: load_yaml(INFRA / MOCK_OVERLAY)["services"],
         }
 
     def image(self, service: str, files: list[str], env: dict[str, str]) -> str | None:
@@ -140,6 +143,15 @@ class ComposeImageNames(unittest.TestCase):
         for service in images.APP_SERVICES:
             with self.subTest(service), self.assertRaises(LookupError):
                 self.image(service, [profiles.BASE_COMPOSE], {images.REGISTRY_KEY: REGISTRY})
+
+    def test_the_mock_model_server_is_a_cpu_image_named_like_the_others(self):
+        env = {images.REGISTRY_KEY: REGISTRY, "HORUS_VERSION": RELEASE}
+        self.assertEqual(self.image(images.MOCK_SERVICE, MOCK_COMPOSE_FILES, env),
+                         images.image_name(REGISTRY, images.MOCK_SERVICE, RELEASE, images.CPU_FLAVOR))
+        self.assertEqual(self.image(images.MOCK_SERVICE, MOCK_COMPOSE_FILES, {"HORUS_VERSION": RELEASE}), "")
+        build = self.layers[MOCK_OVERLAY][images.MOCK_SERVICE]["build"]
+        self.assertTrue((INFRA / build["context"] / "Dockerfile").is_file())
+        self.assertEqual(build["additional_contexts"], {"notices": "../.."})
 
     def test_every_app_service_can_still_be_built_from_source(self):
         for service in images.APP_SERVICES:
@@ -179,8 +191,17 @@ class ReleaseWorkflow(unittest.TestCase):
         self.assertEqual(triggers["push"], {"tags": ["v*"]})
 
     def test_the_matrix_builds_every_app_service_for_both_flavors(self):
-        self.assertEqual(set(self.matrix["service"]), set(images.APP_SERVICES))
+        self.assertEqual(set(self.matrix["service"]), {*images.APP_SERVICES, images.MOCK_SERVICE})
         self.assertEqual(self.matrix["flavor"], [images.CPU_FLAVOR, images.GPU_FLAVOR])
+
+    def test_the_mock_model_server_is_built_once_through_the_mock_overlay(self):
+        self.assertEqual(self.matrix["exclude"],
+                         [{"service": images.MOCK_SERVICE, "flavor": images.GPU_FLAVOR}])
+        entry = self.includes("service")[images.MOCK_SERVICE]
+        self.assertEqual(entry, {"service": images.MOCK_SERVICE,
+                                 "compose_files": ":".join(MOCK_COMPOSE_FILES)})
+        flavor_entries = [index for index, item in enumerate(self.matrix["include"]) if "flavor" in item]
+        self.assertGreater(self.matrix["include"].index(entry), max(flavor_entries))
 
     def test_each_flavor_builds_with_the_compose_files_its_profiles_run(self):
         by_flavor = self.includes("flavor")
@@ -209,7 +230,7 @@ class ReleaseWorkflow(unittest.TestCase):
 
     def test_cpu_torch_images_are_checked_for_cuda_before_anything_is_pushed(self):
         requirements = {name: entry["requirements"]
-                        for name, entry in self.includes("service").items()}
+                        for name, entry in self.includes("service").items() if "requirements" in entry}
         self.assertEqual(requirements, TORCH_REQUIREMENTS)
         for path in requirements.values():
             self.assertTrue((REPO / path).is_file(), path)

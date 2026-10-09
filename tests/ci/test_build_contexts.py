@@ -9,12 +9,12 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 SERVICES = REPO / "src" / "services"
-IMAGE_SERVICES = ("mas", "agent", "knowledge-store", "web-client")
+IMAGE_SERVICES = ("mas", "agent", "knowledge-store", "web-client", "llm-mock")
 SERVICE_GITIGNORES = {
     REPO / ".gitignore": "src/services/",
     REPO / "src" / ".gitignore": "services/",
 }
-PYTHON_CODE = {"mas": "", "agent": "app/", "knowledge-store": "app/"}
+PYTHON_CODE = {"mas": "", "agent": "app/", "knowledge-store": "app/", "llm-mock": "llm_mock/"}
 PYTHON_LEFTOVERS = (
     "__pycache__/main.cpython-311.pyc",
     "core/__pycache__/config.cpython-311.pyc",

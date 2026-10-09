@@ -22,6 +22,7 @@ TEST_JOBS = {
     "test-agent": ("Agent", "coverage-agent.xml", "junit-agent.xml"),
     "test-knowledge-store": ("Knowledge store", "coverage-ks.xml", "junit-ks.xml"),
     "test-installer": ("Installer", "coverage-installer.xml", "junit-installer.xml"),
+    "test-llm-mock": ("LLM mock", "coverage-llm-mock.xml", "junit-llm-mock.xml"),
 }
 RETENTION = {"coverage-": 3, "app-": 7, "Horus-Beta-zip": 14}
 

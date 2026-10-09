@@ -54,7 +54,8 @@ SERVICES = {
     "knowledge-store": REPO / "src" / "services" / "knowledge-store",
 }
 TEST_REQUIREMENTS = "requirements-test.txt"
-IMAGE_SOURCES = {**SERVICES, "web-client": REPO / "src" / "services" / "web-client"}
+IMAGE_SOURCES = {**SERVICES, "web-client": REPO / "src" / "services" / "web-client",
+                 "llm-mock": REPO / "src" / "services" / "llm-mock"}
 OFFER_LIBRARIES = ("psycopg2-binary", "@img/sharp-libvips-")
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 IMAGE_PYTHON = "3.11"
@@ -909,8 +910,8 @@ def offer_section(data: dict, python: dict[str, list[Entry]], web: list[Entry], 
                for kind in ("debian", "alpine")}
     out = ["", "", "7. Source code of GPL and LGPL components", ""]
     out += paragraph(
-        "Our images, horus-mas, horus-agent, horus-knowledge-store and horus-web-client, contain "
-        "operating-system packages from Debian and Alpine Linux licensed under the GNU GPL or the GNU LGPL "
+        "Our images, horus-mas, horus-agent, horus-knowledge-store, horus-web-client and horus-llm-mock, "
+        "contain operating-system packages from Debian and Alpine Linux licensed under the GNU GPL or the GNU LGPL "
         "(7.1 and 7.2). They run as separate programs, or are system libraries that the Python and Node.js "
         "runtimes load; Horus's own code does not link them. Two libraries among our dependencies are under "
         "the LGPL too (7.3): psycopg2-binary, and the prebuilt libvips that sharp loads.")

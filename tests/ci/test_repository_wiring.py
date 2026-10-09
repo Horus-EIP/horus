@@ -18,7 +18,8 @@ INFRA = REPO / "src" / "infra"
 SERVICES = REPO / "src" / "services"
 WORKFLOWS = REPO / ".github" / "workflows"
 DOCS = REPO / "docs"
-COMPOSE_FILES = (INFRA / "docker-compose.yml", INFRA / "docker-compose.cpu.yml")
+COMPOSE_FILES = (INFRA / "docker-compose.yml", INFRA / "docker-compose.cpu.yml",
+                 INFRA / "docker-compose.mock.yml")
 EVAL_TESTS = REPO / "tests" / "eval"
 RESEARCH_NOTE = "tech-watch/IGPU_NPU_RESEARCH.md"
 
@@ -32,7 +33,7 @@ needs_yaml = unittest.skipUnless(yaml is not None, "needs PyYAML to read the CI 
 LIBRARY_SWITCHES = {"SENTENCE_TRANSFORMERS_": "sentence-transformers"}
 DEV_TOOLS = ("pgadmin",)
 EXACT_TAG = r"\d+\.\d+\.\d+|^\d+\.\d+$|-b\d+$"
-IMAGE_SERVICES = ("mas", "agent", "knowledge-store", "web-client")
+IMAGE_SERVICES = ("mas", "agent", "knowledge-store", "web-client", "llm-mock")
 NOTICE_PATHS = ("THIRD_PARTY_NOTICES", "LICENSES", "NOTICES")
 LICENCE_HEADER = re.compile(r"Version (\d+\.\d+) - (\d{1,2} \w+ \d{4})")
 
@@ -207,7 +208,7 @@ class LicenceFilesInImages(unittest.TestCase):
                     self.assertIn(f"COPY --from=notices {name} /usr/share/doc/horus/{name}", stage)
 
     def test_every_image_build_gets_the_repository_root_as_the_notices_context(self):
-        text = (INFRA / "docker-compose.yml").read_text(encoding="utf-8")
+        text = "".join(path.read_text(encoding="utf-8") for path in COMPOSE_FILES)
         for service in IMAGE_SERVICES:
             with self.subTest(service):
                 self.assertRegex(text, rf"context: \.\./services/{re.escape(service)}\n"

@@ -29,6 +29,7 @@ SOURCE_INCLUDE = [
     "src/services/agent",
     "src/services/web-client",
     "src/services/knowledge-store",
+    "src/services/llm-mock",
     "src/infra",
     "demo_assets",
     "models",

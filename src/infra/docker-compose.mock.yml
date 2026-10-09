@@ -1,0 +1,32 @@
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "${HORUS_LOG_MAX_SIZE:-40m}"
+    max-file: "${HORUS_LOG_MAX_FILE:-10}"
+
+services:
+  llm-mock:
+    image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-llm-mock:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-cpu}
+    build:
+      context: ../services/llm-mock
+      dockerfile: Dockerfile
+      additional_contexts:
+        notices: ../..
+    container_name: llm_mock
+    logging: *logging
+    restart: unless-stopped
+    mem_limit: 256m
+    memswap_limit: 256m
+    environment:
+      - HORUS_MOCK_LATENCY_MS=${HORUS_MOCK_LATENCY_MS:-300}
+      - HORUS_MOCK_SCENARIO=${HORUS_MOCK_SCENARIO:-normal}
+      - HORUS_MOCK_MIN_SCORE=${HORUS_MOCK_MIN_SCORE:-0.2}
+      - LLM_VLLM_MODEL=horus-mock
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - horus-net

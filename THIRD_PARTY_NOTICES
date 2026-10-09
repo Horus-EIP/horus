@@ -5614,7 +5614,7 @@ The tag is the one the Compose files or Dockerfiles name.
 - python 3.11.17-slim
   Licence: PSF-2.0, and the Debian packages of the image under their own licences (source: project page)
   https://docs.python.org/3.11/license.html
-  base image of the MAS, agent and knowledge-store images; used by src/services/agent/Dockerfile, src/services/knowledge-store/Dockerfile, src/services/mas/Dockerfile
+  base image of the MAS, agent, knowledge-store and llm-mock images; used by src/services/agent/Dockerfile, src/services/knowledge-store/Dockerfile, src/services/llm-mock/Dockerfile, src/services/mas/Dockerfile
   Licence text (PSF-2.0): LICENSES/PSF-2.0.txt
 - rabbitmq 4.1.2-management
   Licence: MPL-2.0 (source: project page, LICENSE at v4.1.2)
@@ -5745,12 +5745,13 @@ Downloaded at install or build time, or by the services on first use.
 
 7. Source code of GPL and LGPL components
 
-Our images, horus-mas, horus-agent, horus-knowledge-store and horus-web-client,
-contain operating-system packages from Debian and Alpine Linux licensed under
-the GNU GPL or the GNU LGPL (7.1 and 7.2). They run as separate programs, or
-are system libraries that the Python and Node.js runtimes load; Horus's own
-code does not link them. Two libraries among our dependencies are under the
-LGPL too (7.3): psycopg2-binary, and the prebuilt libvips that sharp loads.
+Our images, horus-mas, horus-agent, horus-knowledge-store, horus-web-client and
+horus-llm-mock, contain operating-system packages from Debian and Alpine Linux
+licensed under the GNU GPL or the GNU LGPL (7.1 and 7.2). They run as separate
+programs, or are system libraries that the Python and Node.js runtimes load;
+Horus's own code does not link them. Two libraries among our dependencies are
+under the LGPL too (7.3): psycopg2-binary, and the prebuilt libvips that sharp
+loads.
 
 Where the source is:
 
@@ -5789,44 +5790,45 @@ file in /usr/share/doc/<package>/.
 7.1 Debian packages (Debian GNU/Linux 13 (trixie))
 
 - adduser 3.152
-  Licence: GPL-2+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+. Images: agent, knowledge-store, llm-mock, mas.
 - apt 3.0.3
-  Licence: GPL-2+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+. Images: agent, knowledge-store, llm-mock, mas.
 - base-files 13.8+deb13u7
-  Licence: GPL-2+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+. Images: agent, knowledge-store, llm-mock, mas.
 - base-passwd 3.6.7
-  Licence: GPL-2. Images: agent, knowledge-store, mas.
+  Licence: GPL-2. Images: agent, knowledge-store, llm-mock, mas.
 - bash 5.2.37-2+b10 (source bash 5.2.37-2)
   Licence: GPL-2+, GPL-3+, GPL-3+ with Bison exception. Images: agent,
-  knowledge-store, mas.
+  knowledge-store, llm-mock, mas.
 - bsdutils 1:2.41.5-0+deb13u1 (source util-linux 2.41.5-0+deb13u1)
   Licence: GPL-2, GPL-2+, GPL-3+, LGPL, LGPL-2+, LGPL-2.1+, LGPL-3+. Images:
-  agent, knowledge-store, mas.
+  agent, knowledge-store, llm-mock, mas.
 - ca-certificates 20250419
-  Licence: GPL-2+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+. Images: agent, knowledge-store, llm-mock, mas.
 - coreutils 9.7-3
-  Licence: GPL-3+. Images: agent, knowledge-store, mas.
+  Licence: GPL-3+. Images: agent, knowledge-store, llm-mock, mas.
 - dash 0.5.12-12
-  Licence: GPL-2+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+. Images: agent, knowledge-store, llm-mock, mas.
 - debian-archive-keyring 2025.1
-  Licence: GPL-2+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+. Images: agent, knowledge-store, llm-mock, mas.
 - debianutils 5.23.2
-  Licence: GPL-2+, SMAIL-GPL. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+, SMAIL-GPL. Images: agent, knowledge-store, llm-mock, mas.
 - diffutils 1:3.10-4
   Licence: GPL-2+, GPL-3+, GPL-3+ with autoconf exception, GPL-3+ with texinfo
   exception, LGPL-2.0+, LGPL-2.1+, LGPL-3.0+. Images: agent, knowledge-store,
-  mas.
+  llm-mock, mas.
 - dirmngr 2.4.7-21+deb13u1+b5 (source gnupg2 2.4.7-21+deb13u1)
   Licence: GPL-2+, GPL-3+, LGPL-2.1+, LGPL-3+. Images: knowledge-store.
 - dpkg 1.22.22
-  Licence: GPL-2+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+. Images: agent, knowledge-store, llm-mock, mas.
 - findutils 4.10.0-3
   Licence: GPL with automake exception, GPL-2+, GPL-2+ with Autoconf-data
   exception, GPL-3+, GPL-3+ with Autoconf-data exception, GPL-3+ with Bison-2.2
   exception, LGPL-2+, LGPL-2.1+, LGPL-3, LGPL-3+. Images: agent,
-  knowledge-store, mas.
+  knowledge-store, llm-mock, mas.
 - gcc-14-base 14.2.0-19 (source gcc-14)
-  Licence: GPL-3+ with GCC-exception-3.1. Images: agent, knowledge-store, mas.
+  Licence: GPL-3+ with GCC-exception-3.1. Images: agent, knowledge-store,
+  llm-mock, mas.
 - gnupg 2.4.7-21+deb13u1 (source gnupg2)
   Licence: GPL-2+, GPL-3+, LGPL-2.1+, LGPL-3+. Images: knowledge-store.
 - gnupg-l10n 2.4.7-21+deb13u1 (source gnupg2)
@@ -5840,17 +5842,17 @@ file in /usr/share/doc/<package>/.
 - gpgsm 2.4.7-21+deb13u1+b5 (source gnupg2 2.4.7-21+deb13u1)
   Licence: GPL-2+, GPL-3+, LGPL-2.1+, LGPL-3+. Images: knowledge-store.
 - grep 3.11-4
-  Licence: GPL-3+. Images: agent, knowledge-store, mas.
+  Licence: GPL-3+. Images: agent, knowledge-store, llm-mock, mas.
 - gzip 1.13-1+deb13u1
-  Licence: GPL-3+. Images: agent, knowledge-store, mas.
+  Licence: GPL-3+. Images: agent, knowledge-store, llm-mock, mas.
 - hostname 3.25
-  Licence: GPL-2. Images: agent, knowledge-store, mas.
+  Licence: GPL-2. Images: agent, knowledge-store, llm-mock, mas.
 - init-system-helpers 1.69~deb13u1
-  Licence: GPL-2+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+. Images: agent, knowledge-store, llm-mock, mas.
 - libacl1 2.3.2-2+b1 (source acl 2.3.2-2)
-  Licence: GPL-2+, LGPL-2+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+, LGPL-2+. Images: agent, knowledge-store, llm-mock, mas.
 - libapt-pkg7.0 3.0.3 (source apt)
-  Licence: GPL-2+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+. Images: agent, knowledge-store, llm-mock, mas.
 - libassuan9 3.0.2-2 (source libassuan)
   Licence: GPL-2+ with Autoconf-data exception, GPL-2+ with Libtool exception,
   GPL-2.with.nonstandard.Autoconf-data.exception, GPL-3+, GPL-3+ with
@@ -5859,52 +5861,53 @@ file in /usr/share/doc/<package>/.
 - libatomic1 14.2.0-19 (source gcc-14)
   Licence: GPL-3+ with GCC-exception-3.1. Images: knowledge-store.
 - libattr1 1:2.5.2-3 (source attr)
-  Licence: GPL-2+, LGPL-2+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+, LGPL-2+. Images: agent, knowledge-store, llm-mock, mas.
 - libaudit-common 1:4.0.2-2+deb13u1 (source audit)
-  Licence: GPL-2, LGPL-2.1. Images: agent, knowledge-store, mas.
+  Licence: GPL-2, LGPL-2.1. Images: agent, knowledge-store, llm-mock, mas.
 - libaudit1 1:4.0.2-2+deb13u1 (source audit)
-  Licence: GPL-2, LGPL-2.1. Images: agent, knowledge-store, mas.
+  Licence: GPL-2, LGPL-2.1. Images: agent, knowledge-store, llm-mock, mas.
 - libblkid1 2.41.5-0+deb13u1 (source util-linux)
   Licence: GPL-2, GPL-2+, GPL-3+, LGPL, LGPL-2+, LGPL-2.1+, LGPL-3+. Images:
-  agent, knowledge-store, mas.
+  agent, knowledge-store, llm-mock, mas.
 - libc-bin 2.41-12+deb13u4 (source glibc)
   Licence: GPL-2, GPL-2+, GPL-2+-with-link-exception, GPL-3+, LGPL-2+,
   LGPL-2.1+, LGPL-2.1+-with-link-exception, LGPL-3+. Images: agent,
-  knowledge-store, mas.
+  knowledge-store, llm-mock, mas.
 - libc6 2.41-12+deb13u4 (source glibc)
   Licence: GPL-2, GPL-2+, GPL-2+-with-link-exception, GPL-3+, LGPL-2+,
   LGPL-2.1+, LGPL-2.1+-with-link-exception, LGPL-3+. Images: agent,
-  knowledge-store, mas.
+  knowledge-store, llm-mock, mas.
 - libcairo2 1.18.4-1+b1 (source cairo 1.18.4-1)
   Licence: LGPL-2.1 or MPL-1.1. Images: knowledge-store.
 - libcap-ng0 0.8.5-4+b1 (source libcap-ng 0.8.5-4)
-  Licence: GPL-2+, LGPL-2.1+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+, LGPL-2.1+. Images: agent, knowledge-store, llm-mock, mas.
 - libcom-err2 1.47.2-3+b12 (source e2fsprogs 1.47.2-3)
   Licence: GPL-2, GPL-2+ with Texinfo exception, LGPL-2. Images:
   knowledge-store.
 - libcrypt1 1:4.4.38-1 (source libxcrypt)
-  Licence: LGPL-2.1+. Images: agent, knowledge-store, mas.
+  Licence: LGPL-2.1+. Images: agent, knowledge-store, llm-mock, mas.
 - libdatrie1 0.2.13-3+b1 (source libdatrie 0.2.13-3)
   Licence: LGPL-2.1+. Images: knowledge-store.
 - libdb5.3t64 5.3.28+dfsg2-9 (source db5.3)
-  Licence: GPL-3. Images: agent, knowledge-store, mas.
+  Licence: GPL-3. Images: agent, knowledge-store, llm-mock, mas.
 - libffi8 3.4.8-2 (source libffi)
-  Licence: GPL-2+, GPL-3+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+, GPL-3+. Images: agent, knowledge-store, llm-mock, mas.
 - libfreetype6 2.13.3+dfsg-1+deb13u1 (source freetype)
   Licence: GPL-2+, GPL-3+. Images: knowledge-store.
 - libfribidi0 1.0.16-1 (source fribidi)
   Licence: LGPL-2.1+. Images: knowledge-store.
 - libgcc-s1 14.2.0-19 (source gcc-14)
-  Licence: GPL-3+ with GCC-exception-3.1. Images: agent, knowledge-store, mas.
+  Licence: GPL-3+ with GCC-exception-3.1. Images: agent, knowledge-store,
+  llm-mock, mas.
 - libgcrypt20 1.11.0-7+deb13u1
   Licence: LGPL-2.1+, GPL-2+. Images: knowledge-store.
 - libgdbm6t64 1.24-2 (source gdbm)
-  Licence: GPL-2+, GPL-3+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+, GPL-3+. Images: agent, knowledge-store, llm-mock, mas.
 - libglib2.0-0t64 2.84.4-3~deb13u5 (source glib2.0)
   Licence: GPL-2+, LGPL-2+, LGPL-2.1+, LGPL-3+. Images: knowledge-store.
 - libgmp10 2:6.3.0+dfsg-3 (source gmp)
   Licence: GPL-2+, GPL-3+, GPL-3+ with Bison exception, LGPL-3+. Images: agent,
-  knowledge-store, mas.
+  knowledge-store, llm-mock, mas.
 - libgnutls30t64 3.8.9-3+deb13u4 (source gnutls28)
   Licence: LGPL-2.1+, GPL-3+. Images: knowledge-store.
 - libgomp1 14.2.0-19 (source gcc-14)
@@ -5925,7 +5928,7 @@ file in /usr/share/doc/<package>/.
   Images: knowledge-store.
 - libhogweed6t64 3.10.1-1 (source nettle)
   Licence: GPL-2+, GPL-3+ with Autoconf exception, LGPL-2+, LGPL-3+. Images:
-  agent, knowledge-store, mas.
+  agent, knowledge-store, llm-mock, mas.
 - libidn2-0 2.3.8-2 (source libidn2)
   Licence: GPL-2+, GPL-3+, LGPL-3+. Images: knowledge-store.
 - libjbig0 2.1-6.1+b2 (source jbigkit 2.1-6.1)
@@ -5936,7 +5939,7 @@ file in /usr/share/doc/<package>/.
   Licence: LGPL-3+ or GPL-2+. Images: knowledge-store.
 - liblastlog2-2 2.41.5-0+deb13u1 (source util-linux)
   Licence: GPL-2, GPL-2+, GPL-3+, LGPL, LGPL-2+, LGPL-2.1+, LGPL-3+. Images:
-  agent, knowledge-store, mas.
+  agent, knowledge-store, llm-mock, mas.
 - liblcms2-2 2.16-2+deb13u2 (source lcms2)
   Licence: GPL-3. Images: knowledge-store.
 - libldap2 2.6.10+dfsg-1 (source openldap)
@@ -5944,16 +5947,16 @@ file in /usr/share/doc/<package>/.
   exception, GPL-3+, GPL-3+ with Autoconf exception, GPL-3+ with Libtool
   exception. Images: knowledge-store.
 - liblz4-1 1.10.0-4 (source lz4)
-  Licence: GPL-2+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+. Images: agent, knowledge-store, llm-mock, mas.
 - liblzma5 5.8.1-1+deb13u1 (source xz-utils)
   Licence: GPL-2+, GPL-3.0-or-later-WITH-Autoconf-exception-macro, LGPL-2.1+.
-  Images: agent, knowledge-store, mas.
+  Images: agent, knowledge-store, llm-mock, mas.
 - libmount1 2.41.5-0+deb13u1 (source util-linux)
   Licence: GPL-2, GPL-2+, GPL-3+, LGPL, LGPL-2+, LGPL-2.1+, LGPL-3+. Images:
-  agent, knowledge-store, mas.
+  agent, knowledge-store, llm-mock, mas.
 - libnettle8t64 3.10.1-1 (source nettle)
   Licence: GPL-2+, GPL-3+ with Autoconf exception, LGPL-2+, LGPL-3+. Images:
-  agent, knowledge-store, mas.
+  agent, knowledge-store, llm-mock, mas.
 - libnghttp3-9 1.8.0-1 (source nghttp3)
   Licence: GPL-2+ with Autoconf generic exception, GPL-2+ with Libtool
   Exception, GPL-3+, GPL-3+ with Autoconf generic exception. Images:
@@ -5973,16 +5976,16 @@ file in /usr/share/doc/<package>/.
   exception, LGPL-2.1+. Images: knowledge-store.
 - libpam-modules 1.7.0-5 (source pam)
   Licence: GPL-2, GPL-2+, GPL-3+ with Bison exception, LGPL-2+. Images: agent,
-  knowledge-store, mas.
+  knowledge-store, llm-mock, mas.
 - libpam-modules-bin 1.7.0-5 (source pam)
   Licence: GPL-2, GPL-2+, GPL-3+ with Bison exception, LGPL-2+. Images: agent,
-  knowledge-store, mas.
+  knowledge-store, llm-mock, mas.
 - libpam-runtime 1.7.0-5 (source pam)
   Licence: GPL-2, GPL-2+, GPL-3+ with Bison exception, LGPL-2+. Images: agent,
-  knowledge-store, mas.
+  knowledge-store, llm-mock, mas.
 - libpam0g 1.7.0-5 (source pam)
   Licence: GPL-2, GPL-2+, GPL-3+ with Bison exception, LGPL-2+. Images: agent,
-  knowledge-store, mas.
+  knowledge-store, llm-mock, mas.
 - libpango-1.0-0 1.56.3-1 (source pango1.0)
   Licence: LGPL-2+, LGPL-2.1+. Images: knowledge-store.
 - libpangocairo-1.0-0 1.56.3-1 (source pango1.0)
@@ -5992,27 +5995,28 @@ file in /usr/share/doc/<package>/.
 - libpoppler147 25.03.0-5+deb13u4 (source poppler)
   Licence: GPL-2, GPL-3. Images: knowledge-store.
 - libreadline8t64 8.2-6 (source readline)
-  Licence: GPL-2+, GPL-3+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+, GPL-3+. Images: agent, knowledge-store, llm-mock, mas.
 - librtmp1 2.4+20151223.gitfa8646d.1-2+b5 (source rtmpdump 2.4+20151223.gitfa8646d.1-2)
   Licence: LGPL-2.1+, GPL-2+. Images: knowledge-store.
 - libseccomp2 2.6.0-2 (source libseccomp)
-  Licence: LGPL-2.1. Images: agent, knowledge-store, mas.
+  Licence: LGPL-2.1. Images: agent, knowledge-store, llm-mock, mas.
 - libselinux1 3.8.1-1 (source libselinux)
-  Licence: GPL-2. Images: agent, knowledge-store, mas.
+  Licence: GPL-2. Images: agent, knowledge-store, llm-mock, mas.
 - libsemanage-common 3.8.1-1 (source libsemanage)
-  Licence: LGPL-2.1+. Images: agent, knowledge-store, mas.
+  Licence: LGPL-2.1+. Images: agent, knowledge-store, llm-mock, mas.
 - libsemanage2 3.8.1-1 (source libsemanage)
-  Licence: LGPL-2.1+. Images: agent, knowledge-store, mas.
+  Licence: LGPL-2.1+. Images: agent, knowledge-store, llm-mock, mas.
 - libsepol2 3.8.1-1 (source libsepol)
-  Licence: GPL-2+, LGPL-2.1+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+, LGPL-2.1+. Images: agent, knowledge-store, llm-mock, mas.
 - libsmartcols1 2.41.5-0+deb13u1 (source util-linux)
   Licence: GPL-2, GPL-2+, GPL-3+, LGPL, LGPL-2+, LGPL-2.1+, LGPL-3+. Images:
-  agent, knowledge-store, mas.
+  agent, knowledge-store, llm-mock, mas.
 - libstdc++6 14.2.0-19 (source gcc-14)
-  Licence: GPL-3+ with GCC-exception-3.1. Images: agent, knowledge-store, mas.
+  Licence: GPL-3+ with GCC-exception-3.1. Images: agent, knowledge-store,
+  llm-mock, mas.
 - libsystemd0 257.13-1~deb13u1 (source systemd)
   Licence: GPL-2 with Linux-syscall-note exception, GPL-2+, LGPL-2.1+. Images:
-  agent, knowledge-store, mas.
+  agent, knowledge-store, llm-mock, mas.
 - libtasn1-6 4.20.0-2+deb13u1
   Licence: LGPL-2.1+, GPL-3+. Images: knowledge-store.
 - libthai-data 0.1.29-2 (source libthai)
@@ -6021,50 +6025,51 @@ file in /usr/share/doc/<package>/.
   Licence: LGPL-2.1+. Images: knowledge-store.
 - libudev1 257.13-1~deb13u1 (source systemd)
   Licence: GPL-2 with Linux-syscall-note exception, GPL-2+, LGPL-2.1+. Images:
-  agent, knowledge-store, mas.
+  agent, knowledge-store, llm-mock, mas.
 - libunistring5 1.3-2 (source libunistring)
   Licence: GPL-2+, GPL-2+ with distribution exception, GPL-3+, LGPL-2+,
   LGPL-2.1+, LGPL-3, LGPL-3+. Images: knowledge-store.
 - libuuid1 2.41.5-0+deb13u1 (source util-linux)
   Licence: GPL-2, GPL-2+, GPL-3+, LGPL, LGPL-2+, LGPL-2.1+, LGPL-3+. Images:
-  agent, knowledge-store, mas.
+  agent, knowledge-store, llm-mock, mas.
 - libxxhash0 0.8.3-2 (source xxhash)
-  Licence: GPL-2+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+. Images: agent, knowledge-store, llm-mock, mas.
 - login 1:4.16.0-2+really2.41.5-0+deb13u1 (source util-linux 2.41.5-0+deb13u1)
   Licence: GPL-2, GPL-2+, GPL-3+, LGPL, LGPL-2+, LGPL-2.1+, LGPL-3+. Images:
-  agent, knowledge-store, mas.
+  agent, knowledge-store, llm-mock, mas.
 - login.defs 1:4.17.4-2 (source shadow)
-  Licence: GPL-1, GPL-2+. Images: agent, knowledge-store, mas.
+  Licence: GPL-1, GPL-2+. Images: agent, knowledge-store, llm-mock, mas.
 - mawk 1.3.4.20250131-1
-  Licence: GPL-2.0-only. Images: agent, knowledge-store, mas.
+  Licence: GPL-2.0-only. Images: agent, knowledge-store, llm-mock, mas.
 - mount 2.41.5-0+deb13u1 (source util-linux)
   Licence: GPL-2, GPL-2+, GPL-3+, LGPL, LGPL-2+, LGPL-2.1+, LGPL-3+. Images:
-  agent, knowledge-store, mas.
+  agent, knowledge-store, llm-mock, mas.
 - netbase 6.5
-  Licence: GPL-2. Images: agent, knowledge-store, mas.
+  Licence: GPL-2. Images: agent, knowledge-store, llm-mock, mas.
 - passwd 1:4.17.4-2 (source shadow)
-  Licence: GPL-1, GPL-2+. Images: agent, knowledge-store, mas.
+  Licence: GPL-1, GPL-2+. Images: agent, knowledge-store, llm-mock, mas.
 - perl-base 5.40.1-6+deb13u1 (source perl)
   Licence: DONT-CHANGE-THE-GPL, GPL-3+-WITH-BISON-EXCEPTION. Images: agent,
-  knowledge-store, mas.
+  knowledge-store, llm-mock, mas.
 - pinentry-curses 1.3.1-2 (source pinentry)
   Licence: GPL-2, GPL-2+, LGPL-3+. Images: knowledge-store.
 - poppler-utils 25.03.0-5+deb13u4 (source poppler)
   Licence: GPL-2, GPL-3. Images: knowledge-store.
 - readline-common 8.2-6 (source readline)
-  Licence: GPL-2+, GPL-3+. Images: agent, knowledge-store, mas.
+  Licence: GPL-2+, GPL-3+. Images: agent, knowledge-store, llm-mock, mas.
 - sed 4.9-2+deb13u1
-  Licence: GPL-3+. Images: agent, knowledge-store, mas.
+  Licence: GPL-3+. Images: agent, knowledge-store, llm-mock, mas.
 - sqv 1.3.0-3+b2 (source rust-sequoia-sqv 1.3.0-3)
-  Licence: LGPL-2.0-or-later. Images: agent, knowledge-store, mas.
+  Licence: LGPL-2.0-or-later. Images: agent, knowledge-store, llm-mock, mas.
 - sysvinit-utils 3.14-4 (source sysvinit)
-  Licence: GPL-2.0, GPL-2.0+, GPL-3.0. Images: agent, knowledge-store, mas.
+  Licence: GPL-2.0, GPL-2.0+, GPL-3.0. Images: agent, knowledge-store,
+  llm-mock, mas.
 - tar 1.35+dfsg-3.1
   Licence: GPL-3+, GPL-3+ with Bison exception, LGPL-2.1+, LGPL-3+. Images:
-  agent, knowledge-store, mas.
+  agent, knowledge-store, llm-mock, mas.
 - util-linux 2.41.5-0+deb13u1
   Licence: GPL-2, GPL-2+, GPL-3+, LGPL, LGPL-2+, LGPL-2.1+, LGPL-3+. Images:
-  agent, knowledge-store, mas.
+  agent, knowledge-store, llm-mock, mas.
 
 
 7.2 Alpine packages (Alpine Linux v3.23)

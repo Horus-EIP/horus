@@ -86,8 +86,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [mas, agent, knowledge_store, web-client]
+        service: [mas, agent, knowledge_store, web-client, llm-mock]
         flavor: [cpu, gpu]
+        exclude:
+          - service: llm-mock
+            flavor: gpu
         include:
           - flavor: cpu
             compose_files: docker-compose.yml:docker-compose.cpu.yml
@@ -99,6 +102,8 @@ jobs:
             requirements: src/services/agent/requirements.txt
           - service: knowledge_store
             requirements: src/services/knowledge-store/requirements.txt
+          - service: llm-mock
+            compose_files: docker-compose.yml:docker-compose.cpu.yml:docker-compose.mock.yml
     env:
       SERVICE: ${{ matrix.service }}
       FLAVOR: ${{ matrix.flavor }}
