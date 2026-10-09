@@ -38,6 +38,32 @@ The generic engine of these tools is the open-source [horus-bench-kit](../openso
 python scripts/benchmarks/compare-benchmarks.py benchmarks/cpu-transformers-2026-09-01.json benchmarks/eval-cpu16-standard-<date>.json
 ```
 
+## Mock AI mode
+
+The `mock` profile's minimum in `installer/profiles.py` (B-137) comes from this measurement, of 09/10/2026, on the code of commit `b5b8da7` (mock mode with no model at all, before the installer checked the minimum), measured from its working tree just before the commit; what changed after the measurement is documentation and the model name `/system/ai` reports. The machine: the development laptop, an AMD Ryzen AI 9 HX 370 (12 cores, 24 threads) with 63.1 GiB of RAM, Windows 11 Pro, Docker Desktop 29.2.1 on WSL 2 giving Docker 30.9 GiB and 24 CPUs. Everything ran in a throwaway Docker-in-Docker daemon (`docker:29.2.1-dind`, containerd image store) that started with no image and no build cache, so the build was cold.
+
+The run: `installer/horus_install.py --profile mock --build-from-source --consent demo --non-interactive --skip-smoke`, then the five `demo_assets/*.md` documents uploaded in one `POST /file` to the knowledge store, then `installer/smoke.py`; then `HORUS_MONITORING=on`, `--restart` and the smoke test; then monitoring off again, `MAS_EMBED_URL`, `MAS_EMBED_MODEL`, `KNOWLEDGE_STORE_EMBED_URL` and `KNOWLEDGE_STORE_EMBED_MODEL` emptied and `HORUS_SPACY=on`, so FastEmbed and spaCy load as in local mode, and the smoke test once more. Memory was sampled with `docker stats` every 4 s from the start of the stack to the end of the smoke test, and each container's cgroup `memory.peak` read at the end; the disk is `du -sbx /var/lib/docker` in the daemon.
+
+| | Monitoring off (the mock default) | Monitoring on | Real embeddings and spaCy |
+|---|---|---|---|
+| Containers | 8 | 12 | 8 |
+| Sum of the containers' `memory.peak` | 0.82 GiB | 0.94 GiB | 1.53 GiB |
+| Peak of the summed `docker stats` samples | 0.59 GiB | 0.71 GiB | 1.44 GiB |
+| Largest container | RabbitMQ, 238 MiB | RabbitMQ, 215 MiB | knowledge store, 713 MiB |
+| Disk, prebuilt images | 4.2 GiB | 5.7 GiB | the same images |
+| Disk, built from source, with the build cache | 9.9 GiB | 11.4 GiB (derived) | the same images |
+| Time | install 8 min 33 s: pull 39 s, build 7 min 04 s, start 32 s, healthy 11 s, re-embedding wait 3 s; smoke 4 s | `--restart` 88 s, the monitoring images' download included; smoke 4 s | up to healthy 60 s, the 5 documents re-embedded in 5.2 s; smoke 4 s |
+
+- A second cold install took 8 min 37 s (build 6 min 34 s, start 55 s), and its smoke test passed too. The disk figures come from it: the first install's were read with `du -sb`, which counts the running containers' mounted file systems a second time.
+- The disk peaks at the end of the install. The prebuilt figure is the same daemon after `docker builder prune -af`, so it holds the images built there, not the published ones. The built-from-source figure with monitoring on adds the monitoring images' 1.5 GiB to the measured 9.9 GiB.
+- The build on its own, a third `docker compose build` with the stack stopped and the build cache emptied, peaked at 2.35 GiB of process memory (the daemon cgroup's `anon`, `kernel` and `shmem`, so without the page cache, which the `docker stats` figure of the whole daemon includes).
+- The images still hold the BGE (209 MB) and MiniLM (87 MB) weights and spaCy's `en_core_web_sm` (15 MB, in two images), which mock mode never loads.
+
+The minimum:
+
+- **Memory: 3.0 GiB for Docker.** The larger peak, 0.94 GiB with monitoring on, plus the 2 GiB of headroom of ADR-006's rule, rounded up to half a GiB. The build's 2.35 GiB fits under it too, so the same minimum holds with `--build-from-source`.
+- **Disk: 12 GiB free with the prebuilt images, 23 GiB with `--build-from-source`.** Twice the peak (5.7 and 11.4 GiB), rounded up to a whole GiB: an update downloads or builds the new images next to the old ones, and the documents, the database and the logs grow.
+
 ## Running llama-bench
 
 Runs the plan's command in the pinned llama.cpp image, `ghcr.io/ggml-org/llama.cpp:full-b11382` (the full image of the `server-b11382` build the CPU stack serves with):

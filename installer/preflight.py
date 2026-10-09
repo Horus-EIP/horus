@@ -285,7 +285,7 @@ def _desktop_vm_dir() -> Path | None:
         return cand if cand.exists() else Path.home()
     return None
 
-def check_disk(log: Log, required: int = REQUIRED_FREE_BYTES) -> dict:
+def check_disk(log: Log, required: int = REQUIRED_FREE_BYTES, mock: bool = False) -> dict:
     log.step("4/6  Disk space")
     root = _docker_root(log)
     log.debug(f"docker info DockerRootDir = {root!r}")
@@ -317,6 +317,21 @@ def check_disk(log: Log, required: int = REQUIRED_FREE_BYTES) -> dict:
     free = usage.free
     log.info(f"disk: {note} = {measured}  free={human_bytes(free)} "
              f"total={human_bytes(usage.total)}")
+    if free < required and mock:
+        raise InstallError(
+            EXIT_DISK_SPACE,
+            f"Mock AI mode needs {human_bytes(required)} free. "
+            f"Found {human_bytes(free)} at {measured}.",
+            f"{measured} is the {note}.\n\n"
+            f"{human_bytes(required)} is what a mock install used when it was\n"
+            "measured, with a margin. See docs/mock-ai.md.",
+            "Free up space, then run this again. Docker's own build cache\n"
+            "is usually the quickest win, and it is safe to delete:\n"
+            "  docker builder prune -f\n"
+            "To see what else Docker is holding:\n"
+            "  docker system df\n"
+            "To go ahead anyway, re-run with  --skip-disk-check",
+        )
     if free < required:
         raise InstallError(
             EXIT_DISK_SPACE,
@@ -563,7 +578,8 @@ def run_engine_checks(log: Log) -> dict:
 def run_install_checks(log: Log, infra: Path,
                        skip_disk_check: bool = False,
                        image_registry: str | None = None,
-                       cpu_profile: bool = False) -> dict:
+                       cpu_profile: bool = False,
+                       mock_free_gib: float | None = None) -> dict:
     summary: dict = {}
     if skip_disk_check:
         log.step("4/6  Disk space")
@@ -571,8 +587,10 @@ def run_install_checks(log: Log, infra: Path,
                  "space it will fail part-way through.")
         summary["disk"] = {"checked": False, "path": None,
                            "free_bytes": None, "skipped": True}
-    else:
+    elif mock_free_gib is None:
         summary["disk"] = check_disk(log)
+    else:
+        summary["disk"] = check_disk(log, int(mock_free_gib * 1024**3), mock=True)
     llama_image = model_server_image(infra) if cpu_profile else None
     summary["network"] = check_network(log, network_hosts(image_registry, llama_image))
     summary["ports"] = check_ports(log, infra)

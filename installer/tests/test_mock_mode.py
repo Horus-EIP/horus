@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import hardware  # noqa: E402
 import horus_install  # noqa: E402
+import preflight  # noqa: E402
 import profiles  # noqa: E402
 import reindex  # noqa: E402
 import smoke  # noqa: E402
@@ -55,6 +56,13 @@ def small_machine() -> dict:
 def big_machine() -> dict:
     probe = small_machine()
     probe["memory"]["total_bytes"] = probe["docker"]["mem_total_bytes"] = 32 * GIB
+    return probe
+
+
+def machine_with(docker_gib: float | None) -> dict:
+    probe = small_machine()
+    probe["memory"]["total_bytes"] = int(16 * GIB)
+    probe["docker"]["mem_total_bytes"] = None if docker_gib is None else int(docker_gib * GIB)
     return probe
 
 
@@ -159,6 +167,8 @@ class Offer(unittest.TestCase):
     def test_the_refusal_lists_mock_mode_before_trying_anyway(self):
         alternatives = unsupported.refusal(small_machine()).record()["alternatives"]
         self.assertIn("--profile mock", alternatives[-2])
+        self.assertIn("No AI model runs", alternatives[-2])
+        self.assertIn(f"{profiles.MONITORING_KEY}=on", alternatives[-2])
         self.assertIn("--profile cpu-lean", alternatives[-1])
 
     def test_an_interactive_yes_installs_mock_mode(self):
@@ -186,9 +196,109 @@ class Offer(unittest.TestCase):
         self.assertEqual(name, profiles.MOCK_PROFILE)
         asked.assert_not_called()
 
+    def test_mock_fits_from_its_measured_minimum(self):
+        self.assertTrue(profiles.mock_fits(machine_with(profiles.MOCK_MIN_GIB)))
+        self.assertFalse(profiles.mock_fits(machine_with(profiles.MOCK_MIN_GIB - 0.01)))
+        self.assertTrue(profiles.mock_fits({}))
+        self.assertEqual(profiles.supported_floor_gib("mock"), profiles.MOCK_MIN_GIB)
+        self.assertEqual(profiles.memory_decision(small_machine())["mock_min_gib"], profiles.MOCK_MIN_GIB)
+
+    def test_below_the_mock_minimum_the_reasons_say_mock_mode_does_not_fit_either(self):
+        name, reasons = profiles.select_profile(machine_with(2.5))
+        self.assertEqual(name, profiles.NOT_SUPPORTED)
+        self.assertEqual(reasons[-1], profiles.MOCK_TOO_SMALL)
+        self.assertNotIn(profiles.MOCK_OFFER, reasons)
+        self.assertIn(f"{profiles.MOCK_MIN_GIB:.1f} GiB", reasons[-1])
+
+    def test_a_machine_below_the_mock_minimum_is_never_asked(self):
+        with mock.patch.object(hardware, "probe", side_effect=lambda *a, **k: machine_with(2.5)):
+            refused, asked = self.decide(answer="y")
+        self.assertIsInstance(refused, unsupported.NotSupported)
+        asked.assert_not_called()
+
+    def test_the_refusal_below_the_mock_minimum_says_how_much_mock_mode_needs(self):
+        record = unsupported.refusal(machine_with(2.5)).record()
+        self.assertIn(profiles.MOCK_TOO_SMALL, record["need"])
+        self.assertIn("give Docker at least 4 GB of memory, then run START-HERE again with "
+                      "--profile mock", record["alternatives"][-2])
+        self.assertNotIn("Test Horus without a language model: run START-HERE again",
+                         " ".join(record["alternatives"]))
+
+    def test_forcing_mock_below_its_minimum_warns_with_the_measured_figure(self):
+        warning = profiles.forced_profile_warning("mock", machine_with(2.5))
+        self.assertIn(f"mock needs {profiles.MOCK_MIN_GIB:.1f} GiB ({profiles.MOCK_MEASURED})", warning)
+        self.assertNotIn("answers that take far longer", warning)
+        self.assertIsNone(profiles.forced_profile_warning("mock", machine_with(profiles.MOCK_MIN_GIB)))
+
+    def test_only_mock_has_its_own_disk_need(self):
+        self.assertEqual(profiles.free_disk_gib("mock", from_source=False), profiles.MOCK_FREE_GIB)
+        self.assertEqual(profiles.free_disk_gib("mock", from_source=True), profiles.MOCK_SOURCE_FREE_GIB)
+        self.assertIsNone(profiles.free_disk_gib("cpu-standard", from_source=False))
+        self.assertLess(profiles.MOCK_FREE_GIB, profiles.MOCK_SOURCE_FREE_GIB)
+
+    def test_a_mock_install_checks_the_disk_a_mock_install_needs(self):
+        class ReachedTheQuestions(Exception):
+            pass
+
+        for argv, need in ((("--registry", "ghcr.io/acme"), profiles.MOCK_FREE_GIB),
+                           (("--build-from-source",), profiles.MOCK_SOURCE_FREE_GIB)):
+            with self.subTest(argv=argv), contextlib.ExitStack() as stack:
+                patch = stack.enter_context
+                patch(mock.patch.object(horus_install, "find_repo", return_value=self.tmp))
+                preflight = patch(mock.patch.object(horus_install, "preflight"))
+                patch(mock.patch.object(horus_install, "sign_in_to_registry"))
+                consent = patch(mock.patch.object(horus_install, "consent"))
+                consent.choose.side_effect = ReachedTheQuestions
+                with self.assertRaises(ReachedTheQuestions):
+                    horus_install._dispatch(self.log, self.args("--profile", "mock", "--non-interactive", *argv))
+                self.assertEqual(preflight.run_install_checks.call_args.kwargs["mock_free_gib"], need)
+
     def test_the_images_named_include_llm_mock(self):
         self.assertIn("llm-mock", horus_install.describe_images("ghcr.io/acme", "mock"))
         self.assertNotIn("llm-mock", horus_install.describe_images("ghcr.io/acme", "cpu-standard"))
+
+
+class MockDisk(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp = Path(self._tmp.name)
+        self.log = Log(self.tmp / "log.txt", events=Events(False, io.StringIO()))
+        self.addCleanup(self.log.close, 0)
+
+    def check(self, free_gib: float, required_gib: float, mock_install: bool):
+        usage = mock.Mock(free=int(free_gib * GIB), total=int(500 * GIB))
+        with mock.patch.object(preflight, "_docker_root", return_value=str(self.tmp)), \
+                mock.patch.object(preflight.shutil, "disk_usage", return_value=usage), \
+                contextlib.redirect_stdout(io.StringIO()):
+            return preflight.check_disk(self.log, int(required_gib * GIB), mock=mock_install)
+
+    def test_a_mock_install_with_less_free_disk_than_it_needs_stops_with_its_own_figure(self):
+        with self.assertRaises(InstallError) as caught:
+            self.check(10.0, profiles.MOCK_FREE_GIB, mock_install=True)
+        self.assertEqual(caught.exception.code, preflight.EXIT_DISK_SPACE)
+        self.assertTrue(caught.exception.headline.startswith(
+            f"Mock AI mode needs {profiles.MOCK_FREE_GIB:.1f} GB free. Found 10.0 GB at"))
+        self.assertIn("docs/mock-ai.md", caught.exception.detail)
+        self.assertNotIn("GPU", caught.exception.headline + caught.exception.fix)
+
+    def test_a_mock_install_with_enough_free_disk_goes_on(self):
+        self.assertTrue(self.check(profiles.MOCK_FREE_GIB, profiles.MOCK_FREE_GIB, mock_install=True)["checked"])
+
+    def test_the_other_profiles_keep_their_message(self):
+        with self.assertRaises(InstallError) as caught:
+            self.check(10.0, 150.0, mock_install=False)
+        self.assertIn("for a CPU install", caught.exception.headline)
+
+    def test_the_install_checks_pass_the_mock_need_on_to_the_disk_check(self):
+        with mock.patch.object(preflight, "check_disk") as disk, \
+                mock.patch.object(preflight, "check_network"), \
+                mock.patch.object(preflight, "check_ports"), \
+                contextlib.redirect_stdout(io.StringIO()):
+            preflight.run_install_checks(self.log, self.tmp, mock_free_gib=profiles.MOCK_FREE_GIB)
+            preflight.run_install_checks(self.log, self.tmp)
+        self.assertEqual(disk.call_args_list[0], mock.call(self.log, int(profiles.MOCK_FREE_GIB * GIB), mock=True))
+        self.assertEqual(disk.call_args_list[1], mock.call(self.log))
 
 
 class InstalledStack(unittest.TestCase):

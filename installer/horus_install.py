@@ -1947,7 +1947,8 @@ def decide_profile(log: Log, args, registry: str | None) -> tuple[dict, str, lis
             log.warn(forced)
     else:
         name, reasons = profiles.select_profile(probe)
-    if name == profiles.NOT_SUPPORTED and accepts_mock_mode(log, args, reasons):
+    if (name == profiles.NOT_SUPPORTED and profiles.mock_fits(probe)
+            and accepts_mock_mode(log, args, reasons)):
         name, reasons = profiles.MOCK_PROFILE, [*reasons, "mock AI mode accepted at the prompt"]
     if name == profiles.NOT_SUPPORTED:
         raise record_refusal(log, probe, reasons)
@@ -2000,7 +2001,8 @@ def _dispatch(log: Log, args) -> int:
     preflight.run_install_checks(log, infra,
                                  skip_disk_check=args.skip_disk_check,
                                  image_registry=registry,
-                                 cpu_profile=profiles.is_cpu_profile(name))
+                                 cpu_profile=profiles.is_cpu_profile(name),
+                                 mock_free_gib=profiles.free_disk_gib(name, registry is None))
     if registry is not None:
         sign_in_to_registry(log, args, registry)
         if args.no_build:

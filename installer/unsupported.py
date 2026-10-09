@@ -174,11 +174,20 @@ def refusal(probe: dict) -> NotSupported:
     has_nvidia = str((probe.get("gpu") or {}).get("vendor") or "").lower() == "nvidia"
     gpu = _gpu_alternative(probe)
     alternatives = [gpu, memory] if has_nvidia else [memory, gpu]
-    alternatives.append(
-        "Test Horus without a language model: run START-HERE again with --profile "
-        "mock. Everything runs except the AI, whose answers are simulated from your "
-        f"documents ({profiles.MOCK_DOC})."
-    )
+    if profiles.mock_fits(probe):
+        alternatives.append(
+            "Test Horus without a language model: run START-HERE again with --profile "
+            "mock. No AI model runs: answers and search are simulated from the words of "
+            f"your documents, and monitoring is off unless {profiles.MONITORING_KEY}=on "
+            f"({profiles.MOCK_DOC})."
+        )
+    else:
+        need.append(profiles.MOCK_TOO_SMALL)
+        alternatives.append(
+            "Test Horus without a language model: give Docker at least "
+            f"{_whole_gb_to_set(profiles.MOCK_MIN_GIB)} GB of memory, then run START-HERE "
+            f"again with --profile mock ({profiles.MOCK_DOC})."
+        )
     alternatives.append(
         "Try anyway, unsupported: run START-HERE again with --profile cpu-lean. Expect "
         "containers stopped for lack of memory, or answers that take far longer. If "

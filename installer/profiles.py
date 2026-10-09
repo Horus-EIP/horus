@@ -657,10 +657,23 @@ SIMULATED_ANSWERS = (
     f"{MONITORING_KEY}=on. The answers and the search are simulated: use this mode to "
     f"test Horus, not to judge its answers ({MOCK_DOC})."
 )
+MOCK_MIN_GIB = 3.0
+MOCK_FREE_GIB = 12.0
+MOCK_SOURCE_FREE_GIB = 23.0
+MOCK_MEASURED = (
+    "measured on 09/10/2026: a fresh mock install with the demo corpus, then a --restart "
+    "that turned monitoring on, peaked at 0.94 GiB of memory (the sum of each container's "
+    "own peak), plus the 2 GiB of headroom of ADR-006, rounded up to half a GiB "
+    "(benchmarks/README.md, Mock AI mode)"
+)
 MOCK_OFFER = (
-    "Mock AI mode still fits this machine: it needs no model. "
-    f"{SIMULATED_ANSWERS} An interactive install offers it; --profile mock "
+    f"Mock AI mode still fits this machine: it needs no model and {MOCK_MIN_GIB:.1f} GiB of "
+    f"memory for Docker. {SIMULATED_ANSWERS} An interactive install offers it; --profile mock "
     "installs it without asking."
+)
+MOCK_TOO_SMALL = (
+    f"Mock AI mode does not fit either: it runs no model, but the rest of Horus still needs "
+    f"{MOCK_MIN_GIB:.1f} GiB of memory for Docker ({MOCK_MEASURED})."
 )
 
 def _mock_settings() -> dict[str, Setting]:
@@ -704,7 +717,8 @@ def _mock_settings() -> dict[str, Setting]:
 _add(Profile(
     name=MOCK_PROFILE,
     trigger=(f"Offered when no CPU profile fits ({cpu_floor_gib():.1f} GiB of memory "
-             "for Docker and no usable NVIDIA GPU); forced with --profile mock."),
+             f"for Docker and no usable NVIDIA GPU) and Docker can use {MOCK_MIN_GIB:.1f} GiB "
+             "or more; forced with --profile mock."),
     runs_vllm=False,
     summary="No language model: llm-mock answers from your documents. The answers are simulated.",
     settings=_mock_settings(),
@@ -720,6 +734,9 @@ _add(Profile(
         "each answer, and the desktop app shows AI: Mock.",
         "Switch an install with --ai local or --ai mock; --ai status says which "
         "mode is on.",
+        f"It needs {MOCK_MIN_GIB:.1f} GiB of memory for Docker ({MOCK_MEASURED}), "
+        f"{MOCK_FREE_GIB:.0f} GiB of free disk with the prebuilt images and "
+        f"{MOCK_SOURCE_FREE_GIB:.0f} GiB with --build-from-source.",
     ),
 ))
 
@@ -815,6 +832,7 @@ def memory_decision(probe: dict | None) -> dict:
         "cpu_standard_min_gib": CPU_STANDARD_MIN_GIB,
         "cpu_lean_min_gib": CPU_LEAN_MIN_GIB,
         "cpu_lean_supported": CPU_LEAN_SUPPORTED,
+        "mock_min_gib": MOCK_MIN_GIB,
         "thresholds": THRESHOLDS_BASIS,
     }
 
@@ -823,7 +841,21 @@ def supported_floor_gib(profile_name: str) -> float | None:
         return CPU_STANDARD_MIN_GIB
     if profile_name == "cpu-lean":
         return cpu_floor_gib()
+    if is_mock_profile(profile_name):
+        return MOCK_MIN_GIB
     return None
+
+def floor_basis(profile_name: str) -> str:
+    return MOCK_MEASURED if is_mock_profile(profile_name) else THRESHOLDS_BASIS
+
+def mock_fits(probe: dict | None) -> bool:
+    gib, _ = memory_for_docker(probe)
+    return gib is None or gib >= MOCK_MIN_GIB
+
+def free_disk_gib(profile_name: str, from_source: bool) -> float | None:
+    if not is_mock_profile(profile_name):
+        return None
+    return MOCK_SOURCE_FREE_GIB if from_source else MOCK_FREE_GIB
 
 def _cpu_profile_for_memory(probe: dict) -> tuple[str, list[str]]:
     gib, basis = memory_for_docker(probe)
@@ -861,7 +893,7 @@ def _cpu_profile_for_memory(probe: dict) -> tuple[str, list[str]]:
         f"{have}: under the {cpu_floor_gib():.1f} GiB the smallest CPU profile "
         f"needs ({THRESHOLDS_BASIS}). No CPU profile fits this machine."
     )
-    reasons.append(MOCK_OFFER)
+    reasons.append(MOCK_OFFER if mock_fits(probe) else MOCK_TOO_SMALL)
     return NOT_SUPPORTED, reasons
 
 def forced_profile_warning(profile_name: str, probe: dict | None) -> str | None:
@@ -869,10 +901,11 @@ def forced_profile_warning(profile_name: str, probe: dict | None) -> str | None:
     gib, basis = memory_for_docker(probe)
     if floor is None or gib is None or gib >= floor:
         return None
+    slower = "" if is_mock_profile(profile_name) else ", or answers that take far longer"
     return (f"--profile {profile_name} forces a profile this machine is not supported "
             f"for. {describe_memory(gib, basis)}; {profile_name} needs "
-            f"{floor:.1f} GiB ({THRESHOLDS_BASIS}). Expect containers stopped for "
-            "lack of memory, or answers that take far longer.")
+            f"{floor:.1f} GiB ({floor_basis(profile_name)}). Expect containers stopped for "
+            f"lack of memory{slower}.")
 
 def avx2_warning(probe: dict | None) -> str | None:
     if ((probe or {}).get("cpu") or {}).get("avx2") is not False:

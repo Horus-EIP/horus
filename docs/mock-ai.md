@@ -51,7 +51,7 @@ The services hold no mock code: MAS and the knowledge store get an OpenAI-compat
 
 `START-HERE` is `START-HERE-Windows.bat`, `./START-HERE-Linux.sh` or `START-HERE-macOS.command`; from a checkout, `python installer/horus_install.py`.
 
-A first install can be a mock install: `--profile mock`. On a machine under the `cpu-lean` minimum without a usable NVIDIA GPU, an interactive install offers mock mode instead of stopping; a run with `--non-interactive` still stops, and its screen lists `--profile mock` among the alternatives.
+A first install can be a mock install: `--profile mock`. On a machine under the `cpu-lean` minimum without a usable NVIDIA GPU, where Docker can use at least the mock profile's 3.0 GiB, an interactive install offers mock mode instead of stopping; a run with `--non-interactive` still stops, and its screen lists `--profile mock` among the alternatives. Under 3.0 GiB nothing is offered, and the screen says mock mode does not fit either and how much memory to give Docker.
 
 ### What a switch costs
 
@@ -153,7 +153,7 @@ With the demo corpus, "What was our Q4 2025 revenue?" finds the Q4 report and ge
 
 ## What machine is enough
 
-Mock mode needs no GPU and downloads no model. Measured on 09/10/2026 on the development laptop (AMD Ryzen AI 9 HX 370, Docker Desktop 29.2.1 on WSL 2), in a throwaway Docker-in-Docker daemon with nothing cached: a `--profile mock --build-from-source` install with the demo corpus, then the smoke test.
+Mock mode needs no GPU and downloads no model. Measured on 09/10/2026 on the development laptop (AMD Ryzen AI 9 HX 370, Docker Desktop 29.2.1 on WSL 2), in a throwaway Docker-in-Docker daemon with nothing cached: a `--profile mock --build-from-source` install, the five demo documents uploaded, then the smoke test.
 
 | | Monitoring off (the mock default) | Monitoring on | Real embeddings and spaCy, for comparison |
 |---|---|---|---|
@@ -165,6 +165,16 @@ Mock mode needs no GPU and downloads no model. Measured on 09/10/2026 on the dev
 The memory is the sum of each container's own peak, from the start of the stack to the end of the smoke test; sampled every 4 s, the stack as a whole peaked at 0.59, 0.71 and 1.44 GiB. The images keep the BGE and MiniLM weights and spaCy's small English model, 0.3 GiB that mock mode never loads, so `--ai local` downloads no embedding or spaCy model. It still downloads the rest of local mode: on a CPU profile the language model and the llama-server image, on a GPU profile the GPU images (or rebuilds them) and vLLM, which then downloads its model. The disk is `/var/lib/docker` on the containerd image store at its peak, which is the end of the install; the built-from-source figure with monitoring on adds the monitoring images' 1.5 GiB to the measured one.
 
 The cold install took 8 min 33 s: 39 s to pull the database and queue images, 7 min 04 s to build, 43 s to start until every service was healthy; the smoke test then took 4 s. Turning monitoring on took 88 s, its images' download included.
+
+The installer checks the `mock` profile like the other profiles, from these figures:
+
+| | Minimum | From |
+|---|---|---|
+| Memory for Docker | 3.0 GiB | The larger peak, 0.94 GiB, plus the 2 GiB of headroom of ADR-006, rounded up to half a GiB. The build itself peaked at 2.35 GiB, so it fits too. |
+| Free disk, prebuilt images | 12 GiB | Twice the peak of 5.7 GiB, rounded up: an update downloads the new images next to the old ones, and documents, the database and logs grow. |
+| Free disk, `--build-from-source` | 23 GiB | Twice the peak of 11.4 GiB, rounded up. |
+
+Under the memory minimum, mock mode is not offered: the screen says it does not fit either and to give Docker at least 4 GB before `--profile mock`, and a forced `--profile mock` goes on with a warning. Under the disk minimum the install stops before downloading anything (`--skip-disk-check` goes on anyway). The details of the measurement: [benchmarks/README.md](../benchmarks/README.md#mock-ai-mode).
 
 ---
 
