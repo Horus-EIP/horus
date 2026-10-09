@@ -333,7 +333,7 @@ class CandidateRun:
             return None
         testset_path = Path(self.args.testset).resolve()
         return {
-            "path": relative_to(testset_path, self.profile.base_dir),
+            "path": relative_to(self.args.testset, self.profile.base_dir),
             "version": str(self.testset.get("version")),
             "sha256": file_sha256(testset_path),
             "filters": {"ids": self.args.ids, "categories": self.args.category, "limit": self.args.limit},

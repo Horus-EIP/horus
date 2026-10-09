@@ -623,9 +623,9 @@ def model_info(args: argparse.Namespace, llama_server: dict[str, Any] | None) ->
 
 
 def testset_info(args: argparse.Namespace, testset: dict[str, Any], items: list[dict]) -> dict:
-    path = Path(args.testset).resolve()
     filters = {"ids": args.ids, "categories": args.category, "limit": args.limit}
-    return testset_section(path, testset, items, filters, root=REPO_ROOT, sha256=file_sha256(path))
+    return testset_section(args.testset, testset, items, filters, root=REPO_ROOT,
+                           sha256=file_sha256(Path(args.testset).resolve()))
 
 
 class ChatTarget:

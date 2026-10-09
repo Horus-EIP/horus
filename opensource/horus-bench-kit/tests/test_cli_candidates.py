@@ -3,11 +3,13 @@ import json
 import re
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from conftest import GIB, RecordingShell, make_catalog, run_module
 from horus_bench_kit import __version__
+from horus_bench_kit.cli import candidates as candidates_module
 from horus_bench_kit.cli.candidates import (
     DEFAULT_RUNNER,
     CandidateRun,
@@ -553,3 +555,19 @@ def test_the_tool_also_runs_as_a_module():
     assert "--probe-command" in completed.stdout
     version = run_module("horus_bench_kit.cli.candidates", "--version")
     assert (version.returncode, version.stdout.strip()) == (0, f"hbk-model-candidates {__version__}")
+
+
+def test_a_test_set_outside_the_base_folder_is_recorded_by_its_name(
+    host_folder, host_folder_leaks, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(candidates_module, "file_sha256", lambda path: "0" * 64)
+    run = SimpleNamespace(
+        testset={"version": "1.0.0", "items": []},
+        args=SimpleNamespace(testset=f"{host_folder}/own-testset.json", ids=None, category=None, limit=None),
+        profile=SimpleNamespace(base_dir=tmp_path),
+        probe_items=lambda: [],
+    )
+    section = CandidateRun.testset_section(run)
+    assert section["path"] == "own-testset.json"
+    assert host_folder_leaks(json.dumps(section)) == []

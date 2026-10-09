@@ -14,6 +14,7 @@ CHECKS_PATH = KIT_ROOT / "src" / "horus_bench_kit" / "publishable.py"
 FIXED_TIME = (1980, 1, 1, 0, 0, 0)
 FILE_MODE = 0o644 << 16
 SCRIPT_MODE = 0o755 << 16
+MADE_ON_UNIX = 3
 
 
 def load_checks(path: Path = CHECKS_PATH) -> ModuleType:
@@ -47,6 +48,7 @@ def build_zip(out_dir: Path, root: Path = KIT_ROOT) -> tuple[Path, int]:
         for relative in files:
             entry = zipfile.ZipInfo(f"{name}/{relative}", date_time=FIXED_TIME)
             entry.compress_type = zipfile.ZIP_DEFLATED
+            entry.create_system = MADE_ON_UNIX
             entry.external_attr = SCRIPT_MODE if relative.suffix == ".sh" else FILE_MODE
             bundle.writestr(entry, packaged_bytes(root, relative))
     return archive, len(files)
