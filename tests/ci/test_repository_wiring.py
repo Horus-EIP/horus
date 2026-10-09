@@ -19,7 +19,7 @@ SERVICES = REPO / "src" / "services"
 WORKFLOWS = REPO / ".github" / "workflows"
 DOCS = REPO / "docs"
 COMPOSE_FILES = (INFRA / "docker-compose.yml", INFRA / "docker-compose.cpu.yml",
-                 INFRA / "docker-compose.mock.yml")
+                 INFRA / "docker-compose.mock.yml", INFRA / "docker-compose.monitoring-off.yml")
 EVAL_TESTS = REPO / "tests" / "eval"
 RESEARCH_NOTE = "tech-watch/IGPU_NPU_RESEARCH.md"
 

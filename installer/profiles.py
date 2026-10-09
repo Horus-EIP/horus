@@ -644,6 +644,11 @@ MOCK_OVERLAY = "docker-compose.mock.yml"
 MOCK_MODEL_SERVER = "llm-mock"
 MOCK_MODEL_NAME = "horus-mock"
 MOCK_DOC = "docs/mock-ai.md"
+MONITORING_OVERLAY = "docker-compose.monitoring-off.yml"
+MONITORING_KEY = "HORUS_MONITORING"
+MONITORING_SERVICES = ("loki", "alloy", "tempo", "prometheus")
+MONITORING_ON = frozenset({"on", "1", "true", "yes"})
+MONITORING_OFF = frozenset({"off", "0", "false", "no"})
 SIMULATED_ANSWERS = (
     "Mock AI mode: every service runs except the language model. llm-mock answers "
     "in its place with sentences taken from your documents, with their sources, "
@@ -739,6 +744,21 @@ def image_flavor(name: str) -> str:
 
 def compose_file_runs_mock(compose_file: str) -> bool:
     return MOCK_OVERLAY in compose_file
+
+def compose_file_runs_monitoring(compose_file: str) -> bool:
+    return MONITORING_OVERLAY not in compose_file
+
+def monitoring_choice(setting: str | None) -> bool | None:
+    value = (setting or "").split("#", 1)[0].strip().lower()
+    if value in MONITORING_ON:
+        return True
+    if value in MONITORING_OFF:
+        return False
+    return None
+
+def monitoring_wanted(setting: str | None, mock: bool) -> bool:
+    choice = monitoring_choice(setting)
+    return not mock if choice is None else choice
 
 def model_server_for_compose_file(compose_file: str) -> str:
     if compose_file_runs_mock(compose_file):
@@ -969,7 +989,7 @@ def compose_file_separator(probe: dict | None) -> str:
 def _compose_file_value(runs_vllm: bool, probe: dict | None, mock: bool = False) -> str:
     sep = compose_file_separator(probe)
     if mock:
-        return sep.join((BASE_COMPOSE, CPU_OVERLAY, MOCK_OVERLAY))
+        return sep.join((BASE_COMPOSE, CPU_OVERLAY, MOCK_OVERLAY, MONITORING_OVERLAY))
     if runs_vllm:
         return BASE_COMPOSE
     return sep.join((BASE_COMPOSE, CPU_OVERLAY))
@@ -981,6 +1001,13 @@ def with_mock_overlay(compose_file: str, sep: str) -> str:
         files.insert(files.index(BASE_COMPOSE) + 1 if BASE_COMPOSE in files else 0, CPU_OVERLAY)
     files.insert(files.index(CPU_OVERLAY) + 1, MOCK_OVERLAY)
     return sep.join(files)
+
+def with_monitoring(compose_file: str, sep: str, on: bool) -> str:
+    files = [name for name in compose_file.split(sep) if name]
+    if files and (MONITORING_OVERLAY not in files) == on:
+        return compose_file
+    kept = [name for name in files if name != MONITORING_OVERLAY] or [BASE_COMPOSE]
+    return sep.join(kept if on else [*kept, MONITORING_OVERLAY])
 
 def without_mock_overlay(compose_file: str, sep: str) -> str:
     files = [name for name in compose_file.replace(";", ":").split(":")
@@ -1014,7 +1041,9 @@ def provenance_for(profile_name: str,
         "provenance": DERIVED if mock else MEASURED,
         "why": (
             "The CPU overlay, then docker-compose.mock.yml: it adds llm-mock, turns "
-            "off llm and llm-model, and points MAS and the agent at llm-mock."
+            "off llm and llm-model, and points MAS and the agent at llm-mock. Then "
+            f"{MONITORING_OVERLAY}: Prometheus, Loki, Tempo and Alloy do not run "
+            f"unless {MONITORING_KEY}=on is in src/infra/.env."
             if mock else
             "Selects the CPU overlay. `gpus: []` and `gpus: null` do not work - "
             "Compose appends sequences - so the overlay uses `!reset`."

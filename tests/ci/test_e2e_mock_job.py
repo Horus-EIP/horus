@@ -17,6 +17,7 @@ REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "ci" / "smoke-steps.py"
 WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 MOCK_FILES = "docker-compose.yml:docker-compose.cpu.yml:docker-compose.mock.yml"
+MONITORING_OFF = "docker-compose.monitoring-off.yml"
 
 spec = importlib.util.spec_from_file_location("smoke_steps", SCRIPT)
 smoke_steps = importlib.util.module_from_spec(spec)
@@ -98,7 +99,10 @@ class EndToEndJob(unittest.TestCase):
         self.assertIn("http://127.0.0.1:8000/system/ai", self.runs)
 
     def test_it_checks_the_compose_files_with_and_without_the_overlay(self):
-        for files in ("docker-compose.yml docker-compose.yml:docker-compose.cpu.yml", MOCK_FILES):
+        for files in ("docker-compose.yml docker-compose.yml:docker-compose.cpu.yml", MOCK_FILES,
+                      f"docker-compose.yml:{MONITORING_OFF}",
+                      f"docker-compose.yml:docker-compose.cpu.yml:{MONITORING_OFF}",
+                      f"{MOCK_FILES}:{MONITORING_OFF}"):
             self.assertIn(files, self.runs)
         self.assertIn("config -q", self.runs)
 

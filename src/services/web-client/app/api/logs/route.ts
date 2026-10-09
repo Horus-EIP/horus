@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/server/require-admin";
+import { monitoringIsOff, monitoringOff } from "@/lib/server/monitoring";
 
 /**
  * BFF for container logs. Queries Loki (the log store fed by Grafana Alloy) server-side
@@ -59,6 +60,7 @@ interface LokiStream {
 export async function GET(request: NextRequest): Promise<Response> {
   const guard = await requireAdmin(request);
   if (!guard.ok) return guard.response;
+  if (monitoringIsOff()) return monitoringOff();
 
   const { searchParams } = new URL(request.url);
 

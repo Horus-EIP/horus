@@ -33,6 +33,8 @@ LINUX = {"os": {"platform": "linux"}}
 WINDOWS = {"os": {"platform": "win32"}}
 CPU_FILES = "docker-compose.yml:docker-compose.cpu.yml"
 MOCK_FILES = "docker-compose.yml:docker-compose.cpu.yml:docker-compose.mock.yml"
+LEAN_MOCK_FILES = f"{MOCK_FILES}:docker-compose.monitoring-off.yml"
+MONITORING = list(profiles.MONITORING_SERVICES)
 EXPECT_MOCK = [*horus_install.CORE_SERVICES, profiles.MOCK_MODEL_SERVER]
 
 
@@ -62,8 +64,9 @@ class MockProfile(unittest.TestCase):
         self.assertFalse(profiles.is_cpu_profile("mock"))
 
     def test_it_runs_the_cpu_images_under_the_mock_overlay(self):
-        self.assertEqual(profiles.env_for("mock", LINUX)["COMPOSE_FILE"], MOCK_FILES)
-        self.assertEqual(profiles.env_for("mock", WINDOWS)["COMPOSE_FILE"], MOCK_FILES.replace(":", ";"))
+        self.assertEqual(profiles.env_for("mock", LINUX)["COMPOSE_FILE"], LEAN_MOCK_FILES)
+        self.assertEqual(profiles.env_for("mock", WINDOWS)["COMPOSE_FILE"],
+                         LEAN_MOCK_FILES.replace(":", ";"))
         self.assertEqual(profiles.image_flavor("mock"), "cpu")
         self.assertEqual(profiles.model_server("mock"), profiles.MOCK_MODEL_SERVER)
 
@@ -276,8 +279,8 @@ class SwitchToMock(InstalledStack):
         self.write(self.ORIGINAL)
         with mock.patch.object(horus_install, "start_and_check", return_value=EXPECT_MOCK) as start:
             self.assertEqual(self.ai("mock"), EXIT_OK)
-        self.assertEqual(self.stopped, [(["llm", "llm-model"], CPU_FILES)])
-        self.assertEqual(self.compose_file(), MOCK_FILES)
+        self.assertEqual(self.stopped, [(["llm", "llm-model", *MONITORING], CPU_FILES)])
+        self.assertEqual(self.compose_file(), LEAN_MOCK_FILES)
         self.assertEqual(horus_install.env_line_value(self.infra, "HORUS_AI_MODE"), "mock")
         self.assertIn("LLM_VLLM_URL=http://llm:8080/v1", self.env())
         self.assertTrue(list(self.infra.glob(".env.bak.*")))
@@ -291,9 +294,9 @@ class SwitchToMock(InstalledStack):
         self.write("COMPOSE_FILE=docker-compose.yml\n")
         with mock.patch.object(horus_install, "start_and_check", return_value=EXPECT_MOCK) as start:
             self.ai("mock")
-        self.assertEqual(self.stopped, [(["vllm"], "docker-compose.yml")])
+        self.assertEqual(self.stopped, [(["vllm", *MONITORING], "docker-compose.yml")])
         self.assertEqual(self.compose_file(),
-                         MOCK_FILES.replace(":", profiles.compose_file_separator(None)))
+                         LEAN_MOCK_FILES.replace(":", profiles.compose_file_separator(None)))
         self.assertTrue(start.call_args.args[4])
 
     def test_a_failed_check_rolls_back_to_the_previous_mode(self):
@@ -308,7 +311,7 @@ class SwitchToMock(InstalledStack):
         self.assertEqual(caught.exception.code, EXIT_SMOKE_FAILED)
         self.assertIn("rolled back", caught.exception.headline)
         self.assertEqual(self.env(), self.ORIGINAL)
-        self.assertEqual(self.stopped[-1], (["llm-mock"], MOCK_FILES))
+        self.assertEqual(self.stopped[-1], (["llm-mock"], LEAN_MOCK_FILES))
         up.assert_called_once()
         self.assertIn("llm", health.call_args[0][2])
 
@@ -319,7 +322,7 @@ class SwitchToMock(InstalledStack):
                 self.assertRaises(KeyboardInterrupt):
             self.ai("mock")
         self.assertEqual(self.env(), self.ORIGINAL)
-        self.assertEqual(self.stopped[-1], (["llm-mock"], MOCK_FILES))
+        self.assertEqual(self.stopped[-1], (["llm-mock"], LEAN_MOCK_FILES))
         up.assert_not_called()
         self.assertIn("Start Horus again with --start", self.out.getvalue())
 
@@ -349,7 +352,7 @@ class SwitchToMock(InstalledStack):
         self.assertEqual(self.env(), "COMPOSE_FILE=docker-compose.yml\n")
 
     def test_nothing_changes_when_the_mode_is_already_on(self):
-        self.write(f"COMPOSE_FILE={MOCK_FILES}\n")
+        self.write(f"COMPOSE_FILE={LEAN_MOCK_FILES}\n")
         with mock.patch.object(horus_install, "start_and_check") as start:
             self.assertEqual(self.ai("mock"), EXIT_OK)
         start.assert_not_called()
@@ -439,6 +442,196 @@ class SwitchToLocal(InstalledStack):
                          {"profile": {"name": "cpu-standard"}})
 
 
+class MonitoringSetting(unittest.TestCase):
+    def test_unset_means_off_in_mock_mode_and_on_in_local_mode(self):
+        self.assertFalse(profiles.monitoring_wanted(None, mock=True))
+        self.assertTrue(profiles.monitoring_wanted(None, mock=False))
+        self.assertTrue(profiles.monitoring_wanted("", mock=False))
+
+    def test_an_explicit_value_wins_in_both_modes(self):
+        for value in ("on", "ON", " 1 ", "true", "yes"):
+            for mock_mode in (True, False):
+                with self.subTest(value=value, mock=mock_mode):
+                    self.assertTrue(profiles.monitoring_wanted(value, mock_mode))
+        for value in ("off", "Off", "0", "false", "no"):
+            for mock_mode in (True, False):
+                with self.subTest(value=value, mock=mock_mode):
+                    self.assertFalse(profiles.monitoring_wanted(value, mock_mode))
+
+    def test_the_overlay_goes_last_and_only_once(self):
+        cases = {
+            (MOCK_FILES, ":", False): LEAN_MOCK_FILES,
+            (LEAN_MOCK_FILES, ":", False): LEAN_MOCK_FILES,
+            (LEAN_MOCK_FILES, ":", True): MOCK_FILES,
+            (MOCK_FILES, ":", True): MOCK_FILES,
+            (CPU_FILES.replace(":", ";"), ";", False):
+                f"{CPU_FILES};docker-compose.monitoring-off.yml".replace(":", ";"),
+            ("", ":", False): "docker-compose.yml:docker-compose.monitoring-off.yml",
+            ("", ":", True): "docker-compose.yml",
+        }
+        for (current, sep, on), expected in cases.items():
+            with self.subTest(current=current, on=on):
+                self.assertEqual(profiles.with_monitoring(current, sep, on), expected)
+        self.assertFalse(profiles.compose_file_runs_monitoring(LEAN_MOCK_FILES))
+        self.assertTrue(profiles.compose_file_runs_monitoring(MOCK_FILES))
+
+    def test_only_the_mock_profile_turns_monitoring_off(self):
+        for name in profiles.PROFILE_ORDER:
+            with self.subTest(name):
+                self.assertTrue(profiles.compose_file_runs_monitoring(profiles.env_for(name)["COMPOSE_FILE"]))
+        self.assertIn(profiles.MONITORING_OVERLAY, profiles.provenance_for("mock")["COMPOSE_FILE"]["why"])
+
+    def test_the_uninstall_offers_the_monitoring_volumes_a_lean_install_left(self):
+        for volume in ("loki_data", "tempo_data", "prometheus_data", "alloy_data"):
+            with self.subTest(volume):
+                self.assertIn(volume, horus_install.LEFT_BEHIND_VOLUMES)
+
+
+class MonitoringOnASwitch(InstalledStack):
+    def test_mock_mode_keeps_monitoring_on_when_the_setting_asks(self):
+        self.write(f"COMPOSE_FILE={CPU_FILES}\nHORUS_MONITORING=on\n")
+        with mock.patch.object(horus_install, "start_and_check", return_value=EXPECT_MOCK):
+            self.assertEqual(self.ai("mock"), EXIT_OK)
+        self.assertEqual(self.compose_file(), MOCK_FILES)
+        self.assertEqual(self.stopped, [(["llm", "llm-model"], CPU_FILES)])
+        self.assertIn("Monitoring: on (HORUS_MONITORING=on)", self.out.getvalue())
+
+    def test_mock_mode_says_monitoring_is_off_by_default(self):
+        self.write(f"COMPOSE_FILE={CPU_FILES}\n")
+        with mock.patch.object(horus_install, "start_and_check", return_value=EXPECT_MOCK):
+            self.ai("mock")
+        self.assertIn("Monitoring: off (HORUS_MONITORING=unset, off in mock mode)", self.out.getvalue())
+
+    def switch_to_local(self, env: str) -> None:
+        self.write(env)
+        with mock.patch.object(horus_install.hardware, "probe", side_effect=lambda *a, **k: big_machine()), \
+                mock.patch.object(horus_install.preflight, "run_install_checks"), \
+                mock.patch.object(horus_install, "plan_model", return_value=FakePlan()), \
+                mock.patch.object(horus_install, "download_model"), \
+                mock.patch.object(horus_install, "start_and_check",
+                                  return_value=[*horus_install.CORE_SERVICES, "llm"]):
+            self.assertEqual(self.ai("local"), EXIT_OK)
+
+    def failed_switch(self, env: str, target: str, failure):
+        self.write(env)
+        with mock.patch.object(horus_install.hardware, "probe", side_effect=lambda *a, **k: big_machine()), \
+                mock.patch.object(horus_install.preflight, "run_install_checks"), \
+                mock.patch.object(horus_install, "plan_model", return_value=FakePlan()), \
+                mock.patch.object(horus_install, "download_model"), \
+                mock.patch.object(horus_install, "start_and_check", side_effect=failure), \
+                mock.patch.object(horus_install, "up_waiting_out_a_dependency_abort",
+                                  return_value=(["up", "-d"], 0)), \
+                mock.patch.object(horus_install, "wait_for_health"), \
+                self.assertRaises((InstallError, KeyboardInterrupt)):
+            self.ai(target)
+
+    def test_a_failed_switch_that_turned_monitoring_on_stops_it_again(self):
+        failure = InstallError(EXIT_SMOKE_FAILED, "The smoke test did not pass.")
+        self.failed_switch(f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_AI_MODE=mock\n", "local", failure)
+        self.assertEqual(self.stopped[-1][0], ["llm", "llm-model", *MONITORING])
+        self.assertEqual(self.compose_file(), LEAN_MOCK_FILES)
+
+    def test_an_interrupted_switch_that_turned_monitoring_on_stops_it_again(self):
+        self.failed_switch(f"COMPOSE_FILE={CPU_FILES}\nHORUS_MONITORING=on\n", "mock", KeyboardInterrupt)
+        self.assertEqual(self.stopped[-1][0], ["llm-mock"])
+        self.failed_switch(f"COMPOSE_FILE={CPU_FILES}\nHORUS_MONITORING=off\n", "mock", KeyboardInterrupt)
+        self.assertEqual(self.stopped[-1][0], ["llm-mock"])
+
+    def test_local_mode_turns_monitoring_back_on(self):
+        self.switch_to_local(f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_AI_MODE=mock\n")
+        self.assertEqual(self.compose_file(), profiles.env_for("cpu-standard", big_machine())["COMPOSE_FILE"])
+        self.assertEqual(self.stopped, [(["llm-mock"], LEAN_MOCK_FILES)])
+
+    def test_local_mode_keeps_monitoring_off_when_the_setting_asks(self):
+        self.switch_to_local(f"COMPOSE_FILE={MOCK_FILES}\nHORUS_AI_MODE=mock\nHORUS_MONITORING=off\n")
+        local = profiles.env_for("cpu-standard", big_machine())["COMPOSE_FILE"]
+        self.assertEqual(self.compose_file(),
+                         profiles.with_monitoring(local, horus_install.separator_of(local), False))
+        self.assertEqual(self.stopped, [(["llm-mock", *MONITORING], MOCK_FILES)])
+
+    def test_status_shows_monitoring_and_warns_when_the_setting_is_not_applied(self):
+        self.write(f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_MONITORING=on\n")
+        self.assertEqual(self.ai("status"), EXIT_OK)
+        text = " ".join(self.out.getvalue().split())
+        self.assertIn("Monitoring: Off", text)
+        self.assertIn("HORUS_MONITORING=on, so monitoring should be on, but COMPOSE_FILE keeps it off. "
+                      "Run --restart to apply it.", text)
+        self.assertEqual([e for e in self.emitted() if e["event"] == "ai"][-1]["monitoring"], "off")
+
+
+class MonitoringOnAStart(InstalledStack):
+    def start(self, env: str, action) -> list[list[str]]:
+        self.write(env)
+        streamed: list[list[str]] = []
+        self.ups: list[list[str]] = []
+        with mock.patch.object(horus_install, "ensure_installed_model"), \
+                mock.patch.object(horus_install, "up_waiting_out_a_dependency_abort",
+                                  side_effect=lambda log, infra, up, timeout:
+                                  self.ups.append(up) or (up, 0)), \
+                mock.patch.object(horus_install, "_stream",
+                                  side_effect=lambda cmd, *rest, **kw: streamed.append(cmd) or 0), \
+                mock.patch.object(horus_install, "wait_for_health"):
+            self.assertEqual(action(self.log, self.infra, 60), EXIT_OK)
+        return streamed
+
+    def test_a_start_applies_a_setting_changed_in_the_env(self):
+        self.start(f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_MONITORING=on\n", horus_install.do_start)
+        self.assertEqual(self.compose_file(), MOCK_FILES)
+        self.assertEqual(self.stopped, [])
+        self.start(f"COMPOSE_FILE={CPU_FILES}\nHORUS_MONITORING=off\n", horus_install.do_start)
+        self.assertEqual(self.compose_file(), f"{CPU_FILES}:docker-compose.monitoring-off.yml")
+        self.assertEqual(self.stopped, [(MONITORING, CPU_FILES)])
+
+    def test_a_start_leaves_an_install_that_follows_its_mode_alone(self):
+        for env in (f"COMPOSE_FILE={LEAN_MOCK_FILES}\n", f"COMPOSE_FILE={CPU_FILES}\n"):
+            with self.subTest(env):
+                self.start(env, horus_install.do_start)
+                self.assertEqual(self.env(), env)
+        self.assertEqual(self.stopped, [])
+
+    def test_a_restart_that_changes_monitoring_restarts_then_recreates_the_stack(self):
+        streamed = self.start(f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_MONITORING=on\n",
+                              horus_install.do_restart)
+        self.assertEqual([cmd[-1] for cmd in streamed], ["restart"])
+        self.assertEqual(self.ups, [["up", "-d"]])
+        self.assertEqual(self.compose_file(), MOCK_FILES)
+
+    def test_a_restart_with_nothing_to_change_only_restarts(self):
+        streamed = self.start(f"COMPOSE_FILE={LEAN_MOCK_FILES}\n", horus_install.do_restart)
+        self.assertEqual([cmd[-1] for cmd in streamed], ["restart"])
+        self.assertEqual(self.ups, [])
+
+    def test_a_windows_path_and_an_unchanged_setting_leave_compose_file_as_written(self):
+        written = "docker-compose.yml;docker-compose.cpu.yml;C:\\Users\\me\\override.yml;"
+        self.start(f"COMPOSE_FILE={written}\n", horus_install.do_start)
+        self.assertEqual(self.compose_file(), written)
+        self.start(f"COMPOSE_FILE={written}\nHORUS_MONITORING=off\n", horus_install.do_start)
+        self.assertEqual(self.compose_file(), f"{written}docker-compose.monitoring-off.yml")
+
+    def test_a_quoted_or_commented_setting_is_understood(self):
+        for value in ('"on"', "'on'", "on # keep it"):
+            with self.subTest(value=value):
+                self.start(f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_MONITORING={value}\n",
+                           horus_install.do_start)
+                self.assertEqual(self.compose_file(), MOCK_FILES)
+
+    def test_a_setting_that_is_neither_on_nor_off_says_so(self):
+        self.start(f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_MONITORING=enabled\n", horus_install.do_start)
+        self.assertEqual(self.compose_file(), LEAN_MOCK_FILES)
+        self.assertIn("HORUS_MONITORING=enabled in src/infra/.env is neither on nor off",
+                      " ".join(self.out.getvalue().split()))
+
+    def test_ai_mock_on_a_mock_install_applies_the_monitoring_default(self):
+        self.write(f"COMPOSE_FILE={MOCK_FILES}\n")
+        with mock.patch.object(horus_install, "do_start") as start:
+            self.assertEqual(self.ai("mock"), EXIT_OK)
+        start.assert_called_once()
+        self.write(f"COMPOSE_FILE={LEAN_MOCK_FILES}\n")
+        with mock.patch.object(horus_install, "do_start") as start:
+            self.ai("mock")
+        start.assert_not_called()
+
+
 class InstallOverAnotherMode(InstalledStack):
     def test_the_server_the_new_files_drop_is_stopped_when_mock_mode_is_involved(self):
         cases = {
@@ -456,10 +649,35 @@ class InstallOverAnotherMode(InstalledStack):
         (self.infra / ".env").unlink()
         self.assertEqual(horus_install.model_servers_left_behind(self.infra, MOCK_FILES), [])
 
+    def test_an_install_keeps_the_setting_a_reset_env_would_drop(self):
+        source = inspect.getsource(horus_install._dispatch)
+        self.assertIn("env[profiles.MONITORING_KEY] = monitoring_setting(infra)", source)
+        self.assertLess(source.index("env[profiles.MONITORING_KEY] = monitoring_setting(infra)"),
+                        source.index("apply_env(log, infra, env, reset=args.reset_env)"))
+
+    def test_the_monitoring_the_new_files_turn_off_is_stopped_too(self):
+        cases = {
+            (CPU_FILES, LEAN_MOCK_FILES): MONITORING,
+            (CPU_FILES, MOCK_FILES): [],
+            (LEAN_MOCK_FILES, CPU_FILES): [],
+            (LEAN_MOCK_FILES, LEAN_MOCK_FILES): [],
+        }
+        for (current, target), stopped in cases.items():
+            with self.subTest(current=current, target=target):
+                self.write(f"COMPOSE_FILE={current}\n")
+                self.assertEqual(horus_install.monitoring_left_behind(self.infra, target), stopped)
+        self.write("COMPOSE_PROJECT_NAME=old\n")
+        self.assertEqual(horus_install.monitoring_left_behind(self.infra, LEAN_MOCK_FILES), MONITORING)
+        (self.infra / ".env").unlink()
+        self.assertEqual(horus_install.monitoring_left_behind(self.infra, LEAN_MOCK_FILES), [])
+
     def test_the_install_stops_it_under_the_old_files_before_writing_the_new_ones(self):
         source = inspect.getsource(horus_install._dispatch)
         stop = source.index("stop_services(log, infra, left_behind)")
         self.assertLess(source.index("model_servers_left_behind(infra, env[COMPOSE_FILE_KEY])"), stop)
+        self.assertLess(source.index("monitoring_left_behind(infra, env[COMPOSE_FILE_KEY])"), stop)
+        self.assertLess(source.index("with_wanted_monitoring(log, infra, env[COMPOSE_FILE_KEY]"),
+                        source.index("monitoring_left_behind(infra, env[COMPOSE_FILE_KEY])"))
         self.assertLess(stop, source.index("apply_env(log, infra, env, reset=args.reset_env)"))
 
 

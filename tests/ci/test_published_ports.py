@@ -10,6 +10,7 @@ INFRA = REPO / "src" / "infra"
 BASE_COMPOSE = INFRA / "docker-compose.yml"
 CPU_OVERLAY = INFRA / "docker-compose.cpu.yml"
 MOCK_OVERLAY = INFRA / "docker-compose.mock.yml"
+MONITORING_OFF_OVERLAY = INFRA / "docker-compose.monitoring-off.yml"
 LOOPBACK = "127.0.0.1:"
 BROWSER_FACING = "web-client"
 WEB_MAPPING = "${HORUS_WEB_BIND:-127.0.0.1}:3000:3000"
@@ -71,6 +72,9 @@ class PublishedPorts(unittest.TestCase):
 
     def test_the_mock_overlay_publishes_no_port(self):
         self.assertEqual(published_ports(MOCK_OVERLAY), {})
+
+    def test_the_monitoring_off_overlay_publishes_no_port(self):
+        self.assertEqual(published_ports(MONITORING_OFF_OVERLAY), {})
 
     def test_the_installer_checks_every_port_the_stack_publishes(self):
         published = {default_host_port(mapping)

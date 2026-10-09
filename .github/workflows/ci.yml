@@ -493,11 +493,14 @@ jobs:
             echo "OTEL_SDK_DISABLED=true"
           } >> .env
 
-      - name: Compose configuration with and without the mock overlay
+      - name: Compose configuration with and without the mock and monitoring-off overlays
         working-directory: src/infra
         run: |
           for files in docker-compose.yml docker-compose.yml:docker-compose.cpu.yml \
-                       docker-compose.yml:docker-compose.cpu.yml:docker-compose.mock.yml; do
+                       docker-compose.yml:docker-compose.cpu.yml:docker-compose.mock.yml \
+                       docker-compose.yml:docker-compose.monitoring-off.yml \
+                       docker-compose.yml:docker-compose.cpu.yml:docker-compose.monitoring-off.yml \
+                       docker-compose.yml:docker-compose.cpu.yml:docker-compose.mock.yml:docker-compose.monitoring-off.yml; do
             env -i PATH="$PATH" HOME="$HOME" COMPOSE_FILE="$files" docker compose config -q
             echo "config passes: $files"
           done

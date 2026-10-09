@@ -1014,6 +1014,7 @@ def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
     require_installed(infra)
     _require_docker(log)
     ensure_installed_model(log, infra)
+    apply_monitoring_setting(log, infra)
 
     expect = expected_services(infra)
     log.step("Starting Horus")
@@ -1051,6 +1052,7 @@ def do_restart(log: Log, infra: Path, timeout: int) -> int:
     ensure_installed_model(log, infra)
 
     log.step("Restarting Horus")
+    changed = apply_monitoring_setting(log, infra)
     code = _stream(compose(["restart"]), log, infra, "restart")
     if code != 0:
         log.warn("`docker compose restart` reported errors; trying `up -d` instead")
@@ -1064,6 +1066,15 @@ def do_restart(log: Log, infra: Path, timeout: int) -> int:
                 f"  cd {infra}\n"
                 "  docker compose stop && docker compose up -d\n"
                 f"Full log: {LOG_PATH}",
+            )
+    if changed:
+        up, code = up_waiting_out_a_dependency_abort(log, infra, start_command(infra), timeout)
+        if code != 0:
+            raise InstallError(
+                EXIT_COMPOSE_UP_FAILED,
+                "The stack could not be restarted with the new monitoring setting.",
+                f"`docker compose {' '.join(up)}` exited {code}.",
+                f"The reason is in the logs of the container Docker named.\nFull log: {LOG_PATH}",
             )
 
     expect = expected_services(infra)
@@ -1091,6 +1102,10 @@ LEFT_BEHIND_VOLUMES = {
     "redisinsight_data": "the settings of RedisInsight, which was removed",
     "pgadmin_data": "the settings of PgAdmin, whose profile is off",
     "vllm_hf_cache": "the GPU model weights, which a reinstall downloads again",
+    "loki_data": "the logs Loki kept before monitoring was turned off",
+    "tempo_data": "the traces Tempo kept before monitoring was turned off",
+    "prometheus_data": "the metrics Prometheus kept before monitoring was turned off",
+    "alloy_data": "the state of Alloy, which collected the logs for Loki",
 }
 PROJECT_LABEL = "com.docker.compose.project"
 VOLUME_ROWS = '{{.Name}} {{.Label "com.docker.compose.volume"}}'
@@ -1227,6 +1242,7 @@ def do_uninstall(log: Log, infra: Path, assume_yes: bool, non_interactive: bool 
             return EXIT_OK
 
     log.info("uninstall confirmed")
+    monitoring_was_off = not profiles.compose_file_runs_monitoring(compose_file_now(infra))
     project, services = named_project(log, infra)
     left = volumes_left_behind(log, project, services)
     offered = [name for name, _key in left]
@@ -1248,6 +1264,8 @@ def do_uninstall(log: Log, infra: Path, assume_yes: bool, non_interactive: bool 
     elif offered:
         point_out_volumes(log, offered)
     point_out_other_volumes(log, project, offered)
+    if monitoring_was_off:
+        point_out_monitoring_images(log, infra)
     log.say("")
     log.ok("Horus removed.")
     log.say("  The source folder and this installer are still here; delete them")
@@ -1268,8 +1286,10 @@ def separator_of(compose_file: str) -> str:
     return profiles.compose_file_separator(None)
 
 def write_ai_mode(infra: Path, compose_file: str, mode: str) -> None:
+    write_env_values(infra, {COMPOSE_FILE_KEY: compose_file, AI_MODE_KEY: mode})
+
+def write_env_values(infra: Path, values: dict[str, str]) -> None:
     env_path = infra / ".env"
-    values = {COMPOSE_FILE_KEY: compose_file, AI_MODE_KEY: mode}
     out: list[str] = []
     written: set[str] = set()
     for key, line in _parse_env(env_path.read_text(encoding="utf-8")):
@@ -1283,16 +1303,87 @@ def write_ai_mode(infra: Path, compose_file: str, mode: str) -> None:
     env_path.write_text("\n".join(out) + "\n", encoding="utf-8")
     _lock_down(env_path)
 
+def monitoring_setting(infra: Path) -> str | None:
+    return smoke.read_env(infra / ".env").get(profiles.MONITORING_KEY)
+
+def with_wanted_monitoring(log: Log, infra: Path, compose_file: str, sep: str) -> str:
+    setting = monitoring_setting(infra)
+    mock = profiles.compose_file_runs_mock(compose_file)
+    if setting and profiles.monitoring_choice(setting) is None:
+        log.warn(f"{profiles.MONITORING_KEY}={setting} in src/infra/.env is neither on nor off; "
+                 f"monitoring stays {'off' if mock else 'on'}, the default in "
+                 f"{MOCK_MODE if mock else LOCAL_MODE} mode.")
+    return profiles.with_monitoring(compose_file, sep, profiles.monitoring_wanted(setting, mock))
+
+def monitoring_turned_off(old: str, new: str) -> list[str]:
+    if profiles.compose_file_runs_monitoring(old) and not profiles.compose_file_runs_monitoring(new):
+        return list(profiles.MONITORING_SERVICES)
+    return []
+
+def monitoring_turned_on(old: str, new: str) -> list[str]:
+    return monitoring_turned_off(new, old)
+
+def monitoring_left_behind(infra: Path, compose_file: str) -> list[str]:
+    if not (infra / ".env").is_file():
+        return []
+    return monitoring_turned_off(compose_file_now(infra), compose_file)
+
+def monitoring_images(infra: Path) -> list[str]:
+    try:
+        text = (infra / profiles.BASE_COMPOSE).read_text(encoding="utf-8")
+    except OSError:
+        return []
+    images = []
+    for name in profiles.MONITORING_SERVICES:
+        block = re.search(rf"^  {re.escape(name)}:\s*$(.*?)^  \S", text, re.MULTILINE | re.DOTALL)
+        image = re.search(r"^    image:\s*(\S+)", block.group(1), re.MULTILINE) if block else None
+        if image:
+            images.append(image.group(1))
+    return images
+
+def point_out_monitoring_images(log: Log, infra: Path) -> None:
+    images = monitoring_images(infra)
+    if not images:
+        return
+    log.say("")
+    log.say("  Monitoring was off, so Docker kept the images of Loki, Alloy, Tempo and")
+    log.say("  Prometheus. If no other project uses them, delete them with:")
+    log.say("    docker image rm " + " ".join(images))
+
+def monitoring_word(compose_file: str) -> str:
+    return "on" if profiles.compose_file_runs_monitoring(compose_file) else "off"
+
+def apply_monitoring_setting(log: Log, infra: Path) -> bool:
+    current = compose_file_now(infra)
+    target = with_wanted_monitoring(log, infra, current, separator_of(current))
+    if target == current:
+        return False
+    left = monitoring_turned_off(current, target)
+    if left:
+        stop_services(log, infra, left)
+    write_env_values(infra, {COMPOSE_FILE_KEY: target})
+    log.ok(f"Monitoring {monitoring_word(target)}, as {profiles.MONITORING_KEY} asks: "
+           f"{COMPOSE_FILE_KEY}={target}")
+    return True
+
 def do_ai_status(log: Log, infra: Path) -> int:
     require_installed(infra)
     compose_file = compose_file_now(infra)
     mode = ai_mode_of(compose_file)
     server = profiles.model_server_for_compose_file(compose_file)
+    monitoring = monitoring_word(compose_file)
     log.step("AI mode")
     log.say(f"  AI: {mode.capitalize()}   (model server: {server})")
+    log.say(f"  Monitoring: {monitoring.capitalize()}   (Prometheus, Loki, Tempo and Alloy)")
     if mode == MOCK_MODE:
         for line in _wrapped(profiles.SIMULATED_ANSWERS):
             log.say(f"  {line}")
+    wanted = monitoring_word(with_wanted_monitoring(log, infra, compose_file,
+                                                    separator_of(compose_file)))
+    if wanted != monitoring:
+        log.warn(f"src/infra/.env says {profiles.MONITORING_KEY}="
+                 f"{monitoring_setting(infra) or '(unset)'}, so monitoring should be {wanted}, "
+                 f"but COMPOSE_FILE keeps it {monitoring}. Run --restart to apply it.")
     declared = env_line_value(infra, AI_MODE_KEY) or LOCAL_MODE
     if declared != mode:
         log.warn(f"src/infra/.env says {AI_MODE_KEY}={declared}, but COMPOSE_FILE "
@@ -1302,7 +1393,7 @@ def do_ai_status(log: Log, infra: Path) -> int:
     if os.environ.get(COMPOSE_FILE_KEY):
         log.warn(f"{COMPOSE_FILE_KEY} is set in this shell: Docker Compose uses it instead "
                  "of the one in src/infra/.env.")
-    log.events.emit("ai", mode=mode, server=server)
+    log.events.emit("ai", mode=mode, server=server, monitoring=monitoring)
     return EXIT_OK
 
 def do_ai(log: Log, args, repo: Path) -> int:
@@ -1314,6 +1405,8 @@ def do_ai(log: Log, args, repo: Path) -> int:
     current = compose_file_now(infra)
     if ai_mode_of(current) == args.ai:
         log.ok(f"AI mode is already {args.ai}; nothing to switch.")
+        if with_wanted_monitoring(log, infra, current, separator_of(current)) != current:
+            do_start(log, infra, timeout=args.timeout)
         return do_ai_status(log, infra)
     if args.ai == MOCK_MODE:
         return switch_to_mock(log, args, repo, infra, current)
@@ -1409,15 +1502,18 @@ def switched(log: Log, infra: Path, mode: str, expect: list[str]) -> int:
     return EXIT_OK
 
 def switch_to_mock(log: Log, args, repo: Path, infra: Path, current: str) -> int:
-    target = profiles.with_mock_overlay(current, separator_of(current))
+    sep = separator_of(current)
+    target = with_wanted_monitoring(log, infra, profiles.with_mock_overlay(current, sep), sep)
     log.step("Switching to mock AI mode")
     for line in _wrapped(profiles.SIMULATED_ANSWERS):
         log.say(f"  {line}")
+    log.say(f"  Monitoring: {monitoring_word(target)} "
+            f"({profiles.MONITORING_KEY}={monitoring_setting(infra) or 'unset, off in mock mode'})")
     backup = _backup_env(log, infra / ".env")
     build = not installed_from_registry(infra) and profiles.CPU_OVERLAY not in current
-    started = [profiles.MOCK_MODEL_SERVER]
+    started = [profiles.MOCK_MODEL_SERVER, *monitoring_turned_on(current, target)]
     try:
-        stop_services(log, infra, model_servers_of(current))
+        stop_services(log, infra, model_servers_of(current) + monitoring_turned_off(current, target))
         write_ai_mode(infra, target, MOCK_MODE)
         log.ok(f"{COMPOSE_FILE_KEY}={target}")
         expect = start_and_check(log, args, repo, infra, build, require_answer_quality=True)
@@ -1462,6 +1558,8 @@ def switch_to_local(log: Log, args, repo: Path, infra: Path, current: str) -> in
                                  image_registry=registry,
                                  cpu_profile=profiles.is_cpu_profile(name))
     env = profiles.env_for(name, probe)
+    env[COMPOSE_FILE_KEY] = with_wanted_monitoring(log, infra, env[COMPOSE_FILE_KEY],
+                                                   separator_of(env[COMPOSE_FILE_KEY]))
     plan = plan_model(log, repo, name, args.models_dir)
     if plan is not None:
         env.update(plan.env(repo))
@@ -1473,9 +1571,11 @@ def switch_to_local(log: Log, args, repo: Path, infra: Path, current: str) -> in
     record = PROFILE_JSON.read_text(encoding="utf-8") if PROFILE_JSON.is_file() else None
     backup = _backup_env(log, infra / ".env")
     build = registry is None and profiles.image_flavor(name) != images.CPU_FLAVOR
-    started = model_servers_of(env[COMPOSE_FILE_KEY])
+    started = (model_servers_of(env[COMPOSE_FILE_KEY])
+               + monitoring_turned_on(current, env[COMPOSE_FILE_KEY]))
     try:
-        stop_services(log, infra, [profiles.MOCK_MODEL_SERVER])
+        stop_services(log, infra, [profiles.MOCK_MODEL_SERVER,
+                                   *monitoring_turned_off(current, env[COMPOSE_FILE_KEY])])
         apply_env(log, infra, env, reset=False)
         hardware.write_profile_json(PROFILE_JSON, probe, name, env, reasons, log=log)
         expect = start_and_check(log, args, repo, infra, build,
@@ -1657,6 +1757,8 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
                     profiles.avx2_warning(probe) if profiles.is_cpu_profile(name) else None]
 
         env = profiles.env_for(name, probe)
+        env["COMPOSE_FILE"] = with_wanted_monitoring(log, infra_dir(repo), env["COMPOSE_FILE"],
+                                                     separator_of(env["COMPOSE_FILE"]))
         plan = None
         if not profiles.get(name).runs_vllm:
             manifest = manifest or model_manager.load_manifest(model_manager.manifest_path(repo))
@@ -1858,6 +1960,10 @@ def _dispatch(log: Log, args) -> int:
     )
 
     env = profiles.env_for(name, probe)
+    env[COMPOSE_FILE_KEY] = with_wanted_monitoring(log, infra, env[COMPOSE_FILE_KEY],
+                                                   separator_of(env[COMPOSE_FILE_KEY]))
+    if monitoring_setting(infra):
+        env[profiles.MONITORING_KEY] = monitoring_setting(infra)
     model_plan = plan_model(log, repo, name, args.models_dir)
     if model_plan is not None:
         env.update(model_plan.env(repo))
@@ -1873,7 +1979,8 @@ def _dispatch(log: Log, args) -> int:
     log.ok(f"wrote {PROFILE_JSON.name}")
 
     log.step("Writing configuration")
-    left_behind = model_servers_left_behind(infra, env[COMPOSE_FILE_KEY])
+    left_behind = (model_servers_left_behind(infra, env[COMPOSE_FILE_KEY])
+                   + monitoring_left_behind(infra, env[COMPOSE_FILE_KEY]))
     if left_behind:
         stop_services(log, infra, left_behind)
     apply_env(log, infra, env, reset=args.reset_env)

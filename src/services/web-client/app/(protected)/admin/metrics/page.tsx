@@ -12,6 +12,7 @@ import {
 import { METRIC_PANELS } from "@/lib/metrics/panels";
 import { useNotification } from "@/contexts/notification-context";
 import { ObservabilityTabs } from "@/components/admin/observability-tabs";
+import { MonitoringGate } from "@/components/admin/monitoring-gate";
 
 const SINCE_OPTIONS = [
   { value: "15m", label: "Last 15 min" },
@@ -291,4 +292,10 @@ const AdminMetricsPage = () => {
   );
 };
 
-export default AdminMetricsPage;
+const GatedAdminMetricsPage = () => (
+  <MonitoringGate title="Metrics">
+    <AdminMetricsPage />
+  </MonitoringGate>
+);
+
+export default GatedAdminMetricsPage;

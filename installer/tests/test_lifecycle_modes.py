@@ -1496,6 +1496,28 @@ LEFT_CONTAINERS = (
 REMOVE_LEFT = f"rm --force --volumes {PROJECT}-pgadmin-1 {PROJECT}-vllm-1"
 PGADMIN_VOLUME = (f"{PROJECT}_pgadmin_data", PROJECT, "pgadmin_data")
 
+class UninstallPointsOutTheMonitoringImages(UninstallCase):
+
+    def lean(self, compose_file: str) -> None:
+        (self.infra / ".env").write_text(f"{NAMED_PROJECT}COMPOSE_FILE={compose_file}\n", encoding="utf-8")
+        base = REPO_ROOT / "src" / "infra" / profiles.BASE_COMPOSE
+        (self.infra / profiles.BASE_COMPOSE).write_text(base.read_text(encoding="utf-8"), encoding="utf-8")
+
+    def test_a_lean_install_says_how_to_delete_the_monitoring_images(self):
+        self.lean(f"docker-compose.yml:{profiles.MONITORING_OVERLAY}")
+        code, out = self.uninstall(self.docker())
+        self.assertEqual(code, EXIT_OK)
+        images = horus_install.monitoring_images(self.infra)
+        self.assertEqual([image.split(":")[0] for image in images],
+                         ["grafana/loki", "grafana/alloy", "grafana/tempo", "prom/prometheus"])
+        self.assertIn("docker image rm " + " ".join(images), out)
+
+    def test_an_install_that_ran_monitoring_says_nothing_about_its_images(self):
+        self.lean("docker-compose.yml")
+        _code, out = self.uninstall(self.docker())
+        self.assertNotIn("docker image rm", out)
+
+
 class UninstallRemovesEveryContainerOfTheProject(UninstallCase):
 
     def test_the_containers_of_turned_off_profiles_go_after_the_down(self):

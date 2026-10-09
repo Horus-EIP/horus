@@ -11,6 +11,7 @@ import {
 import { TRACED_SERVICES } from "@/lib/traces/services";
 import { useNotification } from "@/contexts/notification-context";
 import { ObservabilityTabs } from "@/components/admin/observability-tabs";
+import { MonitoringGate } from "@/components/admin/monitoring-gate";
 
 const SERVICE_OPTIONS = [
   { value: "all", label: "All services" },
@@ -266,4 +267,10 @@ const AdminTracesPage = () => {
   );
 };
 
-export default AdminTracesPage;
+const GatedAdminTracesPage = () => (
+  <MonitoringGate title="Traces">
+    <AdminTracesPage />
+  </MonitoringGate>
+);
+
+export default GatedAdminTracesPage;
