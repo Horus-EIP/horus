@@ -278,7 +278,7 @@ The plan is to turn the critical ones into tests under `tests/<service>/` marked
 | `test-agent` | Agent tests, coverage at least 90 % |
 | `test-knowledge-store` | Knowledge-store tests, coverage at least 85 % |
 | `test-installer` | `pytest installer/tests` with coverage, no gate |
-| `coverage-summary` | Test and coverage tables in the run summary |
+| `coverage-summary` | Collects the coverage line of the four test jobs; needs no artifact |
 
 **`eval-testset.yml`** runs `pytest tests/eval -q` on the same pushes and pull requests, when the evaluation files change (section 2.6).
 

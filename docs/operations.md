@@ -29,7 +29,9 @@ Continuous integration is defined in **`.github/workflows/ci.yml`** at the repos
 5. **`test-agent`**: installs `src/services/agent/requirements-gpu.txt` and `requirements-test.txt` with `https://download.pytorch.org/whl/cpu` as an extra index, because its tests cover the in-process model code, and fails unless torch is the pinned CPU build. Then `tests/agent`, with 90% coverage required.
 6. **`test-knowledge-store`**: installs `src/services/knowledge-store/requirements.txt` and `requirements-test.txt`, fails on torch or a CUDA package, then `tests/knowledge_store` with 85% coverage required.
 7. **`test-installer`**: `pytest installer/tests` with PyYAML, with coverage of `installer/` and no gate. The release workflows run the same tests with `unittest` on the same Python.
-8. **`coverage-summary`**: writes the coverage and test counts of the three test jobs to the run summary.
+8. **`coverage-summary`**: each test job writes its suite, its lines covered and its tests passed, failed and skipped to its own job summary with `scripts/ci/coverage-line.py`, even when its tests fail, and passes that line on as a job output. This job collects the four lines into the run summary and names any that did not arrive, so it needs no artifact.
+
+The MAS, agent and knowledge-store jobs still upload their coverage XML, junit XML and HTML report, kept 3 days; the installer job uploads nothing. Every upload step has `continue-on-error: true`: a full artifact storage quota, which is shared across the organisation, no longer fails a job. `desktop-release.yml` keeps the app builds 7 days and the release zip 14, and its bundle job stops before building the zip when one platform's app did not arrive.
 
 Tests that need the running stack are not run in CI. For exact steps and env overrides, read the workflow file: it remains the source of truth.
 

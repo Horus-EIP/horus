@@ -213,6 +213,8 @@ jobs:
   test-mas:
     name: Tests · MAS
     runs-on: ubuntu-latest
+    outputs:
+      coverage-row: ${{ steps.coverage-line.outputs.row }}
     # No service containers: SQLite stands in for Postgres, fakeredis for Redis,
     # and RabbitMQ is mocked. One gap is left: core/config.py builds its settings
     # when it is imported, from the environment and from src/infra/.env, and falls
@@ -259,8 +261,14 @@ jobs:
             --cov-report=html:htmlcov-mas \
             --junitxml=junit-mas.xml
 
+      - name: Coverage and test counts in the job summary
+        id: coverage-line
+        if: always()
+        run: python scripts/ci/coverage-line.py line "MAS" coverage-mas.xml junit-mas.xml
+
       - name: Upload coverage and junit artifacts
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: coverage-mas
@@ -268,7 +276,8 @@ jobs:
             coverage-mas.xml
             junit-mas.xml
             htmlcov-mas/
-          retention-days: 14
+          if-no-files-found: ignore
+          retention-days: 3
 
   # ----------------------------------------------------------------------- #
   # Agent unit tests with coverage
@@ -276,6 +285,8 @@ jobs:
   test-agent:
     name: Tests · Agent
     runs-on: ubuntu-latest
+    outputs:
+      coverage-row: ${{ steps.coverage-line.outputs.row }}
     steps:
       - uses: actions/checkout@v4
 
@@ -309,8 +320,14 @@ jobs:
             --cov-report=html:htmlcov-agent \
             --junitxml=junit-agent.xml
 
+      - name: Coverage and test counts in the job summary
+        id: coverage-line
+        if: always()
+        run: python scripts/ci/coverage-line.py line "Agent" coverage-agent.xml junit-agent.xml
+
       - name: Upload coverage and junit artifacts
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: coverage-agent
@@ -318,7 +335,8 @@ jobs:
             coverage-agent.xml
             junit-agent.xml
             htmlcov-agent/
-          retention-days: 14
+          if-no-files-found: ignore
+          retention-days: 3
 
   # ----------------------------------------------------------------------- #
   # Knowledge Store unit tests with coverage
@@ -326,6 +344,8 @@ jobs:
   test-knowledge-store:
     name: Tests · Knowledge Store
     runs-on: ubuntu-latest
+    outputs:
+      coverage-row: ${{ steps.coverage-line.outputs.row }}
     steps:
       - uses: actions/checkout@v4
 
@@ -359,8 +379,14 @@ jobs:
             --cov-report=html:htmlcov-ks \
             --junitxml=junit-ks.xml
 
+      - name: Coverage and test counts in the job summary
+        id: coverage-line
+        if: always()
+        run: python scripts/ci/coverage-line.py line "Knowledge store" coverage-ks.xml junit-ks.xml
+
       - name: Upload coverage and junit artifacts
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: coverage-knowledge-store
@@ -368,11 +394,14 @@ jobs:
             coverage-ks.xml
             junit-ks.xml
             htmlcov-ks/
-          retention-days: 14
+          if-no-files-found: ignore
+          retention-days: 3
 
   test-installer:
     name: Tests · Installer
     runs-on: ubuntu-latest
+    outputs:
+      coverage-row: ${{ steps.coverage-line.outputs.row }}
     steps:
       - uses: actions/checkout@v4
 
@@ -392,6 +421,11 @@ jobs:
             --cov-report=term-missing \
             --junitxml=junit-installer.xml
 
+      - name: Coverage and test counts in the job summary
+        id: coverage-line
+        if: always()
+        run: python scripts/ci/coverage-line.py line "Installer" coverage-installer.xml junit-installer.xml
+
   # ----------------------------------------------------------------------- #
   # Integration tests — moved to scripts/integration-checks/ per
   # tests/TESTING_PLAN.md. They require the live Docker stack and run only
@@ -400,137 +434,23 @@ jobs:
   # ----------------------------------------------------------------------- #
 
   # ----------------------------------------------------------------------- #
-  # Coverage summary — runs after all unit-test jobs, posts a table to the
-  # workflow summary tab + downloadable HTML coverage reports for the jury.
+  # Coverage summary: the line each test job wrote to its own summary, passed
+  # on as a job output, so it needs no artifact.
   # ----------------------------------------------------------------------- #
   coverage-summary:
     name: Coverage summary
     runs-on: ubuntu-latest
     if: always()
-    needs: [test-mas, test-agent, test-knowledge-store]
+    needs: [test-mas, test-agent, test-knowledge-store, test-installer]
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Download all coverage artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: coverage-*
-          path: artifacts
-          merge-multiple: true
-
-      - name: Render coverage + tests summary
+      - name: Collect the coverage lines the test jobs sent
         env:
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          python - <<'PY'
-          import os, glob, xml.etree.ElementTree as ET
-
-          # ---- Coverage -------------------------------------------------- #
-          cov_rows = []
-          for xml in sorted(glob.glob("artifacts/coverage-*.xml")):
-              name = os.path.basename(xml).replace("coverage-", "").replace(".xml", "")
-              try:
-                  root = ET.parse(xml).getroot()
-                  line_rate = float(root.attrib.get("line-rate", 0)) * 100
-                  branch_rate = float(root.attrib.get("branch-rate", 0)) * 100
-                  lines_covered = int(root.attrib.get("lines-covered", 0))
-                  lines_valid = int(root.attrib.get("lines-valid", 0))
-                  cov_rows.append((name, line_rate, branch_rate, lines_covered, lines_valid))
-              except Exception as e:
-                  cov_rows.append((name, 0.0, 0.0, 0, 0))
-                  print(f"  warn: could not parse {xml}: {e}")
-
-          # ---- Tests (junit) -------------------------------------------- #
-          test_rows = []
-          for xml in sorted(glob.glob("artifacts/junit-*.xml")):
-              name = os.path.basename(xml).replace("junit-", "").replace(".xml", "")
-              try:
-                  root = ET.parse(xml).getroot()
-                  # junit-xml: top tag is either <testsuites> or <testsuite>
-                  suites = root.findall("testsuite") if root.tag == "testsuites" else [root]
-                  tests = sum(int(s.attrib.get("tests", 0)) for s in suites)
-                  failures = sum(int(s.attrib.get("failures", 0)) for s in suites)
-                  errors = sum(int(s.attrib.get("errors", 0)) for s in suites)
-                  skipped = sum(int(s.attrib.get("skipped", 0)) for s in suites)
-                  time_s = sum(float(s.attrib.get("time", 0)) for s in suites)
-                  passed = tests - failures - errors - skipped
-                  test_rows.append((name, tests, passed, failures, errors, skipped, time_s))
-              except Exception as e:
-                  test_rows.append((name, 0, 0, 0, 0, 0, 0.0))
-                  print(f"  warn: could not parse {xml}: {e}")
-
-          # ---- Render --------------------------------------------------- #
-          icon = lambda pct: "🟢" if pct >= 80 else ("🟡" if pct >= 60 else "🔴")
-          lines = ["## Test results", ""]
-
-          if test_rows:
-              lines += [
-                  "| Service | Tests | Passed | Failed | Errors | Skipped | Time |",
-                  "|---------|------:|-------:|-------:|-------:|--------:|-----:|",
-              ]
-              for name, total, p, f_, e_, sk, t in test_rows:
-                  status = "✅" if (f_ + e_) == 0 and total > 0 else "❌"
-                  lines.append(
-                      f"| {status} **{name}** | {total} | {p} | {f_} | {e_} | {sk} | {t:.1f}s |"
-                  )
-          else:
-              lines.append("_no junit artifacts found_")
-
-          lines += ["", "## Coverage", ""]
-          if cov_rows:
-              lines += [
-                  "| Service | Line | Branch | Lines covered |",
-                  "|---------|-----:|-------:|---------------|",
-              ]
-              for name, line_rate, branch_rate, covered, total in cov_rows:
-                  lines.append(
-                      f"| {icon(line_rate)} **{name}** | {line_rate:5.1f} % | {branch_rate:5.1f} % | {covered:,} / {total:,} |"
-                  )
-              # totals row
-              tot_cov = sum(r[3] for r in cov_rows)
-              tot_lines = sum(r[4] for r in cov_rows)
-              tot_rate = (tot_cov / tot_lines * 100) if tot_lines else 0.0
-              lines.append(
-                  f"| {icon(tot_rate)} **TOTAL** | **{tot_rate:5.1f} %** | — | **{tot_cov:,} / {tot_lines:,}** |"
-              )
-          else:
-              lines.append("_no coverage artifacts found_")
-
-          # ---- How to view the full HTML coverage --------------------- #
-          repo = os.environ.get("REPO", "OWNER/REPO")
-          run_id = os.environ.get("RUN_ID", "RUN_ID")
-          lines += [
-              "",
-              "## Full HTML coverage reports",
-              "",
-              f"Download from the **Artifacts** section at the bottom of [this run]"
-              f"(https://github.com/{repo}/actions/runs/{run_id}):",
-              "",
-              "- `coverage-mas` — unzip → open `htmlcov-mas/index.html`",
-              "- `coverage-agent` — unzip → open `htmlcov-agent/index.html`",
-              "- `coverage-knowledge-store` — unzip → open `htmlcov-ks/index.html`",
-              "",
-              "Legend: 🟢 ≥ 80 % · 🟡 60–80 % · 🔴 < 60 %",
-              "",
-          ]
-          summary = "\n".join(lines) + "\n"
-
-          out = os.environ.get("GITHUB_STEP_SUMMARY")
-          if out:
-              with open(out, "a") as f:
-                  f.write(summary)
-          print(summary)
-          PY
-
-      - name: Upload combined coverage XMLs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-combined
-          path: artifacts/coverage-*.xml
-          retention-days: 30
+          MAS: ${{ needs.test-mas.outputs.coverage-row }}
+          AGENT: ${{ needs.test-agent.outputs.coverage-row }}
+          KNOWLEDGE_STORE: ${{ needs.test-knowledge-store.outputs.coverage-row }}
+          INSTALLER: ${{ needs.test-installer.outputs.coverage-row }}
+        run: >-
+          python3 scripts/ci/coverage-line.py collect
+          "MAS=$MAS" "Agent=$AGENT" "Knowledge store=$KNOWLEDGE_STORE" "Installer=$INSTALLER"
