@@ -5,6 +5,53 @@ x-logging: &logging
     max-file: "${HORUS_LOG_MAX_FILE:-10}"
 
 services:
+  mas:
+    environment:
+      - HORUS_AI_MODE=mock
+      - LLM_BACKEND=vllm
+      - LLM_VLLM_URL=http://llm-mock:8080/v1
+      - LLM_VLLM_MODEL=horus-mock
+    depends_on:
+      llm:
+        condition: service_healthy
+        required: false
+      llm-mock:
+        condition: service_healthy
+
+  agent:
+    environment:
+      - HORUS_AI_MODE=mock
+      - LLM_BACKEND=vllm
+      - LLM_VLLM_URL=http://llm-mock:8080/v1
+      - LLM_VLLM_MODEL=horus-mock
+    depends_on:
+      llm:
+        condition: service_healthy
+        required: false
+      llm-mock:
+        condition: service_healthy
+
+  knowledge_store:
+    environment:
+      - HORUS_AI_MODE=mock
+
+  vllm:
+    profiles: ["gpu"]
+    deploy:
+      replicas: 0
+
+  llm-model:
+    logging: *logging
+    profiles: ["local-ai"]
+    deploy:
+      replicas: 0
+
+  llm:
+    logging: *logging
+    profiles: ["local-ai"]
+    deploy:
+      replicas: 0
+
   llm-mock:
     image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-llm-mock:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-cpu}
     build:

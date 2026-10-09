@@ -236,6 +236,22 @@ class TestGenerationSettings:
         assert decision.complete.call_count == 2
         assert len(redis.entries) == 2
 
+    async def test_a_mock_answer_and_a_model_answer_never_share_an_entry(self, redis, monkeypatch):
+        pipeline, decision = _pipeline("Revenue was $4.2M.", "Simulated: revenue was $4.2M.")
+
+        monkeypatch.setenv("LLM_BACKEND", "vllm")
+        monkeypatch.setenv("LLM_VLLM_MODEL", "qwen3-4b")
+        assert (await pipeline.generate_response(QUESTION)).answer == "Revenue was $4.2M."
+        monkeypatch.setenv("LLM_VLLM_MODEL", "horus-mock")
+        mock = await pipeline.generate_response(QUESTION)
+        monkeypatch.setenv("LLM_VLLM_MODEL", "qwen3-4b")
+        local = await pipeline.generate_response(QUESTION)
+
+        assert mock.answer == "Simulated: revenue was $4.2M."
+        assert local.answer == "Revenue was $4.2M."
+        assert decision.complete.call_count == 2
+        assert len(redis.entries) == 2
+
     async def test_an_unset_cap_shares_the_entry_of_the_default_cap(self, redis, monkeypatch):
         pipeline, decision = _pipeline("Revenue was $4.2M.")
 

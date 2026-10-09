@@ -639,6 +639,80 @@ _add(Profile(
     ),
 ))
 
+MOCK_PROFILE = "mock"
+MOCK_OVERLAY = "docker-compose.mock.yml"
+MOCK_MODEL_SERVER = "llm-mock"
+MOCK_MODEL_NAME = "horus-mock"
+MOCK_DOC = "docs/mock-ai.md"
+SIMULATED_ANSWERS = (
+    "Mock AI mode: every service runs except the language model. llm-mock answers "
+    "in its place with sentences taken from your documents, with their sources, "
+    "or says it does not have the information. The answers are simulated: use "
+    f"this mode to test Horus, not to judge its answers ({MOCK_DOC})."
+)
+MOCK_OFFER = (
+    "Mock AI mode still fits this machine: it needs no model. "
+    f"{SIMULATED_ANSWERS} An interactive install offers it; --profile mock "
+    "installs it without asking."
+)
+
+def _mock_settings() -> dict[str, Setting]:
+    return {
+        **_cpu_common(),
+        "HORUS_AI_MODE": Setting(
+            "mock", DERIVED,
+            "Says that this install runs without a language model. The installer "
+            "keeps it in step with COMPOSE_FILE: --ai local sets it back to local "
+            "and --ai status warns when the two disagree. The services do not "
+            "read it from here; docker-compose.mock.yml tells them.",
+        ),
+        "LLM_BACKEND": Setting(
+            "vllm", DERIVED,
+            "The OpenAI-compatible client mode of MAS and the agent, as on the "
+            "CPU profiles: they send their model calls over HTTP and load no "
+            "model of their own. In mock mode those calls go to llm-mock.",
+        ),
+        "LLM_VLLM_URL": Setting(
+            CPU_MODEL_SERVER_URL, DERIVED,
+            "The llm address of the CPU profiles, kept so that --ai local needs "
+            "no change here. docker-compose.mock.yml overrides it for MAS and the "
+            f"agent with http://{MOCK_MODEL_SERVER}:8080/v1; that port is not "
+            "published to the host.",
+        ),
+        "LLM_VLLM_MODEL": Setting(
+            _SERVED_NAME, DERIVED,
+            "The CPU profiles' model name, kept for --ai local. In mock mode the "
+            f"overlay sets {MOCK_MODEL_NAME} instead, so the agent's answer cache, "
+            "whose key includes the model, never serves a simulated answer to a "
+            "real model or the reverse.",
+        ),
+        "LLM_VLLM_TIMEOUT": Setting(
+            "120", DERIVED,
+            "llm-mock answers in HORUS_MOCK_LATENCY_MS (300 ms by default), and in "
+            "40 s at most with HORUS_MOCK_SCENARIO=slow, so the code default is "
+            "plenty.",
+        ),
+    }
+
+_add(Profile(
+    name=MOCK_PROFILE,
+    trigger=(f"Offered when no CPU profile fits ({cpu_floor_gib():.1f} GiB of memory "
+             "for Docker and no usable NVIDIA GPU); forced with --profile mock."),
+    runs_vllm=False,
+    summary="No language model: llm-mock answers from your documents. The answers are simulated.",
+    settings=_mock_settings(),
+    notes=(
+        SIMULATED_ANSWERS,
+        "It runs the CPU images with docker-compose.mock.yml on top of the CPU "
+        "overlay: llm-mock replaces llm and llm-model, and no model is downloaded. "
+        "Search is real: the embeddings and spaCy run as on every profile.",
+        "The web client shows a banner on every page and a Simulated badge on "
+        "each answer, and the desktop app shows AI: Mock.",
+        "Switch an install with --ai local or --ai mock; --ai status says which "
+        "mode is on.",
+    ),
+))
+
 MANAGED_KEYS: tuple[str, ...] = tuple(sorted(
     {"COMPOSE_FILE", *THREAD_KEYS, *SERVER_KEYS, *MODEL_ENV_KEYS, *IMAGE_ENV_KEYS}
     | {k for p in PROFILES.values() for k in p.settings}
@@ -651,13 +725,24 @@ PROFILE_ORDER: tuple[str, ...] = (
 def is_cpu_profile(name: str) -> bool:
     return str(name).startswith("cpu")
 
+def is_mock_profile(name: str) -> bool:
+    return name == MOCK_PROFILE
+
 def model_server(name: str) -> str:
+    if is_mock_profile(get(name).name):
+        return MOCK_MODEL_SERVER
     return GPU_MODEL_SERVER if get(name).runs_vllm else CPU_MODEL_SERVER
 
 def image_flavor(name: str) -> str:
-    return flavor_for(is_cpu_profile(get(name).name))
+    profile = get(name).name
+    return flavor_for(is_cpu_profile(profile) or is_mock_profile(profile))
+
+def compose_file_runs_mock(compose_file: str) -> bool:
+    return MOCK_OVERLAY in compose_file
 
 def model_server_for_compose_file(compose_file: str) -> str:
+    if compose_file_runs_mock(compose_file):
+        return MOCK_MODEL_SERVER
     return CPU_MODEL_SERVER if CPU_OVERLAY in compose_file else GPU_MODEL_SERVER
 
 
@@ -672,7 +757,7 @@ def get(profile_name: str) -> Profile:
             EXIT_PROFILE_UNKNOWN,
             f"Unknown hardware profile: {profile_name!r}",
             "Valid profiles are:\n  " + "\n  ".join(
-                f"{n:<13} {PROFILES[n].trigger}" for n in PROFILE_ORDER
+                f"{n:<13} {PROFILES[n].trigger}" for n in (*PROFILE_ORDER, MOCK_PROFILE)
             ),
             "Drop --profile to let the installer detect your hardware, or pass\n"
             "one of the names above exactly as written.",
@@ -751,6 +836,7 @@ def _cpu_profile_for_memory(probe: dict) -> tuple[str, list[str]]:
         f"{have}: under the {cpu_floor_gib():.1f} GiB the smallest CPU profile "
         f"needs ({THRESHOLDS_BASIS}). No CPU profile fits this machine."
     )
+    reasons.append(MOCK_OFFER)
     return NOT_SUPPORTED, reasons
 
 def forced_profile_warning(profile_name: str, probe: dict | None) -> str | None:
@@ -873,16 +959,33 @@ def select_profile(probe: dict) -> tuple[str, list[str]]:
     )
     return "gpu-8g", reasons
 
-def _compose_file_value(runs_vllm: bool, probe: dict | None) -> str:
+def compose_file_separator(probe: dict | None) -> str:
     platform = ""
     if probe:
         platform = str((probe.get("os") or {}).get("platform") or "")
     platform = platform or sys.platform
-    sep = ";" if platform.startswith("win") else ":"
+    return ";" if platform.startswith("win") else ":"
 
+def _compose_file_value(runs_vllm: bool, probe: dict | None, mock: bool = False) -> str:
+    sep = compose_file_separator(probe)
+    if mock:
+        return sep.join((BASE_COMPOSE, CPU_OVERLAY, MOCK_OVERLAY))
     if runs_vllm:
         return BASE_COMPOSE
     return sep.join((BASE_COMPOSE, CPU_OVERLAY))
+
+def with_mock_overlay(compose_file: str, sep: str) -> str:
+    files = [name for name in compose_file.replace(";", ":").split(":") if name]
+    files = [name for name in files if name != MOCK_OVERLAY] or [BASE_COMPOSE]
+    if CPU_OVERLAY not in files:
+        files.insert(files.index(BASE_COMPOSE) + 1 if BASE_COMPOSE in files else 0, CPU_OVERLAY)
+    files.insert(files.index(CPU_OVERLAY) + 1, MOCK_OVERLAY)
+    return sep.join(files)
+
+def without_mock_overlay(compose_file: str, sep: str) -> str:
+    files = [name for name in compose_file.replace(";", ":").split(":")
+             if name and name != MOCK_OVERLAY]
+    return sep.join(files or [BASE_COMPOSE])
 
 def settings_for(profile_name: str, probe: dict | None = None) -> dict[str, Setting]:
     profile = get(profile_name)
@@ -894,7 +997,8 @@ def settings_for(profile_name: str, probe: dict | None = None) -> dict[str, Sett
 def env_for(profile_name: str, probe: dict | None = None) -> dict[str, str]:
     profile = get(profile_name)
     env = {k: s.value for k, s in settings_for(profile_name, probe).items()}
-    env["COMPOSE_FILE"] = _compose_file_value(profile.runs_vllm, probe)
+    env["COMPOSE_FILE"] = _compose_file_value(profile.runs_vllm, probe,
+                                              is_mock_profile(profile.name))
     return env
 
 def provenance_for(profile_name: str,
@@ -904,15 +1008,24 @@ def provenance_for(profile_name: str,
         key: {"value": s.value, "provenance": s.provenance, "why": s.why}
         for key, s in settings_for(profile_name, probe).items()
     }
+    mock = is_mock_profile(profile.name)
     out["COMPOSE_FILE"] = {
-        "value": _compose_file_value(profile.runs_vllm, None),
-        "provenance": MEASURED,
+        "value": _compose_file_value(profile.runs_vllm, None, mock),
+        "provenance": DERIVED if mock else MEASURED,
         "why": (
+            "The CPU overlay, then docker-compose.mock.yml: it adds llm-mock, turns "
+            "off llm and llm-model, and points MAS and the agent at llm-mock."
+            if mock else
             "Selects the CPU overlay. `gpus: []` and `gpus: null` do not work - "
             "Compose appends sequences - so the overlay uses `!reset`."
         ),
     }
     return out
+
+def _model_server_line(p: Profile) -> str:
+    if is_mock_profile(p.name):
+        return f"{MOCK_MODEL_SERVER} (simulated answers, no language model)"
+    return "vllm (GPU inference)" if p.runs_vllm else "llm (llama-server on the CPU)"
 
 def describe(profile_name: str, probe: dict | None = None) -> str:
     p = get(profile_name)
@@ -924,7 +1037,7 @@ def describe(profile_name: str, probe: dict | None = None) -> str:
         f"  {p.summary}",
         "",
         f"  Selected when:  {p.trigger}",
-        f"  Model server:   {'vllm (GPU inference)' if p.runs_vllm else 'llm (llama-server on the CPU)'}",
+        f"  Model server:   {_model_server_line(p)}",
         f"  Confidence:     {'measured - this exact config has been run' if p.confidence == MEASURED else 'derived - reasoned from the measured gpu-8g config, NOT benchmarked'}",
         "",
         "  Writes to src/infra/.env:",
@@ -941,7 +1054,8 @@ def describe(profile_name: str, probe: dict | None = None) -> str:
     for key in env:
         setting = settings.get(key)
         why = setting.why if setting else (
-            "Activates the CPU Compose overlay (or clears it on a GPU machine)."
+            provenance_for(profile_name)["COMPOSE_FILE"]["why"] if is_mock_profile(p.name)
+            else "Activates the CPU Compose overlay (or clears it on a GPU machine)."
         )
         lines.append(f"    {key}:")
         for chunk in _wrap(why, 66):

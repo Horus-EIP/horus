@@ -11,6 +11,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import textwrap
 import time
 from pathlib import Path
 
@@ -62,6 +63,11 @@ WEB_URL = "http://localhost:3000"
 CORE_SERVICES = [
     "postgres", "redis", "rabbitmq", "mas", "agent", "knowledge_store", "web-client",
 ]
+COMPOSE_FILE_KEY = "COMPOSE_FILE"
+AI_MODE_KEY = "HORUS_AI_MODE"
+MOCK_MODE = "mock"
+LOCAL_MODE = "local"
+AI_CHOICES = (MOCK_MODE, LOCAL_MODE, "status")
 
 def cpu_overlay_active(infra: Path) -> bool:
     answer = False
@@ -75,8 +81,16 @@ def cpu_overlay_active(infra: Path) -> bool:
             answer = profiles.CPU_OVERLAY in line.split("=", 1)[1]
     return answer
 
+def mock_overlay_active(infra: Path) -> bool:
+    return profiles.compose_file_runs_mock(env_line_value(infra, COMPOSE_FILE_KEY) or "")
+
 def expected_services(infra: Path) -> list[str]:
-    server = profiles.CPU_MODEL_SERVER if cpu_overlay_active(infra) else profiles.GPU_MODEL_SERVER
+    if mock_overlay_active(infra):
+        server = profiles.MOCK_MODEL_SERVER
+    elif cpu_overlay_active(infra):
+        server = profiles.CPU_MODEL_SERVER
+    else:
+        server = profiles.GPU_MODEL_SERVER
     return [*CORE_SERVICES, server]
 
 _GIB = 1024 ** 3
@@ -855,8 +869,10 @@ def image_source(args, infra: Path) -> str | None:
 def describe_images(registry: str | None, profile_name: str) -> str:
     if registry is None:
         return "built from source on this machine (--build-from-source)"
+    services = (*images.APP_SERVICES, images.MOCK_SERVICE) if profiles.is_mock_profile(
+        profile_name) else images.APP_SERVICES
     names = ",".join(images.image_repository(service).removeprefix("horus-")
-                     for service in images.APP_SERVICES)
+                     for service in services)
     flavor = profiles.image_flavor(profile_name)
     return (f"{registry}/horus-{{{names}}}:{VERSION}-{flavor}, prebuilt (signed by the "
             "release workflow; the installer does not check the signature yet)")
@@ -961,7 +977,7 @@ def download_model_for_the_stack(log: Log, plan: model_manager.ModelPlan, infra:
     return download_model(log, plan, infra, title)
 
 def ensure_installed_model(log: Log, infra: Path) -> None:
-    if not cpu_overlay_active(infra):
+    if not cpu_overlay_active(infra) or mock_overlay_active(infra):
         return
     values = smoke.read_env(infra / ".env")
     try:
@@ -987,6 +1003,13 @@ def start_command(infra: Path, build: bool = False) -> list[str]:
         up = ["up", "-d"]
     return up + orphan_removal(infra)
 
+def model_server_note(expect: list[str]) -> str:
+    if profiles.MOCK_MODEL_SERVER in expect:
+        return "  (mock AI mode: llm-mock answers instead of a language model)"
+    if profiles.CPU_MODEL_SERVER in expect:
+        return "  (CPU profile: llama-server runs as llm instead of vllm)"
+    return ""
+
 def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
     require_installed(infra)
     _require_docker(log)
@@ -994,9 +1017,7 @@ def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
 
     expect = expected_services(infra)
     log.step("Starting Horus")
-    log.say(f"  {len(expect)} services"
-            + ("" if profiles.GPU_MODEL_SERVER in expect
-               else "  (CPU profile: llama-server runs as llm instead of vllm)"))
+    log.say(f"  {len(expect)} services" + model_server_note(expect))
 
     up, code = up_waiting_out_a_dependency_abort(
         log, infra, start_command(infra, build), timeout)
@@ -1231,6 +1252,240 @@ def do_uninstall(log: Log, infra: Path, assume_yes: bool, non_interactive: bool 
     log.say("  by hand if you want the disk space back.")
     return EXIT_OK
 
+def ai_mode_of(compose_file: str) -> str:
+    return MOCK_MODE if profiles.compose_file_runs_mock(compose_file) else LOCAL_MODE
+
+def compose_file_now(infra: Path) -> str:
+    return env_line_value(infra, COMPOSE_FILE_KEY) or profiles.BASE_COMPOSE
+
+def separator_of(compose_file: str) -> str:
+    if ";" in compose_file:
+        return ";"
+    if ":" in compose_file:
+        return ":"
+    return profiles.compose_file_separator(None)
+
+def write_ai_mode(infra: Path, compose_file: str, mode: str) -> None:
+    env_path = infra / ".env"
+    values = {COMPOSE_FILE_KEY: compose_file, AI_MODE_KEY: mode}
+    out: list[str] = []
+    written: set[str] = set()
+    for key, line in _parse_env(env_path.read_text(encoding="utf-8")):
+        unset = line.startswith(UNSET_MARKER) and line[len(UNSET_MARKER):].split("=", 1)[0].strip()
+        if key in values and key not in written:
+            out.append(f"{key}={values[key]}")
+            written.add(key)
+        elif key not in values and unset not in values:
+            out.append(line)
+    out += [f"{key}={value}" for key, value in values.items() if key not in written]
+    env_path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    _lock_down(env_path)
+
+def do_ai_status(log: Log, infra: Path) -> int:
+    require_installed(infra)
+    compose_file = compose_file_now(infra)
+    mode = ai_mode_of(compose_file)
+    server = profiles.model_server_for_compose_file(compose_file)
+    log.step("AI mode")
+    log.say(f"  AI: {mode.capitalize()}   (model server: {server})")
+    if mode == MOCK_MODE:
+        for line in _wrapped(profiles.SIMULATED_ANSWERS):
+            log.say(f"  {line}")
+    declared = env_line_value(infra, AI_MODE_KEY) or LOCAL_MODE
+    if declared != mode:
+        log.warn(f"src/infra/.env says {AI_MODE_KEY}={declared}, but COMPOSE_FILE "
+                 f"{'loads' if mode == MOCK_MODE else 'does not load'} "
+                 f"{profiles.MOCK_OVERLAY}, which is what decides. Run --ai {mode} "
+                 "to set both.")
+    if os.environ.get(COMPOSE_FILE_KEY):
+        log.warn(f"{COMPOSE_FILE_KEY} is set in this shell: Docker Compose uses it instead "
+                 "of the one in src/infra/.env.")
+    log.events.emit("ai", mode=mode, server=server)
+    return EXIT_OK
+
+def do_ai(log: Log, args, repo: Path) -> int:
+    infra = infra_dir(repo)
+    if args.ai == "status":
+        return do_ai_status(log, infra)
+    require_installed(infra)
+    _require_docker(log)
+    current = compose_file_now(infra)
+    if ai_mode_of(current) == args.ai:
+        log.ok(f"AI mode is already {args.ai}; nothing to switch.")
+        return do_ai_status(log, infra)
+    if args.ai == MOCK_MODE:
+        return switch_to_mock(log, args, repo, infra, current)
+    return switch_to_local(log, args, repo, infra, current)
+
+def stop_services(log: Log, infra: Path, services: list[str]) -> None:
+    if _stream(compose(["stop", *services]), log, infra, f"stop {' '.join(services)}") != 0:
+        log.warn(f"`docker compose stop {' '.join(services)}` reported errors; see the log")
+
+def model_servers_of(compose_file: str) -> list[str]:
+    server = profiles.model_server_for_compose_file(compose_file)
+    return [server, "llm-model"] if server == profiles.CPU_MODEL_SERVER else [server]
+
+def model_servers_left_behind(infra: Path, compose_file: str) -> list[str]:
+    current = env_line_value(infra, COMPOSE_FILE_KEY) if (infra / ".env").is_file() else None
+    if not current:
+        return []
+    old, new = model_servers_of(current), model_servers_of(compose_file)
+    if profiles.MOCK_MODEL_SERVER not in old + new:
+        return []
+    return [server for server in old if server not in new]
+
+def start_and_check(log: Log, args, repo: Path, infra: Path, build: bool,
+                    require_answer_quality: bool) -> list[str]:
+    if installed_from_registry(infra):
+        pull_images(log, infra)
+    up, code = up_waiting_out_a_dependency_abort(
+        log, infra, start_command(infra, build), args.timeout)
+    if code != 0:
+        raise InstallError(
+            EXIT_COMPOSE_UP_FAILED,
+            "The stack did not start in the new AI mode.",
+            f"`docker compose {' '.join(up)}` exited {code}.",
+            f"The reason is in the logs of the container Docker named.\nFull log: {LOG_PATH}",
+        )
+    expect = expected_services(infra)
+    wait_for_health(log, infra, expect, timeout=args.timeout)
+    if args.skip_smoke:
+        log.warn("Smoke test skipped (--skip-smoke). The switch is unverified.")
+        return expect
+    result = smoke.run(log, repo, timeout=min(args.timeout, 1200),
+                       require_answer_quality=require_answer_quality, model_server=expect[-1])
+    if not result.get("passed"):
+        raise InstallError(
+            EXIT_SMOKE_FAILED,
+            "Horus started in the new AI mode, but the smoke test did not pass.",
+            "Step results are in the log.",
+            f"Send us {LOG_PATH.name} from:\n  {BUNDLE_DIR}",
+        )
+    return expect
+
+def restore_previous_mode(infra: Path, backup: Path, record: str | None) -> None:
+    shutil.copy2(backup, infra / ".env")
+    _lock_down(infra / ".env")
+    if record is not None:
+        PROFILE_JSON.write_text(record, encoding="utf-8")
+
+def put_back_after_an_interruption(log: Log, infra: Path, backup: Path, started: list[str],
+                                   record: str | None) -> None:
+    stop_services(log, infra, started)
+    restore_previous_mode(infra, backup, record)
+    log.warn(f"Interrupted: src/infra/.env is back to the previous AI mode ({backup.name}). "
+             "Start Horus again with --start.")
+
+def switch_failed(failure: Exception, outcome: str) -> InstallError:
+    if isinstance(failure, InstallError):
+        return InstallError(failure.code, f"{failure.headline} {outcome}", failure.detail, failure.fix)
+    code = EXIT_ENV_WRITE_FAILED if isinstance(failure, OSError) else EXIT_COMPOSE_UP_FAILED
+    return InstallError(code, f"The switch stopped: {failure}. {outcome}",
+                        f"{type(failure).__name__}: {failure}", f"Full log: {LOG_PATH}")
+
+def roll_back_ai_mode(log: Log, args, infra: Path, backup: Path, started: list[str],
+                      record: str | None, build: bool = False) -> None:
+    log.warn("Rolling back to the previous AI mode")
+    stop_services(log, infra, started)
+    restore_previous_mode(infra, backup, record)
+    up, code = up_waiting_out_a_dependency_abort(log, infra, start_command(infra, build),
+                                                 args.timeout)
+    if code != 0:
+        log.warn(f"`docker compose {' '.join(up)}` exited {code} during the rollback. "
+                 f"src/infra/.env is back as it was ({backup.name}); start Horus with --start.")
+        return
+    try:
+        wait_for_health(log, infra, expected_services(infra), timeout=args.timeout)
+    except InstallError as exc:
+        log.warn(f"After the rollback: {exc.headline}")
+
+def switched(log: Log, infra: Path, mode: str, expect: list[str]) -> int:
+    log.say("")
+    log.ok(f"AI: {mode.capitalize()}. Horus is ready at {WEB_URL}")
+    log.events.emit("ai", mode=mode, server=expect[-1])
+    log.events.emit("ready", url=WEB_URL, services=expect)
+    return EXIT_OK
+
+def switch_to_mock(log: Log, args, repo: Path, infra: Path, current: str) -> int:
+    target = profiles.with_mock_overlay(current, separator_of(current))
+    log.step("Switching to mock AI mode")
+    for line in _wrapped(profiles.SIMULATED_ANSWERS):
+        log.say(f"  {line}")
+    backup = _backup_env(log, infra / ".env")
+    build = not installed_from_registry(infra) and profiles.CPU_OVERLAY not in current
+    started = [profiles.MOCK_MODEL_SERVER]
+    try:
+        stop_services(log, infra, model_servers_of(current))
+        write_ai_mode(infra, target, MOCK_MODE)
+        log.ok(f"{COMPOSE_FILE_KEY}={target}")
+        expect = start_and_check(log, args, repo, infra, build, require_answer_quality=True)
+    except KeyboardInterrupt:
+        put_back_after_an_interruption(log, infra, backup, started, None)
+        raise
+    except Exception as failure:
+        roll_back_ai_mode(log, args, infra, backup, started, None, build)
+        raise switch_failed(failure, "Mock AI mode was rolled back.") from failure
+    return switched(log, infra, MOCK_MODE, expect)
+
+def local_profile(log: Log, args) -> tuple[dict, str, list[str]]:
+    if args.profile and args.profile not in profiles.PROFILES:
+        raise _unknown_profile_error(args.profile)
+    if args.profile and profiles.is_mock_profile(args.profile):
+        raise InstallError(
+            EXIT_PROFILE_UNKNOWN,
+            "--ai local needs a profile with a language model.",
+            f"--profile {args.profile} is mock AI mode itself.",
+            "Drop --profile to let the installer choose, or name a CPU or GPU profile.",
+        )
+    log.step("Checking your hardware")
+    probe = hardware.probe(log, allow_docker_gpu_test=not args.skip_gpu_test,
+                           previous=hardware.read_profile_json(PROFILE_JSON))
+    if args.profile:
+        name, reasons = args.profile, [f"forced with --profile {args.profile}"]
+    else:
+        name, reasons = profiles.select_profile(probe)
+    if name == profiles.NOT_SUPPORTED:
+        for reason in reasons[:-1]:
+            log.say(f"           {reason}")
+        raise unsupported.refusal(probe)
+    log.ok(f"profile: {bold(name)}")
+    for reason in reasons:
+        log.say(f"           {reason}")
+    return probe, name, reasons
+
+def switch_to_local(log: Log, args, repo: Path, infra: Path, current: str) -> int:
+    probe, name, reasons = local_profile(log, args)
+    registry = env_line_value(infra, images.REGISTRY_KEY) or None
+    preflight.run_install_checks(log, infra, skip_disk_check=args.skip_disk_check,
+                                 image_registry=registry,
+                                 cpu_profile=profiles.is_cpu_profile(name))
+    env = profiles.env_for(name, probe)
+    plan = plan_model(log, repo, name, args.models_dir)
+    if plan is not None:
+        env.update(plan.env(repo))
+        download_model(log, plan, infra)
+    if registry:
+        env[images.REGISTRY_KEY] = registry
+
+    log.step("Switching to local AI mode")
+    record = PROFILE_JSON.read_text(encoding="utf-8") if PROFILE_JSON.is_file() else None
+    backup = _backup_env(log, infra / ".env")
+    build = registry is None and profiles.image_flavor(name) != images.CPU_FLAVOR
+    started = model_servers_of(env[COMPOSE_FILE_KEY])
+    try:
+        stop_services(log, infra, [profiles.MOCK_MODEL_SERVER])
+        apply_env(log, infra, env, reset=False)
+        hardware.write_profile_json(PROFILE_JSON, probe, name, env, reasons, log=log)
+        expect = start_and_check(log, args, repo, infra, build,
+                                 require_answer_quality=not profiles.is_cpu_profile(name))
+    except KeyboardInterrupt:
+        put_back_after_an_interruption(log, infra, backup, started, record)
+        raise
+    except Exception as failure:
+        roll_back_ai_mode(log, args, infra, backup, started, record, build)
+        raise switch_failed(failure, "Mock AI mode is back.") from failure
+    return switched(log, infra, LOCAL_MODE, expect)
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="horus-install",
@@ -1312,6 +1567,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--stop", action="store_true", help="stop the stack and exit")
     p.add_argument("--uninstall", action="store_true",
                    help="remove containers, images and volumes (DELETES INGESTED DOCUMENTS)")
+    p.add_argument("--ai", choices=AI_CHOICES,
+                   help="mock: run without a language model, llm-mock answers from your "
+                        "documents (simulated); local: back to the model of this machine's "
+                        "profile, with the disk and memory checks and the model download; "
+                        "status: say which one is on. A switch backs up src/infra/.env, "
+                        "restarts Horus, runs the smoke test and rolls back if it fails.")
     p.add_argument("--json-events", action="store_true",
                    help="also emit one JSON object per line on STDERR, prefixed "
                         "'@@HORUS ', for a program driving this script. stdout is "
@@ -1445,7 +1706,7 @@ def models_dir_to_use(log: Log, repo: Path, requested: str | None) -> str | Path
 
 def plan_model(log: Log, repo: Path, profile: str,
                requested_dir: str | None) -> model_manager.ModelPlan | None:
-    if profiles.get(profile).runs_vllm:
+    if profiles.get(profile).runs_vllm or profiles.is_mock_profile(profile):
         return None
     plan = model_manager.plan_for_profile(repo, profile,
                                           models_dir_to_use(log, repo, requested_dir))
@@ -1479,6 +1740,34 @@ def _unknown_profile_error(profile: str) -> InstallError:
         "Re-run without --profile to let the installer choose.",
     )
 
+def accepts_mock_mode(log: Log, args, reasons: list[str]) -> bool:
+    if args.non_interactive or not interactive_terminal():
+        return False
+    log.warn("No CPU profile fits this machine.")
+    for reason in reasons:
+        log.say(f"           {reason}")
+    try:
+        answer = input("  Install Horus in mock AI mode instead? Its answers are simulated. [y/N]: ")
+    except EOFError:
+        return False
+    return answer.strip().lower() in ("y", "yes")
+
+def warn_mock_mode(log: Log) -> None:
+    log.say("")
+    log.say(yellow("=" * 72))
+    log.say(yellow("  MOCK AI MODE: Horus runs without a language model."))
+    log.say(yellow("=" * 72))
+    log.say("")
+    for line in _wrapped(profiles.SIMULATED_ANSWERS):
+        log.say(f"  {line}")
+    log.say("")
+    log.say("  The web client shows a banner on every page and a Simulated badge on")
+    log.say("  each answer. Switch to a real model later with --ai local.")
+    log.say("")
+
+def _wrapped(text: str, width: int = 68) -> list[str]:
+    return textwrap.wrap(text, width, break_on_hyphens=False)
+
 def record_refusal(log: Log, probe: dict, reasons: list[str]) -> unsupported.NotSupported:
     for reason in reasons:
         log.say(f"           {reason}")
@@ -1500,6 +1789,8 @@ def decide_profile(log: Log, args, registry: str | None) -> tuple[dict, str, lis
             log.warn(forced)
     else:
         name, reasons = profiles.select_profile(probe)
+    if name == profiles.NOT_SUPPORTED and accepts_mock_mode(log, args, reasons):
+        name, reasons = profiles.MOCK_PROFILE, [*reasons, "mock AI mode accepted at the prompt"]
     if name == profiles.NOT_SUPPORTED:
         raise record_refusal(log, probe, reasons)
 
@@ -1516,6 +1807,8 @@ def decide_profile(log: Log, args, registry: str | None) -> tuple[dict, str, lis
         if avx2:
             log.warn(avx2)
         warn_cpu_expectations(log, gpu_usable=probe.get("cuda_usable_in_docker") is True)
+    if profiles.is_mock_profile(name):
+        warn_mock_mode(log)
     return probe, name, reasons
 
 def _dispatch(log: Log, args) -> int:
@@ -1536,6 +1829,8 @@ def _dispatch(log: Log, args) -> int:
         return do_stop(log, infra)
     if args.uninstall:
         return do_uninstall(log, infra, args.yes, non_interactive=args.non_interactive)
+    if args.ai:
+        return do_ai(log, args, repo)
     if args.dry_run:
         return do_dry_run(log, args, repo)
     if args.download_model:
@@ -1576,6 +1871,9 @@ def _dispatch(log: Log, args) -> int:
     log.ok(f"wrote {PROFILE_JSON.name}")
 
     log.step("Writing configuration")
+    left_behind = model_servers_left_behind(infra, env[COMPOSE_FILE_KEY])
+    if left_behind:
+        stop_services(log, infra, left_behind)
     apply_env(log, infra, env, reset=args.reset_env)
 
     pull_and_build(
@@ -1671,6 +1969,11 @@ def _success(log: Log, infra: Path, profile_name: str, choice: dict,
         log.say(yellow("  and take minutes, not seconds; this setup has not been"))
         log.say(yellow("  timed yet. Everything else works normally - 65 of the 68"))
         log.say(yellow("  test scenarios. Only F41, F42 and F43 need an NVIDIA GPU."))
+        log.say("")
+    if profiles.is_mock_profile(profile_name):
+        log.say(yellow("  Mock AI mode: llm-mock answers instead of a language model."))
+        log.say(yellow("  Its answers are simulated from your documents. Switch to a"))
+        log.say(yellow("  real model with  START-HERE (your platform) --ai local"))
         log.say("")
     app_dir = BUNDLE_DIR / "app"
     if app_dir.is_dir():

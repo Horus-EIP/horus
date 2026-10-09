@@ -492,6 +492,12 @@ MODEL_SERVER_HINTS = {
         "platform) --start downloads and checks it again. Then read:\n"
         "  docker compose logs llm-model llm"
     ),
+    profiles.MOCK_MODEL_SERVER: (
+        "In mock AI mode llm-mock answers in place of a language model. A\n"
+        "HORUS_MOCK_SCENARIO other than normal in src/infra/.env makes it slow,\n"
+        "refuse or fail on purpose. Its log names every call it answered:\n"
+        "  docker compose logs llm-mock"
+    ),
 }
 
 def admin_credentials(infra: Path, steps: Steps) -> tuple[str, str]:
