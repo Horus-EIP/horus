@@ -6,13 +6,14 @@ import time
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from llm_mock import completions
+from llm_mock import completions, embeddings
 from llm_mock.call import BadRequest, Call
-from llm_mock.replies import delay_seconds, reply_to
+from llm_mock.replies import ERROR_TEXT, delay_seconds, reply_to
 from llm_mock.settings import DEFAULT_PORT, Settings
 
 PURPOSE_HEADER = "X-Horus-Purpose"
 COMPLETIONS_PATH = "/v1/chat/completions"
+EMBEDDINGS_PATH = "/v1/embeddings"
 MAX_BODY_BYTES = 16 * 1024 * 1024
 
 logger = logging.getLogger("llm_mock")
@@ -44,6 +45,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = self.route()
+        if path == EMBEDDINGS_PATH:
+            self.embed()
+            return
         if path != COMPLETIONS_PATH:
             self.send_json(404, completions.error_body(f"No route for POST {path}", 404))
             return
@@ -66,6 +70,21 @@ class Handler(BaseHTTPRequestHandler):
             self.send_stream(completions.stream_events(call, model, reply.content))
         else:
             self.send_json(200, completions.completion(call, model, reply.content))
+
+    def embed(self) -> None:
+        try:
+            request = embeddings.EmbeddingRequest.from_body(self.read_json())
+        except BadRequest as error:
+            self.send_json(400, completions.error_body(str(error), 400))
+            return
+        settings = self.server.settings
+        failed = settings.scenario == "error"
+        logger.info("embeddings: inputs=%d dimensions=%d status=%d",
+                    len(request.texts), request.dimensions, 500 if failed else 200)
+        if failed:
+            self.send_json(500, completions.error_body(ERROR_TEXT, 500))
+        else:
+            self.send_json(200, embeddings.response(request, settings.model))
 
     def route(self) -> str:
         return self.path.split("?", 1)[0].rstrip("/") or "/"
