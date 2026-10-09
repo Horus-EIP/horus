@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from horus_bench_kit.report import question_record
 from horus_bench_kit.target import (
     Target,
+    absolute_on_another_os,
     observed_values,
     progress_line,
     run_items,
@@ -165,6 +167,36 @@ class TestTestsetInfo:
     def test_without_a_root_only_the_file_name_is_kept(self, tmp_path):
         assert shown_path(tmp_path / "deep" / "harbour.yaml") == "harbour.yaml"
         assert shown_path(Path("harbour.yaml"), root=Path.cwd()) == "harbour.yaml"
+
+    def test_an_absolute_path_of_either_os_is_outside_a_root_that_is_the_working_folder(
+        self, host_folder, host_folder_leaks, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        shown = shown_path(f"{host_folder}/own-testset.json", root=tmp_path)
+        assert shown == "own-testset.json"
+        assert host_folder_leaks(shown) == []
+
+
+    def test_a_path_rooted_with_a_slash_inside_the_root_keeps_its_relative_path(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        rooted = "/" + tmp_path.relative_to(tmp_path.anchor).as_posix() + "/sets/own.json"
+        assert shown_path(rooted, root=tmp_path) == "sets/own.json"
+
+
+@pytest.mark.parametrize(
+    ("path", "from_another_os_outside_windows"),
+    [
+        ("C:\\Users\\someone\\x\\own.json", True),
+        ("C:/Users/someone/x/own.json", True),
+        ("\\\\server\\share\\x\\own.json", True),
+        ("//server/share/x/own.json", False),
+        ("/home/someone/x/own.json", False),
+        ("sets/own.json", False),
+        ("sets\\own.json", False),
+    ],
+)
+def test_only_a_drive_or_unc_path_read_outside_windows_comes_from_another_os(path, from_another_os_outside_windows):
+    assert absolute_on_another_os(path) == (os.name != "nt" and from_another_os_outside_windows)
 
 
 class TestObservedValues:

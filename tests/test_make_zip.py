@@ -63,6 +63,11 @@ class TestArchive:
         second, _ = make_zip.build_zip(tmp_path / "two")
         assert first.read_bytes() == second.read_bytes()
 
+    def test_every_entry_says_it_was_made_on_unix_whichever_system_builds_it(self, make_zip, tmp_path):
+        archive, _ = make_zip.build_zip(tmp_path)
+        with zipfile.ZipFile(archive) as bundle:
+            assert {entry.create_system for entry in bundle.infolist()} == {make_zip.MADE_ON_UNIX}
+
 
 class TestChecks:
     @pytest.fixture

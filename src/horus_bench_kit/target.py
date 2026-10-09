@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Protocol, TypedDict, runtime_checkable
 
 from horus_bench_kit.testset import file_sha256
@@ -92,7 +92,13 @@ async def run_items(
     return records
 
 
+def absolute_on_another_os(path: str) -> bool:
+    return PureWindowsPath(path).is_absolute() and not Path(path).is_absolute()
+
+
 def shown_path(path: Path | str, root: Path | str | None = None) -> str:
+    if absolute_on_another_os(str(path)):
+        return PureWindowsPath(str(path)).name
     resolved = Path(path).resolve()
     if root is not None:
         try:

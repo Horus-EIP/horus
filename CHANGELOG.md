@@ -2,6 +2,13 @@
 
 Every release of horus-bench-kit, newest first. Versions follow [Semantic Versioning](https://semver.org/). Report formats carry their own `schema_version`, described in [docs/FORMATS.md](docs/FORMATS.md).
 
+## 0.1.1 - 2026-10-09
+
+### Fixed
+
+- A test set or report outside the root is recorded by its file name only, whichever system wrote its path. On Linux and macOS a Windows path (`C:\Users\...`, `\\server\share\...`) was a relative name, so a run from the root kept its whole folder; `absolute_on_another_os` in `horus_bench_kit.target` now recognises it. On Windows every shape is a native path, a POSIX `/home/...` one included: it is resolved on the current drive, so it keeps its relative path when it is inside the root.
+- `scripts/make-zip.py` gives the same bytes on Windows as on Linux and macOS: every entry now says it was made on Unix, where it took the system that built it.
+
 ## 0.1.0 - 2026-10-08
 
 First release.
