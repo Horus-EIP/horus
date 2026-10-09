@@ -18,7 +18,7 @@ This repository’s canonical remote is the project GitHub org; avoid unapproved
 
 ### CI pipeline
 
-Continuous integration is defined in **`.github/workflows/ci.yml`** at the repository root. It runs on every pull request, on pushes to `master`, `main`, `pre-release-fix` and `Sprint#1_September2026_Tek5`, and by hand. The service and installer test jobs use the Python of the images, read from `src/services/PYTHON_VERSION` (3.11.17), which `tests/ci/test_image_python.py` checks against every `FROM python:` line. The bench-kit job runs on 3.10 and 3.13; the other jobs run tools, on Python **3.13**.
+Continuous integration is defined in **`.github/workflows/ci.yml`** at the repository root. It runs on every pull request, on pushes to `master`, `main`, `pre-release-fix` and `Sprint#1_September2026_Tek5`, and by hand. The service and installer test jobs use the Python of the images, read from `src/services/PYTHON_VERSION` (3.11.17), which `tests/ci/test_image_python.py` checks against every `FROM python:` line. The bench-kit job runs on 3.10 and 3.13; the other jobs run tools, on Python **3.13**. Every action in the four workflows is pinned by its full commit SHA, with its version in a comment, at a release that runs on Node 24, and every Linux job names its runner image, `ubuntu-24.04` (`ubuntu-22.04` in `desktop-release.yml`), so that GitHub moving `ubuntu-latest` does not change CI mid-sprint. `tests/ci/test_workflow_pins.py` checks both.
 
 **Summary**
 

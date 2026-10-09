@@ -14,12 +14,6 @@ permissions:
 env:
   PYTHON_VERSION: '3.13'
 
-  # Opt in to Node.js 24 for JavaScript-based actions (actions/checkout@v4,
-  # actions/setup-python@v5, etc.) before it becomes the default on
-  # 2026-06-16. Silences the deprecation warning and avoids the forced
-  # cutover surprising us.
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
-
   # CI database / cache / queue defaults — overridden per job where needed
   POSTGRES_USER: postgres
   POSTGRES_PASSWORD: postgres
@@ -48,11 +42,11 @@ jobs:
   # ----------------------------------------------------------------------- #
   lint:
     name: Lint (ruff)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -65,11 +59,11 @@ jobs:
 
   versions:
     name: Version numbers match VERSION
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -84,11 +78,11 @@ jobs:
 
   licences:
     name: Licences
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -106,15 +100,15 @@ jobs:
 
   bench-kit:
     name: Bench kit (standalone, Python ${{ matrix.python }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         python: ['3.10', '3.13']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
 
@@ -138,11 +132,11 @@ jobs:
 
   cpu-build-wiring:
     name: CPU build wiring
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -154,7 +148,7 @@ jobs:
 
   cpu-images:
     name: CPU image · ${{ matrix.service }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: cpu-build-wiring
     strategy:
       fail-fast: false
@@ -169,9 +163,9 @@ jobs:
     env:
       IMAGE: horus-ci-${{ matrix.service }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -212,7 +206,7 @@ jobs:
   # ----------------------------------------------------------------------- #
   test-mas:
     name: Tests · MAS
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       coverage-row: ${{ steps.coverage-line.outputs.row }}
     # No service containers: SQLite stands in for Postgres, fakeredis for Redis,
@@ -223,9 +217,9 @@ jobs:
     # read through it, so the step below copies .env.example to src/infra/.env.
     # It is a workaround until those tests set the settings they need themselves.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version-file: src/services/PYTHON_VERSION
           cache: pip
@@ -269,7 +263,7 @@ jobs:
       - name: Upload coverage and junit artifacts
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-mas
           path: |
@@ -284,13 +278,13 @@ jobs:
   # ----------------------------------------------------------------------- #
   test-agent:
     name: Tests · Agent
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       coverage-row: ${{ steps.coverage-line.outputs.row }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version-file: src/services/PYTHON_VERSION
           cache: pip
@@ -328,7 +322,7 @@ jobs:
       - name: Upload coverage and junit artifacts
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-agent
           path: |
@@ -343,13 +337,13 @@ jobs:
   # ----------------------------------------------------------------------- #
   test-knowledge-store:
     name: Tests · Knowledge Store
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       coverage-row: ${{ steps.coverage-line.outputs.row }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version-file: src/services/PYTHON_VERSION
           cache: pip
@@ -387,7 +381,7 @@ jobs:
       - name: Upload coverage and junit artifacts
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-knowledge-store
           path: |
@@ -399,13 +393,13 @@ jobs:
 
   test-installer:
     name: Tests · Installer
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       coverage-row: ${{ steps.coverage-line.outputs.row }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version-file: src/services/PYTHON_VERSION
 
@@ -439,11 +433,11 @@ jobs:
   # ----------------------------------------------------------------------- #
   coverage-summary:
     name: Coverage summary
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: always()
     needs: [test-mas, test-agent, test-knowledge-store, test-installer]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Collect the coverage lines the test jobs sent
         env:
