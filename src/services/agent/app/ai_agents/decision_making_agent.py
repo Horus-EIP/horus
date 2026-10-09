@@ -137,6 +137,7 @@ def clean_model_text(text: str) -> str:
 ANSWER_CALL = "answer"
 GROUNDED_CALL = "grounded"
 INSTRUCTION_CALL = "instruction"
+PURPOSE_HEADER = "X-Horus-Purpose"
 
 INSTRUCTION_SYSTEM_PROMPT = "You are a helpful assistant. Follow the user's instructions concisely."
 
@@ -960,6 +961,7 @@ class DecisionMakingAgent:
         system_content: str,
         response_format: dict | None = None,
         stream_view: StreamView | None = None,
+        call: str = ANSWER_CALL,
     ) -> str:
         """Generate via the external vLLM OpenAI-compatible server (Phase 4).
 
@@ -987,6 +989,7 @@ class DecisionMakingAgent:
                 emit_tokens=_stream_tokens_enabled(),
                 response_format=response_format,
                 stream_view=stream_view,
+                call=call,
             )
 
         url = _vllm_base_url().rstrip("/") + "/chat/completions"
@@ -999,7 +1002,9 @@ class DecisionMakingAgent:
         }
         if response_format is not None:
             payload["response_format"] = response_format
-        resp = requests.post(url, json=payload, timeout=_vllm_timeout())
+        resp = requests.post(
+            url, json=payload, headers={PURPOSE_HEADER: call}, timeout=_vllm_timeout()
+        )
         resp.raise_for_status()
         data = resp.json()
         text = (data["choices"][0]["message"].get("content") or "").strip()
@@ -1015,6 +1020,7 @@ class DecisionMakingAgent:
         emit_tokens: bool = True,
         response_format: dict | None = None,
         stream_view: StreamView | None = None,
+        call: str = ANSWER_CALL,
     ) -> str:
         """Stream a vLLM chat completion (SSE) and emit confirmed-clean tokens as
         batched ``reasoning.delta`` steps — the Phase-1 streaming UX on the vLLM
@@ -1072,7 +1078,11 @@ class DecisionMakingAgent:
             last_flush = time.monotonic()
 
         with requests.post(
-            url, json=payload, timeout=_vllm_timeout(), stream=True
+            url,
+            json=payload,
+            headers={PURPOSE_HEADER: call},
+            timeout=_vllm_timeout(),
+            stream=True,
         ) as resp:
             resp.raise_for_status()
             for raw in resp.iter_lines():
@@ -1296,6 +1306,7 @@ class DecisionMakingAgent:
                     system_content,
                     response_format=response_format,
                     stream_view=stream_view,
+                    call=call,
                 )
             else:
                 text = self._generate_causal(

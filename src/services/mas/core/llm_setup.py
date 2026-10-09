@@ -23,6 +23,7 @@ logger = get_logger("llm_setup")
 DEFAULT_PROMPT_TOKEN_BUDGET = 4096
 CONSERVATIVE_CHARS_PER_TOKEN = 3
 UNLABELLED_CALL = "other"
+PURPOSE_HEADER = "X-Horus-Purpose"
 
 
 class PromptTokenSource(str, Enum):
@@ -360,7 +361,10 @@ def _post_chat_completion(body: dict, call: str) -> str:
 
     url = _vllm_base_url().rstrip("/") + "/chat/completions"
     req = urllib.request.Request(
-        url, json.dumps(body).encode("utf-8"), {"Content-Type": "application/json"}, method="POST"
+        url,
+        json.dumps(body).encode("utf-8"),
+        {"Content-Type": "application/json", PURPOSE_HEADER: call},
+        method="POST",
     )
     with urllib.request.urlopen(req, timeout=_vllm_timeout()) as resp:
         data = json.loads(resp.read().decode("utf-8"))

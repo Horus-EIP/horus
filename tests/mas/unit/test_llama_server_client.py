@@ -101,6 +101,18 @@ def test_the_request_names_the_llama_server_alias_and_does_not_stream(llama_serv
     assert sent["messages"] == [{"role": "user", "content": "Route this."}]
 
 
+def test_every_call_names_its_purpose_in_a_header(llama_server_env):
+    server = FakeUrlopen(llama_server_completion(ROUTING_REPLY))
+    messages = [{"role": "user", "content": "Route this."}]
+    with patch("urllib.request.urlopen", server):
+        llm_setup.ask_llm(messages, 1024, call="plan")
+        llm_setup.ask_llm(messages, 1024)
+        llm_setup.ask_llm_with_json_schema(messages, "task_route", {"type": "object"}, 32)
+    purposes = [request.get_header("X-horus-purpose") for request in server.requests]
+    assert purposes == ["plan", llm_setup.UNLABELLED_CALL, "task_route"]
+    assert all(request.get_header("Content-type") == "application/json" for request in server.requests)
+
+
 def test_a_long_prompt_leaves_the_answer_inside_the_llama_server_context(llama_server_env):
     server = FakeUrlopen(llama_server_completion("Summary."))
     history = [{"role": "user", "content": "x" * 18000}]

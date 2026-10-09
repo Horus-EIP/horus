@@ -51,12 +51,16 @@ class FakeLlamaServer:
         self.replies = list(replies)
         self.prompt_tokens = prompt_tokens
         self.payloads: list[dict] = []
+        self.purposes: list[str | None] = []
+        self.streamed: list[bool] = []
 
     def _reply(self) -> str:
         return self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
 
     def __call__(self, url, **kwargs):
         self.payloads.append(kwargs["json"])
+        self.purposes.append((kwargs.get("headers") or {}).get("X-Horus-Purpose"))
+        self.streamed.append(bool(kwargs.get("stream")))
         content = self._reply()
         usage = {"prompt_tokens": self.prompt_tokens, "completion_tokens": 12}
         response = MagicMock()
@@ -258,3 +262,41 @@ class TestReactPrompt:
             "calc",
             "delegate",
         )
+
+
+class TestPurposeHeader:
+    async def test_the_answer_names_its_purpose_while_it_streams(self, llama_server_env):
+        server = FakeLlamaServer([ANSWER])
+        pipeline = RAGPipeline(_retrieval({"passages": [Q4_PASSAGE]}), remote_agent())
+        with identity(FINANCE), patch("requests.post", server):
+            await pipeline.generate_response("What was Q4 2025 revenue?")
+
+        assert server.purposes == ["answer"]
+        assert server.streamed == [True]
+
+    @pytest.mark.parametrize("stream_tokens", ["0", "1"])
+    def test_grounded_and_instruction_calls_name_theirs(self, llama_server_env, stream_tokens):
+        llama_server_env.setenv("AGENT_STREAM_TOKENS", stream_tokens)
+        server = FakeLlamaServer(["Revenue was $4.2M."])
+        agent = remote_agent()
+        with patch("requests.post", server):
+            agent.decide("What was Q4 revenue?", context="Q4 2025 revenue was $4.2M.")
+            agent.decide("Write a report about Q4.")
+
+        assert server.purposes == ["grounded", "instruction"]
+        assert server.streamed == [stream_tokens == "1"] * 2
+
+    async def test_each_react_step_names_its_purpose(self, llama_server_env):
+        server = FakeLlamaServer(
+            [
+                "THOUGHT: search.\nACTION: search_knowledge(Q4 revenue)",
+                "THOUGHT: done.\nFINAL_ANSWER: Revenue was $4.2M.",
+            ]
+        )
+        agent = ReactAgent(
+            remote_agent(), _retrieval({"data": "Q4 2025 revenue was $4.2M."}), MagicMock(), max_steps=3
+        )
+        with identity(FINANCE), patch("requests.post", server):
+            await agent.run("What was Q4 2025 revenue?")
+
+        assert server.purposes == ["react_step", "react_step"]
