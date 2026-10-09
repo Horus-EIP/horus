@@ -16,7 +16,8 @@ VERSION_FILE_INPUT = "src/services/PYTHON_VERSION"
 PYTHON_SERVICES = ("mas", "agent", "knowledge-store", "llm-mock")
 WORKFLOWS = REPO / ".github" / "workflows"
 JOBS_ON_THE_IMAGE_PYTHON = {
-    "ci.yml": ("test-mas", "test-agent", "test-knowledge-store", "test-installer", "test-llm-mock"),
+    "ci.yml": ("test-mas", "test-agent", "test-knowledge-store", "test-installer", "test-llm-mock",
+               "e2e-mock"),
     "images.yml": ("plan", "image"),
     "desktop-release.yml": ("verify", "bundle"),
 }

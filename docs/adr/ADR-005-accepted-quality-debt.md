@@ -1,8 +1,8 @@
 # ADR-005: Quality debt we accept (for now), and when we repay it
 
 **Date:** 2026-09-24
-**Status:** Accepted (24/09/2026). Reviewed at every MINOR release (see `VERSIONING.md`). The 07/10/2026 update, which marks what was repaid since, is not reviewed by the team yet.
-**Last updated:** 2026-10-07
+**Status:** Accepted (24/09/2026). Reviewed at every MINOR release (see `VERSIONING.md`). The 07/10/2026 and 09/10/2026 updates, which mark what was repaid since, are not reviewed by the team yet.
+**Last updated:** 2026-10-09
 **Deciders:** Loup Marquez-Luttringer, Noah Gibelli, Matheus Lopez
 **Related:**
 
@@ -65,7 +65,7 @@ The debt as recorded on 24/09/2026. The Decision column says where each item sta
 
 | # | Debt | Better way | Why we didn't | Cost | Risk if we leave it | Decision |
 |---|---|---|---|---|---|---|
-| B1 | **No end-to-end test in CI.** `installer/smoke.py` and the 20 scripts in `scripts/integration-checks/` are run by hand. | A CI job that starts the stack with tiny models and runs `smoke.py` | 12 services and multi-GB models don't fit a standard CI runner in reasonable time | L | Breaks between services are found late (by testers) | **Open.** Repay by 1.0.0. Until then, smoke test on every release candidate (`TESTING.md`) |
+| B1 | **No end-to-end test in CI.** `installer/smoke.py` and the 20 scripts in `scripts/integration-checks/` are run by hand. | A CI job that starts the stack with tiny models and runs `smoke.py` | 12 services and multi-GB models don't fit a standard CI runner in reasonable time | L | Breaks between services are found late (by testers) | **Repaid** on 09/10/2026, for 0.2.0 (B-77): the `e2e-mock` job of `ci.yml` runs the stack on the mock model server of ADR-008 instead of tiny models. The real model is still checked by hand: the smoke test on every release candidate (`TESTING.md`) and the contract tests with `-m real_llm` |
 | B2 | **No automatic check of answer quality.** The out-of-corpus hallucination (F20) and the CPU digit corruption were found by testers. | A small grounding and refusal evaluation set, run on the GPU VM before each release | Needed a GPU runner; the school GPU VM only just became available | M | The product's core promise ("it doesn't invent") silently regresses | **Part repaid** (`084a1c2`). The rest by 0.2.0 |
 | B3 | **Tests in two places**: `tests/` and `src/services/knowledge-store/tests/` | Everything under `tests/<service>/` | Historical | XS | Tests missed by CI or by the coverage config | **Open.** Repay by 0.1.2 |
 | B4 | **The ATP marked features "Done" that testers couldn't use** (F13/F14 search and category filter) | Check each ATP scenario against the shipped UI before sending | Time pressure before the beta | XS per ATP | Wasted tester time; credibility with the jury | **Repay at the next ATP.** The two features now exist (`c2b3184`) |
@@ -107,7 +107,7 @@ The debt as recorded on 24/09/2026. The Decision column says where each item sta
 
 ## Status on 07/10/2026
 
-Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at that commit. C1, E1 and E2 were repaid later that day by the Objective 1 commits named below, and C5 in part. C2, C3 and C7 were repaid on 08/10/2026.
+Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at that commit. C1, E1 and E2 were repaid later that day by the Objective 1 commits named below, and C5 in part. C2, C3 and C7 were repaid on 08/10/2026, and B1 on 09/10/2026.
 
 ### Repaid
 
@@ -123,6 +123,7 @@ Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at 
 | C2 | B-46, 08/10/2026 | Each service's test tools are in its `requirements-test.txt`, which `scripts/dev/lock-requirements.sh` does not lock and only the CI test jobs install; no lock file names pytest, coverage or fakeredis, and `tests/ci/test_cpu_torch_build.py` checks it. |
 | C3 | B-67, 08/10/2026 | `src/services/mas/Dockerfile` has a builder stage with `build-essential` and `g++`, and a final stage that copies the virtual environment and installs no system package; pip resolves the lock with its default resolver and `pip check` passes in the image. The CPU image went from 1.32 GB to 877 MB. |
 | C7 | B-67, 08/10/2026 | `src/infra/docker-compose.yml` runs `grafana/alloy:v1.20.1` with `src/infra/observability/config.alloy`, which gives Loki the labels the web client's `/admin/logs` queries (`compose_service`, `container`) and `compose_project`; no Promtail is left. |
+| B1 | B-77, 09/10/2026 (ADR-008) | The `e2e-mock` job of `.github/workflows/ci.yml` builds the MAS, agent and knowledge-store CPU images and `llm-mock`, starts them with `docker-compose.mock.yml` on top of the CPU overlay, uploads `demo_assets/`, runs `installer/smoke.py` and fails unless all 9 steps pass, the out-of-corpus control included (`scripts/ci/smoke-steps.py`). It needs no artifact storage and writes its duration to the job summary. `tests/contract` runs the same model assertions on the mock in CI and on a real model by hand. |
 | D6 | `2cdc325` (B-51) | `VERSION` is `0.1.2`; `desktop/package.json`, `desktop/src-tauri/tauri.conf.json`, `desktop/src-tauri/Cargo.toml` and `src/services/web-client/package.json` say `0.1.2`; the knowledge store reports `HORUS_VERSION` (`src/services/knowledge-store/app/main.py`, line 112); the CI job `versions` runs `scripts/ci/check-versions.py` (`.github/workflows/ci.yml`, lines 66–80). |
 
 ### Part repaid
@@ -143,7 +144,6 @@ Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at 
 | A3 | `.github/workflows/ci.yml` line 64 runs `ruff check` only; `ruff-format` is in `.pre-commit-config.yaml` (line 26). |
 | A5 | No workflow runs bandit. The one report is `greenlight/code-quality-review/bandit_report.txt` (31/05/2026, `docs/eip/objectives-audit.md`, line 54). |
 | A6 | Repaid on 09/10/2026: `ci.yml` runs `pytest installer/tests` in its `test-installer` job on every push and pull request, on the images' Python. `desktop-release.yml` and `images.yml` still run them on a `v*` tag. |
-| B1 | `ci.yml` (lines 315–320) says the integration tests run only by hand. |
 | B3 | `src/services/knowledge-store/tests/test_corpus_safety.py` is still there; CI runs `tests/knowledge_store` only (`ci.yml`, line 295). |
 | B4 | The repository records no ATP after v7 (18/09/2026, `docs/eip/regressions.md`), so the rule has not been applied yet. |
 | C4 | `src/services/mas/requirements.txt` lines 23–24; `src/services/agent/requirements.txt` line 18. passlib hashes the passwords in `src/services/mas/auth/auth_tool_functions.py` (line 10). |
@@ -160,16 +160,15 @@ The accepted items still hold: B904 is still ignored (`pyproject.toml`, line 51)
 | **0.1.2** (not tagged yet) | A1, A3, B3; the rest of C5 and C6 | Under 2.5 d by the cost scale (S: A1; XS: A3, B3, C6; XS–S: C5). Fixing the 20 lint errors before `npm run lint` can gate CI is not estimated. |
 | **0.2.0** (end of Oct) | A2 (start), A5, D2; the rest of B2 and D1 | A2 and A5: about 1 to 2.5 d by the cost scale. B2 (M) and D1 + D2 (L) are part repaid and not re-estimated. |
 | **0.3.0** (Dec) | C4, D1 (slimmer profile) | ~3 d (24/09 estimate) |
-| **1.0.0** (Feb 2027) | B1 (E2E in CI) | ~3–5 d |
 | **Next ATP** | B4 | XS |
 | **Accepted** | A4, A7 (gates), D7, E3 | — |
-| **Repaid** | D3, D6 (in 0.1.2); C1, C2, C3, C7, D4, D5, E1, E2, E4 (not released yet) | — |
+| **Repaid** | D3, D6 (in 0.1.2); B1, C1, C2, C3, C7, D4, D5, E1, E2, E4 (not released yet) | — |
 
 **Why this order:**
 
 - **0.1.2** holds the cheap items with high interest: they affect external contributors (who arrive in October) and the Tek5 Objective 2 deliverables (CI, test strategy).
 - **0.2.0** holds what the ATP showed hurts users most: install size, grounding and the cache. The cache (D4) and the dropped socket (D5) are already fixed.
-- Big-infrastructure items (E2E in CI) wait until the product is stable enough to be worth it.
+- Big-infrastructure items were to wait until the product was stable enough to be worth it. E2E in CI (B1) came early, on 09/10/2026, because the mock model server of ADR-008 made it cheap and Tek5 Objective 2.5 asks for it by the end of October.
 
 ---
 

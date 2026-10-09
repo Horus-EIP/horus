@@ -450,6 +450,114 @@ jobs:
         if: always()
         run: python scripts/ci/coverage-line.py line "LLM mock" coverage-llm-mock.xml junit-llm-mock.xml
 
+      - name: Contract tests on the mock (the real model runs them by hand, -m real_llm)
+        run: pytest -c tests/contract/pytest.ini tests/contract -p no:cacheprovider -v
+
+  # ----------------------------------------------------------------------- #
+  # End to end on the mock model server (ADR-008, B-77): the CPU images and
+  # llm-mock built here, the stack started with docker-compose.mock.yml, the
+  # demo corpus uploaded, installer/smoke.py run. No artifact is needed. The
+  # workflow env above sets test credentials for the unit tests; every
+  # docker compose call runs with env -i so only src/infra/.env counts.
+  # ----------------------------------------------------------------------- #
+  e2e-mock:
+    name: End to end · mock AI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: src/services/PYTHON_VERSION
+
+      - name: Start the clock
+        run: echo "E2E_START=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Free disk space for the image builds
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Write src/infra/.env for mock mode
+        working-directory: src/infra
+        run: |
+          env -i PATH="$PATH" HOME="$HOME" bash init-env.sh --quiet
+          sed -i -e 's/^COMPOSE_PROJECT_NAME=.*/COMPOSE_PROJECT_NAME=horus-e2e/' \
+                 -e 's/^HORUS_AI_MODE=.*/HORUS_AI_MODE=mock/' .env
+          {
+            echo
+            echo "COMPOSE_FILE=docker-compose.yml:docker-compose.cpu.yml:docker-compose.mock.yml"
+            echo "HORUS_MOCK_LATENCY_MS=0"
+            echo "KNOWLEDGE_STORE_REINDEX_ON_STARTUP=0"
+            echo "OTEL_SDK_DISABLED=true"
+          } >> .env
+
+      - name: Compose configuration with and without the mock overlay
+        working-directory: src/infra
+        run: |
+          for files in docker-compose.yml docker-compose.yml:docker-compose.cpu.yml \
+                       docker-compose.yml:docker-compose.cpu.yml:docker-compose.mock.yml; do
+            env -i PATH="$PATH" HOME="$HOME" COMPOSE_FILE="$files" docker compose config -q
+            echo "config passes: $files"
+          done
+
+      - name: Build the CPU images and llm-mock
+        working-directory: src/infra
+        run: |
+          start=$(date +%s)
+          env -i PATH="$PATH" HOME="$HOME" docker compose --progress plain \
+            build mas agent knowledge_store llm-mock
+          echo "BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+
+      - name: Start the stack in mock mode
+        working-directory: src/infra
+        run: |
+          start=$(date +%s)
+          env -i PATH="$PATH" HOME="$HOME" docker compose up -d --wait --wait-timeout 900 \
+            llm-mock mas knowledge_store agent
+          echo "START_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+
+      - name: Upload the demo corpus
+        run: |
+          args=()
+          for file in demo_assets/*.md; do args+=(-F "files=@$file;type=text/markdown"); done
+          curl -fsS --max-time 600 "${args[@]}" http://127.0.0.1:8080/file > /dev/null
+
+      - name: Smoke test
+        run: |
+          start=$(date +%s)
+          python installer/smoke.py --timeout 900 --log "$RUNNER_TEMP/smoke-log.txt"
+          echo "SMOKE_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+
+      - name: Every smoke step passed, the negative control without a warning
+        run: python scripts/ci/smoke-steps.py "$RUNNER_TEMP/smoke-log.txt"
+
+      - name: MAS reports mock mode at /system/ai
+        run: |
+          curl -fsS http://127.0.0.1:8000/system/ai | tee "$RUNNER_TEMP/system-ai.json"
+          python -c 'import json, sys; mode = json.load(open(sys.argv[1])); sys.exit(0 if mode["mode"] == "mock" and mode["simulated"] else 1)' "$RUNNER_TEMP/system-ai.json"
+
+      - name: Service logs
+        if: failure()
+        working-directory: src/infra
+        run: |
+          env -i PATH="$PATH" HOME="$HOME" docker compose ps -a
+          env -i PATH="$PATH" HOME="$HOME" docker compose logs --no-color --tail 200
+          cat "$RUNNER_TEMP/smoke-log.txt" || true
+
+      - name: Stop the stack
+        if: always()
+        working-directory: src/infra
+        run: env -i PATH="$PATH" HOME="$HOME" docker compose down -v --remove-orphans || true
+
+      - name: Report the duration
+        if: always()
+        run: |
+          total=$(( $(date +%s) - E2E_START ))
+          echo "End to end on the mock model server: $(( total / 60 )) min $(( total % 60 )) s (build ${BUILD_SECONDS:-?} s, start ${START_SECONDS:-?} s, smoke ${SMOKE_SECONDS:-?} s)" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
   # ----------------------------------------------------------------------- #
   # Integration tests — moved to scripts/integration-checks/ per
   # tests/TESTING_PLAN.md. They require the live Docker stack and run only

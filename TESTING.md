@@ -49,10 +49,11 @@ These need their own, stricter tests.
 | 2.7 | **Grounding evaluation** | Answers are correct, cite the right document, and out-of-corpus questions are refused | `tests/eval/testset.yaml` + `scripts/eval/run-eval.py` | Runner against a live stack; results in `benchmarks/` | By hand, before each release (section 6) |
 | 2.8 | **Integration checks** | Two or more real services together (MAS, RabbitMQ, Postgres, agent, knowledge store) | `scripts/integration-checks/` (20 files) | pytest or python, against a live stack | By hand. Not in CI (section 7) |
 | 2.9 | **MAS client scripts** | Manual calls to a running MAS on `localhost:8000` | `tests/mas/client_tests/` | python | By hand. pytest does not collect them (file names start with `client_`) |
-| 2.10 | **End-to-end smoke** | Knowledge store health, unauthenticated call refused, admin login, token accepted, a worker agent registers, the demo document is ingested, a question about it, the answer is grounded, a negative control question | `installer/smoke.py` (9 steps) | Run by the installer, or `python installer/smoke.py` on a running stack | End of every install (unless `--skip-smoke`); every release candidate on a clean CPU machine and on a GPU machine |
+| 2.10 | **End-to-end smoke** | Knowledge store health, unauthenticated call refused, admin login, token accepted, a worker agent registers, the demo document is ingested, a question about it, the answer is grounded, a negative control question | `installer/smoke.py` (9 steps) | Run by the installer, or `python installer/smoke.py` on a running stack | End of every install (unless `--skip-smoke`); every release candidate on a clean CPU machine and on a GPU machine; every push and pull request on the mock model server (`ci.yml` job `e2e-mock`, [mock AI mode](docs/mock-ai.md)) |
 | 2.11 | **Acceptance (manual)** | Real users following written scenarios | `docs/eip_pool_tek5/Horus_ATP_v7.xlsx` (37 scenarios, F1 to F37) | Testers and the results sheet | Before each beta or MINOR release |
 | 2.12 | **Performance and load** | Latency, throughput, retrieval quality, llama.cpp speed | `scripts/perf/` (locust, benchmarks), `scripts/benchmarks/` | locust, Python scripts | Before a MINOR release, and after a performance change. See `scripts/perf/README.md` and `benchmarks/README.md` |
 | 2.13 | **Static checks** | Lint, import order, likely bugs | Repo-wide | ruff 0.16.6 (CI), pre-commit (ruff `--fix`, `ruff-format`, docstring length), bandit (by hand) | ruff in CI; the last bandit report is `greenlight/code-quality-review/bandit_report.txt` (31/05/2026) |
+| 2.14 | **Model contract** | Every structured reply valid against its schema, no factual question answered directly (F20), answers cite a source, out-of-corpus questions refused, on the requests MAS and the agent really send | `tests/contract/` | pytest | CI on the mock (`test-llm-mock`); by hand on a real model (`-m real_llm`) |
 
 **What counts as a regression test:** any test written *because a bug happened* (section 4). It can be of any type above.
 
@@ -278,7 +279,9 @@ The plan is to turn the critical ones into tests under `tests/<service>/` marked
 | `test-agent` | Agent tests, coverage at least 90 % |
 | `test-knowledge-store` | Knowledge-store tests, coverage at least 85 % |
 | `test-installer` | `pytest installer/tests` with coverage, no gate |
-| `coverage-summary` | Collects the coverage line of the four test jobs; needs no artifact |
+| `test-llm-mock` | `tests/llm_mock`, coverage at least 90 %, then `tests/contract` on the mock |
+| `coverage-summary` | Collects the coverage line of the five test jobs; needs no artifact |
+| `e2e-mock` | Builds the CPU images and `llm-mock`, starts the stack with `docker-compose.mock.yml`, uploads `demo_assets/`, runs `installer/smoke.py` and requires its 9 steps; reports its duration |
 
 **`eval-testset.yml`** runs `pytest tests/eval -q` on the same pushes and pull requests, when the evaluation files change (section 2.6).
 
@@ -295,7 +298,8 @@ The plan is to turn the critical ones into tests under `tests/<service>/` marked
 | `ruff format --check` | No (pre-commit only, ruff v0.6.9 there) | Add to CI |
 | Type checking (mypy) | No | Start with MAS auth and new code |
 | bandit | No (report run by hand) | Add to CI |
-| Integration checks, grounding evaluation, smoke test | No (live stack) | Run by hand before a release |
+| Smoke test | Yes, on the mock model server (`e2e-mock`) | On a real model by hand before a release |
+| Integration checks, grounding evaluation | No (live stack) | Run by hand before a release |
 
 Details of each job: "CI pipeline" in `docs/operations.md`. The workflow files remain the source of truth.
 
