@@ -12,8 +12,14 @@ except ImportError:
 
 REPO = Path(__file__).resolve().parents[2]
 INFRA = REPO / "src" / "infra"
-MOCK_SERVER = REPO / "src" / "services" / "llm-mock"
+SERVICES = REPO / "src" / "services"
+MOCK_SERVER = SERVICES / "llm-mock"
 CLIENTS = ("mas", "agent")
+EMBEDDERS = {"mas": "MAS_EMBED", "knowledge_store": "KNOWLEDGE_STORE_EMBED"}
+EMBEDDINGS_CLIENTS = (
+    SERVICES / "mas" / "core" / "embeddings_client.py",
+    SERVICES / "knowledge-store" / "app" / "chroma_db" / "embeddings_client.py",
+)
 AI_MODE_SERVICES = ("mas", "agent", "knowledge_store")
 TURNED_OFF = ("llm", "llm-model", "vllm")
 
@@ -87,6 +93,39 @@ class MockOverlay(unittest.TestCase):
                 self.assertEqual(needs[profiles.MOCK_MODEL_SERVER], {"condition": "service_healthy"})
                 self.assertEqual(self.cpu[name]["depends_on"]["llm"], {"condition": "service_healthy"})
 
+    def test_mas_and_the_knowledge_store_embed_with_llm_mock(self):
+        for name, prefix in EMBEDDERS.items():
+            with self.subTest(name):
+                env = environment(self.mock[name])
+                self.assertEqual(env[f"{prefix}_URL"],
+                                 f"http://{profiles.MOCK_MODEL_SERVER}:{mock_settings.DEFAULT_PORT}/v1")
+                self.assertEqual(env[f"{prefix}_MODEL"], profiles.MOCK_MODEL_NAME)
+
+    def test_the_overlay_sets_the_names_the_services_read(self):
+        readers = {
+            "mas": SERVICES / "mas" / "core" / "embedding_setup.py",
+            "knowledge_store": SERVICES / "knowledge-store" / "app" / "chroma_db" / "setup.py",
+        }
+        for name, prefix in EMBEDDERS.items():
+            source = readers[name].read_text(encoding="utf-8")
+            for key in (f"{prefix}_URL", f"{prefix}_MODEL"):
+                with self.subTest(key):
+                    self.assertIn(f'"{key}"', source)
+
+    def test_the_knowledge_store_waits_for_llm_mock_before_it_embeds(self):
+        self.assertEqual(self.mock["knowledge_store"]["depends_on"],
+                         {profiles.MOCK_MODEL_SERVER: {"condition": "service_healthy"}})
+
+    def test_a_local_install_leaves_the_embeddings_urls_unset(self):
+        env = environment(self.base["knowledge_store"])
+        self.assertEqual(default_of(env["KNOWLEDGE_STORE_EMBED_URL"]), "")
+        self.assertEqual(default_of(env["KNOWLEDGE_STORE_EMBED_MODEL"]), "")
+        for spec in (self.base["mas"], self.cpu["mas"], self.cpu["knowledge_store"]):
+            self.assertNotIn("MAS_EMBED_URL", environment(spec))
+        self.assertNotIn("KNOWLEDGE_STORE_EMBED_URL", environment(self.cpu["knowledge_store"]))
+        self.assertFalse({"MAS_EMBED_URL", "KNOWLEDGE_STORE_EMBED_URL"}
+                         & smoke.read_env(INFRA / ".env.example").keys())
+
     def test_every_service_learns_the_mode_from_the_files_not_from_env(self):
         for name in AI_MODE_SERVICES:
             with self.subTest(name):
@@ -109,6 +148,13 @@ class MockOverlay(unittest.TestCase):
                  / "decision_making_agent.py").read_text(encoding="utf-8")
         for text in (mas, agent):
             self.assertIn(f'PURPOSE_HEADER = "{PURPOSE_HEADER}"', text)
+
+
+class EmbeddingsClients(unittest.TestCase):
+    def test_mas_and_the_knowledge_store_carry_the_same_generic_client(self):
+        mas, knowledge_store = (path.read_text(encoding="utf-8") for path in EMBEDDINGS_CLIENTS)
+        self.assertEqual(mas, knowledge_store)
+        self.assertNotIn("mock", mas.lower())
 
 
 class EnvTemplate(unittest.TestCase):

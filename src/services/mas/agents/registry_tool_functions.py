@@ -174,7 +174,7 @@ async def create_agent(
             rabbitmq_instance.ensure_work_queue, work_queue_name_for_agent_type(Agent_type)
         )
 
-        _skill_cache_upsert(agent_id, name, skills, description)
+        await asyncio.to_thread(_skill_cache_upsert, agent_id, name, skills, description)
         return agent_id, api_key
     except Exception as e:
         db.rollback()

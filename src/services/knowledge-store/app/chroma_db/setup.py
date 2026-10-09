@@ -4,15 +4,15 @@ os.environ.setdefault("POSTHOG_DISABLED", "true")
 os.environ.setdefault("CHROMA_TELEMETRY_ENABLED", "0")
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 
+import time
 from collections.abc import Iterable, Sequence
 from importlib import metadata
 from pathlib import Path
 
 import chromadb
-import onnxruntime
 from chromadb.config import Settings
-from fastembed import TextEmbedding
 
+from app.chroma_db.embeddings_client import EmbeddingsClient
 from app.core.logging import get_logger
 from app.core.metrics import timed_embedding
 
@@ -44,10 +44,13 @@ chroma_client = chromadb.PersistentClient(
     settings=Settings(anonymized_telemetry=False)
 )
 
-MODEL_NAME = "BAAI/bge-base-en-v1.5"
+FASTEMBED_MODEL = "BAAI/bge-base-en-v1.5"
+FASTEMBED_RUNTIME = "fastembed"
+HTTP_RUNTIME = "http"
 EMBED_DIMENSIONS = 768
-EMBED_RUNTIME = "fastembed"
 CUDA_PROVIDER = "CUDAExecutionProvider"
+STARTUP_WAIT_SECONDS = 60.0
+EMBED_URL = os.getenv("KNOWLEDGE_STORE_EMBED_URL", "").strip()
 
 
 def installed_version(distribution: str) -> str:
@@ -57,8 +60,16 @@ def installed_version(distribution: str) -> str:
         return "unknown"
 
 
-EMBED_RUNTIME_VERSION = installed_version(EMBED_RUNTIME)
-EMBED_MODEL = f"{EMBED_RUNTIME}-{EMBED_RUNTIME_VERSION}:{MODEL_NAME}"
+if EMBED_URL:
+    MODEL_NAME = os.getenv("KNOWLEDGE_STORE_EMBED_MODEL", "").strip() or FASTEMBED_MODEL
+    EMBED_RUNTIME = HTTP_RUNTIME
+    EMBED_RUNTIME_VERSION = ""
+    EMBED_MODEL = f"{HTTP_RUNTIME}:{MODEL_NAME}:{EMBED_DIMENSIONS}"
+else:
+    MODEL_NAME = FASTEMBED_MODEL
+    EMBED_RUNTIME = FASTEMBED_RUNTIME
+    EMBED_RUNTIME_VERSION = installed_version(EMBED_RUNTIME)
+    EMBED_MODEL = f"{EMBED_RUNTIME}-{EMBED_RUNTIME_VERSION}:{MODEL_NAME}"
 
 COLLECTION_METADATA = {
     "embedding_model": MODEL_NAME,
@@ -69,6 +80,7 @@ COLLECTION_METADATA = {
 }
 
 BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+QUERY_PREFIX = "" if EMBED_URL else BGE_QUERY_PREFIX
 
 
 def wants_cuda(requested: str, available_providers: Sequence[str]) -> bool:
@@ -94,27 +106,52 @@ def embed_threads(raw: str | None) -> int | None:
     return threads if threads > 0 else None
 
 
-_EMBED_DEVICE = os.getenv("KNOWLEDGE_STORE_EMBED_DEVICE", "auto")
-_USE_CUDA = wants_cuda(_EMBED_DEVICE, onnxruntime.get_available_providers())
-_EMBED_THREADS = embed_threads(os.getenv("KNOWLEDGE_STORE_EMBED_THREADS"))
+def load_fastembed():
+    import onnxruntime
+    from fastembed import TextEmbedding
 
-model = TextEmbedding(MODEL_NAME, threads=_EMBED_THREADS, cuda=_USE_CUDA)
+    device = os.getenv("KNOWLEDGE_STORE_EMBED_DEVICE", "auto")
+    use_cuda = wants_cuda(device, onnxruntime.get_available_providers())
+    threads = embed_threads(os.getenv("KNOWLEDGE_STORE_EMBED_THREADS"))
+    loaded = TextEmbedding(MODEL_NAME, threads=threads, cuda=use_cuda)
+    logger.info(
+        "BGE embedder %s loaded with %s %s on %s (KNOWLEDGE_STORE_EMBED_DEVICE=%s, threads=%s)",
+        MODEL_NAME, EMBED_RUNTIME, EMBED_RUNTIME_VERSION, "cuda" if use_cuda else "cpu",
+        device, threads or "onnxruntime default",
+    )
+    return loaded
 
-logger.info(
-    "BGE embedder %s loaded with %s %s on %s (KNOWLEDGE_STORE_EMBED_DEVICE=%s, threads=%s)",
-    MODEL_NAME, EMBED_RUNTIME, EMBED_RUNTIME_VERSION, "cuda" if _USE_CUDA else "cpu",
-    _EMBED_DEVICE, _EMBED_THREADS or "onnxruntime default",
-)
+
+def connect_to_embeddings_server() -> EmbeddingsClient:
+    client = EmbeddingsClient(EMBED_URL, MODEL_NAME, EMBED_DIMENSIONS)
+    logger.info(
+        "Embeddings come from %s with the model %s, %d values per vector: "
+        "no embedding model is loaded in this service",
+        EMBED_URL, MODEL_NAME, EMBED_DIMENSIONS,
+    )
+    refused = client.wait_until_ready(time.monotonic() + STARTUP_WAIT_SECONDS)
+    if refused:
+        logger.warning(
+            "The embeddings server is up but refused a test request, so search and "
+            "uploads fail until it answers: %s", refused,
+        )
+    return client
+
+
+model = connect_to_embeddings_server() if EMBED_URL else load_fastembed()
 
 
 def _vectors(texts: Iterable[str]) -> list[list[float]]:
-    return [vector.tolist() for vector in model.embed(list(texts))]
+    return [
+        vector if isinstance(vector, list) else vector.tolist()
+        for vector in model.embed(list(texts))
+    ]
 
 
 @timed_embedding
 def get_embedding(text: str, is_query: bool = False) -> list[float]:
     if is_query:
-        text = BGE_QUERY_PREFIX + text
+        text = QUERY_PREFIX + text
     return _vectors([text])[0]
 
 
