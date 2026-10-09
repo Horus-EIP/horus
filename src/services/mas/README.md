@@ -143,6 +143,8 @@ All configuration is loaded from environment variables. A reference file is loca
 | `ROUTER_LLM_MAX_TOKENS` | Token budget of the constrained LLM routing call | `32` |
 | `LLM_PROMPT_TOKEN_BUDGET` | Prompt tokens one orchestrator LLM call may use before it logs a warning and counts in `mas_llm_prompts_over_budget_total` | `4096` |
 | `MAS_EMBED_THREADS`    | Threads of the MiniLM embedder's ONNX Runtime session. Unset, the embedder takes `LLM_TORCH_INTRAOP_THREADS` (the installer's thread budget for MAS, 1 on the CPU profiles), and without either onnxruntime chooses | unset |
+| `MAS_EMBED_URL` | An OpenAI-compatible embeddings server (`POST <url>/embeddings`, 384 values per vector). Set, MAS loads no model and imports no FastEmbed; at start it waits up to 60 s for the server. Mock AI mode points it at `llm-mock` | unset (FastEmbed) |
+| `MAS_EMBED_MODEL` | The model named in those requests | `sentence-transformers/all-MiniLM-L6-v2` |
 | `FASTEMBED_CACHE_PATH` | Where FastEmbed keeps the ONNX model. The image sets `/app/models/fastembed` and downloads the model there at build time | FastEmbed's default (a temp folder) |
 
 The skill matcher (`core/skill_cache.py`) and the router's embedding stage share one embedder, `sentence-transformers/all-MiniLM-L6-v2` on FastEmbed (ONNX Runtime, CPU, no torch), loaded in the background at startup (`core/embedding_setup.py`). Its vectors match the old sentence-transformers ones (cosine 1.000000 on 336 texts, `scripts/compare-embeddings.py`) and the router report gives the same decisions with both.

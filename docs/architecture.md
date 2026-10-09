@@ -509,10 +509,14 @@ All services are configured via environment variables, typically set in `docker-
 | | `ROUTER_MIN_MARGIN` | No | Embedding stage: lowest lead of the best agent over the next one (default 0.10). |
 | | `ROUTER_LLM_MAX_TOKENS` | No | Token budget of the constrained LLM routing call (default 32). |
 | | `MAS_EMBED_THREADS` | No | Threads of MAS's MiniLM embedder (default: `LLM_TORCH_INTRAOP_THREADS`, 1 on the CPU profiles, else onnxruntime's choice). |
+| | `MAS_EMBED_URL`, `MAS_EMBED_MODEL` | No | An OpenAI-compatible embeddings server and model instead of FastEmbed (384 values per vector; set by mock AI mode). |
 | | `LLM_PROMPT_TOKEN_BUDGET` | No | Prompt tokens one MAS LLM call may use before it logs a warning and counts in `mas_llm_prompts_over_budget_total` (default 4096). |
 | **Knowledge store** | `KNOWLEDGE_STORE_EMBED_DEVICE` | No | `auto`, `cpu` or `cuda` for the FastEmbed BGE embedder (default `auto`; CUDA only when onnxruntime offers it). |
 | | `KNOWLEDGE_STORE_EMBED_THREADS` | No | Threads of the embedder's ONNX Runtime session (default: onnxruntime's choice). |
 | | `KNOWLEDGE_STORE_REINDEX_ON_STARTUP` | No | `0` keeps the startup re-index of whole-file entries and passages from another embedder from running (default on). |
+| | `KNOWLEDGE_STORE_EMBED_URL`, `KNOWLEDGE_STORE_EMBED_MODEL` | No | An OpenAI-compatible embeddings server and model instead of FastEmbed (768 values per vector; set by mock AI mode; a change re-embeds the stored documents). |
+| | `HORUS_SPACY` | No | `off` turns spaCy off in the knowledge store and the agent (default on; mock AI mode turns it off). |
+| | `HORUS_MONITORING` | No | `on` or `off`: Prometheus, Loki, Tempo, Alloy and the traces (default off in mock AI mode, on otherwise). |
 | **Application** | `LLM_AUTOINIT` | No | Auto-initialize LLM on startup (0 or 1) |
 
 A complete example with all variables is available at `src/infra/.env.example`.

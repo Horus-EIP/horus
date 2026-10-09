@@ -43,6 +43,7 @@ services:
     environment:
       - OTEL_SDK_DISABLED=true
       - OTEL_ENABLED=false
+      - HORUS_MONITORING=off
 
   agent:
     environment:

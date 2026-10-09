@@ -148,6 +148,9 @@ The service reads environment variables directly. Defaults are suitable for loca
 | `KNOWLEDGE_STORE_EMBED_DEVICE` | `auto` (CUDA when onnxruntime offers it), `cpu`, or `cuda` (falls back to CPU with a warning when onnxruntime has no CUDA provider; the images ship the CPU onnxruntime) | `auto` |
 | `KNOWLEDGE_STORE_EMBED_THREADS` | Threads of the embedder's ONNX Runtime session; unset or not a positive number leaves the choice to onnxruntime | unset |
 | `KNOWLEDGE_STORE_REINDEX_ON_STARTUP` | `0`, `false`, `no` or `off` keeps the startup re-index from running; it then only logs how many documents need one | on |
+| `KNOWLEDGE_STORE_EMBED_URL` | An OpenAI-compatible embeddings server (`POST <url>/embeddings`, 768 values per vector). Set, the service loads no model, sends questions without the BGE prefix and records `embed_model` as `http:<model>:768`, so changing it re-embeds the stored passages at the next start. Mock AI mode points it at `llm-mock` | unset (FastEmbed) |
+| `KNOWLEDGE_STORE_EMBED_MODEL` | The model named in those requests | `BAAI/bge-base-en-v1.5` |
+| `HORUS_SPACY` | `0`, `false`, `no` or `off` turns spaCy off: entities, topics and summaries come from regular expressions, with no people or companies | on |
 | `FASTEMBED_CACHE_PATH` | Where FastEmbed keeps the ONNX model. The image sets `/app/.cache/fastembed` and downloads the model there at build time | FastEmbed's default (a temp folder) |
 
 The embedding model (`BAAI/bge-base-en-v1.5`) is configured in `app/chroma_db/setup.py`. For deployment with other services, see `src/infra/.env.example`.

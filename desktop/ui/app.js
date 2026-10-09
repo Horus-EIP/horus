@@ -271,7 +271,7 @@ function renderFailure() {
 }
 
 const AI_MODE_TEXT = {
-  mock: "AI: Mock - the answers are simulated from your documents, without a language model.",
+  mock: "AI: Mock - no AI model runs. Answers and search are simulated from the words of your documents.",
   local: "AI: Local",
 };
 

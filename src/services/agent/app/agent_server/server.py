@@ -45,6 +45,7 @@ from agent_server.profiles import (
     get_profile_by_agent_id,
 )
 from ai_agents.answer_contract import answer_of
+from ai_agents.data_extractor_tool import spacy_is_off
 from ai_agents.decision_making_agent import DecisionMakingAgent
 from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
 from ai_agents.knowledge_store_client import KnowledgeStoreClient
@@ -623,15 +624,22 @@ def mock_ai_mode() -> bool:
     return os.getenv("HORUS_AI_MODE", "").strip().lower() == "mock"
 
 
+def mock_ai_warning() -> str:
+    message = ("Mock AI mode: llm-mock answers this agent's model calls, so its answers "
+               "are simulated from the documents, not written by a language model")
+    if spacy_is_off():
+        message += "; spaCy is off, so payments are extracted with regular expressions"
+    if os.getenv("OTEL_SDK_DISABLED", "").strip().lower() in ("1", "true", "yes"):
+        message += "; monitoring is off, so the agent exports no trace"
+    return message
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup/shutdown (replaces deprecated on_event)."""
     logger.info("Agent service starting up...")
     if mock_ai_mode():
-        logger.warning(
-            "Mock AI mode: llm-mock answers this agent's model calls, so its answers "
-            "are simulated from the documents, not written by a language model"
-        )
+        logger.warning(mock_ai_warning())
     register_agent()
     fail_abandoned_claims()
     heartbeat_thread = threading.Thread(target=heartbeat_task, daemon=True)

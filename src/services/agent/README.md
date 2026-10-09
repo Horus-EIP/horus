@@ -172,6 +172,7 @@ In practice, most tasks arrive through the RabbitMQ consumer rather than the HTT
 | `MODEL_NAME`              | Hugging Face model id (or local mirror) for decision agent | `Qwen/Qwen3-4B-Instruct-2507` |
 | `MODEL_DEVICE`            | PyTorch device (`auto`, `cpu`, `cuda`)     | `auto`                    |
 | `AGENT_LAZY_DECISION_MODEL` | `1`/`true` = load Qwen on first `decide()`; `0` = load at process start (Compose default `0`) | `0` |
+| `HORUS_SPACY`             | `0`, `false`, `no` or `off` turns spaCy off: the data extractor finds payments with regular expressions only | `on` |
 | `KNOWLEDGE_STORE_URL`     | Knowledge Store service URL                | `http://localhost:8080`   |
 | `KNOWLEDGE_STORE_TIMEOUT` | HTTP timeout for knowledge store requests  | `10.0`                    |
 | `KNOWLEDGE_STORE_MAX_RETRIES` | Max retries for knowledge store calls  | `3`                       |

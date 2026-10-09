@@ -200,6 +200,14 @@ Kubernetes, Docker Swarm, or cloud-specific runtimes are outside this document; 
 
 This document describes the monitoring stack shipped with **`src/infra/docker-compose.yml`** (repository root): metrics (Prometheus), traces (Tempo, OTLP), and logs (Loki), all viewed in the web client's admin pages (`/admin/logs`, `/admin/metrics`, `/admin/traces`), plus admin UIs for data stores.
 
+**Turning monitoring off.** `HORUS_MONITORING=on` or `off` in `src/infra/.env`. Unset, monitoring is off in [mock AI mode](mock-ai.md) and on in local mode; an explicit value wins in both. Off, the installer adds `docker-compose.monitoring-off.yml` last in `COMPOSE_FILE`:
+
+- Prometheus, Loki, Tempo and Alloy get a profile nobody enables and 0 replicas, so they do not run; the web client no longer waits for them;
+- MAS, the agent and the knowledge store get `OTEL_SDK_DISABLED=true` and `OTEL_ENABLED=false`: they export no trace and log no export error;
+- the web client gets `HORUS_MONITORING=off`, and its logs, metrics and traces pages say "Monitoring is off on this install" and how to turn it on, instead of an error.
+
+The installer applies a changed `HORUS_MONITORING` on the next `--start` or `--restart`, `--ai mock` and `--ai local` apply it too, and `--ai status` shows it. When it turns monitoring off it first stops the four services, since Compose leaves running a service its files no longer start. `--uninstall` offers their volumes and prints the command that deletes their images.
+
 ---
 
 ### Stack overview
@@ -439,6 +447,17 @@ In Docker Compose, `OTEL_EXPORTER_OTLP_ENDPOINT` points at the `tempo` service, 
 #### Agent and Knowledge Store
 
 Follow the same `OTEL_*` pattern as in Compose for each service; see service-specific env blocks in `docker-compose.yml`.
+
+#### Models and monitoring (mock AI mode)
+
+| Variable | Read by | Default | Meaning |
+|---|---|---|---|
+| `HORUS_MONITORING` | the installer, MAS (`/system/ai`), the web client | off in mock mode, on in local mode | `on` or `off`: whether Prometheus, Loki, Tempo and Alloy run and the services send traces. |
+| `MAS_EMBED_URL`, `MAS_EMBED_MODEL` | MAS | unset; the MiniLM id | An OpenAI-compatible embeddings server (`POST <url>/embeddings`, 384 values per vector) instead of FastEmbed in MAS. |
+| `KNOWLEDGE_STORE_EMBED_URL`, `KNOWLEDGE_STORE_EMBED_MODEL` | the knowledge store | unset; the bge-base id | The same for the knowledge store (768 values). Setting or clearing the URL, or naming another model, re-embeds the stored documents at the next start; a new URL for the same model does not. |
+| `HORUS_SPACY` | the knowledge store, the agent, MAS (`/system/ai`) | `on` | `off` turns spaCy off: entities, topics and summaries come from regular expressions. |
+
+[`docker-compose.mock.yml`](../src/infra/docker-compose.mock.yml) sets the embeddings URLs to `http://llm-mock:8080/v1` with the model `horus-mock`, and `HORUS_SPACY=off`.
 
 ---
 

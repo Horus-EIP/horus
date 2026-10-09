@@ -8,13 +8,28 @@ from prometheus_client import make_asgi_app
 
 from app.api.routes import ROUTERS
 from app.api.routes.corpus import cancel_startup_check, schedule_startup_check
-from app.chroma_db.setup import EMBED_MODEL
+from app.chroma_db.setup import EMBED_MODEL, EMBED_URL
 from app.core.logging import get_logger
 from app.core.metrics import set_system_info
 from app.core.middleware import CorrelationIDMiddleware
 from app.core.version import HORUS_VERSION
+from app.services.content_analyzer import spacy_is_off
 
 logger = get_logger("main")
+TRACES_OFF_VALUES = frozenset({"1", "true", "yes"})
+
+
+def mock_ai_warning() -> str:
+    parts = ["the answers built on this knowledge store are simulated by llm-mock"]
+    if EMBED_URL:
+        parts.append("llm-mock computes its embeddings from the words of each text, so search "
+                     "is word matching")
+    if spacy_is_off():
+        parts.append("spaCy is off, so entities, topics and summaries come from regular "
+                     "expressions")
+    if os.getenv("OTEL_SDK_DISABLED", "").strip().lower() in TRACES_OFF_VALUES:
+        parts.append("monitoring is off, so it exports no trace")
+    return "Mock AI mode: " + "; ".join(parts)
 
 
 @asynccontextmanager
@@ -29,11 +44,7 @@ async def lifespan(app: FastAPI):
         },
     )
     if os.getenv("HORUS_AI_MODE", "").strip().lower() == "mock":
-        logger.warning(
-            "Mock AI mode: the answers built on this knowledge store are simulated by "
-            "llm-mock, not written by a language model; search and indexing are real",
-            extra={"type": "startup"},
-        )
+        logger.warning(mock_ai_warning(), extra={"type": "startup"})
     schedule_startup_check()
     yield
     cancel_startup_check()

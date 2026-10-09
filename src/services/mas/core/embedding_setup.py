@@ -46,8 +46,12 @@ def embed_threads() -> int | None:
     return None
 
 
+def server_model() -> str:
+    return os.environ.get(EMBED_MODEL_ENV, "").strip() or EMBED_MODEL_ID
+
+
 def _connect_to_embeddings_server(url: str) -> EmbeddingsClient:
-    model = os.environ.get(EMBED_MODEL_ENV, "").strip() or EMBED_MODEL_ID
+    model = server_model()
     client = EmbeddingsClient(url, model, SERVER_DIMENSIONS)
     logger.info(
         "Embeddings come from %s with the model %s, %d values per vector: "

@@ -126,7 +126,7 @@ class MockOverlay(unittest.TestCase):
         for name in SPACY_SERVICES:
             with self.subTest(f"base {name}"):
                 self.assertEqual(default_of(environment(self.base[name])["HORUS_SPACY"]), "on")
-        self.assertNotIn("HORUS_SPACY", environment(self.mock["mas"]))
+        self.assertEqual(environment(self.mock["mas"])["HORUS_SPACY"], "off")
 
     def test_the_knowledge_store_waits_for_llm_mock_before_it_embeds(self):
         self.assertEqual(self.mock["knowledge_store"]["depends_on"],

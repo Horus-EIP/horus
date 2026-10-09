@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { systemApi, type AiMode } from "@/lib/system/api";
 
 export const MOCK_BANNER_TEXT =
-  "answers are assembled from your documents without a language model. They are simulated: use them to test Horus, not to judge its answers.";
+  "no AI model runs. Answers and search are simulated from the words of your documents.";
 
 export function AiModeBanner() {
   const [mode, setMode] = useState<AiMode | null>(null);

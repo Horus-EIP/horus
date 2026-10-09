@@ -131,8 +131,9 @@ def serve(settings: Settings, host: str = "0.0.0.0", port: int = DEFAULT_PORT) -
     server = MockServer((host, port), settings)
     logger.warning(
         "Mock AI mode: llm-mock answers every language-model call with simulated, "
-        "deterministic text (scenario %s, latency %d ms, model %s). Answers are not "
-        "produced by a language model.",
+        "deterministic text and computes embeddings from the words of each text "
+        "(scenario %s, latency %d ms, model %s). No AI model runs: answers and search "
+        "are simulated.",
         settings.scenario, settings.latency_ms, settings.model,
     )
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))

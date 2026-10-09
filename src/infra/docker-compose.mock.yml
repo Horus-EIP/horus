@@ -13,6 +13,7 @@ services:
       - LLM_VLLM_MODEL=horus-mock
       - MAS_EMBED_URL=http://llm-mock:8080/v1
       - MAS_EMBED_MODEL=horus-mock
+      - HORUS_SPACY=off
     depends_on:
       llm:
         condition: service_healthy

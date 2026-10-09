@@ -35,6 +35,23 @@ class TestMainApp:
             warnings = [r for r in caplog.records if "Mock AI mode" in r.getMessage()]
             assert len(warnings) == warned, mode
 
+    def test_the_mock_warning_says_what_is_faked_and_what_is_off(self, monkeypatch):
+        import app.main as main  # noqa: PLC0415
+
+        monkeypatch.setattr(main, "EMBED_URL", "http://llm-mock:8080/v1")
+        monkeypatch.setenv("HORUS_SPACY", "off")
+        monkeypatch.setenv("OTEL_SDK_DISABLED", "true")
+        text = main.mock_ai_warning()
+        assert text.startswith("Mock AI mode: the answers built on this knowledge store")
+        assert "search is word matching" in text
+        assert "spaCy is off" in text
+        assert "exports no trace" in text
+        monkeypatch.setattr(main, "EMBED_URL", "")
+        monkeypatch.delenv("HORUS_SPACY")
+        monkeypatch.delenv("OTEL_SDK_DISABLED")
+        assert main.mock_ai_warning() == (
+            "Mock AI mode: the answers built on this knowledge store are simulated by llm-mock")
+
     def test_openapi_reports_the_release_version(self):
         from app.main import app  # noqa: PLC0415
 

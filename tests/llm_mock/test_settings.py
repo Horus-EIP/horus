@@ -61,6 +61,8 @@ def test_serve_logs_one_warning_and_closes_the_server(caplog):
     warnings = [record for record in caplog.records if record.levelno == logging.WARNING]
     assert len(warnings) == 1
     assert "Mock AI mode" in warnings[0].getMessage()
+    assert "computes embeddings from the words of each text" in warnings[0].getMessage()
+    assert "No AI model runs" in warnings[0].getMessage()
     assert handler.call_args[0][0] == signal.SIGTERM
     with pytest.raises(SystemExit):
         handler.call_args[0][1](signal.SIGTERM, None)

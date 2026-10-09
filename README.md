@@ -69,13 +69,14 @@ docker compose up --build
 
 Without a GPU the stack needs the CPU overlay (`docker-compose.cpu.yml`) and the CPU settings in `.env`: the model server URL `http://llm:8080/v1`, longer timeouts and a context size. The installer writes them; `python installer/horus_install.py --dry-run` prints them. The model file is listed in [`models/manifest.json`](models/manifest.json): the installer downloads it into `models/`, and without the installer the one-shot `llm-model` service fetches it ([the CPU model server](docs/operations.md#the-cpu-model-server)). See also [docs/getting-started.md](docs/getting-started.md) and [docs/operations.md](docs/operations.md#local-deployment-with-docker).
 
-### Mock AI mode: Horus without a language model
+### Mock AI mode: Horus without any AI model
 
-On a machine that cannot run the model, or to test everything but the AI, Horus can run in mock AI mode. A small server, `llm-mock`, takes the place of the model server and answers from the documents the knowledge store retrieved, with their sources, or says it does not have the information. No AI model runs at all: the embeddings come from the words of each text, so search is word matching, and spaCy is off. Sign-in, tasks and the rest are real, but **the answers and the search are simulated**: never judge Horus's answers by them. The web client shows a banner and a **Simulated** badge on each answer, and the desktop app shows `AI: Mock`.
+On a machine that cannot run the models, for a demo, or to test everything but the AI, Horus can run in mock AI mode. No AI model runs at all. A small server, `llm-mock`, takes the place of the model server: it answers from the documents the knowledge store retrieved, with their sources, or says it does not have the information, and it computes the embeddings MAS and the knowledge store search with from the words of each text, so search is word matching. spaCy is off, and so is monitoring (Prometheus, Loki, Tempo, Alloy) unless `HORUS_MONITORING=on`. Sign-in, tasks and the rest are real, but **the answers and the search are simulated**: never judge Horus's answers or search by them. The web client shows a banner and a **Simulated** badge on each answer, and the desktop app shows `AI: Mock`.
 
-- Switch an install: run your START-HERE file with `--ai mock`, `--ai local` or `--ai status`. A switch restarts Horus, runs the smoke test and rolls back if it fails.
+- Switch an install: run your START-HERE file with `--ai mock`, `--ai local` or `--ai status`. A switch says how many documents it will re-embed, asks first above 100, restarts Horus, waits for the re-embedding, runs the smoke test and rolls back if it fails.
 - Install in mock mode: `--profile mock`. On a machine under the minimum, an interactive install offers it.
-- By hand: add `docker-compose.mock.yml` after `docker-compose.cpu.yml` in `COMPOSE_FILE`.
+- By hand: add `docker-compose.mock.yml` after `docker-compose.cpu.yml` in `COMPOSE_FILE`, then `docker-compose.monitoring-off.yml` to turn monitoring off.
+- Settings: `HORUS_MONITORING`, and the ones the mock overlay sets (`MAS_EMBED_URL`, `KNOWLEDGE_STORE_EMBED_URL` and their `_MODEL`, `HORUS_SPACY`), which a local install can use too; see `src/infra/.env.example`.
 
 CI runs the whole stack this way on every push (`e2e-mock`). How it works and its settings: [docs/mock-ai.md](docs/mock-ai.md) and [ADR-008](docs/adr/ADR-008-mock-ai-mode.md).
 

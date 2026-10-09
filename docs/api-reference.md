@@ -61,6 +61,12 @@ The Compose healthcheck of `mas` uses `POST /rabbitmq/heartbeat` instead, becaus
 
 Which AI answers: a language model or the mock model server of [mock AI mode](mock-ai.md). MAS asks the model server for `GET /v1/models` when it starts and keeps the answer; while the server could not be asked, every call asks again. `mode` is `mock` when the server says `owned_by: "horus-mock"`, `local` for any other server (or for the in-process backend), `unknown` when it could not be asked. The web client reads it to show its mock-mode banner. No address or secret.
 
+The other models of the stack:
+
+- `embeddings`: `mock` when MAS's embeddings server (`MAS_EMBED_URL`) is `llm-mock`, by the same `owned_by` rule; otherwise the model MAS embeds with (`sentence-transformers/all-MiniLM-L6-v2` with FastEmbed); `null` while that server cannot be asked.
+- `spacy`: `off` or `on`, from `HORUS_SPACY`. Each service picks its own spaCy model when it is on, so the field does not name one.
+- `monitoring`: `on` or `off`, from `HORUS_MONITORING`.
+
 **Auth:** None
 
 **Response 200:**
@@ -70,7 +76,10 @@ Which AI answers: a language model or the mock model server of [mock AI mode](mo
   "mode": "mock",
   "model": "horus-mock",
   "server": "horus-mock",
-  "simulated": true
+  "simulated": true,
+  "embeddings": "mock",
+  "spacy": "off",
+  "monitoring": "off"
 }
 ```
 
@@ -1961,11 +1970,14 @@ List all documents currently indexed in the knowledge store, one entry per docum
       "excerpt": "First ~400 characters of extracted text...",
       "category": "general",
       "document_type": "unknown",
-      "confidence_score": 0.85
+      "confidence_score": 0.85,
+      "chunk_count": 3
     }
   ]
 }
 ```
+
+`chunk_count` is the number of passages the document was split into; a document stored whole by an older version has none. The installer sums it to say how long a switch of [mock AI mode](mock-ai.md) will re-embed.
 
 **Errors:**
 

@@ -87,8 +87,10 @@ class MonitoringOffOverlay(unittest.TestCase):
                 self.assertEqual(env["OTEL_SDK_DISABLED"], "true")
                 self.assertEqual(env["OTEL_ENABLED"], "false")
 
-    def test_the_web_client_is_told_monitoring_is_off(self):
-        self.assertEqual(environment(self.off["web-client"])["HORUS_MONITORING"], "off")
+    def test_the_web_client_and_mas_are_told_monitoring_is_off(self):
+        for name in ("web-client", "mas"):
+            with self.subTest(name):
+                self.assertEqual(environment(self.off[name])["HORUS_MONITORING"], "off")
         self.assertNotIn("HORUS_MONITORING", environment(self.base["web-client"]))
         reader = (WEB_CLIENT / "lib" / "server" / "monitoring.ts").read_text(encoding="utf-8")
         self.assertIn("process.env.HORUS_MONITORING", reader)

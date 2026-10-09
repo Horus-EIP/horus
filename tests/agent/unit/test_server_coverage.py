@@ -697,6 +697,17 @@ class TestLifespan:
         assert len(warnings) == warned
         assert all(r.levelname == "WARNING" for r in warnings)
 
+    def test_the_mock_warning_says_what_is_off(self, monkeypatch):
+        monkeypatch.setenv("HORUS_SPACY", "off")
+        monkeypatch.setenv("OTEL_SDK_DISABLED", "true")
+        text = server.mock_ai_warning()
+        assert "llm-mock answers this agent's model calls" in text
+        assert "spaCy is off, so payments are extracted with regular expressions" in text
+        assert "the agent exports no trace" in text
+        monkeypatch.delenv("HORUS_SPACY")
+        monkeypatch.delenv("OTEL_SDK_DISABLED")
+        assert "spaCy" not in server.mock_ai_warning()
+
 
 # --------------------------------------------------------------------------- #
 # HTTP endpoints

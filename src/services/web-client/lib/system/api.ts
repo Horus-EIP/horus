@@ -5,6 +5,9 @@ export interface AiMode {
   model: string | null;
   server: string | null;
   simulated: boolean;
+  embeddings?: string | null;
+  spacy?: "on" | "off";
+  monitoring?: "on" | "off";
 }
 
 export interface SystemResponse<T> {

@@ -650,10 +650,12 @@ MONITORING_SERVICES = ("loki", "alloy", "tempo", "prometheus")
 MONITORING_ON = frozenset({"on", "1", "true", "yes"})
 MONITORING_OFF = frozenset({"off", "0", "false", "no"})
 SIMULATED_ANSWERS = (
-    "Mock AI mode: every service runs except the language model. llm-mock answers "
-    "in its place with sentences taken from your documents, with their sources, "
-    "or says it does not have the information. The answers are simulated: use "
-    f"this mode to test Horus, not to judge its answers ({MOCK_DOC})."
+    "Mock AI mode: no AI model runs. llm-mock answers in place of the language model "
+    "with sentences taken from your documents, with their sources, or says it does "
+    "not have the information, and it computes the embeddings from the words of each "
+    "text, so search is word matching. spaCy is off, and so is monitoring unless "
+    f"{MONITORING_KEY}=on. The answers and the search are simulated: use this mode to "
+    f"test Horus, not to judge its answers ({MOCK_DOC})."
 )
 MOCK_OFFER = (
     "Mock AI mode still fits this machine: it needs no model. "
@@ -710,7 +712,10 @@ _add(Profile(
         SIMULATED_ANSWERS,
         "It runs the CPU images with docker-compose.mock.yml on top of the CPU "
         "overlay: llm-mock replaces llm and llm-model, and no model is downloaded. "
-        "Search is real: the embeddings and spaCy run as on every profile.",
+        "No model runs: MAS and the knowledge store take their embeddings from "
+        "llm-mock (word matching, so a synonym finds nothing), the knowledge store and "
+        "the agent extract with regular expressions instead of spaCy, and switching "
+        "modes re-embeds the stored documents.",
         "The web client shows a banner on every page and a Simulated badge on "
         "each answer, and the desktop app shows AI: Mock.",
         "Switch an install with --ai local or --ai mock; --ai status says which "
