@@ -15,10 +15,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import hardware  # noqa: E402
 import horus_install  # noqa: E402
 import profiles  # noqa: E402
+import reindex  # noqa: E402
 import smoke  # noqa: E402
 import unsupported  # noqa: E402
 from common import (  # noqa: E402
     EVENT_PREFIX,
+    EXIT_CONSENT_CANCELLED,
     EXIT_ENV_WRITE_FAILED,
     EXIT_OK,
     EXIT_PROFILE_UNKNOWN,
@@ -210,6 +212,10 @@ class InstalledStack(unittest.TestCase):
         stack.enter_context(mock.patch.object(
             horus_install, "stop_services",
             side_effect=lambda log, infra, names: self.stopped.append((names, self.compose_file()))))
+        self.corpus: reindex.Corpus | None = reindex.Corpus(0, 0)
+        stack.enter_context(mock.patch.object(reindex, "stored_corpus",
+                                              side_effect=lambda ks: self.corpus))
+        self.followed = stack.enter_context(mock.patch.object(reindex, "follow"))
         self.log = Log(self.tmp / "log.txt", events=Events(True, self.events))
         self.addCleanup(self.log.close, 0)
 
@@ -358,6 +364,157 @@ class SwitchToMock(InstalledStack):
         start.assert_not_called()
         self.assertEqual(self.stopped, [])
         self.assertIn("already mock", self.out.getvalue())
+
+
+class ReembedOnASwitch(InstalledStack):
+    ORIGINAL = f"COMPOSE_FILE={CPU_FILES}\n"
+    LARGE = reindex.Corpus(reindex.ASK_ABOVE_DOCUMENTS + 50, 2000)
+
+    def mock_switch(self, *argv: str, answer: str | None = None, tty: bool = True):
+        self.write(self.ORIGINAL)
+        with mock.patch.object(horus_install, "start_and_check", return_value=EXPECT_MOCK) as start, \
+                mock.patch.object(horus_install, "interactive_terminal", return_value=tty), \
+                mock.patch("builtins.input", return_value=answer) as asked:
+            code = self.ai("mock", *argv)
+        return code, start, asked
+
+    def test_mock_says_how_many_documents_it_re_embeds_then_switches(self):
+        self.corpus = reindex.Corpus(5, 22)
+        code, start, asked = self.mock_switch()
+        self.assertEqual(code, EXIT_OK)
+        text = " ".join(self.out.getvalue().split())
+        self.assertIn("holds 5 documents (22 passages)", text)
+        self.assertIn("Switching back to local later re-embeds them", text)
+        asked.assert_not_called()
+        start.assert_called_once()
+
+    def test_a_large_corpus_asks_first_and_no_changes_nothing(self):
+        self.corpus = self.LARGE
+        code, start, asked = self.mock_switch(answer="n")
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn(f"Re-embed the {self.LARGE.documents} documents", asked.call_args.args[0])
+        start.assert_not_called()
+        self.assertEqual(self.env(), self.ORIGINAL)
+        self.assertEqual(self.stopped, [])
+        self.assertFalse(list(self.infra.glob(".env.bak.*")))
+        self.assertIn("Nothing changed.", self.out.getvalue())
+
+    def test_a_large_corpus_switches_on_a_yes_or_with_yes(self):
+        self.corpus = self.LARGE
+        code, start, _asked = self.mock_switch(answer="y")
+        self.assertEqual(code, EXIT_OK)
+        start.assert_called_once()
+        code, start, asked = self.mock_switch("--yes", tty=False)
+        self.assertEqual(code, EXIT_OK)
+        asked.assert_not_called()
+        start.assert_called_once()
+
+    def test_a_large_corpus_without_a_terminal_or_with_non_interactive_needs_yes(self):
+        self.corpus = self.LARGE
+        for argv, tty in ((("--non-interactive",), True), ((), False)):
+            with self.subTest(argv=argv, tty=tty), self.assertRaises(InstallError) as caught:
+                self.mock_switch(*argv, tty=tty)
+            self.assertEqual(caught.exception.code, EXIT_CONSENT_CANCELLED)
+            self.assertIn("--yes", caught.exception.fix)
+            self.assertEqual(self.env(), self.ORIGINAL)
+
+    def test_a_knowledge_store_that_cannot_say_how_much_it_holds_asks_first(self):
+        self.corpus = None
+        code, start, asked = self.mock_switch(answer="n")
+        self.assertEqual(code, EXIT_OK)
+        self.assertIn("Re-embed the stored documents", asked.call_args.args[0])
+        start.assert_not_called()
+        with self.assertRaises(InstallError) as caught:
+            self.mock_switch("--non-interactive", tty=False)
+        self.assertIn("did not say how many documents", caught.exception.detail)
+        code, start, asked = self.mock_switch("--yes", tty=False)
+        start.assert_called_once()
+
+    def test_local_asks_before_it_downloads_the_model(self):
+        self.corpus = self.LARGE
+        self.write(f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_AI_MODE=mock\n")
+        with mock.patch.object(horus_install.hardware, "probe", side_effect=lambda *a, **k: big_machine()), \
+                mock.patch.object(horus_install.preflight, "run_install_checks"), \
+                mock.patch.object(horus_install, "plan_model", return_value=FakePlan()) as plan, \
+                mock.patch.object(horus_install, "download_model") as download, \
+                mock.patch.object(horus_install, "start_and_check") as start, \
+                mock.patch.object(horus_install, "interactive_terminal", return_value=True), \
+                mock.patch("builtins.input", return_value=""):
+            self.assertEqual(self.ai("local"), EXIT_OK)
+        plan.assert_not_called()
+        download.assert_not_called()
+        start.assert_not_called()
+        self.assertIn("On the processor that takes", " ".join(self.out.getvalue().split()))
+        self.assertEqual(self.compose_file(), LEAN_MOCK_FILES)
+
+
+class WaitingForTheReindex(InstalledStack):
+    def start(self, env: str, *argv: str) -> list[str]:
+        self.write(env)
+        order: list[str] = []
+        args = horus_install.build_parser().parse_args(["--ai", "mock", *argv])
+        self.followed.side_effect = lambda *a, **k: order.append("reindex")
+        with mock.patch.object(horus_install, "up_waiting_out_a_dependency_abort",
+                               side_effect=lambda *a: order.append("up") or (["up", "-d"], 0)), \
+                mock.patch.object(horus_install, "wait_for_health",
+                                  side_effect=lambda *a, **k: order.append("health")), \
+                mock.patch.object(horus_install.smoke, "run",
+                                  side_effect=lambda *a, **k: order.append("smoke") or {"passed": True}):
+            horus_install.start_and_check(self.log, args, self.repo, self.infra, False, True)
+        return order
+
+    def test_the_smoke_test_waits_for_the_reindex(self):
+        self.corpus = reindex.Corpus(400, 60_000)
+        order = self.start(f"COMPOSE_FILE={MOCK_FILES}\nCORPUS_SCAN_TOKEN=tok\n")
+        self.assertEqual(order, ["up", "health", "reindex", "smoke"])
+        call = self.followed.call_args
+        self.assertEqual(call.args[1:], (smoke.DEFAULT_BASE_URLS["ks"], "tok"))
+        self.assertEqual({key: call.kwargs[key] for key in ("start_now", "may_start", "startup")},
+                         {"start_now": False, "may_start": True, "startup": True})
+        self.assertEqual(call.kwargs["wait_seconds"], reindex.patience(self.corpus))
+
+    def test_with_the_startup_reindex_off_the_installer_runs_it(self):
+        self.start(f"COMPOSE_FILE={MOCK_FILES}\nCORPUS_SCAN_TOKEN=tok\n"
+                   "KNOWLEDGE_STORE_REINDEX_ON_STARTUP=0\n")
+        self.assertIs(self.followed.call_args.kwargs["start_now"], True)
+        self.assertIs(self.followed.call_args.kwargs["startup"], False)
+
+    def test_an_install_only_watches_and_skips_it_when_the_startup_reindex_is_off(self):
+        self.write("CORPUS_SCAN_TOKEN=tok\n")
+        horus_install.wait_for_reindex(self.log, self.infra, may_start=False)
+        self.assertEqual({key: self.followed.call_args.kwargs[key] for key in ("start_now", "may_start")},
+                         {"start_now": False, "may_start": False})
+        self.followed.reset_mock()
+        self.write("CORPUS_SCAN_TOKEN=tok\nKNOWLEDGE_STORE_REINDEX_ON_STARTUP=0\n")
+        horus_install.wait_for_reindex(self.log, self.infra, may_start=False)
+        self.followed.assert_not_called()
+
+    def test_skipping_the_smoke_test_still_waits(self):
+        order = self.start(f"COMPOSE_FILE={MOCK_FILES}\nCORPUS_SCAN_TOKEN=tok\n", "--skip-smoke")
+        self.assertEqual(order, ["up", "health", "reindex"])
+
+    def test_without_the_token_it_says_so_and_goes_on(self):
+        order = self.start(f"COMPOSE_FILE={MOCK_FILES}\n")
+        self.assertEqual(order, ["up", "health", "smoke"])
+        self.assertIn("CORPUS_SCAN_TOKEN is not in src/infra/.env", " ".join(self.out.getvalue().split()))
+
+    def test_a_rollback_waits_for_the_reindex_back(self):
+        self.write(f"COMPOSE_FILE={CPU_FILES}\nCORPUS_SCAN_TOKEN=tok\n")
+        failure = InstallError(EXIT_SMOKE_FAILED, "The smoke test did not pass.")
+        with mock.patch.object(horus_install, "start_and_check", side_effect=failure), \
+                mock.patch.object(horus_install, "up_waiting_out_a_dependency_abort",
+                                  return_value=(["up", "-d"], 0)), \
+                mock.patch.object(horus_install, "wait_for_health"), \
+                self.assertRaises(InstallError):
+            self.ai("mock")
+        self.followed.assert_called_once()
+        self.assertEqual(self.compose_file(), CPU_FILES)
+
+    def test_the_install_waits_too(self):
+        source = inspect.getsource(horus_install._dispatch)
+        wait = source.index("wait_for_reindex(log, infra, may_start=False)")
+        self.assertLess(source.index("wait_for_health(log, infra, expect"), wait)
+        self.assertLess(wait, source.index("smoke.run("))
 
 
 class FakePlan:

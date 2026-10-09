@@ -23,12 +23,14 @@ import images  # noqa: E402
 import model_manager  # noqa: E402
 import preflight  # noqa: E402
 import profiles  # noqa: E402
+import reindex  # noqa: E402
 import smoke  # noqa: E402
 import unsupported  # noqa: E402
 from common import (  # noqa: E402
     BUNDLE_DIR,
     EXIT_COMPOSE_PULL_FAILED,
     EXIT_COMPOSE_UP_FAILED,
+    EXIT_CONSENT_CANCELLED,
     EXIT_ENV_WRITE_FAILED,
     EXIT_HEALTH_TIMEOUT,
     EXIT_INTERRUPTED,
@@ -1429,6 +1431,48 @@ def model_servers_left_behind(infra: Path, compose_file: str) -> list[str]:
         return []
     return [server for server in old if server not in new]
 
+def agrees_to_reembed(log: Log, args, corpus: reindex.Corpus | None) -> bool:
+    if not reindex.needs_confirmation(corpus) or args.yes:
+        return True
+    documents = f"the {corpus.documents} documents" if corpus else "the stored documents"
+    if args.non_interactive or not interactive_terminal():
+        raise InstallError(
+            EXIT_CONSENT_CANCELLED,
+            f"The switch would re-embed {documents}, so it asks first. Nothing changed.",
+            (f"More than {reindex.ASK_ABOVE_DOCUMENTS} documents are stored"
+             if corpus else "The knowledge store did not say how many documents it holds")
+            + ", and this terminal cannot answer.",
+            "Run it again with --yes to switch without the question.",
+        )
+    try:
+        answer = input(f"  Re-embed {documents} and switch? [y/N]: ")
+    except (EOFError, KeyboardInterrupt):
+        answer = ""
+    return answer.strip().lower() in ("y", "yes")
+
+def corpus_ready_to_switch(log: Log, args, towards_local: bool) -> bool:
+    corpus = reindex.stored_corpus(smoke.DEFAULT_BASE_URLS["ks"])
+    reindex.announce(log, corpus, towards_local)
+    if agrees_to_reembed(log, args, corpus):
+        return True
+    log.ok("Nothing changed.")
+    return False
+
+def wait_for_reindex(log: Log, infra: Path, may_start: bool = True) -> None:
+    startup = reindex.runs_at_start(env_line_value(infra, reindex.STARTUP_KEY))
+    if not may_start and not startup:
+        return
+    token = env_line_value(infra, reindex.TOKEN_KEY)
+    if not token:
+        log.warn(f"{reindex.TOKEN_KEY} is not in src/infra/.env, so the installer cannot "
+                 "follow the knowledge store's re-index; the smoke test runs without "
+                 "waiting for it.")
+        return
+    ks = smoke.DEFAULT_BASE_URLS["ks"]
+    log.say("  Waiting for the knowledge store to re-embed the stored documents")
+    reindex.follow(log, ks, token, start_now=may_start and not startup, may_start=may_start,
+                   startup=startup, wait_seconds=reindex.patience(reindex.stored_corpus(ks)))
+
 def start_and_check(log: Log, args, repo: Path, infra: Path, build: bool,
                     require_answer_quality: bool) -> list[str]:
     if installed_from_registry(infra):
@@ -1444,6 +1488,7 @@ def start_and_check(log: Log, args, repo: Path, infra: Path, build: bool,
         )
     expect = expected_services(infra)
     wait_for_health(log, infra, expect, timeout=args.timeout)
+    wait_for_reindex(log, infra)
     if args.skip_smoke:
         log.warn("Smoke test skipped (--skip-smoke). The switch is unverified.")
         return expect
@@ -1493,6 +1538,8 @@ def roll_back_ai_mode(log: Log, args, infra: Path, backup: Path, started: list[s
         wait_for_health(log, infra, expected_services(infra), timeout=args.timeout)
     except InstallError as exc:
         log.warn(f"After the rollback: {exc.headline}")
+        return
+    wait_for_reindex(log, infra)
 
 def switched(log: Log, infra: Path, mode: str, expect: list[str]) -> int:
     log.say("")
@@ -1509,6 +1556,8 @@ def switch_to_mock(log: Log, args, repo: Path, infra: Path, current: str) -> int
         log.say(f"  {line}")
     log.say(f"  Monitoring: {monitoring_word(target)} "
             f"({profiles.MONITORING_KEY}={monitoring_setting(infra) or 'unset, off in mock mode'})")
+    if not corpus_ready_to_switch(log, args, towards_local=False):
+        return EXIT_OK
     backup = _backup_env(log, infra / ".env")
     build = not installed_from_registry(infra) and profiles.CPU_OVERLAY not in current
     started = [profiles.MOCK_MODEL_SERVER, *monitoring_turned_on(current, target)]
@@ -1557,6 +1606,8 @@ def switch_to_local(log: Log, args, repo: Path, infra: Path, current: str) -> in
     preflight.run_install_checks(log, infra, skip_disk_check=args.skip_disk_check,
                                  image_registry=registry,
                                  cpu_profile=profiles.is_cpu_profile(name))
+    if not corpus_ready_to_switch(log, args, towards_local=True):
+        return EXIT_OK
     env = profiles.env_for(name, probe)
     env[COMPOSE_FILE_KEY] = with_wanted_monitoring(log, infra, env[COMPOSE_FILE_KEY],
                                                    separator_of(env[COMPOSE_FILE_KEY]))
@@ -1659,7 +1710,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="how long to wait for services to become healthy (default 1800)")
     p.add_argument("--non-interactive", action="store_true",
                    help="never prompt; use the safe default for every question")
-    p.add_argument("--yes", action="store_true", help="skip the uninstall confirmation")
+    p.add_argument("--yes", action="store_true",
+                   help="answer yes: skip the uninstall confirmation, and the question "
+                        f"--ai asks before re-embedding more than {reindex.ASK_ABOVE_DOCUMENTS} "
+                        "documents")
     p.add_argument("--start", action="store_true",
                    help="start an already-installed stack and wait for it to be "
                         "healthy; no questions, no config changes. Fails with exit "
@@ -1994,6 +2048,7 @@ def _dispatch(log: Log, args) -> int:
 
     expect = [*CORE_SERVICES, profiles.model_server(name)]
     wait_for_health(log, infra, expect, timeout=args.timeout)
+    wait_for_reindex(log, infra, may_start=False)
     admin_outcome = check_admin_account(log, infra)
     shown_password = (env[ADMIN_PASSWORD_KEY] if admin_password_generated
                       and admin_outcome not in ADMIN_NOT_ON_ENV else None)

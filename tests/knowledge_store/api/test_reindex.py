@@ -154,7 +154,10 @@ class TestReindexEndpoint:
         _reindex(client)
 
         listed_after = {doc["id"]: doc for doc in client.get("/file").json()["documents"]}
+        passages = {doc_id: doc.pop("chunk_count") for doc_id, doc in listed_after.items()}
         assert listed_after == listed_before
+        assert all(count >= 1 for count in passages.values())
+        assert passages["policy"] > 1
         assert client.get("/file/policy/text").json()["text"] == LONG_POLICY
 
     def test_the_status_is_idle_before_any_run(self, client):

@@ -290,6 +290,7 @@ def _listed(document: StoredDocument, text: str) -> dict:
         "category": document_category(meta),
         "document_type": (meta.get("auto_type") or "").strip() or "unknown",
         **({"confidence_score": confidence} if confidence is not None else {}),
+        **({"chunk_count": chunks} if isinstance(chunks := meta.get("chunk_count"), int) else {}),
     }
 
 

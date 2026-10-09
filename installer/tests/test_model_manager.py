@@ -894,6 +894,7 @@ class InstalledStackChecksItsModel(DownloadCase):
                 horus_install, "pull_and_build",
                 side_effect=lambda *args, before_start=None, **kwargs: before_start()))
             patch(mock.patch.object(horus_install, "wait_for_health"))
+            patch(mock.patch.object(horus_install, "wait_for_reindex"))
             patch(mock.patch.object(horus_install, "_success"))
             patch(contextlib.redirect_stdout(out))
             code = horus_install._dispatch(self.log, horus_install.build_parser().parse_args(
