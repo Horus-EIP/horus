@@ -10,7 +10,8 @@ STOPWORDS = frozenset(
     itself just know list many me more most much my no nor not now of off on once only or other
     our ours out over own please same she should show so some such tell than that the their
     them then there these they this those through to too under until up us very was we were
-    what when where which while who whom why will with would you your yours
+    what when where which while who whom why will with would you your yours anything everything
+    something compare compared comparing flag get gets got say says said summarise summarize
     """.split()
 )
 

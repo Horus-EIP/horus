@@ -23,6 +23,9 @@ TEXT_CALLS: dict[str, Handler] = {
     "announce": mas_calls.announce,
     "review": mas_calls.review,
     "aggregate": mas_calls.aggregate,
+    "react_step": agent_calls.react_step,
+    "grounded": agent_calls.grounded,
+    "instruction": agent_calls.instruction,
 }
 JSON_TEXT_CALLS = frozenset({"intent", "plan", "review"})
 
