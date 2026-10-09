@@ -49,11 +49,11 @@ These need their own, stricter tests.
 | 2.7 | **Grounding evaluation** | Answers are correct, cite the right document, and out-of-corpus questions are refused | `tests/eval/testset.yaml` + `scripts/eval/run-eval.py` | Runner against a live stack; results in `benchmarks/` | By hand, before each release (section 6) |
 | 2.8 | **Integration checks** | Two or more real services together (MAS, RabbitMQ, Postgres, agent, knowledge store) | `scripts/integration-checks/` (20 files) | pytest or python, against a live stack | By hand. Not in CI (section 7) |
 | 2.9 | **MAS client scripts** | Manual calls to a running MAS on `localhost:8000` | `tests/mas/client_tests/` | python | By hand. pytest does not collect them (file names start with `client_`) |
-| 2.10 | **End-to-end smoke** | Knowledge store health, unauthenticated call refused, admin login, token accepted, a worker agent registers, the demo document is ingested, a question about it, the answer is grounded, a negative control question | `installer/smoke.py` (9 steps) | Run by the installer, or `python installer/smoke.py` on a running stack | End of every install (unless `--skip-smoke`); every release candidate on a clean CPU machine and on a GPU machine; every push and pull request on the mock model server (`ci.yml` job `e2e-mock`, [mock AI mode](docs/mock-ai.md)) |
+| 2.10 | **End-to-end smoke** | Knowledge store health, unauthenticated call refused, admin login, token accepted, a worker agent registers, the demo document is ingested, a question about it, the answer is grounded, a negative control question | `installer/smoke.py` (9 steps) | Run by the installer, or `python installer/smoke.py` on a running stack | End of every install (unless `--skip-smoke`); every release candidate on a clean CPU machine and on a GPU machine; every push and pull request with no model at all (`ci.yml` job `e2e-mock`, [mock AI mode](docs/mock-ai.md)) |
 | 2.11 | **Acceptance (manual)** | Real users following written scenarios | `docs/eip_pool_tek5/Horus_ATP_v7.xlsx` (37 scenarios, F1 to F37) | Testers and the results sheet | Before each beta or MINOR release |
 | 2.12 | **Performance and load** | Latency, throughput, retrieval quality, llama.cpp speed | `scripts/perf/` (locust, benchmarks), `scripts/benchmarks/` | locust, Python scripts | Before a MINOR release, and after a performance change. See `scripts/perf/README.md` and `benchmarks/README.md` |
 | 2.13 | **Static checks** | Lint, import order, likely bugs | Repo-wide | ruff 0.16.6 (CI), pre-commit (ruff `--fix`, `ruff-format`, docstring length), bandit (by hand) | ruff in CI; the last bandit report is `greenlight/code-quality-review/bandit_report.txt` (31/05/2026) |
-| 2.14 | **Model contract** | Every structured reply valid against its schema, no factual question answered directly (F20), answers cite a source, out-of-corpus questions refused, on the requests MAS and the agent really send | `tests/contract/` | pytest | CI on the mock (`test-llm-mock`); by hand on a real model (`-m real_llm`) |
+| 2.14 | **Model contract** | Every structured reply valid against its schema, no factual question answered directly (F20), answers cite a source, out-of-corpus questions refused, on the requests MAS and the agent really send; on the embeddings requests MAS and the knowledge store send, one vector per text at the size the service needs, the same vector for the same text, and each question closest to a passage of the document that answers it | `tests/contract/` | pytest | CI on the mock (`test-llm-mock`); by hand on a real model (`-m real_llm`) and on real embeddings servers (`-m real_embeddings`) |
 
 **What counts as a regression test:** any test written *because a bug happened* (section 4). It can be of any type above.
 
@@ -126,7 +126,8 @@ These are the markers registered today. Register a new one in the service's `pyt
 |---|---|---|---|
 | *(none)* | | Unit or API test: fast, no external service | Yes |
 | `regression` | `tests/mas/pytest.ini` | Written for a past bug; the ATP id is in the name. Used by 4 MAS tests | Yes |
-| `requires_model` | `tests/mas/pytest.ini` | Needs the MiniLM embedder on disk; skipped when it is missing, never downloads it. Used by `tests/mas/unit/test_router_model.py` | Skipped there |
+| `requires_model` | MAS and knowledge-store `pytest.ini` | Needs a real embedding model on disk and never downloads it. MAS: the MiniLM embedder, for `tests/mas/unit/test_router_model.py`, skipped when it is missing. Knowledge store: BGE through FastEmbed, for `tests/knowledge_store/unit/test_real_fastembed.py`; `HORUS_REQUIRE_MODEL_TESTS=1` turns a missing model into a failure | MAS: skipped. Knowledge store: runs (the job downloads BGE and sets `HORUS_REQUIRE_MODEL_TESTS=1`) |
+| `real_llm`, `real_embeddings` | `tests/contract/pytest.ini` | Run the model contract on a real model server or on real embeddings servers (the `HORUS_CONTRACT_*` URLs) | No: deselected by default; run by hand with `-m real_llm` or `-m real_embeddings` |
 | `requires_stack` | MAS, agent and knowledge-store `pytest.ini` | Needs the live Docker stack. No test uses it yet | The MAS job deselects it (`-m "not requires_stack"`) |
 
 `regression` is registered for MAS only, so `pytest -m regression` finds MAS tests only. The agent's F25 test (`tests/agent/unit/test_consumers_coverage.py::TestResolveAttachedFiles::test_knowledge_store_ref_with_doc_id_is_resolved_by_its_doc_id`) is not marked.
@@ -277,11 +278,11 @@ The plan is to turn the critical ones into tests under `tests/<service>/` marked
 | `cpu-images` | Builds the mas, agent and knowledge-store images through the CPU overlay; fails on any CUDA package or torch (`scripts/ci/check-cpu-image.py`) |
 | `test-mas` | MAS tests, `-m "not requires_stack"`, coverage at least 85 % |
 | `test-agent` | Agent tests, coverage at least 90 % |
-| `test-knowledge-store` | Knowledge-store tests, coverage at least 85 % |
+| `test-knowledge-store` | Knowledge-store tests, coverage at least 85 %. It downloads the BGE model first (cached between runs) and sets `HORUS_REQUIRE_MODEL_TESTS=1`, so `tests/knowledge_store/unit/test_real_fastembed.py` runs real search with FastEmbed instead of skipping |
 | `test-installer` | `pytest installer/tests` with coverage, no gate |
 | `test-llm-mock` | `tests/llm_mock`, coverage at least 90 %, then `tests/contract` on the mock |
 | `coverage-summary` | Collects the coverage line of the five test jobs; needs no artifact |
-| `e2e-mock` | Builds the CPU images and `llm-mock`, starts the stack with `docker-compose.mock.yml`, uploads `demo_assets/`, runs `installer/smoke.py` and requires its 9 steps; reports its duration |
+| `e2e-mock` | Builds every image of the stack and starts it with `docker-compose.mock.yml` and `docker-compose.monitoring-off.yml`, so no model runs: `llm-mock` answers and embeds, spaCy and monitoring are off. Uploads `demo_assets/`, runs `installer/smoke.py` and requires its 9 steps, checks that `/system/ai` says mock, mock embeddings, spaCy off and monitoring off, and fails if any service logged a model load (`scripts/ci/no-model-loads.py`); reports its duration |
 
 **`eval-testset.yml`** runs `pytest tests/eval -q` on the same pushes and pull requests, when the evaluation files change (section 2.6).
 
@@ -308,7 +309,7 @@ Details of each job: "CI pipeline" in `docs/operations.md`. The workflow files r
 ## 9. Test data and models
 
 - **Only fictional data:** the five documents in `demo_assets/` and the ATP test accounts. Never real customer documents.
-- **Unit and API tests mock the heavy libraries and the services.** `tests/mas/conftest.py` replaces torch, transformers and bitsandbytes and uses an in-memory SQLite database; fakeredis stands in for Redis and RabbitMQ is mocked. `tests/knowledge_store/conftest.py` replaces spaCy. Real models run only in the evaluation, the integration checks and the smoke test.
+- **Unit and API tests mock the heavy libraries and the services.** `tests/mas/conftest.py` replaces torch, transformers and bitsandbytes and uses an in-memory SQLite database; fakeredis stands in for Redis and RabbitMQ is mocked. `tests/knowledge_store/conftest.py` replaces spaCy, ChromaDB and FastEmbed, except for `unit/test_real_fastembed.py`, which runs the real BGE model in a process of its own. Otherwise real models run only in the evaluation, the integration checks and the smoke test of a real install: CI's smoke test runs with no model.
 - **LLM checks test facts, not wording:**
   - the cited source file name is present
   - the key figures are present (regex patterns, `\b` before numbers)

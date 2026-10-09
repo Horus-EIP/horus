@@ -183,9 +183,9 @@ Under the memory minimum, mock mode is not offered: the screen says it does not 
 | Where | What |
 |---|---|
 | `tests/llm_mock` | The server: determinism, the SSE format, every reply checked with `jsonschema` against the schema sent, MAS's calls built with MAS's own prompt code, the demo-corpus answers, every scenario, and the embeddings (the same vector in two processes, the size asked for, unit length, a passage closer to a question that shares its words). CI job `test-llm-mock`. |
-| `tests/contract` | The same assertions on the mock (in CI) and on a real model server (by hand): valid JSON for every schema, no factual question answered directly, answers cite a source, out-of-corpus questions refused. The requests are the ones MAS and the agent send: `tests/contract/requests/*.json`, which `tests/mas/unit/test_contract_requests.py` and `tests/agent/unit/test_contract_requests.py` keep equal to what the code builds. |
-| `tests/mas`, `tests/knowledge_store`, `tests/agent` | The embeddings client against a local HTTP server, no FastEmbed import when the URL is set, spaCy never imported when it is off (in a fresh process too), and the local path unchanged. |
-| `e2e-mock` (CI) | Builds the CPU images and `llm-mock`, starts the stack with `docker-compose.mock.yml`, uploads `demo_assets/`, runs `installer/smoke.py`, and fails unless its 9 steps pass. |
+| `tests/contract` | The same assertions on the mock (in CI) and on real servers (by hand). Chat: valid JSON for every schema, no factual question answered directly, answers cite a source, out-of-corpus questions refused. Embeddings: one vector per text of the size the service needs (the service's own client agrees on `dimensions`), finite and not all zero, the same vectors for the same texts, and each question closest to a passage of the document that answers it; on the mock, the recorded requests ask for a size only when the mock needs it. The requests are the ones the services send: `tests/contract/requests/*.json`, which the `test_contract_requests.py` of MAS, the agent and the knowledge store keep equal to what the code builds. |
+| `tests/mas`, `tests/knowledge_store`, `tests/agent` | The embeddings client against a local HTTP server, no FastEmbed import when the URL is set, spaCy never imported when it is off (in a fresh process too), and the local path unchanged. Real search keeps one test: `tests/knowledge_store/unit/test_real_fastembed.py` runs the knowledge store's embedding setup with FastEmbed and the real BGE model, in a process of its own, and checks that three demo questions each find a passage of their document. It skips when the model is not in the FastEmbed cache; CI's `test-knowledge-store` downloads the model first and sets `HORUS_REQUIRE_MODEL_TESTS=1`, so there it must run. |
+| `e2e-mock` (CI) | Builds every image of the stack and starts all of it with `docker-compose.mock.yml` and `docker-compose.monitoring-off.yml`, uploads `demo_assets/`, runs `installer/smoke.py`, and fails unless its 9 steps pass, unless `/system/ai` says mock, mock embeddings, spaCy off and monitoring off, and if any service logged a model load (`scripts/ci/no-model-loads.py`). Replayed locally on 09/10/2026 in a cold Docker-in-Docker daemon on the development laptop, it took 8 min 6 s: build 6 min 40 s, start 71 s, smoke 3 s. A second replay of the final job, beside other tests, passed every step in 9 min 36 s. A GitHub runner has fewer cores, so expect it to take longer. |
 
 Running the contract on a real model, for example the GPU stack's vLLM:
 
@@ -200,7 +200,16 @@ First run on a real model, 09/10/2026: Qwen3-4B-Instruct-2507 Q4_K_M on llama-se
 ```bash
 HORUS_UPDATE_CONTRACT_REQUESTS=1 pytest -c tests/mas/pytest.ini tests/mas/unit/test_contract_requests.py
 HORUS_UPDATE_CONTRACT_REQUESTS=1 pytest -c tests/agent/pytest.ini tests/agent/unit/test_contract_requests.py
+HORUS_UPDATE_CONTRACT_REQUESTS=1 pytest -c tests/knowledge_store/pytest.ini tests/knowledge_store/unit/test_contract_requests.py
 ```
+
+The first records MAS's chat requests and its embeddings requests (`mas.json`, `mas_embeddings.json`), the last the knowledge store's (`knowledge_store.json`). The embeddings contract runs on real servers the way the services would use them, one per service, since MAS needs 384 values and the knowledge store 768:
+
+```bash
+HORUS_CONTRACT_MAS_EMBED_URL=http://127.0.0.1:8081/v1 HORUS_CONTRACT_MAS_EMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2 HORUS_CONTRACT_KNOWLEDGE_STORE_EMBED_URL=http://127.0.0.1:8082/v1 HORUS_CONTRACT_KNOWLEDGE_STORE_EMBED_MODEL=BAAI/bge-base-en-v1.5 pytest -c tests/contract/pytest.ini tests/contract -m real_embeddings
+```
+
+A service whose URL is not set is skipped; a `_MODEL` left unset asks for the model the service asks for by default.
 
 ---
 

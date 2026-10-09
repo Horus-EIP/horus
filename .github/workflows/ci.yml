@@ -362,7 +362,21 @@ jobs:
           python scripts/ci/check-cpu-image.py packages.txt \
             --requirements src/services/knowledge-store/requirements.txt
 
+      - name: Cache the BGE model for the real-search test
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/fastembed
+          key: fastembed-bge-base-en-v1.5-${{ hashFiles('src/services/knowledge-store/requirements.txt') }}
+
+      - name: Download the BGE model for the real-search test
+        env:
+          FASTEMBED_CACHE_PATH: ${{ runner.temp }}/fastembed
+        run: python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-base-en-v1.5')"
+
       - name: Run Knowledge Store unit tests with coverage
+        env:
+          FASTEMBED_CACHE_PATH: ${{ runner.temp }}/fastembed
+          HORUS_REQUIRE_MODEL_TESTS: "1"
         run: |
           pytest -c tests/knowledge_store/pytest.ini tests/knowledge_store \
             --cov=src/services/knowledge-store \
@@ -487,10 +501,8 @@ jobs:
                  -e 's/^HORUS_AI_MODE=.*/HORUS_AI_MODE=mock/' .env
           {
             echo
-            echo "COMPOSE_FILE=docker-compose.yml:docker-compose.cpu.yml:docker-compose.mock.yml"
+            echo "COMPOSE_FILE=docker-compose.yml:docker-compose.cpu.yml:docker-compose.mock.yml:docker-compose.monitoring-off.yml"
             echo "HORUS_MOCK_LATENCY_MS=0"
-            echo "KNOWLEDGE_STORE_REINDEX_ON_STARTUP=0"
-            echo "OTEL_SDK_DISABLED=true"
           } >> .env
 
       - name: Compose configuration with and without the mock and monitoring-off overlays
@@ -505,20 +517,18 @@ jobs:
             echo "config passes: $files"
           done
 
-      - name: Build the CPU images and llm-mock
+      - name: Build every image of the stack
         working-directory: src/infra
         run: |
           start=$(date +%s)
-          env -i PATH="$PATH" HOME="$HOME" docker compose --progress plain \
-            build mas agent knowledge_store llm-mock
+          env -i PATH="$PATH" HOME="$HOME" docker compose --progress plain build
           echo "BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
 
-      - name: Start the stack in mock mode
+      - name: Start the whole stack with no model and monitoring off
         working-directory: src/infra
         run: |
           start=$(date +%s)
-          env -i PATH="$PATH" HOME="$HOME" docker compose up -d --wait --wait-timeout 900 \
-            llm-mock mas knowledge_store agent
+          env -i PATH="$PATH" HOME="$HOME" docker compose up -d --wait --wait-timeout 900
           echo "START_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
 
       - name: Upload the demo corpus
@@ -536,10 +546,20 @@ jobs:
       - name: Every smoke step passed, the negative control without a warning
         run: python scripts/ci/smoke-steps.py "$RUNNER_TEMP/smoke-log.txt"
 
-      - name: MAS reports mock mode at /system/ai
+      - name: MAS reports mock mode, mock embeddings, spaCy off and monitoring off at /system/ai
         run: |
           curl -fsS http://127.0.0.1:8000/system/ai | tee "$RUNNER_TEMP/system-ai.json"
-          python -c 'import json, sys; mode = json.load(open(sys.argv[1])); sys.exit(0 if mode["mode"] == "mock" and mode["simulated"] else 1)' "$RUNNER_TEMP/system-ai.json"
+          python -c 'import json, sys; mode = json.load(open(sys.argv[1])); sys.exit(0 if (mode["mode"], mode["simulated"], mode["embeddings"], mode["spacy"], mode["monitoring"]) == ("mock", True, "mock", "off", "off") else 1)' "$RUNNER_TEMP/system-ai.json"
+
+      - name: No service loaded a model
+        working-directory: src/infra
+        run: |
+          mkdir -p "$RUNNER_TEMP/service-logs"
+          for service in $(env -i PATH="$PATH" HOME="$HOME" docker compose config --services); do
+            env -i PATH="$PATH" HOME="$HOME" docker compose logs --no-color --no-log-prefix "$service" \
+              > "$RUNNER_TEMP/service-logs/$service.log"
+          done
+          python ../../scripts/ci/no-model-loads.py "$RUNNER_TEMP/service-logs"
 
       - name: Service logs
         if: failure()
@@ -558,7 +578,7 @@ jobs:
         if: always()
         run: |
           total=$(( $(date +%s) - E2E_START ))
-          echo "End to end on the mock model server: $(( total / 60 )) min $(( total % 60 )) s (build ${BUILD_SECONDS:-?} s, start ${START_SECONDS:-?} s, smoke ${SMOKE_SECONDS:-?} s)" \
+          echo "End to end with no model at all: $(( total / 60 )) min $(( total % 60 )) s (build ${BUILD_SECONDS:-?} s, start ${START_SECONDS:-?} s, smoke ${SMOKE_SECONDS:-?} s)" \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
   # ----------------------------------------------------------------------- #

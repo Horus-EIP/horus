@@ -8,11 +8,27 @@ from unittest.mock import patch
 import pytest
 
 import core.llm_setup as llm_setup
+from core import embedding_setup, skill_cache
+from core.embeddings_client import EmbeddingsClient
 from tasks import prompts
 from tasks.decomposition import INTENT_CALL, PLAN_CALL, REVIEW_CALL
-from tasks.router import RosterAgent, RouterSettings, llm_decision
+from tasks.router import (
+    ExampleIndex,
+    RosterAgent,
+    RouterSettings,
+    embedding_decision,
+    llm_decision,
+    load_router_examples,
+)
 
 REQUESTS = Path(__file__).resolve().parents[2] / "contract" / "requests" / "mas.json"
+EMBEDDING_REQUESTS = REQUESTS.with_name("mas_embeddings.json")
+MOCK_EMBED_URL = "http://llm-mock:8080/v1"
+MOCK_EMBED_MODEL = "horus-mock"
+LLM_MOCK_SIZE = 768
+FINANCE_SKILLS = ["financial_analysis", "quarterly_report_qa", "revenue_breakdown", "expense_review",
+                  "budget_summary", "knowledge_retrieval"]
+SKILL_DEMAND = "Summarise the Q4 2025 revenue by segment"
 UPDATE = os.environ.get("HORUS_UPDATE_CONTRACT_REQUESTS") == "1"
 SERVER_ENV = {
     "LLM_BACKEND": "vllm",
@@ -96,3 +112,60 @@ def test_the_contract_tests_send_what_mas_sends():
                                            ("plan", "plan"), ("review", "review")])
 def test_each_request_names_its_purpose(name, purpose):
     assert {entry["purpose"] for entry in requests_mas_sends() if entry["name"] == name} == {purpose}
+
+
+def sized_like_llm_mock(self, body, timeout=None):
+    size = body.get("dimensions", LLM_MOCK_SIZE)
+    return {"data": [{"index": index, "embedding": [1.0] + [0.0] * (size - 1)}
+                     for index in range(len(body["input"]))]}
+
+
+def embeddings_requests_mas_sends(monkeypatch) -> list[dict]:
+    sent = []
+
+    def post(self, body, timeout=None):
+        sent.append(body)
+        return sized_like_llm_mock(self, body, timeout)
+
+    monkeypatch.setenv(embedding_setup.EMBED_MODEL_ENV, MOCK_EMBED_MODEL)
+    monkeypatch.setattr(EmbeddingsClient, "post", post)
+    client = embedding_setup._connect_to_embeddings_server(MOCK_EMBED_URL)
+    monkeypatch.setattr(embedding_setup, "_embedder", client)
+    monkeypatch.setattr(skill_cache, "_rows", [])
+    entries = []
+
+    def add(name: str, build, **about) -> None:
+        sent.clear()
+        build()
+        entries.extend({"name": name, **about, "size": embedding_setup.SERVER_DIMENSIONS, "body": body}
+                       for body in sent)
+
+    index = ExampleIndex(load_router_examples())
+    roster = [RosterAgent(f"id-{n}", name, description, kind)
+              for n, (name, description, kind) in enumerate(AGENTS)]
+    add("router_examples", index.warm)
+    for question in (*FACTUAL, COMPARISON):
+        add("route", lambda q=question: embedding_decision(q, roster, index, RouterSettings.from_env()),
+            question=question)
+    finance = next(agent for agent in roster if agent.name == "Finance-Analyst")
+    add("skills", lambda: skill_cache._rows.extend(skill_cache._build_rows_for_agent(
+        finance.agent_id, finance.name, FINANCE_SKILLS, finance.description)))
+    add("skill_demand", lambda: skill_cache.rank_skills(SKILL_DEMAND), question=SKILL_DEMAND)
+    return entries
+
+
+def test_the_contract_tests_send_what_mas_embeds(monkeypatch):
+    built = embeddings_requests_mas_sends(monkeypatch)
+    if UPDATE:
+        EMBEDDING_REQUESTS.write_text(json.dumps(built, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    recorded = json.loads(EMBEDDING_REQUESTS.read_text(encoding="utf-8"))
+    assert recorded == built, (
+        "MAS's embeddings requests changed. Run HORUS_UPDATE_CONTRACT_REQUESTS=1 pytest "
+        "tests/mas/unit/test_contract_requests.py, then the contract tests (tests/contract).")
+
+
+def test_mas_asks_llm_mock_for_its_size_and_embeds_every_kind_of_text(monkeypatch):
+    built = embeddings_requests_mas_sends(monkeypatch)
+    assert {entry["name"] for entry in built} == {"router_examples", "route", "skills", "skill_demand"}
+    assert all(entry["body"]["dimensions"] == 384 for entry in built)
+    assert all(entry["body"]["model"] == MOCK_EMBED_MODEL for entry in built)
