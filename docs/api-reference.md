@@ -57,6 +57,27 @@ The Compose healthcheck of `mas` uses `POST /rabbitmq/heartbeat` instead, becaus
 
 ---
 
+#### GET /system/ai
+
+Which AI answers: a language model or the mock model server of [mock AI mode](mock-ai.md). MAS asks the model server for `GET /v1/models` when it starts and keeps the answer; while the server could not be asked, every call asks again. `mode` is `mock` when the server says `owned_by: "horus-mock"`, `local` for any other server (or for the in-process backend), `unknown` when it could not be asked. The web client reads it to show its mock-mode banner. No address or secret.
+
+**Auth:** None
+
+**Response 200:**
+
+```json
+{
+  "mode": "mock",
+  "model": "horus-mock",
+  "server": "horus-mock",
+  "simulated": true
+}
+```
+
+Each assistant answer also records `ai_provider` (`mock`, `local`, or `null` when the mode was unknown or for older answers): in `GET /conversations/get_history/{chat_id}`, in `GET /tasks/{task_id}`, and in the WebSocket `task_complete` frame.
+
+---
+
 #### GET /
 
 Verify the application is running and test JWT authentication. Returns the authenticated user's identity.

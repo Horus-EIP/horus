@@ -69,6 +69,16 @@ docker compose up --build
 
 Without a GPU the stack needs the CPU overlay (`docker-compose.cpu.yml`) and the CPU settings in `.env`: the model server URL `http://llm:8080/v1`, longer timeouts and a context size. The installer writes them; `python installer/horus_install.py --dry-run` prints them. The model file is listed in [`models/manifest.json`](models/manifest.json): the installer downloads it into `models/`, and without the installer the one-shot `llm-model` service fetches it ([the CPU model server](docs/operations.md#the-cpu-model-server)). See also [docs/getting-started.md](docs/getting-started.md) and [docs/operations.md](docs/operations.md#local-deployment-with-docker).
 
+### Mock AI mode: Horus without a language model
+
+On a machine that cannot run the model, or to test everything but the AI, Horus can run in mock AI mode. A small server, `llm-mock`, takes the place of the model server and answers from the documents the knowledge store retrieved, with their sources, or says it does not have the information. Search, sign-in, tasks and the rest are real, but **the answers are simulated**: never judge Horus's answers by them. The web client shows a banner and a **Simulated** badge on each answer, and the desktop app shows `AI: Mock`.
+
+- Switch an install: run your START-HERE file with `--ai mock`, `--ai local` or `--ai status`. A switch restarts Horus, runs the smoke test and rolls back if it fails.
+- Install in mock mode: `--profile mock`. On a machine under the minimum, an interactive install offers it.
+- By hand: add `docker-compose.mock.yml` after `docker-compose.cpu.yml` in `COMPOSE_FILE`.
+
+CI runs the whole stack this way on every push (`e2e-mock`). How it works and its settings: [docs/mock-ai.md](docs/mock-ai.md) and [ADR-008](docs/adr/ADR-008-mock-ai-mode.md).
+
 ## Measured results
 
 The 100-question test set (`tests/eval/testset.yaml`, version 1.0.0, over the five documents in `demo_assets/`), run on 2026-10-06 on a development laptop: AMD Ryzen AI 9 HX 370 (12 cores, AVX2), 64 GB of LPDDR5-7500, Docker Desktop on WSL 2 with 31 GiB. The GPU run used its NVIDIA GeForce RTX 4070 Laptop GPU (8 GB).
@@ -125,12 +135,13 @@ graph TB
 
 ```
 src/
-  infra/                  Docker Compose files (GPU base + CPU overlay), configs, .env.example
+  infra/                  Docker Compose files (GPU base, CPU and mock overlays), configs, .env.example
   services/
     mas/                  MAS orchestrator (FastAPI)
     agent/                AI agent service (FastAPI)
     knowledge-store/      Document store + vector search (FastAPI + ChromaDB)
     web-client/           Dashboard (Next.js)
+    llm-mock/             Mock model server of mock AI mode (Python standard library)
 installer/                Beta installer: hardware profiles, preflight, model download
 packaging/                START-HERE scripts, README-FIRST.txt, release notes, bundle builder
 desktop/                  Desktop app (Tauri) that starts and stops Horus
@@ -189,6 +200,7 @@ Full documentation lives under [`docs/`](docs/) and is published as a browsable 
 | Architecture (overview, services, data model) | [docs/architecture.md](docs/architecture.md) |
 | API reference (MAS, Knowledge Store, WebSocket) | [docs/api-reference.md](docs/api-reference.md) |
 | Operations (deployment, hardware profiles, monitoring, secrets) | [docs/operations.md](docs/operations.md) |
+| Mock AI mode (Horus without a language model) | [docs/mock-ai.md](docs/mock-ai.md) |
 | Security and compliance (RBAC, audit, data, telemetry) | [docs/security.md](docs/security.md) |
 | How to contribute | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Code style | [docs/contributing.md](docs/contributing.md) |
