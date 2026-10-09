@@ -72,6 +72,7 @@ def get_history(conv_id: int, db: Session = Depends(get_db)) -> list[dict[str, A
                 "agent_name": msg.agent_name,
                 "skill_used": msg.skill_used,
                 "sources": msg.sources,
+                "ai_provider": msg.ai_provider,
             }
             for msg in messages
         ]
@@ -223,6 +224,7 @@ def add_messages(
     agent_name: str | None = None,
     skill_used: str | None = None,
     sources: list[dict[str, Any]] | None = None,
+    ai_provider: str | None = None,
 ) -> dict[str, Any] | None:
     """Append one message to a conversation inside a savepoint.
 
@@ -273,6 +275,7 @@ def add_messages(
             agent_name=agent_name,
             skill_used=skill_used,
             sources=sources,
+            ai_provider=ai_provider,
         )
         db.add(msg)
 
@@ -297,6 +300,7 @@ def add_messages(
             "agent_name": msg.agent_name,
             "skill_used": msg.skill_used,
             "sources": msg.sources,
+            "ai_provider": msg.ai_provider,
         }
 
     except SQLAlchemyError as e:

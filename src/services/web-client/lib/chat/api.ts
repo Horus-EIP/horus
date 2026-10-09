@@ -75,6 +75,24 @@ export interface TaskSubtaskRow {
   completedAt?: string | null;
 }
 
+interface HistoryRow {
+  id?: unknown;
+  role?: unknown;
+  content?: unknown;
+  message?: unknown;
+  created_at?: unknown;
+  timestamp?: unknown;
+  agent_id?: unknown;
+  agent_name?: unknown;
+  skill_used?: unknown;
+  sources?: unknown;
+  ai_provider?: unknown;
+}
+
+function textOf(value: unknown): string | undefined {
+  return typeof value === 'string' && value ? value : undefined;
+}
+
 export interface TaskDetails {
   task_id: string;
   status: string;
@@ -86,6 +104,7 @@ export interface TaskDetails {
   completed_at?: string | null;
   result?: string;
   sources?: AnswerSource[];
+  ai_provider?: string | null;
   history?: unknown[];
   future_actions?: unknown[];
   subtasks?: TaskSubtaskRow[];
@@ -153,15 +172,16 @@ export const chatApi = {
       // metadata (agent_id / agent_name / skill_used) through so reloaded
       // history can restore Manager violet styling + per-agent chips.
       paginatedData = {
-        items: data.map((msg: any) => ({
+        items: (data as HistoryRow[]).map((msg) => ({
           role: msg.role === 'user' ? 'user' : 'assistant',
-          message: msg.content || msg.message || '',
-          timestamp: msg.created_at || msg.timestamp,
+          message: String(msg.content || msg.message || ''),
+          timestamp: textOf(msg.created_at) || textOf(msg.timestamp),
           agentId: typeof msg.agent_id === 'string' ? msg.agent_id : undefined,
           agentName: typeof msg.agent_name === 'string' ? msg.agent_name : undefined,
           skillUsed: typeof msg.skill_used === 'string' ? msg.skill_used : undefined,
           messageId: typeof msg.id === 'number' ? msg.id : undefined,
           sources: answerSourcesOf(msg.sources),
+          aiProvider: typeof msg.ai_provider === 'string' ? msg.ai_provider : undefined,
         })),
         nextCursor: null,
       };

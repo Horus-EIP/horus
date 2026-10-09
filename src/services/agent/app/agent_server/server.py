@@ -619,10 +619,19 @@ def send_step(
         logger.debug("Step POST failed (%s): %s", step.get("step_type"), e)
 
 
+def mock_ai_mode() -> bool:
+    return os.getenv("HORUS_AI_MODE", "").strip().lower() == "mock"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup/shutdown (replaces deprecated on_event)."""
     logger.info("Agent service starting up...")
+    if mock_ai_mode():
+        logger.warning(
+            "Mock AI mode: llm-mock answers this agent's model calls, so its answers "
+            "are simulated from the documents, not written by a language model"
+        )
     register_agent()
     fail_abandoned_claims()
     heartbeat_thread = threading.Thread(target=heartbeat_task, daemon=True)

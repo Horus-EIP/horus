@@ -270,6 +270,18 @@ function renderFailure() {
   show("failed");
 }
 
+const AI_MODE_TEXT = {
+  mock: "AI: Mock - the answers are simulated from your documents, without a language model.",
+  local: "AI: Local",
+};
+
+function renderAiMode(mode) {
+  const line = document.getElementById("ai-mode");
+  line.textContent = AI_MODE_TEXT[mode] || "";
+  line.hidden = !AI_MODE_TEXT[mode];
+  line.classList.toggle("mock", mode === "mock");
+}
+
 function handleInstallerEvent(data) {
   switch (data.event) {
     case "step":
@@ -291,6 +303,10 @@ function handleInstallerEvent(data) {
     case "ready":
       stopTicker();
       state.ready = true;
+      renderAiMode(data.ai);
+      break;
+    case "ai":
+      renderAiMode(data.mode);
       break;
     case "say":
       if (data.text && data.text.trim()) appendOutput(data.text);

@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -27,6 +28,12 @@ async def lifespan(app: FastAPI):
             "embed_model": EMBED_MODEL,
         },
     )
+    if os.getenv("HORUS_AI_MODE", "").strip().lower() == "mock":
+        logger.warning(
+            "Mock AI mode: the answers built on this knowledge store are simulated by "
+            "llm-mock, not written by a language model; search and indexing are real",
+            extra={"type": "startup"},
+        )
     schedule_startup_check()
     yield
     cancel_startup_check()

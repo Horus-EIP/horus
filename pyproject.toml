@@ -73,6 +73,7 @@ known-first-party = [
     "services",
     "config",
     "llm_mock",
+    "system",
 ]
 
 [tool.ruff.lint.per-file-ignores]

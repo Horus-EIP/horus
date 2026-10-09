@@ -76,6 +76,16 @@ h1 {
   font-weight: 560;
 }
 
+.ai-mode {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.ai-mode.mock {
+  color: var(--warn);
+  font-weight: 600;
+}
+
 p { margin: 0 0 12px; max-width: 62ch; }
 
 .detail { color: var(--muted); font-size: 13.5px; }

@@ -31,6 +31,14 @@ export interface Message {
   taskId?: string;
   messageId?: number;
   sources?: AnswerSource[];
+  aiProvider?: string;
+}
+
+export const SIMULATED_TITLE =
+  "Mock AI mode: this answer was assembled from your documents without a language model.";
+
+function isSimulated(message: Message): boolean {
+  return message.sender === "agent" && message.aiProvider === "mock";
 }
 
 interface MessageListProps {
@@ -208,7 +216,7 @@ export const MessageList: React.FC<MessageListProps> = ({
               )}
 
               {message.sender === "agent" &&
-                (message.agentName || message.skillUsed) && (
+                (message.agentName || message.skillUsed || isSimulated(message)) && (
                   <div className="mt-2 flex flex-wrap items-center gap-1">
                     {message.agentName && (
                       <span
@@ -234,6 +242,14 @@ export const MessageList: React.FC<MessageListProps> = ({
                     {message.skillUsed && (
                       <span className="inline-flex items-center rounded-full border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
                         {message.skillUsed}
+                      </span>
+                    )}
+                    {isSimulated(message) && (
+                      <span
+                        className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+                        title={SIMULATED_TITLE}
+                      >
+                        Simulated
                       </span>
                     )}
                   </div>

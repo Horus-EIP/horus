@@ -11,6 +11,7 @@ export type AgentAnswer = {
   messageId?: number;
   failed?: boolean;
   sources?: AnswerSource[];
+  aiProvider?: string;
 };
 
 const FINISHED_TASK_STATUSES = ["completed", "failed", "cancelled"];
@@ -35,6 +36,7 @@ export function finishedTaskAnswer(task: TaskDetails): {
   agentId: string;
   failed: boolean;
   sources?: AnswerSource[];
+  aiProvider?: string;
 } {
   const subtasks = task.subtasks ?? [];
   const answeringAgentId = subtasks[subtasks.length - 1]?.assignedAgent || task.agent_id;
@@ -43,6 +45,7 @@ export function finishedTaskAnswer(task: TaskDetails): {
     agentId: answeringAgentId,
     failed: task.status === "failed",
     sources: task.status === "completed" ? task.sources : undefined,
+    aiProvider: task.ai_provider ?? undefined,
   };
 }
 
@@ -76,6 +79,7 @@ export function appendAgentAnswer(messages: Message[], answer: AgentAnswer): Mes
       skillUsed: answer.skillUsed,
       messageId: answer.messageId,
       sources: answer.sources,
+      aiProvider: answer.aiProvider,
     },
   ];
 }

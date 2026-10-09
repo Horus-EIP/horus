@@ -24,6 +24,17 @@ class TestMainApp:
                 "version": RELEASE_VERSION,
             }
 
+    def test_mock_ai_mode_is_one_warning_at_start(self, monkeypatch, caplog):
+        from app.main import app  # noqa: PLC0415
+
+        for mode, warned in (("mock", 1), ("local", 0)):
+            monkeypatch.setenv("HORUS_AI_MODE", mode)
+            caplog.clear()
+            with caplog.at_level("WARNING"), TestClient(app):
+                pass
+            warnings = [r for r in caplog.records if "Mock AI mode" in r.getMessage()]
+            assert len(warnings) == warned, mode
+
     def test_openapi_reports_the_release_version(self):
         from app.main import app  # noqa: PLC0415
 

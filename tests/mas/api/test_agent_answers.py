@@ -462,3 +462,35 @@ class TestDispatchRecord:
         agent_answers.remember_dispatch("t1", {"task_id": "t1", "demand": QUESTION})
 
         assert agent_answers.recall_dispatch("t1") is None
+
+
+class TestAiProvider:
+    async def test_a_mock_answer_is_stored_sent_and_returned_as_mock(
+        self, agent_client, user_client, routing_db, work_queue
+    ):
+        _add_task(routing_db, "t1")
+
+        with patch.object(routes.ai_mode, "provider", return_value="mock"):
+            response = await _report(agent_client, "t1", sources=[Q4_SOURCE])
+
+        assert response.status_code == 200
+        assert _stored(routing_db, "t1").result.ai_provider == "mock"
+        (result,) = _events("t1", "result")
+        assert result["data"]["ai_provider"] == "mock"
+        message = routing_db.query(Messages).filter(Messages.conversation_id == 7).one()
+        assert message.ai_provider == "mock"
+        async with user_client:
+            detail = (await user_client.get("/tasks/t1")).json()
+        assert detail["ai_provider"] == "mock"
+
+    async def test_an_answer_whose_mode_is_unknown_records_none(
+        self, agent_client, routing_db, work_queue
+    ):
+        _add_task(routing_db, "t1")
+
+        with patch.object(routes.ai_mode, "provider", return_value=None):
+            await _report(agent_client, "t1")
+
+        assert _stored(routing_db, "t1").result.ai_provider is None
+        (result,) = _events("t1", "result")
+        assert "ai_provider" not in result["data"]

@@ -1041,7 +1041,8 @@ def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
     wait_for_health(log, infra, expect, timeout=timeout)
     log.say("")
     log.ok(f"Horus is ready at {WEB_URL}")
-    log.events.emit("ready", url=WEB_URL, services=expect)
+    log.events.emit("ready", url=WEB_URL, services=expect,
+                    ai=ai_mode_of(compose_file_now(infra)))
     return EXIT_OK
 
 def do_restart(log: Log, infra: Path, timeout: int) -> int:
@@ -1069,7 +1070,8 @@ def do_restart(log: Log, infra: Path, timeout: int) -> int:
     wait_for_health(log, infra, expect, timeout=timeout)
     log.say("")
     log.ok(f"Horus is ready at {WEB_URL}")
-    log.events.emit("ready", url=WEB_URL, services=expect)
+    log.events.emit("ready", url=WEB_URL, services=expect,
+                    ai=ai_mode_of(compose_file_now(infra)))
     return EXIT_OK
 
 def do_stop(log: Log, infra: Path) -> int:
@@ -1403,7 +1405,7 @@ def switched(log: Log, infra: Path, mode: str, expect: list[str]) -> int:
     log.say("")
     log.ok(f"AI: {mode.capitalize()}. Horus is ready at {WEB_URL}")
     log.events.emit("ai", mode=mode, server=expect[-1])
-    log.events.emit("ready", url=WEB_URL, services=expect)
+    log.events.emit("ready", url=WEB_URL, services=expect, ai=mode)
     return EXIT_OK
 
 def switch_to_mock(log: Log, args, repo: Path, infra: Path, current: str) -> int:

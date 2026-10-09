@@ -158,6 +158,7 @@ function answerOf(frame: TaskFrame): AgentAnswer {
     messageId: numberOf(frame.message_id),
     failed: frame.event === "error" && frame.status === FAILED_STATUS,
     sources: answerSourcesOf(frame.sources),
+    aiProvider: textOf(frame.ai_provider),
   };
 }
 

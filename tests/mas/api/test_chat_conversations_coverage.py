@@ -46,6 +46,7 @@ def _make_msg(
     agent_name: str | None = None,
     skill_used: str | None = None,
     sources: list[dict] | None = None,
+    ai_provider: str | None = None,
 ) -> MagicMock:
     """Build a Messages-shaped mock with ``.isoformat()``-capable timestamp."""
     msg = MagicMock()
@@ -57,6 +58,7 @@ def _make_msg(
     msg.agent_name = agent_name
     msg.skill_used = skill_used
     msg.sources = sources
+    msg.ai_provider = ai_provider
     return msg
 
 
@@ -97,6 +99,7 @@ class TestGetHistory:
                 agent_name="Manager",
                 skill_used="chat",
                 sources=[{"doc_id": "d1", "chunk_id": "d1:0", "title": "q4.md", "page": None}],
+                ai_provider="mock",
             ),
         ]
         # First query() -> Conversations lookup; second -> Messages ordered.
@@ -117,8 +120,10 @@ class TestGetHistory:
             "agent_name": None,
             "skill_used": None,
             "sources": None,
+            "ai_provider": None,
         }
         assert out[1]["agent_name"] == "Manager"
+        assert out[1]["ai_provider"] == "mock"
         assert out[1]["skill_used"] == "chat"
         assert out[1]["sources"] == [
             {"doc_id": "d1", "chunk_id": "d1:0", "title": "q4.md", "page": None}

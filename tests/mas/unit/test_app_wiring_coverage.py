@@ -88,6 +88,7 @@ def patched_lifespan_side_effects():
         patch.object(app_module, "task_jobs", new_callable=AsyncMock) as task_jobs,
         patch.object(app_module, "rabbitmq_instance") as rabbitmq_instance,
         patch.object(app_module, "start_llm_preload_background_thread") as llm_preload,
+        patch.object(app_module, "start_probe_background_thread") as ai_mode_probe,
         patch.object(
             app_module, "start_embedding_preload_background_thread"
         ) as emb_preload,
@@ -97,6 +98,7 @@ def patched_lifespan_side_effects():
             "init_db": init_db,
             "rabbitmq_instance": rabbitmq_instance,
             "llm_preload": llm_preload,
+            "ai_mode_probe": ai_mode_probe,
             "emb_preload": emb_preload,
             "engine": engine,
             "task_heartbeats": task_heartbeats,
@@ -207,6 +209,7 @@ class TestLifespan:
             mocks["init_db"].assert_called_once()
             mocks["rabbitmq_instance"].connect.assert_called_once()
             mocks["llm_preload"].assert_called_once()
+            mocks["ai_mode_probe"].assert_called_once()
             mocks["emb_preload"].assert_called_once()
             mocks["fail_interrupted_routing"].assert_awaited_once()
             mocks["task_heartbeats"].assert_called_once_with()

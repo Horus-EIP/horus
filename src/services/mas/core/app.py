@@ -17,10 +17,12 @@ import analytics.routes
 import chat.routes
 import conversations.routes
 import core.rabbitmq_tool
+import system.routes
 import tasks.routes
 import users.routes
 from agents.controller import check_agent_heartbeat
 from auth.routes import router as auth_router
+from core.ai_mode import start_probe_background_thread
 from core.embedding_setup import start_embedding_preload_background_thread
 from core.llm_setup import start_llm_preload_background_thread
 from core.logger import get_logger, log_error, log_startup, log_success
@@ -86,6 +88,7 @@ def create_app_environment():
             },
             {"name": "Users", "description": "User management (Admin only)"},
             {"name": "RabbitMQ", "description": "Message queue management"},
+            {"name": "System", "description": "Which AI answers: a language model or the mock"},
         ],
     )
 
@@ -111,6 +114,7 @@ def create_app_environment():
         (auth_router, "Authentication"),
         (users.routes.router, "Users"),
         (core.rabbitmq_tool.router, "RabbitMQ"),
+        (system.routes.router, "System"),
     ]
 
     for router, name in routers:
@@ -164,6 +168,9 @@ async def lifespan(app: FastAPI):
 
     start_llm_preload_background_thread()
     log_success("lifespan", "LLM background preload started (if LLM_AUTOINIT=1)")
+
+    start_probe_background_thread()
+    log_success("lifespan", "AI mode probe started (asks the model server what it serves)")
 
     start_embedding_preload_background_thread()
     log_success(

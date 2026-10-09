@@ -682,6 +682,21 @@ class TestLifespan:
         assert server._consume_messages in started
         assert server._consume_agent_messages in started
 
+    @pytest.mark.parametrize("mode, warned", [("mock", 1), ("local", 0), ("", 0)])
+    async def test_mock_ai_mode_is_one_warning_at_start(self, monkeypatch, caplog, mode, warned):
+        monkeypatch.setenv("HORUS_AI_MODE", mode)
+        with (
+            patch.object(server, "register_agent"),
+            patch.object(server, "fail_abandoned_claims", return_value=[]),
+            patch.object(threading, "Thread"),
+            caplog.at_level("WARNING"),
+        ):
+            async with server.lifespan(server.app):
+                pass
+        warnings = [r for r in caplog.records if "Mock AI mode" in r.getMessage()]
+        assert len(warnings) == warned
+        assert all(r.levelname == "WARNING" for r in warnings)
+
 
 # --------------------------------------------------------------------------- #
 # HTTP endpoints

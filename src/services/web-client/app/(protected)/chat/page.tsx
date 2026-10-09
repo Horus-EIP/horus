@@ -197,6 +197,7 @@ function ChatPageContent() {
         skillUsed: msg.skillUsed,
         messageId: msg.messageId,
         sources: msg.sources,
+        aiProvider: msg.aiProvider,
       }));
 
       if (cursor) {

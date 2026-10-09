@@ -9,11 +9,13 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import common  # noqa: E402
 import hardware  # noqa: E402
+import horus_install  # noqa: E402
 import profiles  # noqa: E402
 import unsupported  # noqa: E402
 
@@ -302,6 +304,52 @@ class RefusalScreen(unittest.TestCase):
     def test_the_refusal_view_can_look_again_after_start_here_ran(self):
         self.assertIn('id="unsupported-retry"', read(UI / "index.html"))
         self.assertRegex(self.app_js, r'on\("unsupported-retry", \(\) => bootstrap\(\)\);')
+
+@skip_without_desktop
+class AiModeLine(unittest.TestCase):
+    MOCK_FILES = "docker-compose.yml:docker-compose.cpu.yml:docker-compose.mock.yml"
+
+    def setUp(self) -> None:
+        self.app_js = read(UI / "app.js")
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.infra = Path(self._tmp.name) / "src" / "infra"
+        self.infra.mkdir(parents=True)
+
+    def function(self, name: str) -> str:
+        body = re.search(rf"function {name}\(.*?\n\}}\n", self.app_js, re.DOTALL)
+        self.assertIsNotNone(body, f"app.js has no function {name}")
+        return body.group(0)
+
+    def ready_event(self, compose_file: str) -> dict:
+        (self.infra / ".env").write_text(f"COMPOSE_FILE={compose_file}\n", encoding="utf-8")
+        stream = io.StringIO()
+        log = common.Log(Path(self._tmp.name) / "log.txt", events=common.Events(True, stream))
+        self.addCleanup(log.close, 0)
+        with contextlib.ExitStack() as stack:
+            for name in ("_require_docker", "ensure_installed_model", "wait_for_health"):
+                stack.enter_context(mock.patch.object(horus_install, name))
+            stack.enter_context(mock.patch.object(
+                horus_install, "up_waiting_out_a_dependency_abort", return_value=(["up"], 0)))
+            stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+            horus_install.do_start(log, self.infra, timeout=1)
+        events = [json.loads(line[len(common.EVENT_PREFIX):]) for line in stream.getvalue().splitlines()]
+        return next(event for event in events if event["event"] == "ready")
+
+    def test_start_tells_the_app_which_ai_answers(self):
+        self.assertEqual(self.ready_event(self.MOCK_FILES)["ai"], "mock")
+        self.assertEqual(self.ready_event("docker-compose.yml:docker-compose.cpu.yml")["ai"], "local")
+
+    def test_the_running_view_shows_ai_mock_or_ai_local(self):
+        handler = self.function("handleInstallerEvent")
+        self.assertRegex(handler, r'case "ready":[^}]*?renderAiMode\(data\.ai\);')
+        self.assertRegex(handler, r'case "ai":\s*renderAiMode\(data\.mode\);')
+        render = self.function("renderAiMode")
+        self.assertIn('getElementById("ai-mode")', render)
+        self.assertRegex(self.app_js, r'mock: "AI: Mock')
+        self.assertRegex(self.app_js, r'local: "AI: Local"')
+        running = read(UI / "index.html").split('data-view="running"', 1)[1].split("</section>", 1)[0]
+        self.assertIn('id="ai-mode" hidden', running)
 
 @skip_without_desktop
 class IconMaster(unittest.TestCase):

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { MantineProvider } from "@mantine/core";
 import { Toaster } from "react-hot-toast";
 
+import { AiModeBanner } from "@/components/ai-mode-banner";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { NotificationProvider } from "@/contexts/notification-context";
 
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" className="dark">
       <body className="antialiased bg-[var(--bg)]">
         <MantineProvider defaultColorScheme="dark">
+          <AiModeBanner />
           <NotificationProvider>
             <AuthProvider>
               {children}

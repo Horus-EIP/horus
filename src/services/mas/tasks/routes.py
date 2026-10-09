@@ -23,6 +23,7 @@ from agents.registry_tool_functions import create_agent
 from auth.auth_tool_functions import PermissionChecker, verify_agent_api_key
 from auth.permissions import Permission
 from conversations.conversation_tool_functions import add_messages
+from core import ai_mode
 from core.logger import get_logger, log_agent_operation
 from core.memory_usage import peak_rss_mb
 from core.metrics import TASK_ERRORS, TASK_QUEUE_DEPTH, observe_task_processing_time
@@ -789,6 +790,7 @@ def get_task_detail(
         "completed_at": _isoformat_or_none(task.completed_at),
         "result": result_str,
         "sources": getattr(tr, "sources", None) or [],
+        "ai_provider": getattr(tr, "ai_provider", None),
         "history": tr.history if tr else [],
         "future_actions": tr.future_actions if tr else [],
         "subtasks": subtasks_out,
@@ -1650,10 +1652,12 @@ async def sharing_agent_result(
         task.status = TaskStatus.COMPLETED.value
 
         history.append({"role": "assistant", "message": task_result.result})
+        ai_provider = await asyncio.to_thread(ai_mode.provider)
 
         current_task_result.result_data = task_result.result
         current_task_result.history = history
         current_task_result.sources = step_sources
+        current_task_result.ai_provider = ai_provider
         db.commit()
 
         TASK_QUEUE_DEPTH.dec()
@@ -1977,6 +1981,7 @@ async def sharing_agent_result(
                 if root_task.result is not None:
                     root_task.result.result_data = final_answer
                     root_task.result.sources = final_sources
+                    root_task.result.ai_provider = ai_provider
                     # Merge the final history onto the root so the result page
                     # shows the full conversation, not an empty seed.
                     root_history = list(root_task.result.history or [])
@@ -2019,6 +2024,7 @@ async def sharing_agent_result(
                 agent_name=attribution_name,
                 skill_used=task_result.skill_used,
                 sources=final_sources,
+                ai_provider=ai_provider,
             )
 
         await publish_agent_message(
@@ -2034,6 +2040,7 @@ async def sharing_agent_result(
             route=ROUTE_AGENT,
             message_id=_message_id(message),
             **({"sources": final_sources} if final_sources is not None else {}),
+            **({"ai_provider": ai_provider} if ai_provider else {}),
         )
         return {"message": f"Result received from agent {task_result.agent_id}"}
     except HTTPException:

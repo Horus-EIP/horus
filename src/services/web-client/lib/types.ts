@@ -35,6 +35,7 @@ export interface HistoryItem {
   skillUsed?: string;
   messageId?: number;
   sources?: AnswerSource[];
+  aiProvider?: string;
 }
 
 export type TaskMode =

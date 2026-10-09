@@ -40,6 +40,7 @@ class Messages(Base):
     agent_name = Column(String, nullable=True)
     skill_used = Column(String, nullable=True)
     sources = Column(JSON, nullable=True)
+    ai_provider = Column(String, nullable=True)
 
     conversation_id = Column(
         Integer,
