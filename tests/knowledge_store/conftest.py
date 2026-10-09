@@ -21,6 +21,7 @@ import numpy as np
 
 os.environ.setdefault("TEST_MODE", "1")
 os.environ.setdefault("KNOWLEDGE_STORE_REINDEX_ON_STARTUP", "0")
+os.environ.pop("HORUS_SPACY", None)
 
 # --------------------------------------------------------------------------- #
 # spaCy — replace with a mock module that returns a doc with one sentence.

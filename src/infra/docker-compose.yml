@@ -224,6 +224,7 @@ services:
       # 0 = load the LLM at agent startup (ready for first chat; slower boot).
       - AGENT_LAZY_DECISION_MODEL=${AGENT_LAZY_DECISION_MODEL:-0}
       - AGENT_SPACY_PREFER_SM=1
+      - HORUS_SPACY=${HORUS_SPACY:-on}
       # OpenTelemetry instrumentation — enabled by default; Tempo is always-on.
       # Set OTEL_SDK_DISABLED=true and OTEL_ENABLED=false in .env to opt out.
       - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-false}
@@ -347,6 +348,7 @@ services:
       - KNOWLEDGE_STORE_EMBED_THREADS=${KNOWLEDGE_STORE_EMBED_THREADS:-}
       - KNOWLEDGE_STORE_EMBED_URL=${KNOWLEDGE_STORE_EMBED_URL:-}
       - KNOWLEDGE_STORE_EMBED_MODEL=${KNOWLEDGE_STORE_EMBED_MODEL:-}
+      - HORUS_SPACY=${HORUS_SPACY:-on}
       - KNOWLEDGE_STORE_REINDEX_ON_STARTUP=${KNOWLEDGE_STORE_REINDEX_ON_STARTUP:-1}
       # Where POST /corpus/scan looks for documents to index. This block has no
       # `env_file: - .env`, so a value set only in .env would never reach the

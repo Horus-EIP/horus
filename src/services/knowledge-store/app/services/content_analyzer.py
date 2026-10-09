@@ -15,11 +15,6 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-try:
-    from spacy.lang.en.stop_words import STOP_WORDS
-except ImportError:
-    STOP_WORDS = set()
-
 CATEGORY_KEYWORDS = {
     "accounting": [
         "invoice", "receipt", "bill", "payment", "tax", "vat", "ledger",
@@ -124,11 +119,23 @@ DOC_TYPE_KEYWORDS = {
 
 CONFIDENCE_THRESHOLD = 0.6
 SPACY_MODELS = ("en_core_web_trf", "en_core_web_sm")
+SPACY_ENV = "HORUS_SPACY"
+OFF_VALUES = frozenset({"0", "false", "no", "off"})
 
 _nlp_model = None
 
 
+def spacy_is_off() -> bool:
+    return os.getenv(SPACY_ENV, "on").strip().lower() in OFF_VALUES
+
+
 def _load_spacy_model() -> Any:
+    if spacy_is_off():
+        logger.info(
+            "spaCy is off (%s=%s): entities, topics and summaries come from the regex extraction",
+            SPACY_ENV, os.getenv(SPACY_ENV),
+        )
+        return False
     try:
         import spacy
     except ImportError:
@@ -398,6 +405,8 @@ class ContentAnalyzer:
 
     def _extract_topics_spacy(self, doc, max_topics: int = 10) -> list[str]:
         """Extract topics from spaCy noun chunks."""
+        from spacy.lang.en.stop_words import STOP_WORDS
+
         chunks = []
         for chunk in doc.noun_chunks:
             root = chunk.root

@@ -16,6 +16,7 @@ SERVICES = REPO / "src" / "services"
 MOCK_SERVER = SERVICES / "llm-mock"
 CLIENTS = ("mas", "agent")
 EMBEDDERS = {"mas": "MAS_EMBED", "knowledge_store": "KNOWLEDGE_STORE_EMBED"}
+SPACY_SERVICES = ("agent", "knowledge_store")
 EMBEDDINGS_CLIENTS = (
     SERVICES / "mas" / "core" / "embeddings_client.py",
     SERVICES / "knowledge-store" / "app" / "chroma_db" / "embeddings_client.py",
@@ -111,6 +112,21 @@ class MockOverlay(unittest.TestCase):
             for key in (f"{prefix}_URL", f"{prefix}_MODEL"):
                 with self.subTest(key):
                     self.assertIn(f'"{key}"', source)
+
+    def test_spacy_is_off_where_it_runs(self):
+        readers = (
+            SERVICES / "agent" / "app" / "ai_agents" / "data_extractor_tool.py",
+            SERVICES / "knowledge-store" / "app" / "services" / "content_analyzer.py",
+        )
+        for reader in readers:
+            self.assertIn('SPACY_ENV = "HORUS_SPACY"', reader.read_text(encoding="utf-8"))
+        for name in SPACY_SERVICES:
+            with self.subTest(name):
+                self.assertEqual(environment(self.mock[name])["HORUS_SPACY"], "off")
+        for name in SPACY_SERVICES:
+            with self.subTest(f"base {name}"):
+                self.assertEqual(default_of(environment(self.base[name])["HORUS_SPACY"]), "on")
+        self.assertNotIn("HORUS_SPACY", environment(self.mock["mas"]))
 
     def test_the_knowledge_store_waits_for_llm_mock_before_it_embeds(self):
         self.assertEqual(self.mock["knowledge_store"]["depends_on"],

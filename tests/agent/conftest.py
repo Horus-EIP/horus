@@ -1,10 +1,13 @@
 """
 Pytest configuration for async tests.
 """
+import os
 import sys
 from unittest.mock import MagicMock
 
 import pytest
+
+os.environ.pop("HORUS_SPACY", None)
 
 # --- Robust Environment Mocking ---
 # Prevent langchain imports from hanging or failing in restricted environments
