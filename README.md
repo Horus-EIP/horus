@@ -71,7 +71,7 @@ Without a GPU the stack needs the CPU overlay (`docker-compose.cpu.yml`) and the
 
 ### Mock AI mode: Horus without a language model
 
-On a machine that cannot run the model, or to test everything but the AI, Horus can run in mock AI mode. A small server, `llm-mock`, takes the place of the model server and answers from the documents the knowledge store retrieved, with their sources, or says it does not have the information. Search, sign-in, tasks and the rest are real, but **the answers are simulated**: never judge Horus's answers by them. The web client shows a banner and a **Simulated** badge on each answer, and the desktop app shows `AI: Mock`.
+On a machine that cannot run the model, or to test everything but the AI, Horus can run in mock AI mode. A small server, `llm-mock`, takes the place of the model server and answers from the documents the knowledge store retrieved, with their sources, or says it does not have the information. No AI model runs at all: the embeddings come from the words of each text, so search is word matching, and spaCy is off. Sign-in, tasks and the rest are real, but **the answers and the search are simulated**: never judge Horus's answers by them. The web client shows a banner and a **Simulated** badge on each answer, and the desktop app shows `AI: Mock`.
 
 - Switch an install: run your START-HERE file with `--ai mock`, `--ai local` or `--ai status`. A switch restarts Horus, runs the smoke test and rolls back if it fails.
 - Install in mock mode: `--profile mock`. On a machine under the minimum, an interactive install offers it.

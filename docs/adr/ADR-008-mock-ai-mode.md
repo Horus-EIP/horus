@@ -80,3 +80,27 @@ v1 also replaced the embedders with a hash embedder, with collections named per 
 - Testers could take mock answers for the AI's. Mock mode is always visible: `GET /system/ai`, a banner on every page, a "Simulated" badge on each mock answer, "AI: Mock" in the desktop app, and one WARNING line per service at start.
 - The answer cache must never serve a mock answer in local mode or the reverse: its key must include the model.
 - Whether a commercial licence key may be used in mock mode is left to the licence-key work (ADR-004).
+
+---
+
+## Update 09/10/2026: no model at all
+
+**Backlog:** B-73 and B-74, reopened with a smaller scope, and B-137. The design is now v2.1, *Horus Mock AI mode, v2.1: a mock model server, and no model at all*.
+
+Mock mode now replaces every model, not only the language model. A mock install loads none:
+
+- **The language model:** `llm-mock` answers the chat calls, as decided above.
+- **The two embedding models:** MiniLM in MAS (skill matching and the router's first stage) and bge-base in the knowledge store (search). `llm-mock` also serves `/v1/embeddings`, with vectors hashed from the words of each text. MAS and the knowledge store get a generic OpenAI-compatible embeddings client, used when an embeddings URL is set; unset, FastEmbed runs in the service as today.
+- **spaCy:** turned off by a setting, not faked. The knowledge store and the agent use the regex extraction they already have for installs without spaCy.
+- **Monitoring:** Prometheus, Loki, Tempo and Alloy do not run in mock mode unless `HORUS_MONITORING=on`.
+
+**Why:** demos and tests on machines with no GPU and little memory, and a quick install. With the language model mocked, a mock install still loaded MiniLM, bge-base and spaCy and ran four monitoring containers.
+
+**What it costs:**
+
+- **Search becomes word matching.** A question finds the passages that share its words, and a synonym finds nothing ("leave" does not match "vacation"). Search quality is now judged, like answer quality, on real models only, and the CI end-to-end job no longer runs the real search: the knowledge store's tests keep one test on FastEmbed.
+- **A switch between modes re-embeds the stored documents.** The knowledge store already re-embeds at start every passage stored with another embedder than the running one. Towards mock it is quick; towards local it takes the CPU embedding time of the whole corpus. The installer says how many documents it will re-embed and waits for the re-index before its smoke test.
+
+**What does not change:** the fakes still live only in `llm-mock`. The services get settings and a generic client, nothing that knows it talks to a mock. B-73 needs no provider package and no collections named per embedder; B-74 needs no provider.
+
+This update replaces, for mock mode, the first point of the Decision ("Only the language model is mocked") and the reasons under "Mocking the embeddings", and it reopens B-73 and B-74, which the Consequences dropped.

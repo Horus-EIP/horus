@@ -1,6 +1,6 @@
 # Mock AI mode
 
-Mock AI mode runs Horus without a language model. A small server, `llm-mock`, takes the place of the model server (llama.cpp on a CPU install, vLLM on a GPU install) and answers every model call MAS and the agent make, from the documents the knowledge store retrieved. Everything else is real: sign-in, permissions, uploads, search (the FastEmbed embeddings and spaCy still run), routing, tasks, the WebSocket and the admin pages.
+Mock AI mode runs Horus without a language model. A small server, `llm-mock`, takes the place of the model server (llama.cpp on a CPU install, vLLM on a GPU install) and answers every model call MAS and the agent make, from the documents the knowledge store retrieved. Since the update of 09/10/2026 no model runs at all: `llm-mock` also computes the embeddings MAS and the knowledge store search with, from the words of each text, and spaCy is off. Search is then word matching, and a switch between modes re-embeds the stored documents. Sign-in, permissions, uploads, routing, tasks, the WebSocket and the admin pages are real.
 
 The decision and the options we did not take are in [ADR-008](adr/ADR-008-mock-ai-mode.md).
 
