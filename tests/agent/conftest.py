@@ -92,8 +92,15 @@ def mock_transformers_pipeline(monkeypatch):
 # Mock transformers to prevent model loading
 import sys
 
+
+class StoppingCriteria:
+    pass
+
+
 if "transformers" not in sys.modules:
     mock_tf = MagicMock()
+    mock_tf.StoppingCriteria = StoppingCriteria
+    mock_tf.StoppingCriteriaList = list
     sys.modules["transformers"] = mock_tf
     mock_tf.pipeline.return_value = MagicMock()
 

@@ -18,7 +18,7 @@ This repository’s canonical remote is the project GitHub org; avoid unapproved
 
 ### CI pipeline
 
-Continuous integration is defined in **`.github/workflows/ci.yml`** at the repository root. It runs on every pull request, on pushes to `master`, `main`, `pre-release-fix` and `Sprint#1_September2026_Tek5`, and by hand. The jobs use Python **3.13**, except the knowledge-store tests.
+Continuous integration is defined in **`.github/workflows/ci.yml`** at the repository root. It runs on every pull request, on pushes to `master`, `main`, `pre-release-fix` and `Sprint#1_September2026_Tek5`, and by hand. The service and installer test jobs use the Python of the images, read from `src/services/PYTHON_VERSION` (3.11.17), which `tests/ci/test_image_python.py` checks against every `FROM python:` line. The bench-kit job runs on 3.10 and 3.13; the other jobs run tools, on Python **3.13**.
 
 **Summary**
 
@@ -27,8 +27,9 @@ Continuous integration is defined in **`.github/workflows/ci.yml`** at the repos
 3. **`licences`**: the tests of the licence scripts, then `scripts/licences/third_party_notices.py --check` (fails when `THIRD_PARTY_NOTICES` or its data is out of date, including the list of GPL and LGPL system packages after a Dockerfile change) and `scripts/licences/check_licences.py` (fails on GPL, AGPL or SSPL among the Python packages, the web client's production dependencies and the desktop app's crates; LGPL is a warning; reviewed exceptions are in `scripts/licences/allowlist.yaml`).
 4. **`test-mas`**: installs `src/services/mas/requirements.txt`, the CPU set, with `requirements-test.txt` (the test tools, which the images leave out), and fails if it brought in torch or a CUDA package. Then `pytest -c tests/mas/pytest.ini tests/mas -m "not requires_stack"`, with `tests/mas/test_integration.py` ignored and 85% coverage required. No service containers: SQLite, fakeredis and mocks stand in for Postgres, Redis and RabbitMQ, and the job copies `.env.example` to `src/infra/.env` for the tests that read settings.
 5. **`test-agent`**: installs `src/services/agent/requirements-gpu.txt` and `requirements-test.txt` with `https://download.pytorch.org/whl/cpu` as an extra index, because its tests cover the in-process model code, and fails unless torch is the pinned CPU build. Then `tests/agent`, with 90% coverage required.
-6. **`test-knowledge-store`**: Python 3.11, the Python of its image. Installs `src/services/knowledge-store/requirements.txt` and `requirements-test.txt`, fails on torch or a CUDA package, then `tests/knowledge_store` with 85% coverage required.
-7. **`coverage-summary`**: writes the coverage and test counts of the three test jobs to the run summary.
+6. **`test-knowledge-store`**: installs `src/services/knowledge-store/requirements.txt` and `requirements-test.txt`, fails on torch or a CUDA package, then `tests/knowledge_store` with 85% coverage required.
+7. **`test-installer`**: `pytest installer/tests` with PyYAML, with coverage of `installer/` and no gate. The release workflows run the same tests with `unittest` on the same Python.
+8. **`coverage-summary`**: writes the coverage and test counts of the three test jobs to the run summary.
 
 Tests that need the running stack are not run in CI. For exact steps and env overrides, read the workflow file: it remains the source of truth.
 

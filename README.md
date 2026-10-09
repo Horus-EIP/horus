@@ -119,7 +119,7 @@ graph TB
 | Auth | JWT + bcrypt, OAuth2 password flow, four roles (admin, manager, user, system) |
 | Install | Python installer (`installer/`), Tauri desktop app (`desktop/`) |
 | Testing | pytest, Vitest, Locust ([TESTING.md](TESTING.md)) |
-| CI/CD | GitHub Actions: tests on Python 3.13 (knowledge store on 3.11), signed release images, desktop release |
+| CI/CD | GitHub Actions: service and installer tests on the images' Python (`src/services/PYTHON_VERSION`, 3.11.17), signed release images, desktop release |
 
 ## Repository structure
 

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -69,13 +70,18 @@ def _make_tokenizer(decoded: str = "  clean answer  ") -> MagicMock:
     return tok
 
 
+class _Tokens:
+    def __init__(self, ids):
+        self.ids = list(ids)
+        self.shape = (len(self.ids),)
+
+    def __getitem__(self, key):
+        return _Tokens(self.ids[key])
+
+
 def _make_model() -> MagicMock:
     model = MagicMock()
-    seq = MagicMock()
-    seq.__getitem__.return_value = "gen_only_tokens"
-    gen_ret = MagicMock()
-    gen_ret.sequences = [seq]
-    model.generate.return_value = gen_ret
+    model.generate.return_value.sequences = [_Tokens([1, 2, 3, 9, 9])]
     return model
 
 
@@ -185,7 +191,7 @@ class TestDecisionHelpers:
 
     def test_resolve_local_model_dir_explicit(self, monkeypatch):
         monkeypatch.setenv("MODEL_DIR", "/tmp/explicit-model-dir")
-        assert str(dma._resolve_local_model_dir()) == "/tmp/explicit-model-dir"
+        assert dma._resolve_local_model_dir() == Path("/tmp/explicit-model-dir")
 
     def test_resolve_local_model_dir_default(self, monkeypatch):
         monkeypatch.delenv("MODEL_DIR", raising=False)
@@ -624,6 +630,11 @@ class TestGenerateCausal:
         assert msgs[0]["role"] == "system" and msgs[0]["content"] == "system msg"
         assert msgs[1]["role"] == "user" and msgs[1]["content"] == "user msg"
         agent._causal_model.generate.assert_called_once()
+        assert agent._causal_tokenizer.decode.call_args.args[0].ids == [9, 9]
+        assert agent._last_gen_tokens == 2
+        assert agent._last_prompt_tokens == 3
+        stopping = agent._causal_model.generate.call_args.kwargs["stopping_criteria"]
+        assert isinstance(stopping[0], dma._SpiralStoppingCriteria)
 
     def test_no_attn_mask_and_no_cuda_and_empty_bad_words(self):
         # Exercises the branches where: there is no attention_mask, CUDA is
@@ -656,12 +667,7 @@ class TestGenerateCausal:
         tok.decode.return_value = "no-cuda answer"
         agent._causal_tokenizer = tok
 
-        model = MagicMock()
-        seq = MagicMock()
-        seq.__getitem__.return_value = "gen"
-        gen_ret = MagicMock()
-        gen_ret.sequences = [seq]
-        model.generate.return_value = gen_ret
+        model = _make_model()
         agent._causal_model = model
 
         fake_torch = MagicMock()

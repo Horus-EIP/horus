@@ -400,11 +400,6 @@ class CiTestJobs(unittest.TestCase):
                 pins = torch_requirements(REPO / requirements)
                 self.assertEqual(bool(pins), index is not None, pins)
 
-    def test_the_knowledge_store_is_tested_on_the_python_of_its_image(self):
-        self.assertEqual(self.jobs["test-knowledge-store"]["env"]["PYTHON_VERSION"], "3.11")
-        self.assertRegex((TORCH_SERVICES["knowledge_store"] / "Dockerfile").read_text(encoding="utf-8"),
-                         r"(?m)^FROM python:3\.11\.\d+-slim\b")
-
     def test_the_coverage_gates_are_kept(self):
         for job, (_, gate, _) in TEST_JOBS.items():
             with self.subTest(job):

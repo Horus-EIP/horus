@@ -525,7 +525,7 @@ A complete example with all variables is available at `src/infra/.env.example`.
 
 | Technology | Version | Usage |
 |---|---|---|
-| Python | 3.11 in the images | MAS Orchestrator, Agent Service, Knowledge Store (CI also runs the MAS and agent tests on 3.13) |
+| Python | 3.11 in the images | MAS Orchestrator, Agent Service, Knowledge Store; CI runs their tests on the same version, read from `src/services/PYTHON_VERSION` |
 | TypeScript | 5.9 | Web Client |
 | SQL | -- | Database schema and migrations |
 

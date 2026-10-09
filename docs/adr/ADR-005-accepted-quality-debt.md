@@ -58,7 +58,7 @@ The debt as recorded on 24/09/2026. The Decision column says where each item sta
 | A3 | `ruff format` runs only in pre-commit, which is optional; CI runs only `ruff check` | `ruff format --check` in CI | Nobody made the one big formatting commit | XS | Noisy diffs, style arguments in review | **Open.** Repay by 0.1.2 |
 | A4 | **Narrow ruff rule set**: bug-catching rules only; style, docstring and annotation rules off; several bugbear rules ignored (e.g. B904) | A wider rule set | Deliberate: we want lint failures to mean real bugs, not style noise | — | Some real issues (e.g. exception chaining) not flagged | **Accept** |
 | A5 | **bandit** (security scan) was run once for the greenlight, not in CI | A bandit job that fails on MEDIUM and above | Done by hand for the jury, never automated | XS | A new security smell goes unnoticed | **Open.** Repay by 0.2.0 |
-| A6 | **Installer tests run only on release tags** (`desktop-release.yml`, or by hand) | Run them on every push and PR | The installer was added late, in its own workflow | XS | An installer regression is found only when tagging | **Open.** Repay by 0.1.2 |
+| A6 | **Installer tests run only on release tags** (`desktop-release.yml`, or by hand) | Run them on every push and PR | The installer was added late, in its own workflow | XS | An installer regression is found only when tagging | **Repaid** on 09/10/2026: the `test-installer` job of `ci.yml` runs them on every push and pull request |
 | A7 | **Coverage is per service with fixed thresholds** (MAS 85 %, agent 90 %, knowledge store 85 %), and some tests were written to raise the number (e.g. `tests/mas/unit/test_registry_tool_functions_coverage.py`) | Coverage as a floor, plus behaviour-focused tests on the critical path | Coverage gates were a fast way to force testing; the greenlight looked at the number | M (gradual) | High percentage, weak assertions; the ATP still found 2 features that nobody could use (F13/F14) | **Accept the gates; repay the naming and assertions gradually** (`TESTING.md` §4) |
 
 ### B. Tests
@@ -78,7 +78,7 @@ The debt as recorded on 24/09/2026. The Decision column says where each item sta
 | C2 | **Test tools installed in production images** (pytest, pytest-cov, pytest-asyncio; pytest-html in the agent) | A `requirements-dev.txt` for tests only | One requirements file per service was simpler | XS | Bigger images, more licences to declare | **Repaid**, not released yet (B-46) |
 | C3 | **The MAS image is single-stage** and keeps compilers (`build-essential`, `g++`); pip runs with `--use-deprecated=legacy-resolver` | Multi-stage build (like the knowledge store); fix the conflicts the legacy resolver hides | The legacy resolver unblocked a dependency conflict quickly | S–M | Larger image; the resolver may install incompatible versions | **Repaid**, not released yet (B-67) |
 | C4 | **passlib 1.7.4 + `bcrypt<4.0`** in MAS, `bcrypt==3.2.2` pinned in the agent. passlib has had no release since 2020 and clashes with recent bcrypt. | Use `bcrypt` directly (or a maintained wrapper), with one version everywhere | Works today; it touches password hashing, so it needs care | S | Stuck on old crypto packages; future security fixes may be blocked | **Open.** Repay by 0.3.0 (before pilots) |
-| C5 | **The Python version is not consistent**: the README badge says 3.13, ruff targets `py313`, CI runs 3.13, and the Docker images use `python:3.11-slim` | One supported version, the same everywhere | Each part was set up at a different time | XS–S | "Works on my machine" bugs; lint rules for a version we don't run | **Part repaid**: the README says 3.11 (`8dc2410`). The rest by 0.1.2 (pick 3.11 or upgrade the images) |
+| C5 | **The Python version is not consistent**: the README badge says 3.13, ruff targets `py313`, CI runs 3.13, and the Docker images use `python:3.11-slim` | One supported version, the same everywhere | Each part was set up at a different time | XS–S | "Works on my machine" bugs; lint rules for a version we don't run | **Part repaid**: the README says 3.11 (`8dc2410`), and CI runs the service and installer tests on the images' Python, read from `src/services/PYTHON_VERSION` (09/10/2026). Ruff's `py313` target by 0.1.2 |
 | C6 | **Unused or odd dependencies**: PyMuPDF (AGPL, never imported) in the knowledge store; the PyPI `graphlib` package in MAS next to the standard-library `graphlib` | Remove them | Nobody cleaned the requirements after refactors | XS | PyMuPDF is the only licence blocker (ADR-004) | **Part repaid**: PyMuPDF removed (`a2e5807`). `graphlib` by 0.1.2 |
 | C7 | **Promtail** (log shipper) is end-of-life since March 2026 | Grafana Alloy | Still works | S | No more security fixes | **Repaid**, not released yet (B-67) |
 
@@ -132,7 +132,7 @@ Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at 
 | B2 | `084a1c2` (B-54); first runs `858dcb3`, `1daf376` | 100 questions in `tests/eval/testset.yaml`, 10 of them `not_in_corpus`, and the runner `scripts/eval/run-eval.py`. First runs on 06/10/2026 on the development laptop: 93 of 100 correct on CPU, 96 of 100 on the 8 GB GPU (`CHANGELOG.md`, line 29). | The runs are by hand, not on the GPU VM and not a release step. `.github/workflows/eval-testset.yml` only checks the set and the runner, with no model. |
 | C6 | `a2e5807` | PyMuPDF is gone from `src/services/knowledge-store/requirements.txt`. | The PyPI `graphlib` is still in `src/services/mas/requirements.txt` (line 38); `src/services/mas/tasks/decomposition.py` (line 10) imports the standard-library one. |
 | D1 | `736fdc2` (B-66), `9739864` (B-90), `5055cd2` (B-96) | The installer pulls prebuilt images: nothing builds on the customer's machine. The CPU profiles run one model server, llama-server, for MAS and every agent, and the CPU images contain no torch. | The installer still asks for 150 GB free, 125 GB with a GPU (`installer/preflight.py`, lines 29–30), because time and disk peak of a prebuilt install are not measured yet (`docs/operations.md`, line 82). Without a GPU, Docker needs at least 13.5 GiB (`installer/profiles.py`, line 22). The GPU profiles still name the 1.5B router in `LLM_MODEL_ID` (`installer/profiles.py`, line 324), but with `LLM_BACKEND=vllm` MAS never loads it. Loki, Promtail, Tempo and Prometheus always run. |
-| C5 | `8dc2410` | The README badge and its stack table say Python 3.11, the Python of the images. | `pyproject.toml` targets `py313` and the MAS and agent CI jobs run 3.13. |
+| C5 | `8dc2410` | The README badge and its stack table say Python 3.11, the Python of the images. | `pyproject.toml` targets `py313`. The CI jobs moved to the images' Python on 09/10/2026. |
 
 ### Still open
 
@@ -142,7 +142,7 @@ Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at 
 | A2 | `.pre-commit-config.yaml` line 7 still names a mypy configuration; `pyproject.toml` has none. |
 | A3 | `.github/workflows/ci.yml` line 64 runs `ruff check` only; `ruff-format` is in `.pre-commit-config.yaml` (line 26). |
 | A5 | No workflow runs bandit. The one report is `greenlight/code-quality-review/bandit_report.txt` (31/05/2026, `docs/eip/objectives-audit.md`, line 54). |
-| A6 | The installer tests run in `desktop-release.yml` (lines 27–28) and, since `736fdc2`, in `images.yml` (lines 44–45). Both run only on a `v*` tag or by hand. `ci.yml` has no installer job. |
+| A6 | Repaid on 09/10/2026: `ci.yml` runs `pytest installer/tests` in its `test-installer` job on every push and pull request, on the images' Python. `desktop-release.yml` and `images.yml` still run them on a `v*` tag. |
 | B1 | `ci.yml` (lines 315–320) says the integration tests run only by hand. |
 | B3 | `src/services/knowledge-store/tests/test_corpus_safety.py` is still there; CI runs `tests/knowledge_store` only (`ci.yml`, line 295). |
 | B4 | The repository records no ATP after v7 (18/09/2026, `docs/eip/regressions.md`), so the rule has not been applied yet. |
@@ -157,7 +157,7 @@ The accepted items still hold: B904 is still ignored (`pyproject.toml`, line 51)
 
 | Repay by | Items | Estimated cost |
 |---|---|---|
-| **0.1.2** (not tagged yet) | A1, A3, A6, B3; the rest of C5 and C6 | Under 2.5 d by the cost scale (S: A1; XS: A3, A6, B3, C6; XS–S: C5). Fixing the 20 lint errors before `npm run lint` can gate CI is not estimated. |
+| **0.1.2** (not tagged yet) | A1, A3, B3; the rest of C5 and C6 | Under 2.5 d by the cost scale (S: A1; XS: A3, B3, C6; XS–S: C5). Fixing the 20 lint errors before `npm run lint` can gate CI is not estimated. |
 | **0.2.0** (end of Oct) | A2 (start), A5, D2; the rest of B2 and D1 | A2 and A5: about 1 to 2.5 d by the cost scale. B2 (M) and D1 + D2 (L) are part repaid and not re-estimated. |
 | **0.3.0** (Dec) | C4, D1 (slimmer profile) | ~3 d (24/09 estimate) |
 | **1.0.0** (Feb 2027) | B1 (E2E in CI) | ~3–5 d |

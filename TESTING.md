@@ -43,7 +43,7 @@ These need their own, stricter tests.
 | 2.1 | **Unit (Python)** | Pure logic: schemas, routing rules, tools, helpers; external systems mocked | `tests/<service>/unit/` | pytest, pytest-asyncio (`asyncio_mode = auto`), fakeredis (MAS), mocks in `conftest.py` | CI (`ci.yml`), with coverage gates |
 | 2.2 | **API (Python)** | FastAPI endpoints through a test client: status codes, auth, validation, response shape | `tests/<service>/api/` | pytest, FastAPI `TestClient` / httpx | CI (`ci.yml`) |
 | 2.3 | **Web client** | API clients, hooks, components with logic | `src/services/web-client/__tests__/` | Vitest, Testing Library, jsdom | Locally only. Not in CI |
-| 2.4 | **Installer** | Preflight, hardware and profile choice, consent, model manager, smoke-test parsing, bundle | `installer/tests/` | `unittest` | `desktop-release.yml` and `images.yml`, on a `v*` tag or by hand. Not on pull requests |
+| 2.4 | **Installer** | Preflight, hardware and profile choice, consent, model manager, smoke-test parsing, bundle | `installer/tests/` | `unittest` | `ci.yml` (`test-installer`, with pytest and coverage) on every push and pull request; `desktop-release.yml` and `images.yml` on a `v*` tag or by hand |
 | 2.5 | **CI wiring** | Version numbers, CPU build wiring, release images, repository wiring, third-party notices | `tests/ci/` | `unittest` | CI (`ci.yml` jobs `versions`, `licences` and `cpu-build-wiring`; `images.yml`) |
 | 2.6 | **Evaluation set checks** | The 100-question set itself, the eval runner's scoring and reports, the benchmark tooling | `tests/eval/` | pytest, hermetic | `eval-testset.yml`, when `demo_assets/`, `tests/eval/`, `scripts/eval/`, `scripts/benchmarks/` or the two reused `scripts/perf/` scripts change |
 | 2.7 | **Grounding evaluation** | Answers are correct, cite the right document, and out-of-corpus questions are refused | `tests/eval/testset.yaml` + `scripts/eval/run-eval.py` | Runner against a live stack; results in `benchmarks/` | By hand, before each release (section 6) |
@@ -163,7 +163,7 @@ These are rules, not suggestions. The reviewer checks them before approving a PR
 
 ## 6. How to run the tests
 
-Install each service's requirements and its `requirements-test.txt` (pytest and the other test tools, kept out of the images) as `.github/workflows/ci.yml` does. CI uses Python 3.13, and 3.11 for the knowledge store.
+Install each service's requirements and its `requirements-test.txt` (pytest and the other test tools, kept out of the images) as `.github/workflows/ci.yml` does. CI runs the service and installer tests on the Python of the images, read from `src/services/PYTHON_VERSION` (3.11.17), and the bench kit on 3.10 and 3.13; the other jobs run tools, on Python 3.13.
 
 ```bash
 # Python, from the repository root (each service has its own pytest.ini)
@@ -276,7 +276,8 @@ The plan is to turn the critical ones into tests under `tests/<service>/` marked
 | `cpu-images` | Builds the mas, agent and knowledge-store images through the CPU overlay; fails on any CUDA package or torch (`scripts/ci/check-cpu-image.py`) |
 | `test-mas` | MAS tests, `-m "not requires_stack"`, coverage at least 85 % |
 | `test-agent` | Agent tests, coverage at least 90 % |
-| `test-knowledge-store` | Knowledge-store tests on Python 3.11, coverage at least 85 % |
+| `test-knowledge-store` | Knowledge-store tests, coverage at least 85 % |
+| `test-installer` | `pytest installer/tests` with coverage, no gate |
 | `coverage-summary` | Test and coverage tables in the run summary |
 
 **`eval-testset.yml`** runs `pytest tests/eval -q` on the same pushes and pull requests, when the evaluation files change (section 2.6).
@@ -290,7 +291,7 @@ The plan is to turn the critical ones into tests under `tests/<service>/` marked
 | Coverage table and HTML reports | Yes | Publish the numbers in the README |
 | Evaluation set checks | Yes, when its files change | |
 | Web client: `npm run lint`, `npm run typecheck`, `npm test` | No | Add a CI job |
-| Installer tests on every PR | No (release tags only) | Add to `ci.yml` |
+| Installer tests on every PR | Yes | |
 | `ruff format --check` | No (pre-commit only, ruff v0.6.9 there) | Add to CI |
 | Type checking (mypy) | No | Start with MAS auth and new code |
 | bandit | No (report run by hand) | Add to CI |
