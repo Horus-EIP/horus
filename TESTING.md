@@ -217,13 +217,13 @@ Five agent tests fail on Windows only. CI runs on Linux. All are in `tests/agent
 
 ### Coverage
 
-| Service | CI gate (`--cov-fail-under`, with `--cov-branch`) | Measured on 07/10/2026 |
+| Service | CI gate (`--cov-fail-under`, with `--cov-branch`) | Lines covered, latest measured on CI |
 |---|---:|---:|
-| MAS | 85 % | 92.3 % |
-| Agent | 90 % | 93.9 % |
-| Knowledge store | 85 % | 90.0 % |
+| MAS | 85 % | 93.8 % |
+| Agent | 90 % | 94.8 % |
+| Knowledge store | 85 % | 92.1 % |
 
-With `--cov-branch`, the percentage counts lines and branches together. What counts as code is set in `pyproject.toml` (`[tool.coverage.*]`: tests, alembic and migrations are left out). Each CI run writes a coverage table to its summary (job `coverage-summary`) and uploads the HTML reports `coverage-mas`, `coverage-agent` and `coverage-knowledge-store`.
+The figures are from CI run #270 of 10/10/2026 on `Sprint#1_September2026_Tek5` (commit `cf0b622`), as its test jobs' summaries give them; the README publishes the same table. A summary's figure is the line rate of the coverage report: lines only. With `--cov-branch`, the percentage the gate checks counts lines and branches together, so it is lower; the job's log prints it (`Total coverage`). What counts as code is set in `pyproject.toml` (`[tool.coverage.*]`: tests, alembic and migrations are left out). Each CI run writes a coverage table to its summary (job `coverage-summary`) and uploads the HTML reports `coverage-mas`, `coverage-agent` and `coverage-knowledge-store`.
 
 ### Grounding evaluation
 
@@ -292,7 +292,7 @@ The plan is to turn the critical ones into tests under `tests/<service>/` marked
 |---|---|---|
 | `ruff check` | Yes | |
 | Python tests with coverage gates (MAS 85, agent 90, knowledge store 85) | Yes | |
-| Coverage table and HTML reports | Yes | Publish the numbers in the README |
+| Coverage table and HTML reports | Yes; the README publishes the figures of 10/10/2026 | |
 | Evaluation set checks | Yes, when its files change | |
 | Web client: `npm run lint`, `npm run typecheck`, `npm test` | No | Add a CI job |
 | Installer tests on every PR | Yes | |
