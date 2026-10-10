@@ -25,6 +25,12 @@ TEST_JOBS = {
     "test-llm-mock": ("LLM mock", "coverage-llm-mock.xml", "junit-llm-mock.xml"),
 }
 RETENTION = {"coverage-": 3, "app-": 7, "Horus-Beta-zip": 14}
+RELEASE_UPLOADS = {("desktop-release.yml", "build"), ("desktop-release.yml", "bundle")}
+REPORT_UPLOADS = {
+    "test-mas": ("coverage-mas", ("coverage-mas.xml", "junit-mas.xml", "htmlcov-mas/")),
+    "test-agent": ("coverage-agent", ("coverage-agent.xml", "junit-agent.xml", "htmlcov-agent/")),
+    "test-knowledge-store": ("coverage-knowledge-store", ("coverage-ks.xml", "junit-ks.xml", "htmlcov-ks/")),
+}
 
 spec = importlib.util.spec_from_file_location("coverage_line", SCRIPT)
 coverage_line = importlib.util.module_from_spec(spec)
@@ -122,6 +128,28 @@ class Workflows(unittest.TestCase):
         for name, job, step in upload_steps():
             with self.subTest(f"{name} {job}"):
                 self.assertIs(step.get("continue-on-error"), True)
+
+    def test_no_test_job_uploads_artifacts_on_a_green_run(self):
+        for name, job, step in upload_steps():
+            if (name, job) in RELEASE_UPLOADS:
+                continue
+            with self.subTest(f"{name} {job}"):
+                self.assertEqual(step.get("if"), "failure()")
+
+    def test_a_failed_test_job_still_uploads_its_reports(self):
+        jobs = workflow("ci.yml")["jobs"]
+        for job, (artifact, paths) in REPORT_UPLOADS.items():
+            uploads = [step for step in jobs[job]["steps"]
+                       if str(step.get("uses", "")).startswith("actions/upload-artifact@")]
+            with self.subTest(job):
+                self.assertEqual(len(uploads), 1)
+                self.assertEqual(uploads[0]["with"]["name"], artifact)
+                self.assertEqual(uploads[0]["with"]["path"].split(), list(paths))
+                self.assertEqual(uploads[0]["if"], "failure()")
+
+    def test_only_the_release_workflow_uploads_on_success(self):
+        always = {(name, job) for name, job, step in upload_steps() if step.get("if") != "failure()"}
+        self.assertEqual(always, RELEASE_UPLOADS)
 
     def test_uploads_are_kept_only_as_long_as_needed(self):
         for name, job, step in upload_steps():

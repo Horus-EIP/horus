@@ -189,7 +189,7 @@ cd src/services/web-client && npm test
 cd scripts/perf && locust -f load-locust.py
 ```
 
-Tests that need a running stack are in [scripts/integration-checks/](scripts/integration-checks/README.md). Every CI run posts a per-service coverage table to its Workflow Summary and uploads the HTML reports as artifacts (`coverage-mas`, `coverage-agent`, `coverage-knowledge-store`).
+Tests that need a running stack are in [scripts/integration-checks/](scripts/integration-checks/README.md). Every CI run posts a per-service coverage table to its Workflow Summary. A MAS, agent or knowledge-store test job that fails also uploads its coverage and junit reports, the HTML report included, as an artifact kept 3 days (`coverage-mas`, `coverage-agent`, `coverage-knowledge-store`); a green run uploads none.
 
 ## Test coverage
 

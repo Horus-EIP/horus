@@ -223,7 +223,7 @@ Five agent tests fail on Windows only. CI runs on Linux. All are in `tests/agent
 | Agent | 90 % | 94.8 % |
 | Knowledge store | 85 % | 92.1 % |
 
-The figures are from CI run #270 of 10/10/2026 on `Sprint#1_September2026_Tek5` (commit `cf0b622`), as its test jobs' summaries give them; the README publishes the same table. A summary's figure is the line rate of the coverage report: lines only. With `--cov-branch`, the percentage the gate checks counts lines and branches together, so it is lower; the job's log prints it (`Total coverage`). What counts as code is set in `pyproject.toml` (`[tool.coverage.*]`: tests, alembic and migrations are left out). Each CI run writes a coverage table to its summary (job `coverage-summary`) and uploads the HTML reports `coverage-mas`, `coverage-agent` and `coverage-knowledge-store`.
+The figures are from CI run #270 of 10/10/2026 on `Sprint#1_September2026_Tek5` (commit `cf0b622`), as its test jobs' summaries give them; the README publishes the same table. A summary's figure is the line rate of the coverage report: lines only. With `--cov-branch`, the percentage the gate checks counts lines and branches together, so it is lower; the job's log prints it (`Total coverage`). What counts as code is set in `pyproject.toml` (`[tool.coverage.*]`: tests, alembic and migrations are left out). Each CI run writes a coverage table to its summary (job `coverage-summary`). A MAS, agent or knowledge-store job that fails also uploads its reports, the HTML one included, as `coverage-mas`, `coverage-agent` or `coverage-knowledge-store`, kept 3 days; a green run uploads nothing.
 
 ### Grounding evaluation
 
@@ -292,7 +292,7 @@ The plan is to turn the critical ones into tests under `tests/<service>/` marked
 |---|---|---|
 | `ruff check` | Yes | |
 | Python tests with coverage gates (MAS 85, agent 90, knowledge store 85) | Yes | |
-| Coverage table and HTML reports | Yes; the README publishes the figures of 10/10/2026 | |
+| Coverage table on every run, HTML reports when a test job fails | Yes; the README publishes the figures of 10/10/2026 | |
 | Evaluation set checks | Yes, when its files change | |
 | Web client: `npm run lint`, `npm run typecheck`, `npm test` | No | Add a CI job |
 | Installer tests on every PR | Yes | |
