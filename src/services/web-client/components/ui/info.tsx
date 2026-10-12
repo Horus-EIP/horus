@@ -50,7 +50,7 @@ const statusClass = (val: string) => {
   if (['busy', 'processing'].includes(v)) {
     return 'bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/30';
   }
-  if (v === 'pending') {
+  if (v === 'pending' || v === 'queued') {
     return 'bg-gray-500/20 text-gray-300 ring-1 ring-gray-500/30';
   }
   if (v === 'offline'){
@@ -58,6 +58,13 @@ const statusClass = (val: string) => {
   }
   return '';
 };
+
+const LONG_TEXT_MIN_LENGTH = 40;
+
+const textCellClass = (text: string) =>
+  text.length >= LONG_TEXT_MIN_LENGTH
+    ? 'min-w-48 max-w-xs line-clamp-3 wrap-anywhere'
+    : 'block max-w-xs wrap-break-word';
 
 export default function Info({
   title,
@@ -78,7 +85,7 @@ export default function Info({
 
   return (
     <div className="rounded-2xl border border-white/10 bg-[var(--bgSoft)]/70 p-2 md:p-4 shadow-xl backdrop-blur-xl">
-      <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="mb-3 flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:justify-between">
         <h2 className="text-lg font-semibold text-[var(--text)]">{title}</h2>
 
         {hasHeaderControls && (
@@ -147,7 +154,7 @@ export default function Info({
                 {row.map((data, cIndex) => (
                   <td
                     key={cIndex}
-                    className="whitespace-nowrap px-3 py-2 align-middle text-[var(--text)]"
+                    className="px-3 py-2 align-middle text-[var(--text)]"
                   >
                     {typeof data === 'string' && statusClass(data) ? (
                       <span
@@ -170,7 +177,7 @@ export default function Info({
                       typeof data === 'object' && data !== null && !Array.isArray(data) ? (
                       <span>{data as ReactNode}</span>
                     ) : (
-                      <span title={String(data)}>{String(data)}</span>
+                      <span title={String(data)} className={textCellClass(String(data))}>{String(data)}</span>
                     )
                     )}
                   </td>

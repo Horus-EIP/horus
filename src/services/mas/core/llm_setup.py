@@ -1,20 +1,86 @@
+from __future__ import annotations
+
 import os
 import threading
+from enum import Enum
 from pathlib import Path
 
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+try:
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+except ImportError:
+    torch = None
+    AutoModelForCausalLM = None
+    AutoTokenizer = None
+    BitsAndBytesConfig = None
 
 from core.config import settings
 from core.logger import get_logger
+from core.metrics import observe_prompt_tokens
 
 logger = get_logger("llm_setup")
+
+DEFAULT_PROMPT_TOKEN_BUDGET = 4096
+CONSERVATIVE_CHARS_PER_TOKEN = 3
+UNLABELLED_CALL = "other"
+PURPOSE_HEADER = "X-Horus-Purpose"
+
+
+class PromptTokenSource(str, Enum):
+    USAGE = "usage"
+    TOKENIZER = "tokenizer"
+    ESTIMATE = "estimate"
+
+
+def prompt_token_budget() -> int:
+    raw = os.getenv("LLM_PROMPT_TOKEN_BUDGET", "").strip()
+    try:
+        budget = int(raw)
+    except ValueError:
+        return DEFAULT_PROMPT_TOKEN_BUDGET
+    return budget if budget > 0 else DEFAULT_PROMPT_TOKEN_BUDGET
+
+
+def estimate_prompt_tokens(messages: list) -> int:
+    characters = sum(len(str(message.get("content", ""))) for message in messages)
+    return -(-characters // CONSERVATIVE_CHARS_PER_TOKEN)
+
+
+def record_prompt_tokens(call: str, tokens: int, source: PromptTokenSource) -> None:
+    budget = prompt_token_budget()
+    over_budget = observe_prompt_tokens(call, source.value, tokens, budget)
+    logger.info(
+        "LLM prompt tokens", call=call, prompt_tokens=tokens, source=source.value, budget=budget
+    )
+    if over_budget:
+        logger.warning(
+            "LLM prompt over its token budget",
+            call=call,
+            prompt_tokens=tokens,
+            budget=budget,
+        )
+
+
+def _served_prompt_tokens(data: dict, messages: list) -> tuple[int, PromptTokenSource]:
+    usage = data.get("usage") if isinstance(data, dict) else None
+    tokens = usage.get("prompt_tokens") if isinstance(usage, dict) else None
+    if isinstance(tokens, int) and not isinstance(tokens, bool):
+        return tokens, PromptTokenSource.USAGE
+    return estimate_prompt_tokens(messages), PromptTokenSource.ESTIMATE
+
+
+IN_PROCESS_STACK_MISSING = (
+    "The in-process router LLM needs torch and transformers, which this image does not "
+    "ship: CPU images leave them out. Set LLM_BACKEND=vllm and LLM_VLLM_URL to use "
+    "llama-server or vLLM, or run the GPU image."
+)
 
 os.environ.setdefault(
     "PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True,max_split_size_mb:64"
 )
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-torch.backends.cuda.matmul.allow_tf32 = True
+if torch is not None:
+    torch.backends.cuda.matmul.allow_tf32 = True
 
 
 def _configure_llm_cpu_threads() -> None:
@@ -32,7 +98,13 @@ def _configure_llm_cpu_threads() -> None:
     logger.info("LLM CPU thread budget: OMP/torch intra-op=%s", n)
 
 
-_configure_llm_cpu_threads()
+if torch is not None:
+    _configure_llm_cpu_threads()
+
+
+def _require_in_process_stack() -> None:
+    if torch is None or AutoModelForCausalLM is None or AutoTokenizer is None:
+        raise RuntimeError(IN_PROCESS_STACK_MISSING)
 
 
 def _cpu_dtype() -> torch.dtype:
@@ -153,6 +225,7 @@ def _model_device(model: torch.nn.Module) -> torch.device:
 
 
 def get_llm():
+    _require_in_process_stack()
     use_gpu = _llm_use_gpu()
 
     if is_model_dir_exists():
@@ -209,6 +282,7 @@ def get_llm():
 tokenizer = None
 model = None
 _llm_load_lock = threading.Lock()
+_generation_lock = threading.Lock()
 
 
 def _ensure_llm_loaded() -> None:
@@ -277,14 +351,55 @@ def _vllm_timeout() -> float:
         return 120.0
 
 
-def _ask_vllm(messages: list, max_new_tokens: int) -> str:
-    """Run an orchestration LLM call against the external vLLM server. Greedy to
-    match the in-process path; vLLM applies the chat template server-side. Uses
-    stdlib urllib so no new MAS dependency / image rebuild is needed for deps."""
+def llm_server_backend() -> bool:
+    return _llm_backend() == "vllm"
+
+
+def _post_chat_completion(body: dict, call: str) -> str:
     import json
     import urllib.request
 
     url = _vllm_base_url().rstrip("/") + "/chat/completions"
+    req = urllib.request.Request(
+        url,
+        json.dumps(body).encode("utf-8"),
+        {"Content-Type": "application/json", PURPOSE_HEADER: call},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=_vllm_timeout()) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    content = (data["choices"][0]["message"].get("content") or "").strip()
+    record_prompt_tokens(call, *_served_prompt_tokens(data, body["messages"]))
+    return content
+
+
+def ask_llm_with_json_schema(
+    messages: list, schema_name: str, schema: dict, max_tokens: int
+) -> str:
+    if not llm_server_backend():
+        raise RuntimeError(
+            "Constrained JSON output needs the OpenAI-compatible server backend (LLM_BACKEND=vllm)."
+        )
+    return _post_chat_completion(
+        {
+            "model": _vllm_model_name(),
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": 0.0,
+            "stream": False,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": schema_name, "strict": True, "schema": schema},
+            },
+        },
+        schema_name,
+    )
+
+
+def _ask_vllm(messages: list, max_new_tokens: int, call: str) -> str:
+    """Run an orchestration LLM call against the external vLLM server. Greedy to
+    match the in-process path; vLLM applies the chat template server-side. Uses
+    stdlib urllib so no new MAS dependency / image rebuild is needed for deps."""
     # Budget max_tokens to the room left under max_model_len so a big prompt
     # (e.g. the aggregation step's full chain history) neither 400s nor silently
     # truncates. Estimate prompt tokens from chars (~chars/3, conservative).
@@ -292,28 +407,24 @@ def _ask_vllm(messages: list, max_new_tokens: int) -> str:
         max_model_len = max(512, int(os.getenv("LLM_VLLM_MAX_MODEL_LEN", "8192")))
     except ValueError:
         max_model_len = 8192
-    est_prompt = sum(len(str(m.get("content", ""))) for m in messages) // 3
+    est_prompt = estimate_prompt_tokens(messages)
     safe_max = max(256, min(int(max_new_tokens), max_model_len - est_prompt - 256))
-    body = json.dumps(
+    return _post_chat_completion(
         {
             "model": _vllm_model_name(),
             "messages": messages,
             "max_tokens": safe_max,
             "temperature": 0.0,
             "stream": False,
-        }
-    ).encode("utf-8")
-    req = urllib.request.Request(
-        url, body, {"Content-Type": "application/json"}, method="POST"
+        },
+        call,
     )
-    with urllib.request.urlopen(req, timeout=_vllm_timeout()) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-    return (data["choices"][0]["message"].get("content") or "").strip()
 
 
-def ask_llm(messages: list, max_new_tokens: int = 256):
+def ask_llm(messages: list, max_new_tokens: int = 256, call: str = UNLABELLED_CALL):
     if _llm_backend() == "vllm":
-        return _ask_vllm(messages, max_new_tokens)
+        return _ask_vllm(messages, max_new_tokens, call)
+    _require_in_process_stack()
     logger.info("Entering ask_llm, checking model...")
     _ensure_llm_loaded()
     if tokenizer is None or model is None:
@@ -346,24 +457,31 @@ def ask_llm(messages: list, max_new_tokens: int = 256):
     logger.info(f"Starting generation with max_new_tokens={max_new_tokens}...")
     import time
 
-    start_time = time.time()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    with torch.no_grad():
-        out = model.generate(
-            input_ids=input_ids,
-            attention_mask=attn_mask,
-            max_new_tokens=max_new_tokens,
-            do_sample=False,
-            repetition_penalty=1.3,
-            return_dict_in_generate=True,
-            pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=tokenizer.eos_token_id,
-        )
-    logger.info(f"Generation finished in {time.time() - start_time:.2f}s")
+    queued_at = time.time()
+    with _generation_lock:
+        start_time = time.time()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        with torch.no_grad():
+            out = model.generate(
+                input_ids=input_ids,
+                attention_mask=attn_mask,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                repetition_penalty=1.3,
+                return_dict_in_generate=True,
+                pad_token_id=tokenizer.eos_token_id,
+                eos_token_id=tokenizer.eos_token_id,
+            )
+    logger.info(
+        f"Generation finished in {time.time() - start_time:.2f}s "
+        f"after waiting {start_time - queued_at:.2f}s for the previous one"
+    )
 
+    prompt_length = input_ids.size(1)
+    record_prompt_tokens(call, int(prompt_length), PromptTokenSource.TOKENIZER)
     seq = out.sequences[0]
-    gen_only = seq[input_ids.size(1) :]
+    gen_only = seq[prompt_length:]
     text = tokenizer.decode(
         gen_only, skip_special_tokens=True, clean_up_tokenization_spaces=False
     ).strip()

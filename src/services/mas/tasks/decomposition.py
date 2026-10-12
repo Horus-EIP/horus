@@ -9,6 +9,7 @@ synthesis helper (``aggregate_results``) that consolidates sub-task output.
 import json
 from graphlib import TopologicalSorter
 
+from opentelemetry import trace
 from sqlalchemy.orm import Session
 
 from agents.registry_tool_functions import (
@@ -21,9 +22,10 @@ from core.llm_setup import ask_llm
 from core.logger import get_logger
 from core.rabbitmq_tool import rabbitmq_instance
 from db.database import SessionLocal
-from db.models import Agents
+from db.models import Agents, AgentTypes
 from tasks.collaborative_task import CollaborativeTask
 from tasks.demo_log import pretty_log
+from tasks.intent_rules import classify_trivial_intent
 from tasks.prompts import (
     clean_json_output,
     get_decomposition_prompt,
@@ -32,6 +34,13 @@ from tasks.prompts import (
 )
 
 logger = get_logger("task_tool_functions")
+tracer = trace.get_tracer(__name__)
+
+INTENT_CALL = "intent"
+PLAN_CALL = "plan"
+ANNOUNCE_CALL = "announce"
+REVIEW_CALL = "review"
+AGGREGATE_CALL = "aggregate"
 
 
 def build_action_list(actions_dict, agents_available, db: Session = None):
@@ -273,6 +282,7 @@ def _heuristic_decompose(user_input: str, db: Session) -> tuple:
     return first_action, actions_list
 
 
+@tracer.start_as_current_span("decompose_task")
 def decompose_task(user_input: str, db: Session = None):
     pretty_log(f"INITIATING TASK DECOMPOSITION FOR: '{user_input}'", "🔨")
 
@@ -287,7 +297,7 @@ def decompose_task(user_input: str, db: Session = None):
 
     pretty_log("GENERATING DECOMPOSITION PLAN WITH LLM...", "🧠")
     prompt = get_decomposition_prompt(user_input, available_agents)
-    output = ask_llm(prompt, max_new_tokens=2048)
+    output = ask_llm(prompt, max_new_tokens=2048, call=PLAN_CALL)
     logger.debug(f"LLM decomposition raw output: {output}")
 
     output = clean_json_output(output)
@@ -380,6 +390,7 @@ def _planned_steps_from_actions(action_list: list, db: Session) -> list[dict]:
     return out
 
 
+@tracer.start_as_current_span("announce_plan")
 def manager_announce_plan(
     user_demand: str, action_list: list, db: Session
 ) -> str:
@@ -398,7 +409,7 @@ def manager_announce_plan(
 
     try:
         prompt = get_manager_announcement_prompt(user_demand, steps)
-        text = ask_llm(prompt, max_new_tokens=256).strip()
+        text = ask_llm(prompt, max_new_tokens=256, call=ANNOUNCE_CALL).strip()
         # Strip markdown/code fences a small model sometimes adds despite
         # being told plain text.
         for fence in ("```text", "```markdown", "```"):
@@ -420,6 +431,7 @@ def manager_announce_plan(
         )
 
 
+@tracer.start_as_current_span("review_step")
 def manager_review_step(
     user_demand: str,
     transcript: str,
@@ -445,7 +457,7 @@ def manager_review_step(
             remaining_steps=remaining_view,
             available_agent_types=available_agent_types,
         )
-        raw = ask_llm(prompt, max_new_tokens=384)
+        raw = ask_llm(prompt, max_new_tokens=384, call=REVIEW_CALL)
         cleaned = clean_json_output(raw)
         parsed = json.loads(cleaned)
     except Exception as exc:
@@ -484,10 +496,43 @@ def select_agent_for_task(user_input: str, db: Session = None):
     (JSON parse failure, unknown classification, or the planner produced no
     plan) and the caller should fall back to its skill-match / catch-all paths.
     """
-    pretty_log(f"ANALYZING USER INPUT: '{user_input}'", "🔍")
-
     if db is None:
         db = SessionLocal()
+
+    classification, outcome = choose_route_with_llm(user_input, db)
+    if classification != "COMPLEX_TASK":
+        return outcome
+
+    # Multi-agent collaboration is the headline feature of this platform —
+    # when the router flags a request as COMPLEX_TASK, hand it straight to
+    # the planner here so the caller doesn't fall back to single-agent
+    # paths (skill-match, auto-create-specialist, catch-all) that would
+    # capture the request before decomposition could ever fire. Returning
+    # the planner's output through the existing 4-tuple lets the regular
+    # subtask-chaining in routes.py + tasks-result/ kick in unchanged.
+    logger.info("LLM requested DECOMPOSITION. Inlining planner.")
+    pretty_log("COMPLEX TASK DETECTED -> RUNNING PLANNER INLINE", "🔨")
+    try:
+        first_action, actions_list = decompose_task(user_input, db)
+    except Exception as exc:
+        logger.exception("Inline decomposition raised: %s", exc)
+        return None, None, None, []
+    if first_action:
+        first_agent, first_demand = first_action
+        pretty_log(
+            f"PLAN READY: {len(actions_list) + 1} subtask(s), first -> {first_agent}",
+            "🗺️",
+        )
+        return first_agent, first_demand, None, actions_list
+    # Planner produced no plan — fall through to the legacy all-None
+    # return so the caller's downstream fallbacks (skill-match → auto-
+    # create → catch-all) still get a chance to dispatch something.
+    return None, None, None, []
+
+
+@tracer.start_as_current_span("route_task_llm")
+def choose_route_with_llm(user_input: str, db: Session) -> tuple[str | None, tuple]:
+    pretty_log(f"ANALYZING USER INPUT: '{user_input}'", "🔍")
 
     available_agents = get_available_agents(db)
     logger.debug(
@@ -496,7 +541,7 @@ def select_agent_for_task(user_input: str, db: Session = None):
 
     if not available_agents:
         pretty_log("NO AGENTS AVAILABLE", "❌")
-        return None, None, None, []
+        return None, _unrouted()
 
     pretty_log(f"FOUND {len(available_agents)} ACTIVE AGENTS", "🤖")
 
@@ -504,7 +549,7 @@ def select_agent_for_task(user_input: str, db: Session = None):
 
     prompt = get_prompt(user_input, available_agents)
     logger.info("Calling ask_llm from select_agent_for_task...")
-    output = ask_llm(prompt, max_new_tokens=1024)
+    output = ask_llm(prompt, max_new_tokens=1024, call=INTENT_CALL)
     logger.info(f"Received LLM output (length: {len(output)}): {output[:100]}...")
 
     output = clean_json_output(output)
@@ -518,41 +563,22 @@ def select_agent_for_task(user_input: str, db: Session = None):
         pretty_log(
             "SELECTOR FAILED TO PARSE JSON - FALLING BACK TO DECOMPOSITION", "⚠️"
         )
-        return None, None, None, []
+        return None, _unrouted()
 
     classification = json_output.get("classification", "UNKNOWN")
     pretty_log(f"ROUTER CLASSIFICATION: {classification.upper()}", "🎯")
 
+    if classification == "DIRECT_ANSWER" and classify_trivial_intent(user_input) is None:
+        return "SINGLE_AGENT", _reroute_direct_answer_to_single_agent(
+            user_input, json_output.get("agent_name"), available_agents
+        )
+
     if classification == "COMPLEX_TASK":
-        # Multi-agent collaboration is the headline feature of this platform —
-        # when the router flags a request as COMPLEX_TASK, hand it straight to
-        # the planner here so the caller doesn't fall back to single-agent
-        # paths (skill-match, auto-create-specialist, catch-all) that would
-        # capture the request before decomposition could ever fire. Returning
-        # the planner's output through the existing 4-tuple lets the regular
-        # subtask-chaining in routes.py + tasks-result/ kick in unchanged.
-        logger.info("LLM requested DECOMPOSITION. Inlining planner.")
-        pretty_log("COMPLEX TASK DETECTED -> RUNNING PLANNER INLINE", "🔨")
-        try:
-            first_action, actions_list = decompose_task(user_input, db)
-        except Exception as exc:
-            logger.exception("Inline decomposition raised: %s", exc)
-            return None, None, None, []
-        if first_action:
-            first_agent, first_demand = first_action
-            pretty_log(
-                f"PLAN READY: {len(actions_list) + 1} subtask(s), first -> {first_agent}",
-                "🗺️",
-            )
-            return first_agent, first_demand, None, actions_list
-        # Planner produced no plan — fall through to the legacy all-None
-        # return so the caller's downstream fallbacks (skill-match → auto-
-        # create → catch-all) still get a chance to dispatch something.
-        return None, None, None, []
+        return classification, _unrouted()
 
     if classification == "DIRECT_ANSWER":
         pretty_log("RESPONDING DIRECTLY TO USER", "💬")
-        return (
+        return classification, (
             None,
             None,
             f"Response for user : {json_output.get('final_answer', '')}",
@@ -565,20 +591,52 @@ def select_agent_for_task(user_input: str, db: Session = None):
 
         if not agent_name:
             logger.error("SINGLE_AGENT classification but no agent_name provided.")
-            return None, None, None, []
+            return classification, _unrouted()
 
         agent_id = get_agent_id(agent_name, db)
         if not agent_id:
             logger.error(f"Agent '{agent_name}' not found.")
-            return None, None, None, []
+            return classification, _unrouted()
 
         pretty_log(f"SELECTED SINGLE AGENT: {agent_name}", "✅")
-        return agent_id, rewritten_input, None, []
+        return classification, (agent_id, rewritten_input, None, [])
 
     logger.warning(
         f"Unknown classification '{classification}'. Falling back to decomposition."
     )
+    return classification, _unrouted()
+
+
+def _unrouted() -> tuple:
     return None, None, None, []
+
+
+def _reroute_direct_answer_to_single_agent(
+    user_input: str, router_agent_name: str | None, available_agents: list
+):
+    named_agent_id = _available_agent_id_by_name(router_agent_name, available_agents)
+    agent_id = named_agent_id or _default_agent_id(available_agents)
+    logger.info(
+        "DIRECT_ANSWER refused for a request that is not a greeting, small talk or "
+        "arithmetic; re-routing to SINGLE_AGENT",
+        agent_id=agent_id,
+    )
+    pretty_log(f"DIRECT ANSWER REFUSED -> SINGLE AGENT {agent_id}", "↪️")
+    return agent_id, user_input, None, []
+
+
+def _available_agent_id_by_name(agent_name: str | None, available_agents: list) -> str | None:
+    for agent_id, name, _description, _agent_type in available_agents:
+        if name == agent_name:
+            return agent_id
+    return None
+
+
+def _default_agent_id(available_agents: list) -> str:
+    for agent_id, _name, _description, agent_type in available_agents:
+        if str(getattr(agent_type, "value", agent_type)).lower() == AgentTypes.GENERAL.value:
+            return agent_id
+    return available_agents[0][0]
 
 
 def select_agent_by_mode(
@@ -658,10 +716,11 @@ def select_agent_by_mode(
     return None, None, None, []
 
 
+@tracer.start_as_current_span("aggregate_results")
 def aggregate_results(history, result):
     """Synthesize a final user-facing answer from sub-task history + output."""
     prompt = get_prompt_final_answer_generation(history, result)
     # The final synthesized briefing needs real room — 512 truncated multi-part
     # answers mid-section. _ask_vllm budgets this down to fit max_model_len.
-    output = ask_llm(prompt, max_new_tokens=3072)
+    output = ask_llm(prompt, max_new_tokens=3072, call=AGGREGATE_CALL)
     return output

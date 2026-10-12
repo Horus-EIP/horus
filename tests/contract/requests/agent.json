@@ -1,0 +1,185 @@
+[
+ {
+  "name": "in_corpus",
+  "purpose": "answer",
+  "question": "What was our Q4 2025 revenue?",
+  "body": {
+   "model": "qwen3-4b",
+   "messages": [
+    {
+     "role": "system",
+     "content": "You are FinCorp's Finance Analyst. You answer questions about company finances from the finance documents: quarterly reports, the Expense Policy and budgets.\n- The reporting corpus covers Q4 2025 (1 October to 31 December 2025). Read 'Q4' without a year as Q4 2025 and never put another year in its place; if the question names a year the documents do not cover, say so.\n- Lead with the figure, and quote revenue, margins and expense caps exactly as the document writes them.\n- HR, IT security and compliance questions are outside finance: say so and name the specialist who owns them.\n\n---\n\nYou answer one request from the passages you are given.\nReply with one JSON object and nothing else, keys in this order: {\"status\": \"ok\", \"answer\": \"...\", \"sources\": [\"S1\"]}\nstatus: \"ok\" when the passages contain what the request asks for, \"not_found\" when they do not.\nanswer: for \"ok\", a short answer to that request only, in your own words, in Markdown; for \"not_found\", one sentence saying the documents do not contain it.\nsources: the labels of the passages your answer uses, such as \"S1\"; [] for \"not_found\".\nUse only the passages. Never invent a fact. State each figure once and never correct yourself: no 'wait', 'no', 'actually' or 'correction'."
+    },
+    {
+     "role": "user",
+     "content": "Passages:\n[S1] 1_Q4_2025_Financial_Report.md\n# FinCorp — Q4 2025 Financial Report\n\n**Reporting period:** October 1, 2025 – December 31, 2025\n**Prepared by:** Finance Department\n**Signed by:** John Smith, Chief Financial Officer\n**Date of issue:** January 18, 2026\n**Classification:** CONFIDENTIAL — Internal Use Only\n\n---\n\n## 1. Executive Summary\n\nFinCorp closed Q4 2025 with total revenue of **$4.2M**, up 12% year-over-year. Operating\nexpenses grew to **$3.1M**, leaving a net operating income of **$1.1M**. Overall 2025 full-year\nrevenue reached **$15.8M**, beating the board target of $15M by 5.3%.\n\nThe quarter was marked by the successful onboarding of three enterprise clients\n(Acme Bank, Meridian Holdings, and Kestrel Capital) and the completion of our SOC 2\nType II audit on November 24, 2025.\n\n## 2. Revenue Breakdown\n\n| Segment | Q4 2025 Revenue | % of Total |\n|---------|-----------------|------------|\n| Advisory Services | $1,850,000 | 44.0% |\n| Asset Management | $1,420,000 | 33.8% |\n| Compliance Consulting | $620,000 | 14.8% |\n\n[S2] 1_Q4_2025_Financial_Report.md\n| Technology Licensing | $310,000 | 7.4% |\n| **Total** | **$4,200,000** | **100%** |\n\n## 3. Operating Expenses\n\n| Category | Q4 2025 Amount | Notes |\n|----------|---------------:|-------|\n| Payroll & Benefits | $1,820,000 | 58% of opex; headcount 94 |\n| Technology & Cloud | $410,000 | Includes Horus deployment, $85K |\n| Travel & Entertainment | $265,000 | See Expense Policy §3 for limits |\n| Professional Services | $220,000 | Legal, audit, consultants |\n| Facilities | $185,000 | Two offices: New York, Singapore |\n| Marketing | $140,000 | Q4 trade show circuit |\n| Other | $60,000 | |\n| **Total** | **$3,100,000** | |\n\n### Notable variances vs. budget\n\n- **Travel & Entertainment** came in at $265K against a Q4 budget of $210K — a\n  **$55K overage (+26%)**. Primary driver: three back-to-back client closings in Q4\n  requiring in-person travel. Approval for overage signed by Sarah Johnson, COO,\n  on December 12, 2025.\n\n[S3] 1_Q4_2025_Financial_Report.md\n- **Technology & Cloud** includes the initial Horus platform deployment and\n  the ChromaDB infrastructure build-out.\n\n## 4. Key Clients Onboarded in Q4\n\n| Client | Contract Value (annual) | Start date |\n|--------|------------------------:|------------|\n| Acme Bank | $1,200,000 | Oct 15, 2025 |\n| Meridian Holdings | $780,000 | Nov 3, 2025 |\n| Kestrel Capital | $540,000 | Dec 1, 2025 |\n\n## 5. Risks and Outlook\n\nThe primary risk flagged this quarter is regulatory: the upcoming **MiCA enforcement\nin the EU on June 30, 2026** may affect our Singapore crypto advisory line. The\nCompliance team, led by Michael Brown, is producing a mitigation plan due\n**March 1, 2026**.\n\nOutlook for Q1 2026: revenue target **$4.5M**, driven by a full quarter of Acme Bank\nrevenue and expansion of Meridian Holdings to advisory services.\n\n## 6. Attestation\n\nI certify that the figures in this report are accurate to the best of my knowledge\nand have been reviewed by the external auditors on **January 14, 2026**.\n\n\n[S4] 1_Q4_2025_Financial_Report.md\n/s/ **John Smith**\nChief Financial Officer, FinCorp\nJanuary 18, 2026\n\nRequest: What was our Q4 2025 revenue?"
+    }
+   ],
+   "max_tokens": 1024,
+   "temperature": 0.0,
+   "stream": true,
+   "stream_options": {
+    "include_usage": true
+   },
+   "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+     "name": "agent_answer",
+     "strict": true,
+     "schema": {
+      "type": "object",
+      "properties": {
+       "status": {
+        "type": "string",
+        "enum": [
+         "ok",
+         "not_found"
+        ]
+       },
+       "answer": {
+        "type": "string"
+       },
+       "sources": {
+        "type": "array",
+        "items": {
+         "type": "string",
+         "enum": [
+          "S1",
+          "S2",
+          "S3",
+          "S4"
+         ]
+        }
+       }
+      },
+      "required": [
+       "status",
+       "answer",
+       "sources"
+      ],
+      "additionalProperties": false
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "out_of_corpus",
+  "purpose": "answer",
+  "question": "What is the capital of Peru?",
+  "body": {
+   "model": "qwen3-4b",
+   "messages": [
+    {
+     "role": "system",
+     "content": "You are FinCorp's Finance Analyst. You answer questions about company finances from the finance documents: quarterly reports, the Expense Policy and budgets.\n- The reporting corpus covers Q4 2025 (1 October to 31 December 2025). Read 'Q4' without a year as Q4 2025 and never put another year in its place; if the question names a year the documents do not cover, say so.\n- Lead with the figure, and quote revenue, margins and expense caps exactly as the document writes them.\n- HR, IT security and compliance questions are outside finance: say so and name the specialist who owns them.\n\n---\n\nYou answer one request from the passages you are given.\nReply with one JSON object and nothing else, keys in this order: {\"status\": \"ok\", \"answer\": \"...\", \"sources\": [\"S1\"]}\nstatus: \"ok\" when the passages contain what the request asks for, \"not_found\" when they do not.\nanswer: for \"ok\", a short answer to that request only, in your own words, in Markdown; for \"not_found\", one sentence saying the documents do not contain it.\nsources: the labels of the passages your answer uses, such as \"S1\"; [] for \"not_found\".\nUse only the passages. Never invent a fact. State each figure once and never correct yourself: no 'wait', 'no', 'actually' or 'correction'."
+    },
+    {
+     "role": "user",
+     "content": "Passages:\n[S1] 1_Q4_2025_Financial_Report.md\n# FinCorp — Q4 2025 Financial Report\n\n**Reporting period:** October 1, 2025 – December 31, 2025\n**Prepared by:** Finance Department\n**Signed by:** John Smith, Chief Financial Officer\n**Date of issue:** January 18, 2026\n**Classification:** CONFIDENTIAL — Internal Use Only\n\n---\n\n## 1. Executive Summary\n\nFinCorp closed Q4 2025 with total revenue of **$4.2M**, up 12% year-over-year. Operating\nexpenses grew to **$3.1M**, leaving a net operating income of **$1.1M**. Overall 2025 full-year\nrevenue reached **$15.8M**, beating the board target of $15M by 5.3%.\n\nThe quarter was marked by the successful onboarding of three enterprise clients\n(Acme Bank, Meridian Holdings, and Kestrel Capital) and the completion of our SOC 2\nType II audit on November 24, 2025.\n\n## 2. Revenue Breakdown\n\n| Segment | Q4 2025 Revenue | % of Total |\n|---------|-----------------|------------|\n| Advisory Services | $1,850,000 | 44.0% |\n| Asset Management | $1,420,000 | 33.8% |\n| Compliance Consulting | $620,000 | 14.8% |\n\n[S2] 1_Q4_2025_Financial_Report.md\n| Technology Licensing | $310,000 | 7.4% |\n| **Total** | **$4,200,000** | **100%** |\n\n## 3. Operating Expenses\n\n| Category | Q4 2025 Amount | Notes |\n|----------|---------------:|-------|\n| Payroll & Benefits | $1,820,000 | 58% of opex; headcount 94 |\n| Technology & Cloud | $410,000 | Includes Horus deployment, $85K |\n| Travel & Entertainment | $265,000 | See Expense Policy §3 for limits |\n| Professional Services | $220,000 | Legal, audit, consultants |\n| Facilities | $185,000 | Two offices: New York, Singapore |\n| Marketing | $140,000 | Q4 trade show circuit |\n| Other | $60,000 | |\n| **Total** | **$3,100,000** | |\n\n### Notable variances vs. budget\n\n- **Travel & Entertainment** came in at $265K against a Q4 budget of $210K — a\n  **$55K overage (+26%)**. Primary driver: three back-to-back client closings in Q4\n  requiring in-person travel. Approval for overage signed by Sarah Johnson, COO,\n  on December 12, 2025.\n\n[S3] 1_Q4_2025_Financial_Report.md\n- **Technology & Cloud** includes the initial Horus platform deployment and\n  the ChromaDB infrastructure build-out.\n\n## 4. Key Clients Onboarded in Q4\n\n| Client | Contract Value (annual) | Start date |\n|--------|------------------------:|------------|\n| Acme Bank | $1,200,000 | Oct 15, 2025 |\n| Meridian Holdings | $780,000 | Nov 3, 2025 |\n| Kestrel Capital | $540,000 | Dec 1, 2025 |\n\n## 5. Risks and Outlook\n\nThe primary risk flagged this quarter is regulatory: the upcoming **MiCA enforcement\nin the EU on June 30, 2026** may affect our Singapore crypto advisory line. The\nCompliance team, led by Michael Brown, is producing a mitigation plan due\n**March 1, 2026**.\n\nOutlook for Q1 2026: revenue target **$4.5M**, driven by a full quarter of Acme Bank\nrevenue and expansion of Meridian Holdings to advisory services.\n\n## 6. Attestation\n\nI certify that the figures in this report are accurate to the best of my knowledge\nand have been reviewed by the external auditors on **January 14, 2026**.\n\n\n[S4] 1_Q4_2025_Financial_Report.md\n/s/ **John Smith**\nChief Financial Officer, FinCorp\nJanuary 18, 2026\n\n[S5] 2_Employee_Handbook.md\n# FinCorp — Employee Handbook\n\n**Version:** 3.2\n**Effective date:** January 1, 2026\n**Owner:** Sarah Johnson, Chief Operating Officer\n**HR Director:** Rachel Garcia\n**Last reviewed:** December 15, 2025\n\n---\n\n## 1. Welcome to FinCorp\n\nFinCorp is a financial advisory, asset management, and compliance consulting firm\nheadquartered in New York with a regional office in Singapore. Founded in 2014,\nwe serve over 80 enterprise clients globally. This handbook summarizes the\npolicies every employee is expected to follow.\n\n## 2. Working Hours and Remote Work\n\n- Standard working hours: Monday to Friday, 9:00 AM to 6:00 PM local time.\n- Hybrid policy: all employees are expected **in office at least 3 days per week**.\n- Core collaboration hours: 10:00 AM – 3:00 PM local.\n- Fully remote arrangements require written approval from the department head\n  and from Sarah Johnson (COO).\n\n## 3. Paid Time Off\n\n| Tenure | Annual vacation days | Sick days |\n|--------|---------------------:|----------:|\n\n[S6] 2_Employee_Handbook.md\n| 0–2 years | 18 | 10 |\n| 3–5 years | 22 | 10 |\n| 6+ years | 28 | 12 |\n\n- Unused vacation may be carried over up to a **maximum of 5 days** into the next\n  calendar year.\n- Public holidays follow the local jurisdiction calendar.\n\n## 4. Compensation and Benefits\n\n- Salaries are reviewed annually, effective April 1 each year.\n- Performance bonuses are paid quarterly, based on individual and company targets.\n- Health insurance is fully employer-funded for the employee; dependents covered\n  at 70%.\n- Retirement contribution: employer matches up to 6% of base salary.\n\n## 5. Expense Reimbursement\n\nExpense reimbursement follows the **FinCorp Expense Policy** (see separate document).\nAny expense above policy limits requires written pre-approval from the\nemployee's department head. Overages above $5,000 require approval from\n**Sarah Johnson (COO)**.\n\n## 6. Confidentiality\n\nAll employees sign an NDA on day one. Client data, financial figures, and\n\n[S7] 2_Employee_Handbook.md\ninternal strategy documents are **strictly confidential** and classified per\nthe FinCorp Data Classification Policy (see Compliance Guidelines).\n\nViolations can result in immediate termination and legal action.\n\n## 7. Code of Conduct\n\nFinCorp expects all employees to:\n\n- Act with integrity toward clients, colleagues, and regulators.\n- Report any suspected fraud, misconduct, or harassment to the HR Director\n  (Rachel Garcia) or via the anonymous ethics hotline: ethics@fincorp.com.\n- Comply with the Compliance Guidelines, including insider trading restrictions.\n\n## 8. Termination\n\n- **Notice period:** 30 days for standard employees, 60 days for senior managers,\n  90 days for the executive team.\n- Termination for cause (fraud, gross misconduct, NDA violation) is immediate.\n- Exit interviews are conducted by Rachel Garcia within 5 business days of\n  the notice.\n\n## 9. Grievances\n\nAny grievance should first be raised with the employee's direct manager.\n\n[S8] 2_Employee_Handbook.md\nIf unresolved within 10 business days, it is escalated to Rachel Garcia.\nCases involving the HR Director are escalated directly to Sarah Johnson (COO).\n\n---\n\nSigned:\n**Sarah Johnson**, Chief Operating Officer\n**Rachel Garcia**, HR Director\nDate: December 15, 2025\n\nRequest: What is the capital of Peru?"
+    }
+   ],
+   "max_tokens": 1024,
+   "temperature": 0.0,
+   "stream": true,
+   "stream_options": {
+    "include_usage": true
+   },
+   "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+     "name": "agent_answer",
+     "strict": true,
+     "schema": {
+      "type": "object",
+      "properties": {
+       "status": {
+        "type": "string",
+        "enum": [
+         "ok",
+         "not_found"
+        ]
+       },
+       "answer": {
+        "type": "string"
+       },
+       "sources": {
+        "type": "array",
+        "items": {
+         "type": "string",
+         "enum": [
+          "S1",
+          "S2",
+          "S3",
+          "S4",
+          "S5",
+          "S6",
+          "S7",
+          "S8"
+         ]
+        }
+       }
+      },
+      "required": [
+       "status",
+       "answer",
+       "sources"
+      ],
+      "additionalProperties": false
+     }
+    }
+   }
+  }
+ },
+ {
+  "name": "no_passages",
+  "purpose": "answer",
+  "question": "What was our Q4 2025 revenue?",
+  "body": {
+   "model": "qwen3-4b",
+   "messages": [
+    {
+     "role": "system",
+     "content": "You are FinCorp's Finance Analyst. You answer questions about company finances from the finance documents: quarterly reports, the Expense Policy and budgets.\n- The reporting corpus covers Q4 2025 (1 October to 31 December 2025). Read 'Q4' without a year as Q4 2025 and never put another year in its place; if the question names a year the documents do not cover, say so.\n- Lead with the figure, and quote revenue, margins and expense caps exactly as the document writes them.\n- HR, IT security and compliance questions are outside finance: say so and name the specialist who owns them.\n\n---\n\nYou answer one request from the passages you are given.\nReply with one JSON object and nothing else, keys in this order: {\"status\": \"ok\", \"answer\": \"...\"}\nstatus: \"ok\" when the passages contain what the request asks for, \"not_found\" when they do not.\nanswer: for \"ok\", a short answer to that request only, in your own words, in Markdown; for \"not_found\", one sentence saying the documents do not contain it.\nUse only the passages. Never invent a fact. State each figure once and never correct yourself: no 'wait', 'no', 'actually' or 'correction'."
+    },
+    {
+     "role": "user",
+     "content": "Passages:\n(no passages)\n\nRequest: What was our Q4 2025 revenue?"
+    }
+   ],
+   "max_tokens": 1024,
+   "temperature": 0.0,
+   "stream": true,
+   "stream_options": {
+    "include_usage": true
+   },
+   "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+     "name": "agent_answer",
+     "strict": true,
+     "schema": {
+      "type": "object",
+      "properties": {
+       "status": {
+        "type": "string",
+        "enum": [
+         "ok",
+         "not_found"
+        ]
+       },
+       "answer": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "status",
+       "answer"
+      ],
+      "additionalProperties": false
+     }
+    }
+   }
+  }
+ }
+]

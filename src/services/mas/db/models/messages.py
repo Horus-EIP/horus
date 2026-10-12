@@ -1,6 +1,7 @@
 """``Messages`` ORM model + audit listeners."""
 
 from sqlalchemy import (
+    JSON,
     Column,
     DateTime,
     ForeignKey,
@@ -38,6 +39,8 @@ class Messages(Base):
     agent_id = Column(String, nullable=True)
     agent_name = Column(String, nullable=True)
     skill_used = Column(String, nullable=True)
+    sources = Column(JSON, nullable=True)
+    ai_provider = Column(String, nullable=True)
 
     conversation_id = Column(
         Integer,

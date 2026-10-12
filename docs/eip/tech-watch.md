@@ -37,6 +37,7 @@ Each row = one technology we evaluated. Status meanings:
 | FastAPI | Web framework | 2025-05 | TLDR AI + GitHub trending | Adopted | [ADR-003](../adr/ADR-003-fastapi.md) — async-first, OpenAPI for free, ecosystem |
 | OpenTelemetry → Tempo | Distributed tracing | 2025-08 | OpenTelemetry blog | Adopted | Compose stack — replaced Jaeger when Tempo's Grafana integration matured |
 | Loki + Promtail | Log aggregation | 2026-04 | Grafana blog | Adopted | Compose stack — single Grafana UI for logs/metrics/traces (see commit `dbc8f5b`) |
+| Grafana Alloy | Log shipping | 2026-09 | Grafana docs (Promtail end of life on 2026-03-02) | Adopted | Replaced Promtail in the Compose stack (B-67); same labels for `/admin/logs` ([ADR-005](../adr/ADR-005-accepted-quality-debt.md), C7) |
 | Qwen3-4B-Instruct (HF) | LLM | 2026-02 | Hugging Face trending | Adopted | Default decision model for the Agent service |
 | BAAI/bge-base-en-v1.5 | Embedding model | 2025-08 | MTEB leaderboard | Adopted | Knowledge Store default — beat e5-base on internal corpus |
 | ReAct agent pattern | Reasoning | 2026-02 | arXiv 2210.03629 + LangChain docs | Adopted | `src/services/agent/app/ai_agents/react_agent.py` |
@@ -50,6 +51,8 @@ Each row = one technology we evaluated. Status meanings:
 | **vLLM** | LLM serving | 2026-04 | HF blog | Watching | Promising for throughput; would replace direct `transformers` calls in Agent. Revisit when GPU budget allows. |
 | **Outlines / Instructor** | Structured LLM output | 2026-05 | Latent Space podcast | Watching | Would replace hand-rolled JSON-mode handling. Spike planned post-greenlight. |
 | **DSPy** | LLM programming | 2026-05 | Stanford NLP Discord | Watching | Interesting paradigm but maturity vs. our timeline doesn't fit yet. |
+| **llama.cpp Vulkan backend** (`server-vulkan` image) | LLM serving on integrated GPUs | 2026-10 | llama.cpp discussion #10879 + docs | Watching | [iGPU and NPU note](../tech-watch/IGPU_NPU_RESEARCH.md) (B-101): one measured spike on a Linux laptop before any profile; no container route on Windows |
+| **llama.cpp OpenVINO backend** | LLM serving on Intel iGPUs and NPUs | 2026-10 | llama.cpp `docs/backend/OPENVINO.md` | Watching | [iGPU and NPU note](../tech-watch/IGPU_NPU_RESEARCH.md) (B-101): work in progress, Intel only, validated on Core Ultra Series 1 and 2 only; do not build yet |
 
 ---
 
@@ -64,6 +67,7 @@ Internal deep-dives produced by the team, beyond per-tool watch entries:
 | Observability strategy | [assets/research/mas/Observability.pdf](../assets/research/mas/Observability.pdf) | ✅ |
 | Orchestrator infrastructure | [assets/research/mas/Orchestrator_infrastructure.pdf](../assets/research/mas/Orchestrator_infrastructure.pdf) | ✅ |
 | Security process | [assets/research/mas/Security_Process.pdf](../assets/research/mas/Security_Process.pdf) | ✅ |
+| Integrated GPUs and NPUs for the CPU profiles (B-101) | [tech-watch/IGPU_NPU_RESEARCH.md](../tech-watch/IGPU_NPU_RESEARCH.md) | Note done; spike not run |
 | Comparative tech brief (jury-facing) | [../greenlight/track-objectives-report/Comparative_Tech_Brief.docx](../../greenlight/track-objectives-report/Comparative_Tech_Brief.docx) | ✅ |
 
 ---

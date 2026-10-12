@@ -16,6 +16,7 @@ import urllib.request
 import uuid
 from pathlib import Path
 
+import profiles
 from common import (
     EXIT_SMOKE_FAILED,
     InstallError,
@@ -26,8 +27,8 @@ from common import (
 )
 
 DEFAULT_BASE_URLS = {
-    "mas": "http://localhost:8000",
-    "ks": "http://localhost:8080",
+    "mas": "http://127.0.0.1:8000",
+    "ks": "http://127.0.0.1:8080",
 }
 
 DEFAULT_TIMEOUT = 1200
@@ -50,6 +51,7 @@ NEGATIVE_RE = re.compile(r"\blima\b", re.IGNORECASE)
 
 MANAGER_NAMES = {"manager"}
 PLANNING_SKILLS = {"planning", "orchestration"}
+TASK_ACCEPTED_STATUSES = (200, 202)
 
 def _sanitise_filename(name: str) -> str:
     return name.replace("\r", "").replace("\n", "").replace('"', "%22")
@@ -475,6 +477,29 @@ def read_env(path: Path) -> dict[str, str]:
         values[key] = val
     return values
 
+def model_server_of(infra: Path) -> str:
+    compose_file = read_env(infra / ".env").get("COMPOSE_FILE", "")
+    return profiles.model_server_for_compose_file(compose_file)
+
+MODEL_SERVER_HINTS = {
+    profiles.GPU_MODEL_SERVER: (
+        "On a machine without a usable GPU, reinstall with --profile cpu-standard."
+    ),
+    profiles.CPU_MODEL_SERVER: (
+        "On a CPU profile llm is llama-server. If its log shows it was killed\n"
+        "for memory, raise LLM_SERVER_MEM_LIMIT in src/infra/.env. If it never\n"
+        "started, its model file is missing or damaged: START-HERE (your\n"
+        "platform) --start downloads and checks it again. Then read:\n"
+        "  docker compose logs llm-model llm"
+    ),
+    profiles.MOCK_MODEL_SERVER: (
+        "In mock AI mode llm-mock answers in place of a language model. A\n"
+        "HORUS_MOCK_SCENARIO other than normal in src/infra/.env makes it slow,\n"
+        "refuse or fail on purpose. Its log names every call it answered:\n"
+        "  docker compose logs llm-mock"
+    ),
+}
+
 def admin_credentials(infra: Path, steps: Steps) -> tuple[str, str]:
     env_path = infra / ".env"
     if not env_path.is_file():
@@ -585,14 +610,17 @@ def step_login(steps: Steps, mas: str, username: str, password: str, deadline: f
         raise _fail(
             steps,
             f"Login failed for user '{username}' (HTTP {resp.status}).",
-            "The admin account is seeded by the API on first start from\n"
-            "SUPER_USER_USERNAME / SUPER_USER_PASSWORD in src/infra/.env.\n"
-            "A 401 here means those values do not match the account already in\n"
-            "the database - which happens if you changed them after the first\n"
-            "start, because the seeding only runs against an empty database.",
-            "If you changed the admin password after installing, either put the\n"
-            "old one back in src/infra/.env, or wipe the data and reinstall:\n"
-            "  START-HERE (your platform) --uninstall --delete-data\n"
+            "The admin account is created by the API on first start from\n"
+            "SUPER_USER_USERNAME / SUPER_USER_PASSWORD in src/infra/.env, and\n"
+            "an account still on the shipped 'admin' gets that password when\n"
+            "the API starts. A 401 here means the account's password is not the\n"
+            "one in src/infra/.env: it was changed in Horus, or SUPER_USER_PASSWORD\n"
+            "is empty or 'admin', which the API refuses.",
+            "Put the admin account's password in SUPER_USER_PASSWORD in\n"
+            "src/infra/.env, then run:\n"
+            "  START-HERE (your platform) --start\n"
+            "Or wipe the data and reinstall:\n"
+            "  START-HERE (your platform) --uninstall\n"
             "  START-HERE (your platform)",
         )
     token = (resp.json() or {}).get("access_token")
@@ -722,7 +750,7 @@ def step_wait_for_agents(steps: Steps, mas: str, token: str, deadline: float) ->
         "  docker compose -f src/infra/docker-compose.yml logs --tail 120 mas",
     )
 
-def step_upload_document(steps: Steps, ks: str, repo: Path, deadline: float) -> None:
+def step_upload_document(steps: Steps, ks: str, repo: Path, deadline: float) -> str | None:
     steps.start("6/9  Ingest the demo document")
     doc = repo / "demo_assets" / DEMO_DOC
     if not doc.is_file():
@@ -755,7 +783,7 @@ def step_upload_document(steps: Steps, ks: str, repo: Path, deadline: float) -> 
 
     if DEMO_DOC in titles(listed):
         steps.passed(f"'{DEMO_DOC}' is already indexed (upload skipped)")
-        return
+        return None
 
     content_type, body = build_multipart(
         [("files", DEMO_DOC, "text/markdown", doc.read_bytes())]
@@ -808,6 +836,21 @@ def step_upload_document(steps: Steps, ks: str, repo: Path, deadline: float) -> 
             "  START-HERE (your platform)",
         )
     steps.passed(f"'{DEMO_DOC}' uploaded and indexed")
+    return uploaded_doc_id(up)
+
+def uploaded_doc_id(up: Response) -> str | None:
+    for entry in up.json() or []:
+        if isinstance(entry, dict) and entry.get("filename") == DEMO_DOC and entry.get("doc_id"):
+            return str(entry["doc_id"])
+    return None
+
+def remove_uploaded_document(log: Log, ks: str, doc_id: str) -> None:
+    try:
+        removed = http("DELETE", f"{ks}/{urllib.parse.quote(doc_id)}", timeout=HTTP_TIMEOUT)
+    except Unreachable as exc:
+        log.info(f"smoke: could not remove the uploaded demo document {doc_id}: {exc}")
+        return
+    log.info(f"smoke: removed the uploaded demo document {doc_id} (HTTP {removed.status})")
 
 def _create_conversation(mas: str, token: str, name: str, timeout: float) -> int | None:
     resp = _json_post(
@@ -848,6 +891,12 @@ def _is_answer_frame(event: dict) -> bool:
     if (event.get("agent_name") or "").strip().lower() in MANAGER_NAMES:
         return False
     return bool((event.get("content") or "").strip())
+
+def _failed_task_note(event: dict) -> str | None:
+    if event.get("event") != "error":
+        return None
+    reason = (event.get("content") or event.get("detail") or "").strip()
+    return f"the task ended without an answer: {reason}" if reason else "the task ended without an answer"
 
 def _poll_task(mas: str, token: str, task_id, timeout: float) -> str:
     try:
@@ -897,7 +946,7 @@ def ask(
             )
         except Unreachable as exc:
             return "", f"the API stopped answering while submitting the task: {exc}"
-        if resp.status != 200:
+        if resp.status not in TASK_ACCEPTED_STATUSES:
             return "", f"the task was rejected: HTTP {resp.status} {resp.text(200)}"
 
         body = resp.json() or {}
@@ -943,6 +992,9 @@ def ask(
                     "ws frame: type=%s agent=%s skill=%s"
                     % (event.get("type"), event.get("agent_name"), event.get("skill_used"))
                 )
+                failure = _failed_task_note(event)
+                if failure:
+                    return "", failure
                 if _is_answer_frame(event):
                     return event["content"].strip(), "answered over the chat socket"
                 continue
@@ -955,7 +1007,8 @@ def ask(
     finally:
         client.close()
 
-def step_chat(steps: Steps, log: Log, mas: str, deadline: float, token: str) -> str:
+def step_chat(steps: Steps, log: Log, mas: str, deadline: float, token: str,
+              model_server: str = profiles.GPU_MODEL_SERVER) -> str:
     steps.start("7/9  Ask a question about the demo document")
     budget = _remaining(deadline, steps, "asking the demo question")
     answer, note = ask(log, mas, token, QUESTION, "horus-smoke", max(30.0, budget - 120.0))
@@ -964,14 +1017,13 @@ def step_chat(steps: Steps, log: Log, mas: str, deadline: float, token: str) -> 
             steps,
             "The stack never produced an answer.",
             f"Asked: {QUESTION!r}\nResult: {note}",
-            "Almost always the AI worker: it is either still loading model\n"
-            "weights, or the LLM backend it was told to use is not running.\n"
-            "  docker compose -f src/infra/docker-compose.yml logs -f agent\n"
-            "If LLM_BACKEND=vllm in src/infra/.env, the vllm container must be\n"
-            "healthy - there is no automatic fallback:\n"
-            "  docker compose -f src/infra/docker-compose.yml ps vllm\n"
-            "  docker compose -f src/infra/docker-compose.yml logs --tail 80 vllm\n"
-            "On a machine without a usable GPU, reinstall with --profile cpu.",
+            "Almost always the AI worker: it is either still starting, or the\n"
+            f"model server it calls, the {model_server} container, is not healthy.\n"
+            "There is no automatic fallback. From src/infra:\n"
+            "  docker compose logs -f agent\n"
+            f"  docker compose ps {model_server}\n"
+            f"  docker compose logs --tail 80 {model_server}\n"
+            + MODEL_SERVER_HINTS.get(model_server, ""),
         )
     steps.passed(f"{note} ({len(answer)} chars)")
     log.debug("answer: " + answer[:1000].replace("\n", " "))
@@ -1001,8 +1053,8 @@ def step_check_answer(steps: Steps, answer: str, require_quality: bool = True) -
             "There are two causes and the search below tells them apart.\n"
             "\n"
             "Check the document is indexed and findable:\n"
-            "  curl http://localhost:8080/file\n"
-            '  curl "http://localhost:8080/?query=Q4%202025%20revenue&n_results=5"\n'
+            "  curl http://127.0.0.1:8080/file\n"
+            '  curl "http://127.0.0.1:8080/?query=Q4%202025%20revenue&n_results=5"\n'
             "\n"
             "If the search returns NOTHING, retrieval is the problem. Reset the\n"
             "store and reinstall:\n"
@@ -1036,7 +1088,8 @@ def step_negative_control(steps: Steps, log: Log, mas: str, token: str, deadline
     steps.passed("declined to answer outside the document set")
 
 def run(log: Log, repo: Path, base_urls: dict | None = None,
-        timeout: int = DEFAULT_TIMEOUT, require_answer_quality: bool = True) -> dict:
+        timeout: int = DEFAULT_TIMEOUT, require_answer_quality: bool = True,
+        model_server: str | None = None) -> dict:
     urls = dict(DEFAULT_BASE_URLS)
     urls.update(base_urls or {})
     mas = urls["mas"].rstrip("/")
@@ -1055,10 +1108,15 @@ def run(log: Log, repo: Path, base_urls: dict | None = None,
         token = step_login(steps, mas, username, password, deadline)
         step_authenticated_ping(steps, mas, token, deadline)
         workers = step_wait_for_agents(steps, mas, token, deadline)
-        step_upload_document(steps, ks, repo, deadline)
-        answer = step_chat(steps, log, mas, deadline, token)
-        step_check_answer(steps, answer, require_answer_quality)
-        step_negative_control(steps, log, mas, token, deadline)
+        uploaded = step_upload_document(steps, ks, repo, deadline)
+        try:
+            answer = step_chat(steps, log, mas, deadline, token,
+                               model_server or model_server_of(infra_dir(repo)))
+            step_check_answer(steps, answer, require_answer_quality)
+            step_negative_control(steps, log, mas, token, deadline)
+        finally:
+            if uploaded:
+                remove_uploaded_document(log, ks, uploaded)
     except InstallError:
         log.info("smoke steps: " + json.dumps(steps.entries))
         raise

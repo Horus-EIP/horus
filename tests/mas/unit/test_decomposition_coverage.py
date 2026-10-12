@@ -199,6 +199,21 @@ def _patch_llm(monkeypatch, output):
     monkeypatch.setattr(D, "ask_llm", _fake)
 
 
+def _capture_llm_prompts(monkeypatch, output):
+    prompts = []
+
+    def _fake(prompt, **kwargs):
+        prompts.append(prompt)
+        return output
+
+    monkeypatch.setattr(D, "ask_llm", _fake)
+    return prompts
+
+
+def _rendered_text(messages):
+    return "\n".join(message["content"] for message in messages)
+
+
 # ============================ clean_json_output ============================ #
 class TestCleanJsonOutput:
     def test_plain_object_untouched(self):
@@ -251,29 +266,38 @@ class TestPromptBuilders:
         msgs = P.get_prompt_final_answer_generation("orig request", "the result")
         assert msgs[0]["role"] == "system"
         assert "synthesizer" in msgs[0]["content"]
-        assert "orig request" in msgs[1]["content"]
+        assert "Address the original user request directly." in msgs[0]["content"]
         assert "the result" in msgs[1]["content"]
+        assert msgs[1]["content"].endswith("ORIGINAL USER REQUEST:\norig request")
 
-    def test_router_prompt_lists_agents_and_escapes_schema(self):
+    def test_router_prompt_lists_agents_and_renders_single_brace_schema(self):
         msgs = P.get_prompt("Q4 revenue?", self.AGENTS)
-        user = msgs[1]["content"]
-        assert "Researcher: finds facts" in user
-        # Schema braces are doubled so an f-string template would survive .format.
-        assert "{{" in user and "}}" in user
-        assert "COMPLEX_TASK" in msgs[0]["content"]
+        system = msgs[0]["content"]
+        assert "Researcher: finds facts" in system
+        assert '{\n  "classification"' in system
+        assert "{{" not in system and "}}" not in system
+        assert "COMPLEX_TASK" in system
+        assert msgs[1]["content"] == "USER INPUT:\nQ4 revenue?"
+
+    def test_router_prompt_limits_direct_answer_to_greetings_small_talk_and_arithmetic(self):
+        system = P.get_prompt("hi", self.AGENTS)[0]["content"]
+        assert "trivial questions" not in system
+        assert "A factual question is NEVER DIRECT_ANSWER" in system
+        assert "capital of Peru" in system
 
     def test_decomposition_prompt_normalises_dotted_enum_types(self):
         dotted = [("a1", "Researcher", "finds facts", "AgentType.RESEARCHER")]
         msgs = P.get_decomposition_prompt("do a thing", dotted)
-        user = msgs[1]["content"]
-        # "AgentType.RESEARCHER" -> "researcher" via split('.')[-1].lower()
-        assert "Type: researcher" in user
-        assert "do a thing" in user
+        system = msgs[0]["content"]
+        assert "Type: researcher" in system
+        assert '"sub_tasks": [' in system
+        assert "{{" not in system and "}}" not in system
+        assert msgs[1]["content"] == "USER INPUT:\ndo a thing"
 
     def test_decomposition_prompt_lowercases_plain_type(self):
         plain = [("a1", "Writer", "writes", "WRITER")]
-        user = P.get_decomposition_prompt("x", plain)[1]["content"]
-        assert "Type: writer" in user
+        system = P.get_decomposition_prompt("x", plain)[0]["content"]
+        assert "Type: writer" in system
 
     def test_manager_announcement_prompt_enumerates_steps(self):
         steps = [
@@ -284,8 +308,9 @@ class TestPromptBuilders:
         user = msgs[1]["content"]
         assert "1. researcher: gather data" in user
         assert "2. writer: draft report" in user
-        assert "build a report" in user
+        assert user.endswith("USER DEMAND:\nbuild a report")
         assert "Manager" in msgs[0]["content"]
+        assert "Plain text, no JSON, no code fences." in msgs[0]["content"]
 
     def test_manager_review_prompt_with_remaining_steps(self):
         steps = [{"agent_type": "writer", "description": "finish draft"}]
@@ -299,8 +324,10 @@ class TestPromptBuilders:
         assert "writer: finish draft" in user
         assert "researcher, writer" in user
         assert "so far so good" in user
-        # schema braces doubled
-        assert '{{"decision"' in user
+        assert user.endswith("USER DEMAND:\ndemand")
+        system = msgs[0]["content"]
+        assert '{"decision"' in system
+        assert "{{" not in system and "}}" not in system
 
     def test_manager_review_prompt_empty_remaining_and_types(self):
         msgs = P.get_manager_review_prompt(
@@ -313,6 +340,75 @@ class TestPromptBuilders:
         assert "none — this was the last planned step" in user
         # default agent type label when none supplied
         assert "general" in user
+
+
+ROSTER_WITH_IDS = [
+    ("agent-id-researcher", "Researcher", "finds facts", _Type.RESEARCHER),
+    ("agent-id-writer", "Writer", "writes prose", _Type.WRITER),
+    ("agent-id-general", "General", "answers anything", _Type.GENERAL),
+]
+
+PROMPT_BUILDERS = {
+    "intent": lambda request, agents: P.get_prompt(request, agents),
+    "plan": lambda request, agents: P.get_decomposition_prompt(request, agents),
+    "aggregate": lambda request, _agents: P.get_prompt_final_answer_generation(
+        request, f"Specialist output for: {request}"
+    ),
+    "announce": lambda request, _agents: P.get_manager_announcement_prompt(
+        request, [{"agent_type": "writer", "description": f"Draft: {request}"}]
+    ),
+    "review": lambda request, _agents: P.get_manager_review_prompt(
+        request,
+        f"[Step 1] Researcher found facts for {request}",
+        [{"agent_type": "writer", "description": f"Draft: {request}"}],
+        ["researcher", "writer"],
+    ),
+}
+
+
+class TestFixedPromptPrefix:
+    @pytest.mark.parametrize("call", sorted(PROMPT_BUILDERS))
+    def test_the_system_message_is_byte_identical_across_requests_and_roster_orders(self, call):
+        build = PROMPT_BUILDERS[call]
+
+        first = build("What was Q4 2025 revenue?", ROSTER_WITH_IDS)
+        second = build("How many vacation days carry over?", list(reversed(ROSTER_WITH_IDS)))
+
+        assert first[0]["role"] == "system"
+        assert first[0]["content"].encode("utf-8") == second[0]["content"].encode("utf-8")
+        assert "Q4 2025 revenue" not in first[0]["content"]
+        assert all(agent_id not in first[0]["content"] for agent_id, *_ in ROSTER_WITH_IDS)
+
+    @pytest.mark.parametrize("call", sorted(PROMPT_BUILDERS))
+    def test_the_request_closes_the_user_message(self, call):
+        messages = PROMPT_BUILDERS[call]("What was Q4 2025 revenue?", ROSTER_WITH_IDS)
+
+        assert [message["role"] for message in messages] == ["system", "user"]
+        assert messages[1]["content"].endswith("What was Q4 2025 revenue?")
+
+    @pytest.mark.parametrize(
+        ("run", "expected"),
+        [
+            (lambda: D.aggregate_results("history", "result"), "aggregate"),
+            (lambda: D.decompose_task("Compare revenue and leave", FakeDB()), "plan"),
+            (lambda: D.choose_route_with_llm("What was revenue?", FakeDB()), "intent"),
+            (lambda: D.manager_review_step("d", "t", [], ["writer"], FakeDB()), "review"),
+        ],
+        ids=["aggregate", "plan", "intent", "review"],
+    )
+    def test_each_llm_call_names_its_prompt_for_the_token_metrics(self, monkeypatch, run, expected):
+        calls = []
+
+        def _fake(prompt, **kwargs):
+            calls.append(kwargs.get("call"))
+            return "{}"
+
+        monkeypatch.setattr(D, "ask_llm", _fake)
+        monkeypatch.setattr(D, "get_available_agents", lambda db: ROSTER_WITH_IDS)
+        monkeypatch.setattr(D, "_heuristic_decompose", lambda user_input, db: (None, []))
+        run()
+
+        assert calls == [expected]
 
 
 # ========================= build_action_list ============================== #
@@ -540,6 +636,17 @@ class TestDecomposeTask:
         monkeypatch.setattr(D, "get_available_agents", lambda db: [])
         _patch_llm(monkeypatch, "x")
         assert D.decompose_task("req") == (None, [])
+
+    def test_planner_prompt_sent_to_model_has_single_braces(self, monkeypatch):
+        monkeypatch.setattr(
+            D, "get_available_agents", lambda db: [("a1", "R", "d", _Type.RESEARCHER)]
+        )
+        monkeypatch.setattr(D, "get_agent_by_type", lambda t, db: f"id-{t}")
+        prompts = _capture_llm_prompts(monkeypatch, json.dumps(GOOD_PLAN))
+        D.decompose_task("complex request", FakeDB())
+        rendered = _rendered_text(prompts[0])
+        assert '{\n  "sub_tasks": [\n    {\n      "id": "1"' in rendered
+        assert "{{" not in rendered and "}}" not in rendered
 
 
 # ========================= _heuristic_decompose =========================== #
@@ -834,6 +941,14 @@ class TestManagerReviewStep:
         out = D.manager_review_step("d", "t", [], [], FakeDB())
         assert out == {"decision": "CONTINUE"}
 
+    def test_review_prompt_sent_to_model_has_single_braces(self, monkeypatch):
+        self._setup(monkeypatch)
+        prompts = _capture_llm_prompts(monkeypatch, json.dumps({"decision": "DONE"}))
+        D.manager_review_step("d", "t", [], ["researcher"], FakeDB())
+        rendered = _rendered_text(prompts[0])
+        assert '{"decision": "CONTINUE" | "INSERT" | "DONE",' in rendered
+        assert "{{" not in rendered and "}}" not in rendered
+
 
 # ======================== select_agent_for_task =========================== #
 class TestSelectAgentForTask:
@@ -937,6 +1052,109 @@ class TestSelectAgentForTask:
         monkeypatch.setattr(D, "get_available_agents", lambda db: [])
         _patch_llm(monkeypatch, "x")
         assert D.select_agent_for_task("q") == (None, None, None, [])
+
+
+class TestDirectAnswerPostCheck:
+    ROUTER_PLACEHOLDERS = {
+        "agent_name": "<agent_name_if_SINGLE_AGENT>",
+        "rewritten_input": "<optimized_input_if_SINGLE_AGENT>",
+    }
+
+    def _agents(self, monkeypatch, agents=None):
+        roster = agents if agents is not None else [
+            ("a1", "Researcher", "finds facts", _Type.RESEARCHER),
+            ("g1", "General-Assistant", "general RAG assistant", _Type.GENERAL),
+        ]
+        monkeypatch.setattr(D, "get_available_agents", lambda db: roster)
+
+    def _router_says_direct_answer(self, monkeypatch, final_answer, **extra):
+        reply = {"classification": "DIRECT_ANSWER", "final_answer": final_answer, **extra}
+        _patch_llm(monkeypatch, json.dumps(reply))
+
+    def test_f20_capital_of_peru_is_rerouted_to_single_agent(self, monkeypatch):
+        self._agents(monkeypatch)
+        self._router_says_direct_answer(
+            monkeypatch, "The capital of Peru is Lima.", **self.ROUTER_PLACEHOLDERS
+        )
+        out = D.select_agent_for_task("What is the capital of Peru?", FakeDB())
+        assert out == ("g1", "What is the capital of Peru?", None, [])
+
+    def test_hello_stays_direct_answer(self, monkeypatch):
+        self._agents(monkeypatch)
+        self._router_says_direct_answer(monkeypatch, "Hello! How can I help?")
+        out = D.select_agent_for_task("hello", FakeDB())
+        assert out == (None, None, "Response for user : Hello! How can I help?", [])
+
+    def test_small_talk_stays_direct_answer(self, monkeypatch):
+        self._agents(monkeypatch)
+        self._router_says_direct_answer(monkeypatch, "You're welcome!")
+        out = D.select_agent_for_task("Thanks a lot!", FakeDB())
+        assert out == (None, None, "Response for user : You're welcome!", [])
+
+    def test_arithmetic_stays_direct_answer(self, monkeypatch):
+        self._agents(monkeypatch)
+        self._router_says_direct_answer(monkeypatch, "4")
+        out = D.select_agent_for_task("what's 2+2?", FakeDB())
+        assert out == (None, None, "Response for user : 4", [])
+
+    def test_greeting_followed_by_factual_question_is_rerouted(self, monkeypatch):
+        self._agents(monkeypatch)
+        self._router_says_direct_answer(monkeypatch, "Hi! Lima.")
+        demand = "Hi! What is the capital of Peru?"
+        assert D.select_agent_for_task(demand, FakeDB()) == ("g1", demand, None, [])
+
+    def test_rerouted_request_uses_router_agent_name_when_it_is_available(self, monkeypatch):
+        self._agents(monkeypatch)
+        self._router_says_direct_answer(
+            monkeypatch, "Lima.", agent_name="Researcher", rewritten_input="capital?"
+        )
+        out = D.select_agent_for_task("What is the capital of Peru?", FakeDB())
+        assert out == ("a1", "What is the capital of Peru?", None, [])
+
+    @pytest.mark.parametrize("router_agent_name", ["Manager", "Offline-Analyst"])
+    def test_rerouted_request_ignores_router_agent_name_that_is_not_available(
+        self, monkeypatch, router_agent_name
+    ):
+        self._agents(monkeypatch)
+        monkeypatch.setattr(D, "get_agent_id", lambda name, db: "id-without-live-consumer")
+        self._router_says_direct_answer(monkeypatch, "Lima.", agent_name=router_agent_name)
+        out = D.select_agent_for_task("What is the capital of Peru?", FakeDB())
+        assert out == ("g1", "What is the capital of Peru?", None, [])
+
+    def test_rerouted_request_without_general_agent_uses_first_available(self, monkeypatch):
+        self._agents(
+            monkeypatch,
+            [
+                ("w1", "Writer", "writes prose", _Type.WRITER),
+                ("a1", "Researcher", "finds facts", _Type.RESEARCHER),
+            ],
+        )
+        self._router_says_direct_answer(monkeypatch, "Lima.")
+        out = D.select_agent_for_task("What is the capital of Peru?", FakeDB())
+        assert out == ("w1", "What is the capital of Peru?", None, [])
+
+    def test_rerouted_request_matches_plain_string_general_type(self, monkeypatch):
+        self._agents(
+            monkeypatch,
+            [
+                ("a1", "Researcher", "finds facts", "researcher"),
+                ("g1", "General-Assistant", "general RAG assistant", "general"),
+            ],
+        )
+        self._router_says_direct_answer(monkeypatch, "Lima.")
+        out = D.select_agent_for_task("What is the capital of Peru?", FakeDB())
+        assert out == ("g1", "What is the capital of Peru?", None, [])
+
+    def test_router_prompt_sent_to_model_has_single_braces(self, monkeypatch):
+        self._agents(monkeypatch)
+        prompts = _capture_llm_prompts(
+            monkeypatch, json.dumps({"classification": "DIRECT_ANSWER", "final_answer": "Hi!"})
+        )
+        D.select_agent_for_task("hello", FakeDB())
+        rendered = _rendered_text(prompts[0])
+        assert '{\n  "classification": "DIRECT_ANSWER" | "SINGLE_AGENT"' in rendered
+        assert '"final_answer": "<answer_if_DIRECT_ANSWER>"\n}' in rendered
+        assert "{{" not in rendered and "}}" not in rendered
 
 
 # ========================= select_agent_by_mode =========================== #

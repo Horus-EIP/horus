@@ -205,7 +205,7 @@ class GpuSampler(threading.Thread):
     def __init__(self, interval: float = 0.5):
         super().__init__(daemon=True)
         self.interval = interval
-        self._stop = threading.Event()
+        self._stop_requested = threading.Event()
         self.mem: list[float] = []
         self.util: list[float] = []
         self.power: list[float] = []
@@ -224,7 +224,7 @@ class GpuSampler(threading.Thread):
     def run(self) -> None:
         if not self.available:
             return
-        while not self._stop.is_set():
+        while not self._stop_requested.is_set():
             try:
                 out = subprocess.run(
                     [
@@ -245,10 +245,10 @@ class GpuSampler(threading.Thread):
                     pass
             except Exception:  # noqa: BLE001
                 pass
-            self._stop.wait(self.interval)
+            self._stop_requested.wait(self.interval)
 
     def stop(self) -> dict:
-        self._stop.set()
+        self._stop_requested.set()
         self.join(timeout=2)
         return self.summary()
 
@@ -467,7 +467,7 @@ class PipelineBench:
                     )
                     m.submit_http_ms = round((time.perf_counter() - ht0) * 1000, 2)
 
-                if r.status_code != 200:
+                if r.status_code not in (200, 202):
                     m.error = f"new_task HTTP {r.status_code}: {r.text[:200]}"
                     return m
                 body = r.json()
@@ -906,8 +906,8 @@ async def main() -> int:
         except Exception:  # noqa: BLE001
             pass
     parser = argparse.ArgumentParser(description="Horus end-to-end LLM pipeline benchmark")
-    parser.add_argument("--mas-url", default=os.environ.get("MAS_URL", "http://localhost:8000"))
-    parser.add_argument("--ks-url", default=os.environ.get("KS_URL", "http://localhost:8080"))
+    parser.add_argument("--mas-url", default=os.environ.get("MAS_URL", "http://127.0.0.1:8000"))
+    parser.add_argument("--ks-url", default=os.environ.get("KS_URL", "http://127.0.0.1:8080"))
     parser.add_argument("--username", default=os.environ.get("SUPER_USER_USERNAME", "admin"))
     parser.add_argument("--password", default=os.environ.get("SUPER_USER_PASSWORD", "secret"))
     parser.add_argument("--token", default=None, help="Bearer JWT (skips /auth/token)")

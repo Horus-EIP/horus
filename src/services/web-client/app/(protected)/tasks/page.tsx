@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { chatApi, TaskQueueStats, type TaskSummary } from "@/lib/chat/api";
-import Card from "@/components/ui/card";
 import { useNotification } from "@/contexts/notification-context";
 import { useAuth } from "@/components/auth/auth-provider";
+import { isTaskInProgress } from "@/lib/tasks/agent-activity";
 import Link from 'next/link';
 import {
   IconClock,
@@ -12,7 +12,6 @@ import {
   IconCheck,
   IconX,
   IconBan,
-  IconAlertTriangle,
   IconPlus,
   IconRefresh,
   IconChevronRight,
@@ -44,6 +43,7 @@ const STATUS_PILL: Record<string, string> = {
   completed: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30',
   running: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30',
   pending: 'bg-white/10 text-[var(--textSoft)] ring-1 ring-white/10',
+  queued: 'bg-white/10 text-[var(--textSoft)] ring-1 ring-white/10',
   failed: 'bg-red-500/20 text-red-300 ring-1 ring-red-500/30',
   cancelled: 'bg-gray-500/20 text-gray-300 ring-1 ring-gray-500/30',
   canceled: 'bg-gray-500/20 text-gray-300 ring-1 ring-gray-500/30',
@@ -97,7 +97,7 @@ export default function TasksPage() {
         setTasks(sorted);
       }
       setLastUpdated(new Date());
-    } catch (e) {
+    } catch {
       notifyError("Failed to load task queue stats");
     } finally {
       if (!signal?.aborted) setIsLoading(false);
@@ -137,7 +137,7 @@ export default function TasksPage() {
         <div className="rounded-2xl border border-white/10 bg-[var(--bgSoft)]/70 p-6 text-center">
           <IconBan className="w-12 h-12 mx-auto mb-4 text-[var(--textSoft)]" />
           <p className="text-[var(--textSoft)]">
-            You don't have permission to view task queue statistics.
+            You don&apos;t have permission to view task queue statistics.
           </p>
         </div>
       </div>
@@ -182,10 +182,10 @@ export default function TasksPage() {
       ) : stats ? (
         <>
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             <StatCard
               title="Pending"
-              value={stats.pending}
+              value={stats.pending + (stats.queued ?? 0)}
               icon={<IconClock className="w-6 h-6 text-yellow-400" />}
               color="bg-yellow-500/20"
               bgColor="bg-[var(--bgSoft)]/70"
@@ -218,13 +218,6 @@ export default function TasksPage() {
               color="bg-gray-500/20"
               bgColor="bg-[var(--bgSoft)]/70"
             />
-            <StatCard
-              title="Timeout"
-              value={stats.timeout}
-              icon={<IconAlertTriangle className="w-6 h-6 text-orange-400" />}
-              color="bg-orange-500/20"
-              bgColor="bg-[var(--bgSoft)]/70"
-            />
           </div>
 
           {/* Total Summary */}
@@ -246,7 +239,7 @@ export default function TasksPage() {
                 <div className="text-center">
                   <p className="text-[var(--textSoft)] text-xs">Active</p>
                   <p className="text-blue-400 text-xl font-bold">
-                    {stats.pending + stats.running}
+                    {stats.pending + (stats.queued ?? 0) + stats.running}
                   </p>
                 </div>
               </div>
@@ -290,13 +283,6 @@ export default function TasksPage() {
                     title={`Cancelled: ${stats.cancelled}`}
                   />
                 )}
-                {stats.timeout > 0 && (
-                  <div 
-                    className="bg-orange-500 transition-all duration-500"
-                    style={{ width: `${(stats.timeout / stats.total) * 100}%` }}
-                    title={`Timeout: ${stats.timeout}`}
-                  />
-                )}
               </div>
               <div className="flex justify-between mt-2 text-xs text-[var(--textSoft)]">
                 <div className="flex gap-4">
@@ -316,9 +302,6 @@ export default function TasksPage() {
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-gray-500"></span> Cancelled
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-orange-500"></span> Timeout
                   </span>
                 </div>
               </div>
@@ -374,7 +357,7 @@ export default function TasksPage() {
                         {formatRelative(t.created_at)} · agent {t.agent_id.slice(0, 8)}…
                       </p>
                     </div>
-                    {(t.status === 'running' || t.status === 'pending') && (
+                    {isTaskInProgress(t.status) && (
                       <button
                         type="button"
                         onClick={(e) => {

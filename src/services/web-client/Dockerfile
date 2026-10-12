@@ -1,11 +1,11 @@
-FROM node:20-alpine AS deps
+FROM node:20.20.2-alpine AS deps
 WORKDIR /app
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 COPY package*.json ./
 COPY .npmrc ./
 RUN npm ci
 
-FROM node:20-alpine AS builder
+FROM node:20.20.2-alpine AS builder
 WORKDIR /app
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 COPY --from=deps /app/node_modules ./node_modules
@@ -21,7 +21,7 @@ ENV NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX=${NEXT_PUBLIC_KNOWLEDGE_STORE_API_PRE
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-FROM node:20-alpine AS runner
+FROM node:20.20.2-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -38,6 +38,10 @@ RUN addgroup -g 1001 -S nodejs && adduser -S -u 1001 -G nodejs nextjs
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+COPY --from=notices THIRD_PARTY_NOTICES /usr/share/doc/horus/THIRD_PARTY_NOTICES
+COPY --from=notices LICENSES /usr/share/doc/horus/LICENSES
+COPY --from=notices NOTICES /usr/share/doc/horus/NOTICES
 
 USER nextjs
 EXPOSE 3000

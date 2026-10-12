@@ -1,4 +1,7 @@
 import json
+import os
+import subprocess
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -318,6 +321,130 @@ class TestDataExtractorTool:
         res_mix = tool._extract_payments(text_mix, tool.nlp(text_mix))
         data_mix = json.loads(res_mix)
         assert data_mix[0]["amount"] == 10.50
+
+
+INVOICE = (
+    "Invoice from Acme Corp to John Smith. Total due: $1,250.00 by 15 March 2026. "
+    "A second payment of EUR 300 follows in April 2026."
+)
+
+
+class SpacyImports:
+    def __init__(self):
+        self.attempts: list[str] = []
+
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] == "spacy":
+            self.attempts.append(name)
+            raise ImportError(f"{name} must not be imported while spaCy is off")
+        return None
+
+
+@pytest.fixture
+def spacy_off(monkeypatch):
+    import ai_agents.data_extractor_tool as det
+
+    monkeypatch.setenv("HORUS_SPACY", "off")
+    monkeypatch.setattr(det, "_nlp_model", None)
+    for name in [name for name in sys.modules if name.split(".")[0] == "spacy"]:
+        monkeypatch.delitem(sys.modules, name)
+    imports = SpacyImports()
+    monkeypatch.setattr(sys, "meta_path", [imports, *sys.meta_path])
+    return imports
+
+
+class TestSpacyOff:
+    @pytest.mark.parametrize("value", ["off", "OFF", " 0 ", "false", "no"])
+    def test_the_setting_turns_spacy_off(self, monkeypatch, value):
+        import ai_agents.data_extractor_tool as det
+
+        monkeypatch.setenv("HORUS_SPACY", value)
+
+        assert det.spacy_is_off()
+
+    @pytest.mark.parametrize("value", [None, "", "on", "1", "yes"])
+    def test_unset_or_on_leaves_spacy_on(self, monkeypatch, value):
+        import ai_agents.data_extractor_tool as det
+
+        if value is None:
+            monkeypatch.delenv("HORUS_SPACY", raising=False)
+        else:
+            monkeypatch.setenv("HORUS_SPACY", value)
+
+        assert not det.spacy_is_off()
+
+    def test_with_spacy_off_spacy_is_never_imported_nor_loaded(self, spacy_off, caplog):
+        with caplog.at_level("INFO", logger="ai_agents.data_extractor_tool"):
+            tool = DataExtractorTool()
+            tool._run(INVOICE, "payments")
+
+        assert tool.nlp is None
+        assert spacy_off.attempts == []
+        assert "spacy" not in sys.modules
+        assert "spaCy is off (HORUS_SPACY=off)" in caplog.text
+
+    def test_with_spacy_off_payments_come_from_the_regex_extraction(self, spacy_off):
+        payments = json.loads(DataExtractorTool()._run(INVOICE, "payments"))
+
+        assert {(row["amount"], row["currency"]) for row in payments} >= {(1250.0, "USD"), (300.0, "EUR")}
+        assert all(row["payee"] is None for row in payments)
+
+    def test_with_spacy_off_tables_and_key_values_still_work(self, spacy_off):
+        tool = DataExtractorTool()
+
+        assert json.loads(tool._run("| Item | Cost |\n| --- | --- |\n| Apple | 1.00 |", "tables"))
+        assert "Total" in tool._run("Total: 1250\nDue: March", "key_values")
+
+    def test_no_document_means_no_spacy_entities(self, spacy_off):
+        assert DataExtractorTool().extract_entities_spacy(None) == {
+            "people": [], "companies": [], "amounts": [], "dates": [],
+        }
+
+    def test_with_spacy_on_the_model_loads_as_before(self, monkeypatch):
+        import ai_agents.data_extractor_tool as det
+
+        monkeypatch.setenv("HORUS_SPACY", "on")
+        monkeypatch.setattr(det, "_nlp_model", None)
+        sentinel = MagicMock()
+        with patch("spacy.load", return_value=sentinel) as load:
+            tool = DataExtractorTool()
+
+        assert tool.nlp is sentinel
+        load.assert_called_once_with("en_core_web_sm")
+
+    @pytest.mark.parametrize(("setting", "imports_spacy"), [("off", False), ("on", True)])
+    def test_a_fresh_process_imports_spacy_only_when_it_is_on(self, setting, imports_spacy):
+        import ai_agents.data_extractor_tool as det
+
+        env = {**os.environ, "HORUS_SPACY": setting, "AGENT_SPACY_PREFER_SM": "1"}
+        done = subprocess.run([sys.executable, "-B", "-c", FRESH_EXTRACTOR, det.__file__, INVOICE],
+                              env=env, capture_output=True, text=True, check=True)
+
+        assert bool(json.loads(done.stdout.splitlines()[-1])) is imports_spacy
+
+
+FRESH_EXTRACTOR = """
+import importlib.util, json, sys, types
+seen = []
+class Watch:
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] == "spacy":
+            seen.append(name)
+        return None
+sys.meta_path.insert(0, Watch())
+class BaseTool:
+    def __init__(self, **kwargs):
+        pass
+tools = types.ModuleType("langchain.tools")
+tools.BaseTool = BaseTool
+sys.modules["langchain"] = types.ModuleType("langchain")
+sys.modules["langchain.tools"] = tools
+spec = importlib.util.spec_from_file_location("fresh_data_extractor", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.DataExtractorTool()._run(sys.argv[2], "payments")
+print(json.dumps(seen))
+"""
 
 
 

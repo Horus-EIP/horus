@@ -1,0 +1,306 @@
+python_overrides:
+  cuda-toolkit:
+    licence: LicenseRef-NVIDIA-CUDA-Toolkit-EULA
+    source: project page, no licence in the package metadata
+    url: https://docs.nvidia.com/cuda/eula/
+  nvidia-cuda-runtime:
+    licence: LicenseRef-NVIDIA-CUDA-Toolkit-EULA
+    source: project page, no licence in the package metadata
+    url: https://docs.nvidia.com/cuda/eula/
+  nvidia-cudnn-cu13:
+    licence: LicenseRef-NVIDIA-cuDNN-SLA
+    source: project page, no licence in the package metadata
+    url: https://docs.nvidia.com/deeplearning/cudnn/latest/reference/eula.html
+  nvidia-nvshmem-cu13:
+    licence: LicenseRef-NVIDIA-NVSHMEM-SLA
+    source: project page, no licence in the package metadata
+    url: https://docs.nvidia.com/nvshmem/api/sla.html
+  nvidia-nccl-cu13:
+    licence: Apache-2.0 AND BSD-3-Clause
+    source: project page, LICENSE.txt, no licence in the package metadata
+    url: https://github.com/NVIDIA/nccl
+  hf-transfer:
+    licence: Apache-2.0
+    source: project page, LICENSE, no licence in the package metadata
+    url: https://github.com/huggingface/hf_transfer
+  py-rust-stemmers:
+    licence: MIT
+    source: project page, LICENSE, no licence in the package metadata
+    url: https://github.com/qdrant/py-rust-stemmers
+  en-core-web-trf:
+    licence: MIT
+    source: spaCy model meta, meta/en_core_web_trf-3.8.0.json; not on PyPI
+    url: https://github.com/explosion/spacy-models
+  nvidia-cusparselt-cu13:
+    spdx: LicenseRef-NVIDIA-Proprietary
+    licence_url: https://docs.nvidia.com/cuda/cusparselt/license.html
+  psycopg2-binary:
+    spdx: LGPL-3.0-or-later
+    own_copy: true
+  pypdfium2:
+    spdx: BSD-3-Clause AND Apache-2.0
+    own_copy: true
+  uvloop:
+    spdx: MIT OR Apache-2.0
+  langsmith:
+    repository: https://github.com/langchain-ai/langsmith-sdk
+
+web_overrides:
+  "@next/swc-*":
+    repository: https://github.com/vercel/next.js
+  "@img/sharp-libvips-*":
+    notice_url: https://raw.githubusercontent.com/lovell/sharp-libvips/v{version}/THIRD-PARTY-NOTICES.md
+
+spdx_aliases:
+  Apache 2.0: Apache-2.0
+  Apache Software License: Apache-2.0
+  MIT License: MIT
+
+licence_refs:
+  LicenseRef-NVIDIA-CUDA-Toolkit-EULA:
+    component: python nvidia-cuda-runtime
+  LicenseRef-NVIDIA-cuDNN-SLA:
+    component: python nvidia-cudnn-cu13
+  LicenseRef-NVIDIA-NVSHMEM-SLA:
+    component: python nvidia-nvshmem-cu13
+  LicenseRef-NVIDIA-Proprietary:
+    component: python nvidia-cublas
+  LicenseRef-NVIDIA-Deep-Learning-Container-License:
+    image: nvidia/cuda:12.4.0-base-ubuntu22.04
+    path: /NGC-DL-CONTAINER-LICENSE
+
+system_overrides:
+  cairo:
+    licence: LGPL-2.1 or MPL-1.1
+    reason: Copyright file not machine-readable. Both choices require the source, so the package stays in the offer.
+  debian-archive-keyring:
+    licence: GPL-2+
+    reason: Copyright file not machine-readable; "covered by the GNU GPL, version 2 or any later version".
+  gcc-14:
+    licence: GPL-3+ with GCC-exception-3.1
+    reason: Copyright file not machine-readable; the runtime libraries carry the GCC Runtime Library Exception 3.1.
+  gnutls28:
+    licence: LGPL-2.1+, GPL-3+
+    reason: Copyright file not machine-readable; LGPL-2.1+ library, GPL-3+ extra tools.
+  krb5:
+    licence: ""
+    reason: MIT-style licences; the one GPL file is "BSD or GPL-2+" at our choice, and we take BSD.
+  libgcrypt20:
+    licence: LGPL-2.1+, GPL-2+
+    reason: Copyright file not machine-readable; LGPL-2.1+ library, GPL-2+ manual and tools.
+  libksba:
+    licence: LGPL-3+ or GPL-2+
+    reason: Copyright file not machine-readable; both choices are copyleft.
+  libtasn1-6:
+    licence: LGPL-2.1+, GPL-3+
+    reason: Copyright file not machine-readable; LGPL-2.1+ library, GPL-3+ tools and build files.
+  libxcrypt:
+    licence: LGPL-2.1+
+    reason: Copyright file not machine-readable; "the overall license is the GNU LGPL, version 2.1 or later".
+  rtmpdump:
+    licence: LGPL-2.1+, GPL-2+
+    reason: Copyright file not machine-readable; LGPL-2.1+ librtmp, GPL-2+ tools.
+
+images:
+  rabbitmq:
+    licence: MPL-2.0
+    spdx: MPL-2.0
+    source: project page, LICENSE at v4.1.2
+    url: https://github.com/rabbitmq/rabbitmq-server
+    note: separate process, unmodified; Horus talks to it over AMQP
+  vllm/vllm-openai:
+    licence: Apache-2.0
+    spdx: Apache-2.0
+    source: project page, LICENSE at v0.23.0
+    url: https://github.com/vllm-project/vllm
+    note: GPU profiles only; the image is built on nvidia/cuda, whose CUDA libraries are under the NVIDIA Deep Learning Container License
+  postgres:
+    licence: PostgreSQL
+    spdx: PostgreSQL
+    source: project page
+    url: https://www.postgresql.org/about/licence/
+  valkey/valkey:
+    licence: BSD-3-Clause
+    spdx: BSD-3-Clause
+    source: project page, COPYING at 9.1.2
+    url: https://github.com/valkey-io/valkey
+    note: the cache, Compose service redis; separate process, unmodified
+  dpage/pgadmin4:
+    licence: PostgreSQL
+    spdx: PostgreSQL
+    source: project page
+    url: https://www.pgadmin.org/licence/
+    note: development tool in the Compose profile dev-tools; the installer never starts it
+  grafana/loki:
+    licence: AGPL-3.0-only
+    spdx: AGPL-3.0-only
+    source: project page, LICENSING.md at v3.4.2
+    url: https://github.com/grafana/loki
+    note: AGPL, run as a separate process, unmodified; Horus only calls its HTTP API
+  grafana/alloy:
+    licence: Apache-2.0
+    spdx: Apache-2.0
+    source: project page, LICENSE at v1.20.1
+    url: https://github.com/grafana/alloy
+    note: separate process, unmodified; reads the Docker socket, read-only, to ship the Compose containers' logs to Loki
+  grafana/tempo:
+    licence: AGPL-3.0-only
+    spdx: AGPL-3.0-only
+    source: project page, LICENSE at v2.6.0
+    url: https://github.com/grafana/tempo
+    note: AGPL, run as a separate process, unmodified; Horus only sends it traces over OTLP
+  prom/prometheus:
+    licence: Apache-2.0
+    spdx: Apache-2.0
+    source: project page, LICENSE
+    url: https://github.com/prometheus/prometheus
+  ghcr.io/ggml-org/llama.cpp:
+    licence: MIT
+    spdx: MIT
+    source: project page, LICENSE
+    url: https://github.com/ggml-org/llama.cpp
+    note: llama-server, the model server of the CPU profiles; separate process, unmodified
+  python:
+    licence: PSF-2.0, and the Debian packages of the image under their own licences
+    spdx: PSF-2.0
+    source: project page
+    url: https://docs.python.org/3.11/license.html
+    note: base image of the MAS, agent, knowledge-store and llm-mock images
+  node:
+    licence: MIT, and the Alpine packages of the image under their own licences
+    spdx: MIT
+    source: project page, LICENSE
+    url: https://github.com/nodejs/node/blob/main/LICENSE
+    note: base image of the web-client image
+
+models:
+  - id: unsloth/Qwen3-4B-Instruct-2507-GGUF
+    revision: a06e946bb6b655725eafa393f4a9745d460374c9
+    licence: Apache-2.0
+    spdx: Apache-2.0
+    source: model card, license apache-2.0, the licence of Qwen/Qwen3-4B-Instruct-2507
+    url: https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF
+    note: file Qwen3-4B-Instruct-2507-Q4_K_M.gguf, the model of the CPU profiles, downloaded by the installer (models/manifest.json)
+  - id: warshanks/Qwen3-4B-Instruct-2507-AWQ
+    licence: Apache-2.0
+    spdx: Apache-2.0
+    source: model card, license apache-2.0, base model Qwen/Qwen3-4B-Instruct-2507
+    url: https://huggingface.co/warshanks/Qwen3-4B-Instruct-2507-AWQ
+    note: the model of the GPU profiles, served by vLLM and downloaded on first start
+  - id: Qwen/Qwen3-4B-Instruct-2507
+    licence: Apache-2.0
+    spdx: Apache-2.0
+    source: model card
+    url: https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507
+    note: base model of the two above, and the default of the agent when LLM_BACKEND is not vllm; every installer profile sets vllm, so it is not downloaded
+  - id: Qwen/Qwen2.5-1.5B-Instruct
+    licence: Apache-2.0
+    spdx: Apache-2.0
+    source: model card
+    url: https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct
+    note: default router of MAS when LLM_BACKEND is not vllm; not downloaded by the installer profiles
+  - id: BAAI/bge-base-en-v1.5
+    licence: MIT
+    spdx: MIT
+    source: model card
+    url: https://huggingface.co/BAAI/bge-base-en-v1.5
+    note: knowledge-store embeddings; fastembed downloads its ONNX export, Qdrant/bge-base-en-v1.5-onnx-Q, when the image is built
+  - id: Qdrant/bge-base-en-v1.5-onnx-Q
+    licence: MIT
+    spdx: MIT
+    source: model card
+    url: https://huggingface.co/Qdrant/bge-base-en-v1.5-onnx-Q
+    note: file model_optimized.onnx, baked into the knowledge-store image
+  - id: sentence-transformers/all-MiniLM-L6-v2
+    licence: Apache-2.0
+    spdx: Apache-2.0
+    source: model card
+    url: https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
+    note: MAS routing embeddings; fastembed downloads its ONNX export, Qdrant/all-MiniLM-L6-v2-onnx, when the image is built
+  - id: Qdrant/all-MiniLM-L6-v2-onnx
+    licence: Apache-2.0
+    spdx: Apache-2.0
+    source: model card
+    url: https://huggingface.co/Qdrant/all-MiniLM-L6-v2-onnx
+    note: file model.onnx, baked into the MAS image
+  - id: google-t5/t5-small
+    licence: Apache-2.0
+    spdx: Apache-2.0
+    source: model card
+    url: https://huggingface.co/google-t5/t5-small
+    note: named t5-small in the code; knowledge-store GPU image only, classification fallback, downloaded on first use
+  - id: sshleifer/distilbart-cnn-6-6
+    licence: Apache-2.0
+    spdx: Apache-2.0
+    source: model card
+    url: https://huggingface.co/sshleifer/distilbart-cnn-6-6
+    note: knowledge-store GPU image only, document summaries, downloaded on first use
+  - id: sshleifer/distilbart-cnn-12-6
+    revision: a4f8f3e
+    licence: Apache-2.0
+    spdx: Apache-2.0
+    source: model card
+    url: https://huggingface.co/sshleifer/distilbart-cnn-12-6
+    note: agent GPU image only; the default model of the transformers summarization pipeline that the agent summariser uses, downloaded on first use
+  - id: spacy/en_core_web_sm
+    revision: 3.8.0
+    licence: MIT
+    spdx: MIT
+    source: model meta, meta.json of the release
+    url: https://github.com/explosion/spacy-models/releases/tag/en_core_web_sm-3.8.0
+    note: installed as a Python wheel in the agent and knowledge-store images
+  - id: spacy/en_core_web_trf
+    revision: 3.8.0
+    licence: MIT
+    spdx: MIT
+    source: model meta, meta.json of the release
+    url: https://github.com/explosion/spacy-models/releases/tag/en_core_web_trf-3.8.0
+    note: installed as a Python wheel in the agent and knowledge-store GPU images; built on roberta-base
+
+components:
+  llama.cpp:
+    version: b11382
+    licence: MIT
+    spdx: MIT
+    source: project page, LICENSE, Copyright (c) 2023-2026 The ggml authors
+    url: https://github.com/ggml-org/llama.cpp
+    note: llama-server in the ghcr.io/ggml-org/llama.cpp:server-b11382 image (section 4)
+  fastembed:
+    version: 0.8.1
+    licence: Apache-2.0
+    spdx: Apache-2.0
+    source: package metadata
+    url: https://github.com/qdrant/fastembed
+    note: embeddings in MAS and the knowledge store (section 1); its wheel ships LICENSE and NOTICE
+  onnxruntime:
+    version: 1.30.0
+    licence: MIT
+    spdx: MIT
+    source: package metadata
+    url: https://github.com/microsoft/onnxruntime
+    note: runs the embedding models, through fastembed and chromadb (section 1); its wheel ships ThirdPartyNotices.txt
+  poppler-utils:
+    licence: GPL-2.0 OR GPL-3.0
+    spdx: GPL-2.0-only OR GPL-3.0-only
+    source: licence inventory
+    url: https://poppler.freedesktop.org/
+    note: Debian package in the knowledge-store image; pdf2image runs its pdftoppm as a separate program, not linked
+  tesseract-ocr:
+    licence: Apache-2.0
+    spdx: Apache-2.0
+    source: licence inventory
+    url: https://github.com/tesseract-ocr/tesseract
+    note: Debian package in the knowledge-store image; pytesseract runs it as a separate program
+  build-essential and g++:
+    licence: GPL-3.0-or-later WITH GCC-exception-3.1
+    spdx: GPL-3.0-or-later WITH GCC-exception-3.1
+    source: licence inventory
+    url: https://gcc.gnu.org/onlinedocs/libstdc++/manual/license.html
+    note: Debian packages left in the MAS image by its single-stage build
+  nvidia/cuda image:
+    version: 12.4.0-base-ubuntu22.04
+    licence: LicenseRef-NVIDIA-Deep-Learning-Container-License
+    spdx: LicenseRef-NVIDIA-Deep-Learning-Container-License
+    source: project page
+    url: https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+    note: run once by the installer to test the GPU (docker run --gpus all ... nvidia-smi); not part of the stack

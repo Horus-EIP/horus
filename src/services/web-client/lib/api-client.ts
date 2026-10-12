@@ -5,7 +5,7 @@ import { isDockerInternalHostname } from "@/utils/docker-internal-hosts";
 import { getBrowserOrchestratorApiBase } from "@/utils/orchestrator-browser-base";
 
 /** MAS HTTP paths (no /api/orchestrator prefix) — used to fix same-origin slash redirects from the BFF. */
-const MAS_ROOT_PATH = /^\/(auth|agents|conversations|tasks|users|chat|rabbitmq)(\/|$)/;
+const MAS_ROOT_PATH = /^\/(auth|agents|conversations|tasks|users|chat|rabbitmq|system)(\/|$)/;
 
 /** Default ceiling for GET requests so a stalled MAS can't hang a page forever. */
 const DEFAULT_GET_TIMEOUT_MS = 15000;
@@ -17,6 +17,7 @@ interface RequestOptions {
   signal?: AbortSignal;
   /** Abort the request after this many ms (combined with ``signal``). 0 disables. */
   timeoutMs?: number;
+  headers?: Record<string, string>;
 }
 
 function stripBodyHeaders(headers: HeadersInit | undefined): HeadersInit {
@@ -341,6 +342,7 @@ class ApiClient {
         this.requestOnce<T>(endpoint, {
           method: "POST",
           body: body ? JSON.stringify(body) : undefined,
+          headers: options?.headers,
           signal,
         }),
       retry

@@ -1,0 +1,58 @@
+logging {
+	level  = "warn"
+	format = "logfmt"
+}
+
+discovery.docker "compose" {
+	host             = "unix:///var/run/docker.sock"
+	refresh_interval = "5s"
+
+	filter {
+		name   = "label"
+		values = ["com.docker.compose.project=" + sys.env("HORUS_COMPOSE_PROJECT")]
+	}
+}
+
+discovery.relabel "compose" {
+	targets = discovery.docker.compose.targets
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		regex         = ""
+		action        = "drop"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		target_label  = "compose_service"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+		target_label  = "compose_project"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "container"
+	}
+
+	rule {
+		regex  = "__meta_docker_container_id|compose_service|compose_project|container"
+		action = "labelkeep"
+	}
+}
+
+loki.source.docker "compose" {
+	host             = "unix:///var/run/docker.sock"
+	targets          = discovery.relabel.compose.output
+	refresh_interval = "5s"
+	forward_to       = [loki.write.loki.receiver]
+}
+
+loki.write "loki" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}

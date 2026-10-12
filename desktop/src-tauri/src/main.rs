@@ -49,6 +49,7 @@ fn bootstrap(app: AppHandle) -> Value {
     let installed = layout.is_installed();
     let payload = json!({
         "state": if installed { "ready" } else { "not-installed" },
+        "refused": !installed && layout.was_refused(),
         "version": VERSION,
         "root": layout.root.to_string_lossy(),
         "repo": layout.repo.to_string_lossy(),

@@ -1,3 +1,4 @@
+import asyncio
 import os
 import shutil
 
@@ -57,11 +58,27 @@ async def pdf_to_text(filepath: str) -> str:
     Returns:
         str: The extracted text.
     """
+    return await asyncio.to_thread(_read_pdf_text, filepath)
+
+def _read_pdf_text(filepath: str) -> str:
     text = ''
     with pdfplumber.open(filepath) as pdf:
         for page in pdf.pages:
             text += page.extract_text() + '\n'
     return text
+
+async def pdf_pages(filepath: str) -> list[str]:
+    return await asyncio.to_thread(_read_pdf_pages, filepath)
+
+def _read_pdf_pages(filepath: str) -> list[str]:
+    with pdfplumber.open(filepath) as pdf:
+        return [page.extract_text() or '' for page in pdf.pages]
+
+async def image_pdf_pages(filepath: str) -> list[str]:
+    return await asyncio.to_thread(_read_scanned_pages, filepath)
+
+def _read_scanned_pages(filepath: str) -> list[str]:
+    return [pytesseract.image_to_string(img) for img in convert_from_path(filepath)]
 
 async def save_file(file: UploadFile, dir_name: str) -> str:
     """

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, main, pre-release-fix]
+    branches: [master, main, pre-release-fix, 'Sprint#1_September2026_Tek5']
   pull_request:
   workflow_dispatch:
 
@@ -13,12 +13,6 @@ permissions:
 
 env:
   PYTHON_VERSION: '3.13'
-
-  # Opt in to Node.js 24 for JavaScript-based actions (actions/checkout@v4,
-  # actions/setup-python@v5, etc.) before it becomes the default on
-  # 2026-06-16. Silences the deprecation warning and avoids the forced
-  # cutover surprising us.
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
   # CI database / cache / queue defaults — overridden per job where needed
   POSTGRES_USER: postgres
@@ -48,11 +42,11 @@ jobs:
   # ----------------------------------------------------------------------- #
   lint:
     name: Lint (ruff)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -61,37 +55,190 @@ jobs:
         run: pip install ruff==0.16.6
 
       - name: Run ruff
-        run: ruff check src tests scripts installer packaging
+        run: ruff check src tests scripts installer packaging opensource
+
+  versions:
+    name: Version numbers match VERSION
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install PyYAML and pytest-cov
+        run: pip install pyyaml pytest-cov
+
+      - name: Test the version check
+        run: python -m unittest discover -s tests/ci -v
+
+      - name: Check every version number against VERSION
+        run: python scripts/ci/check-versions.py
+
+  licences:
+    name: Licences
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Test the licence scripts
+        run: python -m unittest tests.ci.test_third_party_notices tests.ci.test_check_licences -v
+
+      - name: THIRD_PARTY_NOTICES is up to date
+        run: python scripts/licences/third_party_notices.py --check
+
+      - name: No GPL, AGPL or SSPL in the Python packages, web client or desktop app
+        run: python scripts/licences/check_licences.py
+
+  bench-kit:
+    name: Bench kit (standalone, Python ${{ matrix.python }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.13']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install the kit in a fresh environment, from its own folder
+        run: |
+          python -m venv "$RUNNER_TEMP/kit-venv"
+          "$RUNNER_TEMP/kit-venv/bin/pip" install "./opensource/horus-bench-kit[test]"
+
+      - name: Run the kit's tests against the installed package
+        run: >-
+          "$RUNNER_TEMP/kit-venv/bin/python" -m pytest opensource/horus-bench-kit/tests
+          -o pythonpath= -q -p no:cacheprovider
+
+      - name: Build the zip, which refuses to when a publishing check fails
+        run: '"$RUNNER_TEMP/kit-venv/bin/python" opensource/horus-bench-kit/scripts/make-zip.py --out "$RUNNER_TEMP/kit-zip"'
+
+      - name: The kit stays free of Horus content
+        run: |
+          pip install pyyaml
+          python -m unittest tests.ci.test_bench_kit -v
+
+  cpu-build-wiring:
+    name: CPU build wiring
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Check the torch pin, the Dockerfiles, the CPU overlay and the image job
+        run: python -m unittest discover -s tests/ci -p "test_cpu_torch_build.py" -v
+
+  cpu-images:
+    name: CPU image · ${{ matrix.service }}
+    runs-on: ubuntu-24.04
+    needs: cpu-build-wiring
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: mas
+            context: mas
+          - service: agent
+            context: agent
+          - service: knowledge_store
+            context: knowledge-store
+    env:
+      IMAGE: horus-ci-${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Free disk space for the image build
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Provide the compose configuration
+        run: cp src/infra/.env.example src/infra/.env
+
+      - name: Build the image through the CPU overlay
+        working-directory: src/infra
+        run: |
+          start=$(date +%s)
+          docker compose --progress plain -p horus-ci \
+            -f docker-compose.yml -f docker-compose.cpu.yml \
+            build ${{ matrix.service }}
+          echo "BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+
+      - name: List the installed packages
+        run: docker run --rm --entrypoint python "$IMAGE" -m pip list --format=freeze > packages.txt
+
+      - name: Fail on CUDA packages or any torch in the CPU image
+        run: |
+          python scripts/ci/check-cpu-image.py packages.txt \
+            --requirements src/services/${{ matrix.context }}/requirements.txt
+
+      - name: Report the image size and build time
+        if: always()
+        run: |
+          if size=$(docker image inspect --format '{{.Size}}' "$IMAGE" 2>/dev/null); then
+            echo "$IMAGE: $(( size / 1000000 )) MB, built in ${BUILD_SECONDS} s" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
 
   # ----------------------------------------------------------------------- #
   # MAS unit tests with coverage
   # ----------------------------------------------------------------------- #
   test-mas:
     name: Tests · MAS
-    runs-on: ubuntu-latest
-    # No service containers. The suite is MOSTLY hermetic: SQLite stands in for
-    # Postgres, fakeredis for Redis, RabbitMQ is mocked. It is not fully hermetic
-    # yet: test_config, test_auth_helpers, test_rabbitmq_manager and test_auth read
-    # through core.config, which falls back to an all-None DummySettings when the
-    # required settings are absent, so they need the .env written by the step below.
-    # That step is a WORKAROUND; making the suite genuinely hermetic is tracked in
-    # docs/eip/post-beta.md.
+    runs-on: ubuntu-24.04
+    outputs:
+      coverage-row: ${{ steps.coverage-line.outputs.row }}
+    # No service containers: SQLite stands in for Postgres, fakeredis for Redis,
+    # and RabbitMQ is mocked. One gap is left: core/config.py builds its settings
+    # when it is imported, from the environment and from src/infra/.env, and falls
+    # back to DummySettings (None for every setting) when a required one is
+    # missing. test_config, test_auth_helpers, test_rabbitmq_manager and test_auth
+    # read through it, so the step below copies .env.example to src/infra/.env.
+    # It is a workaround until those tests set the settings they need themselves.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version-file: src/services/PYTHON_VERSION
           cache: pip
-          cache-dependency-path: src/services/mas/requirements-cpu.txt
+          cache-dependency-path: |
+            src/services/mas/requirements.txt
+            src/services/mas/requirements-test.txt
 
       - name: Install MAS dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r src/services/mas/requirements-cpu.txt
-          pip install pytest-cov fakeredis
+          pip install -r src/services/mas/requirements.txt -r src/services/mas/requirements-test.txt
 
-      - name: Provide test configuration (workaround, see docs/eip/post-beta.md)
+      - name: Fail on CUDA packages or any torch in the CPU requirements
+        run: |
+          pip list --format=freeze > packages.txt
+          python scripts/ci/check-cpu-image.py packages.txt \
+            --requirements src/services/mas/requirements.txt
+
+      - name: Provide test configuration (workaround, see the comment of this job)
         run: cp src/infra/.env.example src/infra/.env
 
       - name: Run MAS tests with coverage
@@ -108,37 +255,53 @@ jobs:
             --cov-report=html:htmlcov-mas \
             --junitxml=junit-mas.xml
 
-      - name: Upload coverage and junit artifacts
+      - name: Coverage and test counts in the job summary
+        id: coverage-line
         if: always()
-        uses: actions/upload-artifact@v4
+        run: python scripts/ci/coverage-line.py line "MAS" coverage-mas.xml junit-mas.xml
+
+      - name: Upload coverage and junit artifacts
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-mas
           path: |
             coverage-mas.xml
             junit-mas.xml
             htmlcov-mas/
-          retention-days: 14
+          if-no-files-found: ignore
+          retention-days: 3
 
   # ----------------------------------------------------------------------- #
   # Agent unit tests with coverage
   # ----------------------------------------------------------------------- #
   test-agent:
     name: Tests · Agent
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    outputs:
+      coverage-row: ${{ steps.coverage-line.outputs.row }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version-file: src/services/PYTHON_VERSION
           cache: pip
-          cache-dependency-path: src/services/agent/requirements.txt
+          cache-dependency-path: |
+            src/services/agent/requirements-gpu.txt
+            src/services/agent/requirements-test.txt
 
       - name: Install Agent dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r src/services/agent/requirements.txt
-          pip install pytest-cov
+          pip install -r src/services/agent/requirements-gpu.txt -r src/services/agent/requirements-test.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Fail on CUDA packages or a torch other than the pinned CPU build
+        run: |
+          pip list --format=freeze > packages.txt
+          python scripts/ci/check-cpu-image.py packages.txt \
+            --requirements src/services/agent/requirements-gpu.txt
 
       - name: Run Agent unit tests with coverage
         run: |
@@ -151,39 +314,69 @@ jobs:
             --cov-report=html:htmlcov-agent \
             --junitxml=junit-agent.xml
 
-      - name: Upload coverage and junit artifacts
+      - name: Coverage and test counts in the job summary
+        id: coverage-line
         if: always()
-        uses: actions/upload-artifact@v4
+        run: python scripts/ci/coverage-line.py line "Agent" coverage-agent.xml junit-agent.xml
+
+      - name: Upload coverage and junit artifacts
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-agent
           path: |
             coverage-agent.xml
             junit-agent.xml
             htmlcov-agent/
-          retention-days: 14
+          if-no-files-found: ignore
+          retention-days: 3
 
   # ----------------------------------------------------------------------- #
   # Knowledge Store unit tests with coverage
   # ----------------------------------------------------------------------- #
   test-knowledge-store:
     name: Tests · Knowledge Store
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    outputs:
+      coverage-row: ${{ steps.coverage-line.outputs.row }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version-file: src/services/PYTHON_VERSION
           cache: pip
-          cache-dependency-path: src/services/knowledge-store/requirements.txt
+          cache-dependency-path: |
+            src/services/knowledge-store/requirements.txt
+            src/services/knowledge-store/requirements-test.txt
 
       - name: Install Knowledge Store dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r src/services/knowledge-store/requirements.txt
-          pip install pytest-cov
+          pip install -r src/services/knowledge-store/requirements.txt -r src/services/knowledge-store/requirements-test.txt
+
+      - name: Fail on CUDA packages or any torch in the CPU requirements
+        run: |
+          pip list --format=freeze > packages.txt
+          python scripts/ci/check-cpu-image.py packages.txt \
+            --requirements src/services/knowledge-store/requirements.txt
+
+      - name: Cache the BGE model for the real-search test
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/fastembed
+          key: fastembed-bge-base-en-v1.5-${{ hashFiles('src/services/knowledge-store/requirements.txt') }}
+
+      - name: Download the BGE model for the real-search test
+        env:
+          FASTEMBED_CACHE_PATH: ${{ runner.temp }}/fastembed
+        run: python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-base-en-v1.5')"
 
       - name: Run Knowledge Store unit tests with coverage
+        env:
+          FASTEMBED_CACHE_PATH: ${{ runner.temp }}/fastembed
+          HORUS_REQUIRE_MODEL_TESTS: "1"
         run: |
           pytest -c tests/knowledge_store/pytest.ini tests/knowledge_store \
             --cov=src/services/knowledge-store \
@@ -194,16 +387,199 @@ jobs:
             --cov-report=html:htmlcov-ks \
             --junitxml=junit-ks.xml
 
-      - name: Upload coverage and junit artifacts
+      - name: Coverage and test counts in the job summary
+        id: coverage-line
         if: always()
-        uses: actions/upload-artifact@v4
+        run: python scripts/ci/coverage-line.py line "Knowledge store" coverage-ks.xml junit-ks.xml
+
+      - name: Upload coverage and junit artifacts
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-knowledge-store
           path: |
             coverage-ks.xml
             junit-ks.xml
             htmlcov-ks/
-          retention-days: 14
+          if-no-files-found: ignore
+          retention-days: 3
+
+  test-installer:
+    name: Tests · Installer
+    runs-on: ubuntu-24.04
+    outputs:
+      coverage-row: ${{ steps.coverage-line.outputs.row }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: src/services/PYTHON_VERSION
+
+      - name: Install the test tools
+        run: pip install pytest pytest-cov pyyaml
+
+      - name: Run the installer unit tests with coverage
+        run: |
+          pytest installer/tests -p no:cacheprovider \
+            --cov=installer \
+            --cov-branch \
+            --cov-report=xml:coverage-installer.xml \
+            --cov-report=term-missing \
+            --junitxml=junit-installer.xml
+
+      - name: Coverage and test counts in the job summary
+        id: coverage-line
+        if: always()
+        run: python scripts/ci/coverage-line.py line "Installer" coverage-installer.xml junit-installer.xml
+
+  test-llm-mock:
+    name: Tests · LLM mock
+    runs-on: ubuntu-24.04
+    outputs:
+      coverage-row: ${{ steps.coverage-line.outputs.row }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: src/services/PYTHON_VERSION
+
+      - name: Install the test tools
+        run: pip install -r src/services/llm-mock/requirements-test.txt
+
+      - name: Run the mock model server's unit tests with coverage
+        run: |
+          pytest -c tests/llm_mock/pytest.ini tests/llm_mock -p no:cacheprovider \
+            --cov=src/services/llm-mock \
+            --cov-branch \
+            --cov-fail-under=90 \
+            --cov-report=xml:coverage-llm-mock.xml \
+            --cov-report=term-missing \
+            --junitxml=junit-llm-mock.xml
+
+      - name: Coverage and test counts in the job summary
+        id: coverage-line
+        if: always()
+        run: python scripts/ci/coverage-line.py line "LLM mock" coverage-llm-mock.xml junit-llm-mock.xml
+
+      - name: Contract tests on the mock (the real model runs them by hand, -m real_llm)
+        run: pytest -c tests/contract/pytest.ini tests/contract -p no:cacheprovider -v
+
+  # ----------------------------------------------------------------------- #
+  # End to end on the mock model server (ADR-008, B-77): the CPU images and
+  # llm-mock built here, the stack started with docker-compose.mock.yml, the
+  # demo corpus uploaded, installer/smoke.py run. No artifact is needed. The
+  # workflow env above sets test credentials for the unit tests; every
+  # docker compose call runs with env -i so only src/infra/.env counts.
+  # ----------------------------------------------------------------------- #
+  e2e-mock:
+    name: End to end · mock AI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: src/services/PYTHON_VERSION
+
+      - name: Start the clock
+        run: echo "E2E_START=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Free disk space for the image builds
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Write src/infra/.env for mock mode
+        working-directory: src/infra
+        run: |
+          env -i PATH="$PATH" HOME="$HOME" bash init-env.sh --quiet
+          sed -i -e 's/^COMPOSE_PROJECT_NAME=.*/COMPOSE_PROJECT_NAME=horus-e2e/' \
+                 -e 's/^HORUS_AI_MODE=.*/HORUS_AI_MODE=mock/' .env
+          {
+            echo
+            echo "COMPOSE_FILE=docker-compose.yml:docker-compose.cpu.yml:docker-compose.mock.yml:docker-compose.monitoring-off.yml"
+            echo "HORUS_MOCK_LATENCY_MS=0"
+          } >> .env
+
+      - name: Compose configuration with and without the mock and monitoring-off overlays
+        working-directory: src/infra
+        run: |
+          for files in docker-compose.yml docker-compose.yml:docker-compose.cpu.yml \
+                       docker-compose.yml:docker-compose.cpu.yml:docker-compose.mock.yml \
+                       docker-compose.yml:docker-compose.monitoring-off.yml \
+                       docker-compose.yml:docker-compose.cpu.yml:docker-compose.monitoring-off.yml \
+                       docker-compose.yml:docker-compose.cpu.yml:docker-compose.mock.yml:docker-compose.monitoring-off.yml; do
+            env -i PATH="$PATH" HOME="$HOME" COMPOSE_FILE="$files" docker compose config -q
+            echo "config passes: $files"
+          done
+
+      - name: Build every image of the stack
+        working-directory: src/infra
+        run: |
+          start=$(date +%s)
+          env -i PATH="$PATH" HOME="$HOME" docker compose --progress plain build
+          echo "BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+
+      - name: Start the whole stack with no model and monitoring off
+        working-directory: src/infra
+        run: |
+          start=$(date +%s)
+          env -i PATH="$PATH" HOME="$HOME" docker compose up -d --wait --wait-timeout 900
+          echo "START_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+
+      - name: Upload the demo corpus
+        run: |
+          args=()
+          for file in demo_assets/*.md; do args+=(-F "files=@$file;type=text/markdown"); done
+          curl -fsS --max-time 600 "${args[@]}" http://127.0.0.1:8080/file > /dev/null
+
+      - name: Smoke test
+        run: |
+          start=$(date +%s)
+          python installer/smoke.py --timeout 900 --log "$RUNNER_TEMP/smoke-log.txt"
+          echo "SMOKE_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+
+      - name: Every smoke step passed, the negative control without a warning
+        run: python scripts/ci/smoke-steps.py "$RUNNER_TEMP/smoke-log.txt"
+
+      - name: MAS reports mock mode, mock embeddings, spaCy off and monitoring off at /system/ai
+        run: |
+          curl -fsS http://127.0.0.1:8000/system/ai | tee "$RUNNER_TEMP/system-ai.json"
+          python -c 'import json, sys; mode = json.load(open(sys.argv[1])); sys.exit(0 if (mode["mode"], mode["simulated"], mode["embeddings"], mode["spacy"], mode["monitoring"]) == ("mock", True, "mock", "off", "off") else 1)' "$RUNNER_TEMP/system-ai.json"
+
+      - name: No service loaded a model
+        working-directory: src/infra
+        run: |
+          mkdir -p "$RUNNER_TEMP/service-logs"
+          for service in $(env -i PATH="$PATH" HOME="$HOME" docker compose config --services); do
+            env -i PATH="$PATH" HOME="$HOME" docker compose logs --no-color --no-log-prefix "$service" \
+              > "$RUNNER_TEMP/service-logs/$service.log"
+          done
+          python ../../scripts/ci/no-model-loads.py "$RUNNER_TEMP/service-logs"
+
+      - name: Service logs
+        if: failure()
+        working-directory: src/infra
+        run: |
+          env -i PATH="$PATH" HOME="$HOME" docker compose ps -a
+          env -i PATH="$PATH" HOME="$HOME" docker compose logs --no-color --tail 200
+          cat "$RUNNER_TEMP/smoke-log.txt" || true
+
+      - name: Stop the stack
+        if: always()
+        working-directory: src/infra
+        run: env -i PATH="$PATH" HOME="$HOME" docker compose down -v --remove-orphans || true
+
+      - name: Report the duration
+        if: always()
+        run: |
+          total=$(( $(date +%s) - E2E_START ))
+          echo "End to end with no model at all: $(( total / 60 )) min $(( total % 60 )) s (build ${BUILD_SECONDS:-?} s, start ${START_SECONDS:-?} s, smoke ${SMOKE_SECONDS:-?} s)" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
 
   # ----------------------------------------------------------------------- #
   # Integration tests — moved to scripts/integration-checks/ per
@@ -213,137 +589,25 @@ jobs:
   # ----------------------------------------------------------------------- #
 
   # ----------------------------------------------------------------------- #
-  # Coverage summary — runs after all unit-test jobs, posts a table to the
-  # workflow summary tab + downloadable HTML coverage reports for the jury.
+  # Coverage summary: the line each test job wrote to its own summary, passed
+  # on as a job output, so it needs no artifact.
   # ----------------------------------------------------------------------- #
   coverage-summary:
     name: Coverage summary
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: always()
-    needs: [test-mas, test-agent, test-knowledge-store]
+    needs: [test-mas, test-agent, test-knowledge-store, test-installer, test-llm-mock]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Download all coverage artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: coverage-*
-          path: artifacts
-          merge-multiple: true
-
-      - name: Render coverage + tests summary
+      - name: Collect the coverage lines the test jobs sent
         env:
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          python - <<'PY'
-          import os, glob, xml.etree.ElementTree as ET
-
-          # ---- Coverage -------------------------------------------------- #
-          cov_rows = []
-          for xml in sorted(glob.glob("artifacts/coverage-*.xml")):
-              name = os.path.basename(xml).replace("coverage-", "").replace(".xml", "")
-              try:
-                  root = ET.parse(xml).getroot()
-                  line_rate = float(root.attrib.get("line-rate", 0)) * 100
-                  branch_rate = float(root.attrib.get("branch-rate", 0)) * 100
-                  lines_covered = int(root.attrib.get("lines-covered", 0))
-                  lines_valid = int(root.attrib.get("lines-valid", 0))
-                  cov_rows.append((name, line_rate, branch_rate, lines_covered, lines_valid))
-              except Exception as e:
-                  cov_rows.append((name, 0.0, 0.0, 0, 0))
-                  print(f"  warn: could not parse {xml}: {e}")
-
-          # ---- Tests (junit) -------------------------------------------- #
-          test_rows = []
-          for xml in sorted(glob.glob("artifacts/junit-*.xml")):
-              name = os.path.basename(xml).replace("junit-", "").replace(".xml", "")
-              try:
-                  root = ET.parse(xml).getroot()
-                  # junit-xml: top tag is either <testsuites> or <testsuite>
-                  suites = root.findall("testsuite") if root.tag == "testsuites" else [root]
-                  tests = sum(int(s.attrib.get("tests", 0)) for s in suites)
-                  failures = sum(int(s.attrib.get("failures", 0)) for s in suites)
-                  errors = sum(int(s.attrib.get("errors", 0)) for s in suites)
-                  skipped = sum(int(s.attrib.get("skipped", 0)) for s in suites)
-                  time_s = sum(float(s.attrib.get("time", 0)) for s in suites)
-                  passed = tests - failures - errors - skipped
-                  test_rows.append((name, tests, passed, failures, errors, skipped, time_s))
-              except Exception as e:
-                  test_rows.append((name, 0, 0, 0, 0, 0, 0.0))
-                  print(f"  warn: could not parse {xml}: {e}")
-
-          # ---- Render --------------------------------------------------- #
-          icon = lambda pct: "🟢" if pct >= 80 else ("🟡" if pct >= 60 else "🔴")
-          lines = ["## Test results", ""]
-
-          if test_rows:
-              lines += [
-                  "| Service | Tests | Passed | Failed | Errors | Skipped | Time |",
-                  "|---------|------:|-------:|-------:|-------:|--------:|-----:|",
-              ]
-              for name, total, p, f_, e_, sk, t in test_rows:
-                  status = "✅" if (f_ + e_) == 0 and total > 0 else "❌"
-                  lines.append(
-                      f"| {status} **{name}** | {total} | {p} | {f_} | {e_} | {sk} | {t:.1f}s |"
-                  )
-          else:
-              lines.append("_no junit artifacts found_")
-
-          lines += ["", "## Coverage", ""]
-          if cov_rows:
-              lines += [
-                  "| Service | Line | Branch | Lines covered |",
-                  "|---------|-----:|-------:|---------------|",
-              ]
-              for name, line_rate, branch_rate, covered, total in cov_rows:
-                  lines.append(
-                      f"| {icon(line_rate)} **{name}** | {line_rate:5.1f} % | {branch_rate:5.1f} % | {covered:,} / {total:,} |"
-                  )
-              # totals row
-              tot_cov = sum(r[3] for r in cov_rows)
-              tot_lines = sum(r[4] for r in cov_rows)
-              tot_rate = (tot_cov / tot_lines * 100) if tot_lines else 0.0
-              lines.append(
-                  f"| {icon(tot_rate)} **TOTAL** | **{tot_rate:5.1f} %** | — | **{tot_cov:,} / {tot_lines:,}** |"
-              )
-          else:
-              lines.append("_no coverage artifacts found_")
-
-          # ---- How to view the full HTML coverage --------------------- #
-          repo = os.environ.get("REPO", "OWNER/REPO")
-          run_id = os.environ.get("RUN_ID", "RUN_ID")
-          lines += [
-              "",
-              "## Full HTML coverage reports",
-              "",
-              f"Download from the **Artifacts** section at the bottom of [this run]"
-              f"(https://github.com/{repo}/actions/runs/{run_id}):",
-              "",
-              "- `coverage-mas` — unzip → open `htmlcov-mas/index.html`",
-              "- `coverage-agent` — unzip → open `htmlcov-agent/index.html`",
-              "- `coverage-knowledge-store` — unzip → open `htmlcov-ks/index.html`",
-              "",
-              "Legend: 🟢 ≥ 80 % · 🟡 60–80 % · 🔴 < 60 %",
-              "",
-          ]
-          summary = "\n".join(lines) + "\n"
-
-          out = os.environ.get("GITHUB_STEP_SUMMARY")
-          if out:
-              with open(out, "a") as f:
-                  f.write(summary)
-          print(summary)
-          PY
-
-      - name: Upload combined coverage XMLs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-combined
-          path: artifacts/coverage-*.xml
-          retention-days: 30
+          MAS: ${{ needs.test-mas.outputs.coverage-row }}
+          AGENT: ${{ needs.test-agent.outputs.coverage-row }}
+          KNOWLEDGE_STORE: ${{ needs.test-knowledge-store.outputs.coverage-row }}
+          INSTALLER: ${{ needs.test-installer.outputs.coverage-row }}
+          LLM_MOCK: ${{ needs.test-llm-mock.outputs.coverage-row }}
+        run: >-
+          python3 scripts/ci/coverage-line.py collect
+          "MAS=$MAS" "Agent=$AGENT" "Knowledge store=$KNOWLEDGE_STORE" "Installer=$INSTALLER"
+          "LLM mock=$LLM_MOCK"

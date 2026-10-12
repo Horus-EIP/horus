@@ -6,23 +6,31 @@ See ``docs/architecture.md`` for entity types and rules.
 
 import json
 import logging
+import os
 import re
 from typing import Any
 
 from langchain.tools import BaseTool
 
-try:
-    import spacy
-    from spacy.lang.en.stop_words import STOP_WORDS
-    _has_spacy = True
-except ImportError:
-    spacy = None
-    STOP_WORDS = set()
-    _has_spacy = False
+SPACY_ENV = "HORUS_SPACY"
+OFF_VALUES = frozenset({"0", "false", "no", "off"})
+ENTITY_KINDS = ("people", "companies", "amounts", "dates")
 
 _nlp_model = None
 
 logger = logging.getLogger(__name__)
+
+
+def spacy_is_off() -> bool:
+    return os.getenv(SPACY_ENV, "on").strip().lower() in OFF_VALUES
+
+
+def _import_spacy():
+    try:
+        import spacy
+    except ImportError:
+        return None
+    return spacy
 
 class DataExtractorTool(BaseTool):
     """Extract payments, dates, tables, and key-value pairs from raw text."""
@@ -39,8 +47,17 @@ class DataExtractorTool(BaseTool):
         super().__init__(**kwargs)
         global _nlp_model
 
+        if spacy_is_off():
+            logger.info(
+                "spaCy is off (%s=%s): payments are extracted with regular expressions only",
+                SPACY_ENV, os.getenv(SPACY_ENV),
+            )
+            self.nlp = None
+            return
+
+        spacy = _import_spacy()
+
         # Check if we are in a testing environment
-        import os
         import sys
         is_test = "pytest" in sys.modules or "unittest" in sys.modules or os.environ.get("TEST_MODE") == "true"
 
@@ -48,7 +65,7 @@ class DataExtractorTool(BaseTool):
              # Use a mock/dummy or explicitly 'sm' during tests to avoid heavy load
              logger.info("Test environment detected. Skipping 'trf' model load.")
              try:
-                if _has_spacy and spacy:
+                if spacy:
                     _nlp_model = spacy.load("en_core_web_sm")
                 else:
                     raise ImportError("Spacy missing")
@@ -60,7 +77,7 @@ class DataExtractorTool(BaseTool):
 
         if _nlp_model is None:
             try:
-                if not _has_spacy or not spacy:
+                if not spacy:
                     raise ImportError("Spacy missing")
                 prefer_sm = os.getenv("AGENT_SPACY_PREFER_SM", "").strip().lower() in (
                     "1",
@@ -103,7 +120,7 @@ class DataExtractorTool(BaseTool):
         logger.info(f"DataExtractorTool running with extraction_type='{extraction_type}'")
 
         # Determine if Spacy doc is needed
-        doc = self.nlp(text)
+        doc = self.nlp(text) if self.nlp else None
 
         if extraction_type == "payments":
             res = self._extract_payments(text, doc)
@@ -163,6 +180,8 @@ class DataExtractorTool(BaseTool):
         Returns:
             Dict[str, List[str]]: Found 'people', 'companies', 'amounts', 'dates'.
         """
+        if doc is None:
+            return {kind: [] for kind in ENTITY_KINDS}
         money = []
         dates = []
         people = []

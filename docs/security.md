@@ -130,7 +130,26 @@ Complete permission mapping for all roles:
 | `data:export` | Yes | Yes | No | No |
 | `system:config` | Yes | No | No | No |
 
-Source of truth: `src/services/mas/auth/permissions.py` (`ROLE_PERMISSION`). The **manager** role includes `task:read`, which grants WebSocket chat access (see WebSocket API documentation).
+Source of truth: `src/services/mas/auth/permissions.py` (`ROLE_PERMISSION`). These permissions say which routes a role may call; [Who can see what](#who-can-see-what) says which tasks and conversations it then reaches.
+
+---
+
+### Who can see what
+
+The permissions above open the task and conversation routes to several roles; ownership then narrows what each role reaches. Source of truth: `src/services/mas/tasks/task_access.py`, `src/services/mas/conversations/routes.py` and `src/services/mas/chat/routes.py`.
+
+| Role | Read a task and its events | `GET /tasks/list` | Conversation history and chat WebSocket | Cancel a task | Create a task in a conversation |
+|:-----|:---------------------------|:------------------|:-----------------------------------------|:--------------|:--------------------------------|
+| `admin` | any | every task | any conversation | any | any conversation |
+| `manager` | any | every task | only their own | any | only their own |
+| `user` | the tasks they own, and every task in a conversation they own | the same tasks | only their own | the same tasks as they read | only their own |
+| `system` | as `user` | as `user` | only their own | no (`task:delete` missing) | no (`task:create` missing) |
+
+- A task's owner is its `owner_username` (the user who queued it), else the owner of its root task. A subtask therefore belongs to whoever owns its chain.
+- `GET /tasks/conversation/{id}/running` is for the conversation's owner, a manager or an admin. The agent routes (`/claim`, `/task-result/`, `/task-step/`, `/abandoned-claims`) use the agent's API key, not a role.
+- No Horus service logs in as `system`: the agents log in as the super user and use their API key on the agent routes.
+- **A conversation's owner reads and cancels every task in it, whoever posted it.** An admin may post into a user's conversation; the answer reaches the user's chat and history anyway, so refusing them the task protected nothing.
+- **Managers read every task but not other users' conversations.** A task carries what oversight needs (the question, its status, the answer, the timings and the sources); reading or watching a whole chat live gives more access than that. Least privilege.
 
 ---
 
@@ -204,10 +223,12 @@ On first application startup:
 ## - Role assignments
 ## - Permission mappings
 
-## Environment variables set in .env:
+## Environment variables set in .env (the installer and init-env.sh generate the password):
 SUPER_USER_USERNAME=admin
-SUPER_USER_PASSWORD=admin
+SUPER_USER_PASSWORD=<24 generated characters>
 ```
+
+MAS creates the admin account once, on its first start, and refuses to create it when `SUPER_USER_PASSWORD` is empty or `admin`: it logs an error that says how to set one. On every start it also checks the stored password (`src/services/mas/db/admin_account.py`): an account still on the shipped `admin` gets the `SUPER_USER_PASSWORD` from `.env`, and an account whose password was changed in Horus is never touched. The installer shows a password it generated once, at the end, with the login name, and only on a terminal; it never writes it to `install-log.txt`, the `--json-events` stream or `horus-profile.json`. [Upgrades and uninstall](operations.md#upgrades-and-uninstall) says what an upgrade does.
 
 ##### 2. Creating Users
 
@@ -217,7 +238,7 @@ SUPER_USER_PASSWORD=admin
 ## Get admin token
 TOKEN=$(curl -X POST http://localhost:8000/auth/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=admin&password=admin" \
+  --data-urlencode "username=admin" --data-urlencode "password=$SUPER_USER_PASSWORD" \
   | jq -r '.access_token')
 
 ## Create new user
@@ -761,6 +782,9 @@ READ_ONLY_ROOTFS true
 
 - Secrets supplied via environment variables in development  
 - Local `.env` (not committed) for Compose  
+- The installer and `src/infra/init-env.sh` generate `JWT_SECRET_KEY` and `REDIS_PASSWORD` (64 hex characters each) and `SUPER_USER_PASSWORD` (24 characters that meet the MAS password policy) into `src/infra/.env`, and the installer also generates `CORPUS_SCAN_TOKEN`; `.env.example` leaves `REDIS_PASSWORD` and `SUPER_USER_PASSWORD` empty. On an install that still has the password earlier releases shipped (`redis_password`) or an empty one, the installer writes a generated one, and the `docker compose up -d` it ends with recreates `redis`, `mas` and `agent` with it.
+- `POSTGRES_PASSWORD`, `RABBITMQ_PASSWORD` and `PGADMIN_DEFAULT_PASSWORD` still ship as defaults; their ports answer on 127.0.0.1 only (see 6.3 for the Linux Engine caveat).
+- `SUPER_USER_PASSWORD` was `admin` in every release before this one, and no install keeps it now. On an install whose `.env` still has `admin` or an empty value, the installer writes a generated one; on its next start MAS gives it to an account still on `admin` (an account whose password was changed in Horus keeps its own), and the installer shows it once, at the end. The agent signs in with the same value (`ORCHESTRATOR_PASSWORD`), so the account and `.env` must agree: once the stack is up the installer runs `python -m db.admin_account` in the `mas` container and warns when they do not. The web client forwards every `/api/orchestrator/*` request to MAS, `/auth/token` included; port 3000 answers on 127.0.0.1 only, unless `HORUS_WEB_BIND` opens it to the network (6.3).
 
 **Recommendations:**
 - Use Docker secrets for production
@@ -769,13 +793,29 @@ READ_ONLY_ROOTFS true
 
 #### 6.3 Network Security
 
-| Service | Exposed Port | Recommendation |
-|---------|--------------|----------------|
-| MAS | 8000 | Expose via reverse proxy |
-| Web Client | 3000 | Expose via reverse proxy |
-| PostgreSQL | 5432 | Internal only |
-| RabbitMQ | 5672 | Internal only |
-| Redis | 6379 | Internal only |
+| Service | Host port | Bound to | Reached from the host by |
+|---|---|---|---|
+| Web client | 3000 | 127.0.0.1, or the address in `HORUS_WEB_BIND` | the browser, the desktop app |
+| MAS | 8000 | 127.0.0.1 | the browser's chat WebSocket, the installer's smoke test, scripts |
+| Knowledge store | 8080 | 127.0.0.1 | the browser (`NEXT_PUBLIC_KNOWLEDGE_STORE_URL`), the smoke test, scripts |
+| Agent | 8001 | 127.0.0.1 | `scripts/perf/prompt-tokens.py` (metrics) |
+| vLLM (GPU profiles) | 18000 (`VLLM_HOST_PORT`) | 127.0.0.1 | debugging only; it has no API key |
+| PostgreSQL | 5432 (`DB_PORT`) | 127.0.0.1 | MAS run on the host |
+| Valkey | 6379 (`REDIS_PORT`) | 127.0.0.1 | MAS run on the host |
+| RabbitMQ AMQP / management | 5672 (`RABBITMQ_PORT`) / 15672 | 127.0.0.1 | MAS run on the host / the browser |
+| Tempo OTLP | 4317, 4318 | 127.0.0.1 | services run on the host |
+| PgAdmin (`dev-tools` profile) | 5433 | 127.0.0.1 | the browser |
+| Prometheus, Loki, Tempo queries, llama-server | none | not published | containers on `horus-net` only |
+
+By default no port answers other machines, provided Docker Engine is 28.0 or newer on Linux: on older Engines, hosts on the same network segment can reach ports published to 127.0.0.1 (moby/moby#45610, fixed in 28.0.0). The installer, START-HERE and the desktop app open `http://localhost:3000`.
+
+`HORUS_WEB_BIND=0.0.0.0` in `src/infra/.env`, then `START-HERE --start` (or `docker compose up -d`), opens the web client, and only it, to the network on purpose. What that means:
+
+- The sign-in page is on the network. The web client proxies the whole MAS REST API under `/api/orchestrator`, `/auth/token` included, so any machine that reaches port 3000 can try passwords and, once signed in, use the API with that account's role. Binding 8000 to 127.0.0.1 does not change that.
+- Chat and the knowledge store do not work from other machines yet (B-133): the chat socket and the knowledge-store calls go to ports that answer on 127.0.0.1 only, and the knowledge store accepts only the origins `http://localhost:3000` and `http://127.0.0.1:3000`. Other machines can sign in, but chat and the knowledge-store page fail.
+- Use 127.0.0.1 or 0.0.0.0. With any other address, `http://localhost:3000` no longer answers on the machine itself.
+
+`tests/ci/test_published_ports.py` fails when a port is published on every interface, except 3000 through `HORUS_WEB_BIND`, and when a launcher opens anything but `http://localhost:3000`.
 
 ---
 

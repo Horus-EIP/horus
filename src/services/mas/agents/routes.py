@@ -85,7 +85,7 @@ async def handle_agent_creation(
             status_code=409, detail=f"An agent already has the name '{agent.name}'"
         )
 
-    agent_id, api_key = create_agent(
+    agent_id, api_key = await create_agent(
         agent.name,
         agent.skills,
         agent.description,

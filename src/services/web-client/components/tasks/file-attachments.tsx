@@ -21,11 +21,14 @@ import {
 import { useDropzone } from 'react-dropzone';
 import {
   fileToBase64,
+  formatBytes,
   knowledgeStoreApi,
   type KnowledgeStoreDocument,
   type UploadProgress as UploadProgressData,
 } from '@/lib/knowledge-store/api';
 import { UploadProgress } from '@/components/knowledge-store/upload-progress';
+import { AlreadyStoredWarning } from '@/components/knowledge-store/already-stored-warning';
+import { namesAlreadyStored } from '@/lib/knowledge-store/stored-names';
 import type {
   InlineTaskFile,
   KnowledgeStoreFileRef,
@@ -47,6 +50,49 @@ interface FileAttachmentsProps {
 }
 
 type PendingUpload = { file: File; size: number };
+
+function countBy(keys: string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + 1);
+  return counts;
+}
+
+function formatUploadMinute(date?: string): string | null {
+  const match = date?.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+  return match ? `${match[1]} ${match[2]} UTC` : null;
+}
+
+function describeCopy(doc: KnowledgeStoreDocument): string {
+  const uploaded = formatUploadMinute(doc.date);
+  return [
+    doc.title,
+    uploaded && `uploaded ${uploaded}`,
+    doc.size ? formatBytes(doc.size) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function buildDocumentOptions(docs: KnowledgeStoreDocument[]) {
+  const titleCounts = countBy(docs.map((d) => d.title));
+  const labels = docs.map((d) =>
+    (titleCounts.get(d.title) ?? 0) > 1 ? describeCopy(d) : d.title
+  );
+  const labelCounts = countBy(labels);
+  return docs.map((d, i) => ({
+    value: d.id,
+    label:
+      (labelCounts.get(labels[i]) ?? 0) > 1
+        ? `${labels[i]} · id ${d.id.slice(0, 8)}`
+        : labels[i],
+  }));
+}
+
+function sameAttachment(a: KnowledgeStoreFileRef, b: KnowledgeStoreFileRef) {
+  return a.doc_id && b.doc_id
+    ? a.doc_id === b.doc_id
+    : a.filename === b.filename;
+}
 
 export function FileAttachments({
   value,
@@ -78,22 +124,48 @@ export function FileAttachments({
     if (picker) void refreshDocs();
   }, [picker, refreshDocs]);
 
-  const ksOptions = useMemo(
-    () => docs.map((d) => ({ value: d.title, label: d.title })),
+  const ksOptions = useMemo(() => buildDocumentOptions(docs), [docs]);
+
+  const docsById = useMemo(
+    () => new Map(docs.map((d) => [d.id, d])),
     [docs]
   );
 
-  const selectedFilenames = useMemo(
-    () => value.attached.map((a) => a.filename),
-    [value.attached]
+  const optionValueOf = useCallback(
+    (ref: KnowledgeStoreFileRef) =>
+      ref.doc_id ??
+      docs.find((d) => d.title === ref.filename)?.id ??
+      ref.filename,
+    [docs]
   );
 
-  const setSelected = (names: string[]) => {
+  const selectedValues = useMemo(
+    () => value.attached.map(optionValueOf),
+    [value.attached, optionValueOf]
+  );
+
+  const setSelected = (optionValues: string[]) => {
+    const attachedByValue = new Map(
+      value.attached.map((ref) => [optionValueOf(ref), ref])
+    );
     onChange({
       ...value,
-      attached: names.map((filename) => ({ filename })),
+      attached: optionValues.map((optionValue) => {
+        const doc = docsById.get(optionValue);
+        if (doc) return { doc_id: doc.id, filename: doc.title };
+        return attachedByValue.get(optionValue) ?? { filename: optionValue };
+      }),
     });
   };
+
+  const alreadyStoredNames = useMemo(
+    () =>
+      namesAlreadyStored(
+        pendingUploads.map((p) => p.file.name),
+        docs.map((d) => d.title)
+      ),
+    [pendingUploads, docs]
+  );
 
   const removeInline = (filename: string) => {
     onChange({
@@ -171,8 +243,11 @@ export function FileAttachments({
           reportError.current?.(`${row.filename}: ${row.error}`);
           continue;
         }
-        if (newAttached.some((a) => a.filename === row.filename)) continue;
-        newAttached.push({ filename: row.filename });
+        const ref: KnowledgeStoreFileRef = row.doc_id
+          ? { doc_id: row.doc_id, filename: row.filename }
+          : { filename: row.filename };
+        if (newAttached.some((a) => sameAttachment(a, ref))) continue;
+        newAttached.push(ref);
       }
       onChange({ ...value, attached: newAttached });
       void refreshDocs();
@@ -203,6 +278,7 @@ export function FileAttachments({
         <SaveToKsModal
           open={saveModalOpen}
           files={pendingUploads}
+          alreadyStoredNames={alreadyStoredNames}
           uploading={uploading}
           progress={uploadProgress}
           errorDetail={uploadError}
@@ -257,7 +333,7 @@ export function FileAttachments({
                   : 'No files in the knowledge store yet'
             }
             data={ksOptions}
-            value={selectedFilenames}
+            value={selectedValues}
             onChange={setSelected}
             searchable
             clearable
@@ -308,6 +384,7 @@ export function FileAttachments({
       <SaveToKsModal
         open={saveModalOpen}
         files={pendingUploads}
+        alreadyStoredNames={alreadyStoredNames}
         uploading={uploading}
         progress={uploadProgress}
         errorDetail={uploadError}
@@ -322,6 +399,7 @@ export function FileAttachments({
 interface SaveToKsModalProps {
   open: boolean;
   files: PendingUpload[];
+  alreadyStoredNames: string[];
   uploading: boolean;
   progress: UploadProgressData | null;
   errorDetail: string | null;
@@ -333,6 +411,7 @@ interface SaveToKsModalProps {
 function SaveToKsModal({
   open,
   files,
+  alreadyStoredNames,
   uploading,
   progress,
   errorDetail,
@@ -352,7 +431,7 @@ function SaveToKsModal({
     >
       <Stack gap="md">
         <Text size="sm">
-          Save these files to the knowledge store so they're indexed and
+          Save these files to the knowledge store so they&apos;re indexed and
           available to future tasks? Choose <strong>One-shot</strong> to send
           them only for this task without persisting anything.
         </Text>
@@ -366,6 +445,10 @@ function SaveToKsModal({
             </li>
           ))}
         </ul>
+        <AlreadyStoredWarning names={alreadyStoredNames}>
+          Saving adds another copy with the same name; pick the copy you need
+          by its upload date.
+        </AlreadyStoredWarning>
         {progress && <UploadProgress progress={progress} errorDetail={errorDetail} />}
         <Group justify="flex-end">
           <Button variant="default" onClick={onCancel} disabled={uploading}>
@@ -376,7 +459,7 @@ function SaveToKsModal({
             onClick={onAttachOnly}
             disabled={uploading}
           >
-            One-shot (don't save)
+            One-shot (don&apos;t save)
           </Button>
           <Button
             onClick={onSaveAndAttach}

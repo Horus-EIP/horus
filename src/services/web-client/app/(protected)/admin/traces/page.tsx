@@ -8,14 +8,14 @@ import {
   type TraceSummary,
   type TraceDetail,
 } from "@/lib/traces/api";
+import { TRACED_SERVICES } from "@/lib/traces/services";
 import { useNotification } from "@/contexts/notification-context";
 import { ObservabilityTabs } from "@/components/admin/observability-tabs";
+import { MonitoringGate } from "@/components/admin/monitoring-gate";
 
 const SERVICE_OPTIONS = [
   { value: "all", label: "All services" },
-  { value: "mas", label: "mas" },
-  { value: "agent", label: "agent" },
-  { value: "knowledge-store", label: "knowledge-store" },
+  ...TRACED_SERVICES.map((service) => ({ value: service, label: service })),
 ];
 
 const SINCE_OPTIONS = [
@@ -267,4 +267,10 @@ const AdminTracesPage = () => {
   );
 };
 
-export default AdminTracesPage;
+const GatedAdminTracesPage = () => (
+  <MonitoringGate title="Traces">
+    <AdminTracesPage />
+  </MonitoringGate>
+);
+
+export default GatedAdminTracesPage;

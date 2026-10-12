@@ -24,8 +24,9 @@ desktop/
    interpreter. Each failure has its own screen with the one instruction that
    fixes it.
 3. Runs `installer/horus_install.py --start --json-events` and renders the
-   stream: current step, one row per service with its health, elapsed time, and
-   the raw Docker output behind a disclosure triangle.
+   stream: current step, a progress bar while the CPU language model downloads,
+   one row per service with its health, elapsed time, and the raw Docker
+   output behind a disclosure triangle.
 4. On the installer's `ready` event, opens a second window at
    `http://localhost:3000` and hides the status window.
 5. Leaves Stop / Restart / Open install-log.txt / Open horus-profile.json on the
@@ -55,7 +56,16 @@ The contract is two lines wide:
 
 `installer/common.py` owns the prefix and the `Events` class; every `log.step()`
 / `ok()` / `warn()` in the installer is mirrored automatically, and
-`wait_for_health()` adds a `services` event on every poll.
+`wait_for_health()` adds a `services` event on every poll. The model manager
+adds `download` events (phase, bytes done and total, percent, speed, time left
+and a ready-made line of text) twice a second while it downloads, then one each
+for `verifying` and `verified` or `failed`.
+
+A machine the installer refuses gets one `unsupported` event (what the machine
+has, what Horus needs, what to do) and exit code 32, which the app shows on its
+own screen. The refusal stays in `horus-profile.json`, so `bootstrap` reports
+`refused` while nothing is installed and the app runs `--start`, which repeats
+it. A later install run that gets past the hardware decision clears it.
 
 ## Two windows, and why the client is not bundled
 

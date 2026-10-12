@@ -8,7 +8,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-VERSION = "0.1.0"
+VERSION_FILE = Path(__file__).resolve().parent.parent / "VERSION"
+UNKNOWN_VERSION = "0.0.0"
+
+def read_version(path: Path = VERSION_FILE) -> str:
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return UNKNOWN_VERSION
+    return text or UNKNOWN_VERSION
+
+VERSION = read_version()
 
 EXIT_OK = 0
 EXIT_USAGE = 2
@@ -27,11 +37,16 @@ EXIT_CONSENT_CANCELLED = 20
 
 EXIT_PROFILE_UNKNOWN = 30
 EXIT_NO_USABLE_GPU_FOR_PROFILE = 31
+EXIT_HARDWARE_NOT_SUPPORTED = 32
 
 EXIT_ENV_WRITE_FAILED = 40
 EXIT_COMPOSE_PULL_FAILED = 41
 EXIT_COMPOSE_UP_FAILED = 42
 EXIT_HEALTH_TIMEOUT = 43
+EXIT_MODEL_DOWNLOAD_FAILED = 44
+EXIT_MODEL_HASH_MISMATCH = 45
+EXIT_MODEL_MANIFEST_INVALID = 46
+EXIT_REGISTRY_LOGIN_FAILED = 47
 
 EXIT_SMOKE_FAILED = 50
 
@@ -259,6 +274,8 @@ def run(
     timeout: int = 60,
     cwd: Path | None = None,
     env: dict | None = None,
+    log_output: bool = True,
+    stdin_text: str | None = None,
 ) -> Result:
     log.debug(f"$ {' '.join(cmd)}" + (f"   (cwd={cwd})" if cwd else ""))
     merged = None
@@ -275,6 +292,7 @@ def run(
             timeout=timeout,
             cwd=str(cwd) if cwd else None,
             env=merged,
+            input=stdin_text,
         )
     except FileNotFoundError:
         log.debug(f"  -> executable not found: {cmd[0]}")
@@ -289,6 +307,9 @@ def run(
     out = (proc.stdout or "").strip()
     err = (proc.stderr or "").strip()
     log.debug(f"  -> exit {proc.returncode}")
+    if not log_output:
+        log.debug(f"  output not logged ({len(out)} + {len(err)} characters)")
+        return Result(proc.returncode, out, err)
     for label, blob in (("stdout", out), ("stderr", err)):
         if blob:
             for line in blob.splitlines()[:20]:

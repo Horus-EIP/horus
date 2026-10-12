@@ -1,8 +1,10 @@
 'use client';
 
 import { Subtask, TaskStatus } from '@/lib/tasks/types';
+import { formatTaskDuration } from '@/lib/tasks/timing';
 
 const STATUS_CONFIG: Record<TaskStatus, { label: string; dot: string; text: string }> = {
+  queued:    { label: 'Queued',    dot: 'bg-white/20 animate-pulse', text: 'text-[var(--textSoft)]' },
   completed: { label: 'Completed', dot: 'bg-emerald-400', text: 'text-emerald-400' },
   running:   { label: 'Running',   dot: 'bg-amber-400 animate-pulse', text: 'text-amber-400' },
   pending:   { label: 'Pending',   dot: 'bg-white/20', text: 'text-[var(--textSoft)]' },
@@ -12,6 +14,7 @@ const STATUS_CONFIG: Record<TaskStatus, { label: string; dot: string; text: stri
 
 function SubtaskNode({ subtask, depth = 0 }: { subtask: Subtask; depth?: number }) {
   const config = STATUS_CONFIG[subtask.status];
+  const duration = formatTaskDuration(subtask.createdAt, subtask.completedAt);
 
   return (
     <div className={depth > 0 ? 'ml-5 border-l border-white/10 pl-4' : ''}>
@@ -22,6 +25,9 @@ function SubtaskNode({ subtask, depth = 0 }: { subtask: Subtask; depth?: number 
           <div className="flex items-center gap-2">
             <span className={`text-[10px] font-medium ${config.text}`}>{config.label}</span>
             <span className="text-[10px] text-[var(--textSoft)]">→ {subtask.assignedAgent}</span>
+            {duration && (
+              <span className="text-[10px] text-[var(--textSoft)]">· {duration}</span>
+            )}
           </div>
         </div>
       </div>

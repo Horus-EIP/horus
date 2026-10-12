@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -6,11 +7,29 @@ from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
 
 from app.api.routes import ROUTERS
+from app.api.routes.corpus import cancel_startup_check, schedule_startup_check
+from app.chroma_db.setup import EMBED_MODEL, EMBED_URL
 from app.core.logging import get_logger
 from app.core.metrics import set_system_info
 from app.core.middleware import CorrelationIDMiddleware
+from app.core.version import HORUS_VERSION
+from app.services.content_analyzer import spacy_is_off
 
 logger = get_logger("main")
+TRACES_OFF_VALUES = frozenset({"1", "true", "yes"})
+
+
+def mock_ai_warning() -> str:
+    parts = ["the answers built on this knowledge store are simulated by llm-mock"]
+    if EMBED_URL:
+        parts.append("llm-mock computes its embeddings from the words of each text, so search "
+                     "is word matching")
+    if spacy_is_off():
+        parts.append("spaCy is off, so entities, topics and summaries come from regular "
+                     "expressions")
+    if os.getenv("OTEL_SDK_DISABLED", "").strip().lower() in TRACES_OFF_VALUES:
+        parts.append("monitoring is off, so it exports no trace")
+    return "Mock AI mode: " + "; ".join(parts)
 
 
 @asynccontextmanager
@@ -20,10 +39,15 @@ async def lifespan(app: FastAPI):
         "Knowledge Store starting up",
         extra={
             "type": "startup",
-            "version": "1.0.0",
+            "version": HORUS_VERSION,
+            "embed_model": EMBED_MODEL,
         },
     )
+    if os.getenv("HORUS_AI_MODE", "").strip().lower() == "mock":
+        logger.warning(mock_ai_warning(), extra={"type": "startup"})
+    schedule_startup_check()
     yield
+    cancel_startup_check()
     logger.info(
         "Knowledge Store shutting down",
         extra={"type": "shutdown"},
@@ -59,7 +83,7 @@ app = FastAPI(
     title="Horus Knowledge Store",
     description=description,
     summary="Vector database and document retrieval service",
-    version="1.0.0",
+    version=HORUS_VERSION,
     contact={
         "name": "Horus",
     },
@@ -97,13 +121,13 @@ app.add_middleware(
 )
 
 # Set system info for metrics
-set_system_info(version="1.0.0", embedding_model="BAAI/bge-base-en-v1.5")
+set_system_info(version=HORUS_VERSION, embedding_model=EMBED_MODEL)
 
 
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "service": "knowledge-store"}
+    return {"status": "healthy", "service": "knowledge-store", "version": HORUS_VERSION}
 
 
 @app.exception_handler(HTTPException)

@@ -37,6 +37,56 @@ Complete REST and WebSocket API reference for the Multi-Agent System orchestrato
 
 ### 1. Health
 
+#### GET /health
+
+Liveness probe. Reports the service and the Horus release it runs (from `VERSION`, passed in as `HORUS_VERSION`). Calls no other service.
+
+**Auth:** None
+
+**Response 200:**
+
+```json
+{
+  "status": "healthy",
+  "service": "mas",
+  "version": "0.1.2"
+}
+```
+
+The Compose healthcheck of `mas` uses `POST /rabbitmq/heartbeat` instead, because it also proves the broker connection.
+
+---
+
+#### GET /system/ai
+
+Which AI answers: a language model or the mock model server of [mock AI mode](mock-ai.md). MAS asks the model server for `GET /v1/models` when it starts and keeps the answer; while the server could not be asked, every call asks again. `mode` is `mock` when the server says `owned_by: "horus-mock"`, `local` for any other server (or for the in-process backend), `unknown` when it could not be asked. The web client reads it to show its mock-mode banner. No address or secret.
+
+The other models of the stack:
+
+- `embeddings`: `mock` when MAS's embeddings server (`MAS_EMBED_URL`) is `llm-mock`, by the same `owned_by` rule; otherwise the model MAS embeds with (`sentence-transformers/all-MiniLM-L6-v2` with FastEmbed); `null` while that server cannot be asked.
+- `spacy`: `off` or `on`, from `HORUS_SPACY`. Each service picks its own spaCy model when it is on, so the field does not name one.
+- `monitoring`: `on` or `off`, from `HORUS_MONITORING`.
+
+**Auth:** None
+
+**Response 200:**
+
+```json
+{
+  "mode": "mock",
+  "model": "horus-mock",
+  "server": "horus-mock",
+  "simulated": true,
+  "embeddings": "mock",
+  "spacy": "off",
+  "monitoring": "off"
+}
+```
+
+Each assistant answer also records `ai_provider` (`mock`, `local`, or `null` when the mode was unknown or for older answers): in `GET /conversations/get_history/{chat_id}`, in `GET /tasks/{task_id}`, and in the WebSocket `task_complete` frame.
+
+---
+
 #### GET /
 
 Verify the application is running and test JWT authentication. Returns the authenticated user's identity.
@@ -344,9 +394,11 @@ Update an agent's status to active and refresh its `last_heartbeat` timestamp. C
 
 ### 4. Tasks
 
+Who may read, list, cancel and create which task, role by role, is in [Who can see what](security.md#who-can-see-what).
+
 #### GET /tasks/list
 
-Retrieve all tasks stored in the database.
+Retrieve the top-level tasks (the subtasks of a multi-agent chain are left out). Admins and managers get every user's tasks. Other roles (`user`, and `system`, which no Horus service logs in as) get the tasks they own by `owner_username` and every task in a conversation they own, whoever posted it.
 
 **Auth:** JWT Bearer (requires `task:read` permission)
 
@@ -381,7 +433,7 @@ Retrieve all tasks stored in the database.
 
 #### GET /tasks/stats/queue
 
-Retrieve current task queue statistics (pending, running, completed, failed counts).
+Retrieve task counts by status (queued, pending, running, completed, failed, cancelled) and their total. Only top-level tasks are counted, like `GET /tasks/list`: the subtasks of a multi-agent chain are excluded.
 
 **Auth:** JWT Bearer (requires `analytics:view` permission)
 
@@ -391,13 +443,13 @@ Retrieve current task queue statistics (pending, running, completed, failed coun
 
 ```json
 {
+  "queued": 1,
   "pending": 5,
   "running": 2,
   "completed": 150,
   "failed": 1,
   "cancelled": 0,
-  "timeout": 0,
-  "total": 158
+  "total": 159
 }
 ```
 
@@ -411,60 +463,202 @@ Retrieve current task queue statistics (pending, running, completed, failed coun
 
 #### POST /tasks/new_task/
 
-Create a new task and dispatch it to the best matching agent based on required skills. Uses LLM-based agent selection. If no single agent matches, the system attempts to decompose the task into sub-tasks.
+Queue a new task. The task is stored with status `queued` and the call answers `202` at once; it no longer waits for routing. A background job in MAS then routes the demand (direct answer, one agent, or a multi-agent chain planned by the Manager) and dispatches it. In `auto` mode the router tries rules first (greetings, small talk and arithmetic are answered at once, with no model), then embeddings over labelled examples, and calls the LLM only when neither is confident (see "Task Routing" in `src/services/mas/README.md`). The job uses its own database session and runs the blocking router and planner calls in a thread pool, so it keeps going after the HTTP request has ended. Follow the outcome on the conversation WebSocket, with `GET /tasks/{task_id}/events`, or with `GET /tasks/{task_id}`.
 
-**Auth:** JWT Bearer (requires `task:create` permission)
+The `task_id` returned here is the one to follow for the whole request: a single-agent task keeps it, and a multi-agent chain uses it as the Manager-owned root of its subtasks.
+
+**Auth:** JWT Bearer (requires `task:create` permission). A `conversation_id` must be a conversation of the user who posts, unless that user is an admin; anyone else gets `403`, and an unknown `conversation_id` gets `404`, both checked before the `Idempotency-Key`, so a replayed key cannot get around them. A task without a `conversation_id` is accepted as before.
+
+**Headers:**
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Idempotency-Key` | No (the web client always sends one) | 1 to 200 characters. Keys are scoped to the user and kept for 24 h in Redis (`horus:idempotency:{user_id}:{key}`). A request that reuses a key gets the task created by the first request, with the header `Idempotent-Replayed: true`, and never creates a second task. The web client generates one key per submit and reuses it on its automatic retries. If the task cannot be stored, the key is released so a retry can create it. |
 
 **Request:** `application/json`
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | demand | string | Yes | The task description / user question. |
-| conversation_id | integer | Yes | ID of the conversation this task belongs to. |
-| skills_required | string[] | Yes | Skill tags for agent matching (min 1). |
+| conversation_id | integer | No | Conversation this task belongs to. Omit it for a standalone task. |
+| skills_required | string[] | Yes | Skill tags for agent matching (may be empty in `auto` mode). |
+| mode | string | No | `auto` (default), `specific_agent`, `any_with_skill` or `decompose`. |
+| agent_id | string | No | Required with `mode=specific_agent`. |
+| attached_files | object[] | No | Knowledge-store documents (`filename`, optional `doc_id`). |
+| inline_files | object[] | No | One-shot files (`filename`, `mime`, `content_b64`), 2 MB each, 8 MB in total. |
 
-**Response 200 (assigned):**
-
-```json
-{
-  "message": "Task 'Summarize this text' assigned to agent 8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
-  "conversation_id": 1,
-  "task_id": "task-uuid-1234"
-}
-```
-
-**Response 200 (direct answer from LLM):**
+**Response 202:**
 
 ```json
 {
-  "message": "Processing complete",
-  "conversation_id": 1,
-  "result": "The answer is 42."
+  "task_id": "3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13",
+  "status": "queued",
+  "conversation_id": 1
 }
 ```
 
-**Response 200 (no agent available):**
+A replayed `Idempotency-Key` returns the same body shape with the task's current status (for example `running`).
 
-```json
-{
-  "message": "No agent registered to assign a task"
-}
-```
+**What the background job does:**
+
+| Outcome | Task status | Event |
+|---------|-------------|-------|
+| Direct answer (greeting, small talk, arithmetic, with no `attached_files` or `inline_files`) | `completed`, the answer is the task result | `result` with `route: "direct_answer"` |
+| A direct answer for a task with attached files | as for one agent: MAS does not read files, so it drops the direct answer and the requested skill's agent, an auto-created specialist or the catch-all agent takes the task and reads them | as for one agent |
+| One agent | `running`, then `completed` when the agent posts its result | `progress` (`status: "running"`), later `result` with `route: "agent"` |
+| The agent type's work queue is full | `queued` while the task waits in MAS, then `running` once RabbitMQ accepts it | `progress` with `status: "busy"`, `position` and `detail: "Busy, position N"`, sent again whenever N changes, then `progress` with `status: "running"` when the task leaves the line |
+| The agent fails or its answer times out | `failed`, the agent's message is the task result | `error` with `status: "failed"` and `reason` (`timeout` or `error`) |
+| Chain | the task becomes the chain root (`running`); its subtasks are dispatched one by one | Manager messages as `progress`, later `result` |
+| Nothing can handle the demand (no agents, no plan) | `failed`, the reason is the task result | `error` with `route: "none"` |
+| The router or the dispatch crashes | `failed` | `error` |
+| The task was cancelled while it was routed | stays `canceled`, nothing is dispatched | `error` with `status: "cancelled"` |
+
+At start-up MAS marks the tasks still `queued` (their routing job, or their place in the line for a full work queue, died with the previous process) as `failed` and stores an `error` event saying so. The `TASK_TIMEOUT` watchdog watches `queued` tasks as well as `running` ones.
+
+**Full work queues.** Each `horus.work.{type}` queue holds at most `WORK_QUEUE_MAX_LENGTH` waiting tasks (default 10) and rejects the next publish (`x-overflow: reject-publish`). MAS publishes with publisher confirms, so a rejected task is never dropped silently: MAS keeps it in a first-in, first-out line per queue, sends the `busy` status at once (before any wait), and retries the head of the line every second. A request that arrives while others wait joins the end of the line without publishing, so the order holds. **N** is the number of tasks that an agent of that type will take before this one, plus one: the tasks waiting in the RabbitMQ queue (its ready count when the last publish was rejected, so `WORK_QUEUE_MAX_LENGTH` in practice) plus the tasks ahead of it in MAS's line. Tasks an agent is already running are not counted. With the default limit the first task that has to wait shows position 11 (10 tasks in the queue, then this one); N goes down by one each time a task ahead of it leaves MAS's line, and the task is published as soon as it is first in line and the queue has room.
+
+The user message is saved to the conversation when the task is queued, before routing.
 
 **Errors:**
 
 | Code | Detail |
 |------|--------|
+| `400` | Invalid base64 in an inline file. Nothing is stored. |
 | `401` | `Authentication Failed` |
+| `403` | `Only the conversation's owner or an admin can add a task to it`. Nothing is stored. |
+| `404` | `Conversation not found`: the `conversation_id` does not exist. Nothing is stored and the `Idempotency-Key` stays free. |
+| `413` | Inline file too large. Nothing is stored. |
+| `422` | Request body or `Idempotency-Key` validation error. |
+| `500` | `Failed to create task` (the queued task could not be stored). |
+
+---
+
+#### GET /tasks/{task_id}
+
+The task, its result and its subtasks. `result` is the final answer (the aggregated answer for the root of a chain) and `sources` the passages it cites; a chain's root keeps every source of its steps, each once.
+
+**Auth:** JWT Bearer (requires `task:read` permission). Only the task's owner, the owner of its conversation, a manager or an admin can read it; anyone else gets `403`. A task's owner is the user in its `owner_username` (the user who queued it); for a task without one, the owner of its root task. The owner of the task's conversation (its own, else its root task's) may read it too, whoever posted it, for example an admin. An unknown id gets `404` first.
+
+**Response 200:**
+
+```json
+{
+  "task_id": "3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13",
+  "status": "completed",
+  "agent_id": "8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
+  "conversation_id": 1,
+  "query": "What was the Q4 2025 revenue?",
+  "skills_required": [],
+  "created_at": "2026-10-05T09:30:00+00:00",
+  "completed_at": "2026-10-05T09:33:00+00:00",
+  "result": "Q4 2025 revenue was $4.2M.",
+  "sources": [
+    {"doc_id": "6d0e…", "chunk_id": "6d0e…:3", "title": "1_Q4_2025_Financial_Report.md", "page": null}
+  ],
+  "history": [
+    {"role": "user", "message": "What was the Q4 2025 revenue?"},
+    {"role": "assistant", "message": "The passages do not give it.", "status": "not_found", "reason": "not_in_documents", "attempt": 1},
+    {"role": "assistant", "message": "Q4 2025 revenue was $4.2M."}
+  ],
+  "future_actions": [],
+  "subtasks": []
+}
+```
+
+`sources` is `[]` when the answer cites nothing or the task has no agent answer. A `history` entry with a `status` is a first attempt MAS asked the agent to redo (see `POST /tasks/task-result/`).
+
+| Code | Detail |
+|------|--------|
+| `403` | `Only the task's owner, the owner of its conversation, a manager or an admin can read this task` |
+| `404` | `Task not found` |
+
+---
+
+#### GET /tasks/conversation/{conversation_id}/running
+
+The conversation's top-level tasks that are not finished yet (`queued`, `pending` or `running`), newest first. The chat page calls it when it opens a conversation, to pick up a request that is still running.
+
+**Auth:** JWT Bearer (requires `task:read` permission). Only the conversation's owner, a manager or an admin; anyone else gets `403`. An unknown conversation gets `404` first.
+
+**Response 200:** a list of `{id, status, agent_id, conversation_id, query, created_at, parent_task_id}`, empty when nothing runs.
+
+| Code | Detail |
+|------|--------|
+| `403` | `Only the conversation's owner, a manager or an admin can list its running tasks` |
 | `404` | `Conversation not found` |
-| `422` | Request body validation error. |
-| `500` | Database or RabbitMQ error. |
+
+---
+
+#### GET /tasks/{task_id}/events
+
+Replay the events stored for a task. MAS sends every per-task WebSocket frame through one publish function, which gives it the next `seq` of the task (Redis `INCR horus:task:{task_id}:seq`), appends it to the Redis stream `horus:task:{task_id}:events` (kept 24 h after the last event, trimmed to about 10,000 entries) and only then sends it to the connected sockets. Events are therefore stored even when nobody is connected.
+
+**Auth:** JWT Bearer (requires `task:read` permission). Only the task's owner, the owner of its conversation, a manager or an admin can read the events; anyone else gets `403`. A task's owner is the user in its `owner_username` (the user who queued it); for a task without one, the owner of its root task. The owner of the task's conversation (its own, else its root task's) may read it too, whoever posted it, for example an admin.
+
+**Query parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| since | integer | 0 | Return the events with a `seq` greater than this. Pass the last `seq` you processed. |
+| limit | integer | 1000 | Page size, 1 to 10,000. Call again with `since=last_seq` while `has_more` is true. |
+
+**Response 200:**
+
+```json
+{
+  "task_id": "3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13",
+  "status": "running",
+  "since": 2,
+  "events": [
+    {
+      "task_id": "3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13",
+      "seq": 3,
+      "type": "progress",
+      "stage": "retrieval",
+      "data": {"type": "task_status", "status": "running", "detail": "Assigned to Finance-Analyst", "agent_id": "8b9f…", "agent_name": "Finance-Analyst"},
+      "ts": "2026-10-05T09:30:12Z"
+    },
+    {
+      "task_id": "3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13",
+      "seq": 4,
+      "type": "heartbeat",
+      "stage": "retrieval",
+      "data": {"type": "heartbeat", "elapsed_s": 10.0},
+      "ts": "2026-10-05T09:30:17Z"
+    }
+  ],
+  "last_seq": 4,
+  "has_more": false
+}
+```
+
+**Event fields:**
+
+| Field | Description |
+|-------|-------------|
+| `seq` | Per task, starts at 1 and increases by 1. Use it to deduplicate and to ask for what you missed. |
+| `type` | `progress`, `token`, `heartbeat`, `result` or `error`. `result` and `error` end the task. |
+| `stage` | `queued`, `routing`, `retrieval`, `generation`, `aggregation`, or `null` when the event does not change the stage. |
+| `data` | The WebSocket frame as it was sent (see the WebSocket section). |
+| `ts` | UTC time the event was stored. |
+
+Token deltas (`reasoning.delta` steps) are stored as `token` events. The agent already coalesces them into at most one step every `AGENT_STREAM_FLUSH_INTERVAL` seconds (0.5 s by default), so a streamed answer adds about two events per second, the same order as heartbeats. Storing them lets a client that reconnects mid-answer rebuild the typing preview exactly; the stream length cap bounds a runaway task.
+
+**Errors:**
+
+| Code | Detail |
+|------|--------|
+| `403` | `Only the task's owner, the owner of its conversation, a manager or an admin can read its events` |
+| `404` | `Task not found` |
+| `503` | `The task event store is unavailable` (Redis is down). |
 
 ---
 
 #### POST /tasks/task-result/
 
-Submit a completed task result from an agent. Updates the task status to COMPLETED, stores the result, handles sub-task chaining, and broadcasts the final answer via WebSocket.
+Submit the outcome of a task from an agent, following the agent answer contract (see "Answer contract" in `src/services/agent/README.md`). With `status: "completed"` (the default) MAS marks the task COMPLETED, stores the result and its `sources`, handles sub-task chaining, and broadcasts the final answer via WebSocket with its sources (a chain's final answer carries every source of its steps, each `chunk_id` once).
+
+The first `not_found` or `failed` answer of a task is not final: MAS asks the same agent once more, under the same task id, with `attempt: 2` in the task message and another retrieval query (the user's question for a step of a chain, otherwise the request without its filler words), clears the task's claim, adds the first answer to the task's `history` with its `status`, `reason` and `attempt`, and sends a `task_status` event with `status: "retrying"`. A `failed` answer with no other query is tried once more as it was; a `not_found` answer with no other query, a second `not_found`, an answer whose dispatch MAS no longer has (MAS restarted without Redis data, or the task had inline files) and any answer of a cancelled request are not tried again. A `failed` answer with `reason: "timeout"` is never tried again. A final `not_found` completes the task with "The documents don't contain this information." and `sources: []`. A final `failed` answer marks the task FAILED (and the root of its chain, whose remaining steps are dropped), stores the agent's message as the result and in the conversation, and stores an `error` event with `status: "failed"` and the `reason`. If the request already ended (cancelled or timed out by `TASK_TIMEOUT`), a late failure changes nothing and sends nothing.
 
 **Auth:** Agent API Key (`X-API-Key` + `Agent-ID` headers)
 
@@ -475,6 +669,9 @@ Submit a completed task result from an agent. Updates the task status to COMPLET
 | task_id | string | Yes | ID of the completed task. |
 | result | string | Yes | The result / output text. |
 | conversation_id | string | Yes | Conversation this task belongs to. |
+| sources | object[] | No | The passages the answer cites, at most 100: `doc_id`, `chunk_id`, `title` (strings or null) and `page` (integer or null). Only passages the agent retrieved. Left out by older agents, in which case the `result` event has no `sources`. |
+| status | string | No | `completed` (default), `not_found` (the documents do not contain the answer) or `failed`. |
+| reason | string | No | Why the answer is not `completed`: `not_in_documents`, `invalid_output` (the model's JSON could not be read), `degenerate_output` (a self-correction spiral), `retrieval_error` (the knowledge store could not be searched), `timeout` (the answer took longer than `REACT_TIMEOUT_SECONDS` and its generation was stopped) or `error`. At most 64 characters. |
 | agent_id | string | Yes | **Task assignee** UUID (must match `Task.agent_id`). Pooled workers authenticate with their own `X-API-Key` / `Agent-ID` but set this field to the orchestrator-chosen assignee (see task message `assigned_agent_id`). |
 
 **Response 200:**
@@ -496,11 +693,84 @@ Submit a completed task result from an agent. Updates the task status to COMPLET
 
 ---
 
+#### POST /tasks/task-step/
+
+An agent's thought-process step: retrieval start and results, reasoning start and end, a tool call, an error, or with `AGENT_STREAM_TOKENS=1` a `reasoning.delta` that carries the next piece of the answer text (`metadata.chunk`, `metadata.index` from 0 for each answer; only the text of the contract's `answer` field, never its JSON). MAS stores it as an event of the root task (`progress`, or `token` for a delta) and sends it to the conversation as a `task_step` frame. Best-effort: a step for an unknown task is ignored, and a failed step never affects the task's result.
+
+**Auth:** Agent API Key (`X-API-Key` + `Agent-ID` headers). The authenticated worker must be the assignee or share its `AgentTypes` pool.
+
+**Request:** `application/json`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| task_id | string | Yes | The task the step belongs to. |
+| agent_id | string | Yes | Task assignee UUID (must match `Task.agent_id`). |
+| step_type | string | Yes | For example `retrieval.start`, `retrieval.results`, `reasoning.start`, `reasoning.delta`, `reasoning.done`, `tool.invoke`, `error`. |
+| title, detail, timestamp, agent_name | string | No | Shown on the step card. |
+| metadata | object | No | Free-form payload of the step. |
+
+**Response 200:** `{"message": "ok"}`; `{"message": "no conversation"}` for a task outside a conversation (the step is still stored); `{"message": "ignored"}` for an unknown task.
+
+**Errors:** `403` when `agent_id` is not the task's assignee or the worker may not emit steps for it.
+
+---
+
+#### POST /tasks/{task_id}/claim
+
+Called by an agent worker when it takes a task message from its work queue, before it acknowledges the message. The first claim stores the worker and its run in the task row (`claimed_by`, `claim_run`, `started_at`) and marks the task `running`. The same claim sent again by the same run (same `worker_id` and `run_id`) gets `200` again and changes nothing, so a claim whose answer was lost can be retried; the worker itself never starts a task twice in one run. A claim by another worker or another run gets `409`, so a message that is delivered again never runs the task a second time; a finished, failed or cancelled task also gets `409`, so a task cancelled while it waited in the queue is dropped by the agent. When the task's assigned agent is no longer registered (the agent restarted and registered new ids while the task waited in the queue), the task fails at once, with a chat message and an `error` event (`status: "failed"`, `reason: "agent_unregistered"`) asking the user to send it again, and the claim gets `409`.
+
+**Auth:** Agent API Key (`X-API-Key` + `Agent-ID` headers). The authenticated worker must be the assignee or share its `AgentTypes` pool.
+
+**Request:** `application/json`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| agent_id | string | Yes | Task assignee UUID (must match `Task.agent_id`). |
+| worker_id | string | Yes | Stable name of the worker: `AGENT_WORKER_ID`, or the container's host name. |
+| run_id | string | Yes | Random id of the worker process, new at every start. |
+
+**Response 200:**
+
+```json
+{"task_id": "3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13", "status": "running"}
+```
+
+**Errors:**
+
+| Code | Detail |
+|------|--------|
+| `403` | Body `agent_id` must match the task assignee, or the worker may not run it. |
+| `404` | `Task not found` |
+| `409` | `Task was already claimed`, `Task is <status>; it will not run`, or `The task's agent is no longer registered; the task failed`. |
+
+---
+
+#### POST /tasks/abandoned-claims
+
+Called once by an agent worker when it starts, after it registered. Every task still `queued` or `running` that was claimed by the same `worker_id` under another `run_id`, or claimed by any worker for an agent that is no longer registered (a recreated container has a new host name and replaces its agents when it registers), is marked `failed` (with the root of its chain), with a chat message and an `error` event (`status: "failed"`, `reason: "agent_restarted"`) asking the user to send the request again.
+
+**Auth:** Agent API Key (`X-API-Key` + `Agent-ID` headers)
+
+**Request:** `application/json`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| worker_id | string | Yes | Stable name of the worker. |
+| run_id | string | Yes | Id of the run that is starting now. |
+
+**Response 200:**
+
+```json
+{"failed": ["3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13"]}
+```
+
+---
+
 #### PATCH /tasks/task-cancel/{task_id}
 
-Cancel a running task. Updates its status to CANCELED and sends a high-priority cancellation signal to the assigned agent via RabbitMQ.
+Cancel a queued or running task. Updates its status to CANCELED and sends a high-priority cancellation signal to the assigned agent via RabbitMQ. For a top-level task an `error` event (`status: "cancelled"`) is stored and sent to the conversation. A task cancelled while it is still being routed is never dispatched.
 
-**Auth:** JWT Bearer (requires `task:delete` permission)
+**Auth:** JWT Bearer (requires `task:delete` permission). Only the task's owner or the owner of its conversation (as for `GET /tasks/{task_id}`), a manager or an admin can cancel it; anyone else gets `403`. An unknown id gets `404` first. `PATCH /tasks/{task_id}/cancel` is the same route.
 
 **Path parameters:**
 
@@ -524,6 +794,7 @@ Cancel a running task. Updates its status to CANCELED and sends a high-priority 
 |------|--------|
 | `400` | `Cannot interrupt a completed task` |
 | `401` | `Authentication Failed` |
+| `403` | `Only the task's owner, the owner of its conversation, a manager or an admin can cancel this task` |
 | `404` | `Task not found` |
 | `500` | `Error Canceling task: ...` |
 
@@ -565,7 +836,7 @@ Create a new conversation channel. Returns the auto-generated conversation ID.
 
 #### GET /conversations/get_history/{chat_id}
 
-Retrieve the complete message history for a conversation. Only the owner or an admin can access.
+Retrieve the complete message history for a conversation. Only the owner or an admin can access; a manager cannot read another user's conversation (see [Who can see what](security.md#who-can-see-what)).
 
 **Auth:** JWT Bearer (requires `task:read` permission)
 
@@ -590,21 +861,27 @@ Retrieve the complete message history for a conversation. Only the owner or an a
   {
     "id": 2,
     "role": "assistant",
-    "content": "Hello! How can I help you?",
-    "created_at": "2025-09-25T10:30:05Z"
+    "content": "Q4 2025 revenue was $4.2M.",
+    "created_at": "2025-09-25T10:30:05Z",
+    "agent_id": "8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
+    "agent_name": "Finance-Analyst",
+    "skill_used": "financial_analysis",
+    "sources": [
+      {"doc_id": "6d0e…", "chunk_id": "6d0e…:3", "title": "1_Q4_2025_Financial_Report.md", "page": null}
+    ]
   }
 ]
 ```
 
-Returns an empty array `[]` if the conversation has no messages.
+`sources` is the list of passages an agent answer cites, `[]` when it cites nothing, and `null` for other messages and messages stored before answers had sources. Returns an empty array `[]` if the conversation has no messages.
 
 **Errors:**
 
 | Code | Detail |
 |------|--------|
 | `401` | `Authentication Failed` |
-| `403` | Insufficient permissions. |
-| `404` | `Conversation {chat_id} not found` -- does not exist or not owned by caller. |
+| `403` | Insufficient permissions, or `Only the conversation's owner or an admin can read it`. |
+| `404` | `Conversation {chat_id} not found` -- the conversation does not exist. |
 | `500` | Database error. |
 
 ---
@@ -727,30 +1004,7 @@ ws://<host>:8000/chat/{conversation_id}/?token=<jwt_token>
 }
 ```
 
-**Outgoing messages (server to client):**
-
-Agent response:
-
-```json
-{
-  "type": "agent_response",
-  "agent_id": "agent-001",
-  "content": "Processing result",
-  "status": "completed",
-  "timestamp": "2025-09-25T15:30:00Z"
-}
-```
-
-Task status update:
-
-```json
-{
-  "type": "task_update",
-  "task_id": "task-001",
-  "status": "executing",
-  "progress": "45%"
-}
-```
+**Outgoing messages (server to client):** every frame about a task is one of its stored events (see `GET /tasks/{task_id}/events`), sent as the event's `data` with the event fields added: `task_id`, `seq`, `event` (the event type), `stage` and `ts`. The frame types are listed in the WebSocket API reference below.
 
 **WebSocket close codes:**
 
@@ -1158,7 +1412,11 @@ Returns an empty array `[]` if no messages exist for the agent.
 {
   "demand": "string",
   "conversation_id": 0,
-  "skills_required": ["string"]
+  "skills_required": ["string"],
+  "mode": "auto | specific_agent | any_with_skill | decompose (optional)",
+  "agent_id": "string (optional)",
+  "attached_files": [{"filename": "string", "doc_id": "string (optional)"}],
+  "inline_files": [{"filename": "string", "mime": "string (optional)", "content_b64": "string"}]
 }
 ```
 
@@ -1169,7 +1427,31 @@ Returns an empty array `[]` if no messages exist for the agent.
   "task_id": "string",
   "result": "string",
   "conversation_id": "string",
-  "agent_id": "string"
+  "agent_id": "string",
+  "agent_name": "string (optional)",
+  "skill_used": "string (optional)",
+  "sources": [{"doc_id": "string", "chunk_id": "string", "title": "string", "page": 0}],
+  "status": "completed | not_found | failed",
+  "reason": "string (optional, at most 64 characters)"
+}
+```
+
+#### TaskClaimForm
+
+```json
+{
+  "agent_id": "string",
+  "worker_id": "string",
+  "run_id": "string"
+}
+```
+
+#### WorkerRunForm
+
+```json
+{
+  "worker_id": "string",
+  "run_id": "string"
 }
 ```
 
@@ -1290,7 +1572,7 @@ Vector database and document retrieval service.
 
 Prometheus metrics are exposed at **`GET /metrics`** (no trailing slash required).
 
-The service uses ChromaDB with the `BAAI/bge-base-en-v1.5` embedding model (see `main.py`).
+The service uses ChromaDB with the `BAAI/bge-base-en-v1.5` embedding model, run by FastEmbed on ONNX Runtime (see `app/chroma_db/setup.py`); a question gets the BGE query prefix once, a passage none. The collection metadata records the model (`embedding_model`, `embed_model`, `embedding_runtime`, `embedding_runtime_version`, `dimensions`). Every document is stored as passages of at most 1,000 characters (about 200 characters of overlap), one vector each, with the id `{doc_id}:{n}`. `GET /` returns passages; every other route works on documents.
 
 Authentication is not enforced on these endpoints in the default configuration (treat the service as internal to the Docker network).
 
@@ -1301,6 +1583,7 @@ Authentication is not enforced on these endpoints in the default configuration (
 - [Health](#health)
 - [Store Operations](#store-operations)
 - [File Operations](#file-operations)
+- [Corpus Operations](#corpus-operations)
 
 ---
 
@@ -1308,7 +1591,7 @@ Authentication is not enforced on these endpoints in the default configuration (
 
 #### GET /health
 
-Return service health status.
+Return service health status and the Horus release it runs. The Compose healthcheck of `knowledge_store` probes this route.
 
 **Auth:** None
 
@@ -1317,7 +1600,8 @@ Return service health status.
 ```json
 {
   "status": "healthy",
-  "service": "knowledge-store"
+  "service": "knowledge-store",
+  "version": "0.1.2"
 }
 ```
 
@@ -1374,7 +1658,20 @@ Add a plain text document to the knowledge store. Automatic content analysis is 
 
 #### GET /
 
-Query the knowledge store for relevant documents using semantic search with optional metadata filters.
+Query the knowledge store for relevant passages using semantic search with optional metadata filters. `n_results` counts passages, so one document can appear several times. Each passage's id is its chunk id `{doc_id}:{n}`, and its metadata carries:
+
+| Field | Description |
+|-------|-------------|
+| doc_id | Id of the document the passage belongs to |
+| title | Document title (file name) |
+| source_path | Corpus path for a scanned file, empty for an upload |
+| chunk_index | Position of the passage in the document, from 0 |
+| char_start, char_end | Where the passage sits in the extracted text |
+| page | PDFs only: the page the passage starts on |
+| category | Document category |
+| embed_model | Embedder that produced the passage's vector: runtime, its version and model, such as `fastembed-0.8.1:BAAI/bge-base-en-v1.5` |
+
+The passage with `chunk_index` 0 also carries the document-level data: `date`, `size`, `chunk_count` and the auto-analysis.
 
 **Auth:** None (internal service)
 
@@ -1390,15 +1687,15 @@ Query the knowledge store for relevant documents using semantic search with opti
 
 ```json
 {
-  "ids": [["id1", "id2"]],
+  "ids": [["3f9a2c:4", "b71e09:0"]],
   "distances": [[0.1, 0.2]],
   "metadatas": [[
-    { "title": "Doc 1" },
-    { "title": "Doc 2" }
+    { "doc_id": "3f9a2c", "title": "Doc 1.pdf", "chunk_index": 4, "char_start": 3200, "char_end": 4180, "page": 2, "source_path": "", "category": "finance", "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5" },
+    { "doc_id": "b71e09", "title": "Doc 2.md", "chunk_index": 0, "char_start": 0, "char_end": 950, "source_path": "policies/doc2.md", "category": "hr", "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5" }
   ]],
   "documents": [[
-    "Content 1",
-    "Content 2"
+    "Passage of Doc 1",
+    "Passage of Doc 2"
   ]]
 }
 ```
@@ -1413,7 +1710,13 @@ Query the knowledge store for relevant documents using semantic search with opti
 
 #### DELETE /{id}
 
-Remove a document from the knowledge store by its ID.
+Remove a document from the knowledge store by its ID. This is the call behind the trash icon on the Knowledge Store page. One call removes:
+
+- every entry whose ID is `id`, or whose `doc_id` metadata is `id`: every passage of the document;
+- every other entry indexed from the same corpus file (same `source_path`), such as an older version left by a re-scan;
+- the uploaded file in `documents/`, unless another entry still points at the same file.
+
+A deleted corpus file goes on the deleted list (`chroma_data/deleted_sources.json`, next to the Chroma index). A later `POST /corpus/scan` skips it with the decision `skipped_deleted`, even after the file is edited, and also skips an identical copy at another path. To index it again, run the scan with `include_deleted=true`, or upload the file from the UI.
 
 **Auth:** None (internal service)
 
@@ -1427,9 +1730,13 @@ Remove a document from the knowledge store by its ID.
 
 ```json
 {
-  "status": "Document deleted"
+  "status": "Document deleted",
+  "deleted_ids": ["123456"],
+  "removed_files": ["pdf/report.pdf"]
 }
 ```
+
+`removed_files` is relative to `documents/`.
 
 **Errors:**
 
@@ -1439,7 +1746,7 @@ Remove a document from the knowledge store by its ID.
 
 #### POST /smart-search
 
-Perform an advanced search with metadata filters including category, entities, and confidence score.
+Search documents with metadata filters including category, entities, and confidence score. Each document appears once, with its best-matching passage; `n_results` counts documents. `categories` filters passages; `entities`, `min_confidence` and `entity_type` filter on the document's analysis, stored on its first passage.
 
 **Auth:** None (internal service)
 
@@ -1459,14 +1766,16 @@ Perform an advanced search with metadata filters including category, entities, a
 ```json
 {
   "query": "financial report",
-  "filters": { "auto_category": "finance" },
+  "filters": { "category": { "$eq": "finance" } },
   "total": 3,
   "results": {
-    "documents": ["Content 1", "Content 2", "Content 3"],
+    "ids": ["q1", "q2", "annual"],
+    "chunk_ids": ["q1:2", "q2:0", "annual:5"],
+    "documents": ["Best passage of Q1", "Best passage of Q2", "Best passage of the summary"],
     "metadatas": [
-      { "title": "Q1 Report", "auto_category": "finance" },
-      { "title": "Q2 Report", "auto_category": "finance" },
-      { "title": "Annual Summary", "auto_category": "finance" }
+      { "doc_id": "q1", "title": "Q1 Report", "chunk_index": 2, "category": "finance", "auto_summary": "..." },
+      { "doc_id": "q2", "title": "Q2 Report", "chunk_index": 0, "category": "finance", "auto_summary": "..." },
+      { "doc_id": "annual", "title": "Annual Summary", "chunk_index": 5, "category": "finance", "auto_summary": "..." }
     ],
     "distances": [0.12, 0.18, 0.25]
   }
@@ -1482,7 +1791,7 @@ Perform an advanced search with metadata filters including category, entities, a
 
 #### GET /search-by-entity
 
-Search for documents containing a specific named entity.
+Search for documents containing a specific named entity. Each document appears once, with its best-matching passage; `ids` are document ids and `chunk_ids` the passages.
 
 **Auth:** None (internal service)
 
@@ -1503,8 +1812,9 @@ Search for documents containing a specific named entity.
   "filter": { "entities_people": { "$contains": "John Doe" } },
   "total": 2,
   "results": {
-    "ids": [["id1", "id2"]],
-    "documents": [["Doc content 1", "Doc content 2"]],
+    "ids": [["contract-a", "report-b"]],
+    "chunk_ids": [["contract-a:0", "report-b:3"]],
+    "documents": [["Passage of contract A", "Passage of report B"]],
     "metadatas": [[{ "title": "Contract A" }, { "title": "Report B" }]],
     "distances": [[0.05, 0.12]]
   }
@@ -1534,16 +1844,35 @@ Get all document categories in the knowledge store with document counts.
     { "category": "finance", "count": 15 },
     { "category": "technical", "count": 12 },
     { "category": "legal", "count": 8 },
-    { "category": "uncategorized", "count": 7 }
+    { "category": "general", "count": 7 }
   ]
 }
 ```
 
-Categories are sorted by count in descending order.
+Categories are sorted by count in descending order. Counts are documents, not passages. A document stored without a category is counted as `general`, the same label `GET /file` shows for it.
 
 **Errors:**
 
 - `500` -- Retrieval failure
+
+---
+
+#### GET /corpus-version
+
+Return an opaque version of the indexed corpus. It changes whenever an entry is added to or removed from the index: every upload (`POST /file`, `POST /file/{type}`, `POST /`), every delete (`DELETE /{id}`), and every `POST /corpus/scan` that ingests a file or replaces an older version of one. A scan that skips every file, a dry run, a query or a listing leaves it unchanged. The version lives in memory, so a restart of the service also changes it. `POST /corpus/reindex` (run by `scripts/reindex-knowledge-store.py`) and the re-index the service starts by itself at startup, when it finds whole-file entries or passages embedded with another `embed_model`, change it for every document they re-index.
+
+The agent's response cache (`AGENT_RESPONSE_CACHE=1`) puts this version in its cache key, so an answer cached before a change is never served after it. The agent reads the version again after at most `AGENT_RESPONSE_CACHE_VERSION_TTL` seconds (default `5`). When the read fails, the agent answers without the cache.
+
+**Auth:** None (internal service). Unlike the `/corpus` routes, it needs no `X-Corpus-Token`.
+
+**Response:** `200 OK`
+
+```json
+{
+  "version": "3f9a2c1e7b4d-12",
+  "changed_at": "2026-10-05T09:30:12.000000+00:00"
+}
+```
 
 ---
 
@@ -1623,7 +1952,7 @@ Returns a list of results, one per file. Failed files include an `error` field i
 
 #### GET /file
 
-List all files currently indexed in the knowledge store. Returns **analysis metadata and short text only** (auto-summary from ingest, category, type, and a capped excerpt). Full document bodies are not included so large files do not blow up the UI or agents listing the store.
+List all documents currently indexed in the knowledge store, one entry per document however many passages it was split into. Returns **analysis metadata and short text only** (auto-summary from ingest, category, type, and a capped excerpt). Full document bodies are not included so large files do not blow up the UI or agents listing the store.
 
 **Auth:** None (internal service)
 
@@ -1641,15 +1970,81 @@ List all files currently indexed in the knowledge store. Returns **analysis meta
       "excerpt": "First ~400 characters of extracted text...",
       "category": "general",
       "document_type": "unknown",
-      "confidence_score": 0.85
+      "confidence_score": 0.85,
+      "chunk_count": 3
     }
   ]
 }
 ```
 
+`chunk_count` is the number of passages the document was split into; a document stored whole by an older version has none. The installer sums it to say how long a switch of [mock AI mode](mock-ai.md) will re-embed.
+
 **Errors:**
 
 - `404` -- Error retrieving files from the store
+
+---
+
+#### GET /file/{doc_id}/text
+
+Return the full text of one document by its id, rebuilt from its passages. The agent reads an attached knowledge-store file through this route when the task carries the file's `doc_id`, and falls back to `GET /file/resolve` by filename otherwise.
+
+**Auth:** None (internal service)
+
+**Path Parameters:**
+
+| Parameter | Type   | Description  |
+|-----------|--------|--------------|
+| doc_id    | string | Document id  |
+
+**Response:** `200 OK`
+
+```json
+{
+  "doc_id": "a1b2c3d4e5f6",
+  "title": "doc.pdf",
+  "category": "finance",
+  "chunk_count": 3,
+  "text": "Full document text..."
+}
+```
+
+**Errors:**
+
+- `404` -- No document with that id
+- `500` -- The index could not be read
+
+---
+
+#### GET /file/resolve
+
+Return the full text of the stored document(s) whose title matches a filename or its basename, case-insensitively. The agent calls it when a request names a file, and cites each matched document as a source of its own.
+
+**Auth:** None (internal service)
+
+**Query Parameters:**
+
+| Parameter | Type   | Description |
+|-----------|--------|-------------|
+| name      | string | Filename or basename, for example `report.pdf` |
+
+**Response:** `200 OK`
+
+```json
+{
+  "name": "notes.txt",
+  "matched_titles": ["notes.txt"],
+  "doc_ids": ["abc123"],
+  "text": "Full document body...",
+  "documents": [{"doc_id": "abc123", "title": "notes.txt", "text": "Full document body..."}]
+}
+```
+
+`text` joins the texts of all matched documents with `---` lines; `documents` keeps them apart, in the same order.
+
+**Errors:**
+
+- `404` -- No document matched that name
 
 ---
 
@@ -1724,6 +2119,69 @@ Upload a single file specifying its type explicitly, convert to text, analyze, a
 
 ---
 
+### Corpus Operations
+
+Routes under `/corpus` need the `X-Corpus-Token` header, equal to `CORPUS_SCAN_TOKEN` in the `knowledge_store` container. Every route answers `503` when `CORPUS_SCAN_TOKEN` is unset and `403` when the header is missing or wrong. A scan and a re-index never run at the same time: starting one while the other runs gets `409`.
+
+#### POST /corpus/scan
+
+Index every supported file of the read-only folder mounted at `CORPUS_DIR` (default `/app/corpus`, where Compose mounts the host folder `HORUS_CORPUS_DIR`, `demo_assets/` by default) in the background. A file already indexed with the same content is skipped (`skipped_unchanged`), and so is a file deleted from the knowledge store (`skipped_deleted`), even after an edit.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| dry_run | boolean | `false` | Report the decisions without embedding or storing anything. |
+| include_deleted | boolean | `false` | Also index deleted files and take them off the deleted list. |
+
+**Response:** `202 Accepted`
+
+```json
+{"job_id": "9f2c…", "state": "running", "dry_run": false, "include_deleted": false, "root": "/app/corpus"}
+```
+
+**Errors:** `404` (no folder is mounted at `CORPUS_DIR`), `409` (a scan or a re-index is running).
+
+#### GET /corpus/status
+
+The latest scan: `state` (`idle`, `running`, `completed`, `failed`), `totals` (`files_seen`, `eligible`, `ingested`, `would_ingest`, `skipped_unchanged`, `skipped_deleted`, `rejected`, `failed`, `replaced_stale`) and a decision per file. Before any scan it returns `state: "idle"` with the folder, whether it is mounted, the allowed extensions and the size limit.
+
+#### POST /corpus/reindex
+
+Bring every stored document to the current index layout in the background: a document stored as one whole-file entry is split into passages, and a passage whose `embed_model` is not the running embedder's (`fastembed-0.8.1:BAAI/bge-base-en-v1.5`) is embedded again in place. Documents already up to date are left alone, so a second run changes nothing and an interrupted run continues where it stopped. Each changed document bumps the corpus version. A run that ends with no failure writes the embedder into the collection metadata. `scripts/reindex-knowledge-store.py` calls this route and follows its progress.
+
+The service starts the same job by itself at startup when it finds whole-file entries or passages from another embedder (`trigger: "startup"`), unless `KNOWLEDGE_STORE_REINDEX_ON_STARTUP=0`, in which case it only logs how many documents need it.
+
+**Response:** `202 Accepted`
+
+```json
+{"job_id": "9f2c…", "state": "running", "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5"}
+```
+
+**Errors:** `409` (a scan or a re-index is running).
+
+#### GET /corpus/reindex
+
+The latest re-index, whoever started it:
+
+```json
+{
+  "job_id": "9f2c…",
+  "state": "completed",
+  "trigger": "startup",
+  "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5",
+  "started_at": "2026-10-05T09:00:00+00:00",
+  "finished_at": "2026-10-05T09:00:42+00:00",
+  "error": null,
+  "totals": {"pending": 5, "migrated": 5, "reembedded": 0, "unchanged": 0, "failed": 0},
+  "failures": []
+}
+```
+
+`state` is `idle`, `running`, `completed` or `failed`; `trigger` is `request` (`POST /corpus/reindex`) or `startup`. Before any re-index it returns `{"state": "idle", "embed_model": "…"}`.
+
+---
+
 ## Horus WebSocket API Reference
 
 Real-time bidirectional communication between users and the multi-agent system. WebSocket connections are managed through the MAS Chat module.
@@ -1786,12 +2244,12 @@ ws://localhost:8000/chat/1/?token=eyJhbGciOiJIUzI1NiI...
 2. The token is decoded and validated (signature, expiration, blacklist check).
 3. The user's role is checked for `TASK_READ` permission.
 4. The conversation is verified to exist in the database.
-5. Ownership is verified: the user must be the conversation owner or an admin.
-6. If any check fails, the connection is closed with code `1008` (Policy Violation).
+5. Ownership is verified: the user must be the conversation owner or an admin; a manager is refused for another user's conversation.
+6. If any check fails, the connection is closed with code `1008` (Policy Violation). The ownership refusal carries the reason `Only the conversation's owner or an admin can open its chat`.
 
 #### Required permission
 
-The connection handler checks `Permission.TASK_READ` (see `src/services/mas/auth/permissions.py` in the repository). In the current mapping **`admin`**, **`manager`**, **`user`**, and **`system`** all include `TASK_READ`, so every role can open this WebSocket. Access is still narrowed by the ownership check in step 5: a non-admin may only open conversations they own.
+The connection handler checks `Permission.TASK_READ` (see `src/services/mas/auth/permissions.py` in the repository). In the current mapping **`admin`**, **`manager`**, **`user`**, and **`system`** all include `TASK_READ`, so every role can open this WebSocket. Access is still narrowed by the ownership check in step 5: a non-admin, a manager included, may only open conversations they own (see [Who can see what](security.md#who-can-see-what)).
 
 ---
 
@@ -1821,59 +2279,121 @@ The server listens for text messages from the client via `receive_text()`. The c
 
 #### Server to Client (Outgoing)
 
-The server pushes messages to connected clients when agents complete tasks. Messages are broadcast to all WebSocket clients connected to the relevant conversation.
+Every frame about a task is an event of that task. MAS stores the event first (see `GET /tasks/{task_id}/events`) and then sends its `data` to the sockets of the conversation, with these fields added:
 
-**Agent response:**
+| Field | Description |
+|-------|-------------|
+| `task_id` | The task to follow: the root of a chain, the task itself otherwise. |
+| `seq` | Per-task sequence number. `null` only if Redis was down when the event was sent. |
+| `event` | `progress`, `token`, `heartbeat`, `result` or `error`. |
+| `stage` | `queued`, `routing`, `retrieval`, `generation`, `aggregation` or `null`. |
+| `ts` | UTC time of the event. |
+
+**Task status** (`event: progress`): the task was queued, its routing started, it was dispatched to an agent, or a chain is being aggregated.
 
 ```json
 {
-  "type": "agent_response",
+  "type": "task_status",
+  "status": "running",
+  "detail": "Assigned to Finance-Analyst",
   "agent_id": "8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
-  "content": "Here is the analysis result...",
+  "agent_name": "Finance-Analyst",
+  "task_id": "3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13",
+  "seq": 3,
+  "event": "progress",
+  "stage": "retrieval",
+  "ts": "2026-10-05T09:30:12Z"
+}
+```
+
+`status` is `queued`, `routing`, `running`, `aggregating`, `busy` or `retrying`. Clients should show `detail` for a status they do not know. A `retrying` frame (`stage: "retrieval"`) means the agent's first answer was `not_found` or `failed` and MAS asked it once more; it carries `attempt: 2` and a `detail` that says why. A client that shows the streamed answer should drop it, since the agent streams the second answer from `index` 0. A `busy` frame means the agent type's work queue is full and the task waits in MAS's line; it carries `position` (N, defined under `POST /tasks/new_task/`) and `detail: "Busy, position N"`, comes right after the rejected publish and again whenever N changes:
+
+```json
+{"type": "task_status", "status": "busy", "detail": "Busy, position 11", "position": 11, "task_id": "3f6c…", "seq": 4, "event": "progress", "stage": "queued", "ts": "2026-10-05T09:30:14Z"}
+```
+
+**Heartbeat** (`event: heartbeat`): every 5 s for each queued or running top-level task whose conversation has a connected socket, with the current stage and the seconds since the task was created.
+
+```json
+{"type": "heartbeat", "elapsed_s": 65.0, "task_id": "3f6c…", "seq": 9, "event": "heartbeat", "stage": "generation", "ts": "2026-10-05T09:31:17Z"}
+```
+
+**Thought-process step** (`event: progress`, or `token` for `step_type: "reasoning.delta"`, whose `metadata.chunk` is the next piece of the streamed answer text and `metadata.index` its position, from 0 for each answer; the agent streams only the text of the answer, never the JSON around it):
+
+```json
+{
+  "type": "task_step",
+  "task_id": "3f6c…",
+  "subtask_id": "9d21…",
+  "agent_id": "8b9f…",
+  "agent_name": "Finance-Analyst",
+  "step_type": "retrieval.results",
+  "title": "Found 4 passages",
+  "detail": null,
+  "timestamp": "2026-10-05T09:30:20",
+  "metadata": {"chunk_count": 4},
+  "seq": 5,
+  "event": "progress",
+  "stage": "retrieval",
+  "ts": "2026-10-05T09:30:20Z"
+}
+```
+
+**Agent message** (`type: "task_complete"` with attribution, `type: "agent"` without): a Manager message (`event: progress`), the final answer (`event: result`) or the reason the task ended without one (`event: error`). Messages also saved to the conversation history carry their `message_id`, so a client that replays events after loading the history can skip them.
+
+```json
+{
+  "type": "task_complete",
+  "content": "Q4 2025 revenue was $4.2M.",
+  "agent_id": "8b9f…",
+  "agent_name": "Finance-Analyst",
+  "skill_used": "financial_analysis",
+  "timestamp": "2026-10-05T09:33:00",
   "status": "completed",
-  "timestamp": "2025-09-25T15:30:00Z"
+  "route": "agent",
+  "message_id": 412,
+  "sources": [
+    {"doc_id": "6d0e…", "chunk_id": "6d0e…:3", "title": "1_Q4_2025_Financial_Report.md", "page": null}
+  ],
+  "task_id": "3f6c…",
+  "seq": 21,
+  "event": "result",
+  "stage": "generation",
+  "ts": "2026-10-05T09:33:00Z"
 }
 ```
 
-**Task status update:**
-
-```json
-{
-  "type": "task_update",
-  "task_id": "task-001",
-  "status": "executing",
-  "progress": "45%"
-}
-```
-
-**System notification:**
-
-```json
-{
-  "type": "system_notification",
-  "content": "Agent DocumentAnalyzer is now processing your request"
-}
-```
-
-**Connection status:**
-
-```json
-{
-  "type": "connection_status",
-  "status": "connected",
-  "session_id": "sess-uuid-1234"
-}
-```
+| Final frame | `event` | `status` | Other fields |
+|-------------|---------|----------|--------------|
+| Agent or chain answer | `result` | `completed` | `route: "agent"`, `sources` (the passages it cites, `[]` when none; left out when an older agent sent none) |
+| The documents do not contain the answer (after a second attempt, or when nothing else could be tried) | `result` | `completed` | `route: "agent"`, `content` "The documents don't contain this information.", `sources: []` |
+| Direct answer | `result` | `completed` | `route: "direct_answer"` |
+| No agent could take the demand | `error` | `failed` | `route: "none"`; `content` says why |
+| Cancelled by a user | `error` | `cancelled` | `reason: "user"` |
+| Stopped by `TASK_TIMEOUT` | `error` | `cancelled` | `reason: "timeout"`; the notice is also the task result |
+| The agent's answer took longer than `REACT_TIMEOUT_SECONDS` | `error` | `failed` | `reason: "timeout"`; the agent's notice is the task result and the chat shows it as failed |
+| The agent failed (after a second attempt when one was possible) | `error` | `failed` | `reason`: `error`, `invalid_output`, `degenerate_output` or `retrieval_error` |
+| The agent restarted while it ran the task | `error` | `failed` | `reason: "agent_restarted"` |
+| The task's agent was no longer registered when a worker took the task | `error` | `failed` | `reason: "agent_unregistered"` |
+| MAS could not hand the task to its agent's queue (after waiting in the line for a full queue, or when it asked for a second attempt) | `error` | `failed` | `reason: "dispatch_failed"` |
 
 #### Message Types Summary
 
-| Type                  | Direction        | Description                              |
-|-----------------------|------------------|------------------------------------------|
-| `message`             | Client to Server | User sending a query                     |
-| `agent_response`      | Server to Client | Agent returning a processing result      |
-| `task_update`         | Server to Client | Task execution status change             |
-| `system_notification` | Server to Client | System-level notification                |
-| `connection_status`   | Server to Client | Connection health and status messages    |
+| Type          | Direction        | Description                                            |
+|---------------|------------------|--------------------------------------------------------|
+| `task_status` | Server to Client | Queued, routing, busy (position N), dispatched, retrying, aggregating |
+| `heartbeat`   | Server to Client | Liveness of a running task, every 5 s                  |
+| `task_step`   | Server to Client | Agent thought-process step or streamed answer chunk    |
+| `task_complete` | Server to Client | Attributed message: Manager update or final answer   |
+| `agent`       | Server to Client | Unattributed message: direct answer or failure reason  |
+
+#### Reconnecting without losing anything
+
+1. Keep the highest `seq` you processed for each task (in the web client: the last unbroken `seq`).
+2. When the socket reopens, call `GET /tasks/{task_id}/events?since=<seq>` for the task you are waiting on and process the returned frames with the same handler as live frames, skipping any `seq` you already saw.
+3. If the events are gone (more than 24 h, or Redis was down), `GET /tasks/{task_id}` gives the status and the result.
+
+The web client keeps reconnecting with a capped backoff (1 s doubling to 10 s) for as long as a task is running and shows a "reconnecting" notice; it only gives up after five failed attempts when nothing is running.
 
 ---
 
@@ -1913,7 +2433,7 @@ On successful authentication:
 #### 4. Active Communication
 
 - The server enters a read loop (`while True: await websocket.receive_text()`), keeping the connection alive.
-- Agent responses and task updates are pushed to the client asynchronously via `send_messages_via_websockets()` when tasks complete.
+- Task events (status, heartbeats, steps, Manager messages, answers, failures) are pushed to the client by `publish_task_event()` in `core/task_events.py`, after being stored.
 - The client remains connected and receives real-time updates.
 
 #### 5. Disconnect
@@ -1994,17 +2514,21 @@ ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
 
     switch (data.type) {
-        case "agent_response":
-            console.log("Agent response:", data.content);
-            if (data.status === "completed") {
-                console.log("Task finished");
+        case "task_status":
+            console.log("Task", data.task_id, data.status, data.detail ?? "");
+            break;
+        case "heartbeat":
+            console.log("Still working:", data.stage, data.elapsed_s, "s");
+            break;
+        case "task_step":
+            console.log("Step:", data.step_type, data.title ?? "");
+            break;
+        case "task_complete":
+        case "agent":
+            console.log(data.agent_name ?? "Horus", ":", data.content);
+            if (data.event === "result" || data.event === "error") {
+                console.log("Task finished:", data.status);
             }
-            break;
-        case "task_update":
-            console.log("Task status:", data.status, data.progress);
-            break;
-        case "system_notification":
-            console.log("System:", data.content);
             break;
     }
 };

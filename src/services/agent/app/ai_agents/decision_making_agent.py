@@ -14,7 +14,10 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
+
+from ai_agents.generation_stop import GenerationStopped, generation_stop_event
+from ai_agents.prompt_tokens import TokenSource, estimate_tokens, record_prompt_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +95,78 @@ def _is_degenerate_output(text: str) -> bool:
     lowered = text.lower()
     score = sum(lowered.count(m) for m in _SPIRAL_MARKERS)
     return score >= 5
+
+
+DEGENERATE_OUTPUT_FALLBACK = (
+    "I couldn't extract a consistent answer from the retrieved "
+    "content for this step. The chunks pulled from the knowledge "
+    "store appear fragmented or contradictory, and the model "
+    "spiraled trying to reconcile them. Please rephrase the demand "
+    "to focus on one specific question, or check the task detail "
+    "page for the raw retrieved context."
+)
+
+
+_FULL_WIDTH_TO_ASCII = str.maketrans(
+    {
+        **{chr(code): chr(code - 0xFEE0) for code in range(0xFF01, 0xFF5F)},
+        "\u3000": " ",
+        "。": ".",
+        "｡": ".",
+    }
+)
+
+
+def _normalize_model_text(text: str) -> str:
+    return text.translate(_FULL_WIDTH_TO_ASCII)
+
+
+def clean_model_text(text: str) -> str:
+    text = _normalize_model_text(text)
+    if not _is_degenerate_output(text):
+        return text
+    logger.warning(
+        "Degenerate self-correction loop detected in model output (length=%d); replacing "
+        "with clean fallback. Raw output preview: %r",
+        len(text),
+        text[:400],
+    )
+    return DEGENERATE_OUTPUT_FALLBACK
+
+
+ANSWER_CALL = "answer"
+GROUNDED_CALL = "grounded"
+INSTRUCTION_CALL = "instruction"
+PURPOSE_HEADER = "X-Horus-Purpose"
+
+INSTRUCTION_SYSTEM_PROMPT = "You are a helpful assistant. Follow the user's instructions concisely."
+
+GROUNDED_SYSTEM_PROMPT = (
+    "You are a helpful assistant. Use only the retrieved content to complete the task. "
+    "Format every answer in Markdown: start with a brief ## heading when the answer "
+    "has multiple parts, use **bold** for important labels, use bullet lists for "
+    "enumerations, and keep paragraphs short so the reply is easy to scan. "
+    "Never echo or duplicate the retrieved text — synthesise.\n\n"
+    "CRITICAL: Once you write a number, fact, or quote, COMMIT TO IT. "
+    "Do not revise or second-guess in the same answer. Self-correcting "
+    "loops ('wait — no — $265K — actually $263K') destroy the answer's "
+    "trustworthiness. Pick the single statement that best fits the "
+    "question and stop.\n\n"
+    "RULES (read before answering):\n"
+    "1. Use ONLY the retrieved content. Do NOT invent facts.\n"
+    "2. Pick ONE answer and commit. If the retrieved content has "
+    "multiple similar-looking figures, pick the one that matches "
+    "the question's exact wording and move on. Do NOT write 'wait', "
+    "'no', 'actually', 'correction', 'let me recheck', or any "
+    "self-correcting phrase. Do NOT second-guess.\n"
+    "3. If the retrieved content genuinely lacks the answer, say "
+    "'The retrieved content does not contain this information.' in "
+    "ONE sentence and stop. Do NOT keep searching by re-quoting.\n"
+    "4. Never quote the retrieved text back to question it. State "
+    "facts confidently in your own words.\n"
+    "5. Keep the answer concise. Use short paragraphs and bullet "
+    "lists. Stop when the question is answered."
+)
 
 
 def _early_stop_enabled() -> bool:
@@ -214,6 +289,18 @@ def _fit_vllm_prompt(system_content: str, user_content: str) -> tuple[str, int]:
     return user_content, max_tokens
 
 
+def _generated_tail_spirals(tokenizer: Any, input_ids: Any, prompt_len: int) -> bool:
+    gen_len = int(input_ids.shape[1]) - prompt_len
+    if gen_len < _EARLY_STOP_MIN_TOKENS or gen_len % _EARLY_STOP_INTERVAL != 0:
+        return False
+    text = tokenizer.decode(
+        input_ids[0, prompt_len:],
+        skip_special_tokens=True,
+        clean_up_tokenization_spaces=False,
+    )
+    return _is_degenerate_output(_normalize_model_text(text))
+
+
 if _TRANSFORMERS_AVAILABLE and StoppingCriteria is not None:
 
     class _SpiralStoppingCriteria(StoppingCriteria):  # type: ignore[misc]
@@ -234,22 +321,31 @@ if _TRANSFORMERS_AVAILABLE and StoppingCriteria is not None:
             self.triggered = False
 
         def __call__(self, input_ids: Any, scores: Any = None, **kwargs: Any) -> bool:
-            gen_len = int(input_ids.shape[1]) - self._prompt_len
-            if gen_len < _EARLY_STOP_MIN_TOKENS or gen_len % _EARLY_STOP_INTERVAL != 0:
-                return False
-            gen_ids = input_ids[0, self._prompt_len :]
-            text = self._tok.decode(
-                gen_ids,
-                skip_special_tokens=True,
-                clean_up_tokenization_spaces=False,
-            )
-            if _is_degenerate_output(text):
+            if _generated_tail_spirals(self._tok, input_ids, self._prompt_len):
                 self.triggered = True
                 return True
             return False
 
 else:  # transformers unavailable — generation path is never reached in this case
     _SpiralStoppingCriteria = None  # type: ignore
+
+
+class StreamView(Protocol):
+    def feed(self, piece: str) -> str: ...
+
+
+def _visible_piece(piece: str, stream_view: StreamView | None) -> str:
+    if stream_view is None:
+        return _normalize_model_text(piece)
+    return _normalize_model_text(stream_view.feed(piece))
+
+
+class _StopRequestedCriteria:
+    def __init__(self, stop: threading.Event) -> None:
+        self._stop = stop
+
+    def __call__(self, input_ids: Any, scores: Any = None, **kwargs: Any) -> bool:
+        return self._stop.is_set()
 
 
 def _configure_agent_torch_threads() -> None:
@@ -397,6 +493,18 @@ def _max_new_tokens() -> int:
         return 256
 
 
+DEFAULT_MAX_CONTEXT_CHARS = 12000
+
+
+def _max_context_chars() -> int:
+    raw = os.getenv("AGENT_MAX_CONTEXT_CHARS", "").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_MAX_CONTEXT_CHARS
+    return value if value > 0 else DEFAULT_MAX_CONTEXT_CHARS
+
+
 def _bnb4bit():
     assert BitsAndBytesConfig is not None
     assert torch is not None
@@ -451,10 +559,20 @@ class DecisionMakingAgent:
             )
             return
 
+        if _llm_backend() == "vllm" and not _TRANSFORMERS_AVAILABLE:
+            logger.info(
+                "LLM_BACKEND=vllm: generation is served by %s (model=%s); this image has "
+                "no in-process model stack.",
+                _vllm_base_url(),
+                _vllm_model_name(),
+            )
+            return
+
         if not _TRANSFORMERS_AVAILABLE:
             raise RuntimeError(
-                "transformers/torch are required for DecisionMakingAgent. "
-                "Install dependencies and rebuild the agent image."
+                "The in-process decision model needs transformers/torch, which this image "
+                "does not ship: CPU images leave them out. Set LLM_BACKEND=vllm and "
+                "LLM_VLLM_URL to use llama-server or vLLM, or run the GPU image."
             )
 
         OFFLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -606,7 +724,24 @@ class DecisionMakingAgent:
             return str(result[0]["generated_text"]).strip()
         return str(result).strip()
 
-    def _generate_causal(self, user_content: str, system_content: str) -> str:
+    @property
+    def constrains_output(self) -> bool:
+        return self.decision_model is None and _llm_backend() == "vllm"
+
+    def _prompt_token_count(self, prompt: str) -> tuple[int, TokenSource]:
+        counted = self._last_prompt_tokens
+        if self.decision_model is None and isinstance(counted, int) and not isinstance(counted, bool):
+            if _llm_backend() == "vllm":
+                return counted, TokenSource.USAGE
+            return counted, TokenSource.TOKENIZER
+        return estimate_tokens(prompt), TokenSource.ESTIMATE
+
+    def _generate_causal(
+        self,
+        user_content: str,
+        system_content: str,
+        stream_view: StreamView | None = None,
+    ) -> str:
         assert self._causal_tokenizer is not None and self._causal_model is not None
         tok = self._causal_tokenizer
         model = self._causal_model
@@ -662,39 +797,45 @@ class DecisionMakingAgent:
         # letting it run to max_new_tokens (see _early_stop_enabled / the
         # measured 3072-token, ~150s worst case). No-op for well-formed answers.
         spiral_criteria = None
-        stopping = None
+        criteria: list[Any] = []
         if _early_stop_enabled() and _SpiralStoppingCriteria is not None:
             spiral_criteria = _SpiralStoppingCriteria(tok, input_ids.size(1))
-            stopping = StoppingCriteriaList([spiral_criteria])
+            criteria.append(spiral_criteria)
+        stop = generation_stop_event()
+        if stop is not None:
+            criteria.append(_StopRequestedCriteria(stop))
+        stopping = StoppingCriteriaList(criteria) if criteria else None
 
         # Greedy decoding on a 4B model with no penalties loops once it hits a
         # repeatable phrase (the "(Duplicate)" failure mode). repetition_penalty
         # discourages echoing tokens already seen; no_repeat_ngram_size hard-bans
         # repeating any 4-gram; bad_words_ids physically prevents the
         # self-correcting loop by blocking the tokens that start it.
-        gen_kwargs: dict[str, Any] = dict(
-            input_ids=input_ids,
-            attention_mask=attn_mask,
-            max_new_tokens=max_new,
-            do_sample=False,
-            repetition_penalty=1.2,
-            no_repeat_ngram_size=4,
-            bad_words_ids=bad_words_ids if bad_words_ids else None,
-            stopping_criteria=stopping,
-            return_dict_in_generate=True,
-            pad_token_id=tok.eos_token_id,
-            eos_token_id=tok.eos_token_id,
-        )
+        gen_kwargs: dict[str, Any] = {
+            "input_ids": input_ids,
+            "attention_mask": attn_mask,
+            "max_new_tokens": max_new,
+            "do_sample": False,
+            "repetition_penalty": 1.2,
+            "no_repeat_ngram_size": 4,
+            "bad_words_ids": bad_words_ids if bad_words_ids else None,
+            "stopping_criteria": stopping,
+            "return_dict_in_generate": True,
+            "pad_token_id": tok.eos_token_id,
+            "eos_token_id": tok.eos_token_id,
+        }
 
         if _stream_tokens_enabled() and TextIteratorStreamer is not None:
             # Streams confirmed-clean tokens to the client as reasoning.delta
             # steps; returns the same return_dict_in_generate output as below so
             # token telemetry and the degeneracy guard are unchanged.
-            out = self._generate_streaming(model, tok, gen_kwargs)
+            out = self._generate_streaming(model, tok, gen_kwargs, stream_view)
         else:
             with torch.no_grad():
                 out = model.generate(**gen_kwargs)
 
+        if stop is not None and stop.is_set():
+            raise GenerationStopped("Generation stopped by its caller")
         seq = out.sequences[0]
         gen_only = seq[input_ids.size(1) :]
         # Exact token counts for benchmark telemetry. Captured raw — before any
@@ -716,7 +857,13 @@ class DecisionMakingAgent:
             clean_up_tokenization_spaces=False,
         ).strip()
 
-    def _generate_streaming(self, model: Any, tok: Any, gen_kwargs: dict) -> Any:
+    def _generate_streaming(
+        self,
+        model: Any,
+        tok: Any,
+        gen_kwargs: dict,
+        stream_view: StreamView | None = None,
+    ) -> Any:
         """Run ``model.generate`` in a background thread with a
         ``TextIteratorStreamer`` and emit confirmed-clean tokens to the client as
         coalesced ``reasoning.delta`` steps.
@@ -771,8 +918,11 @@ class DecisionMakingAgent:
             last_flush = time.monotonic()
 
         try:
-            for piece in streamer:
-                if not piece or suppressed:
+            for raw_piece in streamer:
+                if not raw_piece or suppressed:
+                    continue
+                piece = _visible_piece(raw_piece, stream_view)
+                if not piece:
                     continue
                 if streaming:
                     pending.append(piece)
@@ -805,7 +955,14 @@ class DecisionMakingAgent:
             raise holder["error"]
         return holder["out"]
 
-    def _generate_vllm(self, user_content: str, system_content: str) -> str:
+    def _generate_vllm(
+        self,
+        user_content: str,
+        system_content: str,
+        response_format: dict | None = None,
+        stream_view: StreamView | None = None,
+        call: str = ANSWER_CALL,
+    ) -> str:
         """Generate via the external vLLM OpenAI-compatible server (Phase 4).
 
         Mirrors the local path's contract: returns the answer text and sets
@@ -825,8 +982,15 @@ class DecisionMakingAgent:
             {"role": "system", "content": system_content},
             {"role": "user", "content": user_content},
         ]
-        if _stream_tokens_enabled():
-            return self._generate_vllm_streaming(messages, max_tokens)
+        if _stream_tokens_enabled() or generation_stop_event() is not None:
+            return self._generate_vllm_streaming(
+                messages,
+                max_tokens,
+                emit_tokens=_stream_tokens_enabled(),
+                response_format=response_format,
+                stream_view=stream_view,
+                call=call,
+            )
 
         url = _vllm_base_url().rstrip("/") + "/chat/completions"
         payload = {
@@ -836,7 +1000,11 @@ class DecisionMakingAgent:
             "temperature": 0.0,
             "stream": False,
         }
-        resp = requests.post(url, json=payload, timeout=_vllm_timeout())
+        if response_format is not None:
+            payload["response_format"] = response_format
+        resp = requests.post(
+            url, json=payload, headers={PURPOSE_HEADER: call}, timeout=_vllm_timeout()
+        )
         resp.raise_for_status()
         data = resp.json()
         text = (data["choices"][0]["message"].get("content") or "").strip()
@@ -845,7 +1013,15 @@ class DecisionMakingAgent:
         self._last_prompt_tokens = usage.get("prompt_tokens")
         return text
 
-    def _generate_vllm_streaming(self, messages: list, max_tokens: int) -> str:
+    def _generate_vllm_streaming(
+        self,
+        messages: list,
+        max_tokens: int,
+        emit_tokens: bool = True,
+        response_format: dict | None = None,
+        stream_view: StreamView | None = None,
+        call: str = ANSWER_CALL,
+    ) -> str:
         """Stream a vLLM chat completion (SSE) and emit confirmed-clean tokens as
         batched ``reasoning.delta`` steps — the Phase-1 streaming UX on the vLLM
         backend. Same hold-a-beat guard as the transformers path: buffer
@@ -863,6 +1039,12 @@ class DecisionMakingAgent:
             def _emit(*_a: Any, **_kw: Any) -> None:  # type: ignore[misc]
                 return None
 
+        if not emit_tokens:
+
+            def _emit(*_a: Any, **_kw: Any) -> None:  # type: ignore[misc]
+                return None
+
+        stop = generation_stop_event()
         url = _vllm_base_url().rstrip("/") + "/chat/completions"
         payload = {
             "model": _vllm_model_name(),
@@ -872,6 +1054,8 @@ class DecisionMakingAgent:
             "stream": True,
             "stream_options": {"include_usage": True},
         }
+        if response_format is not None:
+            payload["response_format"] = response_format
 
         full: list[str] = []
         held: list[str] = []
@@ -894,10 +1078,17 @@ class DecisionMakingAgent:
             last_flush = time.monotonic()
 
         with requests.post(
-            url, json=payload, timeout=_vllm_timeout(), stream=True
+            url,
+            json=payload,
+            headers={PURPOSE_HEADER: call},
+            timeout=_vllm_timeout(),
+            stream=True,
         ) as resp:
             resp.raise_for_status()
             for raw in resp.iter_lines():
+                if stop is not None and stop.is_set():
+                    logger.info("Generation stopped by its caller; closing the stream")
+                    raise GenerationStopped("Generation stopped by its caller")
                 if not raw:
                     continue
                 line = raw.decode("utf-8") if isinstance(raw, bytes) else raw
@@ -910,6 +1101,10 @@ class DecisionMakingAgent:
                     chunk = _json.loads(data)
                 except ValueError:
                     continue
+                error = chunk.get("error")
+                if error:
+                    message = error.get("message") if isinstance(error, dict) else error
+                    raise RuntimeError(f"LLM server stopped the stream: {message}")
                 usage = chunk.get("usage")
                 if usage:
                     self._last_gen_tokens = usage.get("completion_tokens")
@@ -917,11 +1112,12 @@ class DecisionMakingAgent:
                 choices = chunk.get("choices") or []
                 if not choices:
                     continue
-                piece = (choices[0].get("delta") or {}).get("content") or ""
-                if not piece:
+                content = (choices[0].get("delta") or {}).get("content") or ""
+                if not content:
                     continue
-                full.append(piece)
-                if suppressed:
+                piece = _visible_piece(content, stream_view)
+                full.append(content if stream_view is not None else piece)
+                if suppressed or not piece:
                     continue
                 if streaming:
                     pending.append(piece)
@@ -956,6 +1152,85 @@ class DecisionMakingAgent:
         message so the specialist's domain instructions shape the response
         without changing every helper's signature.
         """
+        if context is None:
+            return clean_model_text(
+                self._infer(
+                    query,
+                    query,
+                    INSTRUCTION_SYSTEM_PROMPT,
+                    on_context=False,
+                    call=INSTRUCTION_CALL,
+                )
+            )
+        # Cap retrieved context BEFORE building the prompt. Knowledge-store
+        # retrieval can return multiple full documents (e.g. IT Security
+        # Policy + 2026 Budget + Q4 Report) for an underspecified query;
+        # if we dump that verbatim into the prompt, tokenizer truncation
+        # cuts the ``Task: ...`` line off the end and the model ends up
+        # echoing/repeating retrieved chunks instead of answering. ~12k
+        # chars (~3k tokens) leaves room for the persona, instructions,
+        # and the task line under the 8192-token prompt budget.
+        max_ctx_chars = _max_context_chars()
+        ctx = context or ""
+        if len(ctx) > max_ctx_chars:
+            ctx = ctx[:max_ctx_chars] + "\n…[retrieved content truncated]"
+        callable_prompt = (
+            "You are a helpful assistant. Answer using ONLY the provided context. "
+            "Format the answer in Markdown (## heading when helpful, **bold** labels, "
+            "bullet lists for multiple items, short paragraphs). "
+            "If the user asked for a summary, cover the main points without inventing facts. "
+            "If the answer is not present in the context, say: "
+            "'I don't have that information yet.'\n\n"
+            f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"
+        )
+        return clean_model_text(
+            self._infer(
+                query,
+                f"Retrieved Content:\n{ctx}\n\nTask: {query}",
+                GROUNDED_SYSTEM_PROMPT,
+                on_context=True,
+                callable_prompt=callable_prompt,
+                call=GROUNDED_CALL,
+            )
+        )
+
+    def complete(
+        self,
+        query: str,
+        user_content: str,
+        system_content: str,
+        *,
+        response_format: dict | None = None,
+        stream_view: StreamView | None = None,
+        call: str = ANSWER_CALL,
+    ) -> str:
+        return self._infer(
+            query,
+            user_content,
+            system_content,
+            on_context=True,
+            response_format=response_format,
+            stream_view=stream_view,
+            call=call,
+        )
+
+    def reason(self, query: str, user_content: str, system_content: str, *, call: str) -> str:
+        return clean_model_text(
+            self._infer(query, user_content, system_content, on_context=True, call=call)
+        )
+
+    def _infer(
+        self,
+        query: str,
+        user_content: str,
+        system_content: str,
+        *,
+        on_context: bool,
+        callable_prompt: str | None = None,
+        response_format: dict | None = None,
+        stream_view: StreamView | None = None,
+        call: str = ANSWER_CALL,
+    ) -> str:
         if _llm_backend() != "vllm":
             self._ensure_causal_loaded()
 
@@ -968,60 +1243,6 @@ class DecisionMakingAgent:
             _METRICS_AVAILABLE = True
         except ImportError:
             _METRICS_AVAILABLE = False
-
-        if context is None:
-            user_content = query
-            system_content = (
-                "You are a helpful assistant. Follow the user's instructions concisely."
-            )
-        else:
-            # Cap retrieved context BEFORE building the prompt. Knowledge-store
-            # retrieval can return multiple full documents (e.g. IT Security
-            # Policy + 2026 Budget + Q4 Report) for an underspecified query;
-            # if we dump that verbatim into the prompt, tokenizer truncation
-            # cuts the ``Task: ...`` line off the end and the model ends up
-            # echoing/repeating retrieved chunks instead of answering. ~12k
-            # chars (~3k tokens) leaves room for the persona, instructions,
-            # and the bracketed task line under the 8192-token prompt budget.
-            _MAX_CTX_CHARS = 12000
-            ctx = context or ""
-            if len(ctx) > _MAX_CTX_CHARS:
-                ctx = ctx[:_MAX_CTX_CHARS] + "\n…[retrieved content truncated]"
-
-            # Bracket the task at both ends: even if the middle gets truncated,
-            # the instruction at the top and the question at the bottom both
-            # survive so the model always sees what it's being asked to do.
-            user_content = (
-                f"Task: {query}\n\n"
-                "RULES (read before answering):\n"
-                "1. Use ONLY the retrieved content below. Do NOT invent facts.\n"
-                "2. Pick ONE answer and commit. If the retrieved content has "
-                "multiple similar-looking figures, pick the one that matches "
-                "the question's exact wording and move on. Do NOT write 'wait', "
-                "'no', 'actually', 'correction', 'let me recheck', or any "
-                "self-correcting phrase. Do NOT second-guess.\n"
-                "3. If the retrieved content genuinely lacks the answer, say "
-                "'The retrieved content does not contain this information.' in "
-                "ONE sentence and stop. Do NOT keep searching by re-quoting.\n"
-                "4. Never quote the retrieved text back to question it. State "
-                "facts confidently in your own words.\n"
-                "5. Keep the answer concise. Use short paragraphs and bullet "
-                "lists. Stop when the question is answered.\n\n"
-                f"Retrieved Content:\n{ctx}\n\n"
-                f"Now answer the task: {query}"
-            )
-            system_content = (
-                "You are a helpful assistant. Use only the retrieved content to complete the task. "
-                "Format every answer in Markdown: start with a brief ## heading when the answer "
-                "has multiple parts, use **bold** for important labels, use bullet lists for "
-                "enumerations, and keep paragraphs short so the reply is easy to scan. "
-                "Never echo or duplicate the retrieved text — synthesise.\n\n"
-                "CRITICAL: Once you write a number, fact, or quote, COMMIT TO IT. "
-                "Do not revise or second-guess in the same answer. Self-correcting "
-                "loops ('wait — no — $265K — actually $263K') destroy the answer's "
-                "trustworthiness. Pick the single statement that best fits the "
-                "question and stop."
-            )
 
         # Per-task persona override. Set by the consumer thread based on which
         # specialist agent owns this task. Prepended so the specialist's
@@ -1057,7 +1278,7 @@ class DecisionMakingAgent:
             "Reasoning over retrieved content",
             (
                 "Running the language model on the retrieved context."
-                if context is not None
+                if on_context
                 else "Running the language model on the user's request."
             ),
             model=self.model_name,
@@ -1072,29 +1293,28 @@ class DecisionMakingAgent:
         self._last_gen_tokens = None
         self._last_prompt_tokens = None
 
+        prompt = f"{system_content}\n\n{user_content}"
+        if self.decision_model is not None and callable_prompt:
+            prompt = callable_prompt
         try:
             if self.decision_model is not None:
-                prompt = (
-                    f"{system_content}\n\n{user_content}"
-                    if context is None
-                else (
-                    "You are a helpful assistant. Answer using ONLY the provided context. "
-                    "Format the answer in Markdown (## heading when helpful, **bold** labels, "
-                    "bullet lists for multiple items, short paragraphs). "
-                    "If the user asked for a summary, cover the main points without inventing facts. "
-                    "If the answer is not present in the context, say: "
-                    "'I don't have that information yet.'\n\n"
-                    f"Context:\n{context}\n\nQuestion: {query}\nAnswer:"
-                )
-                )
                 result = self.decision_model(prompt)
                 text = self._coerce_callable_output(result)
             elif _llm_backend() == "vllm":
-                text = self._generate_vllm(user_content, system_content)
+                text = self._generate_vllm(
+                    user_content,
+                    system_content,
+                    response_format=response_format,
+                    stream_view=stream_view,
+                    call=call,
+                )
             else:
-                text = self._generate_causal(user_content, system_content)
+                text = self._generate_causal(
+                    user_content, system_content, stream_view=stream_view
+                )
 
             inference_duration = time.time() - start_time
+            record_prompt_tokens(call, *self._prompt_token_count(prompt))
             if _METRICS_AVAILABLE:
                 model_inference_duration.labels(
                     model_name=self.model_name,
@@ -1114,32 +1334,13 @@ class DecisionMakingAgent:
                 prompt_tokens=self._last_prompt_tokens,
                 model=self.model_name,
             )
-
-            # Final guard: if the model produced a self-correction spiral
-            # despite the anti-loop prompt + bad_words_ids, replace the
-            # output with a clean fallback. The raw text is logged so the
-            # task detail page still has it for debugging, but the user
-            # never sees pages of "→ no → wait → actually $265K — no" in
-            # chat. Detection is a simple density-of-contradiction-markers
-            # check; well-formed answers virtually never trip it.
-            if _is_degenerate_output(text):
-                logger.warning(
-                    "Degenerate self-correction loop detected in model output "
-                    "(length=%d); replacing with clean fallback. Raw output "
-                    "preview: %r",
-                    len(text),
-                    text[:400],
-                )
-                text = (
-                    "I couldn't extract a consistent answer from the retrieved "
-                    "content for this step. The chunks pulled from the knowledge "
-                    "store appear fragmented or contradictory, and the model "
-                    "spiraled trying to reconcile them. Please rephrase the demand "
-                    "to focus on one specific question, or check the task detail "
-                    "page for the raw retrieved context."
-                )
-
             return text
+        except GenerationStopped:
+            logger.info(
+                "Reasoning stopped after %.1fs at its caller's request",
+                time.time() - start_time,
+            )
+            raise
         except Exception as e:
             inference_duration = time.time() - start_time
             if _METRICS_AVAILABLE:

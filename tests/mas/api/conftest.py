@@ -7,14 +7,19 @@ no live Redis, no live RabbitMQ** to run.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from auth.auth_tool_functions import get_current_user, verify_agent_api_key
-from db.database import get_db
+from db.database import Base, get_db
 
 # --------------------------------------------------------------------------- #
 # Database
@@ -85,3 +90,69 @@ def make_client(mock_db: MagicMock):
         return TestClient(app)
 
     return _factory
+
+
+@pytest.fixture
+def routing_db():
+    from db.models import Conversations  # noqa: PLC0415
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    session = sessionmaker(bind=engine)()
+    session.add(Conversations(id=7, owner_username="user", name="Q4 review"))
+    session.commit()
+    try:
+        yield session
+    finally:
+        session.close()
+        engine.dispose()
+
+
+@pytest.fixture
+def mas_client(routing_db):
+    from tasks.routes import router  # noqa: PLC0415
+
+    def _factory(user: dict) -> httpx.AsyncClient:
+        app = FastAPI()
+        app.include_router(router)
+        app.dependency_overrides[get_db] = lambda: routing_db
+        app.dependency_overrides[get_current_user] = lambda: user
+        return httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://mas"
+        )
+
+    return _factory
+
+
+@pytest.fixture
+def submit_task(routing_db, mas_client, monkeypatch):
+    from tasks import routes  # noqa: PLC0415
+    from tasks.task_jobs import task_jobs  # noqa: PLC0415
+
+    outcomes: list[dict] = []
+    route_for_real = routes.run_routing_job
+
+    async def recording_job(*args, **kwargs):
+        outcome = await route_for_real(*args, **kwargs)
+        outcomes.append(outcome)
+        return outcome
+
+    monkeypatch.setattr(routes, "SessionLocal", lambda: routing_db)
+    monkeypatch.setattr(routes, "run_routing_job", recording_job)
+
+    async def _submit(body: dict, *, user: dict, headers: dict | None = None):
+        jobs_before = len(outcomes)
+        async with mas_client(user) as client:
+            response = await client.post("/tasks/new_task/", json=body, headers=headers or {})
+        await task_jobs.drain()
+        return SimpleNamespace(
+            response=response,
+            outcome=outcomes[-1] if len(outcomes) > jobs_before else None,
+        )
+
+    return _submit
+

@@ -1,4 +1,4 @@
-export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type TaskStatus = 'queued' | 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type MessageType = 'instruction' | 'result' | 'question' | 'answer';
 
 export interface Subtask {
@@ -6,6 +6,9 @@ export interface Subtask {
   title: string;
   status: TaskStatus;
   assignedAgent: string;
+  skillsRequired?: string[];
+  createdAt?: string | null;
+  completedAt?: string | null;
   children?: Subtask[];
 }
 
@@ -28,7 +31,10 @@ export interface TaskDetail {
   id: string;
   title: string;
   status: TaskStatus;
+  agentId: string;
+  skills: string[];
   createdAt: string;
+  completedAt: string | null;
   subtasks: Subtask[];
   messages: AgentMessage[];
   delegationChain: DelegationStep[];

@@ -1,0 +1,112 @@
+{
+  "version": "1.0.0",
+  "looked_up": "2026-10-08",
+  "llama_cpp": {
+    "pinned_build": "b11382",
+    "server_image": "ghcr.io/ggml-org/llama.cpp:server-b11382",
+    "bench_image": "ghcr.io/ggml-org/llama.cpp:full-b11382"
+  },
+  "licences_allowed": [
+    "Apache-2.0",
+    "MIT"
+  ],
+  "llama_bench": {
+    "prompts": "512",
+    "generations": "128",
+    "depths": "0",
+    "cache_types_k": "f16",
+    "cache_types_v": "f16",
+    "threads": "4",
+    "repetitions": 3
+  },
+  "candidates": [
+    {
+      "id": "qwen3-4b-instruct-2507",
+      "role": "baseline",
+      "name": "Qwen3-4B-Instruct-2507",
+      "model_repo": "Qwen/Qwen3-4B-Instruct-2507",
+      "model_revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+      "licence": "Apache-2.0",
+      "licence_statement": "Model card metadata: license apache-2.0.",
+      "licence_flags": [],
+      "architecture": "Qwen3ForCausalLM",
+      "gguf_architecture": "qwen3",
+      "llama_cpp": {
+        "since_build": null,
+        "since_pr": null,
+        "evidence": "The qwen3 architecture was supported long before the pinned build."
+      },
+      "parameters": 4022468096,
+      "active_parameters": null,
+      "size_note": "Dense model of about 4 billion parameters.",
+      "context_length": 262144,
+      "thinking_default": "none",
+      "thinking_evidence": "The Instruct-2507 release has no thinking mode.",
+      "notes": [],
+      "ggufs": [
+        {
+          "id": "qwen3-4b-q4km",
+          "file": "qwen3-4b-instruct-2507-Q4_K_M.gguf",
+          "quant": "Q4_K_M",
+          "repo": "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+          "revision": "a06e946bb6b655725eafa393f4a9745d460374c9",
+          "upstream_file": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+          "publisher": "community",
+          "size_bytes": 2497281120,
+          "sha256": "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597",
+          "default": true
+        },
+        {
+          "id": "qwen3-4b-q5km",
+          "file": "qwen3-4b-instruct-2507-Q5_K_M.gguf",
+          "quant": "Q5_K_M",
+          "repo": "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+          "revision": "a06e946bb6b655725eafa393f4a9745d460374c9",
+          "upstream_file": "Qwen3-4B-Instruct-2507-Q5_K_M.gguf",
+          "publisher": "community",
+          "size_bytes": 2889514080,
+          "sha256": "5bde5e9d883622acb02bf77fe7dcbc56a8b9a9ad4be78a72ca23a532658b4ecb",
+          "default": false
+        }
+      ]
+    },
+    {
+      "id": "gemma-4-e4b-it",
+      "role": "candidate",
+      "name": "gemma-4-E4B-it",
+      "model_repo": "google/gemma-4-E4B-it",
+      "model_revision": "ee0ef6023621cff504d758262d4e04895a5af4a2",
+      "licence": "Apache-2.0",
+      "licence_statement": "Model card metadata: license apache-2.0.",
+      "licence_flags": [],
+      "architecture": "Gemma4ForConditionalGeneration",
+      "gguf_architecture": "gemma4",
+      "llama_cpp": {
+        "since_build": 8637,
+        "since_pr": 21309,
+        "evidence": "The gemma4 architecture arrived with llama.cpp pull request 21309, released as b8637."
+      },
+      "parameters": 7996156490,
+      "active_parameters": null,
+      "size_note": "About 8 billion parameters with the embeddings; E4B stands for about 4 billion effective.",
+      "context_length": 131072,
+      "thinking_default": "off",
+      "thinking_evidence": "Recorded as off: replies come without a reasoning block unless the request asks for one.",
+      "notes": [],
+      "ggufs": [
+        {
+          "id": "gemma-4-e4b-it-q4_0",
+          "file": "gemma-4-e4b-it-Q4_0.gguf",
+          "quant": "Q4_0",
+          "repo": "ggml-org/gemma-4-E4B-it-GGUF",
+          "revision": "b8093469224f83f5c38f691eb906c380e9e63114",
+          "upstream_file": "gemma-4-E4B-it-Q4_0.gguf",
+          "publisher": "llama.cpp maintainers",
+          "size_bytes": 4590807392,
+          "sha256": "a555b900214b477d8880e7832e0b8925e139b0159640036b09fe472b6f2097f2",
+          "default": true
+        }
+      ]
+    }
+  ]
+}

@@ -8,6 +8,7 @@ const EXIT_VIEWS = {
   12: "docker-down",
   17: "not-found",
   18: "not-installed",
+  32: "unsupported",
 };
 
 const MAX_OUTPUT_LINES = 400;
@@ -36,6 +37,7 @@ function show(view) {
     "no-python": "Python is missing",
     "docker-down": "Docker is not running",
     "not-installed": "Not installed yet",
+    "unsupported": "Not enough memory",
     "starting": "Starting the stack",
     "failed": "Something went wrong",
     "running": "Running",
@@ -137,6 +139,53 @@ function renderServices(payload) {
   table.hidden = expected.length === 0;
 }
 
+function renderDownload(data) {
+  const box = document.getElementById("download");
+  const bar = document.getElementById("download-bar");
+  if (data.phase === "verified") {
+    box.hidden = true;
+    return;
+  }
+  const label = data.phase === "downloading" ? "Downloading the language model" : "";
+  document.getElementById("download-text").textContent =
+    label ? `${label}: ${data.text || ""}` : data.text || "";
+  if (data.phase === "downloading" && typeof data.percent === "number") {
+    bar.value = data.percent;
+  } else {
+    bar.removeAttribute("value");
+  }
+  bar.hidden = data.phase === "failed";
+  box.hidden = false;
+}
+
+function fillList(id, items) {
+  const list = document.getElementById(id);
+  list.textContent = "";
+  for (const item of items || []) {
+    const li = document.createElement("li");
+    li.textContent = String(item);
+    list.appendChild(li);
+  }
+}
+
+function renderUnsupported(data) {
+  if (data.headline) {
+    document.getElementById("unsupported-headline").textContent = data.headline;
+  }
+  const checked = document.getElementById("unsupported-checked");
+  checked.textContent = data.checked_utc
+    ? `Found when START-HERE last ran (${data.checked_utc}).` : "";
+  checked.hidden = !data.checked_utc;
+  fillList("unsupported-have", data.have);
+  fillList("unsupported-need", data.need);
+  fillList("unsupported-alternatives", data.alternatives);
+}
+
+function hideDownload() {
+  document.getElementById("download").hidden = true;
+  document.getElementById("download-text").textContent = "";
+}
+
 async function bootstrap() {
   show("locating");
   let info;
@@ -161,6 +210,10 @@ async function bootstrap() {
     return;
   }
   if (info.state === "not-installed") {
+    if (info.refused) {
+      await startStack();
+      return;
+    }
     show("not-installed");
     return;
   }
@@ -182,6 +235,7 @@ function beginPhase(phase) {
   const table = document.getElementById("services");
   table.hidden = true;
   table.querySelector("tbody").textContent = "";
+  hideDownload();
   for (const id of ["output", "stopping-output"]) {
     const pre = document.getElementById(id);
     if (pre) pre.textContent = "";
@@ -216,6 +270,18 @@ function renderFailure() {
   show("failed");
 }
 
+const AI_MODE_TEXT = {
+  mock: "AI: Mock - no AI model runs. Answers and search are simulated from the words of your documents.",
+  local: "AI: Local",
+};
+
+function renderAiMode(mode) {
+  const line = document.getElementById("ai-mode");
+  line.textContent = AI_MODE_TEXT[mode] || "";
+  line.hidden = !AI_MODE_TEXT[mode];
+  line.classList.toggle("mock", mode === "mock");
+}
+
 function handleInstallerEvent(data) {
   switch (data.event) {
     case "step":
@@ -228,9 +294,19 @@ function handleInstallerEvent(data) {
     case "services":
       renderServices(data);
       break;
+    case "download":
+      renderDownload(data);
+      break;
+    case "unsupported":
+      renderUnsupported(data);
+      break;
     case "ready":
       stopTicker();
       state.ready = true;
+      renderAiMode(data.ai);
+      break;
+    case "ai":
+      renderAiMode(data.mode);
       break;
     case "say":
       if (data.text && data.text.trim()) appendOutput(data.text);
@@ -355,18 +431,23 @@ function wire() {
   on("docker-quit", () => invoke("quit_app"));
   on("installed-quit", () => invoke("quit_app"));
   on("failed-quit", () => invoke("quit_app"));
+  on("unsupported-quit", () => invoke("quit_app"));
   on("stopped-quit", () => invoke("quit_app"));
 
   on("python-retry", () => bootstrap());
   on("docker-retry", () => startStack());
   on("installed-retry", () => bootstrap());
+  on("unsupported-retry", () => bootstrap());
   on("failed-retry", () => startStack());
   on("stopped-start", () => startStack());
 
   on("installed-open", () => invoke("open_path", { which: "bundle" }));
+  on("unsupported-open", () => invoke("open_path", { which: "bundle" }));
   on("starting-log", () => invoke("open_path", { which: "log" }));
   on("failed-log", () => invoke("open_path", { which: "log" }));
   on("failed-profile", () => invoke("open_path", { which: "profile" }));
+  on("unsupported-profile", () => invoke("open_path", { which: "profile" }));
+  on("unsupported-log", () => invoke("open_path", { which: "log" }));
   on("running-log", () => invoke("open_path", { which: "log" }));
   on("running-profile", () => invoke("open_path", { which: "profile" }));
   on("running-browser", () => invoke("open_path", { which: "web" }));

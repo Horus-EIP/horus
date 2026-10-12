@@ -15,11 +15,6 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-try:
-    from spacy.lang.en.stop_words import STOP_WORDS
-except ImportError:
-    STOP_WORDS = set()
-
 CATEGORY_KEYWORDS = {
     "accounting": [
         "invoice", "receipt", "bill", "payment", "tax", "vat", "ledger",
@@ -123,8 +118,41 @@ DOC_TYPE_KEYWORDS = {
 }
 
 CONFIDENCE_THRESHOLD = 0.6
+SPACY_MODELS = ("en_core_web_trf", "en_core_web_sm")
+SPACY_ENV = "HORUS_SPACY"
+OFF_VALUES = frozenset({"0", "false", "no", "off"})
 
 _nlp_model = None
+
+
+def spacy_is_off() -> bool:
+    return os.getenv(SPACY_ENV, "on").strip().lower() in OFF_VALUES
+
+
+def _load_spacy_model() -> Any:
+    if spacy_is_off():
+        logger.info(
+            "spaCy is off (%s=%s): entities, topics and summaries come from the regex extraction",
+            SPACY_ENV, os.getenv(SPACY_ENV),
+        )
+        return False
+    try:
+        import spacy
+    except ImportError:
+        logger.warning("spaCy is not installed; entity extraction will use regex fallback")
+        return False
+    for name in SPACY_MODELS:
+        try:
+            nlp = spacy.load(name)
+        except (OSError, ImportError, ValueError):
+            continue
+        logger.info("spaCy model %s loaded successfully", name)
+        return nlp
+    logger.warning(
+        "no spaCy model of %s is installed; entity extraction will use regex fallback",
+        ", ".join(SPACY_MODELS),
+    )
+    return False
 
 
 def _try_import_transformers() -> tuple[bool, Any]:
@@ -153,16 +181,7 @@ class ContentAnalyzer:
     ):
         global _nlp_model
         if _nlp_model is None:
-            try:
-                import spacy
-                _nlp_model = spacy.load("en_core_web_trf")
-                logger.info("spaCy model en_core_web_trf loaded successfully")
-            except (OSError, ImportError):
-                logger.warning(
-                    "spaCy model en_core_web_trf not available; "
-                    "entity extraction will use regex fallback"
-                )
-                _nlp_model = False
+            _nlp_model = _load_spacy_model()
 
         self.nlp = _nlp_model if _nlp_model is not False else None
         self.category_keywords = CATEGORY_KEYWORDS
@@ -386,6 +405,8 @@ class ContentAnalyzer:
 
     def _extract_topics_spacy(self, doc, max_topics: int = 10) -> list[str]:
         """Extract topics from spaCy noun chunks."""
+        from spacy.lang.en.stop_words import STOP_WORDS
+
         chunks = []
         for chunk in doc.noun_chunks:
             root = chunk.root

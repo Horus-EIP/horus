@@ -11,6 +11,7 @@ import {
 import { logsApi, type LogEntry } from "@/lib/logs/api";
 import { useNotification } from "@/contexts/notification-context";
 import { ObservabilityTabs } from "@/components/admin/observability-tabs";
+import { MonitoringGate } from "@/components/admin/monitoring-gate";
 
 const SINCE_OPTIONS = [
   { value: "15m", label: "Last 15 min" },
@@ -255,4 +256,10 @@ const AdminLogsPage = () => {
   );
 };
 
-export default AdminLogsPage;
+const GatedAdminLogsPage = () => (
+  <MonitoringGate title="System Logs">
+    <AdminLogsPage />
+  </MonitoringGate>
+);
+
+export default GatedAdminLogsPage;

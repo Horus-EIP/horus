@@ -6,6 +6,8 @@ Provides distributed tracing to SigNoz for request flow visualization.
 
 import os
 
+from core.version import HORUS_VERSION
+
 # Check if OpenTelemetry is available
 OTEL_AVAILABLE = False
 
@@ -54,7 +56,7 @@ def setup_tracing(app, service_name: str = "agent") -> bool:
         # Create resource with service information
         resource = Resource.create({
             "service.name": service_name,
-            "service.version": "1.0.0",
+            "service.version": HORUS_VERSION,
             "deployment.environment": os.getenv("ENVIRONMENT", "development"),
         })
 

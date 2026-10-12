@@ -1,0 +1,8 @@
+-r requirements.txt
+torch==2.14.1
+transformers>=4.44.2,<5
+accelerate>=0.33.0
+bitsandbytes
+huggingface_hub>=0.34,<1
+sentencepiece
+en_core_web_trf @ https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.8.0/en_core_web_trf-3.8.0-py3-none-any.whl

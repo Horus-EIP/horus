@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -30,6 +30,8 @@ from fastapi.testclient import TestClient
 
 import core.app as app_module
 from core.structured_logging import get_correlation_id
+
+RELEASE_VERSION = (Path(__file__).resolve().parents[3] / "VERSION").read_text(encoding="utf-8").strip()
 
 # --------------------------------------------------------------------------- #
 # Shared helpers
@@ -79,8 +81,14 @@ def patched_lifespan_side_effects():
         patch.object(app_module, "init_db") as init_db,
         patch.object(app_module, "check_agent_heartbeat", new=_noop_coro),
         patch.object(app_module, "check_task_timeout", new=_noop_coro),
+        patch.object(app_module, "run_task_heartbeats") as task_heartbeats,
+        patch.object(
+            app_module, "fail_interrupted_routing", new_callable=AsyncMock
+        ) as fail_interrupted_routing,
+        patch.object(app_module, "task_jobs", new_callable=AsyncMock) as task_jobs,
         patch.object(app_module, "rabbitmq_instance") as rabbitmq_instance,
         patch.object(app_module, "start_llm_preload_background_thread") as llm_preload,
+        patch.object(app_module, "start_probe_background_thread") as ai_mode_probe,
         patch.object(
             app_module, "start_embedding_preload_background_thread"
         ) as emb_preload,
@@ -90,8 +98,12 @@ def patched_lifespan_side_effects():
             "init_db": init_db,
             "rabbitmq_instance": rabbitmq_instance,
             "llm_preload": llm_preload,
+            "ai_mode_probe": ai_mode_probe,
             "emb_preload": emb_preload,
             "engine": engine,
+            "task_heartbeats": task_heartbeats,
+            "fail_interrupted_routing": fail_interrupted_routing,
+            "task_jobs": task_jobs,
         }
 
 
@@ -107,7 +119,7 @@ class TestCreateAppEnvironment:
 
         assert isinstance(app, FastAPI)
         assert app.title == "MAS - Multi-Agent System"
-        assert app.version == "1.0.0"
+        assert app.version == RELEASE_VERSION
         # A lifespan context is wired in (FastAPI/Instrumentator wrap ours, so
         # we assert presence rather than identity; TestLifespan proves it runs
         # our boot/teardown hooks).
@@ -197,9 +209,13 @@ class TestLifespan:
             mocks["init_db"].assert_called_once()
             mocks["rabbitmq_instance"].connect.assert_called_once()
             mocks["llm_preload"].assert_called_once()
+            mocks["ai_mode_probe"].assert_called_once()
             mocks["emb_preload"].assert_called_once()
+            mocks["fail_interrupted_routing"].assert_awaited_once()
+            mocks["task_heartbeats"].assert_called_once_with()
 
         # shutdown hooks fire when the context manager exits.
+        mocks["task_jobs"].shutdown.assert_awaited_once()
         mocks["rabbitmq_instance"].close.assert_called_once()
         mocks["engine"].dispose.assert_called_once()
 
@@ -521,6 +537,16 @@ class TestMainEntrypoint:
         assert isinstance(main_module.app, FastAPI)
         paths = _collect_route_paths(main_module.app)
         assert "/" in paths
+
+    def test_public_health_reports_the_release_version(self, main_module):
+        response = TestClient(main_module.app).get("/health")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "healthy",
+            "service": "mas",
+            "version": RELEASE_VERSION,
+        }
 
     def test_health_endpoint_authenticated(self, main_module):
         """An authenticated user receives their claims and the success message."""

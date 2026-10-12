@@ -4,6 +4,7 @@ Functions prefixed with ``_`` take an explicit ``Session`` and are safe to
 call from background tasks. Public variants are used by FastAPI routes.
 """
 
+import asyncio
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -39,6 +40,8 @@ def _skill_cache_evict(agent_id: str) -> None:
 logger = get_logger("registry_tool_functions")
 
 bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+MANAGER_AGENT_NAME = "Manager"
 
 
 # ============================================================================
@@ -138,7 +141,7 @@ def _batch_update_agent_status_internal(agent_statuses: dict, db: Session) -> bo
 # ============================================================================
 
 
-def create_agent(
+async def create_agent(
     name: str, skills: list, description: str, db: Session, Agent_type: AgentTypes
 ) -> tuple[str, str]:
     """Register a new agent and return ``(agent_id, plaintext_api_key)``.
@@ -167,9 +170,11 @@ def create_agent(
         logger.info(f"Agent created successfully: {agent_id} ({name})")
 
         # Shared pool queue for this specialization (all workers of this type consume it).
-        rabbitmq_instance.create_queue(work_queue_name_for_agent_type(Agent_type))
+        await asyncio.to_thread(
+            rabbitmq_instance.ensure_work_queue, work_queue_name_for_agent_type(Agent_type)
+        )
 
-        _skill_cache_upsert(agent_id, name, skills, description)
+        await asyncio.to_thread(_skill_cache_upsert, agent_id, name, skills, description)
         return agent_id, api_key
     except Exception as e:
         db.rollback()
@@ -426,6 +431,10 @@ def _is_agent_recently_alive(agent_info, max_age_seconds: int = 90) -> bool:
         return False
 
 
+def is_available_worker(agent_info) -> bool:
+    return agent_info.name != MANAGER_AGENT_NAME and _is_agent_recently_alive(agent_info)
+
+
 def get_available_agents(db: Session) -> list:
     """Return agents with a recent heartbeat as ``(id, name, desc, type)`` tuples.
 
@@ -446,10 +455,7 @@ def get_available_agents(db: Session) -> list:
             return available_agents
 
         for agent in agents:
-            # Skip Manager (orchestrator, not a worker).
-            if agent.name == "Manager":
-                continue
-            if _is_agent_recently_alive(agent):
+            if is_available_worker(agent):
                 available_agents.append(
                     (agent.id, agent.name, agent.description or "", agent.type)
                 )

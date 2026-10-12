@@ -6,7 +6,11 @@ import { SubtaskTree } from '@/components/tasks/subtask-tree';
 import { MessageFlow } from '@/components/tasks/message-flow';
 import { DelegationChain } from '@/components/tasks/delegation-chain';
 import { CollaborationView } from '@/components/agents/collaboration-view';
+import { TaskFacts } from '@/components/tasks/task-facts';
+import { AnswerSources } from '@/components/chat/answer-sources';
+import type { AnswerSource } from '@/lib/types';
 import type { TaskDetail, TaskStatus, Subtask, AgentMessage, DelegationStep } from '@/lib/tasks/types';
+import { isTaskInProgress, taskStatusByAgentId } from '@/lib/tasks/agent-activity';
 import { chatApi, type TaskDetails } from '@/lib/chat/api';
 import { agentApi, type Agent } from '@/lib/agents/api';
 import { useNotification } from '@/contexts/notification-context';
@@ -15,13 +19,14 @@ const STATUS_COLORS: Record<string, string> = {
   completed: 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30',
   running: 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30',
   pending: 'bg-white/10 text-[var(--textSoft)] ring-1 ring-white/10',
+  queued: 'bg-white/10 text-[var(--textSoft)] ring-1 ring-white/10',
   failed: 'bg-red-500/20 text-red-300 ring-1 ring-red-500/30',
   cancelled: 'bg-gray-500/20 text-gray-300 ring-1 ring-gray-500/30',
 };
 
 function normalizeStatus(s: string): TaskStatus {
   if (s === 'canceled') return 'cancelled';
-  const allowed: TaskStatus[] = ['pending', 'running', 'completed', 'failed', 'cancelled'];
+  const allowed: TaskStatus[] = ['queued', 'pending', 'running', 'completed', 'failed', 'cancelled'];
   return (allowed.includes(s as TaskStatus) ? s : 'pending') as TaskStatus;
 }
 
@@ -42,13 +47,21 @@ function historyToMessages(history: unknown[] | undefined): AgentMessage[] {
   });
 }
 
-function buildTaskDetail(data: TaskDetails): TaskDetail & { result?: string; query: string } {
+type TaskDetailView = TaskDetail & { result?: string; query: string; sources?: AnswerSource[] };
+
+function buildTaskDetail(data: TaskDetails): TaskDetailView {
   const subtasks: Subtask[] = (data.subtasks ?? []).map((st) => ({
     id: st.id,
     title: st.title,
     status: normalizeStatus(st.status),
     assignedAgent: st.assignedAgent,
+    skillsRequired: st.skillsRequired ?? [],
+    createdAt: st.createdAt ?? null,
+    completedAt: st.completedAt ?? null,
   }));
+  const skills = Array.from(
+    new Set([...(data.skills_required ?? []), ...subtasks.flatMap((s) => s.skillsRequired ?? [])])
+  );
   const agents = new Set<string>([data.agent_id]);
   subtasks.forEach((s) => agents.add(s.assignedAgent));
 
@@ -58,7 +71,7 @@ function buildTaskDetail(data: TaskDetails): TaskDetail & { result?: string; que
       ? subtasks.map((s) => ({
           agentName: s.assignedAgent,
           action: s.title,
-          timestamp: data.created_at,
+          timestamp: s.createdAt ?? data.created_at,
         }))
       : [
           {
@@ -72,7 +85,10 @@ function buildTaskDetail(data: TaskDetails): TaskDetail & { result?: string; que
     id: data.task_id,
     title: data.query.length > 120 ? `${data.query.slice(0, 120)}…` : data.query,
     status: normalizeStatus(data.status),
+    agentId: data.agent_id,
+    skills,
     createdAt: data.created_at,
+    completedAt: data.completed_at ?? null,
     collaboratingAgents: Array.from(agents),
     subtasks,
     messages,
@@ -80,6 +96,7 @@ function buildTaskDetail(data: TaskDetails): TaskDetail & { result?: string; que
     // Keep these so the page can render the final answer + original query.
     result: data.result,
     query: data.query,
+    sources: data.sources,
   };
 }
 
@@ -193,7 +210,7 @@ export default function TaskDetailPage() {
 
   const statusClass = STATUS_COLORS[task.status] ?? STATUS_COLORS.pending;
 
-  const taskWithExtras = task as TaskDetail & { result?: string; query?: string };
+  const taskWithExtras = task as Partial<TaskDetailView> & TaskDetail;
   const finalAnswer = taskWithExtras.result ?? '';
   const originalQuery = taskWithExtras.query ?? task.title;
 
@@ -205,7 +222,7 @@ export default function TaskDetailPage() {
           <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusClass}`}>
             {task.status}
           </span>
-          {(task.status === 'running' || task.status === 'pending') && (
+          {isTaskInProgress(task.status) && (
             <button
               type="button"
               onClick={handleCancel}
@@ -218,6 +235,8 @@ export default function TaskDetailPage() {
         </div>
         <span className="text-xs text-[var(--textSoft)]">Task ID: {task.id}</span>
       </div>
+
+      <TaskFacts skills={task.skills} createdAt={task.createdAt} completedAt={task.completedAt} />
 
       {/* Original request */}
       <div className="rounded-2xl border border-white/10 bg-[var(--bgSoft)]/70 p-4">
@@ -236,9 +255,12 @@ export default function TaskDetailPage() {
             Result
           </p>
           {finalAnswer ? (
-            <pre className="whitespace-pre-wrap font-sans text-sm text-[var(--text)]">
-              {finalAnswer}
-            </pre>
+            <>
+              <pre className="whitespace-pre-wrap font-sans text-sm text-[var(--text)]">
+                {finalAnswer}
+              </pre>
+              <AnswerSources sources={taskWithExtras.sources} />
+            </>
           ) : (
             <p className="text-sm text-[var(--textSoft)]">
               Task is marked completed but no result body was returned by the
@@ -248,20 +270,34 @@ export default function TaskDetailPage() {
         </div>
       )}
 
-      {(task.status === 'running' || task.status === 'pending') && (
+      {isTaskInProgress(task.status) && (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-200">
-          Task is still {task.status}. The page auto-refreshes every few
-          seconds — the result will appear here once the agent finishes.
+          {task.status === 'queued'
+            ? 'Task is queued: the orchestrator is choosing the agents. '
+            : `Task is still ${task.status}. `}
+          The page auto-refreshes every few seconds — the result will appear
+          here once the agent finishes.
         </div>
       )}
 
       {task.status === 'failed' && (
         <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-200">
-          Task failed. See the agent logs for details.
+          {finalAnswer ? `Task failed: ${finalAnswer}` : 'Task failed. See the agent logs for details.'}
         </div>
       )}
 
-      <CollaborationView title="Collaborating agents" agents={collaborating} isLoading={false} />
+      {task.status === 'cancelled' && (
+        <div className="rounded-2xl border border-gray-500/30 bg-gray-500/5 p-4 text-sm text-gray-200">
+          {finalAnswer || 'Task was cancelled before it finished.'}
+        </div>
+      )}
+
+      <CollaborationView
+        title="Collaborating agents"
+        agents={collaborating}
+        isLoading={false}
+        taskStatusByAgentId={taskStatusByAgentId(task)}
+      />
 
       {task.subtasks.length > 0 || task.messages.length > 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

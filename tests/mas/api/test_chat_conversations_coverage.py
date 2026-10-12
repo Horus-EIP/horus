@@ -45,6 +45,8 @@ def _make_msg(
     agent_id: str | None = None,
     agent_name: str | None = None,
     skill_used: str | None = None,
+    sources: list[dict] | None = None,
+    ai_provider: str | None = None,
 ) -> MagicMock:
     """Build a Messages-shaped mock with ``.isoformat()``-capable timestamp."""
     msg = MagicMock()
@@ -55,6 +57,8 @@ def _make_msg(
     msg.agent_id = agent_id
     msg.agent_name = agent_name
     msg.skill_used = skill_used
+    msg.sources = sources
+    msg.ai_provider = ai_provider
     return msg
 
 
@@ -94,6 +98,8 @@ class TestGetHistory:
                 agent_id="a-1",
                 agent_name="Manager",
                 skill_used="chat",
+                sources=[{"doc_id": "d1", "chunk_id": "d1:0", "title": "q4.md", "page": None}],
+                ai_provider="mock",
             ),
         ]
         # First query() -> Conversations lookup; second -> Messages ordered.
@@ -113,9 +119,15 @@ class TestGetHistory:
             "agent_id": None,
             "agent_name": None,
             "skill_used": None,
+            "sources": None,
+            "ai_provider": None,
         }
         assert out[1]["agent_name"] == "Manager"
+        assert out[1]["ai_provider"] == "mock"
         assert out[1]["skill_used"] == "chat"
+        assert out[1]["sources"] == [
+            {"doc_id": "d1", "chunk_id": "d1:0", "title": "q4.md", "page": None}
+        ]
 
     def test_handles_null_created_at(self, mock_db):
         conv = _make_conv()
@@ -397,66 +409,25 @@ def _fake_ws() -> MagicMock:
     return ws
 
 
-class TestSendMessagesViaWebsockets:
-    async def test_no_connections_is_noop(self):
-        # Should simply return without raising when nobody is connected.
-        await ctf.send_messages_via_websockets("1", "hi")
-
-    async def test_legacy_agent_payload_without_attribution(self):
-        ws = _fake_ws()
-        ctf.active_connections["1"] = [ws]
-        await ctf.send_messages_via_websockets("1", "plain")
-        ws.send_json.assert_awaited_once()
-        payload = ws.send_json.await_args.args[0]
+class TestAgentMessagePayload:
+    def test_legacy_agent_payload_without_attribution(self):
+        payload = ctf.agent_message_payload("plain")
         assert payload["type"] == "agent"
         assert payload["content"] == "plain"
         assert "agent_id" not in payload
 
-    async def test_task_complete_payload_with_attribution(self):
-        ws = _fake_ws()
-        ctf.active_connections["7"] = [ws]
-        await ctf.send_messages_via_websockets(
-            7, "done", agent_id="a1", agent_name="Mgr", skill_used="sk"
+    def test_task_complete_payload_with_attribution(self):
+        payload = ctf.agent_message_payload(
+            "done", agent_id="a1", agent_name="Mgr", skill_used="sk"
         )
-        payload = ws.send_json.await_args.args[0]
         assert payload["type"] == "task_complete"
         assert payload["agent_id"] == "a1"
         assert payload["agent_name"] == "Mgr"
         assert payload["skill_used"] == "sk"
 
-    async def test_dead_socket_is_removed(self):
-        bad = _fake_ws()
-        bad.send_json.side_effect = RuntimeError("closed")
-        good = _fake_ws()
-        ctf.active_connections["1"] = [bad, good]
-        await ctf.send_messages_via_websockets("1", "hi")
-        assert bad not in ctf.active_connections["1"]
-        assert good in ctf.active_connections["1"]
 
-    async def test_dead_socket_already_gone_is_swallowed(self):
-        """send_json fails AND the socket is missing from the list -> ValueError swallowed."""
-        bad = _fake_ws()
-        conns: list = []
-
-        async def _send(_payload):
-            # Mutate the list so the subsequent remove() raises ValueError.
-            if bad in conns:
-                conns.remove(bad)
-            raise RuntimeError("closed")
-
-        bad.send_json.side_effect = _send
-        conns.append(bad)
-        ctf.active_connections["1"] = conns
-        await ctf.send_messages_via_websockets("1", "hi")
-
-
-class TestSendTaskStepViaWebsockets:
-    async def test_no_connections_is_noop(self):
-        await ctf.send_task_step_via_websockets("1", {"task_id": "t"})
-
-    async def test_full_step_payload(self):
-        ws = _fake_ws()
-        ctf.active_connections["1"] = [ws]
+class TestTaskStepPayload:
+    def test_full_step_payload(self):
         step = {
             "task_id": "t-1",
             "agent_id": "a-1",
@@ -467,29 +438,45 @@ class TestSendTaskStepViaWebsockets:
             "timestamp": "2026-01-01T00:00:00",
             "metadata": {"k": "v"},
         }
-        await ctf.send_task_step_via_websockets("1", step)
-        payload = ws.send_json.await_args.args[0]
+        payload = ctf.task_step_payload(step)
         assert payload["type"] == "task_step"
         assert payload["task_id"] == "t-1"
         assert payload["title"] == "Planning"
         assert payload["metadata"] == {"k": "v"}
         assert payload["timestamp"] == "2026-01-01T00:00:00"
 
-    async def test_defaults_timestamp_and_metadata(self):
-        ws = _fake_ws()
-        ctf.active_connections["1"] = [ws]
-        # Missing timestamp + metadata exercise the `or` fallbacks.
-        await ctf.send_task_step_via_websockets("1", {"task_id": "t"})
-        payload = ws.send_json.await_args.args[0]
+    def test_the_subtask_that_emitted_the_step_is_forwarded(self):
+        payload = ctf.task_step_payload({"task_id": "root-1", "subtask_id": "step-2"})
+        assert payload["task_id"] == "root-1"
+        assert payload["subtask_id"] == "step-2"
+
+    def test_defaults_timestamp_and_metadata(self):
+        payload = ctf.task_step_payload({"task_id": "t"})
         assert payload["metadata"] == {}
         assert isinstance(payload["timestamp"], str) and payload["timestamp"]
 
-    async def test_dead_socket_removed(self):
+
+class TestBroadcastToConversation:
+    async def test_no_connections_is_noop(self):
+        await ctf.broadcast_to_conversation("1", {"type": "agent"})
+
+    async def test_every_socket_of_the_conversation_receives_the_payload(self):
+        first, second, other = _fake_ws(), _fake_ws(), _fake_ws()
+        ctf.active_connections["1"] = [first, second]
+        ctf.active_connections["2"] = [other]
+        await ctf.broadcast_to_conversation(1, {"type": "agent", "content": "hi"})
+        first.send_json.assert_awaited_once_with({"type": "agent", "content": "hi"})
+        second.send_json.assert_awaited_once_with({"type": "agent", "content": "hi"})
+        other.send_json.assert_not_awaited()
+
+    async def test_dead_socket_is_removed(self):
         bad = _fake_ws()
         bad.send_json.side_effect = RuntimeError("closed")
-        ctf.active_connections["1"] = [bad]
-        await ctf.send_task_step_via_websockets("1", {"task_id": "t"})
-        assert ctf.active_connections["1"] == []
+        good = _fake_ws()
+        ctf.active_connections["1"] = [bad, good]
+        await ctf.broadcast_to_conversation("1", {"type": "agent"})
+        assert bad not in ctf.active_connections["1"]
+        assert good in ctf.active_connections["1"]
 
     async def test_dead_socket_already_gone_is_swallowed(self):
         bad = _fake_ws()
@@ -503,7 +490,14 @@ class TestSendTaskStepViaWebsockets:
         bad.send_json.side_effect = _send
         conns.append(bad)
         ctf.active_connections["1"] = conns
-        await ctf.send_task_step_via_websockets("1", {"task_id": "t"})
+        await ctf.broadcast_to_conversation("1", {"type": "agent"})
+
+
+class TestConnectedConversationIds:
+    def test_lists_only_conversations_with_an_open_socket(self):
+        ctf.active_connections["1"] = [_fake_ws()]
+        ctf.active_connections["2"] = []
+        assert ctf.connected_conversation_ids() == ["1"]
 
 
 class TestSaveNewClient:
@@ -756,6 +750,22 @@ class TestChatWebSocketRoute:
                 ws.send_text("ping")
         fake_delete.assert_not_called()
 
+    def test_a_manager_cannot_open_another_users_chat(self, make_client, mock_db):
+        from starlette.websockets import WebSocketDisconnect  # noqa: PLC0415
+
+        conv = _make_conv(owner_username="someone-else")
+        mock_db.query.return_value.filter.return_value.first.return_value = conv
+        client = make_client(chat_router)
+        with patch(
+            "chat.routes.get_current_user_from_token",
+            return_value=_token_user(role="manager", username="manager", uid="2"),
+        ):
+            with pytest.raises(WebSocketDisconnect) as exc:
+                with client.websocket_connect("/chat/1/?token=abc"):
+                    pass
+        assert exc.value.code == 1008
+        assert exc.value.reason == "Only the conversation's owner or an admin can open its chat"
+
     def test_admin_can_connect_to_foreign_conversation(self, make_client, mock_db):
         conv = _make_conv(owner_username="someone-else")
         mock_db.query.return_value.filter.return_value.first.return_value = conv
@@ -891,12 +901,20 @@ class TestGetHistoryRoute:
         r = client.get("/conversations/get_history/9999")
         assert r.status_code == 404
 
-    def test_non_owner_non_admin_gets_404(self, make_client, mock_db, as_user):
+    def test_non_owner_non_admin_gets_403(self, make_client, mock_db, as_user):
         conv = _make_conv(owner_username="someone-else")
         mock_db.query.return_value.filter.return_value.first.return_value = conv
         client = make_client(conv_router, current_user=as_user)
         r = client.get("/conversations/get_history/1")
-        assert r.status_code == 404
+        assert r.status_code == 403
+
+    def test_a_manager_cannot_read_another_users_history(self, make_client, mock_db, as_manager):
+        conv = _make_conv(owner_username="someone-else")
+        mock_db.query.return_value.filter.return_value.first.return_value = conv
+        client = make_client(conv_router, current_user=as_manager)
+        r = client.get("/conversations/get_history/1")
+        assert r.status_code == 403
+        assert r.json()["detail"] == "Only the conversation's owner or an admin can read it"
 
     def test_non_int_chat_id_422(self, make_client, mock_db, as_user):
         # Path is declared {chat_id:int}; a non-int segment doesn't match -> 404,

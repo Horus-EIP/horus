@@ -1,0 +1,7 @@
+allow:
+  - ecosystem: python
+    name: psycopg2-binary
+    reason: LGPL-3.0 with exceptions; MAS uses it unmodified as a library, which leaves our code closed (inventory, Flags & actions 8).
+  - ecosystem: web
+    name: "@img/sharp-*"
+    reason: sharp and its prebuilt libvips binaries (LGPL-3.0-or-later), loaded unmodified by Next.js image optimisation (inventory, Flags & actions 8).

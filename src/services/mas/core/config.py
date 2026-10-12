@@ -45,6 +45,7 @@ class Settings(BaseSettings):
 
     # Shared task queue prefix: workers consume ``{prefix}.{agent_type}`` (e.g. horus.work.general).
     agent_work_queue_prefix: str = "horus.work"
+    work_queue_max_length: int = Field(default=10, ge=1)
 
     # Application Configuration
     llm_autoinit: int = 0  # Force 0 for tests

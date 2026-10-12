@@ -15,11 +15,13 @@ QUEUE_STATS_RESPONSES = {
                     "stats": {
                         "summary": "Current queue stats",
                         "value": {
+                            "queued": 1,
                             "pending": 5,
                             "running": 2,
                             "completed": 150,
                             "failed": 1,
-                            "total": 158,
+                            "cancelled": 0,
+                            "total": 159,
                         },
                     }
                 }
@@ -38,23 +40,28 @@ QUEUE_STATS_RESPONSES = {
 # --- POST /tasks/new_task ------------------------------------------------
 
 CREATE_TASK_RESPONSES = {
-    200: {
-        "description": "Task successfully created and assigned to an agent",
+    202: {
+        "description": (
+            "Task stored with status queued. Routing runs in the background; "
+            "the outcome arrives as task events. A replayed Idempotency-Key "
+            "returns the original task with the header Idempotent-Replayed: true."
+        ),
         "content": {
             "application/json": {
                 "examples": {
-                    "assigned": {
-                        "summary": "Task assigned to suitable agent",
+                    "queued": {
+                        "summary": "Task queued for routing",
                         "value": {
-                            "message": "Task 'Summarize this text' assigned to agent 8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
+                            "task_id": "3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13",
+                            "status": "queued",
                             "conversation_id": 1,
-                            "task_id": "task-uuid-1234",
                         },
                     },
-                    "no_suitable_agent": {
-                        "summary": "No agent with required skills but auto-response generated",
+                    "replayed": {
+                        "summary": "Retry with the same Idempotency-Key",
                         "value": {
-                            "message": "No agent registered to assign a task",
+                            "task_id": "3f6c2a9e-1b7d-4c8e-9a51-6e0b2d4f8c13",
+                            "status": "running",
                             "conversation_id": 1,
                         },
                     },
@@ -122,17 +129,13 @@ CREATE_TASK_RESPONSES = {
         },
     },
     500: {
-        "description": "Internal Server Error - Database or messaging error",
+        "description": "Internal Server Error - the task could not be stored",
         "content": {
             "application/json": {
                 "examples": {
                     "database_error": {
-                        "summary": "Database transaction error",
-                        "value": {"detail": "Error: could not create task"},
-                    },
-                    "rabbitmq_error": {
-                        "summary": "Failed to publish task to queue",
-                        "value": {"detail": "Error: could not publish to RabbitMQ"},
+                        "summary": "The queued task could not be stored",
+                        "value": {"detail": "Failed to create task"},
                     },
                 }
             }
@@ -169,13 +172,16 @@ CREATE_TASK_OPENAPI_EXTRA = {
                                 "type": "object",
                                 "properties": {
                                     "filename": {"type": "string"},
+                                    "doc_id": {"type": "string"},
                                 },
                                 "required": ["filename"],
                             },
                             "description": (
                                 "Files already stored in the knowledge store, "
-                                "referenced by filename. The worker resolves "
-                                "their text on demand."
+                                "referenced by filename and, optionally, by "
+                                "knowledge-store document id (doc_id), which "
+                                "tells apart documents that share a filename. "
+                                "The worker resolves their text on demand."
                             ),
                         },
                         "inline_files": {
@@ -380,6 +386,39 @@ SHARE_RESULT_OPENAPI_EXTRA = {
                             "type": "string",
                             "description": "ID of the agent that executed the task",
                         },
+                        "status": {
+                            "type": "string",
+                            "enum": ["completed", "not_found", "failed"],
+                            "default": "completed",
+                            "description": (
+                                "completed: an answer. not_found: the documents do not "
+                                "contain it. failed: no answer. A first not_found or failed "
+                                "answer is asked for once more (not after a timeout)."
+                            ),
+                        },
+                        "reason": {
+                            "type": ["string", "null"],
+                            "maxLength": 64,
+                            "description": (
+                                "Why the answer is not completed: not_in_documents, "
+                                "invalid_output, degenerate_output, retrieval_error, "
+                                "timeout or error"
+                            ),
+                        },
+                        "sources": {
+                            "type": ["array", "null"],
+                            "maxItems": 100,
+                            "description": "The retrieved passages the answer cites",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "doc_id": {"type": ["string", "null"]},
+                                    "chunk_id": {"type": ["string", "null"]},
+                                    "title": {"type": ["string", "null"]},
+                                    "page": {"type": ["integer", "null"]},
+                                },
+                            },
+                        },
                         "history": {
                             "type": "array",
                             "description": "Message history for context (optional)",
@@ -396,6 +435,36 @@ SHARE_RESULT_OPENAPI_EXTRA = {
                     ],
                 },
                 "examples": {
+                    "answer_with_sources": {
+                        "summary": "Answer citing the passages it used",
+                        "value": {
+                            "task_id": "task_004",
+                            "result": "Q4 2025 revenue was $4.2M.",
+                            "conversation_id": "1",
+                            "agent_id": "8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
+                            "status": "completed",
+                            "sources": [
+                                {
+                                    "doc_id": "6d0e2f1a",
+                                    "chunk_id": "6d0e2f1a:3",
+                                    "title": "1_Q4_2025_Financial_Report.md",
+                                    "page": None,
+                                }
+                            ],
+                        },
+                    },
+                    "not_found": {
+                        "summary": "The documents do not contain the answer",
+                        "value": {
+                            "task_id": "task_005",
+                            "result": "The documents do not give the 2027 budget.",
+                            "conversation_id": "1",
+                            "agent_id": "8b9f1a3e-7a2c-4d7c-9b1b-2f4b2e0d2e5a",
+                            "status": "not_found",
+                            "reason": "not_in_documents",
+                            "sources": [],
+                        },
+                    },
                     "simple_result": {
                         "summary": "Simple task result",
                         "value": {

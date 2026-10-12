@@ -7,6 +7,7 @@ export type WebSocketStatus =
   | "idle"
   | "connecting"
   | "connected"
+  | "reconnecting"
   | "disconnected"
   | "error";
 
@@ -15,7 +16,11 @@ type UseWebSocketOptions = {
   autoReconnect?: boolean;
   maxRetries?: number;
   backoffBaseMs?: number;
+  maxBackoffMs?: number;
+  keepReconnecting?: boolean;
   onMessage?: (event: MessageEvent) => void;
+  onOpen?: (opened: { reconnect: boolean }) => void;
+  onReconnect?: () => void;
 };
 
 type UseWebSocketReturn = {
@@ -31,7 +36,11 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
     autoReconnect = true,
     maxRetries = 5,
     backoffBaseMs = 1000,
+    maxBackoffMs = 30000,
+    keepReconnecting = false,
     onMessage,
+    onOpen,
+    onReconnect,
   } = options;
 
   const { error: notifyError } = useNotification();
@@ -44,11 +53,28 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
   const attemptsRef = useRef(0);
   const queueRef = useRef<string[]>([]);
   const onMessageRef = useRef(onMessage);
+  const onOpenRef = useRef(onOpen);
+  const onReconnectRef = useRef(onReconnect);
+  const lastOpenedUrlRef = useRef<string | null>(null);
   const intentionalCloseRef = useRef(false);  // Track intentional closes
+  const keepReconnectingRef = useRef(keepReconnecting);
+  const gaveUpRef = useRef(false);
 
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
+
+  useEffect(() => {
+    onOpenRef.current = onOpen;
+  }, [onOpen]);
+
+  useEffect(() => {
+    onReconnectRef.current = onReconnect;
+  }, [onReconnect]);
+
+  useEffect(() => {
+    keepReconnectingRef.current = keepReconnecting;
+  }, [keepReconnecting]);
 
   const clearReconnectTimeout = () => {
     if (reconnectTimeoutRef.current !== null) {
@@ -85,20 +111,28 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
 
     // Reset intentional close flag when connecting
     intentionalCloseRef.current = false;
-    setStatus("connecting");
+    setStatus(attemptsRef.current > 0 ? "reconnecting" : "connecting");
     setError(null);
 
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      const isReconnect = lastOpenedUrlRef.current === url;
+      lastOpenedUrlRef.current = url;
       setStatus("connected");
       setError(null);
       attemptsRef.current = 0;
+      gaveUpRef.current = false;
 
       if (queueRef.current.length > 0) {
         queueRef.current.forEach((msg) => ws.send(msg));
         queueRef.current = [];
+      }
+
+      onOpenRef.current?.({ reconnect: isReconnect });
+      if (isReconnect) {
+        onReconnectRef.current?.();
       }
     };
 
@@ -110,6 +144,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
     };
 
     ws.onerror = () => {
+      if (attemptsRef.current > 0 || keepReconnectingRef.current) return;
       setStatus("error");
       setError("Connection error. The assistant may not respond.");
       notifyError("Connection error. Trying to reconnect...");
@@ -127,17 +162,19 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
       if (!autoReconnect) return;
 
       const attempt = attemptsRef.current++;
-      if (attempt >= maxRetries) {
+      if (attempt >= maxRetries && !keepReconnectingRef.current) {
+        gaveUpRef.current = true;
         notifyError("Connection lost. Please refresh the page.");
         return;
       }
 
-      const delay = Math.min(backoffBaseMs * 2 ** attempt, 30000); // cap em 30s
+      setStatus("reconnecting");
+      const delay = Math.min(backoffBaseMs * 2 ** Math.min(attempt, 16), maxBackoffMs);
       reconnectTimeoutRef.current = window.setTimeout(() => {
         connect();
       }, delay);
     };
-  }, [autoReconnect, backoffBaseMs, maxRetries, notifyError, url]);
+  }, [autoReconnect, backoffBaseMs, maxBackoffMs, maxRetries, notifyError, url]);
 
   useEffect(() => {
     if (!url) {
@@ -158,6 +195,13 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
       }
     };
   }, [url, connect, disconnect]);
+
+  useEffect(() => {
+    if (!keepReconnecting || !gaveUpRef.current || !url) return;
+    gaveUpRef.current = false;
+    attemptsRef.current = 0;
+    connect();
+  }, [keepReconnecting, url, connect]);
 
   const sendMessage = useCallback((data: string | object) => {
     const payload = typeof data === "string" ? data : JSON.stringify(data);

@@ -10,6 +10,12 @@
 # Eager LLMs: the agent loads the decision model at startup (`AGENT_LAZY_DECISION_MODEL=0`),
 # so the first chat does not pay a one-time load cost (container start is slower instead).
 
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "${HORUS_LOG_MAX_SIZE:-40m}"
+    max-file: "${HORUS_LOG_MAX_FILE:-10}"
+
 services:
   # =============================================================================
   # CORE APPLICATION SERVICES
@@ -18,10 +24,11 @@ services:
   rabbitmq:
     image: rabbitmq:4.1.2-management
     container_name: rabbitmq
+    logging: *logging
     restart: unless-stopped
     ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "15672:15672"
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:15672:15672"
     networks:
       - horus-net
     environment:
@@ -36,13 +43,17 @@ services:
       - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
 
   mas:
+    image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-mas:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-gpu}
     build:
       context: ../services/mas
       dockerfile: Dockerfile
+      additional_contexts:
+        notices: ../..
     container_name: mas
+    logging: *logging
     restart: unless-stopped
     mem_limit: ${MAS_MEM_LIMIT:-14g}
-    memswap_limit: ${MAS_MEMSWAP_LIMIT:-16g}
+    memswap_limit: ${MAS_MEMSWAP_LIMIT:-${MAS_MEM_LIMIT:-14g}}
     gpus: all
     # Reach the vLLM server on the host/WSL for orchestration LLM calls (Lever #3).
     extra_hosts:
@@ -50,6 +61,8 @@ services:
     env_file:
       - .env
     environment:
+      - HORUS_VERSION=${HORUS_VERSION:-}
+      - HORUS_AI_MODE=local
       # Must be the Docker service name, not localhost (compose passes .env which may use localhost for host-side tools).
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=${RABBITMQ_USER}
@@ -77,6 +90,7 @@ services:
       - OTEL_ENABLED=${OTEL_ENABLED:-true}
       - OTEL_SERVICE_NAME=mas
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
+      - OTEL_PYTHON_EXCLUDED_URLS=/health,/metrics,/rabbitmq/heartbeat,/agents/heartbeat/
       - JSON_LOGGING=true
       - LOG_LEVEL=INFO
       # Wall-clock cap for RUNNING tasks (LLM + agent). TASK_TIMEOUT_SECONDS also accepted by MAS settings.
@@ -94,7 +108,7 @@ services:
       # HTTP is only accepted after lifespan completes (DB + RabbitMQ); this gates dependents.
       # Use a generous timeout: a single Uvicorn worker can be busy with HF/LLM I/O; short
       # timeouts falsely mark the service unhealthy while chat requests are still in flight.
-      test: ["CMD", "curl", "-f", "-m", "25", "-X", "POST", "http://localhost:8000/rabbitmq/heartbeat"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen(urllib.request.Request('http://localhost:8000/rabbitmq/heartbeat', method='POST'), timeout=25)"]
       interval: 15s
       timeout: 30s
       retries: 5
@@ -105,26 +119,30 @@ services:
       rabbitmq:
         condition: service_healthy
       postgres:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     networks:
       - horus-net
     volumes:
       - mas_model_cache:/app/models/llm
 
   web-client:
+    image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-web-client:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-gpu}
     build:
       context: ../services/web-client
       dockerfile: Dockerfile
+      additional_contexts:
+        notices: ../..
       args:
         ORCHESTRATOR_URL: http://mas:8000
         NEXT_PUBLIC_KNOWLEDGE_STORE_URL: http://localhost:8080
         # Browser calls KS on host port; leave empty unless a gateway adds a path prefix.
         NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX: ${NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX:-}
     container_name: web_client
+    logging: *logging
     restart: unless-stopped
     depends_on:
       mas:
@@ -135,8 +153,14 @@ services:
         condition: service_started
       tempo:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "10", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
     ports:
-      - "3000:3000"
+      - "${HORUS_WEB_BIND:-127.0.0.1}:3000:3000"
     networks:
       - horus-net
     environment:
@@ -151,17 +175,25 @@ services:
       - NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX=${NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX:-}
 
   agent:
+    image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-agent:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-gpu}
     build:
       context: ../services/agent
       dockerfile: Dockerfile
+      additional_contexts:
+        notices: ../..
     container_name: agent
+    logging: *logging
     restart: unless-stopped
+    mem_limit: ${AGENT_MEM_LIMIT:-12g}
+    memswap_limit: ${AGENT_MEMSWAP_LIMIT:-${AGENT_MEM_LIMIT:-12g}}
     # Agent inference (Qwen instruct decision LLM, spaCy tools, etc.): NVIDIA Container Toolkit on the host.
     # No GPU? Remove the next line or run without requesting devices (Compose will error if unsupported).
     gpus: all
     env_file:
       - .env
     environment:
+      - HORUS_VERSION=${HORUS_VERSION:-}
+      - HORUS_AI_MODE=local
       # Overrides host-oriented .env (localhost) with Docker network hosts.
       - ORCHESTRATOR_URL=http://mas:8000
       - ORCHESTRATOR_USERNAME=${SUPER_USER_USERNAME}
@@ -192,12 +224,14 @@ services:
       # 0 = load the LLM at agent startup (ready for first chat; slower boot).
       - AGENT_LAZY_DECISION_MODEL=${AGENT_LAZY_DECISION_MODEL:-0}
       - AGENT_SPACY_PREFER_SM=1
+      - HORUS_SPACY=${HORUS_SPACY:-on}
       # OpenTelemetry instrumentation — enabled by default; Tempo is always-on.
       # Set OTEL_SDK_DISABLED=true and OTEL_ENABLED=false in .env to opt out.
       - OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-false}
       - OTEL_ENABLED=${OTEL_ENABLED:-true}
       - OTEL_SERVICE_NAME=agent
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
+      - OTEL_PYTHON_EXCLUDED_URLS=/health,/metrics,/agents/heartbeat/
       # Default ONLINE so first-run can pull. Flip to 1 once the cache is warm.
       - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
       - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
@@ -206,17 +240,26 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=10)"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 1800s
     depends_on:
       mas:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
       knowledge_store:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_healthy
+      vllm:
+        condition: service_healthy
+        required: false
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     networks:
       - horus-net
     # Reach the vLLM server running on the host/WSL (Phase 4, LLM_BACKEND=vllm).
@@ -234,6 +277,7 @@ services:
   vllm:
     image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.23.0}
     container_name: vllm
+    logging: *logging
     gpus: all
     shm_size: "${VLLM_SHM_SIZE:-4gb}"
     command:
@@ -265,7 +309,7 @@ services:
     volumes:
       - vllm_hf_cache:/root/.cache/huggingface
     ports:
-      - "${VLLM_HOST_PORT:-18000}:8000"
+      - "127.0.0.1:${VLLM_HOST_PORT:-18000}:8000"
     restart: unless-stopped
     networks:
       - horus-net
@@ -277,23 +321,35 @@ services:
       start_period: ${VLLM_HC_START_PERIOD:-300s}
 
   knowledge_store:
+    image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-knowledge-store:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-gpu}
     build:
       context: ../services/knowledge-store
       dockerfile: Dockerfile
+      additional_contexts:
+        notices: ../..
     container_name: knowledge_store
+    logging: *logging
     restart: unless-stopped
+    mem_limit: ${KNOWLEDGE_STORE_MEM_LIMIT:-6g}
+    memswap_limit: ${KNOWLEDGE_STORE_MEMSWAP_LIMIT:-${KNOWLEDGE_STORE_MEM_LIMIT:-6g}}
     gpus: all
     environment:
+      - HORUS_VERSION=${HORUS_VERSION:-}
+      - HORUS_AI_MODE=local
       - CHROMA_TELEMETRY_ENABLED=0
       - POSTHOG_DISABLED=true
-      - SENTENCE_TRANSFORMERS_NO_TELEMETRY=1
       - HF_HUB_DISABLE_TELEMETRY=1
       - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
       - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
-      # Embedder device: "auto" (GPU when available, historical default) or "cpu"
+      # Embedder device: "auto" (CUDA only when onnxruntime offers it, which the images do not) or "cpu"
       # to keep the BGE embedder off the shared 8 GB GPU so it doesn't evict the
       # agent's 4B model under ingestion load (see scripts/perf).
       - KNOWLEDGE_STORE_EMBED_DEVICE=${KNOWLEDGE_STORE_EMBED_DEVICE:-auto}
+      - KNOWLEDGE_STORE_EMBED_THREADS=${KNOWLEDGE_STORE_EMBED_THREADS:-}
+      - KNOWLEDGE_STORE_EMBED_URL=${KNOWLEDGE_STORE_EMBED_URL:-}
+      - KNOWLEDGE_STORE_EMBED_MODEL=${KNOWLEDGE_STORE_EMBED_MODEL:-}
+      - HORUS_SPACY=${HORUS_SPACY:-on}
+      - KNOWLEDGE_STORE_REINDEX_ON_STARTUP=${KNOWLEDGE_STORE_REINDEX_ON_STARTUP:-1}
       # Where POST /corpus/scan looks for documents to index. This block has no
       # `env_file: - .env`, so a value set only in .env would never reach the
       # container — it has to be listed here.
@@ -310,6 +366,13 @@ services:
       - OTEL_ENABLED=${OTEL_ENABLED:-true}
       - OTEL_SERVICE_NAME=knowledge-store
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
+      - OTEL_PYTHON_EXCLUDED_URLS=/health,/metrics
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=10)"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 600s
     ports:
       # Loopback only. Nothing off-box needs this port: the other services reach
       # it as http://knowledge_store:8080 on horus-net, and the browser UI uses
@@ -340,8 +403,9 @@ services:
   # =============================================================================
 
   postgres:
-    image: postgres:latest
+    image: postgres:18.6
     container_name: postgres
+    logging: *logging
     restart: unless-stopped
     volumes:
       - postgresql_data:/var/lib/postgresql
@@ -354,7 +418,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     command: postgres -c 'shared_preload_libraries=pg_stat_statements' -c 'pg_stat_statements.track=all'
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     networks:
       - horus-net
     healthcheck:
@@ -364,18 +428,20 @@ services:
       retries: 5
 
   redis:
-    image: redis:7
+    image: valkey/valkey:9.1.2
     container_name: redis
+    logging: *logging
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     env_file:
       - .env
-    command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${REDIS_PASSWORD}"]
+    command: ["valkey-server", "/usr/local/etc/valkey/valkey.conf", "--requirepass", "${REDIS_PASSWORD}"]
     volumes:
-      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
-      - redis_data:/data
+      - ./redis.conf:/usr/local/etc/valkey/valkey.conf:ro
+      # Valkey refuses the RDB files Redis 7.4 wrote, so it starts on a new volume.
+      - valkey_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD", "sh", "-c", "test -n \"$$1\" && VALKEYCLI_AUTH=\"$$1\" valkey-cli ping", "sh", "${REDIS_PASSWORD}"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -384,14 +450,15 @@ services:
     restart: unless-stopped
 
   # =============================================================================
-  # ADMIN TOOLS
+  # DEVELOPMENT TOOLS: `docker compose --profile dev-tools up` starts PgAdmin.
+  # The installer never does, so it is not part of a tester's or customer's stack.
   # =============================================================================
 
   pgadmin:
-    image: dpage/pgadmin4:latest
+    image: dpage/pgadmin4:9.18.0
     container_name: pgadmin
-    # Opt-in: `docker compose --profile admin up` to start.
-    profiles: ["admin"]
+    logging: *logging
+    profiles: ["dev-tools"]
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     env_file:
@@ -402,36 +469,23 @@ services:
     depends_on:
       - postgres
     ports:
-      - "5433:80"
-    networks:
-      - horus-net
-
-  redisinsight:
-    image: redis/redisinsight:latest
-    container_name: redisinsight
-    profiles: ["admin"]
-    depends_on:
-      - redis
-    ports:
-      - "5540:5540"
-    restart: unless-stopped
-    volumes:
-      - redisinsight_data:/data
+      - "127.0.0.1:5433:80"
     networks:
       - horus-net
 
   # =============================================================================
-  # OBSERVABILITY - Tempo + Prometheus + Loki/Promtail
+  # OBSERVABILITY - Tempo + Prometheus + Loki/Alloy
   # Backends only. Logs, metrics, and traces are viewed in the web client's admin
   # pages (/admin/logs, /admin/metrics, /admin/traces) via app/api/{logs,metrics,
   # traces}; Grafana is no longer part of the stack.
   # =============================================================================
 
-  # Always-on observability backends (Loki + Promtail + Tempo + Prometheus).
+  # Always-on observability backends (Loki + Alloy + Tempo + Prometheus).
   # All four start with a plain `docker compose up` and feed the in-app admin pages.
   loki:
     image: grafana/loki:3.4.2
     container_name: loki
+    logging: *logging
     command: ["-config.file=/etc/loki/loki.yaml"]
     volumes:
       - ./observability/loki.yaml:/etc/loki/loki.yaml:ro
@@ -441,15 +495,25 @@ services:
     restart: unless-stopped
 
   # Reads the Docker API to tail logs from Compose services (requires the socket; treat as privileged).
-  promtail:
-    image: grafana/promtail:3.4.2
-    container_name: promtail
-    command: ["-config.file=/etc/promtail/promtail.yaml"]
+  alloy:
+    image: grafana/alloy:v1.20.1
+    container_name: alloy
+    logging: *logging
+    command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy/data", "--disable-reporting"]
+    environment:
+      - HORUS_COMPOSE_PROJECT=${COMPOSE_PROJECT_NAME}
     volumes:
-      - ./observability/promtail.yaml:/etc/promtail/promtail.yaml:ro
+      - ./observability/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy/data
     depends_on:
       - loki
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/12345 && printf 'GET /-/ready HTTP/1.0\r\n\r\n' >&3 && grep -q '200 OK' <&3"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - horus-net
     restart: unless-stopped
@@ -459,21 +523,23 @@ services:
   tempo:
     image: grafana/tempo:2.6.0
     container_name: tempo
+    logging: *logging
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./observability/tempo.yaml:/etc/tempo.yaml:ro
       - tempo_data:/var/tempo
     ports:
-      - "4317:4317"     # OTLP gRPC
-      - "4318:4318"     # OTLP HTTP
+      - "127.0.0.1:4317:4317"     # OTLP gRPC
+      - "127.0.0.1:4318:4318"     # OTLP HTTP
     networks:
       - horus-net
     restart: unless-stopped
 
   # Prometheus - Metrics collection
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.15.0
     container_name: prometheus
+    logging: *logging
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -496,11 +562,11 @@ volumes:
     driver: local
   pgadmin_data:
     driver: local
-  redis_data:
-  redisinsight_data:
+  valkey_data:
   tempo_data:
   prometheus_data:
   loki_data:
+  alloy_data:
   # Per-service LLM caches: populated by bootstrap_llm.py on first container
   # start, persist across rebuilds so model downloads happen exactly once.
   mas_model_cache:

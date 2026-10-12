@@ -19,12 +19,16 @@ so the assertions stay meaningful rather than asserting "a mock returned a mock"
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 import ai_agents.decision_making_agent as dma
+from ai_agents.answer_contract import AnswerStatus
 from ai_agents.decision_making_agent import DecisionMakingAgent
+from ai_agents.generation_stop import GenerationTimedOut
 from ai_agents.knowledge_retrieval_agent import (
     KnowledgeRetrievalAgent,
     _summarize_retrieved,
@@ -66,13 +70,18 @@ def _make_tokenizer(decoded: str = "  clean answer  ") -> MagicMock:
     return tok
 
 
+class _Tokens:
+    def __init__(self, ids):
+        self.ids = list(ids)
+        self.shape = (len(self.ids),)
+
+    def __getitem__(self, key):
+        return _Tokens(self.ids[key])
+
+
 def _make_model() -> MagicMock:
     model = MagicMock()
-    seq = MagicMock()
-    seq.__getitem__.return_value = "gen_only_tokens"
-    gen_ret = MagicMock()
-    gen_ret.sequences = [seq]
-    model.generate.return_value = gen_ret
+    model.generate.return_value.sequences = [_Tokens([1, 2, 3, 9, 9])]
     return model
 
 
@@ -117,6 +126,22 @@ class TestDecisionHelpers:
         )
         assert len(spiral) >= 200
         assert dma._is_degenerate_output(spiral) is True
+
+    def test_normalize_model_text_folds_full_width_digits_and_ideographic_full_stop(self):
+        assert dma._normalize_model_text("Ｑ４ ２０２５ $4。2M") == "Q4 2025 $4.2M"
+
+    def test_normalize_model_text_folds_halfwidth_ideographic_full_stop(self):
+        assert dma._normalize_model_text("$4｡2M") == "$4.2M"
+
+    def test_normalize_model_text_keeps_superscripts_fractions_and_symbols(self):
+        assert dma._normalize_model_text("10⁶ m² ½ x³ ™ ① ﬁ") == "10⁶ m² ½ x³ ™ ① ﬁ"
+
+    def test_normalize_model_text_folds_the_ideographic_space(self):
+        assert dma._normalize_model_text("Ｑ４\u3000ｒｅｖｅｎｕｅ！") == "Q4 revenue!"
+
+    def test_normalize_model_text_leaves_plain_markdown_unchanged(self):
+        text = "## Q4 2025\n- **Revenue:** $4.2M — up 12% → ahead of plan"
+        assert dma._normalize_model_text(text) == text
 
     def test_max_new_tokens_default(self, monkeypatch):
         monkeypatch.delenv("AGENT_MAX_NEW_TOKENS", raising=False)
@@ -166,7 +191,7 @@ class TestDecisionHelpers:
 
     def test_resolve_local_model_dir_explicit(self, monkeypatch):
         monkeypatch.setenv("MODEL_DIR", "/tmp/explicit-model-dir")
-        assert str(dma._resolve_local_model_dir()) == "/tmp/explicit-model-dir"
+        assert dma._resolve_local_model_dir() == Path("/tmp/explicit-model-dir")
 
     def test_resolve_local_model_dir_default(self, monkeypatch):
         monkeypatch.delenv("MODEL_DIR", raising=False)
@@ -352,7 +377,7 @@ class TestDecisionAgentInit:
 
     def test_init_raises_without_transformers(self):
         with patch.object(dma, "_TRANSFORMERS_AVAILABLE", False):
-            with pytest.raises(RuntimeError, match="transformers/torch are required"):
+            with pytest.raises(RuntimeError, match="needs transformers/torch"):
                 DecisionMakingAgent(device="cpu")
 
     def test_init_lazy_defers_model_load(self, monkeypatch):
@@ -605,6 +630,11 @@ class TestGenerateCausal:
         assert msgs[0]["role"] == "system" and msgs[0]["content"] == "system msg"
         assert msgs[1]["role"] == "user" and msgs[1]["content"] == "user msg"
         agent._causal_model.generate.assert_called_once()
+        assert agent._causal_tokenizer.decode.call_args.args[0].ids == [9, 9]
+        assert agent._last_gen_tokens == 2
+        assert agent._last_prompt_tokens == 3
+        stopping = agent._causal_model.generate.call_args.kwargs["stopping_criteria"]
+        assert isinstance(stopping[0], dma._SpiralStoppingCriteria)
 
     def test_no_attn_mask_and_no_cuda_and_empty_bad_words(self):
         # Exercises the branches where: there is no attention_mask, CUDA is
@@ -637,12 +667,7 @@ class TestGenerateCausal:
         tok.decode.return_value = "no-cuda answer"
         agent._causal_tokenizer = tok
 
-        model = MagicMock()
-        seq = MagicMock()
-        seq.__getitem__.return_value = "gen"
-        gen_ret = MagicMock()
-        gen_ret.sequences = [seq]
-        model.generate.return_value = gen_ret
+        model = _make_model()
         agent._causal_model = model
 
         fake_torch = MagicMock()
@@ -656,6 +681,93 @@ class TestGenerateCausal:
         fake_torch.cuda.empty_cache.assert_not_called()
         # No bad_words collected -> generate called with bad_words_ids=None.
         assert model.generate.call_args.kwargs["bad_words_ids"] is None
+
+
+def _capture_delta_chunks():
+    chunks: list[str] = []
+
+    def fake_emit(step_type, title, detail="", **md):
+        if step_type == "reasoning.delta":
+            chunks.append(md["chunk"])
+
+    return chunks, fake_emit
+
+
+def _sse_line(payload: dict) -> bytes:
+    return ("data: " + json.dumps(payload)).encode("utf-8")
+
+
+class TestStreamingNormalization:
+    def _stream_causal(self, pieces: list[str]) -> list[str]:
+        agent = _causal_agent()
+        chunks, fake_emit = _capture_delta_chunks()
+        with patch.object(
+            dma, "TextIteratorStreamer", MagicMock(return_value=pieces)
+        ), patch("ai_agents.step_emitter.emit_step", fake_emit):
+            out = agent._generate_streaming(
+                agent._causal_model, agent._causal_tokenizer, {}
+            )
+        assert out is agent._causal_model.generate.return_value
+        return chunks
+
+    def test_short_streamed_answer_is_emitted_normalized(self):
+        chunks = self._stream_causal(["Ｑ４ ", "２０２５ ", "$4。2M"])
+        assert chunks == ["Q4 2025 $4.2M"]
+
+    def test_long_streamed_answer_is_emitted_normalized_in_every_flush(self):
+        held = "Ｑ４ ２０２５ revenue " * 40
+        chunks = self._stream_causal([held, "$4。2M"])
+        assert chunks == ["Q4 2025 revenue " * 40, "$4.2M"]
+
+    def test_vllm_streamed_answer_is_emitted_and_returned_normalized(self):
+        agent = _causal_agent()
+        resp = MagicMock()
+        resp.iter_lines.return_value = [
+            _sse_line({"choices": [{"delta": {"content": "Ｑ４ ２０２５ "}}]}),
+            _sse_line({"choices": [{"delta": {"content": "$4。2M"}}]}),
+            _sse_line(
+                {"choices": [], "usage": {"completion_tokens": 5, "prompt_tokens": 9}}
+            ),
+            b"data: [DONE]",
+        ]
+        post = MagicMock()
+        post.return_value.__enter__.return_value = resp
+        chunks, fake_emit = _capture_delta_chunks()
+        with patch("requests.post", post), patch(
+            "ai_agents.step_emitter.emit_step", fake_emit
+        ):
+            out = agent._generate_vllm_streaming(
+                [{"role": "user", "content": "Q?"}], 64
+            )
+        assert out == "Q4 2025 $4.2M"
+        assert chunks == ["Q4 2025 $4.2M"]
+        assert agent._last_gen_tokens == 5
+
+
+class TestSpiralEarlyStop:
+    PROMPT_LEN = 10
+
+    def _stops(self, decoded: str, generated: int = dma._EARLY_STOP_MIN_TOKENS) -> bool:
+        tokenizer = MagicMock()
+        tokenizer.decode.return_value = decoded
+        input_ids = MagicMock()
+        input_ids.shape = (1, self.PROMPT_LEN + generated)
+        return dma._generated_tail_spirals(tokenizer, input_ids, self.PROMPT_LEN)
+
+    def test_waits_for_enough_generated_tokens(self):
+        assert not self._stops("wait, actually, " * 20, generated=dma._EARLY_STOP_MIN_TOKENS - 1)
+
+    def test_stops_on_a_spiral_written_with_full_width_punctuation(self):
+        assert self._stops("revenue " * 30 + "wait， actually， " * 5)
+
+    def test_stops_on_a_spiral_written_in_full_width_letters(self):
+        assert self._stops("revenue " * 30 + "ｗａｉｔ， ａｃｔｕａｌｌｙ， " * 5)
+
+    def test_stops_on_an_ascii_spiral(self):
+        assert self._stops("revenue " * 30 + "wait, actually, " * 5)
+
+    def test_keeps_generating_a_clean_full_width_answer(self):
+        assert not self._stops("Ｑ４ ２０２５ revenue was $4。2M. " * 20)
 
 
 # ===========================================================================
@@ -725,6 +837,20 @@ class TestDecide:
         assert out != spiral
         assert "couldn't extract a consistent answer" in out
 
+    def test_decide_normalizes_full_width_digits_and_ideographic_full_stop(self):
+        model = MagicMock(return_value="Ｑ４ ２０２５ $4。2M")
+        agent = DecisionMakingAgent(decision_model=model, device="cpu")
+        out = agent.decide("What was Q4 2025 revenue?", context="Revenue was $4.2M.")
+        assert out == "Q4 2025 $4.2M"
+
+    def test_decide_detects_spiral_written_with_full_width_punctuation(self):
+        spiral = "padding " * 30 + "wait， wait， wait， actually， actually，"
+        assert dma._is_degenerate_output(spiral) is False
+        model = MagicMock(return_value=spiral)
+        agent = DecisionMakingAgent(decision_model=model, device="cpu")
+        out = agent.decide("Q?", context="ctx")
+        assert "couldn't extract a consistent answer" in out
+
     def test_decide_truncates_long_context_in_causal_path(self):
         # The causal path tokenizes ``user_content``, which embeds the capped
         # context. A 20k-char context exceeds the 12k cap, so the truncation
@@ -738,6 +864,39 @@ class TestDecide:
         messages = agent._causal_tokenizer.apply_chat_template.call_args[0][0]
         user_content = messages[1]["content"]
         assert "[retrieved content truncated]" in user_content
+
+    def _vllm_user_content(self, context: str) -> str:
+        agent = _causal_agent()
+        with patch.object(dma, "_llm_backend", return_value="vllm"), patch.object(
+            agent, "_generate_vllm", return_value="ok"
+        ) as generate:
+            agent.decide("Q?", context=context)
+        return generate.call_args.args[0]
+
+    def test_decide_caps_context_at_twelve_thousand_characters_by_default(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("AGENT_MAX_CONTEXT_CHARS", raising=False)
+        user_content = self._vllm_user_content("A" * 20000)
+        assert "A" * 12000 + "\n…[retrieved content truncated]" in user_content
+        assert "A" * 12001 not in user_content
+
+    def test_decide_caps_context_at_agent_max_context_chars(self, monkeypatch):
+        monkeypatch.setenv("AGENT_MAX_CONTEXT_CHARS", "6000")
+        user_content = self._vllm_user_content("A" * 20000)
+        assert "A" * 6000 + "\n…[retrieved content truncated]" in user_content
+        assert "A" * 6001 not in user_content
+
+    def test_context_within_the_cap_is_not_marked_truncated(self, monkeypatch):
+        monkeypatch.setenv("AGENT_MAX_CONTEXT_CHARS", "6000")
+        user_content = self._vllm_user_content("B" * 6000)
+        assert "B" * 6000 in user_content
+        assert "truncated" not in user_content
+
+    @pytest.mark.parametrize("raw", ["", "abc", "0", "-5"])
+    def test_an_unusable_context_cap_falls_back_to_the_default(self, monkeypatch, raw):
+        monkeypatch.setenv("AGENT_MAX_CONTEXT_CHARS", raw)
+        assert dma._max_context_chars() == dma.DEFAULT_MAX_CONTEXT_CHARS == 12000
 
     def test_decide_reraises_on_model_error(self):
         model = MagicMock(side_effect=RuntimeError("inference blew up"))
@@ -892,6 +1051,19 @@ class TestSummarizeRetrieved:
         _, titles, _ = _summarize_retrieved(data)
         assert titles == ["S1", "S2"]
 
+    def test_passages_give_the_passage_count_and_the_distinct_titles_in_rank_order(self):
+        data = {
+            "data": "[Source: B.md]\nb1\n\n[Source: A.md]\na\n\n[Source: B.md]\nb2",
+            "passages": [
+                {"chunk_id": "b:1", "title": "B.md"},
+                {"chunk_id": "a:0", "title": "A.md"},
+                {"chunk_id": "b:2", "title": "B.md"},
+            ],
+        }
+        count, titles, _ = _summarize_retrieved(data)
+        assert count == 3
+        assert titles == ["B.md", "A.md"]
+
     def test_caps_chunk_titles_at_ten(self):
         data = {"data": [{"title": f"doc{i}"} for i in range(20)]}
         count, titles, _ = _summarize_retrieved(data)
@@ -1018,6 +1190,21 @@ def _pipeline(use_react: bool = False, tool_registry=None):
     )
 
 
+def _answers(decision, answer: str, sources=None) -> None:
+    decision.complete.return_value = json.dumps(
+        {"status": "ok", "answer": answer, "sources": sources or []}
+    )
+
+
+def _request(decision) -> str:
+    return decision.complete.call_args.args[0]
+
+
+def _passages(decision) -> str:
+    user_content = decision.complete.call_args.args[1]
+    return user_content.split("Passages:\n", 1)[1].rsplit("\n\nRequest: ", 1)[0]
+
+
 class TestRAGPipelineConstruction:
     def test_builds_default_registry(self):
         pipe, _, _ = _pipeline()
@@ -1061,23 +1248,21 @@ class TestGenerateResponse:
     async def test_returns_decision_output(self):
         pipe, retrieval, decision = _pipeline()
         retrieval.fetch = AsyncMock(return_value={"data": "context text"})
-        decision.decide.return_value = "final insight"
+        _answers(decision, "final insight")
         out = await pipe.generate_response("what is x?")
-        assert out == "final insight"
-        # decide is invoked with the query and the retrieved context.
-        _, kwargs = decision.decide.call_args
-        assert kwargs["query"] == "what is x?"
-        assert kwargs["context"] == "context text"
+        assert out.status is AnswerStatus.OK
+        assert out.answer == "final insight"
+        assert _request(decision) == "what is x?"
+        assert _passages(decision) == "context text"
 
     async def test_missing_data_key_defaults_to_empty_context(self):
         pipe, retrieval, decision = _pipeline()
         retrieval.fetch = AsyncMock(return_value={})
-        decision.decide.return_value = "answer"
+        _answers(decision, "answer")
         await pipe.generate_response("q")
-        _, kwargs = decision.decide.call_args
-        assert kwargs["context"] == ""
+        assert _passages(decision) == "(no passages)"
 
-    async def test_timeout_returns_friendly_message(self):
+    async def test_timeout_fails_with_the_limit_in_its_message(self):
         pipe, retrieval, decision = _pipeline()
         retrieval.fetch = AsyncMock(return_value={"data": "ctx"})
 
@@ -1087,10 +1272,11 @@ class TestGenerateResponse:
                 coro.close()
             raise TimeoutError()
 
-        with patch("asyncio.wait_for", fake_wait_for):
-            out = await pipe.generate_response("a question")
-        assert "took too long" in out
-        assert "REACT_TIMEOUT_SECONDS" in out
+        with patch("asyncio.wait_for", fake_wait_for), pytest.raises(
+            GenerationTimedOut
+        ) as raised:
+            await pipe.generate_response("a question")
+        assert "REACT_TIMEOUT_SECONDS" in str(raised.value)
 
 
 class TestGenerateResponseReact:
@@ -1131,12 +1317,18 @@ class TestProcessTask:
         reg.has.return_value = False
         pipe, retrieval, decision = _pipeline(tool_registry=reg)
         retrieval.fetch = AsyncMock(return_value={"data": "ctx"})
-        decision.decide.return_value = "single shot answer"
+        _answers(decision, "single shot answer")
         result = await pipe.process_task({"task_id": "T2", "query": "hello"})
         assert result == {
             "task_id": "T2",
             "response": "single shot answer",
             "status": "completed",
+            "agent_answer": {
+                "status": "ok",
+                "answer": "single shot answer",
+                "sources": [],
+                "reason": None,
+            },
         }
 
     async def test_react_mode_via_task_flag(self):
@@ -1174,10 +1366,146 @@ class TestProcessTask:
         reg.has.return_value = False
         pipe, retrieval, decision = _pipeline(tool_registry=reg)
         retrieval.fetch = AsyncMock(return_value={"data": "ctx"})
-        decision.decide.return_value = "answer"
+        _answers(decision, "answer")
         # Empty operation string -> registry lookup is skipped entirely.
         result = await pipe.process_task(
             {"task_id": "T5", "operation": "", "query": "q"}
         )
         assert result["response"] == "answer"
         reg.run.assert_not_called()
+
+    async def test_attached_files_come_first_and_their_own_passages_are_not_retrieved_again(
+        self,
+    ):
+        reg = MagicMock()
+        reg.has.return_value = False
+        pipe, retrieval, decision = _pipeline(tool_registry=reg)
+        retrieval.fetch = AsyncMock(return_value={
+            "data": "ignored",
+            "passages": [
+                {"doc_id": "doc-q4", "title": "q4.md", "text": "Q4 REVENUE 4.2M"},
+                {"doc_id": "doc-budget", "title": "budget.md", "text": "2026 BUDGET 5M"},
+            ],
+        })
+        _answers(decision, "4.2M")
+        block = "[S1] [file: q4.md (source=knowledge_store)]\nQ4 REVENUE 4.2M"
+        result = await pipe.process_task(
+            {
+                "task_id": "T6",
+                "query": f"{block}\n\nwhat was the revenue?",
+                "demand": "what was the revenue?",
+                "attached_context": block,
+                "files": [{"filename": "q4.md", "source": "knowledge_store", "doc_id": "doc-q4"}],
+            }
+        )
+        assert result["response"] == "4.2M"
+        retrieval.fetch.assert_awaited_once_with("what was the revenue?")
+        assert _request(decision) == "what was the revenue?"
+        assert _passages(decision) == (
+            f"{block}\n--- Other Knowledge Store Passages ---\n"
+            "[S2] budget.md\n2026 BUDGET 5M"
+        )
+        assert _passages(decision).count("Q4 REVENUE 4.2M") == 1
+
+    async def test_passages_of_an_attached_file_without_doc_id_are_dropped_by_title(self):
+        reg = MagicMock()
+        reg.has.return_value = False
+        pipe, retrieval, decision = _pipeline(tool_registry=reg)
+        retrieval.fetch = AsyncMock(return_value={
+            "passages": [{"doc_id": "doc-q4", "title": "q4.md", "text": "Q4 REVENUE 4.2M"}],
+        })
+        _answers(decision, "4.2M")
+        block = "[file: q4.md (source=inline)]\nQ4 REVENUE 4.2M"
+        await pipe.process_task(
+            {
+                "task_id": "T6b",
+                "query": block,
+                "demand": "what was the revenue?",
+                "attached_context": block,
+                "files": [{"filename": "q4.md", "source": "inline"}],
+            }
+        )
+        assert _passages(decision) == block
+
+    async def test_a_failing_retrieval_still_answers_from_the_attached_files(self):
+        reg = MagicMock()
+        reg.has.return_value = False
+        pipe, retrieval, decision = _pipeline(tool_registry=reg)
+        retrieval.fetch = AsyncMock(side_effect=RuntimeError("knowledge store down"))
+        _answers(decision, "4.2M")
+        block = "[file: q4.md (source=knowledge_store)]\nQ4 REVENUE 4.2M"
+        result = await pipe.process_task(
+            {
+                "task_id": "T6d",
+                "query": block,
+                "demand": "what was the revenue?",
+                "attached_context": block,
+                "files": [{"filename": "q4.md", "source": "knowledge_store", "doc_id": "doc-q4"}],
+            }
+        )
+        assert result["response"] == "4.2M"
+        assert _passages(decision) == block
+
+    async def test_attachments_that_fill_the_context_cap_are_not_joined_by_retrieval(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("AGENT_MAX_CONTEXT_CHARS", "1500")
+        reg = MagicMock()
+        reg.has.return_value = False
+        pipe, retrieval, decision = _pipeline(tool_registry=reg)
+        retrieval.fetch = AsyncMock(return_value={"data": "x", "passages": []})
+        _answers(decision, "answer")
+        block = "[file: big.md (source=knowledge_store)]\n" + "y" * 1000
+        await pipe.process_task(
+            {
+                "task_id": "T6c",
+                "query": block,
+                "demand": "summarise",
+                "attached_context": block,
+                "files": [{"filename": "big.md", "source": "knowledge_store"}],
+            }
+        )
+        retrieval.fetch.assert_not_called()
+        assert _passages(decision) == block
+
+    async def test_attached_file_text_appears_once_in_the_prompt(self):
+        body = "Q4 REVENUE WAS 4.2M"
+        block = (
+            "--- Attached Files ---\n[file: q4.md (source=knowledge_store)]\n"
+            f"{body}\n--- End Attached Files ---\n"
+        )
+        prompts = []
+
+        def served(_self, user_content, system_content, **_kwargs):
+            prompts.append(f"{system_content}\n\n{user_content}")
+            return json.dumps({"status": "ok", "answer": "4.2M"})
+
+        retrieval = MagicMock()
+        retrieval.fetch = AsyncMock(return_value={"data": body})
+        pipe = RAGPipeline(retrieval, _causal_agent())
+        with patch.dict("os.environ", {"LLM_BACKEND": "vllm"}), patch.object(
+            DecisionMakingAgent, "_generate_vllm", served
+        ):
+            result = await pipe.process_task(
+                {
+                    "task_id": "T7",
+                    "query": f"{block}\nwhat was the revenue?",
+                    "demand": "what was the revenue?",
+                    "attached_context": block,
+                }
+            )
+        assert result["response"] == "4.2M"
+        assert prompts[0].count(body) == 1
+        assert "what was the revenue?" in prompts[0]
+
+    async def test_without_attached_context_retrieval_runs_on_the_query(self):
+        reg = MagicMock()
+        reg.has.return_value = False
+        pipe, retrieval, decision = _pipeline(tool_registry=reg)
+        retrieval.fetch = AsyncMock(return_value={"data": "ctx"})
+        _answers(decision, "answer")
+        await pipe.process_task(
+            {"task_id": "T8", "query": "full q", "demand": "q", "attached_context": None}
+        )
+        retrieval.fetch.assert_awaited_once_with("full q")
+        assert _request(decision) == "full q"

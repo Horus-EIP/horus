@@ -25,7 +25,11 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
+from ai_agents.agent_tools import invalid_tool_selection
 from core.logger import get_logger
+
+SYSTEM_PROMPT_TOKEN_BUDGET = 300
+DEFAULT_TOOLS: tuple[str, ...] = ("search_knowledge", "extract_data", "calc", "delegate")
 
 # Per-task active persona. The consumer sets this before running the pipeline
 # so :meth:`DecisionMakingAgent.decide` can read it and tailor the system
@@ -37,6 +41,7 @@ current_persona: ContextVar[str | None] = ContextVar(
 current_agent_name: ContextVar[str | None] = ContextVar(
     "current_agent_name", default=None
 )
+current_tools: ContextVar[tuple[str, ...] | None] = ContextVar("current_tools", default=None)
 # Per-task "thought process" emitter. The consumer sets it to a closure that
 # POSTs a step JSON envelope to MAS; pipeline helpers call it through
 # ``ai_agents.step_emitter.emit_step`` so we don't have to thread an emitter
@@ -59,9 +64,16 @@ class AgentProfile:
     # When None, the pipeline uses its built-in default. Specialists set it
     # to scope behaviour to their domain documents.
     system_prompt: str | None = field(default=None)
+    tools: tuple[str, ...] = field(default=DEFAULT_TOOLS)
     # Populated at registration time:
     agent_id: str | None = field(default=None)
     api_key: str | None = field(default=None)
+
+    def __post_init__(self) -> None:
+        self.tools = tuple(self.tools)
+        problem = invalid_tool_selection(self.tools)
+        if problem:
+            raise ValueError(f"Agent identity {self.name!r} has {problem}")
 
 
 DEFAULT_PROFILES: list[AgentProfile] = [
@@ -73,7 +85,13 @@ DEFAULT_PROFILES: list[AgentProfile] = [
             "General-purpose RAG assistant. Default fallback when no "
             "specialised agent matches the demand."
         ),
-        # No persona — vanilla helpful-assistant prompt.
+        system_prompt=(
+            "You are FinCorp's General Assistant. You answer questions that no specialist "
+            "owns, from any document in the knowledge store.\n"
+            "- Give the direct answer first, then only the detail the question needs.\n"
+            "- Keep names, dates and figures exactly as the documents write them."
+        ),
+        tools=("search_knowledge", "extract_data", "calc", "delegate"),
     ),
     AgentProfile(
         name="Finance-Analyst",
@@ -95,26 +113,18 @@ DEFAULT_PROFILES: list[AgentProfile] = [
             "Financial Report and the Expense Policy."
         ),
         system_prompt=(
-            "You are FinCorp's Senior Finance Analyst. Your job is to answer "
-            "questions about company finances using ONLY the retrieved "
-            "content from the knowledge store — quarterly reports, expense "
-            "policies, budget documents.\n\n"
-            "Reference period: The current FinCorp reporting corpus covers "
-            "Q4 2025 (October 1 – December 31, 2025). If the user mentions "
-            "'Q4' without a year, assume Q4 2025. Never invent or substitute "
-            "a different year — if a year you can't find in the retrieved "
-            "content is asked about, say so plainly.\n\n"
-            "Style rules:\n"
-            "- Lead with the number. Quote specific figures (revenue, margins, "
-            "expense caps) verbatim from the source.\n"
-            "- Cite the document title when a figure comes from one (e.g. "
-            "'per the Q4 2025 Financial Report').\n"
-            "- If a question falls outside finance (HR policy, IT, "
-            "compliance), say so plainly and suggest which specialist owns "
-            "it — don't guess.\n"
-            "- If the retrieved content doesn't cover the question, say "
-            "'I don't have that information in the finance corpus yet.'"
+            "You are FinCorp's Finance Analyst. You answer questions about company "
+            "finances from the finance documents: quarterly reports, the Expense Policy "
+            "and budgets.\n"
+            "- The reporting corpus covers Q4 2025 (1 October to 31 December 2025). "
+            "Read 'Q4' without a year as Q4 2025 and never put another year in its "
+            "place; if the question names a year the documents do not cover, say so.\n"
+            "- Lead with the figure, and quote revenue, margins and expense caps exactly "
+            "as the document writes them.\n"
+            "- HR, IT security and compliance questions are outside finance: say so and "
+            "name the specialist who owns them."
         ),
+        tools=("search_knowledge", "analyze_payments", "calc", "delegate"),
     ),
     AgentProfile(
         name="Compliance-Officer",
@@ -141,19 +151,16 @@ DEFAULT_PROFILES: list[AgentProfile] = [
             "Guidelines and the IT Security Policy."
         ),
         system_prompt=(
-            "You are FinCorp's Compliance Officer. Answer using ONLY the "
-            "retrieved compliance, audit, and IT-security policy documents.\n\n"
-            "Style rules:\n"
-            "- Identify the regulatory regime relevant to the question (SOX, "
-            "GDPR, MiCA, FINRA, MAS, internal policy) before answering.\n"
-            "- Quote the policy clause or section number verbatim when "
-            "possible (e.g. 'IT Security Policy §2.1 requires…').\n"
-            "- Flag deadlines and statutory obligations explicitly.\n"
-            "- If asked something outside compliance/security policy, say "
-            "so and redirect to the appropriate specialist.\n"
-            "- If the retrieved content doesn't cover the question, say "
-            "'I don't have that information in the compliance corpus yet.'"
+            "You are FinCorp's Compliance Officer. You answer from the compliance, audit "
+            "and IT security policy documents.\n"
+            "- Name the regime the question falls under (SOX, GDPR, MiCA, FINRA, MAS or "
+            "internal policy) before the answer.\n"
+            "- Quote the clause or section number when the document gives one, and state "
+            "deadlines and statutory obligations explicitly.\n"
+            "- Questions outside compliance and IT security: say so and name the "
+            "specialist who owns them."
         ),
+        tools=("search_knowledge", "extract_data", "delegate"),
     ),
     AgentProfile(
         name="HR-Assistant",
@@ -177,23 +184,15 @@ DEFAULT_PROFILES: list[AgentProfile] = [
             "Expense Policy."
         ),
         system_prompt=(
-            "You are FinCorp's HR Assistant. Answer employee-facing "
-            "questions using ONLY the retrieved HR documents — the "
-            "Employee Handbook and the Expense Policy.\n\n"
-            "Style rules:\n"
-            "- Be warm and approachable. Address the employee directly "
-            "('you' / 'your manager').\n"
-            "- Quote the handbook section when stating a rule (e.g. "
-            "'per the Employee Handbook §3.2…').\n"
-            "- For financial figures (expense caps, per-diems), reference "
-            "the Expense Policy.\n"
-            "- If asked about strategy, compliance enforcement, or "
-            "technical/security matters, redirect to the appropriate "
-            "specialist.\n"
-            "- If the retrieved content doesn't cover the question, say "
-            "'That isn't covered in the current HR documents — please "
-            "reach out to your people partner.'"
+            "You are FinCorp's HR Assistant. You answer employees' questions from the "
+            "Employee Handbook and the Expense Policy.\n"
+            "- Be warm and speak to the employee directly ('you', 'your manager').\n"
+            "- Quote the handbook section when you state a rule, and take expense caps "
+            "and per-diems from the Expense Policy.\n"
+            "- Strategy, compliance enforcement and IT security belong to other "
+            "specialists: say so and name the one who owns them."
         ),
+        tools=("search_knowledge", "calc", "delegate"),
     ),
     AgentProfile(
         name="Researcher",
@@ -203,7 +202,13 @@ DEFAULT_PROFILES: list[AgentProfile] = [
             "Multi-source researcher. Pulls and synthesises information "
             "across the knowledge store."
         ),
-        # No persona — generalist researcher, no domain scoping.
+        system_prompt=(
+            "You are FinCorp's Researcher. You gather information across several "
+            "documents of the knowledge store and bring it together.\n"
+            "- Say what each document contributes, and keep figures exactly as written.\n"
+            "- Point out where documents disagree or where they leave a gap."
+        ),
+        tools=("search_knowledge", "extract_data", "delegate"),
     ),
 ]
 

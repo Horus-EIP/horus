@@ -20,6 +20,7 @@ continue to work.
 """
 
 import os
+import socket
 import threading
 import time
 import uuid
@@ -30,7 +31,12 @@ import requests
 from fastapi import FastAPI, Request
 from prometheus_client import make_asgi_app
 
-from agent_server.consumers import _consume_agent_messages, _consume_messages
+from agent_server.consumers import (
+    RESULT_STATUS_BY_ANSWER,
+    TaskClaim,
+    _consume_agent_messages,
+    _consume_messages,
+)
 from agent_server.middleware import CorrelationIDMiddleware
 from agent_server.models import Result, Task
 from agent_server.profiles import (
@@ -38,6 +44,8 @@ from agent_server.profiles import (
     get_primary_profile,
     get_profile_by_agent_id,
 )
+from ai_agents.answer_contract import answer_of
+from ai_agents.data_extractor_tool import spacy_is_off
 from ai_agents.decision_making_agent import DecisionMakingAgent
 from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
 from ai_agents.knowledge_store_client import KnowledgeStoreClient
@@ -59,6 +67,7 @@ from core.metrics import (
     task_processing_duration,
     task_processing_total,
 )
+from core.version import HORUS_VERSION
 from specialized.analyst_agent import AnalystAgent
 from specialized.researcher_agent import ResearcherAgent
 from specialized.writer_agent import WriterAgent
@@ -131,6 +140,10 @@ def work_queue_name_for_type(agent_type: str) -> str:
 
 
 WORK_QUEUE_NAME = work_queue_name_for_type(get_primary_profile().type)
+
+WORKER_ID = os.getenv("AGENT_WORKER_ID", "").strip() or socket.gethostname()
+WORKER_RUN_ID = uuid.uuid4().hex
+_CLAIM_TIMEOUT_SECONDS = 10
 
 
 _AUTH_TOKEN = None  # cached bearer token for orchestrator requests
@@ -386,12 +399,117 @@ def heartbeat_task():
         time.sleep(30)
 
 
+def _post_as_profile(path: str, body: dict, profile) -> requests.Response:
+    url = f"{ORCHESTRATOR_URL}{path}"
+
+    def _post() -> requests.Response:
+        return requests.post(
+            url,
+            json=body,
+            headers=_build_headers(
+                include_api_key=True,
+                agent_id=profile.agent_id,
+                api_key=profile.api_key,
+            ),
+            timeout=_CLAIM_TIMEOUT_SECONDS,
+        )
+
+    response = _post()
+    if response.status_code == 401 and not ORCHESTRATOR_TOKEN:
+        _invalidate_cached_mas_token()
+        response = _post()
+    return response
+
+
+def _detail(response: requests.Response) -> str | None:
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    return body.get("detail") if isinstance(body, dict) else None
+
+
+def claim_task(task_id: str, assigned_agent_id: str | None) -> TaskClaim:
+    profile = get_profile_by_agent_id(assigned_agent_id) or get_primary_profile()
+    body = {
+        "agent_id": assigned_agent_id or profile.agent_id,
+        "worker_id": WORKER_ID,
+        "run_id": WORKER_RUN_ID,
+    }
+    try:
+        response = _post_as_profile(f"/tasks/{task_id}/claim", body, profile)
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Claim of task %s did not reach MAS: %s", task_id, exc)
+        return TaskClaim.UNAVAILABLE
+    if response.status_code == 200:
+        return TaskClaim.CLAIMED
+    if response.status_code == 404 and _detail(response) == "Not Found":
+        logger.warning(
+            "MAS has no claim endpoint (older release); task %s runs unclaimed", task_id
+        )
+        return TaskClaim.CLAIMED
+    if response.status_code in (404, 409):
+        logger.info(
+            "MAS refused the claim of task %s: %s - %s",
+            task_id,
+            response.status_code,
+            response.text[:200],
+        )
+        return TaskClaim.REFUSED
+    if response.status_code in (403, 422):
+        logger.warning(
+            "MAS will never accept the claim of task %s, so its message is dropped: %s - %s",
+            task_id,
+            response.status_code,
+            response.text[:200],
+        )
+        return TaskClaim.REFUSED
+    logger.warning(
+        "Claim of task %s failed: %s - %s",
+        task_id,
+        response.status_code,
+        response.text[:200],
+    )
+    return TaskClaim.UNAVAILABLE
+
+
+def fail_abandoned_claims() -> list[str]:
+    profile = get_primary_profile()
+    body = {"worker_id": WORKER_ID, "run_id": WORKER_RUN_ID}
+    try:
+        response = _post_as_profile("/tasks/abandoned-claims", body, profile)
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Could not report the tasks an earlier run left unfinished: %s", exc)
+        return []
+    if response.status_code != 200:
+        logger.warning(
+            "MAS did not fail the tasks an earlier run left unfinished: %s - %s",
+            response.status_code,
+            response.text[:200],
+        )
+        return []
+    try:
+        failed = list(response.json().get("failed") or [])
+    except (ValueError, AttributeError):
+        failed = []
+    if failed:
+        logger.warning(
+            "MAS failed %d task(s) an earlier run of worker %s left unfinished",
+            len(failed),
+            WORKER_ID,
+        )
+    return failed
+
+
 def send_result(
     result: str,
     conversation_id: str,
     task_id: str,
     assigned_agent_id: str | None = None,
     skill_used: str | None = None,
+    status: str = "completed",
+    reason: str | None = None,
+    sources: list[dict] | None = None,
 ):
     """
     Sends the processed task result to the MAS Orchestrator using the /tasks/task-result/ endpoint.
@@ -422,7 +540,12 @@ def send_result(
         "result": result,
         "conversation_id": str(conversation_id),
         "task_id": task_id,
+        "status": status,
     }
+    if reason:
+        payload["reason"] = reason
+    if sources is not None:
+        payload["sources"] = [dict(source) for source in sources]
     try:
         response = requests.post(
             url,
@@ -497,11 +620,28 @@ def send_step(
         logger.debug("Step POST failed (%s): %s", step.get("step_type"), e)
 
 
+def mock_ai_mode() -> bool:
+    return os.getenv("HORUS_AI_MODE", "").strip().lower() == "mock"
+
+
+def mock_ai_warning() -> str:
+    message = ("Mock AI mode: llm-mock answers this agent's model calls, so its answers "
+               "are simulated from the documents, not written by a language model")
+    if spacy_is_off():
+        message += "; spaCy is off, so payments are extracted with regular expressions"
+    if os.getenv("OTEL_SDK_DISABLED", "").strip().lower() in ("1", "true", "yes"):
+        message += "; monitoring is off, so the agent exports no trace"
+    return message
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup/shutdown (replaces deprecated on_event)."""
     logger.info("Agent service starting up...")
+    if mock_ai_mode():
+        logger.warning(mock_ai_warning())
     register_agent()
+    fail_abandoned_claims()
     heartbeat_thread = threading.Thread(target=heartbeat_task, daemon=True)
     heartbeat_thread.start()
     logger.info("Heartbeat thread started")
@@ -514,7 +654,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Horus Agent Service", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Horus Agent Service", version=HORUS_VERSION, lifespan=lifespan)
 
 # OpenTelemetry auto-instrumentation is handled by opentelemetry-instrument wrapper
 # See Dockerfile CMD for details
@@ -523,6 +663,16 @@ metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)
 
 app.add_middleware(CorrelationIDMiddleware)
+
+
+@app.get(
+    "/health",
+    summary="Liveness probe",
+    description="Answers once startup has finished. Loads no model and calls no other service.",
+    tags=["Health"],
+)
+async def health_check():
+    return {"status": "healthy", "service": "agent", "version": HORUS_VERSION}
 
 
 @app.get(
@@ -579,13 +729,14 @@ async def receive_task(task: Task, request: Request):
         primary_type = get_primary_profile().type
         primary_pipeline = get_pipeline_for_type(primary_type)
         if primary_type == "general":
-            result_pipeline = await primary_pipeline.process_task(task_dict)
-            final_result_text = result_pipeline["response"]
+            answer = answer_of(await primary_pipeline.process_task(task_dict))
         elif primary_type in ("researcher", "analyst", "writer"):
-            final_result_text = await primary_pipeline.process_request(
-                task_type=task_dict.get("operation"),
-                data=task_dict.get("query"),
-                extra_parameters=task_dict,
+            answer = answer_of(
+                await primary_pipeline.process_request(
+                    task_type=task_dict.get("operation"),
+                    data=task_dict.get("query"),
+                    extra_parameters=task_dict,
+                )
             )
         else:
             raise ValueError(f"Unsupported primary type: {primary_type}")
@@ -602,17 +753,20 @@ async def receive_task(task: Task, request: Request):
 
         # Send the result back to the orchestrator.
         send_result(
-            final_result_text,
+            answer.answer,
             task.conversation_id,
             task.task_id,
             assigned_agent_id=task_dict.get("assigned_agent_id"),
             skill_used=task_dict.get("skill_used") or task_dict.get("operation"),
+            status=RESULT_STATUS_BY_ANSWER[answer.status],
+            reason=answer.reason,
+            sources=answer.sources,
         )
 
         # Return the result in the format expected by the response_model
         return Result(
             agent_id=AGENT_ID if AGENT_ID else "unknown",
-            result=final_result_text
+            result=answer.answer
         )
     except Exception as e:
         processing_duration = time_module.time() - start_time

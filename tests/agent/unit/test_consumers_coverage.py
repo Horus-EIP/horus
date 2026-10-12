@@ -19,12 +19,16 @@ from __future__ import annotations
 
 import base64
 import json
+import threading
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pika.exceptions import AMQPError, ChannelClosedByBroker
 
 from agent_server import consumers
+from ai_agents.generation_stop import GenerationTimedOut
 
 
 # --------------------------------------------------------------------------- #
@@ -53,7 +57,10 @@ class _FakePika:
     def __init__(self):
         self.channel = MagicMock(name="channel")
         self.channel.basic_consume.side_effect = self._record_consume
+        self.channel.basic_get.side_effect = self._next_delivery
         self.consumed: list = []  # list[(queue, callback)]
+        self.deliveries: list = []
+        self.pulled: list[str] = []
         self.connection = MagicMock(name="connection")
         self.connection.channel.return_value = self.channel
         self.PlainCredentials = MagicMock(name="PlainCredentials")
@@ -65,6 +72,16 @@ class _FakePika:
     def _record_consume(self, *, queue, on_message_callback):
         self.consumed.append((queue, on_message_callback))
 
+    def _next_delivery(self, *, queue, auto_ack):
+        self.pulled.append(queue)
+        for index, (delivery_queue, delivery) in enumerate(self.deliveries):
+            if delivery_queue == queue:
+                del self.deliveries[index]
+                return delivery
+        if not self.deliveries:
+            consumers._stop_pulling.set()
+        return None, None, None
+
     def callback_for(self, queue_substr: str):
         for q, cb in self.consumed:
             if queue_substr in q:
@@ -75,8 +92,28 @@ class _FakePika:
 @pytest.fixture
 def fake_pika():
     fp = _FakePika()
+    consumers._stop_pulling.clear()
     with patch.object(consumers, "pika", fp):
         yield fp
+    consumers._stop_pulling.clear()
+
+
+class _InlineWorkers:
+    max_workers = 1
+
+    def __init__(self, free: bool = True):
+        self.free = free
+        self.jobs = 0
+
+    def has_free_slot(self):
+        return self.free
+
+    def has_started(self, _task_id):
+        return False
+
+    def submit(self, job, _task_id=None):
+        self.jobs += 1
+        job()
 
 
 # --------------------------------------------------------------------------- #
@@ -122,7 +159,9 @@ class TestResolveAttachedFiles:
     async def test_knowledge_store_file_resolved_via_client(self):
         files = [{"source": "knowledge_store", "filename": "report.pdf"}]
         client = MagicMock()
-        client.resolve_by_filename = AsyncMock(return_value={"text": "KS body"})
+        client.resolve_by_filename = AsyncMock(
+            return_value={"query": "__file__:report.pdf", "data": "KS body"}
+        )
         with patch(
             "ai_agents.knowledge_store_client.KnowledgeStoreClient",
             return_value=client,
@@ -132,6 +171,90 @@ class TestResolveAttachedFiles:
         assert out == [
             {"filename": "report.pdf", "source": "knowledge_store", "text": "KS body"}
         ]
+
+    async def test_knowledge_store_text_survives_the_real_client(self, monkeypatch):
+        import ai_agents.knowledge_store_client as ksc
+
+        response = MagicMock(status_code=200)
+        response.json.return_value = {
+            "text": "KS body",
+            "matched_titles": ["report.pdf"],
+            "doc_ids": ["d1"],
+        }
+        http = MagicMock()
+        http.__aenter__.return_value = http
+        http.get = AsyncMock(return_value=response)
+        monkeypatch.setattr(ksc.httpx, "AsyncClient", MagicMock(return_value=http))
+        files = [{"source": "knowledge_store", "filename": "report.pdf"}]
+        out = await consumers._resolve_attached_files(files)
+        assert out[0]["text"].endswith("KS body")
+        assert "report.pdf" in out[0]["text"]
+
+    async def test_knowledge_store_ref_with_doc_id_is_resolved_by_its_doc_id(self):
+        """Regression F25 (B-48).
+
+        What: two knowledge-store documents can share a filename, so an attached
+        ref must reach the copy the user picked, by its doc_id.
+        How: resolve a ref that carries a doc_id and check the client fetches
+        that id and never searches by filename.
+        When: found in ATP v7 (18/09/2026), fixed in 0b93375; resolved by doc_id
+        since 8670bec (B-97), which renamed this test.
+        """
+        files = [
+            {"source": "knowledge_store", "filename": "report.pdf", "doc_id": "abc123"}
+        ]
+        client = MagicMock()
+        client.resolve_by_doc_id = AsyncMock(
+            return_value={"query": "__doc__:abc123", "data": "the second report.pdf"}
+        )
+        client.resolve_by_filename = AsyncMock(return_value=None)
+        with patch(
+            "ai_agents.knowledge_store_client.KnowledgeStoreClient",
+            return_value=client,
+        ):
+            out = await consumers._resolve_attached_files(files)
+        client.resolve_by_doc_id.assert_awaited_once_with("abc123")
+        client.resolve_by_filename.assert_not_called()
+        assert out == [{
+            "filename": "report.pdf",
+            "source": "knowledge_store",
+            "text": "the second report.pdf",
+            "doc_id": "abc123",
+        }]
+
+    async def test_a_doc_id_the_store_does_not_know_falls_back_to_the_filename(self):
+        files = [
+            {"source": "knowledge_store", "filename": "report.pdf", "doc_id": "gone"}
+        ]
+        client = MagicMock()
+        client.resolve_by_doc_id = AsyncMock(return_value={"query": "__doc__:gone", "data": ""})
+        client.resolve_by_filename = AsyncMock(
+            return_value={"query": "__file__:report.pdf", "data": "by name"}
+        )
+        with patch(
+            "ai_agents.knowledge_store_client.KnowledgeStoreClient",
+            return_value=client,
+        ):
+            out = await consumers._resolve_attached_files(files)
+        client.resolve_by_filename.assert_awaited_once_with("report.pdf")
+        assert out[0]["text"] == "by name"
+        assert out[0]["doc_id"] == "gone"
+
+    async def test_a_failing_doc_id_lookup_falls_back_to_the_filename(self):
+        files = [
+            {"source": "knowledge_store", "filename": "report.pdf", "doc_id": "abc123"}
+        ]
+        client = MagicMock()
+        client.resolve_by_doc_id = AsyncMock(side_effect=RuntimeError("ks down"))
+        client.resolve_by_filename = AsyncMock(
+            return_value={"query": "__file__:report.pdf", "data": "by name"}
+        )
+        with patch(
+            "ai_agents.knowledge_store_client.KnowledgeStoreClient",
+            return_value=client,
+        ):
+            out = await consumers._resolve_attached_files(files)
+        assert out[0]["text"] == "by name"
 
     async def test_knowledge_store_none_hit_yields_empty_text(self):
         files = [{"source": "knowledge_store", "filename": "missing.pdf"}]
@@ -248,7 +371,7 @@ class TestConsumeMessagesSetup:
                 consumers._consume_messages_session()
                 pk.BlockingConnection.assert_not_called()
 
-    def test_declares_one_queue_per_type_and_starts_consuming(self, fake_pika):
+    def test_checks_each_type_queue_and_pulls_from_it(self, fake_pika):
         srv = MagicMock()
         srv.AGENT_ID = "agent-1"
         srv.work_queue_name_for_type.side_effect = lambda t: f"work_{t}"
@@ -256,17 +379,15 @@ class TestConsumeMessagesSetup:
             "agent_server.profiles.unique_agent_types",
             return_value=["general", "analyst"],
         ):
-            consumers._consume_messages_session()
+            assert consumers._consume_messages_session() is True
 
-        # Two distinct types -> two queue_declare calls + two consumers + QoS.
-        assert fake_pika.channel.queue_declare.call_count == 2
-        declared = {
-            c.kwargs["queue"] for c in fake_pika.channel.queue_declare.call_args_list
-        }
-        assert declared == {"work_general", "work_analyst"}
-        fake_pika.channel.basic_qos.assert_called_once_with(prefetch_count=1)
-        fake_pika.channel.start_consuming.assert_called_once()
-        assert {q for q, _ in fake_pika.consumed} == {"work_general", "work_analyst"}
+        declared = [
+            (c.kwargs["queue"], c.kwargs["passive"])
+            for c in fake_pika.channel.queue_declare.call_args_list
+        ]
+        assert declared == [("work_general", True), ("work_analyst", True)]
+        assert set(fake_pika.pulled) == {"work_general", "work_analyst"}
+        fake_pika.channel.basic_consume.assert_not_called()
 
     def test_empty_types_falls_back_to_general(self, fake_pika):
         srv = MagicMock()
@@ -276,7 +397,45 @@ class TestConsumeMessagesSetup:
             "agent_server.profiles.unique_agent_types", return_value=[]
         ):
             consumers._consume_messages_session()
-        assert {q for q, _ in fake_pika.consumed} == {"work_general"}
+        assert set(fake_pika.pulled) == {"work_general"}
+
+    def test_a_missing_queue_is_declared_with_the_length_limit(
+        self, fake_pika, monkeypatch
+    ):
+        monkeypatch.setenv("WORK_QUEUE_MAX_LENGTH", "25")
+        fake_pika.channel.queue_declare.side_effect = [
+            ChannelClosedByBroker(404, "NOT_FOUND - no queue 'work_general'"),
+            None,
+        ]
+
+        consumers._declare_work_queue(fake_pika.connection, fake_pika.channel, "work_general")
+
+        declared = fake_pika.channel.queue_declare.call_args_list[1].kwargs
+        assert declared["durable"] is True
+        assert declared["arguments"] == {
+            "x-max-priority": 10,
+            "x-max-length": 25,
+            "x-overflow": "reject-publish",
+        }
+
+    def test_a_queue_declared_with_other_arguments_is_used_as_it_is(self, fake_pika):
+        fake_pika.channel.queue_declare.side_effect = [
+            ChannelClosedByBroker(404, "NOT_FOUND"),
+            ChannelClosedByBroker(406, "PRECONDITION_FAILED - inequivalent arg"),
+            None,
+        ]
+
+        consumers._declare_work_queue(fake_pika.connection, fake_pika.channel, "work_general")
+
+        last = fake_pika.channel.queue_declare.call_args_list[-1].kwargs
+        assert last == {"queue": "work_general", "passive": True}
+
+    def test_any_other_broker_refusal_ends_the_session(self, fake_pika):
+        fake_pika.channel.queue_declare.side_effect = ChannelClosedByBroker(
+            403, "ACCESS_REFUSED"
+        )
+        with pytest.raises(ChannelClosedByBroker):
+            consumers._declare_work_queue(fake_pika.connection, fake_pika.channel, "work_x")
 
     def test_connection_error_is_caught_and_counted(self, fake_pika):
         srv = MagicMock()
@@ -317,18 +476,19 @@ class TestConsumerSupervisor:
 # _consume_messages — per-message callback behaviour
 # --------------------------------------------------------------------------- #
 def _start_consumer_and_get_callback(fake_pika, *, agent_id="agent-1", types=None):
-    """Run ``_consume_messages`` with a fully-mocked server/profiles and return
-    (server_mock, on_message_callback) for the first queue.
-    """
     types = types or ["general"]
     srv = MagicMock()
     srv.AGENT_ID = agent_id
     srv.work_queue_name_for_type.side_effect = lambda t: f"work_{t}"
-    with patch("agent_server.server", srv, create=True), patch(
-        "agent_server.profiles.unique_agent_types", return_value=types
-    ):
-        consumers._consume_messages_session()
-    return srv, fake_pika.callback_for(f"work_{types[0]}")
+    srv.claim_task.return_value = consumers.TaskClaim.CLAIMED
+
+    def deliver(ch, method, properties, body):
+        with patch("agent_server.server", srv, create=True):
+            return consumers._handle_delivery(
+                ch, method, properties, body, types[0], _InlineWorkers()
+            )
+
+    return srv, deliver
 
 
 class TestConsumeMessagesCallback:
@@ -380,6 +540,52 @@ class TestConsumeMessagesCallback:
         assert kwargs.kwargs["skill_used"] == "rag"
         # Success path acks exactly once with the delivery tag.
         ch.basic_ack.assert_called_once_with(delivery_tag=11)
+
+    def test_completion_log_line_reports_the_peak_rss(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        pipeline = MagicMock()
+        pipeline.process_task = AsyncMock(return_value={"response": "ANSWER"})
+        srv.get_pipeline_for_type.return_value = pipeline
+        body = json.dumps({"demand": "q", "task_id": "task-42"}).encode("utf-8")
+
+        with self._patch_profiles(), patch.object(
+            consumers, "peak_rss_mb", return_value="4321"
+        ), patch.object(consumers, "logger") as log:
+            cb(MagicMock(), _make_method(11), _make_props(), body)
+
+        completion = [
+            call.args for call in log.info.call_args_list
+            if call.args and str(call.args[0]).startswith("Task processed")
+        ]
+        assert completion == [
+            (
+                "Task processed (%s): task_id=%s duration=%.2fs peak_rss_mb=%s",
+                "general",
+                "task-42",
+                completion[0][3],
+                "4321",
+            )
+        ]
+
+    def test_failure_log_line_reports_the_peak_rss(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        pipeline = MagicMock()
+        pipeline.process_task = AsyncMock(side_effect=RuntimeError("boom"))
+        srv.get_pipeline_for_type.return_value = pipeline
+        body = json.dumps({"demand": "q", "task_id": "task-43"}).encode("utf-8")
+
+        with self._patch_profiles(), patch.object(
+            consumers, "peak_rss_mb", return_value="4321"
+        ), patch.object(consumers, "logger") as log:
+            cb(MagicMock(), _make_method(12), _make_props(), body)
+
+        log.error.assert_any_call(
+            "Task processing failed: task_id=%s error=%s peak_rss_mb=%s",
+            "task-43",
+            "boom",
+            "4321",
+            exc_info=True,
+        )
 
     def test_cancel_control_message_just_acks(self, fake_pika):
         srv, cb = _start_consumer_and_get_callback(fake_pika)
@@ -549,6 +755,8 @@ class TestConsumeMessagesCallback:
         sent = srv.send_result.call_args.args[0]
         assert "Agent processing failed" in sent
         assert "pipeline boom" in sent
+        assert srv.send_result.call_args.kwargs["status"] == "failed"
+        assert srv.send_result.call_args.kwargs["reason"] == "error"
         # A step POST is fired (the fire-and-forget emitter calls send_step).
         srv.send_step.assert_called()
         # Error path still acks so the message is not redelivered forever.
@@ -627,6 +835,73 @@ class TestConsumeMessagesCallback:
 
         ch.basic_ack.assert_called_once_with(delivery_tag=16)
 
+    def test_streamed_steps_reach_mas_in_the_order_they_were_emitted(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        posted: list[int] = []
+        all_posted = threading.Event()
+
+        def first_post_is_slow(event, *_args, **_kwargs):
+            index = event["metadata"]["index"]
+            if index == 0:
+                time.sleep(0.3)
+            posted.append(index)
+            if len(posted) == 3:
+                all_posted.set()
+
+        srv.send_step.side_effect = first_post_is_slow
+
+        async def stream_three_deltas(_task):
+            from agent_server.profiles import current_step_emitter
+
+            emit = current_step_emitter.get()
+            for index in range(3):
+                emit({"step_type": "reasoning.delta", "metadata": {"index": index}})
+            return {"response": "ANSWER"}
+
+        pipeline = MagicMock()
+        pipeline.process_task = stream_three_deltas
+        srv.get_pipeline_for_type.return_value = pipeline
+        body = json.dumps({"demand": "x", "task_id": "t", "conversation_id": "c"})
+
+        with self._patch_profiles():
+            cb(MagicMock(), _make_method(18), _make_props(), body.encode("utf-8"))
+
+        assert all_posted.wait(5)
+        assert posted == [0, 1, 2]
+
+    def test_a_failed_step_post_does_not_stop_the_later_ones(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        posted: list[int] = []
+        delivered = threading.Event()
+
+        def first_post_fails(event, *_args, **_kwargs):
+            index = event["metadata"]["index"]
+            if index == 0:
+                raise RuntimeError("MAS unreachable")
+            posted.append(index)
+            delivered.set()
+
+        srv.send_step.side_effect = first_post_fails
+
+        async def stream_two_deltas(_task):
+            from agent_server.profiles import current_step_emitter
+
+            emit = current_step_emitter.get()
+            for index in range(2):
+                emit({"step_type": "reasoning.delta", "metadata": {"index": index}})
+            return {"response": "ANSWER"}
+
+        pipeline = MagicMock()
+        pipeline.process_task = stream_two_deltas
+        srv.get_pipeline_for_type.return_value = pipeline
+        body = json.dumps({"demand": "x", "task_id": "t", "conversation_id": "c"})
+
+        with self._patch_profiles():
+            cb(MagicMock(), _make_method(19), _make_props(), body.encode("utf-8"))
+
+        assert delivered.wait(5)
+        assert posted == [1]
+
     def test_active_profile_binds_persona(self, fake_pika):
         # When a profile matches the assigned agent, its persona/name are bound
         # to the contextvars during processing.
@@ -639,12 +914,15 @@ class TestConsumeMessagesCallback:
 
             captured["persona"] = profiles.current_persona.get()
             captured["name"] = profiles.current_agent_name.get()
+            captured["tools"] = profiles.current_tools.get()
             return {"response": "OK"}
 
         pipeline.process_task = AsyncMock(side_effect=_proc)
         srv.get_pipeline_for_type.return_value = pipeline
 
-        active = SimpleNamespace(system_prompt="BE A PIRATE", name="Pirate")
+        active = SimpleNamespace(
+            system_prompt="BE A PIRATE", name="Pirate", tools=("search_knowledge", "calc")
+        )
         ch = MagicMock()
         body = json.dumps(
             {"demand": "x", "task_id": "t", "assigned_agent_id": "a1"}
@@ -655,10 +933,12 @@ class TestConsumeMessagesCallback:
 
         assert captured["persona"] == "BE A PIRATE"
         assert captured["name"] == "Pirate"
+        assert captured["tools"] == ("search_knowledge", "calc")
         # And it is reset after the task (no leak).
         from agent_server import profiles
 
         assert profiles.current_persona.get() is None
+        assert profiles.current_tools.get() is None
 
     def test_unsupported_queue_type_raises_inside_processing(self, fake_pika):
         # A queue type that is neither "general" nor a known specialist (and
@@ -764,6 +1044,359 @@ class TestConsumeMessagesCallback:
         assert "FILE BODY" in task_arg["query"]
         assert "use the file" in task_arg["query"]
         assert task_arg["files"][0]["filename"] == "notes.txt"
+
+    def test_attached_file_text_is_handed_over_once_as_context(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        pipeline = MagicMock()
+        pipeline.process_task = AsyncMock(return_value={"response": "OK"})
+        srv.get_pipeline_for_type.return_value = pipeline
+        client = MagicMock()
+        client.resolve_by_filename = AsyncMock(
+            return_value={"query": "__file__:q4.md", "data": "Q4 REVENUE 4.2M"}
+        )
+        body = json.dumps(
+            {
+                "demand": "what was the revenue?",
+                "task_id": "tk",
+                "files": [{"source": "knowledge_store", "filename": "q4.md"}],
+            }
+        ).encode("utf-8")
+
+        with self._patch_profiles(), patch(
+            "ai_agents.knowledge_store_client.KnowledgeStoreClient",
+            return_value=client,
+        ):
+            cb(MagicMock(), _make_method(19), _make_props(), body)
+
+        task_arg = pipeline.process_task.await_args.args[0]
+        assert task_arg["demand"] == "what was the revenue?"
+        assert "[file: q4.md (source=knowledge_store)]" in task_arg["attached_context"]
+        assert task_arg["attached_context"].count("Q4 REVENUE 4.2M") == 1
+        assert "Q4 REVENUE 4.2M" not in task_arg["demand"]
+
+    def test_unreadable_attachments_give_no_attached_context(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        pipeline = MagicMock()
+        pipeline.process_task = AsyncMock(return_value={"response": "OK"})
+        srv.get_pipeline_for_type.return_value = pipeline
+        client = MagicMock()
+        client.resolve_by_filename = AsyncMock(
+            return_value={"query": "__file__:gone.md", "data": ""}
+        )
+        body = json.dumps(
+            {
+                "demand": "what does it say?",
+                "task_id": "tg",
+                "files": [{"source": "knowledge_store", "filename": "gone.md"}],
+            }
+        ).encode("utf-8")
+
+        with self._patch_profiles(), patch(
+            "ai_agents.knowledge_store_client.KnowledgeStoreClient",
+            return_value=client,
+        ):
+            cb(MagicMock(), _make_method(20), _make_props(), body)
+
+        task_arg = pipeline.process_task.await_args.args[0]
+        assert task_arg["attached_context"] is None
+        assert "(no content available)" in task_arg["query"]
+
+
+def _general_pipeline(srv, **process_task):
+    pipeline = MagicMock()
+    pipeline.process_task = AsyncMock(**process_task)
+    srv.get_pipeline_for_type.return_value = pipeline
+    return pipeline
+
+
+def _task_body(**over):
+    body = {"demand": "q", "task_id": "task-1", "conversation_id": "conv-1"}
+    body.update(over)
+    return json.dumps(body).encode("utf-8")
+
+
+class TestTaskClaims:
+    def test_the_task_is_claimed_before_its_message_is_acknowledged(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        _general_pipeline(srv, return_value={"response": "ANSWER"})
+        order = []
+
+        def claim(*_args):
+            order.append("claim")
+            return consumers.TaskClaim.CLAIMED
+
+        srv.claim_task.side_effect = claim
+        ch = MagicMock()
+        ch.basic_ack.side_effect = lambda **_kwargs: order.append("ack")
+
+        cb(ch, _make_method(3), _make_props(), _task_body(assigned_agent_id="agent-9"))
+
+        srv.claim_task.assert_called_once_with("task-1", "agent-9")
+        assert order == ["claim", "ack"]
+        srv.send_result.assert_called_once()
+
+    def test_a_refused_claim_drops_the_message_without_running_the_task(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        pipeline = _general_pipeline(srv, return_value={"response": "ANSWER"})
+        srv.claim_task.return_value = consumers.TaskClaim.REFUSED
+        ch = MagicMock()
+
+        pause = cb(ch, _make_method(4), _make_props(), _task_body())
+
+        assert pause == 0.0
+        ch.basic_ack.assert_called_once_with(delivery_tag=4)
+        pipeline.process_task.assert_not_called()
+        srv.send_result.assert_not_called()
+
+    def test_an_unconfirmed_claim_puts_the_message_back_and_backs_off(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        pipeline = _general_pipeline(srv, return_value={"response": "ANSWER"})
+        srv.claim_task.return_value = consumers.TaskClaim.UNAVAILABLE
+        ch = MagicMock()
+
+        pause = cb(ch, _make_method(5), _make_props(), _task_body())
+
+        assert pause == consumers._CLAIM_RETRY_SECONDS
+        ch.basic_nack.assert_called_once_with(delivery_tag=5, requeue=True)
+        ch.basic_ack.assert_not_called()
+        pipeline.process_task.assert_not_called()
+
+    def test_a_claimed_task_still_runs_when_its_acknowledgement_fails(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        pipeline = _general_pipeline(srv, return_value={"response": "ANSWER"})
+        ch = MagicMock()
+        ch.basic_ack.side_effect = AMQPError("channel closed")
+
+        with pytest.raises(AMQPError):
+            cb(ch, _make_method(6), _make_props(), _task_body())
+
+        pipeline.process_task.assert_awaited_once()
+        srv.send_result.assert_called_once()
+
+    def test_a_message_without_task_id_runs_without_a_claim(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        _general_pipeline(srv, return_value={"response": "ANSWER"})
+
+        cb(MagicMock(), _make_method(7), _make_props(), json.dumps({"demand": "q"}).encode())
+
+        srv.claim_task.assert_not_called()
+        srv.send_result.assert_called_once()
+
+
+class TestTimedOutAnswer:
+    def test_a_timed_out_answer_is_reported_as_failed_not_as_an_answer(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        _general_pipeline(srv, side_effect=GenerationTimedOut(900))
+
+        class _InlineThread:
+            def __init__(self, target=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        with patch.object(consumers.threading, "Thread", _InlineThread):
+            cb(MagicMock(), _make_method(8), _make_props(), _task_body())
+
+        srv.send_result.assert_called_once()
+        sent = srv.send_result.call_args
+        assert "within 900s" in sent.args[0]
+        assert sent.kwargs["status"] == "failed"
+        assert sent.kwargs["reason"] == "timeout"
+        step = srv.send_step.call_args.args[0]
+        assert step["step_type"] == "error"
+        assert step["title"] == "Answer timed out"
+
+
+SOURCE = {"doc_id": "doc-q4", "chunk_id": "doc-q4:3", "title": "q4.md", "page": 2}
+
+
+def _contract_result(status, answer, sources=(), reason=None):
+    return {
+        "response": answer,
+        "status": "completed",
+        "agent_answer": {
+            "status": status,
+            "answer": answer,
+            "sources": list(sources),
+            "reason": reason,
+        },
+    }
+
+
+class TestAnswerContract:
+    def test_an_answer_carries_the_sources_it_cites(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        _general_pipeline(srv, return_value=_contract_result("ok", "Revenue was $4.2M.", [SOURCE]))
+
+        cb(MagicMock(), _make_method(9), _make_props(), _task_body())
+
+        sent = srv.send_result.call_args
+        assert sent.args[:3] == ("Revenue was $4.2M.", "conv-1", "task-1")
+        assert sent.kwargs["status"] == "completed"
+        assert sent.kwargs["sources"] == [SOURCE]
+        assert sent.kwargs["reason"] is None
+
+    def test_an_answer_the_documents_do_not_contain_is_reported_as_not_found(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        _general_pipeline(
+            srv,
+            return_value=_contract_result(
+                "not_found", "The documents don't say.", reason="not_in_documents"
+            ),
+        )
+
+        cb(MagicMock(), _make_method(9), _make_props(), _task_body())
+
+        sent = srv.send_result.call_args
+        assert sent.kwargs["status"] == "not_found"
+        assert sent.kwargs["reason"] == "not_in_documents"
+        assert sent.kwargs["sources"] == []
+
+    def test_an_unreadable_answer_is_reported_as_failed(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika)
+        _general_pipeline(
+            srv,
+            return_value=_contract_result(
+                "failed", "The model's answer could not be read.", reason="invalid_output"
+            ),
+        )
+
+        class _InlineThread:
+            def __init__(self, target=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        with patch.object(consumers.threading, "Thread", _InlineThread):
+            cb(MagicMock(), _make_method(9), _make_props(), _task_body())
+
+        sent = srv.send_result.call_args
+        assert sent.args[0] == "The model's answer could not be read."
+        assert sent.kwargs["status"] == "failed"
+        assert sent.kwargs["reason"] == "invalid_output"
+        step = srv.send_step.call_args.args[0]
+        assert (step["step_type"], step["title"]) == ("error", "Answer failed")
+
+    def test_a_specialist_answer_has_no_sources(self, fake_pika):
+        srv, cb = _start_consumer_and_get_callback(fake_pika, types=["writer"])
+        specialist = MagicMock()
+        specialist.process_request = AsyncMock(return_value="Draft memo")
+        srv.get_pipeline_for_type.return_value = specialist
+
+        cb(MagicMock(), _make_method(9), _make_props(), _task_body(operation="write"))
+
+        sent = srv.send_result.call_args
+        assert sent.args[0] == "Draft memo"
+        assert (sent.kwargs["status"], sent.kwargs["sources"]) == ("completed", [])
+
+
+class TestDeliveryKey:
+    def test_the_first_attempt_is_keyed_by_the_task_id(self):
+        assert consumers._delivery_key("t1", None) == "t1"
+        assert consumers._delivery_key("t1", 1) == "t1"
+        assert consumers._delivery_key("t1", "not a number") == "t1"
+
+    def test_a_later_attempt_has_its_own_key(self):
+        assert consumers._delivery_key("t1", 2) == "t1#attempt-2"
+        assert consumers._delivery_key("t1", "2") == "t1#attempt-2"
+
+
+class TestPullLoop:
+    def _deliver(self, fake_pika, queue, tag, body):
+        fake_pika.deliveries.append((queue, (_make_method(tag), _make_props(), body)))
+
+    def test_nothing_is_pulled_while_every_worker_is_busy(self, fake_pika):
+        fake_pika.connection.process_data_events.side_effect = (
+            lambda **_kwargs: consumers._stop_pulling.set()
+        )
+
+        consumers._pull_tasks(
+            fake_pika.connection,
+            fake_pika.channel,
+            {"work_general": "general"},
+            _InlineWorkers(free=False),
+        )
+
+        fake_pika.channel.basic_get.assert_not_called()
+        fake_pika.connection.process_data_events.assert_called_once_with(
+            time_limit=consumers._IDLE_POLL_SECONDS
+        )
+
+    def test_empty_queues_keep_the_connection_serviced(self, fake_pika):
+        consumers._pull_tasks(
+            fake_pika.connection,
+            fake_pika.channel,
+            {"work_general": "general", "work_writer": "writer"},
+            _InlineWorkers(),
+        )
+
+        assert fake_pika.pulled == ["work_general", "work_writer"]
+        fake_pika.connection.process_data_events.assert_called_with(
+            time_limit=consumers._IDLE_POLL_SECONDS
+        )
+
+    def test_the_next_scan_starts_after_the_queue_that_delivered(self, fake_pika):
+        self._deliver(fake_pika, "work_general", 1, b"{}")
+        self._deliver(fake_pika, "work_general", 2, b"{}")
+        self._deliver(fake_pika, "work_writer", 3, b"{}")
+        handled = []
+
+        def handle(_channel, method, _properties, _body, queue_type, _workers):
+            handled.append((queue_type, method.delivery_tag))
+            return 0.0
+
+        with patch.object(consumers, "_handle_delivery", side_effect=handle):
+            consumers._pull_tasks(
+                fake_pika.connection,
+                fake_pika.channel,
+                {"work_general": "general", "work_writer": "writer"},
+                _InlineWorkers(),
+            )
+
+        assert handled == [("general", 1), ("writer", 3), ("general", 2)]
+
+    def test_the_loop_waits_as_long_as_a_delivery_asks(self, fake_pika):
+        self._deliver(fake_pika, "work_general", 1, b"{}")
+
+        with patch.object(
+            consumers, "_handle_delivery", return_value=consumers._CLAIM_RETRY_SECONDS
+        ):
+            consumers._pull_tasks(
+                fake_pika.connection,
+                fake_pika.channel,
+                {"work_general": "general"},
+                _InlineWorkers(),
+            )
+
+        fake_pika.connection.process_data_events.assert_any_call(
+            time_limit=consumers._CLAIM_RETRY_SECONDS
+        )
+
+
+class TestTaskWorkerPool:
+    def test_a_slot_stays_busy_until_its_task_ends(self):
+        pool = consumers.TaskWorkerPool(1)
+        release = threading.Event()
+        pool.submit(lambda: release.wait(5))
+
+        busy_while_running = pool.has_free_slot()
+        release.set()
+        deadline = time.monotonic() + 5
+        while not pool.has_free_slot() and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+        assert busy_while_running is False
+        assert pool.has_free_slot() is True
+
+    def test_the_number_of_tasks_at_a_time_comes_from_the_environment(self, monkeypatch):
+        monkeypatch.setenv("AGENT_MAX_CONCURRENT_TASKS", "3")
+        assert consumers._positive_int_env("AGENT_MAX_CONCURRENT_TASKS", 1) == 3
+        monkeypatch.setenv("AGENT_MAX_CONCURRENT_TASKS", "many")
+        assert consumers._positive_int_env("AGENT_MAX_CONCURRENT_TASKS", 1) == 1
+        monkeypatch.setenv("AGENT_MAX_CONCURRENT_TASKS", "0")
+        assert consumers._positive_int_env("AGENT_MAX_CONCURRENT_TASKS", 1) == 1
 
 
 # --------------------------------------------------------------------------- #

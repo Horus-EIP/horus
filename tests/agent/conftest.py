@@ -1,10 +1,13 @@
 """
 Pytest configuration for async tests.
 """
+import os
 import sys
 from unittest.mock import MagicMock
 
 import pytest
+
+os.environ.pop("HORUS_SPACY", None)
 
 # --- Robust Environment Mocking ---
 # Prevent langchain imports from hanging or failing in restricted environments
@@ -92,8 +95,15 @@ def mock_transformers_pipeline(monkeypatch):
 # Mock transformers to prevent model loading
 import sys
 
+
+class StoppingCriteria:
+    pass
+
+
 if "transformers" not in sys.modules:
     mock_tf = MagicMock()
+    mock_tf.StoppingCriteria = StoppingCriteria
+    mock_tf.StoppingCriteriaList = list
     sys.modules["transformers"] = mock_tf
     mock_tf.pipeline.return_value = MagicMock()
 

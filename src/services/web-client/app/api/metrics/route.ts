@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/server/require-admin";
+import { monitoringIsOff, monitoringOff } from "@/lib/server/monitoring";
 
 /**
  * BFF for metrics. Runs read-only PromQL against Prometheus server-side (so the
@@ -63,6 +64,7 @@ async function listTargets(): Promise<Response> {
 export async function GET(request: NextRequest): Promise<Response> {
   const guard = await requireAdmin(request);
   if (!guard.ok) return guard.response;
+  if (monitoringIsOff()) return monitoringOff();
 
   const { searchParams } = new URL(request.url);
 

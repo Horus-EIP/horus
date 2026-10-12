@@ -1,0 +1,639 @@
+version: 1.0.0
+document_owners:
+  1_Q4_2025_Financial_Report.md: [Finance-Analyst]
+  2_Employee_Handbook.md: [HR-Assistant]
+  3_Compliance_Guidelines.md: [Compliance-Officer]
+  4_Expense_Policy.md: [Finance-Analyst, HR-Assistant]
+  5_IT_Security_Policy.md: [Compliance-Officer]
+roster:
+  - name: General-Assistant
+    type: general
+    skills: [knowledge_retrieval, decision_making, rag_pipeline]
+    description: "General-purpose RAG assistant. Default fallback when no specialised agent matches the demand."
+  - name: Finance-Analyst
+    type: analyst
+    skills: [financial_analysis, quarterly_report_qa, revenue_breakdown, expense_review, budget_summary, knowledge_retrieval]
+    description: "Financial analysis specialist. Grounded in the Q4 2025 Financial Report and the Expense Policy."
+  - name: Compliance-Officer
+    type: analyst
+    skills: [compliance_check, policy_review, audit, gdpr, sox, mica, finra, data_protection, it_security_policy, access_control, incident_response, knowledge_retrieval]
+    description: "Policy and compliance reviewer. Grounded in the Compliance Guidelines and the IT Security Policy."
+  - name: HR-Assistant
+    type: general
+    skills: [hr_policy, employee_handbook, leave_policy, benefits_qa, remote_work_policy, code_of_conduct, expense_review, knowledge_retrieval]
+    description: "HR specialist. Grounded in the Employee Handbook and the Expense Policy."
+  - name: Researcher
+    type: researcher
+    skills: [research, literature_review, citation_lookup, knowledge_retrieval]
+    description: "Multi-source researcher. Pulls and synthesises information across the knowledge store."
+items:
+  - id: direct-01
+    category: direct
+    question: "Hey Horus!"
+    route: DIRECT_ANSWER
+  - id: direct-02
+    category: direct
+    question: "good evening everyone"
+    route: DIRECT_ANSWER
+  - id: direct-03
+    category: direct
+    question: "Hi there, how's it going?"
+    route: DIRECT_ANSWER
+  - id: direct-04
+    category: direct
+    question: "thank you so much!"
+    route: DIRECT_ANSWER
+  - id: direct-05
+    category: direct
+    question: "ok, bye"
+    route: DIRECT_ANSWER
+  - id: direct-06
+    category: direct
+    question: "What can you do?"
+    route: DIRECT_ANSWER
+  - id: direct-07
+    category: direct
+    question: "nice to meet you"
+    route: DIRECT_ANSWER
+  - id: direct-08
+    category: direct
+    question: "what is 45 + 17?"
+    route: DIRECT_ANSWER
+  - id: direct-09
+    category: direct
+    question: "calculate 9 * (4 + 6)"
+    route: DIRECT_ANSWER
+  - id: direct-10
+    category: direct
+    question: "how much is 81 divided by 9?"
+    route: DIRECT_ANSWER
+  - id: direct-11
+    category: direct
+    question: "what's 20% of 350"
+    route: DIRECT_ANSWER
+  - id: direct-12
+    category: direct
+    question: "square root of 144"
+    route: DIRECT_ANSWER
+  - id: direct-13
+    category: direct
+    question: "3 to the power of 4"
+    route: DIRECT_ANSWER
+  - id: direct-14
+    category: direct
+    question: "Thanks, that's all for today."
+    route: DIRECT_ANSWER
+  - id: direct-15
+    category: direct
+    question: "1,200 - 450 ="
+    route: DIRECT_ANSWER
+  - id: complex-01
+    category: complex
+    question: "Compare the hotel caps for Singapore and the US."
+    route: COMPLEX_TASK
+  - id: complex-02
+    category: complex
+    question: "How does the Q4 operating spend compare with the budget?"
+    route: COMPLEX_TASK
+  - id: complex-03
+    category: complex
+    question: "P1 versus P3 incident response times"
+    route: COMPLEX_TASK
+  - id: complex-04
+    category: complex
+    question: "Summarise the GDPR deadlines and also the SOX controls."
+    route: COMPLEX_TASK
+  - id: complex-05
+    category: complex
+    question: "What is the minimum MFA requirement? Who approves a $30,000 expense?"
+    route: COMPLEX_TASK
+  - id: complex-06
+    category: complex
+    question: "How many vacation days do I get after six years? What is the sick leave allowance?"
+    route: COMPLEX_TASK
+  - id: complex-07
+    category: complex
+    question: "What was Technology Licensing revenue in Q4, and how long do I have to report a lost laptop?"
+    route: COMPLEX_TASK
+  - id: complex-08
+    category: complex
+    question: "How many office days are expected each week, and what encryption is required for confidential data?"
+    route: COMPLEX_TASK
+  - id: complex-09
+    category: complex
+    question: "Who is the Data Protection Officer, and what is the retirement match?"
+    route: COMPLEX_TASK
+  - id: complex-10
+    category: complex
+    question: "When does the trading window open, and how many vacation days carry over?"
+    route: COMPLEX_TASK
+  - id: complex-11
+    category: complex
+    question: "How much revenue came from Asset Management, and when is the ROPA review due?"
+    route: COMPLEX_TASK
+  - id: complex-12
+    category: complex
+    question: "What is the notice period for managers, and how quickly must a P2 incident get a response?"
+    route: COMPLEX_TASK
+  - id: complex-13
+    category: complex
+    question: "Which clients were onboarded in Q4; how long are Horus platform logs retained?"
+    route: COMPLEX_TASK
+  - id: complex-14
+    category: complex
+    question: "What is the password rotation period for admin accounts, and when are salaries reviewed?"
+    route: COMPLEX_TASK
+  - id: complex-15
+    category: complex
+    question: "How much did FinCorp spend on Technology & Cloud, and who must pre-clear executive trades?"
+    route: COMPLEX_TASK
+  - id: complex-16
+    category: complex
+    question: "What is the core collaboration window, and what was FinCorp's revenue for the whole of 2025?"
+    route: COMPLEX_TASK
+  - id: complex-17
+    category: complex
+    question: "Who runs the phishing tests, and what share of dependents' insurance premiums does FinCorp pay?"
+    route: COMPLEX_TASK
+  - id: complex-18
+    category: complex
+    question: "Draft a memo covering the Q4 revenue results as well as the upcoming GDPR deadlines"
+    route: COMPLEX_TASK
+  - id: fin-01
+    category: document
+    source: 1_Q4_2025_Financial_Report.md
+    question: "What revenue did FinCorp record for the October to December 2025 period?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst]
+  - id: fin-02
+    category: document
+    source: 1_Q4_2025_Financial_Report.md
+    question: "What was the year-over-year growth rate of fourth-quarter revenue?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst]
+  - id: fin-03
+    category: document
+    source: 1_Q4_2025_Financial_Report.md
+    question: "How large were operating expenses in the last quarter of 2025?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst]
+  - id: fin-04
+    category: document
+    source: 1_Q4_2025_Financial_Report.md
+    question: "What net operating income figure appears in the Q4 2025 report?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst]
+  - id: fin-05
+    category: document
+    source: 1_Q4_2025_Financial_Report.md
+    question: "How much did the Compliance Consulting segment earn in Q4 2025?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst]
+  - id: fin-06
+    category: document
+    source: 1_Q4_2025_Financial_Report.md
+    question: "What percentage of Q4 revenue did Technology Licensing represent?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst]
+  - id: fin-07
+    category: document
+    source: 1_Q4_2025_Financial_Report.md
+    question: "By how much did the Technology & Cloud line exceed its Q4 budget?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst]
+  - id: fin-08
+    category: document
+    source: 1_Q4_2025_Financial_Report.md
+    question: "What is the total contract value of the clients signed in Q4 2025?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst]
+  - id: fin-09
+    category: document
+    source: 1_Q4_2025_Financial_Report.md
+    question: "What revenue goal has FinCorp set for the first quarter of 2026?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst]
+  - id: fin-10
+    category: document
+    source: 1_Q4_2025_Financial_Report.md
+    question: "Who signed off the Q4 2025 financial report?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst]
+  - id: fin-11
+    category: document
+    source: 1_Q4_2025_Financial_Report.md
+    question: "Was the SOC 2 Type II audit finished before the end of 2025?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst, Compliance-Officer]
+  - id: fin-12
+    category: document
+    source: 1_Q4_2025_Financial_Report.md
+    question: "What was FinCorp's revenue in the third quarter of 2025?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst]
+  - id: fin-13
+    category: document
+    source: 1_Q4_2025_Financial_Report.md
+    question: "What is FinCorp's stock ticker?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst]
+  - id: exp-01
+    category: document
+    source: 4_Expense_Policy.md
+    question: "What is the maximum nightly hotel rate in Germany?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst, HR-Assistant]
+  - id: exp-02
+    category: document
+    source: 4_Expense_Policy.md
+    question: "How much may I claim for one hotel night in Singapore?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst, HR-Assistant]
+  - id: exp-03
+    category: document
+    source: 4_Expense_Policy.md
+    question: "What is the spending limit on a domestic plane ticket?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst, HR-Assistant]
+  - id: exp-04
+    category: document
+    source: 4_Expense_Policy.md
+    question: "Under what conditions may staff book business class?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst, HR-Assistant]
+  - id: exp-05
+    category: document
+    source: 4_Expense_Policy.md
+    question: "What is the dinner allowance per person on a work trip?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst, HR-Assistant]
+  - id: exp-06
+    category: document
+    source: 4_Expense_Policy.md
+    question: "What's the per-head cap when entertaining a client over dinner?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst, HR-Assistant]
+  - id: exp-07
+    category: document
+    source: 4_Expense_Policy.md
+    question: "Above what amount must I keep a receipt?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst, HR-Assistant]
+  - id: exp-08
+    category: document
+    source: 4_Expense_Policy.md
+    question: "How many days do I have to submit my expense report?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst, HR-Assistant]
+  - id: exp-09
+    category: document
+    source: 4_Expense_Policy.md
+    question: "When will an approved reimbursement reach my bank account?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst, HR-Assistant]
+  - id: exp-10
+    category: document
+    source: 4_Expense_Policy.md
+    question: "Who signs off on an expense of $12,000?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst, HR-Assistant]
+  - id: exp-11
+    category: document
+    source: 4_Expense_Policy.md
+    question: "Is alcohol reimbursable?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst, HR-Assistant]
+  - id: exp-12
+    category: document
+    source: 4_Expense_Policy.md
+    question: "What mileage rate applies when I drive my own car for business?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst, HR-Assistant]
+  - id: exp-13
+    category: document
+    source: 4_Expense_Policy.md
+    question: "How long before an unreconciled corporate card gets suspended?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst, HR-Assistant]
+  - id: hr-01
+    category: document
+    source: 2_Employee_Handbook.md
+    question: "How many vacation days do employees in their first two years receive?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+  - id: hr-02
+    category: document
+    source: 2_Employee_Handbook.md
+    question: "How many sick days does someone with seven years of service get?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+  - id: hr-03
+    category: document
+    source: 2_Employee_Handbook.md
+    question: "What are the standard daily working hours?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+  - id: hr-04
+    category: document
+    source: 2_Employee_Handbook.md
+    question: "How many in-office days are required per week?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+  - id: hr-05
+    category: document
+    source: 2_Employee_Handbook.md
+    question: "What percentage of base pay is matched for retirement savings?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+  - id: hr-06
+    category: document
+    source: 2_Employee_Handbook.md
+    question: "At what time of year does FinCorp review salaries?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+  - id: hr-07
+    category: document
+    source: 2_Employee_Handbook.md
+    question: "How much notice must a senior manager give before leaving?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+  - id: hr-08
+    category: document
+    source: 2_Employee_Handbook.md
+    question: "Who is the HR Director at FinCorp?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+  - id: hr-09
+    category: document
+    source: 2_Employee_Handbook.md
+    question: "How many unused vacation days can I carry into next year?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+  - id: hr-10
+    category: document
+    source: 2_Employee_Handbook.md
+    question: "What does the handbook say about confidentiality after I leave the company?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+  - id: hr-11
+    category: document
+    source: 2_Employee_Handbook.md
+    question: "How do I raise a formal grievance?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+  - id: hr-12
+    category: document
+    source: 2_Employee_Handbook.md
+    question: "What is FinCorp's parental leave policy?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+  - id: hr-13
+    category: document
+    source: 2_Employee_Handbook.md
+    question: "Can I bring my dog to the office?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+  - id: comp-01
+    category: document
+    source: 3_Compliance_Guidelines.md
+    question: "Who serves as FinCorp's Data Protection Officer?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: comp-02
+    category: document
+    source: 3_Compliance_Guidelines.md
+    question: "How many days does FinCorp have to answer a data subject access request?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: comp-03
+    category: document
+    source: 3_Compliance_Guidelines.md
+    question: "Within how many hours must a personal data breach be notified to the regulator?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: comp-04
+    category: document
+    source: 3_Compliance_Guidelines.md
+    question: "When is the annual records of processing activities review due?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: comp-05
+    category: document
+    source: 3_Compliance_Guidelines.md
+    question: "Which transactions trigger enhanced due diligence under the AML rules?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: comp-06
+    category: document
+    source: 3_Compliance_Guidelines.md
+    question: "How quickly must a Suspicious Activity Report be filed after detection?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: comp-07
+    category: document
+    source: 3_Compliance_Guidelines.md
+    question: "When does the insider-trading window open after results are published?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: comp-08
+    category: document
+    source: 3_Compliance_Guidelines.md
+    question: "Who owns the MiCA mitigation plan?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: comp-09
+    category: document
+    source: 3_Compliance_Guidelines.md
+    question: "What are the four data classification levels?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: comp-10
+    category: document
+    source: 3_Compliance_Guidelines.md
+    question: "Which email should privacy questions go to?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: comp-11
+    category: document
+    source: 3_Compliance_Guidelines.md
+    question: "Which US regulators oversee FinCorp?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: comp-12
+    category: document
+    source: 3_Compliance_Guidelines.md
+    question: "Who must pre-approve trades by senior managers?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: it-01
+    category: document
+    source: 5_IT_Security_Policy.md
+    question: "What is the minimum number of characters for a password?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: it-02
+    category: document
+    source: 5_IT_Security_Policy.md
+    question: "How many old passwords are blocked from reuse?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: it-03
+    category: document
+    source: 5_IT_Security_Policy.md
+    question: "How often do privileged account passwords have to change?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: it-04
+    category: document
+    source: 5_IT_Security_Policy.md
+    question: "Is SMS accepted as a second factor?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: it-05
+    category: document
+    source: 5_IT_Security_Policy.md
+    question: "What MFA method is mandatory for administrator accounts?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: it-06
+    category: document
+    source: 5_IT_Security_Policy.md
+    question: "How fast is access revoked once someone is terminated?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: it-07
+    category: document
+    source: 5_IT_Security_Policy.md
+    question: "How soon must a suspected security incident be reported?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: it-08
+    category: document
+    source: 5_IT_Security_Policy.md
+    question: "What email address receives security incident reports?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: it-09
+    category: document
+    source: 5_IT_Security_Policy.md
+    question: "What is the response time for a P1 incident?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: it-10
+    category: document
+    source: 5_IT_Security_Policy.md
+    question: "What encryption standard applies to Restricted data?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: it-11
+    category: document
+    source: 5_IT_Security_Policy.md
+    question: "How long does FinCorp keep Horus audit logs?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: it-12
+    category: document
+    source: 5_IT_Security_Policy.md
+    question: "Who organises the quarterly phishing simulations?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+  - id: general-01
+    category: general
+    question: "What is the capital of Peru?"
+    route: SINGLE_AGENT
+    agents: [General-Assistant]
+  - id: general-02
+    category: general
+    question: "How far is the Moon from the Earth?"
+    route: SINGLE_AGENT
+    agents: [General-Assistant]
+  - id: general-03
+    category: general
+    question: "Write a haiku about autumn."
+    route: SINGLE_AGENT
+    agents: [General-Assistant]
+  - id: general-04
+    category: general
+    question: "Explain what a large language model is."
+    route: SINGLE_AGENT
+    agents: [General-Assistant]
+  - id: general-05
+    category: general
+    question: "At what temperature does water boil at sea level?"
+    route: SINGLE_AGENT
+    agents: [General-Assistant]
+  - id: general-06
+    category: general
+    question: "Give me a quick vegetarian dinner idea."
+    route: SINGLE_AGENT
+    agents: [General-Assistant]
+  - id: general-07
+    category: general
+    question: "Who painted the Mona Lisa?"
+    route: SINGLE_AGENT
+    agents: [General-Assistant]
+  - id: general-08
+    category: general
+    question: "How do I make a pivot table in a spreadsheet?"
+    route: SINGLE_AGENT
+    agents: [General-Assistant]
+  - id: general-09
+    category: general
+    question: "Suggest a name for our team's new side project."
+    route: SINGLE_AGENT
+    agents: [General-Assistant]
+  - id: general-10
+    category: general
+    question: "What is the difference between weather and climate?"
+    route: SINGLE_AGENT
+    agents: [General-Assistant]
+  - id: research-01
+    category: research
+    question: "Which of our documents mention the COO?"
+    route: SINGLE_AGENT
+    agents: [Researcher]
+  - id: research-02
+    category: research
+    question: "Search all files for references to SOC 2 and cite them."
+    route: SINGLE_AGENT
+    agents: [Researcher]
+  - id: research-03
+    category: research
+    question: "Give me a short summary of each document in the knowledge store."
+    route: SINGLE_AGENT
+    agents: [Researcher]
+  - id: research-04
+    category: research
+    question: "Find all the passages that talk about deadlines."
+    route: SINGLE_AGENT
+    agents: [Researcher]
+  - id: research-05
+    category: research
+    question: "Which documents were published by the HR department?"
+    route: SINGLE_AGENT
+    agents: [Researcher]
+  - id: research-06
+    category: research
+    question: "What does the knowledge base say about Horus? Cite the sources."
+    route: SINGLE_AGENT
+    agents: [Researcher]
+  - id: research-07
+    category: research
+    question: "List every document that discusses encryption."
+    route: SINGLE_AGENT
+    agents: [Researcher]
+  - id: research-08
+    category: research
+    question: "Collect the key dates mentioned across all of our files."
+    route: SINGLE_AGENT
+    agents: [Researcher]
+  - id: research-09
+    category: research
+    question: "Look up where the CFO's name appears in the documents."
+    route: SINGLE_AGENT
+    agents: [Researcher]
+  - id: research-10
+    category: research
+    question: "Give me citations for everything related to client onboarding."
+    route: SINGLE_AGENT
+    agents: [Researcher]

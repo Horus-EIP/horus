@@ -1,19 +1,20 @@
 'use client';
 
-import { useState } from 'react';
 import { AgentTypeBadge, getRole } from './agent-type-badge';
 import { Agent } from '@/lib/agents/api';
 import { Spinner } from '@/components/ui/spinner';
+import { isTaskInProgress } from '@/lib/tasks/agent-activity';
+import type { TaskStatus } from '@/lib/tasks/types';
 
 interface CollaborationViewProps {
   agents?: Agent[];
   isLoading?: boolean;
   title?: string;
+  taskStatusByAgentId?: Record<string, TaskStatus>;
 }
 
-function AgentNode({ agent }: { agent: Agent }) {
+function AgentNode({ agent, isWorking }: { agent: Agent; isWorking: boolean }) {
   const role = getRole(agent.skills);
-  const isWorking = agent.status === 'active';
 
   return (
     <div className="group relative w-full transition-transform duration-200 hover:-translate-y-0.5">
@@ -52,7 +53,9 @@ export function CollaborationView({
   agents = [],
   isLoading = false,
   title = "Active Collaboration",
+  taskStatusByAgentId = {},
 }: CollaborationViewProps) {
+  const isAgentWorking = (agent: Agent) => isTaskInProgress(taskStatusByAgentId[agent.id]);
 
   if (isLoading) {
     return (
@@ -75,12 +78,12 @@ export function CollaborationView({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-[var(--textSoft)] uppercase tracking-wide">{title}</h2>
-        <span className="text-xs text-[var(--textSoft)]">{agents.filter(a => a.status === 'active').length} active</span>
+        <span className="text-xs text-[var(--textSoft)]">{agents.filter(isAgentWorking).length} working</span>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {agents.map((agent) => (
-          <AgentNode key={agent.id} agent={agent} />
+          <AgentNode key={agent.id} agent={agent} isWorking={isAgentWorking(agent)} />
         ))}
       </div>
     </div>

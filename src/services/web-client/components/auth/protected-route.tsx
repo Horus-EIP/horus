@@ -20,7 +20,7 @@ export const ProtectedRoute = ({
 
   useEffect(() => {
     if (status === 'unauthenticated') {
-      window.location.href = redirectTo;
+      window.location.replace(redirectTo);
       return;
     }
 
@@ -32,6 +32,23 @@ export const ProtectedRoute = ({
       window.location.href = '/dashboard';
     }
   }, [status, redirectTo, allowedRoles, user]);
+
+  useEffect(() => {
+    if (status !== 'unauthenticated') {
+      return;
+    }
+
+    const redirectRestoredLoggedOutPage = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        window.location.replace(redirectTo);
+      }
+    };
+
+    window.addEventListener('pageshow', redirectRestoredLoggedOutPage);
+    return () => {
+      window.removeEventListener('pageshow', redirectRestoredLoggedOutPage);
+    };
+  }, [status, redirectTo]);
 
   if (status === 'loading') {
     return (

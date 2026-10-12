@@ -16,6 +16,8 @@ mutated.
 
 from __future__ import annotations
 
+import asyncio
+import threading
 from unittest.mock import MagicMock, patch
 
 import alembic_helper
@@ -79,6 +81,29 @@ class TestInsertNewTask:
         db.rollback.assert_called_once()
 
 
+class TestInsertQueuedTask:
+    def test_stores_a_queued_task_owned_by_the_submitter(self):
+        db = MagicMock()
+        task = task_crud.insert_queued_task(
+            "task-1", 7, "manager-id", "Summarise Q4", "alice", db, skills_required=["analysis"]
+        )
+        (stored_task,), (stored_result,) = (call.args for call in db.add.call_args_list)
+        assert stored_task is task
+        assert task.status == TaskRunStatus.QUEUED
+        assert task.owner_username == "alice"
+        assert task.skills_required == ["analysis"]
+        assert stored_result.history == [{"role": "user", "message": "Summarise Q4"}]
+        assert stored_result.future_actions == []
+        db.commit.assert_called_once()
+
+    def test_failure_rolls_back_and_raises(self):
+        db = MagicMock()
+        db.commit.side_effect = RuntimeError("db down")
+        with pytest.raises(RuntimeError):
+            task_crud.insert_queued_task("task-1", None, "manager-id", "q", "alice", db)
+        db.rollback.assert_called_once()
+
+
 class TestValidatingTaskResults:
     def test_success_marks_completed_and_appends_history(self):
         task = MagicMock()
@@ -137,7 +162,7 @@ class TestValidatingTaskResults:
 
 
 class TestInterruptTask:
-    def test_success_cancels_and_publishes(self):
+    async def test_success_cancels_and_publishes(self):
         task = MagicMock()
         task.status = TaskRunStatus.RUNNING
         task.conversation_id = 99
@@ -145,7 +170,7 @@ class TestInterruptTask:
         db = _query_returning(task)
 
         with patch.object(task_crud, "rabbitmq_instance") as rmq:
-            ok = task_crud.interrupt_task("task-1", db, reason="stop please")
+            ok = await task_crud.interrupt_task("task-1", db, reason="stop please")
 
         assert ok is True
         assert task.status == TaskRunStatus.CANCELED
@@ -158,7 +183,7 @@ class TestInterruptTask:
         assert '"type": "cancel"' in kwargs["message"]
         assert '"reason": "stop please"' in kwargs["message"]
 
-    def test_default_reason_used_when_none(self):
+    async def test_default_reason_used_when_none(self):
         task = MagicMock()
         task.status = TaskRunStatus.RUNNING
         task.conversation_id = 1
@@ -166,41 +191,61 @@ class TestInterruptTask:
         db = _query_returning(task)
 
         with patch.object(task_crud, "rabbitmq_instance") as rmq:
-            task_crud.interrupt_task("task-2", db)
+            await task_crud.interrupt_task("task-2", db)
 
         msg = rmq.publish.call_args.kwargs["message"]
         assert "User requested cancellation" in msg
 
-    def test_task_not_found_raises_404(self):
+    async def test_task_not_found_raises_404(self):
         db = _query_returning(None)
         with patch.object(task_crud, "rabbitmq_instance") as rmq:
             with pytest.raises(HTTPException) as exc:
-                task_crud.interrupt_task("missing", db)
+                await task_crud.interrupt_task("missing", db)
         assert exc.value.status_code == 404
         rmq.publish.assert_not_called()
 
-    def test_already_terminal_raises_400(self):
+    async def test_already_terminal_raises_400(self):
         task = MagicMock()
         # Handler compares task.status against the enum *.value strings.
         task.status = TaskRunStatus.COMPLETED.value
         db = _query_returning(task)
         with patch.object(task_crud, "rabbitmq_instance") as rmq:
             with pytest.raises(HTTPException) as exc:
-                task_crud.interrupt_task("done", db)
+                await task_crud.interrupt_task("done", db)
         assert exc.value.status_code == 400
         assert "Cannot interrupt a completed task" in exc.value.detail
         rmq.publish.assert_not_called()
 
-    def test_generic_error_rolls_back_and_raises_500(self):
+    async def test_generic_error_rolls_back_and_raises_500(self):
         task = MagicMock()
         task.status = TaskRunStatus.RUNNING
         db = _query_returning(task)
         db.commit.side_effect = RuntimeError("commit fail")
         with patch.object(task_crud, "rabbitmq_instance"):
             with pytest.raises(HTTPException) as exc:
-                task_crud.interrupt_task("task-3", db)
+                await task_crud.interrupt_task("task-3", db)
         assert exc.value.status_code == 500
         db.rollback.assert_called_once()
+
+    async def test_the_cancel_signal_waits_for_the_broker_off_the_event_loop(self):
+        task = MagicMock()
+        task.status = TaskRunStatus.RUNNING
+        task.conversation_id = 5
+        task.agent_id = "agent-Z"
+        db = _query_returning(task)
+        release = threading.Event()
+        waits: list[bool] = []
+
+        async def another_request():
+            release.set()
+
+        with patch.object(task_crud, "rabbitmq_instance") as rmq:
+            rmq.publish.side_effect = lambda **_kwargs: waits.append(release.wait(timeout=2))
+            ok, _ = await asyncio.gather(task_crud.interrupt_task("task-4", db), another_request())
+
+        assert ok is True
+        assert waits == [True]
+        assert rmq.publish.call_args.kwargs["queue_name"] == "agent-Z"
 
 
 class TestGetAllTasksInternal:
@@ -222,6 +267,16 @@ class TestGetAllTasksInternal:
         assert out is filtered
         db.query.return_value.filter.assert_called_once()
 
+    def test_status_list_filter_applies_filter(self):
+        db = MagicMock()
+        filtered = [MagicMock()]
+        db.query.return_value.filter.return_value.all.return_value = filtered
+        out = task_crud._get_all_tasks_internal(
+            db, status_in=[TaskRunStatus.QUEUED, TaskRunStatus.RUNNING]
+        )
+        assert out is filtered
+        db.query.return_value.filter.assert_called_once()
+
     def test_error_raises_500(self):
         db = MagicMock()
         db.query.side_effect = RuntimeError("db gone")
@@ -231,14 +286,17 @@ class TestGetAllTasksInternal:
 
 
 class TestGetTasksInProgress:
-    def test_success_delegates_with_running_filter(self):
+    def test_success_delegates_with_queued_and_running_filter(self):
         running = [MagicMock()]
         with patch.object(
             task_crud, "_get_all_tasks_internal", return_value=running
         ) as inner:
             out = task_crud.get_tasks_in_progress(MagicMock())
         assert out is running
-        assert inner.call_args.kwargs["status_filter"] == TaskRunStatus.RUNNING
+        assert inner.call_args.kwargs["status_in"] == [
+            TaskRunStatus.QUEUED,
+            TaskRunStatus.RUNNING,
+        ]
 
     def test_inner_httpexception_is_rewrapped_as_500(self):
         # _get_all_tasks_internal raises HTTPException(500); the outer handler
@@ -465,47 +523,53 @@ class TestCollaborativeTask:
 # =========================================================================== #
 
 
-class TestResolveModelPath:
-    # ``exists``/``iterdir`` are read-only C attributes on a Path *instance*, so
-    # we patch them on the ``pathlib.Path`` class and gate on the module's path.
+class TestEmbedThreads:
+    @pytest.fixture(autouse=True)
+    def _no_thread_settings(self, monkeypatch):
+        monkeypatch.delenv(embedding_setup.EMBED_THREADS_ENV, raising=False)
+        monkeypatch.delenv(embedding_setup.SHARED_THREADS_ENV, raising=False)
 
-    def test_prefers_local_dir_when_present_and_nonempty(self):
-        target = embedding_setup.EMBED_MODEL_DIR
-        with patch("pathlib.Path.exists", lambda self: self == target), \
-             patch("pathlib.Path.iterdir", lambda self: iter(["a_file"])):
-            assert embedding_setup._resolve_model_path() == str(target)
+    def test_onnxruntime_picks_the_threads_when_nothing_is_set(self):
+        assert embedding_setup.embed_threads() is None
 
-    def test_falls_back_to_hf_id_when_dir_missing(self):
-        with patch("pathlib.Path.exists", lambda self: False):
-            assert embedding_setup._resolve_model_path() == (
-                embedding_setup.EMBED_MODEL_ID
-            )
+    def test_the_embedder_setting_wins(self, monkeypatch):
+        monkeypatch.setenv(embedding_setup.EMBED_THREADS_ENV, "2")
+        monkeypatch.setenv(embedding_setup.SHARED_THREADS_ENV, "1")
 
-    def test_falls_back_to_hf_id_when_dir_empty(self):
-        target = embedding_setup.EMBED_MODEL_DIR
-        with patch("pathlib.Path.exists", lambda self: self == target), \
-             patch("pathlib.Path.iterdir", lambda self: iter([])):
-            assert embedding_setup._resolve_model_path() == (
-                embedding_setup.EMBED_MODEL_ID
-            )
+        assert embedding_setup.embed_threads() == 2
+
+    def test_the_installer_thread_budget_applies_without_an_embedder_setting(self, monkeypatch):
+        monkeypatch.setenv(embedding_setup.SHARED_THREADS_ENV, "1")
+
+        assert embedding_setup.embed_threads() == 1
+
+    @pytest.mark.parametrize("raw", ["0", "-2", "many"])
+    def test_a_value_that_is_not_a_positive_count_is_ignored(self, monkeypatch, raw):
+        monkeypatch.setenv(embedding_setup.EMBED_THREADS_ENV, raw)
+        monkeypatch.setenv(embedding_setup.SHARED_THREADS_ENV, "3")
+
+        assert embedding_setup.embed_threads() == 3
 
 
 class TestLoadEmbedder:
-    def test_load_embedder_uses_sentence_transformer_on_cpu(self):
-        fake_model = MagicMock()
-        fake_model.get_sentence_embedding_dimension.return_value = 384
-        fake_st_module = MagicMock()
-        fake_st_module.SentenceTransformer.return_value = fake_model
+    def test_load_embedder_uses_fastembed_on_cpu(self, monkeypatch):
+        monkeypatch.setenv(embedding_setup.EMBED_THREADS_ENV, "1")
+        fake_model = MagicMock(embedding_size=384)
+        fake_fastembed = MagicMock()
+        fake_fastembed.TextEmbedding.return_value = fake_model
 
-        with patch.dict("sys.modules", {"sentence_transformers": fake_st_module}), \
-             patch.object(embedding_setup, "_resolve_model_path",
-                          return_value="/some/path"):
+        with patch.dict("sys.modules", {"fastembed": fake_fastembed}):
             model = embedding_setup._load_embedder()
 
         assert model is fake_model
-        fake_st_module.SentenceTransformer.assert_called_once_with(
-            "/some/path", device="cpu"
+        fake_fastembed.TextEmbedding.assert_called_once_with(
+            "sentence-transformers/all-MiniLM-L6-v2", threads=1, cuda=False
         )
+
+    def test_sentence_transformers_and_torch_are_not_needed(self):
+        missing = {"sentence_transformers": None, "torch": None, "fastembed": MagicMock()}
+        with patch.dict("sys.modules", missing):
+            embedding_setup._load_embedder()
 
 
 class TestEnsureEmbedderLoaded:
@@ -584,17 +648,50 @@ class TestPreloadBackgroundThread:
 
         warm = MagicMock()
         fake_skill_cache = MagicMock(warm_skill_cache=warm)
+        router_warm = MagicMock()
+        fake_router = MagicMock(warm_router_examples=router_warm)
 
         with patch.object(embedding_setup.threading, "Thread",
                           side_effect=fake_thread), \
              patch.object(embedding_setup, "_ensure_embedder_loaded") as ensure, \
-             patch.dict("sys.modules", {"core.skill_cache": fake_skill_cache}):
+             patch.dict(
+                 "sys.modules",
+                 {"core.skill_cache": fake_skill_cache, "tasks.router": fake_router},
+             ):
             embedding_setup.start_embedding_preload_background_thread()
             # Invoke the captured worker as the thread would have.
             captured["target"]()
 
         ensure.assert_called_once()
         warm.assert_called_once()
+        router_warm.assert_called_once()
+
+    def test_worker_swallows_router_examples_warm_exception(self, monkeypatch):
+        monkeypatch.delenv("TEST_MODE", raising=False)
+        captured = {}
+
+        def fake_thread(target, name, daemon):
+            captured["target"] = target
+            return MagicMock()
+
+        skill_warm = MagicMock()
+        failing_router = MagicMock()
+        failing_router.warm_router_examples.side_effect = RuntimeError("examples failed")
+
+        with patch.object(embedding_setup.threading, "Thread", side_effect=fake_thread), \
+             patch.object(embedding_setup, "_ensure_embedder_loaded"), \
+             patch.dict(
+                 "sys.modules",
+                 {
+                     "core.skill_cache": MagicMock(warm_skill_cache=skill_warm),
+                     "tasks.router": failing_router,
+                 },
+             ):
+            embedding_setup.start_embedding_preload_background_thread()
+            captured["target"]()
+
+        skill_warm.assert_called_once()
+        failing_router.warm_router_examples.assert_called_once()
 
     def test_worker_swallows_loader_exception(self, monkeypatch):
         monkeypatch.delenv("TEST_MODE", raising=False)
@@ -626,7 +723,9 @@ class TestPreloadBackgroundThread:
         with patch.object(embedding_setup.threading, "Thread",
                           side_effect=fake_thread), \
              patch.object(embedding_setup, "_ensure_embedder_loaded"), \
-             patch.dict("sys.modules", {"core.skill_cache": boom_cache}):
+             patch.dict(
+                 "sys.modules", {"core.skill_cache": boom_cache, "tasks.router": MagicMock()}
+             ):
             embedding_setup.start_embedding_preload_background_thread()
             captured["target"]()  # inner warm raises, outer try swallows
 
@@ -634,15 +733,24 @@ class TestPreloadBackgroundThread:
 class TestEmbedTexts:
     def test_embed_texts_returns_float32_matrix(self):
         fake_model = MagicMock()
-        fake_model.encode.return_value = np.array(
-            [[1.0, 2.0], [3.0, 4.0]], dtype=np.float64
+        fake_model.embed.return_value = iter(
+            [np.array([1.0, 2.0]), np.array([3.0, 4.0])]
         )
         with patch.object(embedding_setup, "_embedder", fake_model), \
              patch.object(embedding_setup, "_ensure_embedder_loaded"):
             out = embedding_setup.embed_texts(["a", "b"])
         assert out.dtype == np.float32
         assert out.shape == (2, 2)
-        fake_model.encode.assert_called_once()
+        fake_model.embed.assert_called_once_with(["a", "b"])
+
+    def test_embed_texts_of_nothing_is_an_empty_matrix_of_the_model_width(self):
+        fake_model = MagicMock(embedding_size=384)
+        fake_model.embed.return_value = iter([])
+        with patch.object(embedding_setup, "_embedder", fake_model), \
+             patch.object(embedding_setup, "_ensure_embedder_loaded"):
+            out = embedding_setup.embed_texts([])
+        assert out.shape == (0, 384)
+        assert out.dtype == np.float32
 
     def test_embed_texts_raises_when_model_not_loaded(self):
         with patch.object(embedding_setup, "_embedder", None), \
@@ -652,7 +760,7 @@ class TestEmbedTexts:
 
     def test_embed_text_returns_single_vector(self):
         fake_model = MagicMock()
-        fake_model.encode.return_value = np.array([[5.0, 6.0, 7.0]], dtype=np.float64)
+        fake_model.embed.return_value = iter([np.array([5.0, 6.0, 7.0])])
         with patch.object(embedding_setup, "_embedder", fake_model), \
              patch.object(embedding_setup, "_ensure_embedder_loaded"):
             vec = embedding_setup.embed_text("hello")

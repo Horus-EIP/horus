@@ -11,10 +11,21 @@ from core.logger import AgentLogger, StructuredFormatter, correlation_id
 
 
 class TestLoggerCoverage:
-    def setup_method(self):
-        # Reset configuration state
-        AgentLogger._configured = False
-        AgentLogger._loggers = {}
+    @pytest.fixture(autouse=True)
+    def fresh_logger_state(self, monkeypatch):
+        monkeypatch.setattr(AgentLogger, "_configured", False)
+        monkeypatch.setattr(AgentLogger, "_loggers", {})
+        root = logging.getLogger()
+        handlers, level = root.handlers[:], root.level
+        quieted = {name: logging.getLogger(name).level for name in ("pika", "httpx", "httpcore")}
+        yield
+        for handler in root.handlers:
+            if handler not in handlers:
+                handler.close()
+        root.handlers[:] = handlers
+        root.setLevel(level)
+        for name, previous in quieted.items():
+            logging.getLogger(name).setLevel(previous)
 
     def test_structured_formatter_with_exception_and_correlation(self):
         # Set correlation ID

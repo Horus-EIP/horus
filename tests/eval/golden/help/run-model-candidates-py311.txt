@@ -1,0 +1,59 @@
+usage: run-model-candidates.py [-h] [--catalog CATALOG] [--only ONLY]
+                               [--all-quants] [--steps STEPS]
+                               [--models-dir MODELS_DIR] [--out-dir OUT_DIR]
+                               [--reference REFERENCE]
+                               [--reasoning {off,on,auto}]
+                               [--llm-mem-limit LLM_MEM_LIMIT]
+                               [--server-image SERVER_IMAGE]
+                               [--stack-llm-container STACK_LLM_CONTAINER]
+                               [--agent-container AGENT_CONTAINER]
+                               [--allow-response-cache]
+                               [--start-timeout START_TIMEOUT]
+                               [--testset TESTSET] [--ids IDS]
+                               [--category CATEGORY] [--limit LIMIT]
+                               [--bench-arg BENCH_ARG] [--eval-arg EVAL_ARG]
+                               [--cpu-model CPU_MODEL] [--ram RAM]
+                               [--ram-speed RAM_SPEED] [--disk-type DISK_TYPE]
+                               [--dry-run]
+                               [--resume SUMMARY_JSON | --resummarize SUMMARY_JSON]
+
+Benchmark the B-102 model candidates against the Qwen3-4B baseline: download
+and verify each GGUF, run llama-bench, probe the B-98 answer contract and run
+the 100-question evaluation with that model behind the CPU stack's llama-
+server.
+
+options:
+  -h, --help            show this help message and exit
+  --catalog CATALOG
+  --only ONLY           Candidate or GGUF ids, comma-separated.
+  --all-quants          Also the GGUFs that are not defaults.
+  --steps STEPS         Among fetch,bench,probe,eval.
+  --models-dir MODELS_DIR
+  --out-dir OUT_DIR
+  --reference REFERENCE
+  --reasoning {off,on,auto}
+  --llm-mem-limit LLM_MEM_LIMIT
+                        Memory limit of the candidate llama-server, e.g. 6g.
+  --server-image SERVER_IMAGE
+                        Default: the catalog's pinned server image.
+  --stack-llm-container STACK_LLM_CONTAINER
+  --agent-container AGENT_CONTAINER
+  --allow-response-cache
+                        Run the eval step although the agent's response cache
+                        is on or cannot be checked.
+  --start-timeout START_TIMEOUT
+  --testset TESTSET
+  --ids IDS
+  --category CATEGORY
+  --limit LIMIT
+  --bench-arg BENCH_ARG
+                        Extra run-llama-bench.py argument.
+  --eval-arg EVAL_ARG   Extra run-eval.py argument.
+  --cpu-model CPU_MODEL
+  --ram RAM
+  --ram-speed RAM_SPEED
+  --disk-type DISK_TYPE
+  --dry-run
+  --resume SUMMARY_JSON
+                        Run more steps into an earlier summary.
+  --resummarize SUMMARY_JSON

@@ -1,0 +1,2361 @@
+{
+  "kind": "horus-eval",
+  "schema_version": 2,
+  "label": "spark-x2.5-4b-q4km-eval",
+  "run": {
+    "mode": "chat",
+    "started_at": "2026-10-06T16:34:58Z",
+    "finished_at": "2026-10-06T16:41:56Z",
+    "completed": true,
+    "git_commit": "245f965",
+    "mas_url": "http://localhost:8000",
+    "ks_url": "http://localhost:8080",
+    "event_timeout_s": 1800.0,
+    "submit_timeout_s": 900.0,
+    "top_k": null,
+    "warmup": "In one sentence, what kinds of documents are in the knowledge store?",
+    "server_settings": {
+      "LLM_BACKEND": "vllm (src/infra/.env)",
+      "LLM_VLLM_URL": "http://vllm:8000/v1 (src/infra/.env)",
+      "LLM_VLLM_MODEL": "qwen3-4b (src/infra/.env)",
+      "KNOWLEDGE_STORE_N_RESULTS": "10 (src/infra/.env)",
+      "AGENT_MAX_NEW_TOKENS": "3072 (src/infra/.env)",
+      "AGENT_MAX_CONTEXT_CHARS": "unset",
+      "AGENT_STREAM_TOKENS": "1 (src/infra/.env)",
+      "AGENT_RESPONSE_CACHE": "1 (src/infra/.env)",
+      "LLM_SERVER_THREADS": "unset",
+      "LLM_TORCH_INTRAOP_THREADS": "unset",
+      "AGENT_TORCH_INTRAOP_THREADS": "unset"
+    },
+    "observed_models": [
+      "Qwen/Qwen3-4B-Instruct-2507"
+    ],
+    "observed_devices": [
+      "cpu"
+    ]
+  },
+  "testset": {
+    "path": "tests/eval/testset.yaml",
+    "version": "1.0.0",
+    "sha256": "f6f11ee2fe1040bbb68782ba810d73b20c2c723a58a29339365465af86ad3cac",
+    "corpus": {
+      "1_Q4_2025_Financial_Report.md": "7e3a592933a1b6d8f2d69c3132c23371d2dbfaf8be553c140c4798fb810c7880",
+      "2_Employee_Handbook.md": "c416c7fec78af0ac90281927e2aff03e54ef37ff3b3c026586fbb65d4972c1b1",
+      "3_Compliance_Guidelines.md": "3d8fb608c2cb74e4275b2c1c6d50a9870f0a14e0c6322ffe73ebfdd6721cadec",
+      "4_Expense_Policy.md": "946fc442a43dab428f93d20e1a1dc0b54160b54fc7a9381a680ebc36ebbadf44",
+      "5_IT_Security_Policy.md": "5a52e6bb01ecf184a46771e28ab64dc83147fdf92770642f8f72ab1a356b7f40"
+    },
+    "items_total": 100,
+    "items_run": 20,
+    "filters": {
+      "ids": null,
+      "categories": null,
+      "limit": 20
+    }
+  },
+  "llama_cpp": {
+    "build": "b11382",
+    "server": {
+      "container": "llm-candidate",
+      "image": "ghcr.io/ggml-org/llama.cpp:server-b11382",
+      "args": [
+        "--model",
+        "/models/spark-x2.5-4b-Q4_K_M.gguf",
+        "--alias",
+        "qwen3-4b",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8080",
+        "--ctx-size",
+        "8192",
+        "--parallel",
+        "1",
+        "--cache-type-k",
+        "f16",
+        "--cache-type-v",
+        "f16",
+        "--flash-attn",
+        "auto",
+        "--load-mode",
+        "mmap",
+        "--cache-ram",
+        "1024",
+        "--threads",
+        "12",
+        "--metrics",
+        "--reasoning",
+        "off"
+      ],
+      "settings": {
+        "model": "/models/spark-x2.5-4b-Q4_K_M.gguf",
+        "alias": "qwen3-4b",
+        "port": 8080,
+        "ctx_size": 8192,
+        "parallel": 1,
+        "cache_type_k": "f16",
+        "cache_type_v": "f16",
+        "flash_attn": "auto",
+        "load_mode": "mmap",
+        "cache_ram_mib": 1024,
+        "threads": 12
+      },
+      "port": 8080,
+      "build_info": "b11382-11fe02151",
+      "build": "b11382",
+      "n_ctx": 8192,
+      "model_path": "/models/spark-x2.5-4b-Q4_K_M.gguf",
+      "model_sha256": "adfcfa19a4ed6a5985da8bf565fe15f8e1a7e131d79bae2d19d48d1c40109428"
+    }
+  },
+  "model": {
+    "name": "spark-x2.5-4b-q4km",
+    "file": "spark-x2.5-4b-Q4_K_M.gguf",
+    "sha256": "adfcfa19a4ed6a5985da8bf565fe15f8e1a7e131d79bae2d19d48d1c40109428",
+    "sha256_source": "llm container: the .sha256 written next to the GGUF once its hash was verified"
+  },
+  "machine": {
+    "reference": "dev-laptop",
+    "cpu_model": "AMD Ryzen AI 9 HX 370 (12 cores)",
+    "physical_cores": 12,
+    "logical_cpus": 24,
+    "avx2": true,
+    "ram": "64 GB host, Docker VM 31 GiB",
+    "ram_total_bytes": 67723177984,
+    "ram_installed_bytes": 68719476736,
+    "ram_modules": 4,
+    "ram_type": "LPDDR5",
+    "ram_speed": "7500 MT/s",
+    "disk_type": "NVMe SSD",
+    "disk_model": "WD PC SN740 SDDPNQE-2T00-1202",
+    "os": "Windows-10-10.0.26200-SP0",
+    "docker": {
+      "mem_total_bytes": 33160323072,
+      "cpus": 24,
+      "operating_system": "Docker Desktop",
+      "kernel": "6.6.87.2-microsoft-standard-WSL2",
+      "server_version": "29.2.1",
+      "cgroup_version": "2",
+      "root_dir": "/var/lib/docker"
+    },
+    "sources": {
+      "avx2": "IsProcessorFeaturePresent",
+      "cpu_model": "given",
+      "disk_model": "Get-PhysicalDisk (C:)",
+      "disk_type": "given",
+      "physical_cores": "Win32_Processor",
+      "ram": "given",
+      "ram_installed_bytes": "Win32_PhysicalMemory",
+      "ram_modules": "Win32_PhysicalMemory",
+      "ram_speed": "Win32_PhysicalMemory",
+      "ram_total_bytes": "Win32_ComputerSystem",
+      "ram_type": "Win32_PhysicalMemory"
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+      "driver": "610.88",
+      "memory_total": "8188 MiB"
+    }
+  },
+  "resources": {
+    "samples": 32,
+    "container_peak_mem_bytes": {
+      "horus_upgrade-agent-1": 180459929,
+      "horus_upgrade-knowledge_store-1": 935958937,
+      "horus_upgrade-loki-1": 91844771,
+      "horus_upgrade-mas-1": 305030758,
+      "horus_upgrade-postgres-1": 55301898,
+      "horus_upgrade-prometheus-1": 53351546,
+      "horus_upgrade-promtail-1": 41932554,
+      "horus_upgrade-rabbitmq-1": 246415360,
+      "horus_upgrade-redis-1": 12761169,
+      "horus_upgrade-tempo-1": 54557409,
+      "horus_upgrade-web-client-1": 46745518,
+      "llm-candidate": 3529389375
+    },
+    "containers_sum_peak_mem_bytes": 5428880600,
+    "llm_mapped_outside_docker_stats_bytes": 2575740928,
+    "stack_peak_mem_bytes": 8004621528,
+    "samples_without_llm_pages": 0,
+    "swap_peak_used_bytes": 1930993664,
+    "docker_host_swap_peak_used_bytes": null,
+    "container_lifetime_peak_mem_bytes": {
+      "horus_upgrade-agent-1": 249602048,
+      "horus_upgrade-knowledge_store-1": 1294938112,
+      "horus_upgrade-loki-1": 97701888,
+      "horus_upgrade-mas-1": 325537792,
+      "horus_upgrade-postgres-1": 64212992,
+      "horus_upgrade-prometheus-1": 58609664,
+      "horus_upgrade-promtail-1": 46485504,
+      "horus_upgrade-rabbitmq-1": 274972672,
+      "horus_upgrade-redis-1": 18178048,
+      "horus_upgrade-tempo-1": 266350592,
+      "horus_upgrade-web-client-1": 62386176,
+      "llm-candidate": 6114078720
+    },
+    "container_oom_kills": {
+      "horus_upgrade-agent-1": 0,
+      "horus_upgrade-knowledge_store-1": 0,
+      "horus_upgrade-loki-1": 0,
+      "horus_upgrade-mas-1": 0,
+      "horus_upgrade-postgres-1": 0,
+      "horus_upgrade-prometheus-1": 0,
+      "horus_upgrade-promtail-1": 0,
+      "horus_upgrade-rabbitmq-1": 0,
+      "horus_upgrade-redis-1": 0,
+      "horus_upgrade-tempo-1": 0,
+      "horus_upgrade-web-client-1": 0,
+      "llm-candidate": 0
+    },
+    "container_memory_stat": {
+      "horus_upgrade-agent-1": {
+        "anon": 170946560,
+        "file": 1331200,
+        "active_file": 622592,
+        "inactive_file": 708608,
+        "file_mapped": 65536
+      },
+      "horus_upgrade-knowledge_store-1": {
+        "anon": 908492800,
+        "file": 15306752,
+        "active_file": 11882496,
+        "inactive_file": 3424256,
+        "file_mapped": 335872
+      },
+      "horus_upgrade-loki-1": {
+        "anon": 66183168,
+        "file": 4198400,
+        "active_file": 274432,
+        "inactive_file": 3923968,
+        "file_mapped": 1056768
+      },
+      "horus_upgrade-mas-1": {
+        "anon": 291590144,
+        "file": 5357568,
+        "active_file": 2330624,
+        "inactive_file": 3026944,
+        "file_mapped": 368640
+      },
+      "horus_upgrade-postgres-1": {
+        "anon": 18993152,
+        "file": 34242560,
+        "active_file": 10293248,
+        "inactive_file": 3080192,
+        "file_mapped": 22626304
+      },
+      "horus_upgrade-prometheus-1": {
+        "anon": 50429952,
+        "file": 3014656,
+        "active_file": 331776,
+        "inactive_file": 2682880,
+        "file_mapped": 667648
+      },
+      "horus_upgrade-promtail-1": {
+        "anon": 39505920,
+        "file": 1286144,
+        "active_file": 577536,
+        "inactive_file": 708608,
+        "file_mapped": 712704
+      },
+      "horus_upgrade-rabbitmq-1": {
+        "anon": 92065792,
+        "file": 36425728,
+        "active_file": 9965568,
+        "inactive_file": 8216576,
+        "file_mapped": 18530304
+      },
+      "horus_upgrade-redis-1": {
+        "anon": 4255744,
+        "file": 8704000,
+        "active_file": 7372800,
+        "inactive_file": 1331200,
+        "file_mapped": 3039232
+      },
+      "horus_upgrade-tempo-1": {
+        "anon": 51486720,
+        "file": 5705728,
+        "active_file": 479232,
+        "inactive_file": 5226496,
+        "file_mapped": 831488
+      },
+      "horus_upgrade-web-client-1": {
+        "anon": 33517568,
+        "file": 16035840,
+        "active_file": 9904128,
+        "inactive_file": 6131712,
+        "file_mapped": 13217792
+      },
+      "llm-candidate": {
+        "anon": 3406843904,
+        "file": 2601218048,
+        "active_file": 20131840,
+        "inactive_file": 2581086208,
+        "file_mapped": 2580713472
+      }
+    },
+    "container_restarts": {
+      "horus_upgrade-agent-1": 0,
+      "horus_upgrade-knowledge_store-1": 0,
+      "horus_upgrade-loki-1": 0,
+      "horus_upgrade-mas-1": 0,
+      "horus_upgrade-postgres-1": 0,
+      "horus_upgrade-prometheus-1": 0,
+      "horus_upgrade-promtail-1": 0,
+      "horus_upgrade-rabbitmq-1": 0,
+      "horus_upgrade-redis-1": 0,
+      "horus_upgrade-tempo-1": 0,
+      "horus_upgrade-web-client-1": 0,
+      "llm-candidate": 0
+    },
+    "llm_process": {
+      "name": "llama-server",
+      "rss_file_bytes": 2595872768
+    },
+    "at_questions_start": {
+      "container_lifetime_peak_mem_bytes": {
+        "horus_upgrade-agent-1": 249602048,
+        "horus_upgrade-knowledge_store-1": 1294938112,
+        "horus_upgrade-loki-1": 91828224,
+        "horus_upgrade-mas-1": 325537792,
+        "horus_upgrade-postgres-1": 63979520,
+        "horus_upgrade-prometheus-1": 58609664,
+        "horus_upgrade-promtail-1": 46485504,
+        "horus_upgrade-rabbitmq-1": 274972672,
+        "horus_upgrade-redis-1": 18178048,
+        "horus_upgrade-tempo-1": 266350592,
+        "horus_upgrade-web-client-1": 62386176,
+        "llm-candidate": 6064386048
+      },
+      "container_oom_kills": {
+        "horus_upgrade-agent-1": 0,
+        "horus_upgrade-knowledge_store-1": 0,
+        "horus_upgrade-loki-1": 0,
+        "horus_upgrade-mas-1": 0,
+        "horus_upgrade-postgres-1": 0,
+        "horus_upgrade-prometheus-1": 0,
+        "horus_upgrade-promtail-1": 0,
+        "horus_upgrade-rabbitmq-1": 0,
+        "horus_upgrade-redis-1": 0,
+        "horus_upgrade-tempo-1": 0,
+        "horus_upgrade-web-client-1": 0,
+        "llm-candidate": 0
+      },
+      "container_memory_stat": {
+        "horus_upgrade-agent-1": {
+          "anon": 170721280,
+          "file": 1331200,
+          "active_file": 622592,
+          "inactive_file": 708608,
+          "file_mapped": 65536
+        },
+        "horus_upgrade-knowledge_store-1": {
+          "anon": 907755520,
+          "file": 15273984,
+          "active_file": 11882496,
+          "inactive_file": 3391488,
+          "file_mapped": 335872
+        },
+        "horus_upgrade-loki-1": {
+          "anon": 83062784,
+          "file": 3747840,
+          "active_file": 274432,
+          "inactive_file": 3473408,
+          "file_mapped": 1056768
+        },
+        "horus_upgrade-mas-1": {
+          "anon": 293765120,
+          "file": 4927488,
+          "active_file": 2330624,
+          "inactive_file": 2596864,
+          "file_mapped": 368640
+        },
+        "horus_upgrade-postgres-1": {
+          "anon": 18829312,
+          "file": 34058240,
+          "active_file": 10293248,
+          "inactive_file": 2990080,
+          "file_mapped": 22536192
+        },
+        "horus_upgrade-prometheus-1": {
+          "anon": 51060736,
+          "file": 2752512,
+          "active_file": 270336,
+          "inactive_file": 2482176,
+          "file_mapped": 606208
+        },
+        "horus_upgrade-promtail-1": {
+          "anon": 36835328,
+          "file": 1286144,
+          "active_file": 577536,
+          "inactive_file": 708608,
+          "file_mapped": 712704
+        },
+        "horus_upgrade-rabbitmq-1": {
+          "anon": 91873280,
+          "file": 36425728,
+          "active_file": 9965568,
+          "inactive_file": 8216576,
+          "file_mapped": 18530304
+        },
+        "horus_upgrade-redis-1": {
+          "anon": 4063232,
+          "file": 8704000,
+          "active_file": 7372800,
+          "inactive_file": 1331200,
+          "file_mapped": 3039232
+        },
+        "horus_upgrade-tempo-1": {
+          "anon": 43589632,
+          "file": 4562944,
+          "active_file": 393216,
+          "inactive_file": 4169728,
+          "file_mapped": 765952
+        },
+        "horus_upgrade-web-client-1": {
+          "anon": 33222656,
+          "file": 16035840,
+          "active_file": 9904128,
+          "inactive_file": 6131712,
+          "file_mapped": 13217792
+        },
+        "llm-candidate": {
+          "anon": 3438997504,
+          "file": 2601218048,
+          "active_file": 20131840,
+          "inactive_file": 2581086208,
+          "file_mapped": 2580713472
+        }
+      },
+      "llm_process": {
+        "name": "llama-server",
+        "rss_file_bytes": 2595872768
+      },
+      "docker_host_swap_used_bytes": null
+    },
+    "unsampled_peak_excess_bytes": {
+      "horus_upgrade-loki-1": 1933149,
+      "horus_upgrade-postgres-1": 5830902,
+      "llm-candidate": 3603137
+    },
+    "docker_host_swap_growth_bytes": null
+  },
+  "summary": {
+    "questions": 20,
+    "answer_correct_auto": {
+      "n": 20,
+      "correct": 18,
+      "pct": 90.0
+    },
+    "source_correct_auto": {
+      "n": 20,
+      "correct": 20,
+      "pct": 100.0
+    },
+    "source_rank": {
+      "n": 0,
+      "first": 0,
+      "not_retrieved": 0
+    },
+    "route_correct": {
+      "n": 20,
+      "correct": 20,
+      "pct": 100.0
+    },
+    "total_s": {
+      "n": 20,
+      "mean": 15.028,
+      "median": 14.857,
+      "p90": 17.679,
+      "min": 12.728,
+      "max": 18.558,
+      "sum": 300.551
+    },
+    "status": {
+      "ok": 20
+    },
+    "fallbacks": {},
+    "source_basis": {
+      "cited": 20
+    },
+    "ttft_s": {
+      "n": 18,
+      "mean": 14.961,
+      "median": 14.413,
+      "p90": 17.674,
+      "min": 12.724,
+      "max": 18.553,
+      "sum": 269.299
+    },
+    "dispatch_s": {
+      "n": 20,
+      "mean": 0.703,
+      "median": 0.074,
+      "p90": 3.219,
+      "min": 0.055,
+      "max": 3.263,
+      "sum": 14.057
+    },
+    "routing": {
+      "questions": 20,
+      "mas_restarts": 0,
+      "decided_once": 20,
+      "without_decision": 0,
+      "several_decisions": 0,
+      "methods": {
+        "embedding": 15,
+        "llm": 5
+      },
+      "llm_pct": 25.0,
+      "decision_s": {
+        "n": 20,
+        "mean": 0.637,
+        "median": 0.006,
+        "p90": 3.139,
+        "min": 0.005,
+        "max": 3.197,
+        "sum": 12.743
+      },
+      "decision_s_without_llm": {
+        "n": 15,
+        "mean": 0.006,
+        "median": 0.006,
+        "p90": 0.008,
+        "min": 0.005,
+        "max": 0.009,
+        "sum": 0.095
+      }
+    },
+    "llm": {
+      "questions": 20,
+      "server_restarts": 0,
+      "prompt_s": {
+        "n": 20,
+        "mean": 10.753,
+        "median": 10.583,
+        "p90": 12.744,
+        "min": 9.346,
+        "max": 13.79,
+        "sum": 215.069
+      },
+      "prompt_tokens": {
+        "n": 20,
+        "mean": 1646.1,
+        "median": 1601.0,
+        "p90": 1956,
+        "min": 1451,
+        "max": 2089,
+        "sum": 32922
+      },
+      "generation_s": {
+        "n": 20,
+        "mean": 3.721,
+        "median": 3.47,
+        "p90": 4.98,
+        "min": 2.693,
+        "max": 5.935,
+        "sum": 74.423
+      },
+      "generated_tokens": {
+        "n": 20,
+        "mean": 70.15,
+        "median": 66.0,
+        "p90": 88,
+        "min": 50,
+        "max": 114,
+        "sum": 1403
+      },
+      "prompt_tps": 153.08,
+      "generation_tps": 18.85
+    },
+    "manual_review": {
+      "reviewed": 0,
+      "pending": 20,
+      "agreed_correct": 0,
+      "disagreements": [],
+      "answer_correct_pct": null
+    },
+    "by_category": {
+      "lookup": {
+        "questions": 13,
+        "answer_correct_auto": {
+          "n": 13,
+          "correct": 12,
+          "pct": 92.3
+        },
+        "source_correct_auto": {
+          "n": 13,
+          "correct": 13,
+          "pct": 100.0
+        },
+        "source_rank": {
+          "n": 0,
+          "first": 0,
+          "not_retrieved": 0
+        },
+        "route_correct": {
+          "n": 13,
+          "correct": 13,
+          "pct": 100.0
+        },
+        "total_s": {
+          "n": 13,
+          "mean": 15.466,
+          "median": 15.274,
+          "p90": 17.679,
+          "min": 12.728,
+          "max": 18.558,
+          "sum": 201.062
+        }
+      },
+      "numeric": {
+        "questions": 6,
+        "answer_correct_auto": {
+          "n": 6,
+          "correct": 6,
+          "pct": 100.0
+        },
+        "source_correct_auto": {
+          "n": 6,
+          "correct": 6,
+          "pct": 100.0
+        },
+        "source_rank": {
+          "n": 0,
+          "first": 0,
+          "not_retrieved": 0
+        },
+        "route_correct": {
+          "n": 6,
+          "correct": 6,
+          "pct": 100.0
+        },
+        "total_s": {
+          "n": 6,
+          "mean": 14.234,
+          "median": 13.87,
+          "p90": 15.85,
+          "min": 13.087,
+          "max": 15.85,
+          "sum": 85.403
+        }
+      },
+      "multi_hop": {
+        "questions": 1,
+        "answer_correct_auto": {
+          "n": 1,
+          "correct": 0,
+          "pct": 0.0
+        },
+        "source_correct_auto": {
+          "n": 1,
+          "correct": 1,
+          "pct": 100.0
+        },
+        "source_rank": {
+          "n": 0,
+          "first": 0,
+          "not_retrieved": 0
+        },
+        "route_correct": {
+          "n": 1,
+          "correct": 1,
+          "pct": 100.0
+        },
+        "total_s": {
+          "n": 1,
+          "mean": 14.086,
+          "median": 14.086,
+          "p90": 14.086,
+          "min": 14.086,
+          "max": 14.086,
+          "sum": 14.086
+        }
+      }
+    }
+  },
+  "questions": [
+    {
+      "id": "fin-01",
+      "category": "lookup",
+      "difficulty": "easy",
+      "question": "What was FinCorp's total revenue in Q4 2025?",
+      "expected_answer": "$4.2M ($4,200,000), up 12% year-over-year.",
+      "expected_source": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 59,
+      "task_id": "6a1e2693-98ed-4dc9-96b8-4328f6e83d90",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.047,
+      "first_event_s": 0.534,
+      "dispatch_s": 0.069,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "embedding": 1
+        },
+        "seconds": 0.0061
+      },
+      "retrieval_s": 0.59,
+      "reasoning_start_s": 0.606,
+      "ttft_s": 15.18,
+      "total_s": 15.182,
+      "llm": {
+        "prompt_tokens": 1832,
+        "prompt_s": 11.699,
+        "generated_tokens": 55,
+        "generation_s": 2.76,
+        "decode_calls": 58,
+        "prompt_tps": 156.59,
+        "generation_tps": 19.93
+      },
+      "resources": {
+        "samples": 1,
+        "containers_sum_peak_mem_bytes": 5354091965,
+        "swap_peak_used_bytes": 1930993664,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "FinCorp's total revenue in Q4 2025 was **$4.2M**.",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "1_Q4_2025_Financial_Report.md",
+          "2_Employee_Handbook.md",
+          "4_Expense_Policy.md"
+        ]
+      ],
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "fin-02",
+      "category": "numeric",
+      "difficulty": "easy",
+      "question": "By how much did FinCorp's Q4 2025 revenue grow year-over-year?",
+      "expected_answer": "12% year-over-year.",
+      "expected_source": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 60,
+      "task_id": "53cfaf4e-6588-443f-bdf0-e8a901ed008d",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.047,
+      "first_event_s": 0.362,
+      "dispatch_s": 0.066,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "embedding": 1
+        },
+        "seconds": 0.0063
+      },
+      "retrieval_s": 0.422,
+      "reasoning_start_s": 0.438,
+      "ttft_s": 13.392,
+      "total_s": 13.397,
+      "llm": {
+        "prompt_tokens": 1537,
+        "prompt_s": 9.995,
+        "generated_tokens": 50,
+        "generation_s": 2.817,
+        "decode_calls": 53,
+        "prompt_tps": 153.78,
+        "generation_tps": 17.75
+      },
+      "resources": {
+        "samples": 1,
+        "containers_sum_peak_mem_bytes": 5300807528,
+        "swap_peak_used_bytes": 1930993664,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "FinCorp's Q4 2025 revenue grew **12%** year-over-year.",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "1_Q4_2025_Financial_Report.md",
+          "2_Employee_Handbook.md",
+          "3_Compliance_Guidelines.md"
+        ]
+      ],
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "fin-03",
+      "category": "lookup",
+      "difficulty": "easy",
+      "question": "What were FinCorp's total operating expenses in Q4 2025?",
+      "expected_answer": "$3.1M ($3,100,000).",
+      "expected_source": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 61,
+      "task_id": "356feba6-6496-45e2-85c4-e40219f0fd8b",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.038,
+      "first_event_s": 0.417,
+      "dispatch_s": 0.057,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "embedding": 1
+        },
+        "seconds": 0.0056
+      },
+      "retrieval_s": 0.472,
+      "reasoning_start_s": 0.487,
+      "ttft_s": 13.948,
+      "total_s": 13.951,
+      "llm": {
+        "prompt_tokens": 1601,
+        "prompt_s": 10.658,
+        "generated_tokens": 52,
+        "generation_s": 2.693,
+        "decode_calls": 55,
+        "prompt_tps": 150.22,
+        "generation_tps": 19.31
+      },
+      "resources": {
+        "samples": 2,
+        "containers_sum_peak_mem_bytes": 5421009990,
+        "swap_peak_used_bytes": 1930993664,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "FinCorp's total operating expenses in Q4 2025 were **$3.1M**.",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "1_Q4_2025_Financial_Report.md",
+          "4_Expense_Policy.md",
+          "2_Employee_Handbook.md",
+          "3_Compliance_Guidelines.md"
+        ]
+      ],
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "fin-04",
+      "category": "numeric",
+      "difficulty": "easy",
+      "question": "What net operating income did FinCorp report for Q4 2025?",
+      "expected_answer": "$1.1M.",
+      "expected_source": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 62,
+      "task_id": "33ccac87-0d88-4f94-a008-c42d666d97f4",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.042,
+      "first_event_s": 0.44,
+      "dispatch_s": 0.062,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "embedding": 1
+        },
+        "seconds": 0.0055
+      },
+      "retrieval_s": 0.499,
+      "reasoning_start_s": 0.513,
+      "ttft_s": 13.982,
+      "total_s": 13.989,
+      "llm": {
+        "prompt_tokens": 1601,
+        "prompt_s": 10.508,
+        "generated_tokens": 53,
+        "generation_s": 2.804,
+        "decode_calls": 56,
+        "prompt_tps": 152.36,
+        "generation_tps": 18.9
+      },
+      "resources": {
+        "samples": 1,
+        "containers_sum_peak_mem_bytes": 5162078826,
+        "swap_peak_used_bytes": 1930993664,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "FinCorp reported a net operating income of **$1.1M** for Q4 2025.",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "1_Q4_2025_Financial_Report.md",
+          "2_Employee_Handbook.md",
+          "3_Compliance_Guidelines.md",
+          "4_Expense_Policy.md"
+        ]
+      ],
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "fin-05",
+      "category": "lookup",
+      "difficulty": "easy",
+      "question": "What was FinCorp's full-year revenue for 2025?",
+      "expected_answer": "$15.8M.",
+      "expected_source": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 63,
+      "task_id": "0b9cab53-722c-4d06-9e81-90bd140467e9",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.035,
+      "first_event_s": 0.384,
+      "dispatch_s": 0.055,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "embedding": 1
+        },
+        "seconds": 0.0055
+      },
+      "retrieval_s": 0.427,
+      "reasoning_start_s": 0.441,
+      "ttft_s": 13.445,
+      "total_s": 13.448,
+      "llm": {
+        "prompt_tokens": 1454,
+        "prompt_s": 9.473,
+        "generated_tokens": 67,
+        "generation_s": 3.4,
+        "decode_calls": 70,
+        "prompt_tps": 153.49,
+        "generation_tps": 19.71
+      },
+      "resources": {
+        "samples": 1,
+        "containers_sum_peak_mem_bytes": 4805426672,
+        "swap_peak_used_bytes": 1930993664,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "FinCorp's full-year 2025 revenue was **$15.8M**, which exceeded the board target of $15M by 5.3%.",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "1_Q4_2025_Financial_Report.md",
+          "2_Employee_Handbook.md",
+          "4_Expense_Policy.md",
+          "3_Compliance_Guidelines.md"
+        ]
+      ],
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "fin-06",
+      "category": "numeric",
+      "difficulty": "medium",
+      "question": "By what percentage did FinCorp's 2025 full-year revenue beat the board target?",
+      "expected_answer": "By 5.3%: $15.8M against a board target of $15M.",
+      "expected_source": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 64,
+      "task_id": "4f94a7f4-6983-4128-856b-8e7e4878f19c",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.077,
+      "first_event_s": 0.356,
+      "dispatch_s": 0.113,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "embedding": 1
+        },
+        "seconds": 0.0084
+      },
+      "retrieval_s": 0.403,
+      "reasoning_start_s": 0.417,
+      "ttft_s": null,
+      "total_s": 15.328,
+      "llm": {
+        "prompt_tokens": 1517,
+        "prompt_s": 9.739,
+        "generated_tokens": 84,
+        "generation_s": 4.98,
+        "decode_calls": 87,
+        "prompt_tps": 155.77,
+        "generation_tps": 16.87
+      },
+      "resources": {
+        "samples": 2,
+        "containers_sum_peak_mem_bytes": 5189721385,
+        "swap_peak_used_bytes": 1930862592,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "FinCorp's 2025 full-year revenue beat the board target by **5.3%**. The report states that full-year revenue reached **$15.8M**, beating the board target of $15M by 5.3%.",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "1_Q4_2025_Financial_Report.md",
+          "3_Compliance_Guidelines.md"
+        ]
+      ],
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "fin-07",
+      "category": "lookup",
+      "difficulty": "easy",
+      "question": "Which three enterprise clients did FinCorp onboard in Q4 2025?",
+      "expected_answer": "Acme Bank, Meridian Holdings and Kestrel Capital.",
+      "expected_source": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 65,
+      "task_id": "8872c788-8e41-4a5e-a0b6-1bf781dbb115",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.036,
+      "first_event_s": 0.512,
+      "dispatch_s": 0.058,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "embedding": 1
+        },
+        "seconds": 0.0057
+      },
+      "retrieval_s": 0.586,
+      "reasoning_start_s": 0.6,
+      "ttft_s": 14.299,
+      "total_s": 14.302,
+      "llm": {
+        "prompt_tokens": 1534,
+        "prompt_s": 10.111,
+        "generated_tokens": 65,
+        "generation_s": 3.405,
+        "decode_calls": 68,
+        "prompt_tps": 151.72,
+        "generation_tps": 19.09
+      },
+      "resources": {
+        "samples": 1,
+        "containers_sum_peak_mem_bytes": 4851482223,
+        "swap_peak_used_bytes": 1930862592,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "FinCorp onboarded three enterprise clients in Q4 2025: **Acme Bank**, **Meridian Holdings**, and **Kestrel Capital**.",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "1_Q4_2025_Financial_Report.md",
+          "2_Employee_Handbook.md",
+          "3_Compliance_Guidelines.md"
+        ]
+      ],
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "fin-08",
+      "category": "lookup",
+      "difficulty": "easy",
+      "question": "When did FinCorp complete its SOC 2 Type II audit?",
+      "expected_answer": "November 24, 2025.",
+      "expected_source": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 66,
+      "task_id": "d1173ad6-a74e-40bd-8832-0c38cf7bdd95",
+      "observed_route": "AGENT",
+      "answered_by": "Compliance-Officer",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.049,
+      "first_event_s": 3.211,
+      "dispatch_s": 3.056,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "llm": 1
+        },
+        "seconds": 2.9889
+      },
+      "retrieval_s": 3.247,
+      "reasoning_start_s": 3.259,
+      "ttft_s": 18.553,
+      "total_s": 18.558,
+      "llm": {
+        "prompt_tokens": 2089,
+        "prompt_s": 13.79,
+        "generated_tokens": 82,
+        "generation_s": 4.312,
+        "decode_calls": 87,
+        "prompt_tps": 151.49,
+        "generation_tps": 19.02
+      },
+      "resources": {
+        "samples": 2,
+        "containers_sum_peak_mem_bytes": 5289778606,
+        "swap_peak_used_bytes": 1930862592,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "FinCorp completed its SOC 2 Type II audit on **November 24, 2025**.",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "1_Q4_2025_Financial_Report.md",
+          "3_Compliance_Guidelines.md",
+          "5_IT_Security_Policy.md",
+          "2_Employee_Handbook.md"
+        ]
+      ],
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "fin-09",
+      "category": "lookup",
+      "difficulty": "medium",
+      "question": "How much revenue did the Advisory Services segment generate in Q4 2025?",
+      "expected_answer": "$1,850,000, which is 44.0% of total revenue.",
+      "expected_source": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 67,
+      "task_id": "3d03fb1d-a9d6-44c4-a885-ddcf7cbd5d19",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.05,
+      "first_event_s": 0.171,
+      "dispatch_s": 0.071,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "embedding": 1
+        },
+        "seconds": 0.0059
+      },
+      "retrieval_s": 0.224,
+      "reasoning_start_s": 0.241,
+      "ttft_s": 14.528,
+      "total_s": 14.531,
+      "llm": {
+        "prompt_tokens": 1657,
+        "prompt_s": 10.968,
+        "generated_tokens": 59,
+        "generation_s": 3.19,
+        "decode_calls": 62,
+        "prompt_tps": 151.08,
+        "generation_tps": 18.5
+      },
+      "resources": {
+        "samples": 1,
+        "containers_sum_peak_mem_bytes": 4896791195,
+        "swap_peak_used_bytes": 1930862592,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "Advisory Services generated **$1,850,000** in Q4 2025 revenue.",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "1_Q4_2025_Financial_Report.md",
+          "3_Compliance_Guidelines.md"
+        ]
+      ],
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "fin-10",
+      "category": "numeric",
+      "difficulty": "medium",
+      "question": "What share of FinCorp's Q4 2025 revenue came from Asset Management?",
+      "expected_answer": "33.8% ($1,420,000).",
+      "expected_source": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 68,
+      "task_id": "ef4c06e9-c3b1-4b5f-8aec-308cff39eb37",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.057,
+      "first_event_s": 0.121,
+      "dispatch_s": 0.077,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "embedding": 1
+        },
+        "seconds": 0.0069
+      },
+      "retrieval_s": 0.185,
+      "reasoning_start_s": 0.198,
+      "ttft_s": 13.746,
+      "total_s": 13.752,
+      "llm": {
+        "prompt_tokens": 1536,
+        "prompt_s": 9.844,
+        "generated_tokens": 64,
+        "generation_s": 3.534,
+        "decode_calls": 67,
+        "prompt_tps": 156.03,
+        "generation_tps": 18.11
+      },
+      "resources": {
+        "samples": 2,
+        "containers_sum_peak_mem_bytes": 5292414725,
+        "swap_peak_used_bytes": 1930862592,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "Asset Management contributed **$1,420,000**, which represents **33.8%** of Q4 2025 total revenue.",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "1_Q4_2025_Financial_Report.md",
+          "2_Employee_Handbook.md",
+          "3_Compliance_Guidelines.md"
+        ]
+      ],
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "fin-11",
+      "category": "lookup",
+      "difficulty": "medium",
+      "question": "Which revenue segment was the smallest in Q4 2025?",
+      "expected_answer": "Technology Licensing, with $310,000 (7.4% of total revenue).",
+      "expected_source": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 69,
+      "task_id": "5ee5927a-7f1f-4669-b49c-a6915aa8ef64",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.049,
+      "first_event_s": 0.362,
+      "dispatch_s": 0.066,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "embedding": 1
+        },
+        "seconds": 0.0051
+      },
+      "retrieval_s": 0.403,
+      "reasoning_start_s": 0.418,
+      "ttft_s": 15.27,
+      "total_s": 15.274,
+      "llm": {
+        "prompt_tokens": 1654,
+        "prompt_s": 10.794,
+        "generated_tokens": 73,
+        "generation_s": 3.935,
+        "decode_calls": 76,
+        "prompt_tps": 153.23,
+        "generation_tps": 18.55
+      },
+      "resources": {
+        "samples": 1,
+        "containers_sum_peak_mem_bytes": 5235338634,
+        "swap_peak_used_bytes": 1930862592,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "The smallest revenue segment in Q4 2025 was **Compliance Consulting**, with **$620,000** (14.8% of total revenue).",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "1_Q4_2025_Financial_Report.md",
+          "3_Compliance_Guidelines.md"
+        ]
+      ],
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": false,
+      "missing_patterns": [
+        "Technology\\s+Licensing"
+      ],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "fin-12",
+      "category": "numeric",
+      "difficulty": "medium",
+      "question": "How far over budget was Travel & Entertainment in Q4 2025?",
+      "expected_answer": "$55K over budget (+26%): $265K spent against a Q4 budget of $210K.",
+      "expected_source": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 70,
+      "task_id": "09ff91de-d0a4-4a18-9f27-5dddeda53278",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.043,
+      "first_event_s": 0.512,
+      "dispatch_s": 0.064,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "embedding": 1
+        },
+        "seconds": 0.0056
+      },
+      "retrieval_s": 0.553,
+      "reasoning_start_s": 0.567,
+      "ttft_s": null,
+      "total_s": 15.85,
+      "llm": {
+        "prompt_tokens": 1730,
+        "prompt_s": 11.145,
+        "generated_tokens": 74,
+        "generation_s": 3.997,
+        "decode_calls": 77,
+        "prompt_tps": 155.23,
+        "generation_tps": 18.51
+      },
+      "resources": {
+        "samples": 2,
+        "containers_sum_peak_mem_bytes": 5184564489,
+        "swap_peak_used_bytes": 1930862592,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "Travel & Entertainment was **$55K over budget** in Q4 2025, exceeding the Q4 budget of $210K by $55K (+26%).",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "1_Q4_2025_Financial_Report.md",
+          "4_Expense_Policy.md"
+        ]
+      ],
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "fin-13",
+      "category": "lookup",
+      "difficulty": "medium",
+      "question": "Who approved the Q4 2025 Travel & Entertainment overage, and on what date?",
+      "expected_answer": "Sarah Johnson, COO, on December 12, 2025.",
+      "expected_source": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 71,
+      "task_id": "54e425dd-16b8-4f9f-a4c9-a531169f6ecd",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.059,
+      "first_event_s": 3.598,
+      "dispatch_s": 3.219,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "llm": 1
+        },
+        "seconds": 3.1388
+      },
+      "retrieval_s": 3.642,
+      "reasoning_start_s": 3.658,
+      "ttft_s": 17.326,
+      "total_s": 17.33,
+      "llm": {
+        "prompt_tokens": 1639,
+        "prompt_s": 10.672,
+        "generated_tokens": 114,
+        "generation_s": 5.935,
+        "decode_calls": 119,
+        "prompt_tps": 153.58,
+        "generation_tps": 19.21
+      },
+      "resources": {
+        "samples": 1,
+        "containers_sum_peak_mem_bytes": 4968301981,
+        "swap_peak_used_bytes": 1930862592,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "The Q4 2025 Travel & Entertainment overage was approved by **Sarah Johnson, COO**, on **December 12, 2025**. The overage was $55K against a Q4 budget of $210K.",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "1_Q4_2025_Financial_Report.md",
+          "4_Expense_Policy.md"
+        ]
+      ],
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "fin-14",
+      "category": "lookup",
+      "difficulty": "medium",
+      "question": "How much of the Q4 2025 Technology & Cloud spend was for the Horus deployment?",
+      "expected_answer": "$85K, out of $410,000 of Technology & Cloud spend.",
+      "expected_source": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 72,
+      "task_id": "12584d7c-8b22-4c89-afdd-aed7442e4182",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.044,
+      "first_event_s": 0.25,
+      "dispatch_s": 0.067,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "embedding": 1
+        },
+        "seconds": 0.0063
+      },
+      "retrieval_s": 0.302,
+      "reasoning_start_s": 0.314,
+      "ttft_s": 15.345,
+      "total_s": 15.348,
+      "llm": {
+        "prompt_tokens": 1735,
+        "prompt_s": 11.651,
+        "generated_tokens": 61,
+        "generation_s": 3.168,
+        "decode_calls": 64,
+        "prompt_tps": 148.91,
+        "generation_tps": 19.26
+      },
+      "resources": {
+        "samples": 2,
+        "containers_sum_peak_mem_bytes": 5300698475,
+        "swap_peak_used_bytes": 1930862592,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "The Horus deployment accounted for **$85,000** of the Q4 2025 Technology & Cloud spend.",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "1_Q4_2025_Financial_Report.md",
+          "5_IT_Security_Policy.md",
+          "3_Compliance_Guidelines.md"
+        ]
+      ],
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "fin-15",
+      "category": "lookup",
+      "difficulty": "easy",
+      "question": "What is FinCorp's revenue target for Q1 2026?",
+      "expected_answer": "$4.5M.",
+      "expected_source": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 73,
+      "task_id": "0534ecb2-dcc8-42e7-9d66-6b242e48b7a9",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.064,
+      "first_event_s": 0.36,
+      "dispatch_s": 0.093,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "embedding": 1
+        },
+        "seconds": 0.007
+      },
+      "retrieval_s": 0.411,
+      "reasoning_start_s": 0.425,
+      "ttft_s": 12.724,
+      "total_s": 12.728,
+      "llm": {
+        "prompt_tokens": 1465,
+        "prompt_s": 9.346,
+        "generated_tokens": 50,
+        "generation_s": 2.823,
+        "decode_calls": 53,
+        "prompt_tps": 156.75,
+        "generation_tps": 17.71
+      },
+      "resources": {
+        "samples": 1,
+        "containers_sum_peak_mem_bytes": 5306893462,
+        "swap_peak_used_bytes": 1930862592,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "FinCorp's Q1 2026 revenue target is **$4.5M**.",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "1_Q4_2025_Financial_Report.md",
+          "3_Compliance_Guidelines.md",
+          "2_Employee_Handbook.md"
+        ]
+      ],
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "fin-16",
+      "category": "multi_hop",
+      "difficulty": "hard",
+      "question": "What is the combined annual contract value of the three clients onboarded in Q4 2025?",
+      "expected_answer": "$2,520,000: $1,200,000 (Acme Bank) + $780,000 (Meridian Holdings) + $540,000 (Kestrel Capital).",
+      "expected_source": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 74,
+      "task_id": "3f9b85ea-727c-47ee-ac67-4657ed898514",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.054,
+      "first_event_s": 0.116,
+      "dispatch_s": 0.08,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "embedding": 1
+        },
+        "seconds": 0.0091
+      },
+      "retrieval_s": 0.153,
+      "reasoning_start_s": 0.163,
+      "ttft_s": 14.081,
+      "total_s": 14.086,
+      "llm": {
+        "prompt_tokens": 1451,
+        "prompt_s": 9.593,
+        "generated_tokens": 78,
+        "generation_s": 4.147,
+        "decode_calls": 81,
+        "prompt_tps": 151.26,
+        "generation_tps": 18.81
+      },
+      "resources": {
+        "samples": 1,
+        "containers_sum_peak_mem_bytes": 5242668182,
+        "swap_peak_used_bytes": 1930862592,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "The combined annual contract value of the three clients onboarded in Q4 2025 is **$3.5M** ($1.2M + $780K + $540K).",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "1_Q4_2025_Financial_Report.md",
+          "4_Expense_Policy.md"
+        ]
+      ],
+      "cited_sources": [
+        "1_Q4_2025_Financial_Report.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": false,
+      "missing_patterns": [
+        "\\b2,520,000\\b|\\b2\\.52\\s*(m\\b|million)"
+      ],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "hr-01",
+      "category": "lookup",
+      "difficulty": "easy",
+      "question": "How many days per week are FinCorp employees expected to be in the office?",
+      "expected_answer": "At least 3 days per week (hybrid policy).",
+      "expected_source": [
+        "2_Employee_Handbook.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 75,
+      "task_id": "742da029-5d80-4e46-93e9-18b506d60024",
+      "observed_route": "AGENT",
+      "answered_by": "HR-Assistant",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.045,
+      "first_event_s": 3.537,
+      "dispatch_s": 3.263,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "llm": 1
+        },
+        "seconds": 3.1972
+      },
+      "retrieval_s": 3.595,
+      "reasoning_start_s": 3.603,
+      "ttft_s": 17.674,
+      "total_s": 17.679,
+      "llm": {
+        "prompt_tokens": 1956,
+        "prompt_s": 12.744,
+        "generated_tokens": 84,
+        "generation_s": 4.363,
+        "decode_calls": 89,
+        "prompt_tps": 153.48,
+        "generation_tps": 19.25
+      },
+      "resources": {
+        "samples": 2,
+        "containers_sum_peak_mem_bytes": 5300451012,
+        "swap_peak_used_bytes": 1930862592,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "FinCorp employees are expected to be in the office at least **3 days per week**. This is part of the hybrid policy outlined in the Employee Handbook.",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "2_Employee_Handbook.md",
+          "4_Expense_Policy.md",
+          "5_IT_Security_Policy.md"
+        ]
+      ],
+      "cited_sources": [
+        "2_Employee_Handbook.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "hr-02",
+      "category": "lookup",
+      "difficulty": "easy",
+      "question": "What are FinCorp's standard working hours?",
+      "expected_answer": "Monday to Friday, 9:00 AM to 6:00 PM local time.",
+      "expected_source": [
+        "2_Employee_Handbook.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 76,
+      "task_id": "f89ce323-8f50-4986-890a-8c7e421b4d82",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.043,
+      "first_event_s": 1.848,
+      "dispatch_s": 1.71,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "llm": 1
+        },
+        "seconds": 1.6433
+      },
+      "retrieval_s": 1.902,
+      "reasoning_start_s": 1.908,
+      "ttft_s": 17.391,
+      "total_s": 17.396,
+      "llm": {
+        "prompt_tokens": 1885,
+        "prompt_s": 12.576,
+        "generated_tokens": 85,
+        "generation_s": 4.371,
+        "decode_calls": 90,
+        "prompt_tps": 149.89,
+        "generation_tps": 19.45
+      },
+      "resources": {
+        "samples": 2,
+        "containers_sum_peak_mem_bytes": 5428880600,
+        "swap_peak_used_bytes": 1930862592,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "FinCorp's standard working hours are Monday to Friday, 9:00 AM to 6:00 PM local time.",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "2_Employee_Handbook.md",
+          "3_Compliance_Guidelines.md",
+          "1_Q4_2025_Financial_Report.md",
+          "5_IT_Security_Policy.md"
+        ]
+      ],
+      "cited_sources": [
+        "2_Employee_Handbook.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "hr-03",
+      "category": "lookup",
+      "difficulty": "medium",
+      "question": "What are the core collaboration hours at FinCorp?",
+      "expected_answer": "10:00 AM to 3:00 PM local time.",
+      "expected_source": [
+        "2_Employee_Handbook.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 77,
+      "task_id": "11109351-2f3e-463c-bda1-208de03bb164",
+      "observed_route": "AGENT",
+      "answered_by": "Finance-Analyst",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.035,
+      "first_event_s": 1.952,
+      "dispatch_s": 1.732,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "llm": 1
+        },
+        "seconds": 1.6793
+      },
+      "retrieval_s": 2.01,
+      "reasoning_start_s": 2.022,
+      "ttft_s": 15.331,
+      "total_s": 15.335,
+      "llm": {
+        "prompt_tokens": 1557,
+        "prompt_s": 10.288,
+        "generated_tokens": 88,
+        "generation_s": 4.504,
+        "decode_calls": 93,
+        "prompt_tps": 151.34,
+        "generation_tps": 19.54
+      },
+      "resources": {
+        "samples": 1,
+        "containers_sum_peak_mem_bytes": 4994862409,
+        "swap_peak_used_bytes": 1930862592,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "Core collaboration hours at FinCorp are **10:00 AM – 3:00 PM local time** (see S1).",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "2_Employee_Handbook.md",
+          "1_Q4_2025_Financial_Report.md",
+          "3_Compliance_Guidelines.md",
+          "5_IT_Security_Policy.md"
+        ]
+      ],
+      "cited_sources": [
+        "2_Employee_Handbook.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    },
+    {
+      "id": "hr-04",
+      "category": "numeric",
+      "difficulty": "easy",
+      "question": "How many annual vacation days does an employee with 0–2 years of tenure get?",
+      "expected_answer": "18 vacation days per year.",
+      "expected_source": [
+        "2_Employee_Handbook.md"
+      ],
+      "expected_route": "AGENT",
+      "status": "ok",
+      "error": null,
+      "conversation_id": 78,
+      "task_id": "3868864e-d73e-45da-bcda-737db30c6670",
+      "observed_route": "AGENT",
+      "answered_by": "HR-Assistant",
+      "models": [
+        "Qwen/Qwen3-4B-Instruct-2507"
+      ],
+      "devices": [
+        "cpu"
+      ],
+      "timing_source": "websocket",
+      "submit_http_s": 0.058,
+      "first_event_s": 0.104,
+      "dispatch_s": 0.079,
+      "routing_decision": {
+        "decisions": 1,
+        "methods": {
+          "embedding": 1
+        },
+        "seconds": 0.006
+      },
+      "retrieval_s": 0.176,
+      "reasoning_start_s": 0.186,
+      "ttft_s": 13.084,
+      "total_s": 13.087,
+      "llm": {
+        "prompt_tokens": 1492,
+        "prompt_s": 9.475,
+        "generated_tokens": 65,
+        "generation_s": 3.285,
+        "decode_calls": 68,
+        "prompt_tps": 157.47,
+        "generation_tps": 19.79
+      },
+      "resources": {
+        "samples": 1,
+        "containers_sum_peak_mem_bytes": 5213924618,
+        "swap_peak_used_bytes": 1930862592,
+        "docker_host_swap_peak_used_bytes": null
+      },
+      "answer": "An employee with 0–2 years of tenure receives **18 annual vacation days**, as stated in the Paid Time Off section of the Employee Handbook.",
+      "retrieval_steps": 1,
+      "retrieved_sources": [
+        [
+          "2_Employee_Handbook.md",
+          "4_Expense_Policy.md"
+        ]
+      ],
+      "cited_sources": [
+        "2_Employee_Handbook.md"
+      ],
+      "fallback": null,
+      "answer_correct_auto": true,
+      "missing_patterns": [],
+      "source_basis": "cited",
+      "source_ranks": null,
+      "source_correct_auto": true,
+      "route_correct": true,
+      "review": [
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        },
+        {
+          "reviewer": null,
+          "answer_correct": null,
+          "comment": null
+        }
+      ]
+    }
+  ]
+}

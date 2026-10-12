@@ -14,7 +14,6 @@ import {
 import { usePathname, useRouter } from 'next/navigation';
 import { Center, Image, Stack, Tooltip, UnstyledButton } from '@mantine/core';
 import { useAuth } from '@/components/auth/auth-provider';
-import { authApi } from '@/lib/auth/api';
 
 interface NavbarLinkProps {
   icon: typeof IconDeviceDesktopAnalytics;
@@ -29,6 +28,7 @@ function NavbarLink({ icon: Icon, label, active, onClick, status }: NavbarLinkPr
   return (
     <Tooltip label={label} position="right" transitionProps={{ duration: 0 }} className=''>
       <UnstyledButton
+        aria-label={label}
         onClick={onClick}
         className={`
           w-[30px] md:w-[50px] h-[50px] rounded-md flex items-center justify-center
@@ -60,7 +60,12 @@ export function NavbarMinimal() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    router.replace('/auth/login');
+  };
 
   const links = mockdata.map((link) => (
     <NavbarLink
@@ -128,7 +133,7 @@ export function NavbarMinimal() {
         <NavbarLink
           icon={IconLogout}
           label="Logout"
-          onClick={() => authApi.logout().then(() => router.push('/auth/login'))}
+          onClick={() => void handleLogout()}
         />
       </Stack>
     </nav>

@@ -1,0 +1,92 @@
+version: 1.0.0
+corpus_dir: corpus
+corpus:
+  garden-handbook.txt: 747cd65e638cb07c1398926bf7f16b1dd6070ef0b1eb0d8187986a2e6a5b6d06
+  plot-fees.txt: 981b101e9cd631ae1fd17af2d076c1b89bc75d258d2ef8e9864f69785188d406
+  tool-shed.txt: ee63d0d78e88cf5ac4c084cb3bf3018f6ecf9329d41d477d03f82d68281f9e71
+refusal_patterns: &refusal_patterns
+  - '\b(?:do(?:es)?\s*(?:not|n''t)\s+(?:say|mention|contain|cover|include|state|specify)|no\s+(?:information|mention)|not\s+(?:mentioned|stated|specified|covered)|could\s*(?:not|n''t)\s+find|cannot\s+find)\b'
+items:
+  - id: fg-01
+    category: lookup
+    difficulty: easy
+    question: What time does the garden gate open on weekdays?
+    expected_answer: At 7:00 am.
+    expected_source: garden-handbook.txt
+    answer_patterns:
+      - '\b7(?::00)?\s*(?:am|a\.m\.)'
+  - id: fg-02
+    category: lookup
+    difficulty: easy
+    question: How many volunteer hours does each plot holder give per season?
+    expected_answer: 12 hours per season.
+    expected_source: garden-handbook.txt
+    answer_patterns:
+      - '\b(?:12|twelve)\b'
+  - id: fg-03
+    category: lookup
+    difficulty: medium
+    question: On which day are the shared compost bins emptied?
+    expected_answer: On Saturday mornings.
+    expected_source: garden-handbook.txt
+    answer_patterns:
+      - '\bsaturdays?\b'
+  - id: fg-04
+    category: numeric
+    difficulty: medium
+    question: How much does a full plot cost for one season if the fee is paid before 1 March?
+    expected_answer: '$72: the $80 fee less the 10% early payment discount.'
+    expected_source: plot-fees.txt
+    answer_patterns:
+      - '\b72\b'
+    evidence_patterns:
+      - 'Full plot[^\n]*\$80 per season'
+      - 'before 1 March get a 10\s*% discount'
+  - id: fg-05
+    category: multi_hop
+    difficulty: hard
+    question: Who do you ask to borrow the rotary tiller, and how much is its deposit?
+    expected_answer: Ines Okafor, the shed coordinator; the deposit is $25.
+    expected_source:
+      - garden-handbook.txt
+      - tool-shed.txt
+    answer_patterns:
+      - '\bOkafor\b'
+      - '\$\s*25\b'
+  - id: fg-06
+    category: lookup
+    difficulty: easy
+    question: For how many days can a member keep the rotary tiller?
+    expected_answer: Two days at most.
+    expected_source: tool-shed.txt
+    answer_patterns:
+      - '\b(?:2|two)\s+days\b'
+  - id: fg-07
+    category: not_in_corpus
+    difficulty: easy
+    question: Does the garden allow beekeeping?
+    expected_answer: The documents do not say.
+    expected_source: null
+    answer_patterns: *refusal_patterns
+    absent_terms:
+      - beekeeping
+      - bees
+      - hive
+  - id: fg-08
+    category: not_in_corpus
+    difficulty: medium
+    question: What is the wifi password at the tool shed?
+    expected_answer: The documents do not say.
+    expected_source: null
+    answer_patterns: *refusal_patterns
+    absent_terms:
+      - wifi
+      - password
+  - id: fg-09
+    category: direct
+    difficulty: easy
+    question: What is 15 multiplied by 4?
+    expected_answer: '60.'
+    expected_source: null
+    answer_patterns:
+      - '\b60\b'

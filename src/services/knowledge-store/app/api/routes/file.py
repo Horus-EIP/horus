@@ -7,12 +7,21 @@ endpoint live alongside the route decorators.
 import asyncio
 import os
 import uuid
+from typing import NamedTuple
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 
-from app.api.utils import docx_to_text, image_pdf_to_text, pdf_to_text, save_file
-from app.chroma_db import DocumentModel, knowledge_collection, store_file
+from app.api.utils import docx_to_text, image_pdf_pages, pdf_pages, save_file
+from app.chroma_db import DocumentModel, store_file
+from app.chroma_db.services.file_service import (
+    StoredDocument,
+    document_category,
+    document_texts,
+    entry_texts,
+    stored_documents,
+)
 from app.core.logging import get_logger
+from app.core.metrics import record_document_operation
 from app.services.content_analyzer import ContentAnalyzer
 
 router = APIRouter(tags=["File"])
@@ -20,29 +29,32 @@ logger = get_logger("FileRouter")
 
 _content_analyzer = ContentAnalyzer()
 
+LIST_EXCERPT_MAX_CHARS = 400
 
-async def extract_text(path: str, ext: str) -> str:
-    """Turn a file on disk into plain text. The one extraction path in the service.
 
-    Lives here rather than in ``app.api.utils`` on purpose: it resolves
-    ``pdf_to_text`` / ``docx_to_text`` through *this* module's globals, which is
-    where the existing route tests patch them. The corpus scanner imports it from
-    here so an upload and a corpus ingest can never drift apart.
+class ExtractedText(NamedTuple):
+    text: str
+    page_starts: tuple[int, ...] = ()
 
-    ``ext`` may carry a leading dot or not.
 
-    Anything that is not PDF or DOCX is read as UTF-8 with undecodable bytes
-    dropped. That was already the fallback branch's behaviour; the old dedicated
-    ``txt`` branch used the process default encoding, which raises on a perfectly
-    good UTF-8 file whenever the container locale is not UTF-8.
-    """
+def pages_to_text(pages: list[str], trailing_newline: bool = True) -> ExtractedText:
+    starts: list[int] = []
+    offset = 0
+    for page in pages:
+        starts.append(offset)
+        offset += len(page) + 1
+    text = "\n".join(pages) + ("\n" if trailing_newline and pages else "")
+    return ExtractedText(text, tuple(starts))
+
+
+async def extract_document(path: str, ext: str) -> ExtractedText:
     kind = (ext or "").lower().lstrip(".")
     if kind == "pdf":
-        return await pdf_to_text(path)
+        return pages_to_text(await pdf_pages(path))
     if kind == "docx":
-        return await docx_to_text(path)
+        return ExtractedText(await docx_to_text(path))
     with open(path, encoding="utf-8", errors="ignore") as handle:
-        return handle.read()
+        return ExtractedText(handle.read())
 
 
 def _match_stored_title(requested: str, stored_title: str) -> bool:
@@ -69,7 +81,9 @@ def _match_stored_title(requested: str, stored_title: str) -> bool:
     summary="Resolve document by filename",
     description=(
         "Return full indexed text for stored document(s) whose title matches the given "
-        "filename or basename (case-insensitive). Used by agents when the user names a file."
+        "filename or basename (case-insensitive). Used by agents when the user names a file. "
+        "`documents` gives each matched document's id, title and text apart, so an answer "
+        "can cite the one it used."
     ),
     responses={
         200: {
@@ -81,6 +95,13 @@ def _match_stored_title(requested: str, stored_title: str) -> bool:
                         "matched_titles": ["notes.txt"],
                         "doc_ids": ["abc123"],
                         "text": "Full document body...",
+                        "documents": [
+                            {
+                                "doc_id": "abc123",
+                                "title": "notes.txt",
+                                "text": "Full document body...",
+                            }
+                        ],
                     }
                 }
             },
@@ -95,43 +116,80 @@ async def resolve_document_by_name(
         description="Filename or basename as stored in the knowledge store (e.g. report.pdf)",
     ),
 ):
-    """Return full text for stored document(s) matching ``name``."""
     try:
-        stored = knowledge_collection.get(include=["documents", "metadatas", "ids"])
+        matched = [
+            document.doc_id
+            for document in stored_documents()
+            if _match_stored_title(name, document.metadata.get("title") or "Untitled")
+        ]
+        texts = document_texts(matched)
     except Exception as e:
         logger.error("resolve_document_by_name: get failed: %s", e)
+        record_document_operation("get", success=False)
         raise HTTPException(status_code=404, detail=str(e))
 
-    ids = stored.get("ids") or []
-    documents = stored.get("documents") or []
-    metadatas = stored.get("metadatas") or []
-
-    matched_ids: list[str] = []
-    matched_titles: list[str] = []
-    parts: list[str] = []
-
-    for doc_id, doc_content, meta in zip(ids, documents, metadatas, strict=False):
-        meta = meta or {}
-        title = meta.get("title") or "Untitled"
-        if not _match_stored_title(name, title):
-            continue
-        matched_ids.append(str(doc_id))
-        matched_titles.append(title)
-        text = (doc_content or "") if isinstance(doc_content, str) else str(doc_content or "")
-        parts.append(text)
-
-    if not parts:
+    found = [texts[doc_id] for doc_id in matched if doc_id in texts]
+    record_document_operation("get", success=bool(found))
+    if not found:
         raise HTTPException(
             status_code=404,
             detail=f"No indexed document matched name={name!r}",
         )
 
-    combined = "\n\n---\n\n".join(parts)
     return {
         "name": name.strip(),
-        "matched_titles": matched_titles,
-        "doc_ids": matched_ids,
-        "text": combined,
+        "matched_titles": [document.title for document in found],
+        "doc_ids": [document.doc_id for document in found],
+        "text": "\n\n---\n\n".join(document.text for document in found),
+        "documents": [
+            {"doc_id": document.doc_id, "title": document.title, "text": document.text}
+            for document in found
+        ],
+    }
+
+
+@router.get(
+    "/{doc_id}/text",
+    summary="Full text of one document",
+    description=(
+        "Return the full indexed text of one document, rebuilt from its passages, by its "
+        "document id. Used by agents to read an attached file by the id the UI sent."
+    ),
+    responses={
+        200: {
+            "description": "The document's full text",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "doc_id": "abc123",
+                        "title": "notes.txt",
+                        "category": "general",
+                        "chunk_count": 3,
+                        "text": "Full document body...",
+                    }
+                }
+            },
+        },
+        404: {"description": "No document with that id"},
+        500: {"description": "The index could not be read"},
+    },
+)
+async def get_document_text(doc_id: str):
+    try:
+        found = document_texts([doc_id]).get(doc_id)
+    except Exception as e:
+        logger.error("get_document_text: get failed for %s: %s", doc_id, e)
+        record_document_operation("get", success=False)
+        raise HTTPException(status_code=500, detail=str(e))
+    record_document_operation("get", success=found is not None)
+    if found is None:
+        raise HTTPException(status_code=404, detail=f"No document with id {doc_id!r}")
+    return {
+        "doc_id": found.doc_id,
+        "title": found.title,
+        "category": document_category(found.metadata),
+        "chunk_count": found.chunk_count,
+        "text": found.text,
     }
 
 
@@ -172,11 +230,11 @@ async def upload_file(files: list[UploadFile] = File(...)):
             file_ext = file.filename.split(".")[-1].lower()
             doc_path = await save_file(file, file_ext)
 
-            text = await extract_text(doc_path, file_ext)
+            extracted = await extract_document(doc_path, file_ext)
 
             auto_analysis = await asyncio.to_thread(
                 _content_analyzer.analyze,
-                text,
+                extracted.text,
                 file.filename,
             )
 
@@ -184,10 +242,12 @@ async def upload_file(files: list[UploadFile] = File(...)):
                 DocumentModel(
                     id=doc_id,
                     title=file.filename,
-                    content=text,
+                    content=extracted.text,
                     size=os.path.getsize(doc_path),
                 ),
                 auto_analysis=auto_analysis,
+                extra_metadata={"stored_path": doc_path},
+                page_starts=extracted.page_starts,
             )
 
             logger.info(f"File {file.filename} stored successfully with ID {doc_id}")
@@ -205,10 +265,42 @@ async def upload_file(files: list[UploadFile] = File(...)):
     return responses
 
 
+def _listed(document: StoredDocument, text: str) -> dict:
+    meta = document.metadata
+    try:
+        size = int(meta.get("size", 0))
+    except (TypeError, ValueError):
+        size = 0
+    excerpt = text[:LIST_EXCERPT_MAX_CHARS].strip()
+    if len(text) > LIST_EXCERPT_MAX_CHARS:
+        excerpt = f"{excerpt}..."
+    auto_summary = (meta.get("auto_summary") or "").strip()
+    conf = meta.get("confidence_score")
+    try:
+        confidence = float(conf) if conf is not None and conf != "" else None
+    except (TypeError, ValueError):
+        confidence = None
+    return {
+        "id": document.doc_id,
+        "title": meta.get("title") or "Untitled",
+        "date": meta.get("date") or "Unknown",
+        "size": size,
+        "summary": auto_summary or excerpt or "(no text extracted)",
+        "excerpt": excerpt,
+        "category": document_category(meta),
+        "document_type": (meta.get("auto_type") or "").strip() or "unknown",
+        **({"confidence_score": confidence} if confidence is not None else {}),
+        **({"chunk_count": chunks} if isinstance(chunks := meta.get("chunk_count"), int) else {}),
+    }
+
+
 @router.get(
     "",
     summary="List all files",
-    description="Retrieve a list of all files currently indexed in the knowledge store.",
+    description=(
+        "Retrieve a list of all documents currently indexed in the knowledge store, one "
+        "entry per document however many passages it was split into."
+    ),
     responses={
         200: {
             "description": "List of documents",
@@ -236,53 +328,14 @@ async def upload_file(files: list[UploadFile] = File(...)):
 )
 async def get_all_files():
     """Get all files in the knowledge store (metadata + summary; not full body)."""
-    list_excerpt_max = 400
     try:
-        stored_files = knowledge_collection.get(include=["documents", "metadatas"])
-
-        files = []
-        for doc_id, doc_content, meta in zip(
-            stored_files["ids"],
-            stored_files["documents"],
-            stored_files["metadatas"],
-            strict=False,
-        ):
-            meta = meta or {}
-            title = meta.get("title") or "Untitled"
-            date = meta.get("date") or "Unknown"
-            try:
-                size = int(meta.get("size", 0))
-            except (TypeError, ValueError):
-                size = 0
-            text = (doc_content or "") if isinstance(doc_content, str) else str(doc_content or "")
-            excerpt = text[:list_excerpt_max].strip()
-            if len(text) > list_excerpt_max:
-                excerpt = f"{excerpt}..."
-            auto_summary = (meta.get("auto_summary") or "").strip()
-            summary = auto_summary if auto_summary else (excerpt or "(no text extracted)")
-            category = (meta.get("auto_category") or "").strip() or "general"
-            document_type = (meta.get("auto_type") or "").strip() or "unknown"
-            conf = meta.get("confidence_score")
-            try:
-                confidence = float(conf) if conf is not None and conf != "" else None
-            except (TypeError, ValueError):
-                confidence = None
-
-            files.append(
-                {
-                    "id": doc_id,
-                    "title": title,
-                    "date": date,
-                    "size": size,
-                    "summary": summary,
-                    "excerpt": excerpt,
-                    "category": category,
-                    "document_type": document_type,
-                    **({"confidence_score": confidence} if confidence is not None else {}),
-                }
-            )
-
-        return {"documents": files}
+        documents = stored_documents()
+        texts = entry_texts(document.head_id for document in documents)
+        return {
+            "documents": [
+                _listed(document, texts.get(document.head_id, "")) for document in documents
+            ]
+        }
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -348,17 +401,17 @@ async def upload_file_to_text(type: str, doc_id: str, file: UploadFile = File(..
     path = await save_file(file, type)
 
     if type == "pdf":
-        text = await pdf_to_text(path)
+        extracted = pages_to_text(await pdf_pages(path))
     elif type == "docx":
-        text = await docx_to_text(path)
+        extracted = ExtractedText(await docx_to_text(path))
     elif type == "image":
-        text = await image_pdf_to_text(path)
+        extracted = pages_to_text(await image_pdf_pages(path), trailing_newline=False)
     else:
         raise HTTPException(status_code=400, detail="Invalid file type")
 
     auto_analysis = await asyncio.to_thread(
         _content_analyzer.analyze,
-        text,
+        extracted.text,
         file.filename,
     )
 
@@ -366,15 +419,17 @@ async def upload_file_to_text(type: str, doc_id: str, file: UploadFile = File(..
         DocumentModel(
             id=doc_id,
             title=file.filename,
-            content=text,
+            content=extracted.text,
             size=os.path.getsize(path) if os.path.exists(path) else 0,
         ),
         auto_analysis=auto_analysis,
+        extra_metadata={"stored_path": path},
+        page_starts=extracted.page_starts,
     )
 
     return {
         "filename": file.filename,
         "stored_at": path,
-        "text": text,
+        "text": extracted.text,
         "auto_analysis": auto_analysis,
     }

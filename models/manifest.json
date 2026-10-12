@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "defaults": {
+    "cpu-lean": "qwen3-4b-q4km",
+    "cpu-standard": "qwen3-4b-q4km"
+  },
+  "mirror_bases": [],
+  "models": [
+    {
+      "id": "qwen3-4b-q4km",
+      "version": "1.0.0",
+      "file": "qwen3-4b-instruct-2507-Q4_K_M.gguf",
+      "size_bytes": 2497281120,
+      "sha256": "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597",
+      "min_ram_gb": 16,
+      "profiles": ["cpu-standard", "cpu-lean"],
+      "licence": "Apache-2.0",
+      "source": "unsloth/Qwen3-4B-Instruct-2507-GGUF@a06e946bb6b655725eafa393f4a9745d460374c9:Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+      "mirrors": [
+        "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/a06e946bb6b655725eafa393f4a9745d460374c9/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+      ]
+    }
+  ]
+}

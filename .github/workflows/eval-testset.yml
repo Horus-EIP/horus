@@ -1,0 +1,53 @@
+name: Eval test set
+
+on:
+  push:
+    branches: [master, main, pre-release-fix, 'Sprint#1_September2026_Tek5']
+    paths:
+      - demo_assets/**
+      - tests/eval/**
+      - scripts/eval/**
+      - scripts/benchmarks/**
+      - scripts/perf/benchmark-pipeline.py
+      - scripts/perf/quality-benchmark.py
+      - opensource/horus-bench-kit/**
+      - opensource/horus-bench-kit/src/**
+      - .github/workflows/eval-testset.yml
+  pull_request:
+    paths:
+      - demo_assets/**
+      - tests/eval/**
+      - scripts/eval/**
+      - scripts/benchmarks/**
+      - scripts/perf/benchmark-pipeline.py
+      - scripts/perf/quality-benchmark.py
+      - opensource/horus-bench-kit/**
+      - opensource/horus-bench-kit/src/**
+      - .github/workflows/eval-testset.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: '3.13'
+
+jobs:
+  test-eval:
+    name: Tests · Eval test set
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install test dependencies
+        run: pip install pytest pyyaml httpx websockets
+
+      - name: Check the test set and the runner
+        run: pytest tests/eval -q
+
+      - name: Check the benchmark kit
+        run: pytest opensource/horus-bench-kit -q

@@ -9,40 +9,81 @@ LLM that genuinely needs it.
 
 import os
 import threading
-from pathlib import Path
+import time
 
 import numpy as np
 
+from core.embeddings_client import EmbeddingsClient
 from core.logger import get_logger
 
 logger = get_logger("embedding_setup")
 
-BASE_DIR = Path(__file__).resolve().parent.parent
 EMBED_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
-EMBED_MODEL_DIR = BASE_DIR / "models/all-MiniLM-L6-v2"
+EMBED_THREADS_ENV = "MAS_EMBED_THREADS"
+SHARED_THREADS_ENV = "LLM_TORCH_INTRAOP_THREADS"
+EMBED_URL_ENV = "MAS_EMBED_URL"
+EMBED_MODEL_ENV = "MAS_EMBED_MODEL"
+SERVER_DIMENSIONS = 384
+STARTUP_WAIT_SECONDS = 60.0
+_started_at = time.monotonic()
 
 _embedder = None
 _embedder_load_lock = threading.Lock()
 
 
-def _resolve_model_path() -> str:
-    """Prefer the baked-in local copy; fall back to the HF id (network at runtime)."""
-    if EMBED_MODEL_DIR.exists() and any(EMBED_MODEL_DIR.iterdir()):
-        return str(EMBED_MODEL_DIR)
-    return EMBED_MODEL_ID
+def embed_threads() -> int | None:
+    for name in (EMBED_THREADS_ENV, SHARED_THREADS_ENV):
+        raw = os.environ.get(name, "").strip()
+        if not raw:
+            continue
+        try:
+            threads = int(raw)
+        except ValueError:
+            logger.warning("Ignoring %s=%r: not a whole number of threads", name, raw)
+            continue
+        if threads > 0:
+            return threads
+    return None
+
+
+def server_model() -> str:
+    return os.environ.get(EMBED_MODEL_ENV, "").strip() or EMBED_MODEL_ID
+
+
+def _connect_to_embeddings_server(url: str) -> EmbeddingsClient:
+    model = server_model()
+    client = EmbeddingsClient(url, model, SERVER_DIMENSIONS)
+    logger.info(
+        "Embeddings come from %s with the model %s, %d values per vector: "
+        "no embedding model is loaded in MAS",
+        url,
+        model,
+        SERVER_DIMENSIONS,
+    )
+    refused = client.wait_until_ready(_started_at + STARTUP_WAIT_SECONDS)
+    if refused:
+        logger.warning(
+            "The embeddings server is up but refused a test request, so skill matching "
+            "and the router's embedding stage fail until it answers: %s",
+            refused,
+        )
+    return client
 
 
 def _load_embedder():
-    from sentence_transformers import SentenceTransformer
+    url = os.environ.get(EMBED_URL_ENV, "").strip()
+    if url:
+        return _connect_to_embeddings_server(url)
+    from fastembed import TextEmbedding
 
-    path = _resolve_model_path()
-    logger.info("Loading sentence-embedding model from %s on CPU", path)
-    model = SentenceTransformer(path, device="cpu")
+    threads = embed_threads()
     logger.info(
-        "Sentence-embedding model ready: dim=%d, max_seq_len=%s",
-        model.get_sentence_embedding_dimension(),
-        getattr(model, "max_seq_length", "?"),
+        "Loading sentence-embedding model %s with FastEmbed on CPU (threads=%s)",
+        EMBED_MODEL_ID,
+        threads or "onnxruntime default",
     )
+    model = TextEmbedding(EMBED_MODEL_ID, threads=threads, cuda=False)
+    logger.info("Sentence-embedding model ready: dim=%d", model.embedding_size)
     return model
 
 
@@ -75,6 +116,12 @@ def start_embedding_preload_background_thread() -> None:
                 warm_skill_cache()
             except Exception:
                 logger.exception("Skill-cache warm failed during embedding preload.")
+            try:
+                from tasks.router import warm_router_examples
+
+                warm_router_examples()
+            except Exception:
+                logger.exception("Router examples warm failed during embedding preload.")
         except Exception:
             logger.exception(
                 "Background embedder preload failed; first suggest call will retry."
@@ -92,13 +139,10 @@ def embed_texts(texts: list[str]) -> np.ndarray:
         raise RuntimeError(
             "Embedding model is not loaded. Check container logs for load errors."
         )
-    vecs = _embedder.encode(
-        texts,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
-        show_progress_bar=False,
-    )
-    return vecs.astype(np.float32, copy=False)
+    vectors = list(_embedder.embed(list(texts)))
+    if not vectors:
+        return np.empty((0, _embedder.embedding_size), dtype=np.float32)
+    return np.stack(vectors).astype(np.float32, copy=False)
 
 
 def embed_text(text: str) -> np.ndarray:

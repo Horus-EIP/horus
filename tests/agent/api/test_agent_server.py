@@ -9,8 +9,13 @@ Routes under test (``src/services/agent/app/agent_server/server.py``):
 
 from __future__ import annotations
 
+from pathlib import Path
+from unittest.mock import patch
+
 import pytest
 from fastapi.testclient import TestClient
+
+RELEASE_VERSION = (Path(__file__).resolve().parents[3] / "VERSION").read_text(encoding="utf-8").strip()
 
 
 @pytest.fixture
@@ -18,6 +23,35 @@ def client():
     from agent_server.server import app  # noqa: PLC0415
 
     return TestClient(app)
+
+
+class TestHealth:
+    def test_health_answers_without_credentials(self, client):
+        r = client.get("/health")
+        assert r.status_code == 200
+        assert r.json()["status"] == "healthy"
+        assert r.json()["service"] == "agent"
+
+    def test_health_and_openapi_report_the_release_version(self, client):
+        assert client.get("/health").json()["version"] == RELEASE_VERSION
+        assert client.get("/openapi.json").json()["info"]["version"] == RELEASE_VERSION
+
+    def test_health_loads_no_model_and_calls_nothing_downstream(self, client):
+        from agent_server import server  # noqa: PLC0415
+
+        with (
+            patch.object(server.decision_agent, "_ensure_causal_loaded") as ensure_loaded,
+            patch.object(server.decision_agent, "decide") as decide,
+            patch.object(server.requests, "get") as http_get,
+            patch.object(server.requests, "post") as http_post,
+        ):
+            r = client.get("/health")
+
+        assert r.status_code == 200
+        ensure_loaded.assert_not_called()
+        decide.assert_not_called()
+        http_get.assert_not_called()
+        http_post.assert_not_called()
 
 
 class TestCapabilities:

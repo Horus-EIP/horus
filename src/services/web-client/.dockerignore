@@ -3,3 +3,11 @@ node_modules
 .git
 *.md
 .env*.local
+.env
+.env.production
+*.pem
+*.tsbuildinfo
+out
+coverage
+.turbo
+.cache

@@ -12,8 +12,12 @@ from typing import Any, NamedTuple
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
-from app.api.routes.file import _content_analyzer, extract_text
+from app.api.routes.file import ExtractedText, _content_analyzer, extract_document
 from app.chroma_db import DocumentModel, knowledge_collection, store_file
+from app.chroma_db.services import file_service, reindex
+from app.chroma_db.services.corpus_version import bump_corpus_version
+from app.chroma_db.services.deleted_sources import forget_deleted, was_deleted
+from app.chroma_db.services.file_service import chunk_id, document_id_of
 from app.core.logging import get_logger
 from app.services.content_analyzer import ContentAnalyzer
 
@@ -21,6 +25,10 @@ logger = get_logger("CorpusRouter")
 
 CORPUS_TOKEN_ENV = "CORPUS_SCAN_TOKEN"
 CORPUS_TOKEN_HEADER = "X-Corpus-Token"
+STARTUP_REINDEX_ENV = "KNOWLEDGE_STORE_REINDEX_ON_STARTUP"
+DISABLED_VALUES = frozenset({"0", "false", "no", "off"})
+REQUESTED = "request"
+STARTUP = "startup"
 
 async def require_corpus_token(
     presented: str | None = Header(default=None, alias=CORPUS_TOKEN_HEADER),
@@ -200,19 +208,22 @@ def _still_pinned(path: Path, pinned: Candidate) -> bool:
 def _pinned_path(fd: int, path: Path) -> str:
     return f"/proc/self/fd/{fd}" if HAS_PROC_FD else str(path)
 
-def _extract_text_blocking(path: str, ext: str) -> str:
-    return asyncio.run(extract_text(path, ext))
+def _extract_text_blocking(path: str, ext: str) -> ExtractedText:
+    return asyncio.run(extract_document(path, ext))
 
 def _store_blocking(
     doc: DocumentModel,
     auto_analysis: dict[str, Any],
     extra_metadata: dict[str, Any],
-) -> None:
-    asyncio.run(store_file(doc, auto_analysis=auto_analysis, extra_metadata=extra_metadata))
+    page_starts: tuple[int, ...] = (),
+) -> int:
+    return asyncio.run(store_file(
+        doc, auto_analysis=auto_analysis, extra_metadata=extra_metadata, page_starts=page_starts,
+    ))
 
 def _already_stored(doc_id: str) -> bool:
     try:
-        found = knowledge_collection.get(ids=[doc_id])
+        found = knowledge_collection.get(ids=[chunk_id(doc_id, 0), doc_id], include=["metadatas"])
     except Exception as exc:  # noqa: BLE001 - a lookup failure must not abort the scan
         logger.warning("corpus: id lookup failed for %s: %s", doc_id, exc)
         return False
@@ -220,29 +231,50 @@ def _already_stored(doc_id: str) -> bool:
 
 def _drop_previous_versions(rel: str, keep_id: str) -> int:
     try:
-        found = knowledge_collection.get(where={"source_path": rel})
+        found = knowledge_collection.get(where={"source_path": rel}, include=["metadatas"])
     except Exception as exc:  # noqa: BLE001
         logger.warning("corpus: stale lookup failed for %s: %s", rel, exc)
         return 0
-    stale = [i for i in (found.get("ids") or []) if i != keep_id]
-    if not stale:
+    stale_ids: list[str] = []
+    stale_documents: set[str] = set()
+    for entry_id, metadata in zip(
+        found.get("ids") or [], found.get("metadatas") or [], strict=False
+    ):
+        document = document_id_of(str(entry_id), metadata or {})
+        if document != keep_id:
+            stale_ids.append(str(entry_id))
+            stale_documents.add(document)
+    if not stale_ids:
         return 0
     try:
-        knowledge_collection.delete(ids=stale)
+        knowledge_collection.delete(ids=stale_ids)
     except Exception as exc:  # noqa: BLE001
         logger.warning("corpus: stale delete failed for %s: %s", rel, exc)
         return 0
-    return len(stale)
+    bump_corpus_version()
+    return len(stale_documents)
 
 _scan_slot = asyncio.Semaphore(1)
 _job: dict[str, Any] | None = None
 _scan_task: asyncio.Task | None = None
+_reindex_job: dict[str, Any] | None = None
+_reindex_task: asyncio.Task | None = None
+_startup_check: asyncio.Task | None = None
 
-def _new_job(dry_run: bool) -> dict[str, Any]:
+def _busy_detail() -> str:
+    if (_reindex_job or {}).get("state") == "running":
+        return (f"A re-index is running (job {_reindex_job['job_id']}). "
+                f"Poll GET /corpus/reindex and retry when it reports completed.")
+    running = (_job or {}).get("job_id", "unknown")
+    return (f"A corpus scan is already running (job {running}). "
+            f"Poll GET /corpus/status and retry when it reports completed.")
+
+def _new_job(dry_run: bool, include_deleted: bool = False) -> dict[str, Any]:
     return {
         "job_id": uuid.uuid4().hex,
         "state": "running",
         "dry_run": dry_run,
+        "include_deleted": include_deleted,
         "root": str(CORPUS_ROOT),
         "started_at": datetime.now(UTC).isoformat(),
         "finished_at": None,
@@ -253,6 +285,7 @@ def _new_job(dry_run: bool) -> dict[str, Any]:
             "ingested": 0,
             "would_ingest": 0,
             "skipped_unchanged": 0,
+            "skipped_deleted": 0,
             "rejected": 0,
             "failed": 0,
             "replaced_stale": 0,
@@ -293,6 +326,14 @@ async def _ingest_one(job: dict[str, Any], path: Path, rel: str, pinned: Candida
             })
             return
 
+        if not job["include_deleted"] and await asyncio.to_thread(was_deleted, rel, digest):
+            job["totals"]["skipped_deleted"] += 1
+            _record(job, {
+                "path": rel, "decision": "skipped_deleted",
+                "doc_id": doc_id, "bytes": size,
+            })
+            return
+
         if job["dry_run"]:
             job["totals"]["would_ingest"] += 1
             _record(job, {
@@ -305,25 +346,28 @@ async def _ingest_one(job: dict[str, Any], path: Path, rel: str, pinned: Candida
             _record_changed(job, rel, size)
             return
 
-        text = await asyncio.to_thread(
+        extracted = await asyncio.to_thread(
             _extract_text_blocking, _pinned_path(fd, path), path.suffix
         )
-        analysis = await asyncio.to_thread(_ANALYZER.analyze, text, path.name)
+        analysis = await asyncio.to_thread(_ANALYZER.analyze, extracted.text, path.name)
 
         replaced = await asyncio.to_thread(_drop_previous_versions, rel, doc_id)
         job["totals"]["replaced_stale"] += replaced
 
-        await asyncio.to_thread(
+        chunks = await asyncio.to_thread(
             _store_blocking,
-            DocumentModel(id=doc_id, title=path.name, content=text, size=size),
+            DocumentModel(id=doc_id, title=path.name, content=extracted.text, size=size),
             analysis,
             {"source_path": rel, "content_sha256": digest, "source": "corpus"},
+            extracted.page_starts,
         )
+        if job["include_deleted"]:
+            await asyncio.to_thread(forget_deleted, rel, digest)
 
         job["totals"]["ingested"] += 1
         _record(job, {
             "path": rel, "decision": "ingested", "doc_id": doc_id,
-            "bytes": size, "characters": len(text),
+            "bytes": size, "characters": len(extracted.text), "chunks": chunks,
             **({"replaced_stale": replaced} if replaced else {}),
         })
     finally:
@@ -377,7 +421,9 @@ async def _run_scan(job: dict[str, Any]) -> None:
         "Walk the read-only folder mounted at CORPUS_DIR (default /app/corpus) and "
         "index every supported file. Returns immediately with a job id; poll "
         "GET /corpus/status for progress. Files already indexed with identical "
-        "content are skipped, so running this twice is a no-op. "
+        "content are skipped, so running this twice is a no-op. Files deleted from "
+        "the knowledge store are skipped too (decision skipped_deleted), even after "
+        "an edit, unless include_deleted=true. "
         "Pass dry_run=true to get the candidate list and per-file decisions "
         "without embedding anything. Requires the X-Corpus-Token header."
     ),
@@ -386,7 +432,10 @@ async def _run_scan(job: dict[str, Any]) -> None:
             "description": "Scan accepted and running in the background",
             "content": {
                 "application/json": {
-                    "example": {"job_id": "9f2c...", "state": "running", "dry_run": False}
+                    "example": {
+                        "job_id": "9f2c...", "state": "running",
+                        "dry_run": False, "include_deleted": False,
+                    }
                 }
             },
         },
@@ -401,6 +450,13 @@ async def scan_corpus(
         False,
         description="Report what would happen without embedding or storing anything.",
     ),
+    include_deleted: bool = Query(
+        False,
+        description=(
+            "Also index files that were deleted from the knowledge store, and take "
+            "the ones it indexes off the deleted list."
+        ),
+    ),
 ):
     global _job, _scan_task
 
@@ -414,21 +470,16 @@ async def scan_corpus(
         )
 
     if _scan_slot.locked():
-        running = (_job or {}).get("job_id", "unknown")
-        raise HTTPException(
-            status_code=409,
-            detail=f"A corpus scan is already running (job {running}). "
-                   f"Poll GET /corpus/status and retry when it reports completed.",
-        )
+        raise HTTPException(status_code=409, detail=_busy_detail())
     await _scan_slot.acquire()
 
-    _job = _new_job(dry_run)
-    logger.info("corpus scan %s starting (dry_run=%s) on %s",
-                _job["job_id"], dry_run, CORPUS_ROOT)
+    _job = _new_job(dry_run, include_deleted)
+    logger.info("corpus scan %s starting (dry_run=%s, include_deleted=%s) on %s",
+                _job["job_id"], dry_run, include_deleted, CORPUS_ROOT)
     _scan_task = asyncio.create_task(_run_scan(_job))
 
     return {"job_id": _job["job_id"], "state": "running", "dry_run": dry_run,
-            "root": str(CORPUS_ROOT)}
+            "include_deleted": include_deleted, "root": str(CORPUS_ROOT)}
 
 @router.get(
     "/status",
@@ -449,6 +500,7 @@ async def scan_corpus(
                         "totals": {
                             "files_seen": 12, "eligible": 5, "ingested": 5,
                             "would_ingest": 0, "skipped_unchanged": 0,
+                            "skipped_deleted": 0,
                             "rejected": 7, "failed": 0, "replaced_stale": 0,
                         },
                         "files": [
@@ -475,3 +527,183 @@ async def corpus_status():
             "max_file_bytes": MAX_FILE_BYTES,
         }
     return _job
+
+def _new_reindex_job(trigger: str = REQUESTED) -> dict[str, Any]:
+    return {
+        "job_id": uuid.uuid4().hex,
+        "state": "running",
+        "trigger": trigger,
+        "embed_model": file_service.EMBED_MODEL,
+        "started_at": datetime.now(UTC).isoformat(),
+        "finished_at": None,
+        "error": None,
+        "totals": {
+            "pending": 0,
+            reindex.MIGRATED: 0,
+            reindex.REEMBEDDED: 0,
+            reindex.UNCHANGED: 0,
+            "failed": 0,
+        },
+        "failures": [],
+    }
+
+async def _run_reindex(job: dict[str, Any]) -> None:
+    try:
+        embed_model = job["embed_model"]
+        pending = await asyncio.to_thread(reindex.documents_to_reindex, embed_model)
+        job["totals"]["pending"] = len(pending)
+        for doc_id in pending:
+            try:
+                outcome = await asyncio.to_thread(
+                    reindex.reindex_document, doc_id, file_service.get_embeddings, embed_model
+                )
+            except Exception as exc:
+                job["totals"]["failed"] += 1
+                if len(job["failures"]) < MAX_REPORT_ENTRIES:
+                    job["failures"].append(
+                        {"doc_id": doc_id, "reason": f"{type(exc).__name__}: {exc}"}
+                    )
+                logger.warning("re-index: %s failed: %s", doc_id, exc)
+                continue
+            job["totals"][outcome] += 1
+        job["state"] = "completed"
+        logger.info("re-index %s complete: %s", job["job_id"], job["totals"])
+        if not job["totals"]["failed"]:
+            await asyncio.to_thread(reindex.record_embedder_in_collection)
+        await asyncio.to_thread(file_service.refresh_document_count)
+    except Exception as exc:
+        job["state"] = "failed"
+        job["error"] = f"{type(exc).__name__}: {exc}"
+        logger.error("re-index %s failed: %s", job["job_id"], exc)
+    finally:
+        job["finished_at"] = datetime.now(UTC).isoformat()
+        _scan_slot.release()
+
+def reindex_on_startup_enabled() -> bool:
+    return os.getenv(STARTUP_REINDEX_ENV, "1").strip().lower() not in DISABLED_VALUES
+
+def _start_reindex(trigger: str) -> dict[str, Any]:
+    global _reindex_job, _reindex_task
+    _reindex_job = _new_reindex_job(trigger)
+    _reindex_task = asyncio.create_task(_run_reindex(_reindex_job))
+    return _reindex_job
+
+async def check_index_on_startup() -> dict[str, Any] | None:
+    embed_model = file_service.EMBED_MODEL
+    try:
+        await asyncio.to_thread(file_service.refresh_document_count)
+        pending = await asyncio.to_thread(reindex.documents_to_reindex, embed_model)
+        if not pending:
+            await asyncio.to_thread(reindex.record_embedder_in_collection)
+            logger.info("startup: every stored passage is embedded with %s", embed_model)
+            return None
+    except Exception as exc:
+        logger.warning("startup: could not check the index against %s: %s", embed_model, exc)
+        return None
+    if not reindex_on_startup_enabled():
+        logger.warning(
+            "startup: %d documents are stored as whole files or with another embedder than "
+            "%s, and %s is off; run scripts/reindex-knowledge-store.py",
+            len(pending), embed_model, STARTUP_REINDEX_ENV,
+        )
+        return None
+    if _scan_slot.locked():
+        logger.warning("startup: %d documents need a re-index, but %s",
+                       len(pending), _busy_detail())
+        return None
+    await _scan_slot.acquire()
+    job = _start_reindex(STARTUP)
+    logger.info(
+        "startup: re-index %s started in the background for %d documents stored as whole "
+        "files or with another embedder than %s",
+        job["job_id"], len(pending), embed_model,
+    )
+    return job
+
+def schedule_startup_check() -> asyncio.Task:
+    global _startup_check
+    _startup_check = asyncio.create_task(check_index_on_startup())
+    return _startup_check
+
+def cancel_startup_check() -> None:
+    if _startup_check is not None and not _startup_check.done():
+        _startup_check.cancel()
+
+@router.post(
+    "/reindex",
+    status_code=202,
+    summary="Re-index the stored documents",
+    description=(
+        "Bring every stored document to the current index layout: a document still "
+        "stored as one whole-file entry is split into passages, and a passage embedded "
+        "with another model than the running one (embed_model) is embedded again. "
+        "Documents already up to date are left alone, so running it twice is a no-op, "
+        "and an interrupted run picks up where it stopped. Each changed document bumps "
+        "the corpus version. Returns immediately; poll GET /corpus/reindex. Never runs "
+        "together with a corpus scan. The service also starts this job by itself at "
+        "startup when it finds such passages or whole-file entries (trigger startup), "
+        "unless KNOWLEDGE_STORE_REINDEX_ON_STARTUP=0. Requires the X-Corpus-Token header."
+    ),
+    responses={
+        202: {
+            "description": "Re-index accepted and running in the background",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "job_id": "9f2c...", "state": "running",
+                        "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5",
+                    }
+                }
+            },
+        },
+        403: {"description": "Missing or invalid X-Corpus-Token"},
+        409: {"description": "A corpus scan or a re-index is already running"},
+        503: {"description": "CORPUS_SCAN_TOKEN is not configured"},
+    },
+)
+async def reindex_corpus():
+    if _scan_slot.locked():
+        raise HTTPException(status_code=409, detail=_busy_detail())
+    await _scan_slot.acquire()
+
+    job = _start_reindex(REQUESTED)
+    logger.info("re-index %s starting with %s", job["job_id"], job["embed_model"])
+
+    return {"job_id": job["job_id"], "state": "running", "embed_model": job["embed_model"]}
+
+@router.get(
+    "/reindex",
+    summary="Progress of the most recent re-index",
+    description=(
+        "Totals of the latest re-index: pending documents, and how many were migrated "
+        "from whole-file entries, re-embedded, already up to date, or failed. state is "
+        "one of idle, running, completed, failed; trigger is request or startup. "
+        "Requires the X-Corpus-Token header."
+    ),
+    responses={
+        200: {
+            "description": "Latest re-index state",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "job_id": "9f2c...",
+                        "state": "completed",
+                        "trigger": "startup",
+                        "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5",
+                        "totals": {
+                            "pending": 5, "migrated": 5, "reembedded": 0,
+                            "unchanged": 0, "failed": 0,
+                        },
+                        "failures": [],
+                    }
+                }
+            },
+        },
+        403: {"description": "Missing or invalid X-Corpus-Token"},
+        503: {"description": "CORPUS_SCAN_TOKEN is not configured"},
+    },
+)
+async def reindex_status():
+    if _reindex_job is None:
+        return {"state": "idle", "embed_model": file_service.EMBED_MODEL}
+    return _reindex_job

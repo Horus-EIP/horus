@@ -14,163 +14,198 @@ returns JSON that needs the same markdown-fence strip.
 """
 
 
+SYNTHESIS_SYSTEM_PROMPT = (
+    "You are an expert synthesizer. Your goal is to provide a final, comprehensive answer "
+    "to the user's original request, based on the results from the executed sub-tasks.\n\n"
+    "INSTRUCTIONS:\n"
+    "- Synthesize the final answer clearly and concisely.\n"
+    "- If the final output contains JSON or raw data, format it into a readable text summary.\n"
+    "- Address the original user request directly.\n"
+    "- Do not mention internal agent steps unless relevant to the answer."
+)
+
+ROUTER_RESPONSE_FORMAT = """{
+  "classification": "DIRECT_ANSWER" | "SINGLE_AGENT" | "COMPLEX_TASK",
+  "agent_name": "<agent_name_if_SINGLE_AGENT>",
+  "rewritten_input": "<optimized_input_if_SINGLE_AGENT>",
+  "final_answer": "<answer_if_DIRECT_ANSWER>"
+}"""
+
+ROUTER_SYSTEM_PROMPT = (
+    "You are an expert intent router for a MULTI-AGENT orchestration "
+    "platform. Each agent in the list below owns a distinct domain "
+    "(e.g. Finance-Analyst owns financial reports, Compliance-Officer "
+    "owns regulatory and IT-security policy, HR-Assistant owns the "
+    "Employee Handbook). The platform is designed for agents to "
+    "COLLABORATE on cross-domain requests, not for one agent to do "
+    "everything. Default to COMPLEX_TASK whenever the request "
+    "touches more than ONE agent's domain.\n\n"
+    "Classify the USER INPUT as exactly one of:\n"
+    " - DIRECT_ANSWER: ONLY for greetings, small talk (thanks, how "
+    "are you, goodbye) and pure arithmetic (e.g. 'what is 6x7?'). "
+    "Any factual or knowledge question, however simple or well "
+    "known (e.g. 'what is the capital of Peru?'), is NEVER a "
+    "DIRECT_ANSWER: route it to an agent so the documents are "
+    "searched.\n"
+    " - SINGLE_AGENT: the request falls cleanly inside ONE agent's "
+    "domain (e.g. 'what was Q4 revenue?' → Finance-Analyst alone).\n"
+    " - COMPLEX_TASK: the request needs information or analysis from "
+    "TWO OR MORE agents' domains (e.g. 'review Q4 financials AND IT "
+    "security policy', 'how do the new compliance rules affect HR "
+    "policy AND finance reporting?'). A separate planner will then "
+    "decompose it into per-agent subtasks. PREFER this when "
+    "uncertain — it's better to over-decompose than to have one "
+    "agent guess outside its scope.\n\n"
+    "OUTPUT RULES (CRITICAL):\n"
+    "- Return ONLY a valid JSON object matching exactly this schema:\n"
+    f"{ROUTER_RESPONSE_FORMAT}\n"
+    '- If one agent can handle the request entirely: set "classification": "SINGLE_AGENT", '
+    'fill "agent_name" and "rewritten_input".\n'
+    "- If the request touches 2+ agents' domains, or needs multiple distinct retrievals "
+    "(finance + compliance, finance + HR, IT security + finance, etc.): set "
+    '"classification": "COMPLEX_TASK".\n'
+    '- Only for a greeting, small talk or pure arithmetic (e.g. "hi", "thanks", '
+    '"what\'s 2+2"): set "classification": "DIRECT_ANSWER", fill "final_answer".\n'
+    "- A factual question is NEVER DIRECT_ANSWER, even when you know the answer "
+    '(e.g. "what is the capital of Peru?"): use SINGLE_AGENT, or COMPLEX_TASK if it '
+    "spans several domains.\n"
+    '- When the request mentions multiple document types ("financial report AND policy", '
+    '"report AND handbook"), it is ALWAYS COMPLEX_TASK.\n'
+    "- No text outside the JSON. No code fences, no explanations."
+)
+
+DECOMPOSITION_RESPONSE_FORMAT = """{
+  "sub_tasks": [
+    {
+      "id": "1",
+      "agent_type": "<AGENT_TYPE_FROM_LIST>",
+      "description": "<CLEAR_instruction_based_on_user_input>",
+      "depends_on": [],
+      "status": "pending"
+    },
+    {
+      "id": "2",
+      "agent_type": "<AGENT_TYPE_FROM_LIST>",
+      "description": "<CLEAR_instruction_dependent_on_step_1>",
+      "depends_on": ["<ID_OF_TASK_THIS_DEPENDS_ON>"],
+      "status": "pending"
+    }
+  ]
+}"""
+
+DECOMPOSITION_SYSTEM_PROMPT = (
+    "You are an expert Task Planner. Your goal is to decompose a complex user request into "
+    "a series of dependent sub-tasks executable by specialized agents.\n\n"
+    "OUTPUT RULES (CRITICAL):\n"
+    "- Analyze the request and break it down into logical steps based ONLY on USER INPUT.\n"
+    "- Each step must be assigned to the most appropriate agent type from the list below.\n"
+    "- Define dependencies: if step B needs output from step A, add A's ID to B's "
+    '"depends_on".\n'
+    "- Return ONLY a valid JSON object matching exactly this schema template:\n"
+    f"{DECOMPOSITION_RESPONSE_FORMAT}\n"
+    "- No text outside the JSON. No code fences, no explanations.\n"
+    "- Ensure strict JSON syntax. All keys and string values must be double-quoted.\n"
+    '- Use EXACTLY the field names from the schema (e.g., use "agent_type", NOT "agent").\n'
+    "- Do NOT copy the example placeholders. Fill them with real steps derived from USER "
+    "INPUT.\n"
+    "- If the request cannot be decomposed or no suitable agent exists, return an empty "
+    '"sub_tasks" list.'
+)
+
+ANNOUNCEMENT_SYSTEM_PROMPT = (
+    "You are the Manager — the orchestrator of a multi-agent platform. "
+    "Specialists answer the user; your job is to plan their order, "
+    "set expectations, and route the work. Write in first person as "
+    "'I'. Be concise (2-4 sentences). Address the user directly. "
+    "Don't list every step verbatim — summarise the plan in plain "
+    "language. Don't promise outcomes; describe the approach.\n\n"
+    "Write the chat message you'd send to the user announcing how "
+    "you'll handle the USER DEMAND with the PLANNED STEPS. Plain text, "
+    "no JSON, no code fences."
+)
+
+REVIEW_RESPONSE_FORMAT = (
+    '{"decision": "CONTINUE" | "INSERT" | "DONE",'
+    ' "next_agent_type": "<agent_type if INSERT>",'
+    ' "next_action": "<the new subtask demand if INSERT>",'
+    ' "reasoning": "<one short sentence>"}'
+)
+
+REVIEW_SYSTEM_PROMPT = (
+    "You are the Manager reviewing a chain of specialist outputs. "
+    "Decide whether the chain has answered the user's demand, "
+    "should continue to the next planned step, or needs an extra "
+    "step BEFORE the next planned one (cyclic re-routing). Be "
+    "conservative — prefer CONTINUE unless an explicit gap exists.\n\n"
+    "DECISION RULES:\n"
+    " - DONE: the transcript already answers the user's demand. "
+    "Skip remaining steps.\n"
+    " - INSERT: a prior specialist explicitly flagged a gap "
+    "(e.g. 'I'd need more research on X'), or the next planned "
+    "step would fail without info that's missing. Set "
+    "next_agent_type and next_action.\n"
+    " - CONTINUE: the chain is on track and the next planned "
+    "step is appropriate.\n\n"
+    "Return ONLY a JSON object matching this schema, no prose:\n"
+    f"{REVIEW_RESPONSE_FORMAT}"
+)
+
+
+def _prompt_agents(suitable_agents):
+    return sorted(
+        suitable_agents, key=lambda agent: (str(agent[1]), str(agent[2]), str(agent[3]))
+    )
+
+
+def _agent_type_label(agent_type) -> str:
+    text = str(agent_type)
+    return text.split(".")[-1].lower() if "." in text else text.lower()
+
+
 def get_prompt_final_answer_generation(history, final_result):
     """Build the synthesis prompt used to consolidate sub-task outputs."""
-    messages = [
-        {
-            "role": "system",
-            "content": "You are an expert synthesizer. Your goal is to provide a final, comprehensive answer to the user's original request, based on the results from the executed sub-tasks.",
-        },
+    return [
+        {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
         {
             "role": "user",
-            "content": f"""
-    ORIGINAL USER REQUEST:
-    {history}
-
-    FINAL AGENT OUTPUT (Containing cumulative results):
-    {final_result}
-
-    INSTRUCTIONS:
-    - Synthesize the final answer clearly and concisely.
-    - If the final output contains JSON or raw data, format it into a readable text summary.
-    - Address the original user request directly.
-    - Do not mention internal agent steps unless relevant to the answer.
-    """,
+            "content": (
+                f"FINAL AGENT OUTPUT (Containing cumulative results):\n{final_result}\n\n"
+                f"ORIGINAL USER REQUEST:\n{history}"
+            ),
         },
     ]
-    return messages
 
 
 def get_prompt(user_input, suitable_agents):
     """Build the intent-router prompt (DIRECT_ANSWER/SINGLE_AGENT/COMPLEX_TASK)."""
-    response_format = """{
-      "classification": "DIRECT_ANSWER" | "SINGLE_AGENT" | "COMPLEX_TASK",
-      "agent_name": "<agent_name_if_SINGLE_AGENT>",
-      "rewritten_input": "<optimized_input_if_SINGLE_AGENT>",
-      "final_answer": "<answer_if_DIRECT_ANSWER>"
-    }"""
-
     agents_block = "\n".join(
         f"- {name}: {desc} (Type: {agent_type})"
-        for _, name, desc, agent_type in suitable_agents
+        for _, name, desc, agent_type in _prompt_agents(suitable_agents)
     )
-    schema_literal = response_format.replace("{", "{{").replace("}", "}}")
-
-    messages = [
+    return [
         {
             "role": "system",
             "content": (
-                "You are an expert intent router for a MULTI-AGENT orchestration "
-                "platform. Each agent in the list below owns a distinct domain "
-                "(e.g. Finance-Analyst owns financial reports, Compliance-Officer "
-                "owns regulatory and IT-security policy, HR-Assistant owns the "
-                "Employee Handbook). The platform is designed for agents to "
-                "COLLABORATE on cross-domain requests, not for one agent to do "
-                "everything. Default to COMPLEX_TASK whenever the request "
-                "touches more than ONE agent's domain.\n\n"
-                "Classify the USER INPUT as exactly one of:\n"
-                " - DIRECT_ANSWER: only for greetings, small talk, arithmetic, "
-                "or trivial questions that need no document retrieval.\n"
-                " - SINGLE_AGENT: the request falls cleanly inside ONE agent's "
-                "domain (e.g. 'what was Q4 revenue?' → Finance-Analyst alone).\n"
-                " - COMPLEX_TASK: the request needs information or analysis from "
-                "TWO OR MORE agents' domains (e.g. 'review Q4 financials AND IT "
-                "security policy', 'how do the new compliance rules affect HR "
-                "policy AND finance reporting?'). A separate planner will then "
-                "decompose it into per-agent subtasks. PREFER this when "
-                "uncertain — it's better to over-decompose than to have one "
-                "agent guess outside its scope."
+                f"{ROUTER_SYSTEM_PROMPT}\n\nAVAILABLE AGENTS (name: description):\n{agents_block}"
             ),
         },
-        {
-            "role": "user",
-            "content": f"""        AVAILABLE AGENTS (name: description):
-    {agents_block}
-
-    USER INPUT:
-    {user_input}
-
-    OUTPUT RULES (CRITICAL):
-    - Return ONLY a valid JSON object matching exactly this schema:
-
-
-    {schema_literal}
-
-
-    - If one agent can handle the request entirely: set "classification": "SINGLE_AGENT", fill "agent_name" and "rewritten_input".
-    - If the request touches 2+ agents' domains, or needs multiple distinct retrievals (finance + compliance, finance + HR, IT security + finance, etc.): set "classification": "COMPLEX_TASK".
-    - If no agent is needed (e.g. "hi", "what's 2+2"): set "classification": "DIRECT_ANSWER", fill "final_answer".
-    - When the request mentions multiple document types ("financial report AND policy", "report AND handbook"), it is ALWAYS COMPLEX_TASK.
-    - No text outside the JSON. No code fences, no explanations.
-        """,
-        },
+        {"role": "user", "content": f"USER INPUT:\n{user_input}"},
     ]
-
-    return messages
 
 
 def get_decomposition_prompt(user_input, suitable_agents):
     """Build the planner prompt that decomposes a request into dependent sub-tasks."""
-    response_format = """
-    {
-      "sub_tasks": [
-        {
-          "id": "1",
-          "agent_type": "<AGENT_TYPE_FROM_LIST>",
-          "description": "<CLEAR_instruction_based_on_user_input>",
-          "depends_on": [],
-          "status": "pending"
-        },
-        {
-          "id": "2",
-          "agent_type": "<AGENT_TYPE_FROM_LIST>",
-          "description": "<CLEAR_instruction_dependent_on_step_1>",
-          "depends_on": ["<ID_OF_TASK_THIS_DEPENDS_ON>"],
-          "status": "pending"
-        }
-      ]
-    }
-    """
-
     agents_block = "\n".join(
-        f"- Type: {str(agent_type).split('.')[-1].lower() if '.' in str(agent_type) else str(agent_type).lower()} (Name: {name}): {desc}"
-        for _, name, desc, agent_type in suitable_agents
+        f"- Type: {_agent_type_label(agent_type)} (Name: {name}): {desc}"
+        for _, name, desc, agent_type in _prompt_agents(suitable_agents)
     )
-    schema = response_format.replace("{", "{{").replace("}", "}}")
-
-    messages = [
+    return [
         {
             "role": "system",
-            "content": "You are an expert Task Planner. Your goal is to decompose a complex user request into a series of dependent sub-tasks executable by specialized agents.",
+            "content": f"{DECOMPOSITION_SYSTEM_PROMPT}\n\nAVAILABLE AGENT TYPES:\n{agents_block}",
         },
-        {
-            "role": "user",
-            "content": f"""        AVAILABLE AGENT TYPES:
-    {agents_block}
-
-    USER INPUT:
-    {user_input}
-
-    OUTPUT RULES (CRITICAL):
-    - Analyze the request and break it down into logical steps based ONLY on USER INPUT.
-    - Each step must be assigned to the most appropriate agent type from the list above.
-    - Define dependencies: if step B needs output from step A, add A's ID to B's "depends_on".
-    - Return ONLY a valid JSON object matching exactly this schema template:
-
-
-    {schema}
-
-
-    - No text outside the JSON. No code fences, no explanations.
-    - Ensure strict JSON syntax. All keys and string values must be double-quoted.
-    - Use EXACTLY the field names from the schema (e.g., use "agent_type", NOT "agent").
-    - Do NOT copy the example placeholders. Fill them with real steps derived from USER INPUT.
-    - If the request cannot be decomposed or no suitable agent exists, return an empty "sub_tasks" list.
-        """,
-        },
+        {"role": "user", "content": f"USER INPUT:\n{user_input}"},
     ]
-
-    return messages
 
 
 def get_manager_announcement_prompt(user_demand: str, planned_steps: list[dict]) -> list[dict]:
@@ -186,25 +221,10 @@ def get_manager_announcement_prompt(user_demand: str, planned_steps: list[dict])
         for i, s in enumerate(planned_steps)
     )
     return [
-        {
-            "role": "system",
-            "content": (
-                "You are the Manager — the orchestrator of a multi-agent platform. "
-                "Specialists answer the user; your job is to plan their order, "
-                "set expectations, and route the work. Write in first person as "
-                "'I'. Be concise (2-4 sentences). Address the user directly. "
-                "Don't list every step verbatim — summarise the plan in plain "
-                "language. Don't promise outcomes; describe the approach."
-            ),
-        },
+        {"role": "system", "content": ANNOUNCEMENT_SYSTEM_PROMPT},
         {
             "role": "user",
-            "content": (
-                f"USER DEMAND:\n{user_demand}\n\n"
-                f"PLANNED STEPS:\n{steps_block}\n\n"
-                "Write the chat message you'd send to the user announcing how "
-                "you'll handle this. Plain text, no JSON, no code fences."
-            ),
+            "content": f"PLANNED STEPS:\n{steps_block}\n\nUSER DEMAND:\n{user_demand}",
         },
     ]
 
@@ -239,42 +259,15 @@ def get_manager_review_prompt(
         if remaining_steps
         else "  (none — this was the last planned step)"
     )
-    schema = (
-        '{"decision": "CONTINUE" | "INSERT" | "DONE",'
-        ' "next_agent_type": "<agent_type if INSERT>",'
-        ' "next_action": "<the new subtask demand if INSERT>",'
-        ' "reasoning": "<one short sentence>"}'
-    )
-    schema_literal = schema.replace("{", "{{").replace("}", "}}")
     return [
-        {
-            "role": "system",
-            "content": (
-                "You are the Manager reviewing a chain of specialist outputs. "
-                "Decide whether the chain has answered the user's demand, "
-                "should continue to the next planned step, or needs an extra "
-                "step BEFORE the next planned one (cyclic re-routing). Be "
-                "conservative — prefer CONTINUE unless an explicit gap exists."
-            ),
-        },
+        {"role": "system", "content": REVIEW_SYSTEM_PROMPT},
         {
             "role": "user",
             "content": (
-                f"USER DEMAND:\n{user_demand}\n\n"
                 f"CHAIN TRANSCRIPT SO FAR:\n{transcript}\n\n"
                 f"REMAINING PLANNED STEPS:\n{remaining_block}\n\n"
                 f"AVAILABLE AGENT TYPES (for INSERT): {types_block}\n\n"
-                "DECISION RULES:\n"
-                " - DONE: the transcript already answers the user's demand. "
-                "Skip remaining steps.\n"
-                " - INSERT: a prior specialist explicitly flagged a gap "
-                "(e.g. 'I'd need more research on X'), or the next planned "
-                "step would fail without info that's missing. Set "
-                "next_agent_type and next_action.\n"
-                " - CONTINUE: the chain is on track and the next planned "
-                "step is appropriate.\n\n"
-                "Return ONLY a JSON object matching this schema, no prose:\n"
-                f"{schema_literal}"
+                f"USER DEMAND:\n{user_demand}"
             ),
         },
     ]

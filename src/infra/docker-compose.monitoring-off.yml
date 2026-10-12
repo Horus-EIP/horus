@@ -1,0 +1,56 @@
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "${HORUS_LOG_MAX_SIZE:-40m}"
+    max-file: "${HORUS_LOG_MAX_FILE:-10}"
+
+services:
+  loki:
+    profiles: ["monitoring"]
+    deploy:
+      replicas: 0
+
+  alloy:
+    profiles: ["monitoring"]
+    deploy:
+      replicas: 0
+
+  tempo:
+    profiles: ["monitoring"]
+    deploy:
+      replicas: 0
+
+  prometheus:
+    profiles: ["monitoring"]
+    deploy:
+      replicas: 0
+
+  web-client:
+    environment:
+      - HORUS_MONITORING=off
+    depends_on:
+      loki:
+        condition: service_started
+        required: false
+      prometheus:
+        condition: service_started
+        required: false
+      tempo:
+        condition: service_started
+        required: false
+
+  mas:
+    environment:
+      - OTEL_SDK_DISABLED=true
+      - OTEL_ENABLED=false
+      - HORUS_MONITORING=off
+
+  agent:
+    environment:
+      - OTEL_SDK_DISABLED=true
+      - OTEL_ENABLED=false
+
+  knowledge_store:
+    environment:
+      - OTEL_SDK_DISABLED=true
+      - OTEL_ENABLED=false

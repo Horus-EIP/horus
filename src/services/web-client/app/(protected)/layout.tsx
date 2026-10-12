@@ -18,7 +18,7 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
       <div className="min-h-screen w-full text-[var(--text)] text-[clamp(13px,1.1vw,16px)] bg-[var(--bg)]">
         <div className="mx-auto flex max-h-screen max-w-[1600px] gap-3 sm:gap-4 lg:gap-6">
           <NavbarMinimal />
-          <main className="flex-1 flex flex-col min-h-0 p-2 sm:p-3 lg:pt-4 lg:pr-4 lg:pb-4 lg:pl-0 mb-0">
+          <main className="flex-1 flex flex-col min-h-0 min-w-0 p-2 sm:p-3 lg:pt-4 lg:pr-4 lg:pb-4 lg:pl-0 mb-0">
             <div className="z-30 shrink-0">
               <Navbar onToggleSidebar={toggleSidebar} sidebarOpen={sidebarOpen} />
             </div>

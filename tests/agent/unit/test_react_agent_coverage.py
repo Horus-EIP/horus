@@ -6,7 +6,9 @@ handler) are stubbed so the THOUGHT -> ACTION -> OBSERVATION loop is fully
 deterministic.
 
 Collaborator call conventions (mirrored by the stubs below):
-  * decision_agent.decide(query=, context=) -> str   (sync; run via to_thread)
+  * decision_agent.reason(query, user_content, system_content, call=) -> str
+                                            (sync; run via to_thread; one per step)
+  * decision_agent.decide(query=, context=) -> str   (sync; the final synthesis)
   * retrieval_agent.fetch(query)            -> dict   (async; awaited directly)
   * tool_registry.run(name, payload)        -> str    (sync; run via to_thread)
   * delegation_handler.delegate(...)        -> dict   (sync; run via to_thread)
@@ -21,6 +23,7 @@ import pytest
 from ai_agents.react_agent import (
     DEFAULT_TIMEOUT_SECONDS,
     MAX_REACT_STEPS,
+    REACT_STEP_CALL,
     ExecutionHistory,
     ReactAgent,
     ReActStep,
@@ -32,7 +35,7 @@ from ai_agents.react_agent import (
 # Stubs / fixtures
 # --------------------------------------------------------------------------- #
 class FakeDecisionAgent:
-    """Returns queued scripted responses for successive ``decide`` calls.
+    """Returns queued scripted responses for successive ``reason`` and ``decide`` calls.
 
     Once the queue is exhausted the last response repeats, so a runaway loop
     never crashes the test for an unrelated reason.
@@ -40,15 +43,26 @@ class FakeDecisionAgent:
 
     def __init__(self, responses):
         self._responses = list(responses)
-        self.calls = []  # list of (query, context) tuples
+        self.calls = []  # list of (query, user content or context) tuples
+        self.system_prompts = []
+        self.call_labels = []
 
-    def decide(self, query, context):
-        self.calls.append((query, context))
+    def _next(self):
         if self._responses:
             resp = self._responses.pop(0)
             self._last = resp
             return resp
         return getattr(self, "_last", "")
+
+    def reason(self, query, user_content, system_content, *, call):
+        self.calls.append((query, user_content))
+        self.system_prompts.append(system_content)
+        self.call_labels.append(call)
+        return self._next()
+
+    def decide(self, query, context):
+        self.calls.append((query, context))
+        return self._next()
 
 
 def make_retrieval(data_text="some retrieved knowledge"):
@@ -212,7 +226,7 @@ class TestGenerateThought:
         )
         agent = make_agent([raw])
         thought, is_final, final_text = await agent._generate_thought(
-            "q", [], [], 1
+            "q", [], 1
         )
         assert is_final is True
         assert thought == raw.strip()
@@ -222,28 +236,26 @@ class TestGenerateThought:
     async def test_non_final_thought(self):
         agent = make_agent(["THOUGHT: keep going\nACTION: calc(1)"])
         thought, is_final, final_text = await agent._generate_thought(
-            "q", [], [], 1
+            "q", [], 1
         )
         assert is_final is False
         assert final_text == ""
         assert thought.startswith("THOUGHT: keep going")
 
-    async def test_prompt_includes_trace_and_context(self):
+    async def test_prompt_includes_the_query_the_trace_and_the_step(self):
         agent = make_agent(["THOUGHT: ok"])
         await agent._generate_thought(
             "my-query",
             ["THOUGHT: earlier", "OBSERVATION: stuff"],
-            ["gathered ctx"],
             2,
         )
-        # The decision agent received the assembled prompt as ``context``.
-        _, context = agent.decision_agent.calls[0]
-        assert "Reasoning so far:" in context
-        assert "THOUGHT: earlier" in context
-        assert "Gathered context:" in context
-        assert "gathered ctx" in context
-        assert "Step 2:" in context
-        assert "my-query" in context
+        _, user_content = agent.decision_agent.calls[0]
+        assert user_content == (
+            "User query: my-query\n\n"
+            "Reasoning so far:\nTHOUGHT: earlier\nOBSERVATION: stuff\n\n"
+            "Step 2: Provide your next THOUGHT and ACTION (or FINAL_ANSWER)."
+        )
+        assert agent.decision_agent.call_labels == [REACT_STEP_CALL]
 
 
 # --------------------------------------------------------------------------- #
@@ -540,11 +552,10 @@ class TestRunLoop:
         registry.run = MagicMock(return_value="OBSDATA")
 
         class FlakyDecision(FakeDecisionAgent):
+            def reason(self, query, user_content, system_content, *, call):
+                return "THOUGHT: go.\nACTION: calc(1)"
+
             def decide(self, query, context):
-                self.calls.append((query, context))
-                # Loop thoughts (2) succeed; the 3rd (synthesis) raises.
-                if len(self.calls) <= 2:
-                    return "THOUGHT: go.\nACTION: calc(1)"
                 raise RuntimeError("synthesis model down")
 
         decision = FlakyDecision([])
@@ -583,7 +594,7 @@ class TestRunLoop:
         # decision_agent.decide raising a non-timeout error hits the generic
         # exception branch of run().
         class ExplodingDecision:
-            def decide(self, query, context):
+            def reason(self, query, user_content, system_content, *, call):
                 raise ValueError("kaboom")
 
         agent = ReactAgent(

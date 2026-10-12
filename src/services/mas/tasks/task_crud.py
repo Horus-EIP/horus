@@ -1,5 +1,6 @@
 """DB-bound task lifecycle helpers: create, validate, cancel, list."""
 
+import asyncio
 import json
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ from core.rabbitmq_tool import rabbitmq_instance
 from db.models import Task, TaskResult
 from tasks.demo_log import pretty_log
 from tasks.status import TaskStatus
+from tasks.task_access import TASK_CANCEL_REFUSED, may_cancel_task
 
 logger = get_logger("task_tool_functions")
 
@@ -22,6 +24,7 @@ def insert_new_task(
     history: list,
     future_actions: list,
     db: Session,
+    skills_required: list[str] | None = None,
 ):
     """Create a running ``Task`` + its ``TaskResult`` shell and return the task id."""
     pretty_log(f"SCHEDULING NEW TASK FOR AGENT {agent_id}", "📅")
@@ -36,6 +39,7 @@ def insert_new_task(
             query=query,
             parent_task_id=None,
             order=0,
+            skills_required=list(skills_required or []),
         )
         db.add(task)
         db.commit()
@@ -58,7 +62,53 @@ def insert_new_task(
         return None
 
 
-def validating_task_results(task_id: str, task_result: str, db: Session):
+def insert_queued_task(
+    task_id: str,
+    conversation_id: int | None,
+    agent_id: str,
+    query: str,
+    owner_username: str | None,
+    db: Session,
+    skills_required: list[str] | None = None,
+) -> Task:
+    task = Task(
+        id=task_id,
+        conversation_id=conversation_id,
+        agent_id=agent_id,
+        status=TaskStatus.QUEUED,
+        query=query,
+        parent_task_id=None,
+        order=0,
+        skills_required=list(skills_required or []),
+        owner_username=owner_username,
+    )
+    try:
+        db.add(task)
+        db.add(
+            TaskResult(
+                id=str(uuid4()),
+                task_id=task_id,
+                result_data=None,
+                history=[{"role": "user", "message": query}],
+                future_actions=[],
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return task
+
+
+def record_skill_used(task: Task, skill_used: str | None) -> None:
+    known_skills = list(task.skills_required or [])
+    if skill_used and skill_used not in known_skills:
+        task.skills_required = [*known_skills, skill_used]
+
+
+def validating_task_results(
+    task_id: str, task_result: str, db: Session, skill_used: str | None = None
+):
     """Mark a task completed and persist its result + updated history."""
     pretty_log(f"VALIDATING RESULTS FOR TASK {task_id}", "📥")
     try:
@@ -71,6 +121,7 @@ def validating_task_results(task_id: str, task_result: str, db: Session):
         history = current_task_result.history or []
         history.append({"role": "assistant", "message": task_result})
         task.status = TaskStatus.COMPLETED
+        record_skill_used(task, skill_used)
         current_task_result.result_data = task_result
         current_task_result.history = history
         db.commit()
@@ -87,7 +138,9 @@ def validating_task_results(task_id: str, task_result: str, db: Session):
         )
 
 
-def interrupt_task(task_id: str, db: Session, reason: str | None = None):
+async def interrupt_task(
+    task_id: str, db: Session, reason: str | None = None, *, user: dict | None = None
+):
     """Cancel an in-flight task and notify its agent via RabbitMQ."""
     pretty_log(f"INTERRUPT SIGNAL RECEIVED FOR TASK {task_id}", "🛑")
     cancel_reason = reason or "User requested cancellation"
@@ -95,6 +148,8 @@ def interrupt_task(task_id: str, db: Session, reason: str | None = None):
         task = db.query(Task).filter(Task.id == task_id).first()
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
+        if user is not None and not may_cancel_task(user, task, db):
+            raise HTTPException(status_code=403, detail=TASK_CANCEL_REFUSED)
         if task.status in [
             TaskStatus.COMPLETED.value,
             TaskStatus.FAILED.value,
@@ -120,19 +175,28 @@ def interrupt_task(task_id: str, db: Session, reason: str | None = None):
             "reason": cancel_reason,
         }
     )
-    rabbitmq_instance.publish(
-        queue_name=task.agent_id, message=cancellation_message, priority_value=10
+    await asyncio.to_thread(
+        rabbitmq_instance.publish,
+        queue_name=task.agent_id,
+        message=cancellation_message,
+        priority_value=10,
     )
     logger.info(f"Cancellation signal sent for task {task_id} to agent {task.agent_id}")
     return True
 
 
-def _get_all_tasks_internal(db: Session, status_filter: TaskStatus = None):
+def _get_all_tasks_internal(
+    db: Session,
+    status_filter: TaskStatus = None,
+    status_in: list[TaskStatus] | None = None,
+):
     """Return every task, optionally filtered by status."""
     try:
         query = db.query(Task)
         if status_filter:
             query = query.filter(Task.status == status_filter)
+        if status_in:
+            query = query.filter(Task.status.in_(status_in))
         tasks = query.all()
         return tasks
     except Exception as e:
@@ -141,10 +205,10 @@ def _get_all_tasks_internal(db: Session, status_filter: TaskStatus = None):
 
 
 def get_tasks_in_progress(db: Session):
-    """Return tasks currently in ``RUNNING`` state."""
+    """Return tasks that are still queued or running."""
     try:
         tasks_in_progress = _get_all_tasks_internal(
-            db, status_filter=TaskStatus.RUNNING
+            db, status_in=[TaskStatus.QUEUED, TaskStatus.RUNNING]
         )
         return tasks_in_progress
     except Exception as e:

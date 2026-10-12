@@ -2,6 +2,10 @@
 Unit tests for ContentAnalyzer - Phase 2a Core + Phase 2b LLM Integration.
 """
 
+import json
+import os
+import subprocess
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -222,3 +226,146 @@ class TestReturnFormat:
         analyzer = ContentAnalyzer(init_llm=False)
         result = analyzer.analyze("Invoice content", title="Invoice #123")
         assert result["auto_type"] == "invoice"
+
+
+class TestSpacyModelChoice:
+    def test_the_transformer_model_is_used_when_installed(self, monkeypatch):
+        import spacy
+
+        import app.services.content_analyzer as ca_mod
+
+        monkeypatch.setattr(spacy, "load", MagicMock(side_effect=lambda name: f"nlp:{name}"))
+
+        assert ca_mod._load_spacy_model() == "nlp:en_core_web_trf"
+
+    def test_a_cpu_image_without_the_transformer_model_uses_the_small_one(self, monkeypatch):
+        import spacy
+
+        import app.services.content_analyzer as ca_mod
+
+        def installed_models(name):
+            if name == "en_core_web_trf":
+                raise OSError(f"[E050] Can't find model '{name}'")
+            return f"nlp:{name}"
+
+        monkeypatch.setattr(spacy, "load", MagicMock(side_effect=installed_models))
+
+        assert ca_mod._load_spacy_model() == "nlp:en_core_web_sm"
+
+    def test_without_any_model_entities_come_from_the_regex_fallback(self, monkeypatch):
+        import spacy
+
+        import app.services.content_analyzer as ca_mod
+
+        monkeypatch.setattr(spacy, "load", MagicMock(side_effect=OSError("[E050] no model")))
+
+        assert ca_mod._load_spacy_model() is False
+
+
+INVOICE = (
+    "Invoice from Acme Corp to John Smith. Total due: $1,250.00 by 15 March 2026. "
+    "A second payment of EUR 300 follows in April 2026."
+)
+
+
+class SpacyImports:
+    def __init__(self):
+        self.attempts: list[str] = []
+
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] == "spacy":
+            self.attempts.append(name)
+            raise ImportError(f"{name} must not be imported while spaCy is off")
+        return None
+
+
+@pytest.fixture
+def spacy_off(monkeypatch):
+    import app.services.content_analyzer as ca_mod
+
+    monkeypatch.setenv("HORUS_SPACY", "off")
+    monkeypatch.setattr(ca_mod, "_nlp_model", None)
+    for name in [name for name in sys.modules if name.split(".")[0] == "spacy"]:
+        monkeypatch.delitem(sys.modules, name)
+    imports = SpacyImports()
+    monkeypatch.setattr(sys, "meta_path", [imports, *sys.meta_path])
+    return imports
+
+
+class TestSpacyOff:
+    @pytest.mark.parametrize("value", ["off", "OFF", " 0 ", "false", "no"])
+    def test_the_setting_turns_spacy_off(self, monkeypatch, value):
+        import app.services.content_analyzer as ca_mod
+
+        monkeypatch.setenv("HORUS_SPACY", value)
+
+        assert ca_mod.spacy_is_off()
+
+    @pytest.mark.parametrize("value", [None, "", "on", "1", "yes"])
+    def test_unset_or_on_leaves_spacy_on(self, monkeypatch, value):
+        import app.services.content_analyzer as ca_mod
+
+        if value is None:
+            monkeypatch.delenv("HORUS_SPACY", raising=False)
+        else:
+            monkeypatch.setenv("HORUS_SPACY", value)
+
+        assert not ca_mod.spacy_is_off()
+
+    def test_with_spacy_off_spacy_is_never_imported_nor_loaded(self, spacy_off, caplog):
+        with caplog.at_level("INFO", logger="app.services.content_analyzer"):
+            analyzer = ContentAnalyzer(init_llm=False)
+            analyzer.analyze(INVOICE)
+
+        assert analyzer.nlp is None
+        assert spacy_off.attempts == []
+        assert "spacy" not in sys.modules
+        assert "spaCy is off (HORUS_SPACY=off)" in caplog.text
+
+    def test_with_spacy_off_the_regex_extraction_runs(self, spacy_off):
+        result = ContentAnalyzer(init_llm=False).analyze(INVOICE)
+
+        entities = result["entities"]
+        assert entities["people"] == []
+        assert entities["companies"] == []
+        assert {"$1,250.00", "EUR 300"} <= set(entities["amounts"])
+        assert "15 March 2026" in entities["dates"]
+        assert "invoice" in result["topics"]
+        assert result["auto_summary"].startswith("Invoice from Acme Corp")
+
+    def test_with_spacy_on_the_model_loads_as_before(self, monkeypatch):
+        import spacy
+
+        import app.services.content_analyzer as ca_mod
+
+        monkeypatch.setenv("HORUS_SPACY", "on")
+        monkeypatch.setattr(spacy, "load", MagicMock(side_effect=lambda name: f"nlp:{name}"))
+
+        assert ca_mod._load_spacy_model() == "nlp:en_core_web_trf"
+
+    @pytest.mark.parametrize(("setting", "imports_spacy"), [("off", False), ("on", True)])
+    def test_a_fresh_process_imports_spacy_only_when_it_is_on(self, setting, imports_spacy):
+        import app.services.content_analyzer as ca_mod
+
+        env = {**os.environ, "HORUS_SPACY": setting}
+        done = subprocess.run([sys.executable, "-B", "-c", FRESH_ANALYZER, ca_mod.__file__, INVOICE],
+                              env=env, capture_output=True, text=True, check=True)
+
+        assert bool(json.loads(done.stdout.splitlines()[-1])) is imports_spacy
+
+
+FRESH_ANALYZER = """
+import importlib.util, json, sys
+seen = []
+class Watch:
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] == "spacy":
+            seen.append(name)
+        return None
+sys.meta_path.insert(0, Watch())
+spec = importlib.util.spec_from_file_location("fresh_content_analyzer", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.ContentAnalyzer(init_llm=False).analyze(sys.argv[2])
+print(json.dumps(seen))
+"""

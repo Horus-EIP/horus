@@ -1,10 +1,23 @@
 import { apiClient } from "@/lib/api-client";
+import { answerSourcesOf } from "@/lib/chat/answer-sources";
 import {
+  AnswerSource,
   CreateConversationResponse,
   NewTaskPayload,
   NewTaskResponse,
   PaginatedHistory,
+  TaskEventsPage,
 } from "@/lib/types";
+
+export const IDEMPOTENCY_HEADER = "Idempotency-Key";
+
+export function newIdempotencyKey(): string {
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi && typeof cryptoApi.randomUUID === "function") {
+    return cryptoApi.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
 
 export interface ChatResponse<T = void> {
   ok: boolean;
@@ -12,6 +25,7 @@ export interface ChatResponse<T = void> {
   error?: string;
   /** True when the underlying request was aborted (navigation or timeout). */
   aborted?: boolean;
+  status?: number;
 }
 
 export interface Conversation {
@@ -30,12 +44,12 @@ export interface SuggestedSkill {
 }
 
 export interface TaskQueueStats {
+  queued?: number;
   pending: number;
   running: number;
   completed: number;
   failed: number;
   cancelled: number;
-  timeout: number;
   total: number;
 }
 
@@ -56,6 +70,27 @@ export interface TaskSubtaskRow {
   title: string;
   status: string;
   assignedAgent: string;
+  skillsRequired?: string[];
+  createdAt?: string | null;
+  completedAt?: string | null;
+}
+
+interface HistoryRow {
+  id?: unknown;
+  role?: unknown;
+  content?: unknown;
+  message?: unknown;
+  created_at?: unknown;
+  timestamp?: unknown;
+  agent_id?: unknown;
+  agent_name?: unknown;
+  skill_used?: unknown;
+  sources?: unknown;
+  ai_provider?: unknown;
+}
+
+function textOf(value: unknown): string | undefined {
+  return typeof value === 'string' && value ? value : undefined;
 }
 
 export interface TaskDetails {
@@ -64,8 +99,12 @@ export interface TaskDetails {
   agent_id: string;
   conversation_id: number;
   query: string;
+  skills_required?: string[];
   created_at: string;
+  completed_at?: string | null;
   result?: string;
+  sources?: AnswerSource[];
+  ai_provider?: string | null;
   history?: unknown[];
   future_actions?: unknown[];
   subtasks?: TaskSubtaskRow[];
@@ -78,8 +117,10 @@ export interface TaskSummary {
   agent_id: string;
   conversation_id: number | null;
   query: string;
+  skills_required?: string[] | null;
   created_at: string;
   updated_at?: string;
+  completed_at?: string | null;
   parent_task_id?: string | null;
 }
 
@@ -131,13 +172,16 @@ export const chatApi = {
       // metadata (agent_id / agent_name / skill_used) through so reloaded
       // history can restore Manager violet styling + per-agent chips.
       paginatedData = {
-        items: data.map((msg: any) => ({
+        items: (data as HistoryRow[]).map((msg) => ({
           role: msg.role === 'user' ? 'user' : 'assistant',
-          message: msg.content || msg.message || '',
-          timestamp: msg.created_at || msg.timestamp,
+          message: String(msg.content || msg.message || ''),
+          timestamp: textOf(msg.created_at) || textOf(msg.timestamp),
           agentId: typeof msg.agent_id === 'string' ? msg.agent_id : undefined,
           agentName: typeof msg.agent_name === 'string' ? msg.agent_name : undefined,
           skillUsed: typeof msg.skill_used === 'string' ? msg.skill_used : undefined,
+          messageId: typeof msg.id === 'number' ? msg.id : undefined,
+          sources: answerSourcesOf(msg.sources),
+          aiProvider: typeof msg.ai_provider === 'string' ? msg.ai_provider : undefined,
         })),
         nextCursor: null,
       };
@@ -156,12 +200,13 @@ export const chatApi = {
   },
 
   async createTask(
-    payload: NewTaskPayload
+    payload: NewTaskPayload,
+    idempotencyKey: string = newIdempotencyKey()
   ): Promise<ChatResponse<NewTaskResponse | void>> {
     const response = await apiClient.post<NewTaskResponse>(
       "/tasks/new_task",
       payload,
-      { retry: 2 }
+      { retry: 2, headers: { [IDEMPOTENCY_HEADER]: idempotencyKey } }
     );
 
     if (!response.ok) {
@@ -324,6 +369,7 @@ export const chatApi = {
         ok: false,
         error: response.error || "Failed to fetch task details",
         aborted: response.aborted,
+        status: response.status,
       };
     }
 
@@ -331,6 +377,24 @@ export const chatApi = {
       ok: true,
       data: response.data,
     };
+  },
+
+  async getTaskEvents(
+    taskId: string,
+    since: number
+  ): Promise<ChatResponse<TaskEventsPage>> {
+    const response = await apiClient.get<TaskEventsPage>(
+      `/tasks/${taskId}/events?since=${since}`,
+      { retry: 1 }
+    );
+    if (!response.ok || !response.data || !Array.isArray(response.data.events)) {
+      return {
+        ok: false,
+        error: response.error || "Failed to fetch task events",
+        aborted: response.aborted,
+      };
+    }
+    return { ok: true, data: response.data };
   },
 
   async cancelTask(taskId: string, reason?: string): Promise<ChatResponse<void>> {

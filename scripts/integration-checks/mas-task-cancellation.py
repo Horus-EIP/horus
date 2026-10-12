@@ -102,7 +102,7 @@ async def test_cancellation_workflow():
                 "skills_required": ["testing"],
             }
             r = await client.post("/tasks/new_task/", json=task_payload)
-            if r.status_code != 200:
+            if r.status_code != 202:
                 print(f"❌ Task creation failed: {r.text}")
                 return
 

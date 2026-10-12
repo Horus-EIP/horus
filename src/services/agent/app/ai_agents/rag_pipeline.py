@@ -10,11 +10,23 @@ multi-step THOUGHT → ACTION → OBSERVATION loops for complex queries.
 
 import logging
 import os
+import threading
 from typing import Any
 
+from ai_agents.answer_contract import (
+    REASON_RETRIEVAL_ERROR,
+    AgentAnswer,
+    AnswerFieldStream,
+    AnswerStatus,
+    SourceCatalog,
+    answer_prompt,
+    answer_response_format,
+    parse_answer,
+)
 from ai_agents.calculator_tool import CalculatorTool
-from ai_agents.decision_making_agent import DecisionMakingAgent
+from ai_agents.decision_making_agent import DecisionMakingAgent, _max_context_chars
 from ai_agents.file_parser_tool import FileParserTool
+from ai_agents.generation_stop import GenerationTimedOut, current_generation_stop
 from ai_agents.knowledge_retrieval_agent import KnowledgeRetrievalAgent
 from ai_agents.step_emitter import emit_step
 from ai_agents.summarizer_tool import SummarizerTool
@@ -30,10 +42,11 @@ from ai_agents.payment_analyzer_tool import PaymentAnalyzerTool  # noqa: E402
 # long chain transcript embeds mostly front-matter, not the actual task.
 _RETRIEVAL_QUERY_CHAR_CAP = 2000
 
+_ONE_PASSAGE_CHARS = 1100
+_OTHER_PASSAGES_HEADER = "--- Other Knowledge Store Passages ---"
+
 # Wall-clock budget for a single decide() call. This, not TASK_TIMEOUT, is what
-# actually bounds a chat answer, and on expiry the pipeline returns a canned
-# string as a *successful* task -- so too low a value reads as a bad answer
-# rather than as a timeout. The old flat 120s default was a GPU number: a
+# actually bounds a chat answer. The old flat 120s default was a GPU number: a
 # CPU-only worker cannot finish a 4B generation anywhere near it.
 # REACT_TIMEOUT_SECONDS still overrides both.
 _REACT_TIMEOUT_GPU_DEFAULT = 120.0
@@ -50,6 +63,18 @@ def _react_timeout(device: object) -> float:
             logger.warning("Ignoring non-numeric REACT_TIMEOUT_SECONDS=%r", raw)
     on_cpu = str(device or "").lower().startswith("cpu")
     return _REACT_TIMEOUT_CPU_DEFAULT if on_cpu else _REACT_TIMEOUT_GPU_DEFAULT
+
+
+def _retrieval_error(data: object) -> str | None:
+    if not isinstance(data, dict) or data.get("passages"):
+        return None
+    error = data.get("error")
+    return str(error) if error else None
+
+
+def _passages_of(data: object) -> list:
+    passages = data.get("passages") if isinstance(data, dict) else None
+    return passages if isinstance(passages, list) else []
 
 
 class RAGPipeline:
@@ -107,8 +132,12 @@ class RAGPipeline:
     # ------------------------------------------------------------------
 
     async def generate_response(
-        self, query: str, retrieval_query: str | None = None
-    ) -> str:
+        self,
+        query: str,
+        retrieval_query: str | None = None,
+        attached_context: str | None = None,
+        attached_files: list[dict[str, Any]] | None = None,
+    ) -> AgentAnswer:
         """
         Generate a response by retrieving and processing data (async).
 
@@ -120,25 +149,60 @@ class RAGPipeline:
                 full transcript for grounding.
 
         Returns:
-            A formatted response string with insights.
+            The agent answer: status, answer text, cited sources and reason.
         """
         import asyncio
 
         timeout = _react_timeout(getattr(self.decision_agent, "device", None))
 
+        from ai_agents.response_cache import current_corpus_version, get_cached, set_cached
+
+        corpus_version = await current_corpus_version()
         rquery = retrieval_query or query
         if len(rquery) > _RETRIEVAL_QUERY_CHAR_CAP:
             rquery = rquery[:_RETRIEVAL_QUERY_CHAR_CAP]
-        data = await self.retrieval_agent.fetch(rquery)
-        context_text = data.get("data", "")
+        catalog = SourceCatalog()
+        if attached_context:
+            attached = attached_files or []
+            catalog.add_attached_files(attached)
+            others = await self._passages_beside_attachments(
+                rquery, attached_context, attached, catalog
+            )
+            emit_step(
+                "retrieval.results",
+                "Using the attached files",
+                (
+                    "Answering from the files attached to this task, followed by the "
+                    "knowledge-store passages from other documents."
+                    if others
+                    else "Answering from the files attached to this task."
+                ),
+                source="attached_files",
+                chunk_count=len(attached),
+                chunks=[f.get("filename") for f in attached if f.get("filename")],
+            )
+            context_text = f"{attached_context}\n{others}" if others else attached_context
+        else:
+            data = await self.retrieval_agent.fetch(rquery)
+            error = _retrieval_error(data)
+            if error:
+                logger.warning("Retrieval failed, so the request is not answered: %s", error)
+                return AgentAnswer.failed(
+                    REASON_RETRIEVAL_ERROR,
+                    f"The knowledge store could not be searched: {error}",
+                )
+            passages = _passages_of(data)
+            context_text = (
+                catalog.format_passages(passages, _max_context_chars())
+                if passages
+                else data.get("data", "")
+            )
 
         # Phase 3: exact-match response cache. Keyed on (query + retrieved
         # context + generation params), so a hit is safe across users and
         # document versions — different retrieval yields a different key — and
         # skips the costly model generation. No-op unless AGENT_RESPONSE_CACHE.
-        from ai_agents.response_cache import get_cached, set_cached
-
-        cached = await get_cached(query, context_text)
+        cached = await get_cached(query, context_text, corpus_version)
         if cached is not None:
             emit_step(
                 "cache.hit",
@@ -149,32 +213,74 @@ class RAGPipeline:
             )
             return cached
 
+        stop = threading.Event()
+        stop_binding = current_generation_stop.set(stop)
         try:
-            insight = await asyncio.wait_for(
-                asyncio.to_thread(
-                    self.decision_agent.decide,
-                    query=query,
-                    context=context_text,
-                ),
+            answer = await asyncio.wait_for(
+                asyncio.to_thread(self._answer, query, context_text, catalog),
                 timeout=timeout,
             )
         except TimeoutError:
+            stop.set()
             logger.warning(
-                "Single-shot LLM inference timed out after %.0fs for query: %r",
+                "Single-shot LLM inference timed out after %.0fs; generation asked to stop. Query: %r",
                 timeout,
                 query[:120],
             )
-            # Do not cache the timeout fallback — it is not a real answer.
-            return (
-                "The model took too long to respond (no answer within "
-                f"{timeout:.0f}s). Try a shorter question, or ask an "
-                "administrator to raise REACT_TIMEOUT_SECONDS. On a CPU-only "
-                "deployment this is expected for long questions: generation is "
-                "many times slower than on a GPU."
-            )
+            raise GenerationTimedOut(timeout) from None
+        finally:
+            current_generation_stop.reset(stop_binding)
 
-        await set_cached(query, context_text, insight)
-        return insight
+        await set_cached(query, context_text, corpus_version, answer)
+        return answer
+
+    def _answer(self, query: str, context: str, catalog: SourceCatalog) -> AgentAnswer:
+        system_content, user_content = answer_prompt(query, context, catalog.labels)
+        raw = self.decision_agent.complete(
+            query,
+            user_content,
+            system_content,
+            response_format=answer_response_format(catalog.labels),
+            stream_view=AnswerFieldStream(),
+        )
+        strict = bool(getattr(self.decision_agent, "constrains_output", False))
+        answer = parse_answer(raw, catalog, strict=strict)
+        if answer.status is AnswerStatus.FAILED:
+            logger.warning(
+                "The model's answer was rejected (%s). Raw output preview: %r",
+                answer.reason,
+                str(raw or "")[:400],
+            )
+        return answer
+
+    async def _passages_beside_attachments(
+        self,
+        query: str,
+        attached_context: str,
+        attached_files: list[dict[str, Any]],
+        catalog: SourceCatalog,
+    ) -> str:
+        room = _max_context_chars() - len(attached_context)
+        if room < _ONE_PASSAGE_CHARS:
+            return ""
+        try:
+            data = await self.retrieval_agent.fetch(query)
+        except Exception as exc:
+            logger.warning("Retrieval beside the attached files failed: %s", exc)
+            return ""
+        passages = data.get("passages") if isinstance(data, dict) else None
+        attached_ids = {str(f["doc_id"]) for f in attached_files if f.get("doc_id")}
+        attached_names = {f["filename"] for f in attached_files if f.get("filename")}
+        others = [
+            passage for passage in passages or []
+            if isinstance(passage, dict)
+            and passage.get("doc_id") not in attached_ids
+            and passage.get("title") not in attached_names
+        ]
+        if not others:
+            return ""
+        budget = room - len(_OTHER_PASSAGES_HEADER) - 2
+        return f"{_OTHER_PASSAGES_HEADER}\n{catalog.format_passages(others, budget)}"
 
     async def generate_response_react(self, query: str) -> dict[str, Any]:
         """
@@ -248,13 +354,22 @@ class RAGPipeline:
             }
 
         # Default single-shot mode
-        response_text = await self.generate_response(
-            query, retrieval_query=retrieval_query
-        )
+        attached_context = task.get("attached_context")
+        if attached_context:
+            demand = task.get("demand") or query
+            answer = await self.generate_response(
+                demand,
+                retrieval_query=task.get("retrieval_query") or demand,
+                attached_context=attached_context,
+                attached_files=task.get("files") or [],
+            )
+        else:
+            answer = await self.generate_response(query, retrieval_query=retrieval_query)
         return {
             "task_id": task.get("task_id"),
-            "response": response_text,
+            "response": answer.answer,
             "status": "completed",
+            "agent_answer": answer.as_dict(),
         }
 
     def _build_default_registry(self) -> ToolRegistry:

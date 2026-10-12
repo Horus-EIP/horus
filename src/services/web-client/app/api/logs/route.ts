@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/server/require-admin";
+import { monitoringIsOff, monitoringOff } from "@/lib/server/monitoring";
 
 /**
- * BFF for container logs. Queries Loki (the log store fed by Promtail) server-side
+ * BFF for container logs. Queries Loki (the log store fed by Grafana Alloy) server-side
  * so the browser never needs to reach the Docker-internal `loki` host, and so the
  * caller's admin role can be enforced before any log line is returned.
  */
@@ -59,6 +60,7 @@ interface LokiStream {
 export async function GET(request: NextRequest): Promise<Response> {
   const guard = await requireAdmin(request);
   if (!guard.ok) return guard.response;
+  if (monitoringIsOff()) return monitoringOff();
 
   const { searchParams } = new URL(request.url);
 

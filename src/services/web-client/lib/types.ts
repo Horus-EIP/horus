@@ -16,6 +16,13 @@ export interface CreateConversationResponse {
   conversation_id: string;
 }
 
+export interface AnswerSource {
+  doc_id: string | null;
+  chunk_id: string | null;
+  title: string | null;
+  page: number | null;
+}
+
 export interface HistoryItem {
   role: HistoryItemRole;
   message: string;
@@ -26,6 +33,9 @@ export interface HistoryItem {
   agentName?: string;
   /** Skill the agent exercised for this turn. */
   skillUsed?: string;
+  messageId?: number;
+  sources?: AnswerSource[];
+  aiProvider?: string;
 }
 
 export type TaskMode =
@@ -36,6 +46,7 @@ export type TaskMode =
 
 export interface KnowledgeStoreFileRef {
   filename: string;
+  doc_id?: string;
 }
 
 export interface InlineTaskFile {
@@ -60,12 +71,32 @@ export interface NewTaskPayload {
   inline_files?: InlineTaskFile[];
 }
 
-/** POST /tasks/new_task success body (orchestrator may return an immediate `result` without an agent). */
 export interface NewTaskResponse {
-  message?: string;
-  conversation_id?: number | string;
-  task_id?: string;
-  result?: string;
+  task_id: string;
+  status: string;
+  conversation_id?: number | string | null;
+}
+
+export type TaskEventType = "progress" | "token" | "heartbeat" | "result" | "error";
+
+export type TaskStage = "queued" | "routing" | "retrieval" | "generation" | "aggregation";
+
+export interface TaskEvent {
+  task_id: string;
+  seq: number;
+  type: TaskEventType;
+  stage: TaskStage | null;
+  data: Record<string, unknown>;
+  ts: string;
+}
+
+export interface TaskEventsPage {
+  task_id: string;
+  status: string;
+  since: number;
+  events: TaskEvent[];
+  last_seq: number;
+  has_more: boolean;
 }
 
 export interface User {

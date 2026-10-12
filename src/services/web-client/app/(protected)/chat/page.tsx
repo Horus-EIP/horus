@@ -14,11 +14,38 @@ import { IconRobot, IconSend, IconPlayerStopFilled } from '@tabler/icons-react';
 import { Modal, Button, Group, Text, Textarea, TextInput } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { config } from '@/utils/config';
-import { chatApi, type Conversation, type TaskDetails } from '@/lib/chat/api';
+import {
+  chatApi,
+  type Conversation,
+  type TaskDetails,
+  type TaskSummary,
+} from '@/lib/chat/api';
+import {
+  appendStreamChunk,
+  dropStreamPreview,
+  type StreamPreviews,
+} from '@/lib/chat/stream-preview';
+import {
+  appendAgentAnswer,
+  finishedTaskAnswer,
+  isFinishedTask,
+  type AgentAnswer,
+} from '@/lib/chat/agent-answer';
+import {
+  RETRYING_STATUS,
+  TaskEventLog,
+  applyTaskFrame,
+  fetchMissedTaskFrames,
+  mergeTaskProgress,
+  taskProgressLabel,
+  type TaskFrame,
+  type TaskProgress,
+} from '@/lib/chat/task-events';
 import { agentApi, type Agent } from '@/lib/agents/api';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { useNotification } from '@/contexts/notification-context';
 import { useWebSocket } from '@/hooks/use-web-socket';
+import { useTaskResync, type TaskResync } from '@/hooks/use-task-resync';
 import { MessageList, type Message } from '@/components/message-list';
 import type { TaskStepEvent } from '@/lib/types';
 import { ConversationSidebar } from '@/components/chat/conversation-sidebar';
@@ -81,10 +108,16 @@ function ChatPageContent() {
   // Live answer text accumulated from reasoning.delta frames (Phase 1 token
   // streaming), keyed by the (root) task_id. Rendered as a "typing" preview in
   // the thinking slot until the authoritative task_complete answer commits.
-  const [streamingByTaskId, setStreamingByTaskId] = useState<Record<string, string>>({});
+  const [streamingByTaskId, setStreamingByTaskId] = useState<StreamPreviews>({});
+  const [taskProgress, setTaskProgress] = useState<TaskProgress | null>(null);
+  const eventLogRef = useRef(new TaskEventLog());
+  const conversationIdRef = useRef(conversationId);
+  conversationIdRef.current = conversationId;
+  const workingTaskIdRef = useRef(workingTaskId);
+  workingTaskIdRef.current = workingTaskId;
 
   const { user } = useAuth();
-  const { error: notifyError, success: notifySuccess } = useNotification();
+  const { error: notifyError, success: notifySuccess, info: notifyInfo } = useNotification();
   const notifyErrorRef = useRef(notifyError);
   notifyErrorRef.current = notifyError;
 
@@ -162,6 +195,9 @@ function ChatPageContent() {
         agentId: msg.agentId,
         agentName: msg.agentName,
         skillUsed: msg.skillUsed,
+        messageId: msg.messageId,
+        sources: msg.sources,
+        aiProvider: msg.aiProvider,
       }));
 
       if (cursor) {
@@ -176,6 +212,105 @@ function ChatPageContent() {
     [conversationId, notifyError]
   );
 
+  const commitAgentAnswer = useCallback((answer: AgentAnswer, endsTurn: boolean) => {
+    setMessages((prev) => appendAgentAnswer(prev, answer));
+    if (endsTurn) {
+      setIsLoading(false);
+      setStreamingByTaskId({});
+      setTaskProgress(null);
+    }
+  }, []);
+
+  const handleTaskFrame = useCallback(
+    (frame: TaskFrame) => {
+      applyTaskFrame(eventLogRef.current, frame, {
+        onStep: (step) =>
+          setStepsByTaskId((prev) => ({
+            ...prev,
+            [step.taskId]: [...(prev[step.taskId] ?? []), step],
+          })),
+        onStreamChunk: (taskId, subtaskId, chunk, index) =>
+          setStreamingByTaskId((prev) => appendStreamChunk(prev, taskId, subtaskId, chunk, index)),
+        onAnswer: commitAgentAnswer,
+        onProgress: (progress) => {
+          setTaskProgress((prev) => mergeTaskProgress(prev, progress));
+          if (progress.status === RETRYING_STATUS) {
+            setStreamingByTaskId((prev) => dropStreamPreview(prev, progress.taskId));
+          }
+        },
+      });
+    },
+    [commitAgentAnswer]
+  );
+
+  const replayTaskEvents = useCallback(
+    async (taskId: string) => {
+      const replayingFor = conversationIdRef.current;
+      const frames = await fetchMissedTaskFrames(taskId, eventLogRef.current.since(taskId));
+      if (conversationIdRef.current !== replayingFor) return;
+      frames.forEach(handleTaskFrame);
+    },
+    [handleTaskFrame]
+  );
+
+  const adoptRunningTask = useCallback((running: TaskSummary) => {
+    setWorkingTaskId(running.id);
+    setIsLoading(true);
+    // Attach the root task id to the most recent USER message so the
+    // thought-process card pinned to it can pick up incoming step events.
+    // Best-effort: the message exists because loadHistory ran first.
+    setMessages((prev) => {
+      // Walk from the end to find the latest user message without an
+      // attached taskId — that's the demand that kicked off this chain.
+      for (let i = prev.length - 1; i >= 0; i--) {
+        if (prev[i].sender === 'user' && !prev[i].taskId) {
+          const updated = [...prev];
+          updated[i] = { ...updated[i], taskId: running.id };
+          return updated;
+        }
+      }
+      return prev;
+    });
+  }, []);
+
+  const applyTaskResync = useCallback(
+    ({ runningTasks, openTask, missedFrames }: TaskResync) => {
+      missedFrames.forEach(handleTaskFrame);
+      if (isFinishedTask(openTask)) {
+        if (eventLogRef.current.hasFinished(openTask.task_id)) return;
+        const answer = finishedTaskAnswer(openTask);
+        commitAgentAnswer(
+          {
+            ...answer,
+            agentName: agentsById.get(answer.agentId)?.name,
+            timestamp: new Date(),
+          },
+          true
+        );
+        return;
+      }
+      if (!workingTaskId && runningTasks.length > 0) {
+        adoptRunningTask(runningTasks[0]);
+        void replayTaskEvents(runningTasks[0].id);
+      }
+    },
+    [adoptRunningTask, agentsById, commitAgentAnswer, handleTaskFrame, replayTaskEvents, workingTaskId]
+  );
+
+  const resyncTasks = useTaskResync({
+    conversationId: conversationId || null,
+    openTaskId: workingTaskId,
+    sinceFor: (taskId) => eventLogRef.current.since(taskId),
+    onResync: applyTaskResync,
+  });
+
+  const resyncOnOpen = useCallback(
+    ({ reconnect }: { reconnect: boolean }) => {
+      if (reconnect || workingTaskIdRef.current) void resyncTasks();
+    },
+    [resyncTasks]
+  );
+
   const wsUrl =
     conversationId && authToken
       ? `${config.wsUrl}/chat/${conversationId}/?token=${authToken}`
@@ -186,117 +321,15 @@ function ChatPageContent() {
     autoReconnect: true,
     maxRetries: 5,
     backoffBaseMs: 1000,
-    onMessage: (event) => {
-      const message = JSON.parse(event.data);
-      // 'reasoning.delta' = a streamed chunk of the answer itself (Phase 1).
-      // Accumulated into the live preview, NOT the thought-process card.
-      if (
-        message.type === 'task_step' &&
-        message.step_type === 'reasoning.delta'
-      ) {
-        const taskId =
-          typeof message.task_id === 'string' ? message.task_id : '';
-        const meta =
-          message.metadata && typeof message.metadata === 'object'
-            ? (message.metadata as Record<string, unknown>)
-            : {};
-        const chunk = typeof meta.chunk === 'string' ? meta.chunk : '';
-        if (taskId && chunk) {
-          setStreamingByTaskId((prev) => ({
-            ...prev,
-            [taskId]: (prev[taskId] ?? '') + chunk,
-          }));
-        }
-        return;
-      }
-      // 'task_step' = streaming "thought process" event from the agent worker.
-      // Appended to the per-task bucket so the ThoughtProcessCard renders it
-      // live under the user message that kicked off this task.
-      if (message.type === 'task_step') {
-        const taskId = typeof message.task_id === 'string' ? message.task_id : '';
-        if (!taskId) return;
-        const step: TaskStepEvent = {
-          taskId,
-          agentId:
-            typeof message.agent_id === 'string' ? message.agent_id : undefined,
-          agentName:
-            typeof message.agent_name === 'string'
-              ? message.agent_name
-              : undefined,
-          stepType: String(message.step_type ?? 'unknown'),
-          title: String(message.title ?? message.step_type ?? 'Step'),
-          detail:
-            typeof message.detail === 'string' && message.detail.length
-              ? message.detail
-              : undefined,
-          timestamp:
-            typeof message.timestamp === 'string'
-              ? message.timestamp
-              : new Date().toISOString(),
-          metadata:
-            message.metadata && typeof message.metadata === 'object'
-              ? (message.metadata as Record<string, unknown>)
-              : undefined,
-        };
-        setStepsByTaskId((prev) => {
-          const next = { ...prev };
-          next[taskId] = [...(next[taskId] ?? []), step];
-          return next;
-        });
-        return;
-      }
-      // 'agent' = legacy bare-text broadcast (direct-answer / pre-attribution path)
-      // 'task_complete' = answer with agent attribution metadata for the chip
-      if (message.type === 'agent' || message.type === 'task_complete') {
-        const text = String(message.content ?? '').trim();
-        // Manager messages are intermediate orchestration updates (plan
-        // announcement, per-step "routing to X" progress, review decisions).
-        // They should NOT clear the loading state — the chain is still
-        // running and the user expects to see the spinner until the actual
-        // final answer from the last specialist arrives.
-        const isManagerMessage =
-          typeof message.agent_name === 'string' &&
-          message.agent_name === 'Manager';
-        if (!text) {
-          if (!isManagerMessage) {
-            setIsLoading(false);
-          }
-          return;
-        }
-        setMessages((prev) => {
-          const last = prev[prev.length - 1];
-          if (last?.sender === 'agent' && last.text === text) {
-            return prev;
-          }
-          const agentMessage: Message = {
-            id: Date.now().toString(),
-            text: message.content,
-            sender: 'agent',
-            timestamp: new Date(message.timestamp),
-            status: 'sent',
-            agentId:
-              typeof message.agent_id === 'string' ? message.agent_id : undefined,
-            agentName:
-              typeof message.agent_name === 'string'
-                ? message.agent_name
-                : undefined,
-            skillUsed:
-              typeof message.skill_used === 'string'
-                ? message.skill_used
-                : undefined,
-          };
-          return [...prev, agentMessage];
-        });
-        if (!isManagerMessage) {
-          // Only a real specialist's terminal answer clears the spinner.
-          // The chain is still running while Manager messages flow.
-          setIsLoading(false);
-          // The committed message now owns the text; drop the live preview.
-          setStreamingByTaskId({});
-        }
-      }
-    },
+    maxBackoffMs: 10000,
+    keepReconnecting: isLoading,
+    onMessage: (event) => handleTaskFrame(JSON.parse(event.data)),
+    onOpen: resyncOnOpen,
   });
+
+  const progressText = taskProgressLabel(
+    taskProgress && taskProgress.taskId === workingTaskId ? taskProgress : null
+  );
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -318,6 +351,16 @@ function ChatPageContent() {
   }, [conversationFromUrl]);
 
   useEffect(() => {
+    eventLogRef.current = new TaskEventLog();
+    setTaskProgress(null);
+    setIsLoading(false);
+    setWorkingTaskId(null);
+    setWorkingTaskDetail(null);
+    setStreamingByTaskId({});
+    setAttachments({ attached: [], inline: [] });
+  }, [conversationId]);
+
+  useEffect(() => {
     if (!conversationId) return;
     loadHistory();
   }, [conversationId, loadHistory]);
@@ -334,29 +377,13 @@ function ChatPageContent() {
       const r = await chatApi.getRunningTasksForConversation(conversationId);
       if (cancelled || !r.ok || !r.data || r.data.length === 0) return;
       // Most recent running root task — the one the user is waiting on.
-      const running = r.data[0];
-      setWorkingTaskId(running.id);
-      setIsLoading(true);
-      // Attach the root task id to the most recent USER message so the
-      // thought-process card pinned to it can pick up incoming step events.
-      // Best-effort: the message exists because loadHistory ran first.
-      setMessages((prev) => {
-        // Walk from the end to find the latest user message without an
-        // attached taskId — that's the demand that kicked off this chain.
-        for (let i = prev.length - 1; i >= 0; i--) {
-          if (prev[i].sender === 'user' && !prev[i].taskId) {
-            const updated = [...prev];
-            updated[i] = { ...updated[i], taskId: running.id };
-            return updated;
-          }
-        }
-        return prev;
-      });
+      adoptRunningTask(r.data[0]);
+      void replayTaskEvents(r.data[0].id);
     })();
     return () => {
       cancelled = true;
     };
-  }, [conversationId]);
+  }, [conversationId, adoptRunningTask, replayTaskEvents]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -371,8 +398,22 @@ function ChatPageContent() {
 
     const tick = async () => {
       const r = await chatApi.getTask(workingTaskId);
-      if (cancelled || !r.ok || !r.data) return;
+      if (cancelled) return;
+      if (!r.ok && (r.status === 403 || r.status === 404)) {
+        cancelled = true;
+        setIsLoading(false);
+        setWorkingTaskId(null);
+        setWorkingTaskDetail(null);
+        setStreamingByTaskId({});
+        setTaskProgress(null);
+        notifyInfo('This task is no longer available.');
+        return;
+      }
+      if (!r.ok || !r.data) return;
       setWorkingTaskDetail(r.data);
+      if (isFinishedTask(r.data) && String(r.data.conversation_id) === conversationIdRef.current) {
+        void resyncTasks();
+      }
     };
 
     void tick();
@@ -381,7 +422,7 @@ function ChatPageContent() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [workingTaskId, isLoading]);
+  }, [workingTaskId, isLoading, resyncTasks, notifyInfo]);
 
   useEffect(() => {
     const el = scrollContainerRef.current;
@@ -535,64 +576,41 @@ function ChatPageContent() {
     // the catch-all path when nothing matches. Previously hardcoded to
     // ``['knowledge_retrieval']``, which short-circuited routing onto the
     // General-Assistant for every chat message and starved the specialists.
+    const sentFrom = conversationIdRef.current;
+    const sentAttachments = attachments;
+    setAttachments({ attached: [], inline: [] });
     const result = await chatApi.createTask({
       demand,
       conversation_id: String(conversationId),
       skills_required: [],
-      attached_files: attachments.attached,
-      inline_files: attachments.inline,
+      attached_files: sentAttachments.attached,
+      inline_files: sentAttachments.inline,
     });
 
-    if (!result.ok) {
+    if (conversationIdRef.current !== sentFrom) return;
+
+    const newTaskId = result.ok ? result.data?.task_id : undefined;
+    if (!newTaskId) {
       notifyError('Your message could not be sent. Please try again.');
       setMessages((prev) =>
         prev.map((msg) => (msg.id === userMessageId ? { ...msg, status: 'error' } : msg))
+      );
+      setAttachments((current) =>
+        current.attached.length || current.inline.length ? current : sentAttachments
       );
       setIsLoading(false);
       return;
     }
 
-    const newTaskId = result.data?.task_id;
-    const directAnswer = !newTaskId && Boolean(result.data?.result);
-    // Direct-answer path: MAS's orchestrator router decided no agent dispatch
-    // was needed (typical for arithmetic / greetings / DIRECT_ANSWER class).
-    // Synthesize a task_id and one step so the thought-process card still
-    // renders — that way the user sees *why* there's no agent attribution
-    // and which model actually answered (the small 1.5B router, not the 4B
-    // worker). The agent never runs in this path, so no real steps come.
-    const effectiveTaskId = newTaskId ?? (directAnswer ? `direct-${Date.now()}` : undefined);
-    if (newTaskId) {
+    if (!eventLogRef.current.hasFinished(newTaskId)) {
       setWorkingTaskId(newTaskId);
-    }
-    if (directAnswer && effectiveTaskId) {
-      setStepsByTaskId((prev) => ({
-        ...prev,
-        [effectiveTaskId]: [
-          {
-            taskId: effectiveTaskId,
-            stepType: 'reasoning.done',
-            title: 'Orchestrator answered directly',
-            detail:
-              "MAS's router classified this as a DIRECT_ANSWER and replied " +
-              'without dispatching to an agent worker. No retrieval ran, no ' +
-              'specialist persona was applied.',
-            timestamp: new Date().toISOString(),
-            metadata: { path: 'orchestrator_direct_answer' },
-          },
-        ],
-      }));
     }
 
     setMessages((prev) =>
       prev.map((msg) =>
-        msg.id === userMessageId
-          ? { ...msg, status: 'sent', taskId: effectiveTaskId ?? msg.taskId }
-          : msg
+        msg.id === userMessageId ? { ...msg, status: 'sent', taskId: newTaskId } : msg
       )
     );
-    // Attachments are scoped to a single message — clear them after dispatch
-    // so the next one starts clean unless the user picks again.
-    setAttachments({ attached: [], inline: [] });
   };
 
   // Stop the in-flight chat: cancel the running task on the backend (which
@@ -604,7 +622,7 @@ function ChatPageContent() {
     const taskId = workingTaskId;
     setIsCancelling(true);
     try {
-      if (taskId && !taskId.startsWith('direct-')) {
+      if (taskId) {
         const res = await chatApi.cancelTask(taskId, 'Stopped by user');
         if (!res.ok) {
           notifyError(res.error || 'Could not stop the task.');
@@ -618,6 +636,7 @@ function ChatPageContent() {
       setWorkingTaskId(null);
       setWorkingTaskDetail(null);
       setStreamingByTaskId({});
+      setTaskProgress(null);
     }
   };
 
@@ -804,7 +823,7 @@ function ChatPageContent() {
                     className={`h-2 w-2 rounded-full ${
                       wsStatus === 'connected'
                         ? 'bg-green-500'
-                        : wsStatus === 'connecting'
+                        : wsStatus === 'connecting' || wsStatus === 'reconnecting'
                           ? 'bg-yellow-400'
                           : wsStatus === 'error'
                             ? 'bg-red-500'
@@ -814,6 +833,7 @@ function ChatPageContent() {
                   <span className="hidden sm:inline">
                     {wsStatus === 'connected' && 'Connected'}
                     {wsStatus === 'connecting' && 'Connecting...'}
+                    {wsStatus === 'reconnecting' && 'Reconnecting...'}
                     {wsStatus === 'disconnected' && 'Disconnected'}
                     {wsStatus === 'error' && 'Error'}
                     {wsStatus === 'idle' && 'Idle'}
@@ -823,11 +843,26 @@ function ChatPageContent() {
             </div>
           </div>
 
-          {isLoading && workingTaskId && !workingTaskDetail && (
-            <div className="border-b border-amber-500/20 bg-amber-500/5 px-3 py-2 text-center text-xs text-[var(--textSoft)]">
-              Dispatching task to agents…
+          {isLoading && wsStatus === 'reconnecting' && (
+            <div
+              role="status"
+              className="border-b border-sky-500/20 bg-sky-500/5 px-3 py-2 text-center text-xs text-[var(--textSoft)]"
+            >
+              Connection lost. Reconnecting… your request keeps running on the server.
             </div>
           )}
+
+          {isLoading &&
+            wsStatus !== 'reconnecting' &&
+            workingTaskId &&
+            (progressText || !workingTaskDetail) && (
+              <div
+                role="status"
+                className="border-b border-amber-500/20 bg-amber-500/5 px-3 py-2 text-center text-xs text-[var(--textSoft)]"
+              >
+                {progressText ?? 'Dispatching task to agents…'}
+              </div>
+            )}
 
           <WorkingAgentsBar taskDetail={workingTaskDetail} agentsById={agentsById} />
 
@@ -854,7 +889,7 @@ function ChatPageContent() {
               stepsByTaskId={stepsByTaskId}
               workingTaskId={workingTaskId}
               streamingText={
-                workingTaskId ? streamingByTaskId[workingTaskId] ?? '' : ''
+                workingTaskId ? streamingByTaskId[workingTaskId]?.text ?? '' : ''
               }
               emptyStateTitle={
                 conversationId ? undefined : 'No conversation selected'

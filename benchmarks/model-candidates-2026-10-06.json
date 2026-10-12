@@ -1,0 +1,1642 @@
+{
+  "kind": "horus-model-candidates",
+  "schema_version": 1,
+  "label": "model-candidates",
+  "catalog": {
+    "path": "scripts/benchmarks/model-candidates.yaml",
+    "version": "1.0.0",
+    "sha256": "48453a2099aba19627af2e59c15ea674093f1fa64a3233c1e59c1ba5dd17cd7a",
+    "looked_up": "2026-10-05",
+    "pinned_build": "b11382"
+  },
+  "run": {
+    "started_at": "2026-10-06T15:56:41Z",
+    "finished_at": "2026-10-06T17:25:32Z",
+    "completed": true,
+    "git_commit": "245f965",
+    "steps": [
+      "fetch",
+      "probe",
+      "eval"
+    ],
+    "reasoning": "off",
+    "stack_llm": {
+      "name": "horus_upgrade-llm-1",
+      "image": "ghcr.io/ggml-org/llama.cpp:server-b11382",
+      "args": [
+        "--model",
+        "/models/qwen3-4b-instruct-2507-Q4_K_M.gguf",
+        "--alias",
+        "qwen3-4b",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8080",
+        "--ctx-size",
+        "8192",
+        "--parallel",
+        "1",
+        "--cache-type-k",
+        "f16",
+        "--cache-type-v",
+        "f16",
+        "--flash-attn",
+        "auto",
+        "--load-mode",
+        "mmap",
+        "--cache-ram",
+        "1024",
+        "--threads",
+        "12",
+        "--metrics"
+      ],
+      "networks": [
+        "horus_upgrade_horus-net"
+      ],
+      "memory_bytes": 6442450944,
+      "running": true,
+      "oom_killed": false,
+      "restart_count": 0,
+      "models_source": "<bench-dir>\\upgrade\\models"
+    },
+    "testset": {
+      "path": "tests/eval/testset.yaml",
+      "version": "1.0.0",
+      "sha256": "f6f11ee2fe1040bbb68782ba810d73b20c2c723a58a29339365465af86ad3cac",
+      "filters": {
+        "ids": null,
+        "categories": null,
+        "limit": 20
+      },
+      "probe_items": 20
+    },
+    "sessions": [
+      {
+        "started_at": "2026-10-06T15:56:41Z",
+        "finished_at": "2026-10-06T17:25:32Z",
+        "completed": true,
+        "git_commit": "245f965",
+        "steps": [
+          "fetch",
+          "probe",
+          "eval"
+        ],
+        "reasoning": "off",
+        "only": null,
+        "all_quants": false,
+        "models_dir": "<bench-dir>\\candidates",
+        "server_image": "ghcr.io/ggml-org/llama.cpp:server-b11382",
+        "llm_mem_limit_bytes": 6442450944,
+        "testset": {
+          "path": "tests/eval/testset.yaml",
+          "version": "1.0.0",
+          "sha256": "f6f11ee2fe1040bbb68782ba810d73b20c2c723a58a29339365465af86ad3cac",
+          "filters": {
+            "ids": null,
+            "categories": null,
+            "limit": 20
+          },
+          "probe_items": 20
+        }
+      }
+    ]
+  },
+  "machine": {
+    "reference": "dev-laptop",
+    "cpu_model": "AMD Ryzen AI 9 HX 370 (12 cores)",
+    "physical_cores": 12,
+    "logical_cpus": 24,
+    "avx2": true,
+    "ram": "64 GB host, Docker VM 31 GiB",
+    "ram_total_bytes": 67723177984,
+    "ram_installed_bytes": 68719476736,
+    "ram_modules": 4,
+    "ram_type": "LPDDR5",
+    "ram_speed": "7500 MT/s",
+    "disk_type": "NVMe SSD",
+    "disk_model": "WD PC SN740 SDDPNQE-2T00-1202",
+    "os": "Windows-10-10.0.26200-SP0",
+    "docker": {
+      "mem_total_bytes": 33160323072,
+      "cpus": 24,
+      "operating_system": "Docker Desktop",
+      "kernel": "6.6.87.2-microsoft-standard-WSL2",
+      "server_version": "29.2.1",
+      "cgroup_version": "2",
+      "root_dir": "/var/lib/docker"
+    },
+    "sources": {
+      "avx2": "IsProcessorFeaturePresent",
+      "cpu_model": "given",
+      "disk_model": "Get-PhysicalDisk (C:)",
+      "disk_type": "given",
+      "physical_cores": "Win32_Processor",
+      "ram": "given",
+      "ram_installed_bytes": "Win32_PhysicalMemory",
+      "ram_modules": "Win32_PhysicalMemory",
+      "ram_speed": "Win32_PhysicalMemory",
+      "ram_total_bytes": "Win32_ComputerSystem",
+      "ram_type": "Win32_PhysicalMemory"
+    }
+  },
+  "variants": [
+    {
+      "id": "qwen3-4b-q4km",
+      "candidate": "qwen3-4b-instruct-2507",
+      "role": "baseline",
+      "name": "Qwen3-4B-Instruct-2507",
+      "model_repo": "Qwen/Qwen3-4B-Instruct-2507",
+      "licence": "Apache-2.0",
+      "licence_flags": [],
+      "gguf_architecture": "qwen3",
+      "thinking_default": "none",
+      "quant": "Q4_K_M",
+      "file": "qwen3-4b-instruct-2507-Q4_K_M.gguf",
+      "gguf_repo": "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+      "revision": "a06e946bb6b655725eafa393f4a9745d460374c9",
+      "publisher": "community",
+      "size_bytes": 2497281120,
+      "sha256": "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597",
+      "fetch": {
+        "status": "verified",
+        "method": "installer",
+        "path": "<bench-dir>\\candidates\\qwen3-4b-instruct-2507-Q4_K_M.gguf"
+      },
+      "reports": {
+        "llama_bench": null,
+        "contract": "model-candidates-2026-10-06/qwen3-4b-q4km-contract-2026-10-06.json",
+        "eval": "model-candidates-2026-10-06/qwen3-4b-q4km-eval-2026-10-06.json"
+      },
+      "llama_bench": null,
+      "contract": {
+        "replies": 20,
+        "json_valid": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "failures": {},
+        "thought_first": 0,
+        "truncated": 0,
+        "blank_answers": 0,
+        "status_correct": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "answer_correct_auto": {
+          "n": 20,
+          "correct": 19,
+          "pct": 95.0
+        },
+        "source_correct_auto": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "wall_s": {
+          "n": 20,
+          "mean": 13.088,
+          "median": 12.826,
+          "p90": 16.86,
+          "min": 5.737,
+          "max": 18.394,
+          "sum": 261.768
+        },
+        "completion_tokens": {
+          "n": 20,
+          "mean": 45.15,
+          "median": 40.0,
+          "p90": 56,
+          "min": 36,
+          "max": 98,
+          "sum": 903
+        },
+        "prompt_tps": 115.68,
+        "generation_tps": 12.55
+      },
+      "eval": {
+        "completed": true,
+        "questions": 20,
+        "status": {
+          "ok": 20
+        },
+        "answer_correct_auto": {
+          "n": 20,
+          "correct": 19,
+          "pct": 95.0
+        },
+        "answer_correct_reviewed_pct": null,
+        "review_pending": 20,
+        "source_correct_auto": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "route_correct": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "fallbacks": {},
+        "total_s": {
+          "n": 20,
+          "mean": 11.742,
+          "median": 11.391,
+          "p90": 16.145,
+          "min": 4.719,
+          "max": 16.241,
+          "sum": 234.841
+        },
+        "ttft_s": {
+          "n": 17,
+          "mean": 12.283,
+          "median": 11.648,
+          "p90": 16.141,
+          "min": 4.715,
+          "max": 16.237,
+          "sum": 208.807
+        },
+        "llm_prompt_tps": 141.64,
+        "llm_generation_tps": 18.47,
+        "stack_peak_mem_bytes": 8588124384,
+        "containers_sum_peak_mem_bytes": 8084705504,
+        "llm_peak_mem_bytes": 5953898414,
+        "llm_lifetime_peak_mem_bytes": 6442450944,
+        "llm_oom_kills": 0,
+        "docker_host_swap_growth_bytes": null
+      },
+      "server": {
+        "container": "llm-candidate",
+        "image": "ghcr.io/ggml-org/llama.cpp:server-b11382",
+        "command": [
+          "docker",
+          "run",
+          "-d",
+          "--name",
+          "llm-candidate",
+          "--network",
+          "horus_upgrade_horus-net",
+          "--network-alias",
+          "llm",
+          "--memory",
+          "6442450944",
+          "--memory-swap",
+          "6442450944",
+          "-v",
+          "<bench-dir>\\candidates:/models:ro",
+          "ghcr.io/ggml-org/llama.cpp:server-b11382",
+          "--model",
+          "/models/qwen3-4b-instruct-2507-Q4_K_M.gguf",
+          "--alias",
+          "qwen3-4b",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8080",
+          "--ctx-size",
+          "8192",
+          "--parallel",
+          "1",
+          "--cache-type-k",
+          "f16",
+          "--cache-type-v",
+          "f16",
+          "--flash-attn",
+          "auto",
+          "--load-mode",
+          "mmap",
+          "--cache-ram",
+          "1024",
+          "--threads",
+          "12",
+          "--metrics",
+          "--reasoning",
+          "off"
+        ],
+        "memory_limit_bytes": 6442450944,
+        "reasoning": "off",
+        "build_info": "b11382-11fe02151",
+        "build": "b11382",
+        "n_ctx": 8192,
+        "model_path": "/models/qwen3-4b-instruct-2507-Q4_K_M.gguf"
+      },
+      "memory": {
+        "after_probe": {
+          "taken_at": "2026-10-06T16:15:44Z",
+          "process": {
+            "name": "llama-server",
+            "vm_hwm_bytes": 6436130816,
+            "vm_rss_bytes": 6334283776,
+            "rss_anon_bytes": 4064350208,
+            "rss_file_bytes": 2269933568
+          },
+          "cgroup_peak_bytes": 6442450944,
+          "oom_kills": 0,
+          "oom_killed": false,
+          "restart_count": 0
+        },
+        "after_eval": {
+          "taken_at": "2026-10-06T16:21:48Z",
+          "process": {
+            "name": "llama-server",
+            "vm_hwm_bytes": 6436732928,
+            "vm_rss_bytes": 6378348544,
+            "rss_anon_bytes": 4152061952,
+            "rss_file_bytes": 2226286592
+          },
+          "cgroup_peak_bytes": 6442450944,
+          "oom_kills": 0,
+          "oom_killed": false,
+          "restart_count": 0
+        }
+      },
+      "problems": []
+    },
+    {
+      "id": "qwen3-4b-q5km",
+      "candidate": "qwen3-4b-instruct-2507",
+      "role": "baseline",
+      "name": "Qwen3-4B-Instruct-2507",
+      "model_repo": "Qwen/Qwen3-4B-Instruct-2507",
+      "licence": "Apache-2.0",
+      "licence_flags": [],
+      "gguf_architecture": "qwen3",
+      "thinking_default": "none",
+      "quant": "Q5_K_M",
+      "file": "qwen3-4b-instruct-2507-Q5_K_M.gguf",
+      "gguf_repo": "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+      "revision": "a06e946bb6b655725eafa393f4a9745d460374c9",
+      "publisher": "community",
+      "size_bytes": 2889514080,
+      "sha256": "5bde5e9d883622acb02bf77fe7dcbc56a8b9a9ad4be78a72ca23a532658b4ecb",
+      "fetch": {
+        "status": "verified",
+        "method": "installer",
+        "path": "<bench-dir>\\candidates\\qwen3-4b-instruct-2507-Q5_K_M.gguf"
+      },
+      "reports": {
+        "llama_bench": null,
+        "contract": "model-candidates-2026-10-06/qwen3-4b-q5km-contract-2026-10-06.json",
+        "eval": "model-candidates-2026-10-06/qwen3-4b-q5km-eval-2026-10-06.json"
+      },
+      "llama_bench": null,
+      "contract": {
+        "replies": 20,
+        "json_valid": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "failures": {},
+        "thought_first": 0,
+        "truncated": 0,
+        "blank_answers": 0,
+        "status_correct": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "answer_correct_auto": {
+          "n": 20,
+          "correct": 19,
+          "pct": 95.0
+        },
+        "source_correct_auto": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "wall_s": {
+          "n": 20,
+          "mean": 8.005,
+          "median": 7.946,
+          "p90": 10.235,
+          "min": 3.656,
+          "max": 12.511,
+          "sum": 160.09
+        },
+        "completion_tokens": {
+          "n": 20,
+          "mean": 45.75,
+          "median": 40.0,
+          "p90": 60,
+          "min": 36,
+          "max": 106,
+          "sum": 915
+        },
+        "prompt_tps": 205.31,
+        "generation_tps": 17.33
+      },
+      "eval": {
+        "completed": true,
+        "questions": 20,
+        "status": {
+          "ok": 20
+        },
+        "answer_correct_auto": {
+          "n": 20,
+          "correct": 19,
+          "pct": 95.0
+        },
+        "answer_correct_reviewed_pct": null,
+        "review_pending": 20,
+        "source_correct_auto": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "route_correct": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "fallbacks": {},
+        "total_s": {
+          "n": 20,
+          "mean": 9.029,
+          "median": 9.07,
+          "p90": 12.029,
+          "min": 4.496,
+          "max": 12.095,
+          "sum": 180.575
+        },
+        "ttft_s": {
+          "n": 14,
+          "mean": 9.139,
+          "median": 9.435,
+          "p90": 12.024,
+          "min": 4.469,
+          "max": 12.092,
+          "sum": 127.945
+        },
+        "llm_prompt_tps": 211.34,
+        "llm_generation_tps": 18.0,
+        "stack_peak_mem_bytes": 7683041420,
+        "containers_sum_peak_mem_bytes": 4793309324,
+        "llm_peak_mem_bytes": 2472827420,
+        "llm_lifetime_peak_mem_bytes": 5360435200,
+        "llm_oom_kills": 0,
+        "docker_host_swap_growth_bytes": null
+      },
+      "server": {
+        "container": "llm-candidate",
+        "image": "ghcr.io/ggml-org/llama.cpp:server-b11382",
+        "command": [
+          "docker",
+          "run",
+          "-d",
+          "--name",
+          "llm-candidate",
+          "--network",
+          "horus_upgrade_horus-net",
+          "--network-alias",
+          "llm",
+          "--memory",
+          "6442450944",
+          "--memory-swap",
+          "6442450944",
+          "-v",
+          "<bench-dir>\\candidates:/models:ro",
+          "ghcr.io/ggml-org/llama.cpp:server-b11382",
+          "--model",
+          "/models/qwen3-4b-instruct-2507-Q5_K_M.gguf",
+          "--alias",
+          "qwen3-4b",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8080",
+          "--ctx-size",
+          "8192",
+          "--parallel",
+          "1",
+          "--cache-type-k",
+          "f16",
+          "--cache-type-v",
+          "f16",
+          "--flash-attn",
+          "auto",
+          "--load-mode",
+          "mmap",
+          "--cache-ram",
+          "1024",
+          "--threads",
+          "12",
+          "--metrics",
+          "--reasoning",
+          "off"
+        ],
+        "memory_limit_bytes": 6442450944,
+        "reasoning": "off",
+        "build_info": "b11382-11fe02151",
+        "build": "b11382",
+        "n_ctx": 8192,
+        "model_path": "/models/qwen3-4b-instruct-2507-Q5_K_M.gguf"
+      },
+      "memory": {
+        "after_probe": {
+          "taken_at": "2026-10-06T16:25:10Z",
+          "process": {
+            "name": "llama-server",
+            "vm_hwm_bytes": 5295210496,
+            "vm_rss_bytes": 5198819328,
+            "rss_anon_bytes": 2300387328,
+            "rss_file_bytes": 2898432000
+          },
+          "cgroup_peak_bytes": 5311549440,
+          "oom_kills": 0,
+          "oom_killed": false,
+          "restart_count": 0
+        },
+        "after_eval": {
+          "taken_at": "2026-10-06T16:30:07Z",
+          "process": {
+            "name": "llama-server",
+            "vm_hwm_bytes": 5342756864,
+            "vm_rss_bytes": 5286010880,
+            "rss_anon_bytes": 2387578880,
+            "rss_file_bytes": 2898432000
+          },
+          "cgroup_peak_bytes": 5360435200,
+          "oom_kills": 0,
+          "oom_killed": false,
+          "restart_count": 0
+        }
+      },
+      "problems": []
+    },
+    {
+      "id": "spark-x2.5-4b-q4km",
+      "candidate": "spark-x2.5-4b",
+      "role": "candidate",
+      "name": "Spark-X2.5-4B",
+      "model_repo": "XHToken/Spark-X2.5-4B",
+      "licence": "Apache-2.0",
+      "licence_flags": [],
+      "gguf_architecture": "spark2_5",
+      "thinking_default": "on",
+      "quant": "Q4_K_M",
+      "file": "spark-x2.5-4b-Q4_K_M.gguf",
+      "gguf_repo": "XHToken/Spark-X2.5-4B-GGUF",
+      "revision": "9826e0be84e6e6e8b9668abc91421109a1df1e2d",
+      "publisher": "model author",
+      "size_bytes": 2600224352,
+      "sha256": "adfcfa19a4ed6a5985da8bf565fe15f8e1a7e131d79bae2d19d48d1c40109428",
+      "fetch": {
+        "status": "verified",
+        "method": "installer",
+        "path": "<bench-dir>\\candidates\\spark-x2.5-4b-Q4_K_M.gguf"
+      },
+      "reports": {
+        "llama_bench": null,
+        "contract": "model-candidates-2026-10-06/spark-x2.5-4b-q4km-contract-2026-10-06.json",
+        "eval": "model-candidates-2026-10-06/spark-x2.5-4b-q4km-eval-2026-10-06.json"
+      },
+      "llama_bench": null,
+      "contract": {
+        "replies": 20,
+        "json_valid": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "failures": {},
+        "thought_first": 0,
+        "truncated": 0,
+        "blank_answers": 0,
+        "status_correct": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "answer_correct_auto": {
+          "n": 20,
+          "correct": 18,
+          "pct": 90.0
+        },
+        "source_correct_auto": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "wall_s": {
+          "n": 20,
+          "mean": 12.534,
+          "median": 12.504,
+          "p90": 15.243,
+          "min": 5.025,
+          "max": 15.87,
+          "sum": 250.68
+        },
+        "completion_tokens": {
+          "n": 20,
+          "mean": 44.65,
+          "median": 44.5,
+          "p90": 69,
+          "min": 25,
+          "max": 76,
+          "sum": 893
+        },
+        "prompt_tps": 147.47,
+        "generation_tps": 19.15
+      },
+      "eval": {
+        "completed": true,
+        "questions": 20,
+        "status": {
+          "ok": 20
+        },
+        "answer_correct_auto": {
+          "n": 20,
+          "correct": 18,
+          "pct": 90.0
+        },
+        "answer_correct_reviewed_pct": null,
+        "review_pending": 20,
+        "source_correct_auto": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "route_correct": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "fallbacks": {},
+        "total_s": {
+          "n": 20,
+          "mean": 15.028,
+          "median": 14.857,
+          "p90": 17.679,
+          "min": 12.728,
+          "max": 18.558,
+          "sum": 300.551
+        },
+        "ttft_s": {
+          "n": 18,
+          "mean": 14.961,
+          "median": 14.413,
+          "p90": 17.674,
+          "min": 12.724,
+          "max": 18.553,
+          "sum": 269.299
+        },
+        "llm_prompt_tps": 153.08,
+        "llm_generation_tps": 18.85,
+        "stack_peak_mem_bytes": 8004621528,
+        "containers_sum_peak_mem_bytes": 5428880600,
+        "llm_peak_mem_bytes": 3529389375,
+        "llm_lifetime_peak_mem_bytes": 6114078720,
+        "llm_oom_kills": 0,
+        "docker_host_swap_growth_bytes": null
+      },
+      "server": {
+        "container": "llm-candidate",
+        "image": "ghcr.io/ggml-org/llama.cpp:server-b11382",
+        "command": [
+          "docker",
+          "run",
+          "-d",
+          "--name",
+          "llm-candidate",
+          "--network",
+          "horus_upgrade_horus-net",
+          "--network-alias",
+          "llm",
+          "--memory",
+          "6442450944",
+          "--memory-swap",
+          "6442450944",
+          "-v",
+          "<bench-dir>\\candidates:/models:ro",
+          "ghcr.io/ggml-org/llama.cpp:server-b11382",
+          "--model",
+          "/models/spark-x2.5-4b-Q4_K_M.gguf",
+          "--alias",
+          "qwen3-4b",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8080",
+          "--ctx-size",
+          "8192",
+          "--parallel",
+          "1",
+          "--cache-type-k",
+          "f16",
+          "--cache-type-v",
+          "f16",
+          "--flash-attn",
+          "auto",
+          "--load-mode",
+          "mmap",
+          "--cache-ram",
+          "1024",
+          "--threads",
+          "12",
+          "--metrics",
+          "--reasoning",
+          "off"
+        ],
+        "memory_limit_bytes": 6442450944,
+        "reasoning": "off",
+        "build_info": "b11382-11fe02151",
+        "build": "b11382",
+        "n_ctx": 8192,
+        "model_path": "/models/spark-x2.5-4b-Q4_K_M.gguf"
+      },
+      "memory": {
+        "after_probe": {
+          "taken_at": "2026-10-06T16:34:56Z",
+          "process": {
+            "name": "llama-server",
+            "vm_hwm_bytes": 6036992000,
+            "vm_rss_bytes": 6014406656,
+            "rss_anon_bytes": 3418533888,
+            "rss_file_bytes": 2595872768
+          },
+          "cgroup_peak_bytes": 6064386048,
+          "oom_kills": 0,
+          "oom_killed": false,
+          "restart_count": 0
+        },
+        "after_eval": {
+          "taken_at": "2026-10-06T16:41:57Z",
+          "process": {
+            "name": "llama-server",
+            "vm_hwm_bytes": 6083301376,
+            "vm_rss_bytes": 6000898048,
+            "rss_anon_bytes": 3405025280,
+            "rss_file_bytes": 2595872768
+          },
+          "cgroup_peak_bytes": 6114078720,
+          "oom_kills": 0,
+          "oom_killed": false,
+          "restart_count": 0
+        }
+      },
+      "problems": []
+    },
+    {
+      "id": "neohorse-1-4b-q4km",
+      "candidate": "neohorse-1-4b",
+      "role": "candidate",
+      "name": "NeoHorse-1-4B",
+      "model_repo": "TokenRhythm/NeoHorse-1-4B",
+      "licence": "Apache-2.0",
+      "licence_flags": [],
+      "gguf_architecture": "qwen35",
+      "thinking_default": "on",
+      "quant": "Q4_K_M",
+      "file": "neohorse-1-4b-Q4_K_M.gguf",
+      "gguf_repo": "TokenRhythm/NeoHorse-1-4B-GGUF",
+      "revision": "3c5d58ca82e580b5b0b3ce6eeffd34ac7d0fd95a",
+      "publisher": "model author",
+      "size_bytes": 2708804352,
+      "sha256": "7da8ac6219b0aaa21b58cb26c1ec6826b478449215a3b0448742e1cda60fa2b4",
+      "fetch": {
+        "status": "verified",
+        "method": "installer",
+        "path": "<bench-dir>\\candidates\\neohorse-1-4b-Q4_K_M.gguf"
+      },
+      "reports": {
+        "llama_bench": null,
+        "contract": "model-candidates-2026-10-06/neohorse-1-4b-q4km-contract-2026-10-06.json",
+        "eval": "model-candidates-2026-10-06/neohorse-1-4b-q4km-eval-2026-10-06.json"
+      },
+      "llama_bench": null,
+      "contract": {
+        "replies": 20,
+        "json_valid": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "failures": {},
+        "thought_first": 0,
+        "truncated": 0,
+        "blank_answers": 0,
+        "status_correct": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "answer_correct_auto": {
+          "n": 20,
+          "correct": 19,
+          "pct": 95.0
+        },
+        "source_correct_auto": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "wall_s": {
+          "n": 20,
+          "mean": 12.777,
+          "median": 12.845,
+          "p90": 15.448,
+          "min": 5.466,
+          "max": 15.656,
+          "sum": 255.545
+        },
+        "completion_tokens": {
+          "n": 20,
+          "mean": 53,
+          "median": 50.0,
+          "p90": 69,
+          "min": 37,
+          "max": 93,
+          "sum": 1060
+        },
+        "prompt_tps": 146.75,
+        "generation_tps": 17.46
+      },
+      "eval": {
+        "completed": true,
+        "questions": 20,
+        "status": {
+          "ok": 20
+        },
+        "answer_correct_auto": {
+          "n": 20,
+          "correct": 19,
+          "pct": 95.0
+        },
+        "answer_correct_reviewed_pct": null,
+        "review_pending": 20,
+        "source_correct_auto": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "route_correct": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "fallbacks": {},
+        "total_s": {
+          "n": 20,
+          "mean": 14.275,
+          "median": 14.32,
+          "p90": 16.015,
+          "min": 11.776,
+          "max": 16.773,
+          "sum": 285.509
+        },
+        "ttft_s": {
+          "n": 19,
+          "mean": 14.186,
+          "median": 14.03,
+          "p90": 16.011,
+          "min": 11.772,
+          "max": 16.77,
+          "sum": 269.542
+        },
+        "llm_prompt_tps": 150.92,
+        "llm_generation_tps": 17.57,
+        "stack_peak_mem_bytes": 8077745876,
+        "containers_sum_peak_mem_bytes": 5375512276,
+        "llm_peak_mem_bytes": 3462817382,
+        "llm_lifetime_peak_mem_bytes": 6184431616,
+        "llm_oom_kills": 0,
+        "docker_host_swap_growth_bytes": null
+      },
+      "server": {
+        "container": "llm-candidate",
+        "image": "ghcr.io/ggml-org/llama.cpp:server-b11382",
+        "command": [
+          "docker",
+          "run",
+          "-d",
+          "--name",
+          "llm-candidate",
+          "--network",
+          "horus_upgrade_horus-net",
+          "--network-alias",
+          "llm",
+          "--memory",
+          "6442450944",
+          "--memory-swap",
+          "6442450944",
+          "-v",
+          "<bench-dir>\\candidates:/models:ro",
+          "ghcr.io/ggml-org/llama.cpp:server-b11382",
+          "--model",
+          "/models/neohorse-1-4b-Q4_K_M.gguf",
+          "--alias",
+          "qwen3-4b",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8080",
+          "--ctx-size",
+          "8192",
+          "--parallel",
+          "1",
+          "--cache-type-k",
+          "f16",
+          "--cache-type-v",
+          "f16",
+          "--flash-attn",
+          "auto",
+          "--load-mode",
+          "mmap",
+          "--cache-ram",
+          "1024",
+          "--threads",
+          "12",
+          "--metrics",
+          "--reasoning",
+          "off"
+        ],
+        "memory_limit_bytes": 6442450944,
+        "reasoning": "off",
+        "build_info": "b11382-11fe02151",
+        "build": "b11382",
+        "n_ctx": 8192,
+        "model_path": "/models/neohorse-1-4b-Q4_K_M.gguf"
+      },
+      "memory": {
+        "after_probe": {
+          "taken_at": "2026-10-06T16:46:52Z",
+          "process": {
+            "name": "llama-server",
+            "vm_hwm_bytes": 6126821376,
+            "vm_rss_bytes": 6112653312,
+            "rss_anon_bytes": 3399454720,
+            "rss_file_bytes": 2713198592
+          },
+          "cgroup_peak_bytes": 6145601536,
+          "oom_kills": 0,
+          "oom_killed": false,
+          "restart_count": 0
+        },
+        "after_eval": {
+          "taken_at": "2026-10-06T16:53:39Z",
+          "process": {
+            "name": "llama-server",
+            "vm_hwm_bytes": 6166306816,
+            "vm_rss_bytes": 6054699008,
+            "rss_anon_bytes": 3341500416,
+            "rss_file_bytes": 2713198592
+          },
+          "cgroup_peak_bytes": 6184431616,
+          "oom_kills": 0,
+          "oom_killed": false,
+          "restart_count": 0
+        }
+      },
+      "problems": []
+    },
+    {
+      "id": "agents-a1-4b-q4km",
+      "candidate": "agents-a1-4b",
+      "role": "candidate",
+      "name": "Agents-A1-4B",
+      "model_repo": "InternScience/Agents-A1-4B",
+      "licence": "Apache-2.0",
+      "licence_flags": [
+        "The licence is only in the card metadata: no LICENSE file and no licence text in the repository. Ask InternScience or check before shipping.",
+        "No base model is declared; the GGUF architecture is qwen35, the Qwen3.5 family (Apache 2.0)."
+      ],
+      "gguf_architecture": "qwen35",
+      "thinking_default": "on",
+      "quant": "Q4_K_M",
+      "file": "agents-a1-4b-Q4_K_M.gguf",
+      "gguf_repo": "InternScience/Agents-A1-4B-Q4_K_M-GGUF",
+      "revision": "d92b02e27074b27542384f72bc0e72203c970f0f",
+      "publisher": "model author",
+      "size_bytes": 2708805312,
+      "sha256": "d93c393a9bd5139a4b5cfe24d31ef553c5a497bfb8afec178a354ecbf508f062",
+      "fetch": {
+        "status": "verified",
+        "method": "installer",
+        "path": "<bench-dir>\\candidates\\agents-a1-4b-Q4_K_M.gguf"
+      },
+      "reports": {
+        "llama_bench": null,
+        "contract": "model-candidates-2026-10-06/agents-a1-4b-q4km-contract-2026-10-06.json",
+        "eval": "model-candidates-2026-10-06/agents-a1-4b-q4km-eval-2026-10-06.json"
+      },
+      "llama_bench": null,
+      "contract": {
+        "replies": 20,
+        "json_valid": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "failures": {},
+        "thought_first": 0,
+        "truncated": 0,
+        "blank_answers": 0,
+        "status_correct": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "answer_correct_auto": {
+          "n": 20,
+          "correct": 19,
+          "pct": 95.0
+        },
+        "source_correct_auto": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "wall_s": {
+          "n": 20,
+          "mean": 12.923,
+          "median": 12.928,
+          "p90": 15.633,
+          "min": 5.31,
+          "max": 15.733,
+          "sum": 258.468
+        },
+        "completion_tokens": {
+          "n": 20,
+          "mean": 56.05,
+          "median": 54.5,
+          "p90": 71,
+          "min": 38,
+          "max": 103,
+          "sum": 1121
+        },
+        "prompt_tps": 146.36,
+        "generation_tps": 17.62
+      },
+      "eval": {
+        "completed": true,
+        "questions": 20,
+        "status": {
+          "ok": 20
+        },
+        "answer_correct_auto": {
+          "n": 20,
+          "correct": 19,
+          "pct": 95.0
+        },
+        "answer_correct_reviewed_pct": null,
+        "review_pending": 20,
+        "source_correct_auto": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "route_correct": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "fallbacks": {},
+        "total_s": {
+          "n": 20,
+          "mean": 14.58,
+          "median": 14.669,
+          "p90": 16.802,
+          "min": 12.511,
+          "max": 17.649,
+          "sum": 291.608
+        },
+        "ttft_s": {
+          "n": 18,
+          "mean": 14.714,
+          "median": 14.84,
+          "p90": 16.797,
+          "min": 12.507,
+          "max": 17.646,
+          "sum": 264.856
+        },
+        "llm_prompt_tps": 150.93,
+        "llm_generation_tps": 17.46,
+        "stack_peak_mem_bytes": 8485288045,
+        "containers_sum_peak_mem_bytes": 5782464621,
+        "llm_peak_mem_bytes": 3438121320,
+        "llm_lifetime_peak_mem_bytes": 6146879488,
+        "llm_oom_kills": 0,
+        "docker_host_swap_growth_bytes": null
+      },
+      "server": {
+        "container": "llm-candidate",
+        "image": "ghcr.io/ggml-org/llama.cpp:server-b11382",
+        "command": [
+          "docker",
+          "run",
+          "-d",
+          "--name",
+          "llm-candidate",
+          "--network",
+          "horus_upgrade_horus-net",
+          "--network-alias",
+          "llm",
+          "--memory",
+          "6442450944",
+          "--memory-swap",
+          "6442450944",
+          "-v",
+          "<bench-dir>\\candidates:/models:ro",
+          "ghcr.io/ggml-org/llama.cpp:server-b11382",
+          "--model",
+          "/models/agents-a1-4b-Q4_K_M.gguf",
+          "--alias",
+          "qwen3-4b",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8080",
+          "--ctx-size",
+          "8192",
+          "--parallel",
+          "1",
+          "--cache-type-k",
+          "f16",
+          "--cache-type-v",
+          "f16",
+          "--flash-attn",
+          "auto",
+          "--load-mode",
+          "mmap",
+          "--cache-ram",
+          "1024",
+          "--threads",
+          "12",
+          "--metrics",
+          "--reasoning",
+          "off"
+        ],
+        "memory_limit_bytes": 6442450944,
+        "reasoning": "off",
+        "build_info": "b11382-11fe02151",
+        "build": "b11382",
+        "n_ctx": 8192,
+        "model_path": "/models/agents-a1-4b-Q4_K_M.gguf"
+      },
+      "memory": {
+        "after_probe": {
+          "taken_at": "2026-10-06T16:58:37Z",
+          "process": {
+            "name": "llama-server",
+            "vm_hwm_bytes": 6127349760,
+            "vm_rss_bytes": 6114529280,
+            "rss_anon_bytes": 3400740864,
+            "rss_file_bytes": 2713788416
+          },
+          "cgroup_peak_bytes": 6146879488,
+          "oom_kills": 0,
+          "oom_killed": false,
+          "restart_count": 0
+        },
+        "after_eval": {
+          "taken_at": "2026-10-06T17:05:29Z",
+          "process": {
+            "name": "llama-server",
+            "vm_hwm_bytes": 6127349760,
+            "vm_rss_bytes": 6052761600,
+            "rss_anon_bytes": 3338973184,
+            "rss_file_bytes": 2713788416
+          },
+          "cgroup_peak_bytes": 6146879488,
+          "oom_kills": 0,
+          "oom_killed": false,
+          "restart_count": 0
+        }
+      },
+      "problems": []
+    },
+    {
+      "id": "ling-3.0-tiny-q4km",
+      "candidate": "ling-3.0-tiny",
+      "role": "candidate",
+      "name": "Ling-3.0-tiny",
+      "model_repo": "inclusionAI/Ling-3.0-tiny",
+      "licence": "MIT",
+      "licence_flags": [
+        "The licence is only in the card metadata: no LICENSE file in the repository. Check before shipping."
+      ],
+      "gguf_architecture": "bailingmoe3",
+      "thinking_default": "on",
+      "quant": "Q4_K_M",
+      "file": "ling-3.0-tiny-Q4_K_M.gguf",
+      "gguf_repo": "inclusionAI/Ling-3.0-tiny-GGUF",
+      "revision": "01b850e29ed5b44e2b810160ff980a9bb353296f",
+      "publisher": "model author",
+      "size_bytes": 4823894944,
+      "sha256": "246d67d45f5b0c7447ca0ce0bdb8b46b8a47b593c5068635dc16422c051d7be9",
+      "fetch": {
+        "status": "verified",
+        "method": "installer",
+        "path": "<bench-dir>\\candidates\\ling-3.0-tiny-Q4_K_M.gguf"
+      },
+      "reports": {
+        "llama_bench": null,
+        "contract": "model-candidates-2026-10-06/ling-3.0-tiny-q4km-contract-2026-10-06.json",
+        "eval": "model-candidates-2026-10-06/ling-3.0-tiny-q4km-eval-2026-10-06.json"
+      },
+      "llama_bench": null,
+      "contract": {
+        "replies": 20,
+        "json_valid": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "failures": {},
+        "thought_first": 0,
+        "truncated": 0,
+        "blank_answers": 0,
+        "status_correct": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "answer_correct_auto": {
+          "n": 20,
+          "correct": 19,
+          "pct": 95.0
+        },
+        "source_correct_auto": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "wall_s": {
+          "n": 20,
+          "mean": 5.863,
+          "median": 6.057,
+          "p90": 7.103,
+          "min": 2.244,
+          "max": 7.46,
+          "sum": 117.262
+        },
+        "completion_tokens": {
+          "n": 20,
+          "mean": 29.4,
+          "median": 26.5,
+          "p90": 39,
+          "min": 23,
+          "max": 47,
+          "sum": 588
+        },
+        "prompt_tps": 281.79,
+        "generation_tps": 42.14
+      },
+      "eval": {
+        "completed": true,
+        "questions": 20,
+        "status": {
+          "ok": 20
+        },
+        "answer_correct_auto": {
+          "n": 20,
+          "correct": 19,
+          "pct": 95.0
+        },
+        "answer_correct_reviewed_pct": null,
+        "review_pending": 20,
+        "source_correct_auto": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "route_correct": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "fallbacks": {},
+        "total_s": {
+          "n": 20,
+          "mean": 6.672,
+          "median": 6.688,
+          "p90": 8.289,
+          "min": 2.845,
+          "max": 8.429,
+          "sum": 133.44
+        },
+        "ttft_s": {
+          "n": 13,
+          "mean": 6.662,
+          "median": 6.987,
+          "p90": 8.285,
+          "min": 2.836,
+          "max": 8.424,
+          "sum": 86.602
+        },
+        "llm_prompt_tps": 287.01,
+        "llm_generation_tps": 42.64,
+        "stack_peak_mem_bytes": 8382160170,
+        "containers_sum_peak_mem_bytes": 8065441066,
+        "llm_peak_mem_bytes": 6073083756,
+        "llm_lifetime_peak_mem_bytes": 6442455040,
+        "llm_oom_kills": 0,
+        "docker_host_swap_growth_bytes": null
+      },
+      "server": {
+        "container": "llm-candidate",
+        "image": "ghcr.io/ggml-org/llama.cpp:server-b11382",
+        "command": [
+          "docker",
+          "run",
+          "-d",
+          "--name",
+          "llm-candidate",
+          "--network",
+          "horus_upgrade_horus-net",
+          "--network-alias",
+          "llm",
+          "--memory",
+          "6442450944",
+          "--memory-swap",
+          "6442450944",
+          "-v",
+          "<bench-dir>\\candidates:/models:ro",
+          "ghcr.io/ggml-org/llama.cpp:server-b11382",
+          "--model",
+          "/models/ling-3.0-tiny-Q4_K_M.gguf",
+          "--alias",
+          "qwen3-4b",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8080",
+          "--ctx-size",
+          "8192",
+          "--parallel",
+          "1",
+          "--cache-type-k",
+          "f16",
+          "--cache-type-v",
+          "f16",
+          "--flash-attn",
+          "auto",
+          "--load-mode",
+          "mmap",
+          "--cache-ram",
+          "1024",
+          "--threads",
+          "12",
+          "--metrics",
+          "--reasoning",
+          "off"
+        ],
+        "memory_limit_bytes": 6442450944,
+        "reasoning": "off",
+        "build_info": "b11382-11fe02151",
+        "build": "b11382",
+        "n_ctx": 8192,
+        "model_path": "/models/ling-3.0-tiny-Q4_K_M.gguf"
+      },
+      "memory": {
+        "after_probe": {
+          "taken_at": "2026-10-06T17:08:22Z",
+          "process": {
+            "name": "llama-server",
+            "vm_hwm_bytes": 6430576640,
+            "vm_rss_bytes": 6349955072,
+            "rss_anon_bytes": 4911980544,
+            "rss_file_bytes": 1437974528
+          },
+          "cgroup_peak_bytes": 6442455040,
+          "oom_kills": 0,
+          "oom_killed": false,
+          "restart_count": 0
+        },
+        "after_eval": {
+          "taken_at": "2026-10-06T17:12:28Z",
+          "process": {
+            "name": "llama-server",
+            "vm_hwm_bytes": 6430576640,
+            "vm_rss_bytes": 6349254656,
+            "rss_anon_bytes": 4928188416,
+            "rss_file_bytes": 1421066240
+          },
+          "cgroup_peak_bytes": 6442455040,
+          "oom_kills": 0,
+          "oom_killed": false,
+          "restart_count": 0
+        }
+      },
+      "problems": []
+    },
+    {
+      "id": "gemma-4-e4b-it-qat-q4_0",
+      "candidate": "gemma-4-e4b-it",
+      "role": "candidate",
+      "name": "gemma-4-E4B",
+      "model_repo": "google/gemma-4-E4B-it",
+      "licence": "Apache-2.0",
+      "licence_flags": [
+        "Google's Gemma documentation, where the licence page lives, also links a prohibited use policy. Confirm it is not part of the terms before shipping."
+      ],
+      "gguf_architecture": "gemma4",
+      "thinking_default": "off",
+      "quant": "Q4_0 (QAT)",
+      "file": "gemma-4-e4b-it-qat-Q4_0.gguf",
+      "gguf_repo": "google/gemma-4-E4B-it-qat-q4_0-gguf",
+      "revision": "4b4a2c1d584be7264f87aac328a1bc739ce81b6c",
+      "publisher": "model author",
+      "size_bytes": 5154941280,
+      "sha256": "676c35070db6dbe52f93e9c864ee0fba4eddea94b9c875d9cb10daff453fbaee",
+      "fetch": {
+        "status": "verified",
+        "method": "installer",
+        "path": "<bench-dir>\\candidates\\gemma-4-e4b-it-qat-Q4_0.gguf"
+      },
+      "reports": {
+        "llama_bench": null,
+        "contract": "model-candidates-2026-10-06/gemma-4-e4b-it-qat-q4_0-contract-2026-10-06.json",
+        "eval": "model-candidates-2026-10-06/gemma-4-e4b-it-qat-q4_0-eval-2026-10-06.json"
+      },
+      "llama_bench": null,
+      "contract": {
+        "replies": 20,
+        "json_valid": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "failures": {},
+        "thought_first": 0,
+        "truncated": 0,
+        "blank_answers": 0,
+        "status_correct": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "answer_correct_auto": {
+          "n": 20,
+          "correct": 19,
+          "pct": 95.0
+        },
+        "source_correct_auto": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "wall_s": {
+          "n": 20,
+          "mean": 14.369,
+          "median": 14.608,
+          "p90": 16.783,
+          "min": 6.817,
+          "max": 16.957,
+          "sum": 287.376
+        },
+        "completion_tokens": {
+          "n": 20,
+          "mean": 65.2,
+          "median": 62.5,
+          "p90": 72,
+          "min": 56,
+          "max": 115,
+          "sum": 1304
+        },
+        "prompt_tps": 130.62,
+        "generation_tps": 18.02
+      },
+      "eval": {
+        "completed": true,
+        "questions": 20,
+        "status": {
+          "ok": 20
+        },
+        "answer_correct_auto": {
+          "n": 20,
+          "correct": 19,
+          "pct": 95.0
+        },
+        "answer_correct_reviewed_pct": null,
+        "review_pending": 20,
+        "source_correct_auto": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "route_correct": {
+          "n": 20,
+          "correct": 20,
+          "pct": 100.0
+        },
+        "fallbacks": {},
+        "total_s": {
+          "n": 20,
+          "mean": 15.441,
+          "median": 15.265,
+          "p90": 18.536,
+          "min": 7.21,
+          "max": 19.752,
+          "sum": 308.818
+        },
+        "ttft_s": {
+          "n": 20,
+          "mean": 15.437,
+          "median": 15.262,
+          "p90": 18.529,
+          "min": 7.207,
+          "max": 19.748,
+          "sum": 308.736
+        },
+        "llm_prompt_tps": 133.34,
+        "llm_generation_tps": 17.95,
+        "stack_peak_mem_bytes": 8764421630,
+        "containers_sum_peak_mem_bytes": 8272893438,
+        "llm_peak_mem_bytes": 5931349835,
+        "llm_lifetime_peak_mem_bytes": 6442459136,
+        "llm_oom_kills": 0,
+        "docker_host_swap_growth_bytes": null
+      },
+      "server": {
+        "container": "llm-candidate",
+        "image": "ghcr.io/ggml-org/llama.cpp:server-b11382",
+        "command": [
+          "docker",
+          "run",
+          "-d",
+          "--name",
+          "llm-candidate",
+          "--network",
+          "horus_upgrade_horus-net",
+          "--network-alias",
+          "llm",
+          "--memory",
+          "6442450944",
+          "--memory-swap",
+          "6442450944",
+          "-v",
+          "<bench-dir>\\candidates:/models:ro",
+          "ghcr.io/ggml-org/llama.cpp:server-b11382",
+          "--model",
+          "/models/gemma-4-e4b-it-qat-Q4_0.gguf",
+          "--alias",
+          "qwen3-4b",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8080",
+          "--ctx-size",
+          "8192",
+          "--parallel",
+          "1",
+          "--cache-type-k",
+          "f16",
+          "--cache-type-v",
+          "f16",
+          "--flash-attn",
+          "auto",
+          "--load-mode",
+          "mmap",
+          "--cache-ram",
+          "1024",
+          "--threads",
+          "12",
+          "--metrics",
+          "--reasoning",
+          "off"
+        ],
+        "memory_limit_bytes": 6442450944,
+        "reasoning": "off",
+        "build_info": "b11382-11fe02151",
+        "build": "b11382",
+        "n_ctx": 8192,
+        "model_path": "/models/gemma-4-e4b-it-qat-Q4_0.gguf"
+      },
+      "memory": {
+        "after_probe": {
+          "taken_at": "2026-10-06T17:18:20Z",
+          "process": {
+            "name": "llama-server",
+            "vm_hwm_bytes": 6429499392,
+            "vm_rss_bytes": 6378860544,
+            "rss_anon_bytes": 3741208576,
+            "rss_file_bytes": 2637651968
+          },
+          "cgroup_peak_bytes": 6442459136,
+          "oom_kills": 0,
+          "oom_killed": false,
+          "restart_count": 0
+        },
+        "after_eval": {
+          "taken_at": "2026-10-06T17:25:30Z",
+          "process": {
+            "name": "llama-server",
+            "vm_hwm_bytes": 6429499392,
+            "vm_rss_bytes": 6312697856,
+            "rss_anon_bytes": 3803627520,
+            "rss_file_bytes": 2509070336
+          },
+          "cgroup_peak_bytes": 6442459136,
+          "oom_kills": 0,
+          "oom_killed": false,
+          "restart_count": 0
+        }
+      },
+      "problems": []
+    }
+  ]
+}

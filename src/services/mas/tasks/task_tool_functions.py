@@ -31,6 +31,7 @@ from tasks.task_crud import (
     _get_all_tasks_internal,
     get_tasks_in_progress,
     insert_new_task,
+    insert_queued_task,
     interrupt_task,
     validating_task_results,
 )
@@ -46,6 +47,7 @@ __all__ = [
     "get_prompt_final_answer_generation",
     "get_tasks_in_progress",
     "insert_new_task",
+    "insert_queued_task",
     "interrupt_task",
     "pretty_log",
     "select_agent_by_mode",

@@ -7,9 +7,11 @@ import datetime
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
+import textwrap
 import time
 from pathlib import Path
 
@@ -17,15 +19,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import consent  # noqa: E402
 import hardware  # noqa: E402
+import images  # noqa: E402
+import model_manager  # noqa: E402
 import preflight  # noqa: E402
 import profiles  # noqa: E402
+import reindex  # noqa: E402
 import smoke  # noqa: E402
+import unsupported  # noqa: E402
 from common import (  # noqa: E402
     BUNDLE_DIR,
+    EXIT_COMPOSE_PULL_FAILED,
     EXIT_COMPOSE_UP_FAILED,
+    EXIT_CONSENT_CANCELLED,
     EXIT_ENV_WRITE_FAILED,
     EXIT_HEALTH_TIMEOUT,
     EXIT_INTERRUPTED,
+    EXIT_MODEL_MANIFEST_INVALID,
     EXIT_NOT_INSTALLED,
     EXIT_OK,
     EXIT_PROFILE_UNKNOWN,
@@ -56,6 +65,11 @@ WEB_URL = "http://localhost:3000"
 CORE_SERVICES = [
     "postgres", "redis", "rabbitmq", "mas", "agent", "knowledge_store", "web-client",
 ]
+COMPOSE_FILE_KEY = "COMPOSE_FILE"
+AI_MODE_KEY = "HORUS_AI_MODE"
+MOCK_MODE = "mock"
+LOCAL_MODE = "local"
+AI_CHOICES = (MOCK_MODE, LOCAL_MODE, "status")
 
 def cpu_overlay_active(infra: Path) -> bool:
     answer = False
@@ -69,19 +83,27 @@ def cpu_overlay_active(infra: Path) -> bool:
             answer = profiles.CPU_OVERLAY in line.split("=", 1)[1]
     return answer
 
+def mock_overlay_active(infra: Path) -> bool:
+    return profiles.compose_file_runs_mock(env_line_value(infra, COMPOSE_FILE_KEY) or "")
+
 def expected_services(infra: Path) -> list[str]:
-    expect = list(CORE_SERVICES)
-    if not cpu_overlay_active(infra):
-        expect.append("vllm")
-    return expect
+    if mock_overlay_active(infra):
+        server = profiles.MOCK_MODEL_SERVER
+    elif cpu_overlay_active(infra):
+        server = profiles.CPU_MODEL_SERVER
+    else:
+        server = profiles.GPU_MODEL_SERVER
+    return [*CORE_SERVICES, server]
 
 _GIB = 1024 ** 3
 
 def _simulated(system: str, machine: str, cpu_model: str, physical: int,
                logical: int, ram_gib: float, *, gpu_vendor: str | None = None,
                gpu_name: str | None = None, vram_gib: float | None = None,
-               docker_gpu: bool = False, wsl: bool = False) -> dict:
+               docker_gpu: bool = False, wsl: bool = False,
+               avx2: bool | None = True) -> dict:
     has_gpu = gpu_name is not None
+    docker_gib = ram_gib if system == "Linux" else ram_gib / 2
     return {
         "installer_version": VERSION,
         "timestamp_utc": "simulated",
@@ -90,9 +112,11 @@ def _simulated(system: str, machine: str, cpu_model: str, physical: int,
                "platform": system.lower(), "is_wsl": wsl, "is_64bit": True},
         "cpu": {"model": cpu_model, "physical_cores": physical,
                 "logical_cores": logical, "count_is_logical_fallback": False,
-                "source": "simulated"},
+                "source": "simulated", "avx2": avx2, "avx2_source": "simulated"},
         "memory": {"total_bytes": int(ram_gib * _GIB), "total_gib": float(ram_gib),
                    "source": "simulated"},
+        "docker": {"mem_total_bytes": int(docker_gib * _GIB),
+                   "mem_total_gib": round(docker_gib, 2), "source": "simulated"},
         "disk": {"path": "(simulated)", "free_bytes": 500 * _GIB,
                  "total_bytes": 1000 * _GIB},
         "gpu": {"vendor": gpu_vendor, "name": gpu_name,
@@ -122,9 +146,19 @@ SIMULATIONS = {
     "macos-arm": _simulated(
         "Darwin", "arm64", "Apple M3 Pro", 11, 11, 18,
         gpu_vendor="apple", gpu_name="Apple M3 Pro (integrated)",
-        vram_gib=None, docker_gpu=False),
+        vram_gib=None, docker_gpu=False, avx2=None),
     "linux-cpu-8gb": _simulated(
-        "Linux", "x86_64", "Intel Core i5-8250U", 4, 8, 8),
+        "Linux", "x86_64", "Intel Core i5-8250U", 4, 8, 7.6),
+    "laptop-cpu-14gb": _simulated(
+        "Linux", "x86_64", "Intel Core i7-1165G7", 4, 8, 13.8,
+        gpu_vendor="intel", gpu_name="Intel Iris Xe Graphics"),
+    "linux-cpu-16gb": _simulated(
+        "Linux", "x86_64", "AMD Ryzen 5 5600G", 6, 12, 15.4),
+    "windows-cpu-16gb": _simulated(
+        "Windows", "AMD64", "Intel Core i5-1135G7", 4, 8, 15.8,
+        gpu_vendor="intel", gpu_name="Intel Iris Xe Graphics", wsl=True),
+    "old-cpu-no-avx2": _simulated(
+        "Linux", "x86_64", "Intel Core i5-3470", 4, 4, 15.6, avx2=False),
     "amd-gpu": _simulated(
         "Linux", "x86_64", "AMD Ryzen 7 5800X", 8, 16, 32,
         gpu_vendor="amd", gpu_name="AMD Radeon RX 7900 XTX",
@@ -145,6 +179,30 @@ def _parse_env(text: str) -> list[tuple[str | None, str]]:
             out.append((stripped.split("=", 1)[0].strip(), line))
     return out
 
+ADMIN_USERNAME_KEY = "SUPER_USER_USERNAME"
+ADMIN_PASSWORD_KEY = "SUPER_USER_PASSWORD"
+SHIPPED_ADMIN_PASSWORDS = frozenset({"", "admin"})
+ADMIN_PASSWORD_SHAPE = tuple(re.compile(pattern) for pattern in
+                             ("^[A-Za-z0-9]", "[a-z]", "[A-Z]", "[0-9]", "[-_]"))
+GENERATED_SECRETS = ("JWT_SECRET_KEY", "REDIS_PASSWORD", ADMIN_PASSWORD_KEY)
+
+def generated_admin_password() -> str:
+    while True:
+        candidate = secrets.token_urlsafe(18)
+        if all(shape.search(candidate) for shape in ADMIN_PASSWORD_SHAPE):
+            return candidate
+
+def generated_secret(key: str) -> str:
+    return generated_admin_password() if key == ADMIN_PASSWORD_KEY else secrets.token_hex(32)
+
+def env_line_value(infra: Path, key: str) -> str | None:
+    try:
+        text = (infra / ".env").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    values = [line.split("=", 1)[1].strip() for name, line in _parse_env(text) if name == key]
+    return values[-1] if values else None
+
 def _bootstrap_env(log: Log, infra: Path, reset: bool) -> None:
     env_path = infra / ".env"
     if env_path.is_file() and not reset:
@@ -162,8 +220,6 @@ def _bootstrap_env(log: Log, infra: Path, reset: bool) -> None:
         log.warn(f"init-env.sh did not complete ({res.first_line() or 'no output'}); "
                  "falling back to the built-in equivalent")
 
-    import secrets
-
     example = infra / ".env.example"
     if not example.is_file():
         raise InstallError(
@@ -176,11 +232,9 @@ def _bootstrap_env(log: Log, infra: Path, reset: bool) -> None:
         _backup_env(log, env_path)
     try:
         text = example.read_text(encoding="utf-8")
-        secret = secrets.token_hex(32)
-        lines = [
-            f"JWT_SECRET_KEY={secret}" if ln.startswith("JWT_SECRET_KEY=") else ln
-            for ln in text.splitlines()
-        ]
+        generated = {key: generated_secret(key) for key in GENERATED_SECRETS}
+        lines = [f"{key}={generated[key]}" if key in generated else line
+                 for key, line in _parse_env(text)]
         env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         _lock_down(env_path)
         log.ok("Generated src/infra/.env (built-in equivalent of init-env.sh)")
@@ -279,8 +333,6 @@ def apply_env(log: Log, infra: Path, updates: dict[str, str], reset: bool) -> Pa
     return env_path
 
 def corpus_scan_token(log: Log, infra: Path) -> str:
-    import secrets
-
     env_path = infra / ".env"
     if env_path.is_file():
         try:
@@ -296,16 +348,87 @@ def corpus_scan_token(log: Log, infra: Path) -> str:
     log.info("Generated a new CORPUS_SCAN_TOKEN")
     return secrets.token_urlsafe(32)
 
+OLD_VALKEY_PASSWORDS = frozenset({"", "redis_password"})
+
+def valkey_password(log: Log, infra: Path) -> str:
+    existing = smoke.read_env(infra / ".env").get("REDIS_PASSWORD", "").strip()
+    if existing not in OLD_VALKEY_PASSWORDS:
+        log.info("Reusing the existing REDIS_PASSWORD")
+        return env_line_value(infra, "REDIS_PASSWORD") or existing
+    if existing:
+        log.ok("Replacing the default Valkey password with a generated one: redis, mas "
+               "and the agent restart with it when the stack starts")
+    else:
+        log.info("Generated a new REDIS_PASSWORD")
+    return secrets.token_hex(32)
+
+def admin_password(log: Log, infra: Path) -> tuple[str, bool]:
+    existing = smoke.read_env(infra / ".env").get(ADMIN_PASSWORD_KEY, "").strip()
+    if existing not in SHIPPED_ADMIN_PASSWORDS:
+        log.info(f"Keeping the {ADMIN_PASSWORD_KEY} in src/infra/.env")
+        return env_line_value(infra, ADMIN_PASSWORD_KEY) or existing, False
+    if existing:
+        log.ok("Replacing the shipped admin password with a generated one. MAS gives it to "
+               "the admin account when it starts; it is shown once, at the end")
+    else:
+        log.info(f"Generated a new {ADMIN_PASSWORD_KEY}; it is shown once, at the end")
+    return generated_admin_password(), True
+
+ADMIN_CHECK = ["exec", "-T", "mas", "python", "-m", "db.admin_account"]
+ADMIN_OUTCOME = re.compile(r"^admin-account: (\w+)$")
+ADMIN_USES_ENV = frozenset({"created", "replaced", "matches"})
+ADMIN_REFUSED = frozenset({"shipped", "refused"})
+ADMIN_NOT_ON_ENV = ADMIN_REFUSED | {"differs"}
+
+def admin_account_outcome(log: Log, infra: Path) -> str:
+    res = run(compose(ADMIN_CHECK), log, timeout=180, cwd=infra, log_output=False,
+              stdin_text="")
+    for line in reversed(res.out.splitlines()):
+        match = ADMIN_OUTCOME.match(line.strip())
+        if match:
+            log.info(f"admin account: {match.group(1)}")
+            return match.group(1)
+    log.info(f"admin account: no outcome (exit {res.code})")
+    return ""
+
+def check_admin_account(log: Log, infra: Path) -> str:
+    outcome = admin_account_outcome(log, infra)
+    username = admin_username(infra)
+    if outcome == "differs":
+        log.warn(f"The password of {username} is not the {ADMIN_PASSWORD_KEY} in src/infra/.env, "
+                 "so Horus kept it: it was changed in Horus.")
+        log.say(f"  The agent signs in with {ADMIN_PASSWORD_KEY}. Put the password of "
+                f"{username} there,")
+        log.say("  then run  START-HERE (your platform) --start")
+    elif outcome in ADMIN_REFUSED:
+        log.warn(f"MAS refused the {ADMIN_PASSWORD_KEY} in src/infra/.env: it is empty or "
+                 "'admin'. Set a password of your own there, then run "
+                 "START-HERE (your platform) --start")
+    elif outcome not in ADMIN_USES_ENV:
+        log.warn(f"Could not check the admin account (`docker compose "
+                 f"{' '.join(ADMIN_CHECK)}` gave no answer). The log has the details.")
+    return outcome
+
+def admin_username(infra: Path) -> str:
+    return smoke.read_env(infra / ".env").get(ADMIN_USERNAME_KEY, "").strip() or "admin"
+
+def terminal_output() -> bool:
+    try:
+        return sys.stdout.isatty()
+    except (ValueError, AttributeError):
+        return False
+
 def _stream(cmd: list[str], log: Log, cwd: Path, label: str,
             heartbeat: int = 30, watch_for: tuple[str, ...] = (),
-            found: set[str] | None = None) -> int:
-    log.debug(f"$ {' '.join(cmd)}   (cwd={cwd})")
+            found: set[str] | None = None, env: dict[str, str] | None = None) -> int:
+    log.debug(f"$ {' '.join(cmd)}   (cwd={cwd})" + (f"   (env {env})" if env else ""))
     start = time.monotonic()
     last_beat = start
     try:
         proc = subprocess.Popen(
             cmd, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
+            env={**os.environ, **env} if env else None,
         )
     except OSError as exc:
         log.fail(f"{label}: could not start docker ({exc})")
@@ -333,23 +456,228 @@ def _stream(cmd: list[str], log: Log, cwd: Path, label: str,
 
 DEPENDENCY_ABORT = "dependency failed to start"
 
+FIRST_INSTALL_TIME = "1.5 to 2 hours"
+
+PULL_ATTEMPTS = 3
+PULL_BACKOFF_SECONDS = 15
+ONE_IMAGE_AT_A_TIME = {"COMPOSE_PARALLEL_LIMIT": "1"}
+NO_BUILD = "--no-build"
+REMOVE_ORPHANS = "--remove-orphans"
+PROJECT_NAME_KEY = "COMPOSE_PROJECT_NAME"
+IGNORE_ORPHANS_KEY = "COMPOSE_IGNORE_ORPHANS"
+
 def compose(args: list[str]) -> list[str]:
     return ["docker", "compose"] + args
 
-def pull_and_build(log: Log, infra: Path, no_build: bool = False) -> None:
-    log.step("Downloading container images")
-    log.say("  This is the long part. On a first install expect roughly")
-    log.say("  10-15 minutes to build, then several more minutes while the")
-    log.say("  language models download in the background. It is not frozen.")
+def compose_setting(infra: Path, key: str) -> str:
+    if key in os.environ:
+        return os.environ[key].strip()
+    return smoke.read_env(infra / ".env").get(key, "").strip()
+
+def explicit_project_name(infra: Path) -> str:
+    return compose_setting(infra, PROJECT_NAME_KEY)
+
+def orphan_removal(infra: Path) -> list[str]:
+    if compose_setting(infra, IGNORE_ORPHANS_KEY).lower() in ("1", "t", "true"):
+        return []
+    return [REMOVE_ORPHANS] if explicit_project_name(infra) else []
+
+def compose_config(log: Log, infra: Path) -> tuple[str, dict[str, dict]] | None:
+    res = run(compose(["config", "--format", "json"]), log, timeout=90, cwd=infra,
+              log_output=False)
+    if not res.ok:
+        log.debug("  stderr: " + (res.err.splitlines()[0] if res.err else "(empty)"))
+        return None
+    try:
+        config = json.loads(res.out)
+    except ValueError:
+        return None
+    services = config.get("services") if isinstance(config, dict) else None
+    if not isinstance(services, dict):
+        return None
+    project = str(config.get("name") or "")
+    return project, {name: spec for name, spec in services.items() if isinstance(spec, dict)}
+
+def ours(spec: dict) -> bool:
+    return bool(spec.get("build"))
+
+def images_built_here_before(log: Log, project: str, services: dict[str, dict]) -> list[str]:
+    if not project:
+        return []
+    local = [f"{project}-{name}" for name, spec in services.items() if ours(spec)]
+    return [image for image in local if _image_on_this_machine(log, image)]
+
+def _images_in_repository(log: Log, repository: str) -> list[tuple[str, str]]:
+    res = run(["docker", "image", "ls", "--format", "{{.ID}} {{.Repository}}:{{.Tag}}",
+               repository], log, timeout=60)
+    if not res.ok:
+        return []
+    rows = (line.split() for line in res.out.splitlines())
+    return [(row[0], row[1]) for row in rows if len(row) == 2]
+
+def other_releases_left_here(log: Log, services: dict[str, dict]) -> list[str]:
+    left: list[str] = []
+    for spec in services.values():
+        image = str(spec.get("image") or "")
+        if not (ours(spec) and image):
+            continue
+        repository, in_use = images.split_tag(image)
+        listed = _images_in_repository(log, repository)
+        in_use_ids = {image_id for image_id, name in listed
+                      if images.split_tag(name)[1] == in_use}
+        left += [name for image_id, name in listed
+                 if image_id not in in_use_ids
+                 and images.split_tag(name)[1] not in ("", "<none>")]
+    return left
+
+def unused_horus_images(log: Log, project: str, services: dict[str, dict]) -> list[str]:
+    built_here = images_built_here_before(log, project, services)
+    return built_here + other_releases_left_here(log, services)
+
+def point_out_unused_local_images(log: Log, leftovers: list[str]) -> None:
+    if not leftovers:
+        return
     log.say("")
+    log.say("  Earlier installs left these Horus images here. This install does not")
+    log.say("  use them, and they take a lot of disk. Free the space with:")
+    log.say("    docker image rm " + " ".join(leftovers))
 
-    code = _stream(compose(["pull", "--ignore-buildable"]), log, infra, "pull")
-    if code != 0:
-        log.warn("`docker compose pull` reported errors; continuing to the build "
-                 "step, which will surface anything genuinely missing")
+def pullable_images(services: dict[str, dict], from_source: bool) -> dict[str, str]:
+    named = {name: str(spec["image"]) for name, spec in services.items() if spec.get("image")}
+    first = [name for name in named if ours(services[name]) and not from_source]
+    rest = [name for name in named if not ours(services[name])]
+    return {name: named[name] for name in [*first, *rest]}
 
-    log.step("Building and starting the stack")
-    up = ["up", "-d"] + ([] if no_build else ["--build"])
+PULLED = "pulled"
+REFUSED = "refused"
+FAILED = "failed"
+
+def _pull_with_retries(log: Log, infra: Path, label: str, args: list[str],
+                       landed=None) -> str:
+    cmd = compose(["pull"] + args)
+    for attempt in range(1, PULL_ATTEMPTS + 1):
+        suffix = "" if attempt == 1 else f" (attempt {attempt} of {PULL_ATTEMPTS})"
+        refusals: set[str] = set()
+        code = _stream(cmd, log, infra, label + suffix, env=ONE_IMAGE_AT_A_TIME,
+                       watch_for=images.REFUSALS, found=refusals)
+        if code == 0 and (landed is None or landed()):
+            return PULLED
+        if refusals:
+            log.warn(f"The registry refused `{' '.join(cmd)}` "
+                     f"({', '.join(sorted(refusals))}); not trying again")
+            return REFUSED
+        if code == 0:
+            log.warn(f"`{' '.join(cmd)}` exited 0 but the image is not on this machine")
+        if attempt < PULL_ATTEMPTS:
+            pause = PULL_BACKOFF_SECONDS * attempt
+            log.warn(f"`{' '.join(cmd)}` failed (attempt {attempt} of {PULL_ATTEMPTS}); "
+                     f"trying again in {pause}s")
+            time.sleep(pause)
+    return FAILED
+
+def _image_on_this_machine(log: Log, image: str) -> bool:
+    return run(["docker", "image", "inspect", "--format", "{{.Id}}", image],
+               log, timeout=60).ok
+
+def _unnamed_error(unnamed: list[str], infra: Path) -> InstallError:
+    return InstallError(
+        EXIT_COMPOSE_PULL_FAILED,
+        "Compose gives Horus's own images no name to download.",
+        f"{', '.join(unnamed)} would be built here, because {images.REGISTRY_KEY} is not\n"
+        f"set in {infra / '.env'}. The installer writes it on every install.",
+        "Run START-HERE again so it writes the registry, or build the images\n"
+        "on this machine instead (contributors):  --build-from-source",
+    )
+
+def _refused_error(service: str, image: str, infra: Path) -> InstallError:
+    host = images.registry_host(image)
+    return InstallError(
+        EXIT_COMPOSE_PULL_FAILED,
+        f"{host} refused to send Horus's own images.",
+        f"Refused: {service}  ({image})\n"
+        "The images are private: the registry needs the access token you were\n"
+        "given, or that release was never published there.",
+        f"Give the installer the token, as one line  USERNAME:TOKEN :\n"
+        f"  - save it as {images.TOKEN_FILE_NAME} next to START-HERE, or\n"
+        f"  - set {images.TOKEN_KEY} (and {images.USERNAME_KEY}), or\n"
+        "  - pass --registry-token-file PATH\n"
+        "then run START-HERE again. Never put the token itself on the command line.\n"
+        "Contributors with the source can build the images instead:  --build-from-source\n"
+        f"To see Docker's own error:  cd {infra}  then  docker compose pull {service}\n"
+        f"Full log: {LOG_PATH}",
+    )
+
+def pull_images(log: Log, infra: Path, from_source: bool = False) -> list[str]:
+    config = compose_config(log, infra)
+    if config is None:
+        log.info("`docker compose config` gave no service list; pulling every image "
+                 "in one call, still one image at a time")
+        args = ["--ignore-buildable"] if from_source else []
+        if _pull_with_retries(log, infra, "pull", args) != PULLED:
+            log.warn(f"`docker compose pull` still failed after {PULL_ATTEMPTS} tries; "
+                     "continuing: the next step surfaces anything genuinely missing")
+        return []
+    project, services = config
+
+    if not from_source:
+        unnamed = [name for name, spec in services.items()
+                   if ours(spec) and not spec.get("image")]
+        if unnamed:
+            raise _unnamed_error(unnamed, infra)
+
+    wanted = pullable_images(services, from_source)
+    missing: list[tuple[str, str]] = []
+    for index, (service, image) in enumerate(wanted.items(), start=1):
+        prebuilt = ours(services[service])
+        log.say(f"  [{index}/{len(wanted)}] {service}  " + dim(image)
+                + ("  (prebuilt)" if prebuilt else ""))
+        landed = (lambda image=image: _image_on_this_machine(log, image)) if prebuilt else None
+        outcome = _pull_with_retries(log, infra, f"pull {service}", [service], landed)
+        if outcome == PULLED:
+            continue
+        if _image_on_this_machine(log, image):
+            log.warn(f"Could not download {image}; using the copy already on this machine")
+            continue
+        if outcome == REFUSED and prebuilt:
+            raise _refused_error(service, image, infra)
+        missing.append((service, image))
+
+    if missing:
+        names = " ".join(service for service, _image in missing)
+        raise InstallError(
+            EXIT_COMPOSE_PULL_FAILED,
+            f"{len(missing)} container image(s) could not be downloaded.",
+            f"Each was tried {PULL_ATTEMPTS} times, one image at a time:\n  "
+            + "\n  ".join(f"{service}  ({image})" for service, image in missing),
+            "This is almost always the network or Docker Hub (a timeout or a\n"
+            "download limit), not this machine. Everything already downloaded\n"
+            "is kept, so trying again only fetches what is missing.\n"
+            "  1. Check the internet connection, and the proxy or VPN if you use one.\n"
+            "  2. Download what is missing by hand to see Docker's own error:\n"
+            f"       cd {infra}\n"
+            f"       docker compose pull {names}\n"
+            "  3. Run your START-HERE file again. It resumes where it stopped.\n"
+            "If Docker says 'toomanyrequests', Docker Hub is limiting this\n"
+            "connection: wait a while, or sign in with  docker login  first.\n"
+            "If it says 'manifest unknown' for a horus-* image, that release was\n"
+            "never published to the registry: check --registry and the version.\n"
+            "If it says 'no matching manifest', the prebuilt images are not built\n"
+            "for this processor: run START-HERE again with  --build-from-source\n"
+            f"Full log: {LOG_PATH}",
+        )
+    return [] if from_source else unused_horus_images(log, project, services)
+
+def services_still_starting(log: Log, infra: Path) -> list[str]:
+    starting: list[str] = []
+    for row in _ps(log, infra):
+        name = str(row.get("Service") or row.get("Name") or "")
+        state, health = _state_of(row)
+        if name and state == "running" and health in ("starting", "unhealthy"):
+            starting.append(name)
+    return starting
+
+def up_waiting_out_a_dependency_abort(log: Log, infra: Path, up: list[str],
+                                      timeout: int) -> tuple[list[str], int]:
     seen: set[str] = set()
     code = _stream(compose(up), log, infra, "up",
                    watch_for=(DEPENDENCY_ABORT,), found=seen)
@@ -359,14 +687,63 @@ def pull_and_build(log: Log, infra: Path, no_build: bool = False) -> None:
         log.say("  On a first install this is almost always a model download:")
         log.say("  the service takes longer than Docker waits, Docker marks it")
         log.say("  unhealthy, and everything depending on it is cancelled. What")
-        log.say("  was downloaded is kept, so starting again picks up from there.")
-        log.say("  Trying once more.")
+        log.say("  was downloaded is kept. Waiting for that service to finish,")
+        log.say("  then starting the rest.")
         log.say("")
+        starting = services_still_starting(log, infra)
+        if starting:
+            wait_for_health(log, infra, starting, timeout=timeout)
+        else:
+            log.info("no service is still starting; starting the rest straight away")
+        up = ["up", "-d"] + [flag for flag in up if flag in (NO_BUILD, REMOVE_ORPHANS)]
         seen.clear()
         code = _stream(compose(up), log, infra, "up (second attempt)",
                        watch_for=(DEPENDENCY_ABORT,), found=seen)
         if code == 0:
             log.ok("Started on the second attempt.")
+    return up, code
+
+def build_images(log: Log, infra: Path) -> None:
+    log.step("Building the images")
+    code = _stream(compose(["build"]), log, infra, "build")
+    if code != 0:
+        raise InstallError(
+            EXIT_COMPOSE_UP_FAILED,
+            "The images did not build.",
+            f"`docker compose build` exited {code}. The lines above show what "
+            "Docker reported; the full output is in the log.",
+            "Common causes:\n"
+            "  - out of disk space part-way through   ->  docker system df\n"
+            "  - a package download that timed out    ->  just run this again,\n"
+            "    it reuses every layer that already built\n"
+            f"Full log: {LOG_PATH}",
+        )
+
+def pull_and_build(log: Log, infra: Path, no_build: bool = False,
+                   timeout: int = 1800, before_start=None, from_source: bool = False) -> None:
+    log.step("Downloading container images")
+    if from_source:
+        log.say(f"  This is the long part. A first install takes {FIRST_INSTALL_TIME}:")
+        log.say("  the images download one at a time, the containers build, then the")
+        log.say("  language model downloads. It is not frozen.")
+    else:
+        log.say("  This is the long part. Horus's own images come prebuilt, so nothing")
+        log.say("  is built here: the images download one at a time, then the language")
+        log.say("  model downloads. It is not frozen. The release workflow signs the")
+        log.say("  images, but the installer does not check the signature yet. A first")
+        log.say(f"  install that built the images here took {FIRST_INSTALL_TIME};")
+        log.say("  downloading them instead has not been timed yet.")
+    log.say("")
+
+    leftovers = pull_images(log, infra, from_source)
+    if from_source and not no_build:
+        build_images(log, infra)
+    if before_start is not None:
+        before_start()
+
+    log.step("Starting the stack")
+    first_up = (["up", "-d"] if from_source else ["up", "-d", NO_BUILD]) + orphan_removal(infra)
+    up, code = up_waiting_out_a_dependency_abort(log, infra, first_up, timeout)
     if code != 0:
         raise InstallError(
             EXIT_COMPOSE_UP_FAILED,
@@ -386,12 +763,14 @@ def pull_and_build(log: Log, infra: Path, no_build: bool = False) -> None:
             "  - a transient registry error           ->  just run this again,\n"
             "    it resumes from what was already downloaded\n"
             "\n"
-            "This was already retried once. If Docker named a service that\n"
-            "was still downloading a model, the stack is probably fine and\n"
-            "only needs starting again, which waits instead of cancelling:\n"
+            "This was already retried once, after waiting for the services\n"
+            "that were still starting. If Docker named a service that was\n"
+            "still downloading a model, the stack is probably fine and only\n"
+            "needs starting again:\n"
             "  START-HERE (your platform) --start\n"
             f"Full log: {LOG_PATH}",
         )
+    point_out_unused_local_images(log, leftovers)
 
 def _ps(log: Log, infra: Path) -> list[dict]:
     res = run(compose(["ps", "--format", "json", "--all"]), log, timeout=90, cwd=infra)
@@ -481,32 +860,82 @@ def wait_for_health(log: Log, infra: Path, expect: list[str],
         f"Full log: {LOG_PATH}",
     )
 
-def warn_cpu_expectations(log: Log) -> None:
+ARM_MACHINES = frozenset({"arm64", "aarch64"})
+
+def image_source(args, infra: Path) -> str | None:
+    if images.build_from_source_requested(args.build_from_source):
+        return None
+    configured = smoke.read_env(infra / ".env").get(images.REGISTRY_KEY, "")
+    return images.registry_to_use(args.registry, os.environ, configured)
+
+def describe_images(registry: str | None, profile_name: str) -> str:
+    if registry is None:
+        return "built from source on this machine (--build-from-source)"
+    services = (*images.APP_SERVICES, images.MOCK_SERVICE) if profiles.is_mock_profile(
+        profile_name) else images.APP_SERVICES
+    names = ",".join(images.image_repository(service).removeprefix("horus-")
+                     for service in services)
+    flavor = profiles.image_flavor(profile_name)
+    return (f"{registry}/horus-{{{names}}}:{VERSION}-{flavor}, prebuilt (signed by the "
+            "release workflow; the installer does not check the signature yet)")
+
+def sign_in_to_registry(log: Log, args, registry: str) -> None:
+    credentials = images.read_credentials(
+        args.registry_token_file, args.registry_user, os.environ,
+        BUNDLE_DIR / images.TOKEN_FILE_NAME,
+    )
+    if credentials is None:
+        log.info("no registry token given; pulling with the credentials Docker "
+                 "already has, if any")
+        return
+    images.sign_in(log, registry, credentials)
+
+def warn_if_images_are_emulated(log: Log, probe: dict | None) -> None:
+    machine = str(((probe or {}).get("os") or {}).get("machine") or "").lower()
+    if machine not in ARM_MACHINES:
+        return
+    log.warn("This machine has an ARM processor. Horus's prebuilt images are built "
+             "for x86-64 (linux/amd64) only, so Docker runs them through emulation: "
+             "slower, and not tested yet.")
+    log.say("  If the download or the start fails, run START-HERE again with")
+    log.say(f"  --build-from-source to build them for this processor ({FIRST_INSTALL_TIME}).")
+
+def warn_cpu_expectations(log: Log, gpu_usable: bool = False) -> None:
     log.say("")
     log.say(yellow("=" * 72))
-    log.say(yellow("  No NVIDIA GPU was usable, so Horus will run on the CPU."))
+    if gpu_usable:
+        log.say(yellow("  A CPU profile was chosen, so Horus will run on the CPU even though"))
+        log.say(yellow("  Docker can use your GPU."))
+    else:
+        log.say(yellow("  No NVIDIA GPU was usable, so Horus will run on the CPU."))
     log.say(yellow("=" * 72))
     log.say("")
-    log.say("  Read this before you spend an hour on the install.")
+    log.say(f"  Read this before you spend {FIRST_INSTALL_TIME} on the install.")
     log.say("")
     log.say("  Everything except the AI answers works on the CPU: the whole stack")
     log.say("  starts, and sign-in, permissions, users, agents, the knowledge")
     log.say("  store, tasks, conversations and the admin pages all behave")
     log.say("  normally. That is 65 of the 68 acceptance-test scenarios.")
     log.say("")
-    log.say(yellow("  What does NOT work is the model itself."))
-    log.say("  Measured on a 12-core CPU: one question took 14 minutes and came")
-    log.say("  back wrong. The same question on a GPU answers in about 4 seconds.")
-    log.say("  Test scenarios F41, F42 and F43 need an NVIDIA GPU. Nothing else does.")
+    log.say(yellow("  What is NOT known yet is how well the model answers."))
+    log.say("  The CPU profile now serves one quantized 4B model with llama-server")
+    log.say("  instead of two models inside the services. That has not been timed")
+    log.say("  on a CPU-only machine. The old setup, measured on a 12-core CPU, took")
+    log.say("  14 minutes for one question and came back wrong; a GPU answers in")
+    log.say("  about 4 seconds. Test scenarios F41, F42 and F43 need an NVIDIA GPU.")
+    log.say("  Nothing else does.")
     log.say("")
-    log.say("  The install will still finish and report success. Do not file the")
-    log.say("  slow or wrong answer as a bug - it is a known limitation.")
+    log.say("  The install will still finish and report success. A slow answer is")
+    log.say("  expected; please note how long it took in your report.")
     log.say("")
 
 
-def require_installed(infra: Path) -> None:
+def require_installed(infra: Path, record: Path | None = None) -> None:
     if (infra / ".env").is_file():
         return
+    refused = unsupported.from_record(hardware.read_profile_json(record or PROFILE_JSON))
+    if refused is not None:
+        raise refused
     raise InstallError(
         EXIT_NOT_INSTALLED,
         "Horus has not been installed on this machine yet.",
@@ -522,17 +951,79 @@ def _require_docker(log: Log) -> None:
     preflight.check_docker(log)
     preflight.check_compose(log)
 
+def _model_token(infra: Path) -> str | None:
+    return os.environ.get("HF_TOKEN") or smoke.read_env(infra / ".env").get("HF_TOKEN") or None
+
+def download_model(log: Log, plan: model_manager.ModelPlan, infra: Path,
+                   title: str = "Downloading the language model") -> Path:
+    entry = plan.entry
+    log.step(title)
+    log.say(f"  {entry.file}, {human_bytes(entry.size_bytes)}"
+            + (f" ({entry.id} {entry.version})" if entry.version else ""))
+    log.say(f"  in {plan.models_dir}")
+    return plan.ensure(log, token=_model_token(infra))
+
+def stop_llm_before_its_model_changes(log: Log, infra: Path,
+                                      plan: model_manager.ModelPlan) -> None:
+    if not plan.target.is_file() or model_manager.is_verified(plan.entry, plan.target):
+        return
+    log.say(f"  {plan.entry.file} was not verified yet, so llm is stopped while it is "
+            "checked and maybe replaced")
+    if _stream(compose(["stop", profiles.CPU_MODEL_SERVER]), log, infra, "stop llm") != 0:
+        log.warn("`docker compose stop llm` failed. If the model file cannot be replaced, "
+                 "stop Horus with --stop, then run this again.")
+
+def download_model_for_the_stack(log: Log, plan: model_manager.ModelPlan, infra: Path,
+                                 title: str = "Downloading the language model") -> Path:
+    stop_llm_before_its_model_changes(log, infra, plan)
+    return download_model(log, plan, infra, title)
+
+def ensure_installed_model(log: Log, infra: Path) -> None:
+    if not cpu_overlay_active(infra) or mock_overlay_active(infra):
+        return
+    values = smoke.read_env(infra / ".env")
+    try:
+        manifest = model_manager.load_manifest(model_manager.manifest_path(infra.parent.parent))
+    except InstallError as exc:
+        log.warn(f"{exc.headline} Using the model named in src/infra/.env.")
+        manifest = None
+    plan = model_manager.plan_from_env(values, infra, manifest)
+    if plan is None:
+        log.info("src/infra/.env names no model file; the llm-model service fetches it")
+        return
+    download_model_for_the_stack(log, plan, infra, "Checking the language model")
+
+def installed_from_registry(infra: Path) -> bool:
+    return bool(smoke.read_env(infra / ".env").get(images.REGISTRY_KEY, "").strip())
+
+def start_command(infra: Path, build: bool = False) -> list[str]:
+    if build:
+        up = ["up", "-d", "--build"]
+    elif installed_from_registry(infra):
+        up = ["up", "-d", NO_BUILD]
+    else:
+        up = ["up", "-d"]
+    return up + orphan_removal(infra)
+
+def model_server_note(expect: list[str]) -> str:
+    if profiles.MOCK_MODEL_SERVER in expect:
+        return "  (mock AI mode: llm-mock answers instead of a language model)"
+    if profiles.CPU_MODEL_SERVER in expect:
+        return "  (CPU profile: llama-server runs as llm instead of vllm)"
+    return ""
+
 def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
     require_installed(infra)
     _require_docker(log)
+    ensure_installed_model(log, infra)
+    apply_monitoring_setting(log, infra)
 
     expect = expected_services(infra)
     log.step("Starting Horus")
-    log.say(f"  {len(expect)} services"
-            + ("" if "vllm" in expect else "  (CPU profile: vllm is not started)"))
+    log.say(f"  {len(expect)} services" + model_server_note(expect))
 
-    up = ["up", "-d"] + (["--build"] if build else [])
-    code = _stream(compose(up), log, infra, "up")
+    up, code = up_waiting_out_a_dependency_abort(
+        log, infra, start_command(infra, build), timeout)
     if code != 0:
         raise InstallError(
             EXIT_COMPOSE_UP_FAILED,
@@ -546,25 +1037,28 @@ def do_start(log: Log, infra: Path, timeout: int, build: bool = False) -> int:
             "replacing mas with whichever container Docker named above.\n"
             "\n"
             "If a container is missing or its image was removed, re-run the full\n"
-            "installer - it rebuilds what is missing and keeps your documents.\n"
+            "installer - it downloads what is missing and keeps your documents.\n"
             f"Full log: {LOG_PATH}",
         )
 
     wait_for_health(log, infra, expect, timeout=timeout)
     log.say("")
     log.ok(f"Horus is ready at {WEB_URL}")
-    log.events.emit("ready", url=WEB_URL, services=expect)
+    log.events.emit("ready", url=WEB_URL, services=expect,
+                    ai=ai_mode_of(compose_file_now(infra)))
     return EXIT_OK
 
 def do_restart(log: Log, infra: Path, timeout: int) -> int:
     require_installed(infra)
     _require_docker(log)
+    ensure_installed_model(log, infra)
 
     log.step("Restarting Horus")
+    changed = apply_monitoring_setting(log, infra)
     code = _stream(compose(["restart"]), log, infra, "restart")
     if code != 0:
         log.warn("`docker compose restart` reported errors; trying `up -d` instead")
-        code = _stream(compose(["up", "-d"]), log, infra, "up")
+        code = _stream(compose(start_command(infra)), log, infra, "up")
         if code != 0:
             raise InstallError(
                 EXIT_COMPOSE_UP_FAILED,
@@ -575,12 +1069,22 @@ def do_restart(log: Log, infra: Path, timeout: int) -> int:
                 "  docker compose stop && docker compose up -d\n"
                 f"Full log: {LOG_PATH}",
             )
+    if changed:
+        up, code = up_waiting_out_a_dependency_abort(log, infra, start_command(infra), timeout)
+        if code != 0:
+            raise InstallError(
+                EXIT_COMPOSE_UP_FAILED,
+                "The stack could not be restarted with the new monitoring setting.",
+                f"`docker compose {' '.join(up)}` exited {code}.",
+                f"The reason is in the logs of the container Docker named.\nFull log: {LOG_PATH}",
+            )
 
     expect = expected_services(infra)
     wait_for_health(log, infra, expect, timeout=timeout)
     log.say("")
     log.ok(f"Horus is ready at {WEB_URL}")
-    log.events.emit("ready", url=WEB_URL, services=expect)
+    log.events.emit("ready", url=WEB_URL, services=expect,
+                    ai=ai_mode_of(compose_file_now(infra)))
     return EXIT_OK
 
 def do_stop(log: Log, infra: Path) -> int:
@@ -595,7 +1099,121 @@ def do_stop(log: Log, infra: Path) -> int:
     log.say(f"    cd {infra} && docker compose start")
     return EXIT_OK
 
-def do_uninstall(log: Log, infra: Path, assume_yes: bool) -> int:
+LEFT_BEHIND_VOLUMES = {
+    "redis_data": "the cache of Redis, which Valkey replaced",
+    "redisinsight_data": "the settings of RedisInsight, which was removed",
+    "pgadmin_data": "the settings of PgAdmin, whose profile is off",
+    "vllm_hf_cache": "the GPU model weights, which a reinstall downloads again",
+    "loki_data": "the logs Loki kept before monitoring was turned off",
+    "tempo_data": "the traces Tempo kept before monitoring was turned off",
+    "prometheus_data": "the metrics Prometheus kept before monitoring was turned off",
+    "alloy_data": "the state of Alloy, which collected the logs for Loki",
+}
+PROJECT_LABEL = "com.docker.compose.project"
+VOLUME_ROWS = '{{.Name}} {{.Label "com.docker.compose.volume"}}'
+
+def interactive_terminal() -> bool:
+    try:
+        return bool(sys.stdin) and sys.stdin.isatty()
+    except (ValueError, AttributeError):
+        return False
+
+def named_project(log: Log, infra: Path) -> tuple[str, dict[str, dict]]:
+    if not explicit_project_name(infra):
+        return "", {}
+    return compose_config(log, infra) or ("", {})
+
+def volumes_in_use(services: dict[str, dict]) -> set[str]:
+    return {str(mount.get("source")) for spec in services.values()
+            for mount in spec.get("volumes") or []
+            if isinstance(mount, dict) and mount.get("type") == "volume"}
+
+def project_volumes(log: Log, project: str) -> list[tuple[str, str]]:
+    if not project:
+        return []
+    res = run(["docker", "volume", "ls", "--filter", f"label={PROJECT_LABEL}={project}",
+               "--format", VOLUME_ROWS], log, timeout=60)
+    if not res.ok:
+        return []
+    rows = (line.split() for line in res.out.splitlines())
+    return [(row[0], row[1]) for row in rows if len(row) == 2]
+
+def volumes_left_behind(log: Log, project: str,
+                        services: dict[str, dict]) -> list[tuple[str, str]]:
+    in_use = volumes_in_use(services)
+    return [(name, key) for name, key in project_volumes(log, project)
+            if key in LEFT_BEHIND_VOLUMES and key not in in_use]
+
+def volume_sizes(log: Log) -> dict[str, str]:
+    res = run(["docker", "system", "df", "--verbose", "--format", "json"], log, timeout=300,
+              log_output=False)
+    try:
+        rows = json.loads(res.out).get("Volumes") if res.ok else None
+    except (ValueError, AttributeError):
+        rows = None
+    return {str(row.get("Name")): str(row.get("Size")) for row in rows or []
+            if isinstance(row, dict) and row.get("Size")}
+
+def project_containers(log: Log, project: str) -> list[str]:
+    res = run(["docker", "ps", "--all", "--filter", f"label={PROJECT_LABEL}={project}",
+               "--format", "{{.Names}}"], log, timeout=60)
+    return res.out.split() if res.ok else []
+
+def remove_containers_of_turned_off_profiles(log: Log, project: str) -> bool:
+    if not project:
+        return False
+    left = project_containers(log, project)
+    if not left:
+        return False
+    log.say("  Removing the containers of services whose profile is off: " + ", ".join(left))
+    res = run(["docker", "rm", "--force", "--volumes", *left], log, timeout=300)
+    if not res.ok:
+        log.warn(f"`docker rm` failed ({res.first_line() or 'no output'}); remove them later with:")
+        log.say("    docker rm --force --volumes " + " ".join(left))
+        return False
+    log.ok("Removed " + ", ".join(left))
+    return True
+
+def point_out_other_volumes(log: Log, project: str, offered: list[str]) -> None:
+    left = [name for name, _key in project_volumes(log, project) if name not in offered]
+    if not left:
+        return
+    log.say("")
+    log.say("  Docker also kept these volumes of this install. Delete them with:")
+    log.say("    docker volume rm " + " ".join(left))
+
+def agrees_to_delete_left_behind(log: Log, left: list[tuple[str, str]], sizes: dict[str, str],
+                                 non_interactive: bool) -> bool:
+    log.say("")
+    log.say("  `down --volumes` keeps these volumes: an older version of Horus")
+    log.say("  left them, or only a service whose profile is off uses them.")
+    width = max(len(name) for name, _key in left)
+    for name, key in left:
+        size = sizes.get(name, "size unknown")
+        log.say(f"    {name:<{width}}  {size:>12}  {LEFT_BEHIND_VOLUMES[key]}")
+    if non_interactive or not interactive_terminal():
+        return False
+    try:
+        answer = input("  Delete them too? [y/N]: ")
+    except (EOFError, KeyboardInterrupt):
+        log.say("")
+        return False
+    return answer.strip().lower() in ("y", "yes")
+
+def delete_volumes(log: Log, names: list[str]) -> None:
+    res = run(["docker", "volume", "rm", *names], log, timeout=120)
+    if res.ok:
+        log.ok("Deleted " + ", ".join(names))
+        return
+    log.warn(f"`docker volume rm` failed ({res.first_line() or 'no output'}); "
+             "delete them later with:")
+    log.say("    docker volume rm " + " ".join(names))
+
+def point_out_volumes(log: Log, names: list[str]) -> None:
+    log.say("  Left alone. Delete them later with:")
+    log.say("    docker volume rm " + " ".join(names))
+
+def do_uninstall(log: Log, infra: Path, assume_yes: bool, non_interactive: bool = False) -> int:
     log.step("Uninstall Horus")
     log.say("")
     log.say(red("  This removes the containers, the downloaded images, AND the"))
@@ -603,14 +1221,16 @@ def do_uninstall(log: Log, infra: Path, assume_yes: bool) -> int:
     log.say(red("    - every document you uploaded or ingested"))
     log.say(red("    - the vector index built from them"))
     log.say(red("    - all accounts, conversations and task history"))
-    log.say(red("    - the downloaded model weights (many GB, re-downloaded next time)"))
+    log.say(red("    - the model weights the GPU server downloaded (many GB,"))
+    log.say(red("      downloaded again next time)"))
     log.say("")
     log.say("  Your own files on disk are NOT touched: the corpus folder was")
-    log.say("  mounted read-only and is never written to.")
+    log.say("  mounted read-only and is never written to. The CPU language model")
+    log.say("  stays in the models folder; delete that folder to free its space.")
     log.say("")
 
     if not assume_yes:
-        if not sys.stdin or not sys.stdin.isatty():
+        if non_interactive or not interactive_terminal():
             log.fail("Refusing to uninstall without confirmation on a "
                      "non-interactive terminal. Pass --yes if you really mean it.")
             return EXIT_UNINSTALL_FAILED
@@ -624,26 +1244,407 @@ def do_uninstall(log: Log, infra: Path, assume_yes: bool) -> int:
             return EXIT_OK
 
     log.info("uninstall confirmed")
-    code = _stream(
-        compose(["down", "--volumes", "--rmi", "all", "--remove-orphans"]),
-        log, infra, "down",
-    )
+    monitoring_was_off = not profiles.compose_file_runs_monitoring(compose_file_now(infra))
+    project, services = named_project(log, infra)
+    left = volumes_left_behind(log, project, services)
+    offered = [name for name, _key in left]
+    delete_left = bool(left) and agrees_to_delete_left_behind(
+        log, left, volume_sizes(log), non_interactive)
+    down = compose(["down", "--volumes", "--rmi", "all"] + orphan_removal(infra))
+    code = _stream(down, log, infra, "down")
+    if code == 0 and remove_containers_of_turned_off_profiles(log, project):
+        code = _stream(down, log, infra, "down (again)")
     if code != 0:
         log.warn("Some resources could not be removed; see the log for detail")
         log.say("  You can finish manually with:")
-        log.say(f"    cd {infra} && docker compose down -v --rmi all")
+        log.say(f"    cd {infra} && " + " ".join(compose(["down", "-v", "--rmi", "all"] + orphan_removal(infra))))
+        if offered:
+            log.say("    docker volume rm " + " ".join(offered))
         return EXIT_UNINSTALL_FAILED
+    if delete_left:
+        delete_volumes(log, offered)
+    elif offered:
+        point_out_volumes(log, offered)
+    point_out_other_volumes(log, project, offered)
+    if monitoring_was_off:
+        point_out_monitoring_images(log, infra)
     log.say("")
     log.ok("Horus removed.")
     log.say("  The source folder and this installer are still here; delete them")
     log.say("  by hand if you want the disk space back.")
     return EXIT_OK
 
+def ai_mode_of(compose_file: str) -> str:
+    return MOCK_MODE if profiles.compose_file_runs_mock(compose_file) else LOCAL_MODE
+
+def compose_file_now(infra: Path) -> str:
+    return env_line_value(infra, COMPOSE_FILE_KEY) or profiles.BASE_COMPOSE
+
+def separator_of(compose_file: str) -> str:
+    if ";" in compose_file:
+        return ";"
+    if ":" in compose_file:
+        return ":"
+    return profiles.compose_file_separator(None)
+
+def write_ai_mode(infra: Path, compose_file: str, mode: str) -> None:
+    write_env_values(infra, {COMPOSE_FILE_KEY: compose_file, AI_MODE_KEY: mode})
+
+def write_env_values(infra: Path, values: dict[str, str]) -> None:
+    env_path = infra / ".env"
+    out: list[str] = []
+    written: set[str] = set()
+    for key, line in _parse_env(env_path.read_text(encoding="utf-8")):
+        unset = line.startswith(UNSET_MARKER) and line[len(UNSET_MARKER):].split("=", 1)[0].strip()
+        if key in values and key not in written:
+            out.append(f"{key}={values[key]}")
+            written.add(key)
+        elif key not in values and unset not in values:
+            out.append(line)
+    out += [f"{key}={value}" for key, value in values.items() if key not in written]
+    env_path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    _lock_down(env_path)
+
+def monitoring_setting(infra: Path) -> str | None:
+    return smoke.read_env(infra / ".env").get(profiles.MONITORING_KEY)
+
+def with_wanted_monitoring(log: Log, infra: Path, compose_file: str, sep: str) -> str:
+    setting = monitoring_setting(infra)
+    mock = profiles.compose_file_runs_mock(compose_file)
+    if setting and profiles.monitoring_choice(setting) is None:
+        log.warn(f"{profiles.MONITORING_KEY}={setting} in src/infra/.env is neither on nor off; "
+                 f"monitoring stays {'off' if mock else 'on'}, the default in "
+                 f"{MOCK_MODE if mock else LOCAL_MODE} mode.")
+    return profiles.with_monitoring(compose_file, sep, profiles.monitoring_wanted(setting, mock))
+
+def monitoring_turned_off(old: str, new: str) -> list[str]:
+    if profiles.compose_file_runs_monitoring(old) and not profiles.compose_file_runs_monitoring(new):
+        return list(profiles.MONITORING_SERVICES)
+    return []
+
+def monitoring_turned_on(old: str, new: str) -> list[str]:
+    return monitoring_turned_off(new, old)
+
+def monitoring_left_behind(infra: Path, compose_file: str) -> list[str]:
+    if not (infra / ".env").is_file():
+        return []
+    return monitoring_turned_off(compose_file_now(infra), compose_file)
+
+def monitoring_images(infra: Path) -> list[str]:
+    try:
+        text = (infra / profiles.BASE_COMPOSE).read_text(encoding="utf-8")
+    except OSError:
+        return []
+    images = []
+    for name in profiles.MONITORING_SERVICES:
+        block = re.search(rf"^  {re.escape(name)}:\s*$(.*?)^  \S", text, re.MULTILINE | re.DOTALL)
+        image = re.search(r"^    image:\s*(\S+)", block.group(1), re.MULTILINE) if block else None
+        if image:
+            images.append(image.group(1))
+    return images
+
+def point_out_monitoring_images(log: Log, infra: Path) -> None:
+    images = monitoring_images(infra)
+    if not images:
+        return
+    log.say("")
+    log.say("  Monitoring was off, so Docker kept the images of Loki, Alloy, Tempo and")
+    log.say("  Prometheus. If no other project uses them, delete them with:")
+    log.say("    docker image rm " + " ".join(images))
+
+def monitoring_word(compose_file: str) -> str:
+    return "on" if profiles.compose_file_runs_monitoring(compose_file) else "off"
+
+def apply_monitoring_setting(log: Log, infra: Path) -> bool:
+    current = compose_file_now(infra)
+    target = with_wanted_monitoring(log, infra, current, separator_of(current))
+    if target == current:
+        return False
+    left = monitoring_turned_off(current, target)
+    if left:
+        stop_services(log, infra, left)
+    write_env_values(infra, {COMPOSE_FILE_KEY: target})
+    log.ok(f"Monitoring {monitoring_word(target)}, as {profiles.MONITORING_KEY} asks: "
+           f"{COMPOSE_FILE_KEY}={target}")
+    return True
+
+def do_ai_status(log: Log, infra: Path) -> int:
+    require_installed(infra)
+    compose_file = compose_file_now(infra)
+    mode = ai_mode_of(compose_file)
+    server = profiles.model_server_for_compose_file(compose_file)
+    monitoring = monitoring_word(compose_file)
+    log.step("AI mode")
+    log.say(f"  AI: {mode.capitalize()}   (model server: {server})")
+    log.say(f"  Monitoring: {monitoring.capitalize()}   (Prometheus, Loki, Tempo and Alloy)")
+    if mode == MOCK_MODE:
+        for line in _wrapped(profiles.SIMULATED_ANSWERS):
+            log.say(f"  {line}")
+    wanted = monitoring_word(with_wanted_monitoring(log, infra, compose_file,
+                                                    separator_of(compose_file)))
+    if wanted != monitoring:
+        log.warn(f"src/infra/.env says {profiles.MONITORING_KEY}="
+                 f"{monitoring_setting(infra) or '(unset)'}, so monitoring should be {wanted}, "
+                 f"but COMPOSE_FILE keeps it {monitoring}. Run --restart to apply it.")
+    declared = env_line_value(infra, AI_MODE_KEY) or LOCAL_MODE
+    if declared != mode:
+        log.warn(f"src/infra/.env says {AI_MODE_KEY}={declared}, but COMPOSE_FILE "
+                 f"{'loads' if mode == MOCK_MODE else 'does not load'} "
+                 f"{profiles.MOCK_OVERLAY}, which is what decides. Run --ai {mode} "
+                 "to set both.")
+    if os.environ.get(COMPOSE_FILE_KEY):
+        log.warn(f"{COMPOSE_FILE_KEY} is set in this shell: Docker Compose uses it instead "
+                 "of the one in src/infra/.env.")
+    log.events.emit("ai", mode=mode, server=server, monitoring=monitoring)
+    return EXIT_OK
+
+def do_ai(log: Log, args, repo: Path) -> int:
+    infra = infra_dir(repo)
+    if args.ai == "status":
+        return do_ai_status(log, infra)
+    require_installed(infra)
+    _require_docker(log)
+    current = compose_file_now(infra)
+    if ai_mode_of(current) == args.ai:
+        log.ok(f"AI mode is already {args.ai}; nothing to switch.")
+        if with_wanted_monitoring(log, infra, current, separator_of(current)) != current:
+            do_start(log, infra, timeout=args.timeout)
+        return do_ai_status(log, infra)
+    if args.ai == MOCK_MODE:
+        return switch_to_mock(log, args, repo, infra, current)
+    return switch_to_local(log, args, repo, infra, current)
+
+def stop_services(log: Log, infra: Path, services: list[str]) -> None:
+    if _stream(compose(["stop", *services]), log, infra, f"stop {' '.join(services)}") != 0:
+        log.warn(f"`docker compose stop {' '.join(services)}` reported errors; see the log")
+
+def model_servers_of(compose_file: str) -> list[str]:
+    server = profiles.model_server_for_compose_file(compose_file)
+    return [server, "llm-model"] if server == profiles.CPU_MODEL_SERVER else [server]
+
+def model_servers_left_behind(infra: Path, compose_file: str) -> list[str]:
+    current = env_line_value(infra, COMPOSE_FILE_KEY) if (infra / ".env").is_file() else None
+    if not current:
+        return []
+    old, new = model_servers_of(current), model_servers_of(compose_file)
+    if profiles.MOCK_MODEL_SERVER not in old + new:
+        return []
+    return [server for server in old if server not in new]
+
+def agrees_to_reembed(log: Log, args, corpus: reindex.Corpus | None) -> bool:
+    if not reindex.needs_confirmation(corpus) or args.yes:
+        return True
+    documents = f"the {corpus.documents} documents" if corpus else "the stored documents"
+    if args.non_interactive or not interactive_terminal():
+        raise InstallError(
+            EXIT_CONSENT_CANCELLED,
+            f"The switch would re-embed {documents}, so it asks first. Nothing changed.",
+            (f"More than {reindex.ASK_ABOVE_DOCUMENTS} documents are stored"
+             if corpus else "The knowledge store did not say how many documents it holds")
+            + ", and this terminal cannot answer.",
+            "Run it again with --yes to switch without the question.",
+        )
+    try:
+        answer = input(f"  Re-embed {documents} and switch? [y/N]: ")
+    except (EOFError, KeyboardInterrupt):
+        answer = ""
+    return answer.strip().lower() in ("y", "yes")
+
+def corpus_ready_to_switch(log: Log, args, towards_local: bool) -> bool:
+    corpus = reindex.stored_corpus(smoke.DEFAULT_BASE_URLS["ks"])
+    reindex.announce(log, corpus, towards_local)
+    if agrees_to_reembed(log, args, corpus):
+        return True
+    log.ok("Nothing changed.")
+    return False
+
+def wait_for_reindex(log: Log, infra: Path, may_start: bool = True) -> None:
+    startup = reindex.runs_at_start(env_line_value(infra, reindex.STARTUP_KEY))
+    if not may_start and not startup:
+        return
+    token = env_line_value(infra, reindex.TOKEN_KEY)
+    if not token:
+        log.warn(f"{reindex.TOKEN_KEY} is not in src/infra/.env, so the installer cannot "
+                 "follow the knowledge store's re-index; the smoke test runs without "
+                 "waiting for it.")
+        return
+    ks = smoke.DEFAULT_BASE_URLS["ks"]
+    log.say("  Waiting for the knowledge store to re-embed the stored documents")
+    reindex.follow(log, ks, token, start_now=may_start and not startup, may_start=may_start,
+                   startup=startup, wait_seconds=reindex.patience(reindex.stored_corpus(ks)))
+
+def start_and_check(log: Log, args, repo: Path, infra: Path, build: bool,
+                    require_answer_quality: bool) -> list[str]:
+    if installed_from_registry(infra):
+        pull_images(log, infra)
+    up, code = up_waiting_out_a_dependency_abort(
+        log, infra, start_command(infra, build), args.timeout)
+    if code != 0:
+        raise InstallError(
+            EXIT_COMPOSE_UP_FAILED,
+            "The stack did not start in the new AI mode.",
+            f"`docker compose {' '.join(up)}` exited {code}.",
+            f"The reason is in the logs of the container Docker named.\nFull log: {LOG_PATH}",
+        )
+    expect = expected_services(infra)
+    wait_for_health(log, infra, expect, timeout=args.timeout)
+    wait_for_reindex(log, infra)
+    if args.skip_smoke:
+        log.warn("Smoke test skipped (--skip-smoke). The switch is unverified.")
+        return expect
+    result = smoke.run(log, repo, timeout=min(args.timeout, 1200),
+                       require_answer_quality=require_answer_quality, model_server=expect[-1])
+    if not result.get("passed"):
+        raise InstallError(
+            EXIT_SMOKE_FAILED,
+            "Horus started in the new AI mode, but the smoke test did not pass.",
+            "Step results are in the log.",
+            f"Send us {LOG_PATH.name} from:\n  {BUNDLE_DIR}",
+        )
+    return expect
+
+def restore_previous_mode(infra: Path, backup: Path, record: str | None) -> None:
+    shutil.copy2(backup, infra / ".env")
+    _lock_down(infra / ".env")
+    if record is not None:
+        PROFILE_JSON.write_text(record, encoding="utf-8")
+
+def put_back_after_an_interruption(log: Log, infra: Path, backup: Path, started: list[str],
+                                   record: str | None) -> None:
+    stop_services(log, infra, started)
+    restore_previous_mode(infra, backup, record)
+    log.warn(f"Interrupted: src/infra/.env is back to the previous AI mode ({backup.name}). "
+             "Start Horus again with --start.")
+
+def switch_failed(failure: Exception, outcome: str) -> InstallError:
+    if isinstance(failure, InstallError):
+        return InstallError(failure.code, f"{failure.headline} {outcome}", failure.detail, failure.fix)
+    code = EXIT_ENV_WRITE_FAILED if isinstance(failure, OSError) else EXIT_COMPOSE_UP_FAILED
+    return InstallError(code, f"The switch stopped: {failure}. {outcome}",
+                        f"{type(failure).__name__}: {failure}", f"Full log: {LOG_PATH}")
+
+def roll_back_ai_mode(log: Log, args, infra: Path, backup: Path, started: list[str],
+                      record: str | None, build: bool = False) -> None:
+    log.warn("Rolling back to the previous AI mode")
+    stop_services(log, infra, started)
+    restore_previous_mode(infra, backup, record)
+    up, code = up_waiting_out_a_dependency_abort(log, infra, start_command(infra, build),
+                                                 args.timeout)
+    if code != 0:
+        log.warn(f"`docker compose {' '.join(up)}` exited {code} during the rollback. "
+                 f"src/infra/.env is back as it was ({backup.name}); start Horus with --start.")
+        return
+    try:
+        wait_for_health(log, infra, expected_services(infra), timeout=args.timeout)
+    except InstallError as exc:
+        log.warn(f"After the rollback: {exc.headline}")
+        return
+    wait_for_reindex(log, infra)
+
+def switched(log: Log, infra: Path, mode: str, expect: list[str]) -> int:
+    log.say("")
+    log.ok(f"AI: {mode.capitalize()}. Horus is ready at {WEB_URL}")
+    log.events.emit("ai", mode=mode, server=expect[-1])
+    log.events.emit("ready", url=WEB_URL, services=expect, ai=mode)
+    return EXIT_OK
+
+def switch_to_mock(log: Log, args, repo: Path, infra: Path, current: str) -> int:
+    sep = separator_of(current)
+    target = with_wanted_monitoring(log, infra, profiles.with_mock_overlay(current, sep), sep)
+    log.step("Switching to mock AI mode")
+    for line in _wrapped(profiles.SIMULATED_ANSWERS):
+        log.say(f"  {line}")
+    log.say(f"  Monitoring: {monitoring_word(target)} "
+            f"({profiles.MONITORING_KEY}={monitoring_setting(infra) or 'unset, off in mock mode'})")
+    if not corpus_ready_to_switch(log, args, towards_local=False):
+        return EXIT_OK
+    backup = _backup_env(log, infra / ".env")
+    build = not installed_from_registry(infra) and profiles.CPU_OVERLAY not in current
+    started = [profiles.MOCK_MODEL_SERVER, *monitoring_turned_on(current, target)]
+    try:
+        stop_services(log, infra, model_servers_of(current) + monitoring_turned_off(current, target))
+        write_ai_mode(infra, target, MOCK_MODE)
+        log.ok(f"{COMPOSE_FILE_KEY}={target}")
+        expect = start_and_check(log, args, repo, infra, build, require_answer_quality=True)
+    except KeyboardInterrupt:
+        put_back_after_an_interruption(log, infra, backup, started, None)
+        raise
+    except Exception as failure:
+        roll_back_ai_mode(log, args, infra, backup, started, None, build)
+        raise switch_failed(failure, "Mock AI mode was rolled back.") from failure
+    return switched(log, infra, MOCK_MODE, expect)
+
+def local_profile(log: Log, args) -> tuple[dict, str, list[str]]:
+    if args.profile and args.profile not in profiles.PROFILES:
+        raise _unknown_profile_error(args.profile)
+    if args.profile and profiles.is_mock_profile(args.profile):
+        raise InstallError(
+            EXIT_PROFILE_UNKNOWN,
+            "--ai local needs a profile with a language model.",
+            f"--profile {args.profile} is mock AI mode itself.",
+            "Drop --profile to let the installer choose, or name a CPU or GPU profile.",
+        )
+    log.step("Checking your hardware")
+    probe = hardware.probe(log, allow_docker_gpu_test=not args.skip_gpu_test,
+                           previous=hardware.read_profile_json(PROFILE_JSON))
+    if args.profile:
+        name, reasons = args.profile, [f"forced with --profile {args.profile}"]
+    else:
+        name, reasons = profiles.select_profile(probe)
+    if name == profiles.NOT_SUPPORTED:
+        for reason in reasons[:-1]:
+            log.say(f"           {reason}")
+        raise unsupported.refusal(probe)
+    log.ok(f"profile: {bold(name)}")
+    for reason in reasons:
+        log.say(f"           {reason}")
+    return probe, name, reasons
+
+def switch_to_local(log: Log, args, repo: Path, infra: Path, current: str) -> int:
+    probe, name, reasons = local_profile(log, args)
+    registry = env_line_value(infra, images.REGISTRY_KEY) or None
+    preflight.run_install_checks(log, infra, skip_disk_check=args.skip_disk_check,
+                                 image_registry=registry,
+                                 cpu_profile=profiles.is_cpu_profile(name))
+    if not corpus_ready_to_switch(log, args, towards_local=True):
+        return EXIT_OK
+    env = profiles.env_for(name, probe)
+    env[COMPOSE_FILE_KEY] = with_wanted_monitoring(log, infra, env[COMPOSE_FILE_KEY],
+                                                   separator_of(env[COMPOSE_FILE_KEY]))
+    plan = plan_model(log, repo, name, args.models_dir)
+    if plan is not None:
+        env.update(plan.env(repo))
+        download_model(log, plan, infra)
+    if registry:
+        env[images.REGISTRY_KEY] = registry
+
+    log.step("Switching to local AI mode")
+    record = PROFILE_JSON.read_text(encoding="utf-8") if PROFILE_JSON.is_file() else None
+    backup = _backup_env(log, infra / ".env")
+    build = registry is None and profiles.image_flavor(name) != images.CPU_FLAVOR
+    started = (model_servers_of(env[COMPOSE_FILE_KEY])
+               + monitoring_turned_on(current, env[COMPOSE_FILE_KEY]))
+    try:
+        stop_services(log, infra, [profiles.MOCK_MODEL_SERVER,
+                                   *monitoring_turned_off(current, env[COMPOSE_FILE_KEY])])
+        apply_env(log, infra, env, reset=False)
+        hardware.write_profile_json(PROFILE_JSON, probe, name, env, reasons, log=log)
+        expect = start_and_check(log, args, repo, infra, build,
+                                 require_answer_quality=not profiles.is_cpu_profile(name))
+    except KeyboardInterrupt:
+        put_back_after_an_interruption(log, infra, backup, started, record)
+        raise
+    except Exception as failure:
+        roll_back_ai_mode(log, args, infra, backup, started, record, build)
+        raise switch_failed(failure, "Mock AI mode is back.") from failure
+    return switched(log, infra, LOCAL_MODE, expect)
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="horus-install",
         description="Install and run Horus locally. Everything stays on this machine.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
         epilog="Examples:\n"
                "  horus_install.py                       normal install\n"
                "  horus_install.py --dry-run             show what would happen\n"
@@ -652,6 +1653,8 @@ def build_parser() -> argparse.ArgumentParser:
                "  horus_install.py --start               start an installed stack\n"
                "  horus_install.py --restart             restart it in place\n"
                "  horus_install.py --stop                stop the stack, keep data\n"
+               "  horus_install.py --download-model      fetch the CPU model only\n"
+               "  horus_install.py --build-from-source   build the images here (contributors)\n"
                "  horus_install.py --uninstall           remove everything, DELETES DATA\n",
     )
     p.add_argument("--version", action="version", version=f"Horus beta installer {VERSION}")
@@ -660,7 +1663,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="force a tuning profile: " + ", ".join(profiles.PROFILES))
     p.add_argument("--dry-run", action="store_true",
                    help="print the chosen profile and the config it would write, "
-                        "then exit without touching Docker or any file")
+                        "then exit without writing any file; Docker is only asked "
+                        "how much memory it can use")
     p.add_argument("--simulate", metavar="NAME",
                    help="with --dry-run, pretend to be a different machine: "
                         + ", ".join(SIMULATIONS))
@@ -676,16 +1680,40 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--reset-env", action="store_true",
                    help="regenerate src/infra/.env from the template, rotating the JWT "
                         "secret (signs everyone out). A backup is always kept.")
+    p.add_argument("--build-from-source", action="store_true",
+                   help="build Horus's own images on this machine instead of downloading "
+                        "the prebuilt ones, which the release workflow signs; the "
+                        "installer does not check the signature yet (contributors; "
+                        f"same as {images.BUILD_FROM_SOURCE_KEY}=1)")
     p.add_argument("--no-build", action="store_true",
-                   help="start without rebuilding images (faster re-run)")
+                   help="with --build-from-source, start without rebuilding the images "
+                        "(faster re-run)")
+    p.add_argument("--registry", metavar="HOST/PATH",
+                   help="where the prebuilt images are (default: the registry a previous "
+                        f"install used, else {images.DEFAULT_REGISTRY}; or set "
+                        f"{images.REGISTRY_KEY})")
+    p.add_argument("--registry-user", metavar="NAME",
+                   help=f"user name for the image registry (or set {images.USERNAME_KEY})")
+    p.add_argument("--registry-token-file", metavar="PATH",
+                   help="file holding the registry access token as USERNAME:TOKEN or TOKEN "
+                        f"(default: {images.TOKEN_FILE_NAME} next to START-HERE, or set "
+                        f"{images.TOKEN_KEY}). The token itself is never a flag.")
+    p.add_argument("--models-dir", metavar="PATH",
+                   help="where the CPU profiles keep their language model "
+                        "(default: the folder a previous install chose, else the "
+                        "models folder next to src)")
+    p.add_argument("--download-model", action="store_true",
+                   help="only download and check the language model of --profile "
+                        "(default cpu-standard), then exit; Docker is not needed")
     p.add_argument("--skip-smoke", action="store_true", help="do not run the smoke test")
-    p.add_argument("--admin-profile", action="store_true",
-                   help="also start pgadmin and redisinsight (Compose profile 'admin')")
     p.add_argument("--timeout", type=int, default=1800, metavar="SECONDS",
                    help="how long to wait for services to become healthy (default 1800)")
     p.add_argument("--non-interactive", action="store_true",
                    help="never prompt; use the safe default for every question")
-    p.add_argument("--yes", action="store_true", help="skip the uninstall confirmation")
+    p.add_argument("--yes", action="store_true",
+                   help="answer yes: skip the uninstall confirmation, and the question "
+                        f"--ai asks before re-embedding more than {reindex.ASK_ABOVE_DOCUMENTS} "
+                        "documents")
     p.add_argument("--start", action="store_true",
                    help="start an already-installed stack and wait for it to be "
                         "healthy; no questions, no config changes. Fails with exit "
@@ -695,6 +1723,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--stop", action="store_true", help="stop the stack and exit")
     p.add_argument("--uninstall", action="store_true",
                    help="remove containers, images and volumes (DELETES INGESTED DOCUMENTS)")
+    p.add_argument("--ai", choices=AI_CHOICES,
+                   help="mock: run without a language model, llm-mock answers from your "
+                        "documents (simulated); local: back to the model of this machine's "
+                        "profile, with the disk and memory checks and the model download; "
+                        "status: say which one is on. A switch backs up src/infra/.env, "
+                        "restarts Horus, runs the smoke test and rolls back if it fails.")
     p.add_argument("--json-events", action="store_true",
                    help="also emit one JSON object per line on STDERR, prefixed "
                         "'@@HORUS ', for a program driving this script. stdout is "
@@ -708,6 +1742,37 @@ def banner(log: Log) -> None:
     log.say("")
     log.say(rule())
 
+def say_detected(log: Log, probe: dict) -> None:
+    osi = probe.get("os") or {}
+    cpu = probe.get("cpu") or {}
+    mem = probe.get("memory") or {}
+    gpu = probe.get("gpu") or {}
+    docker = probe.get("docker") or {}
+    cores = cpu.get("physical_cores")
+    ram = mem.get("total_bytes") or 0
+    log.say(f"  detected : {osi.get('system') or '?'} {osi.get('machine') or '?'}, "
+            f"{cores if cores is not None else '?'} cores, "
+            f"{ram / 1024**3:.0f} GB RAM")
+    docker_bytes = docker.get("mem_total_bytes")
+    log.say("  docker   : " + (f"{docker_bytes / 1024**3:.1f} GiB of memory" if docker_bytes
+                              else f"memory not read ({docker.get('detail') or 'unknown'})"))
+    vram = gpu.get("vram_bytes")
+    log.say(f"  gpu      : {gpu.get('name') or 'none detected'}"
+            + (f", {vram / 1024**3:.0f} GB VRAM" if vram else "")
+            + ", usable by Docker: "
+            + ("yes" if probe.get("cuda_usable_in_docker") else "no"))
+
+def say_refusal(log: Log, probe: dict, reasons: list[str]) -> None:
+    refused = unsupported.refusal(probe)
+    log.say(f"  profile  : {bold('not supported')}")
+    for reason in reasons:
+        log.say(f"             - {reason}")
+    log.say(f"  stops    : before any download, exit code {refused.code}, with:")
+    for line in [refused.headline, "", *refused.detail.splitlines(), "",
+                 "What to do:", *refused.fix.splitlines()]:
+        log.say(f"             {line}".rstrip())
+    log.say("")
+
 def do_dry_run(log: Log, args, repo: Path) -> int:
     log.step("Dry run - nothing will be changed")
 
@@ -717,42 +1782,59 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
             log.say("  Available: " + ", ".join(SIMULATIONS))
             return EXIT_PROFILE_UNKNOWN
         probes = [(args.simulate, dict(SIMULATIONS[args.simulate]))]
-    elif args.profile:
-        probes = [("this machine", hardware.probe(log, allow_docker_gpu_test=False))]
     else:
         probes = [("this machine", hardware.probe(log, allow_docker_gpu_test=False))]
-        probes += [(name, dict(spec)) for name, spec in SIMULATIONS.items()]
+        if not args.profile:
+            probes += [(name, dict(spec)) for name, spec in SIMULATIONS.items()]
 
+    if args.profile and args.profile not in profiles.PROFILES:
+        log.fail(f"Unknown profile {args.profile!r}")
+        log.say("  Available: " + ", ".join(profiles.PROFILES))
+        return EXIT_PROFILE_UNKNOWN
+
+    registry = image_source(args, infra_dir(repo))
+    manifest = None
+    models_dir = None
     for label, probe in probes:
         if args.profile:
-            if args.profile not in profiles.PROFILES:
-                log.fail(f"Unknown profile {args.profile!r}")
-                log.say("  Available: " + ", ".join(profiles.PROFILES))
-                return EXIT_PROFILE_UNKNOWN
             name, reasons = args.profile, ["forced with --profile"]
         else:
             name, reasons = profiles.select_profile(probe)
 
-        env = profiles.env_for(name, probe)
         log.say("")
         log.say(rule(label))
+        say_detected(log, probe)
+        if name == profiles.NOT_SUPPORTED:
+            say_refusal(log, probe, reasons)
+            continue
+        warnings = [profiles.forced_profile_warning(name, probe) if args.profile else None,
+                    profiles.avx2_warning(probe) if profiles.is_cpu_profile(name) else None]
+
+        env = profiles.env_for(name, probe)
+        env["COMPOSE_FILE"] = with_wanted_monitoring(log, infra_dir(repo), env["COMPOSE_FILE"],
+                                                     separator_of(env["COMPOSE_FILE"]))
+        plan = None
+        if not profiles.get(name).runs_vllm:
+            manifest = manifest or model_manager.load_manifest(model_manager.manifest_path(repo))
+            models_dir = models_dir or models_dir_to_use(log, repo, args.models_dir)
+            plan = model_manager.plan_for_profile(repo, name, models_dir, manifest)
+            if plan is not None:
+                env.update(plan.env(repo))
+        if registry is not None:
+            env[images.REGISTRY_KEY] = registry
         osi = probe.get("os") or {}
-        cpu = probe.get("cpu") or {}
-        mem = probe.get("memory") or {}
-        gpu = probe.get("gpu") or {}
-        cores = cpu.get("physical_cores")
-        ram = mem.get("total_bytes") or 0
-        log.say(f"  detected : {osi.get('system') or '?'} {osi.get('machine') or '?'}, "
-                f"{cores if cores is not None else '?'} cores, "
-                f"{ram / 1024**3:.0f} GB RAM")
-        vram = gpu.get("vram_bytes")
-        log.say(f"  gpu      : {gpu.get('name') or 'none detected'}"
-                + (f", {vram / 1024**3:.0f} GB VRAM" if vram else "")
-                + ", usable by Docker: "
-                + ("yes" if probe.get("cuda_usable_in_docker") else "no"))
         log.say(f"  profile  : {bold(name)}")
         for reason in reasons:
             log.say(f"             - {reason}")
+        for warning in filter(None, warnings):
+            log.say(f"             ! {warning}")
+        log.say(f"  images   : {describe_images(registry, name)}")
+        if registry is not None and str(osi.get("machine") or "").lower() in ARM_MACHINES:
+            log.say("             ! built for x86-64 only: Docker emulates them on this "
+                    "processor; --build-from-source builds them for it")
+        if plan is not None:
+            log.say(f"  model    : {plan.entry.id}, {human_bytes(plan.entry.size_bytes)}, "
+                    f"into {plan.models_dir}")
         log.say("")
         log.say("  would write to src/infra/.env:")
         for key in sorted(env):
@@ -760,8 +1842,133 @@ def do_dry_run(log: Log, args, repo: Path) -> int:
 
     log.say("")
     log.say(rule())
-    log.say("  Dry run complete. No files were written and Docker was not contacted.")
+    if args.simulate:
+        log.say("  Dry run complete. No files were written and Docker was not contacted.")
+    else:
+        log.say("  Dry run complete. No files were written; Docker was only asked how much "
+                "memory it can use.")
     return EXIT_OK
+
+def models_dir_to_use(log: Log, repo: Path, requested: str | None) -> str | Path | None:
+    if requested:
+        return requested
+    infra = infra_dir(repo)
+    configured = smoke.read_env(infra / ".env").get("HORUS_MODELS_DIR", "")
+    if not configured:
+        return None
+    folder = model_manager.models_dir_from_env(configured, infra)
+    if folder == model_manager.default_models_dir(repo).resolve():
+        return None
+    log.say(f"  Keeping the models folder chosen before: {folder}")
+    return folder
+
+def plan_model(log: Log, repo: Path, profile: str,
+               requested_dir: str | None) -> model_manager.ModelPlan | None:
+    if profiles.get(profile).runs_vllm or profiles.is_mock_profile(profile):
+        return None
+    plan = model_manager.plan_for_profile(repo, profile,
+                                          models_dir_to_use(log, repo, requested_dir))
+    if plan is None:
+        raise InstallError(
+            EXIT_MODEL_MANIFEST_INVALID,
+            f"models/manifest.json names no language model for the {profile} profile.",
+            f"llama-server needs one, and {model_manager.manifest_path(repo)} has no\n"
+            f"entry under \"defaults\" for {profile}.",
+            "Extract the ZIP again; the manifest ships with Horus.",
+        )
+    return plan
+
+def do_download_model(log: Log, args, repo: Path) -> int:
+    name = args.profile or "cpu-standard"
+    plan = plan_model(log, repo, name, args.models_dir)
+    if plan is None:
+        log.ok(f"The {name} profile has no model file to download: vLLM fetches its own "
+               "model when it first starts.")
+        return EXIT_OK
+    path = download_model(log, plan, infra_dir(repo))
+    log.say("")
+    log.ok(f"{path} is ready for llama-server")
+    return EXIT_OK
+
+def _unknown_profile_error(profile: str) -> InstallError:
+    return InstallError(
+        EXIT_PROFILE_UNKNOWN,
+        f"Unknown profile {profile!r}.",
+        "Available: " + ", ".join(profiles.PROFILES),
+        "Re-run without --profile to let the installer choose.",
+    )
+
+def accepts_mock_mode(log: Log, args, reasons: list[str]) -> bool:
+    if args.non_interactive or not interactive_terminal():
+        return False
+    log.warn("No CPU profile fits this machine.")
+    for reason in reasons:
+        log.say(f"           {reason}")
+    try:
+        answer = input("  Install Horus in mock AI mode instead? Its answers are simulated. [y/N]: ")
+    except EOFError:
+        return False
+    return answer.strip().lower() in ("y", "yes")
+
+def warn_mock_mode(log: Log) -> None:
+    log.say("")
+    log.say(yellow("=" * 72))
+    log.say(yellow("  MOCK AI MODE: Horus runs without a language model."))
+    log.say(yellow("=" * 72))
+    log.say("")
+    for line in _wrapped(profiles.SIMULATED_ANSWERS):
+        log.say(f"  {line}")
+    log.say("")
+    log.say("  The web client shows a banner on every page and a Simulated badge on")
+    log.say("  each answer. Switch to a real model later with --ai local.")
+    log.say("")
+
+def _wrapped(text: str, width: int = 68) -> list[str]:
+    return textwrap.wrap(text, width, break_on_hyphens=False)
+
+def record_refusal(log: Log, probe: dict, reasons: list[str]) -> unsupported.NotSupported:
+    for reason in reasons:
+        log.say(f"           {reason}")
+    refused = unsupported.refusal(probe)
+    hardware.write_profile_json(PROFILE_JSON, probe, profiles.NOT_SUPPORTED, {}, reasons,
+                                log=log, refusal=refused.record())
+    return refused
+
+def decide_profile(log: Log, args, registry: str | None) -> tuple[dict, str, list[str]]:
+    if args.profile and args.profile not in profiles.PROFILES:
+        raise _unknown_profile_error(args.profile)
+    log.step("Checking your hardware")
+    probe = hardware.probe(log, allow_docker_gpu_test=not args.skip_gpu_test,
+                           previous=hardware.read_profile_json(PROFILE_JSON))
+    if args.profile:
+        name, reasons = args.profile, [f"forced with --profile {args.profile}"]
+        forced = profiles.forced_profile_warning(name, probe)
+        if forced:
+            log.warn(forced)
+    else:
+        name, reasons = profiles.select_profile(probe)
+    if (name == profiles.NOT_SUPPORTED and profiles.mock_fits(probe)
+            and accepts_mock_mode(log, args, reasons)):
+        name, reasons = profiles.MOCK_PROFILE, [*reasons, "mock AI mode accepted at the prompt"]
+    if name == profiles.NOT_SUPPORTED:
+        raise record_refusal(log, probe, reasons)
+
+    log.ok(f"profile: {bold(name)}")
+    for reason in reasons:
+        log.say(f"           {reason}")
+    hardware.write_profile_json(PROFILE_JSON, probe, name, {}, reasons, log=log)
+    log.say(f"  images:  {describe_images(registry, name)}")
+    if registry is not None:
+        warn_if_images_are_emulated(log, probe)
+
+    if profiles.is_cpu_profile(name):
+        avx2 = profiles.avx2_warning(probe)
+        if avx2:
+            log.warn(avx2)
+        warn_cpu_expectations(log, gpu_usable=probe.get("cuda_usable_in_docker") is True)
+    if profiles.is_mock_profile(name):
+        warn_mock_mode(log)
+    return probe, name, reasons
 
 def _dispatch(log: Log, args) -> int:
     repo = find_repo(args.repo)
@@ -780,12 +1987,27 @@ def _dispatch(log: Log, args) -> int:
     if args.stop:
         return do_stop(log, infra)
     if args.uninstall:
-        return do_uninstall(log, infra, args.yes)
+        return do_uninstall(log, infra, args.yes, non_interactive=args.non_interactive)
+    if args.ai:
+        return do_ai(log, args, repo)
     if args.dry_run:
         return do_dry_run(log, args, repo)
+    if args.download_model:
+        return do_download_model(log, args, repo)
 
-    preflight.run_all(log, infra, want_admin_profile=args.admin_profile,
-                      skip_disk_check=args.skip_disk_check)
+    registry = image_source(args, infra)
+    preflight.run_engine_checks(log)
+    probe, name, reasons = decide_profile(log, args, registry)
+    preflight.run_install_checks(log, infra,
+                                 skip_disk_check=args.skip_disk_check,
+                                 image_registry=registry,
+                                 cpu_profile=profiles.is_cpu_profile(name),
+                                 mock_free_gib=profiles.free_disk_gib(name, registry is None))
+    if registry is not None:
+        sign_in_to_registry(log, args, registry)
+        if args.no_build:
+            log.warn("--no-build only matters with --build-from-source; "
+                     "the prebuilt images are never built here")
 
     choice = consent.choose(
         log, repo,
@@ -793,42 +2015,45 @@ def _dispatch(log: Log, args) -> int:
         preselect=args.consent,
     )
 
-    log.step("Checking your hardware")
-    probe = hardware.probe(log, allow_docker_gpu_test=not args.skip_gpu_test)
-    if args.profile:
-        if args.profile not in profiles.PROFILES:
-            raise InstallError(
-                EXIT_PROFILE_UNKNOWN,
-                f"Unknown profile {args.profile!r}.",
-                "Available: " + ", ".join(profiles.PROFILES),
-                "Re-run without --profile to let the installer choose.",
-            )
-        name, reasons = args.profile, [f"forced with --profile {args.profile}"]
-    else:
-        name, reasons = profiles.select_profile(probe)
-    log.ok(f"profile: {bold(name)}")
-    for reason in reasons:
-        log.say(f"           {reason}")
-
-    if profiles.is_cpu_profile(name):
-        warn_cpu_expectations(log)
-
     env = profiles.env_for(name, probe)
+    env[COMPOSE_FILE_KEY] = with_wanted_monitoring(log, infra, env[COMPOSE_FILE_KEY],
+                                                   separator_of(env[COMPOSE_FILE_KEY]))
+    if monitoring_setting(infra):
+        env[profiles.MONITORING_KEY] = monitoring_setting(infra)
+    model_plan = plan_model(log, repo, name, args.models_dir)
+    if model_plan is not None:
+        env.update(model_plan.env(repo))
     env["HORUS_CORPUS_DIR"] = choice["corpus_dir"]
     env["CORPUS_SCAN_TOKEN"] = corpus_scan_token(log, infra)
+    env["REDIS_PASSWORD"] = valkey_password(log, infra)
+    env[ADMIN_PASSWORD_KEY], admin_password_generated = admin_password(log, infra)
+    env["HORUS_VERSION"] = VERSION
+    if registry is not None:
+        env[images.REGISTRY_KEY] = registry
 
     hardware.write_profile_json(PROFILE_JSON, probe, name, env, reasons)
     log.ok(f"wrote {PROFILE_JSON.name}")
 
     log.step("Writing configuration")
+    left_behind = (model_servers_left_behind(infra, env[COMPOSE_FILE_KEY])
+                   + monitoring_left_behind(infra, env[COMPOSE_FILE_KEY]))
+    if left_behind:
+        stop_services(log, infra, left_behind)
     apply_env(log, infra, env, reset=args.reset_env)
 
-    pull_and_build(log, infra, no_build=args.no_build)
+    pull_and_build(
+        log, infra, no_build=args.no_build, timeout=args.timeout,
+        before_start=None if model_plan is None
+        else lambda: download_model_for_the_stack(log, model_plan, infra),
+        from_source=registry is None,
+    )
 
-    expect = list(CORE_SERVICES)
-    if profiles.PROFILES[name].runs_vllm:
-        expect.append("vllm")
+    expect = [*CORE_SERVICES, profiles.model_server(name)]
     wait_for_health(log, infra, expect, timeout=args.timeout)
+    wait_for_reindex(log, infra, may_start=False)
+    admin_outcome = check_admin_account(log, infra)
+    shown_password = (env[ADMIN_PASSWORD_KEY] if admin_password_generated
+                      and admin_outcome not in ADMIN_NOT_ON_ENV else None)
 
     if args.skip_smoke:
         log.warn("Smoke test skipped (--skip-smoke). Install is unverified.")
@@ -838,6 +2063,7 @@ def _dispatch(log: Log, args) -> int:
             log, repo,
             timeout=min(args.timeout, 1200),
             require_answer_quality=not profiles.is_cpu_profile(name),
+            model_server=profiles.model_server(name),
         )
 
     if not result.get("passed"):
@@ -850,7 +2076,8 @@ def _dispatch(log: Log, args) -> int:
         )
 
     _success(log, infra, name, choice,
-             non_interactive=args.non_interactive)
+             non_interactive=args.non_interactive, built_here=registry is None,
+             admin_password=shown_password, admin_outcome=admin_outcome)
     return EXIT_OK
 
 def main(argv: list[str] | None = None) -> int:
@@ -874,25 +2101,45 @@ def main(argv: list[str] | None = None) -> int:
         log.close(code)
     return code
 
+def show_admin_password(log: Log, infra: Path, password: str | None, outcome: str = "") -> None:
+    stored = f"{ADMIN_PASSWORD_KEY} in {infra / '.env'}"
+    if outcome in ADMIN_NOT_ON_ENV:
+        log.say("  Password    not the one in .env; see the warning above")
+    elif password and terminal_output():
+        print(f"  Password    {bold(password)}")
+        log.info("The generated admin password was shown on screen; it is not in this log")
+        log.say("              Shown only this once. It is stored as")
+        log.say(f"              {stored}")
+    elif password:
+        log.say(f"  Password    generated, stored as {stored}")
+    else:
+        log.say(f"  Password    the {stored}")
+
 def _success(log: Log, infra: Path, profile_name: str, choice: dict,
-             non_interactive: bool = False) -> None:
-    creds = _read_admin_credentials(infra)
+             non_interactive: bool = False, built_here: bool = False,
+             admin_password: str | None = None, admin_outcome: str = "") -> None:
     log.say("")
     log.say(green("=" * 72))
     log.say(green("  Horus is running."))
     log.say(green("=" * 72))
     log.say("")
     log.say(f"  Open        {bold(WEB_URL)}")
-    log.say(f"  Sign in as  {creds[0]} / {creds[1]}")
+    log.say(f"  Sign in as  {admin_username(infra)}")
+    show_admin_password(log, infra, admin_password, admin_outcome)
     log.say("")
     log.say(f"  Profile     {profile_name}")
     log.say(f"  Documents   {consent.describe(choice)}")
     log.say("")
     if profiles.is_cpu_profile(profile_name):
-        log.say(yellow("  Running on the CPU, so the AI answers are not usable:"))
-        log.say(yellow("  expect about 15 minutes per question, and the answer may"))
-        log.say(yellow("  be wrong. Everything else works normally - 65 of the 68"))
+        log.say(yellow("  Running on the CPU: the AI answers come from llama-server"))
+        log.say(yellow("  and take minutes, not seconds; this setup has not been"))
+        log.say(yellow("  timed yet. Everything else works normally - 65 of the 68"))
         log.say(yellow("  test scenarios. Only F41, F42 and F43 need an NVIDIA GPU."))
+        log.say("")
+    if profiles.is_mock_profile(profile_name):
+        log.say(yellow("  Mock AI mode: llm-mock answers instead of a language model."))
+        log.say(yellow("  Its answers are simulated from your documents. Switch to a"))
+        log.say(yellow("  real model with  START-HERE (your platform) --ai local"))
         log.say("")
     app_dir = BUNDLE_DIR / "app"
     if app_dir.is_dir():
@@ -909,7 +2156,7 @@ def _success(log: Log, infra: Path, profile_name: str, choice: dict,
     log.say("  To stop:       START-HERE (your platform) --stop")
     log.say("  To remove:     START-HERE (your platform) --uninstall")
     log.say("")
-    offer_to_reclaim(log, non_interactive=non_interactive)
+    offer_to_reclaim(log, non_interactive=non_interactive, built_here=built_here)
     log.say("")
 
 def reclaimable_build_cache(log: Log) -> int:
@@ -933,11 +2180,15 @@ def reclaimable_build_cache(log: Log) -> int:
         return int(float(match.group(1)) * scale.get(match.group(2), 1))
     return 0
 
-def offer_to_reclaim(log: Log, non_interactive: bool = False) -> None:
+def offer_to_reclaim(log: Log, non_interactive: bool = False, built_here: bool = True) -> None:
     spare = reclaimable_build_cache(log)
     if spare < 1024**3:
         return
-    log.say(f"  The build left {human_bytes(spare)} of Docker build cache behind.")
+    if built_here:
+        log.say(f"  The build left {human_bytes(spare)} of Docker build cache behind.")
+    else:
+        log.say(f"  Docker still holds {human_bytes(spare)} of build cache from images built")
+        log.say("  on this machine before. The prebuilt images do not need it.")
     log.say("  It only makes a future rebuild faster. Deleting it does not")
     log.say("  touch Horus, its images or your data.")
     if non_interactive:
@@ -961,19 +2212,6 @@ def offer_to_reclaim(log: Log, non_interactive: bool = False) -> None:
     freed = max(0, spare - reclaimable_build_cache(log))
     log.ok(f"Reclaimed {human_bytes(freed)} of build cache.")
     log.say("")
-
-def _read_admin_credentials(infra: Path) -> tuple[str, str]:
-    user, password = "admin", "admin"
-    try:
-        for line in (infra / ".env").read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line.startswith("SUPER_USER_USERNAME="):
-                user = line.split("=", 1)[1].strip() or user
-            elif line.startswith("SUPER_USER_PASSWORD="):
-                password = line.split("=", 1)[1].strip() or password
-    except OSError:
-        pass
-    return user, password
 
 if __name__ == "__main__":
     try:

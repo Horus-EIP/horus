@@ -3,18 +3,15 @@
 import type { TaskDetails } from '@/lib/chat/api';
 import type { Agent } from '@/lib/agents/api';
 import { Spinner } from '@/components/ui/spinner';
+import { isTaskInProgress } from '@/lib/tasks/agent-activity';
 
 function collectWorkingAgentIds(task: TaskDetails): string[] {
   const ids: string[] = [];
-  const root = task.status;
-  if ((root === 'pending' || root === 'running') && task.agent_id) {
+  if (isTaskInProgress(task.status) && task.agent_id) {
     ids.push(task.agent_id);
   }
   for (const st of task.subtasks ?? []) {
-    if (
-      (st.status === 'pending' || st.status === 'running') &&
-      st.assignedAgent
-    ) {
+    if (isTaskInProgress(st.status) && st.assignedAgent) {
       ids.push(st.assignedAgent);
     }
   }

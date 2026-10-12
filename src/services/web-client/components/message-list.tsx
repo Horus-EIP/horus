@@ -12,7 +12,8 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { formatTimestamp } from "@/utils/format";
 import { ThoughtProcessCard } from "@/components/chat/thought-process-card";
-import type { TaskStepEvent } from "@/lib/types";
+import { AnswerSources } from "@/components/chat/answer-sources";
+import type { AnswerSource, TaskStepEvent } from "@/lib/types";
 
 export interface Message {
   id: string;
@@ -28,6 +29,16 @@ export interface Message {
   skillUsed?: string;
   /** Task ID the message dispatched, used to attach a thought-process card. */
   taskId?: string;
+  messageId?: number;
+  sources?: AnswerSource[];
+  aiProvider?: string;
+}
+
+export const SIMULATED_TITLE =
+  "Mock AI mode: this answer was assembled from your documents without a language model.";
+
+function isSimulated(message: Message): boolean {
+  return message.sender === "agent" && message.aiProvider === "mock";
 }
 
 interface MessageListProps {
@@ -163,7 +174,7 @@ export const MessageList: React.FC<MessageListProps> = ({
             }`}
         >
           <div
-            className={`flex gap-2 max-w-[85%] sm:max-w-[75%]
+            className={`flex min-w-0 gap-2 max-w-[85%] sm:max-w-[75%]
               ${message.sender === "user"
                 ? "flex-row-reverse"
                 : "flex-row"
@@ -185,7 +196,7 @@ export const MessageList: React.FC<MessageListProps> = ({
             </div>
 
             <div
-              className={`rounded-2xl px-4 py-2 text-[var(--text)] text-base shadow-sm ${
+              className={`min-w-0 wrap-break-word rounded-2xl px-4 py-2 text-[var(--text)] text-base shadow-sm ${
                 message.sender === "user"
                   ? "bg-blue-500 text-white rounded-tr-none"
                   : isManager
@@ -198,13 +209,14 @@ export const MessageList: React.FC<MessageListProps> = ({
                   <ReactMarkdown components={mdComponents}>
                     {message.text}
                   </ReactMarkdown>
+                  <AnswerSources sources={message.sources} />
                 </div>
               ) : (
                 <p className="whitespace-pre-wrap break-words">{message.text}</p>
               )}
 
               {message.sender === "agent" &&
-                (message.agentName || message.skillUsed) && (
+                (message.agentName || message.skillUsed || isSimulated(message)) && (
                   <div className="mt-2 flex flex-wrap items-center gap-1">
                     {message.agentName && (
                       <span
@@ -232,6 +244,14 @@ export const MessageList: React.FC<MessageListProps> = ({
                         {message.skillUsed}
                       </span>
                     )}
+                    {isSimulated(message) && (
+                      <span
+                        className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+                        title={SIMULATED_TITLE}
+                      >
+                        Simulated
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -239,6 +259,13 @@ export const MessageList: React.FC<MessageListProps> = ({
                 <span className="text-[10px] opacity-70">
                   {formatTimestamp(message.timestamp)}
                 </span>
+
+                {message.sender === "agent" && message.status === "error" && (
+                  <span className="text-[10px] text-right flex items-center gap-1">
+                    <span className="text-red-400">Failed</span>
+                    <IconExclamationCircle className="w-3 h-3 text-red-400" />
+                  </span>
+                )}
 
                 {message.sender === "user" && (
                   <span className="text-[10px] opacity-80 text-right text-[var(--textSoft)] flex items-center gap-1">
@@ -269,11 +296,11 @@ export const MessageList: React.FC<MessageListProps> = ({
 
       {isLoading && !isHistoryLoading && (
         <div className="flex justify-start opacity-95 transition-opacity">
-          <div className="flex gap-2 max-w-[85%] sm:max-w-[75%]">
+          <div className="flex min-w-0 gap-2 max-w-[85%] sm:max-w-[75%]">
             <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--bgSoft)] border border-gray-200 dark:border-gray-700">
               <IconRobot className="w-5 h-5 text-blue-500" stroke={1.25} />
             </div>
-            <div className="bg-[var(--bgSoft)] border border-gray-200 dark:border-gray-700 rounded-2xl rounded-tl-none p-3 shadow-sm">
+            <div className="min-w-0 wrap-break-word bg-[var(--bgSoft)] border border-gray-200 dark:border-gray-700 rounded-2xl rounded-tl-none p-3 shadow-sm">
               {streamingText ? (
                 // Live "typing" preview — confirmed-clean tokens streamed from
                 // the agent. Replaced by the committed message on task_complete.

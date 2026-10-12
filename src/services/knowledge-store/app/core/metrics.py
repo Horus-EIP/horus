@@ -1,6 +1,11 @@
 """Prometheus metrics for document operations, query latency, embeddings, and collection stats."""
 
+import functools
+import time
+
 from prometheus_client import Counter, Gauge, Histogram, Info
+
+LONG_RUNNING_TAIL_BUCKETS = (10.0, 30.0, 60.0, 120.0, 300.0, 600.0, 900.0, 1200.0, 1800.0)
 
 # --- Document metrics ---
 DOCUMENT_OPERATIONS = Counter(
@@ -24,7 +29,7 @@ QUERY_COUNT = Counter(
 QUERY_LATENCY = Histogram(
     "knowledge_store_query_duration_seconds",
     "Query latency in seconds",
-    buckets=[0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0]
+    buckets=[0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, *LONG_RUNNING_TAIL_BUCKETS]
 )
 
 QUERY_RESULTS = Histogram(
@@ -37,7 +42,7 @@ QUERY_RESULTS = Histogram(
 EMBEDDING_TIME = Histogram(
     "knowledge_store_embedding_duration_seconds",
     "Time to generate embeddings",
-    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0]
+    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, *LONG_RUNNING_TAIL_BUCKETS]
 )
 
 EMBEDDING_COUNT = Counter(
@@ -78,6 +83,43 @@ def record_embedding(success: bool, duration: float):
     """Record embedding generation."""
     EMBEDDING_COUNT.labels(status="success" if success else "error").inc()
     EMBEDDING_TIME.observe(duration)
+
+
+def _returned_count(results) -> int:
+    try:
+        return len(results["ids"][0])
+    except (KeyError, IndexError, TypeError):
+        return 0
+
+
+def timed_query(query):
+    @functools.wraps(query)
+    async def timed(*args, **kwargs):
+        started = time.perf_counter()
+        try:
+            results = await query(*args, **kwargs)
+        except Exception:
+            record_query(False, time.perf_counter() - started, 0)
+            raise
+        record_query(True, time.perf_counter() - started, _returned_count(results))
+        return results
+
+    return timed
+
+
+def timed_embedding(embed):
+    @functools.wraps(embed)
+    def timed(*args, **kwargs):
+        started = time.perf_counter()
+        try:
+            embedding = embed(*args, **kwargs)
+        except Exception:
+            record_embedding(False, time.perf_counter() - started)
+            raise
+        record_embedding(True, time.perf_counter() - started)
+        return embedding
+
+    return timed
 
 
 def set_system_info(version: str, embedding_model: str):

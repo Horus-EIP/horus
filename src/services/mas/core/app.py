@@ -17,19 +17,23 @@ import analytics.routes
 import chat.routes
 import conversations.routes
 import core.rabbitmq_tool
+import system.routes
 import tasks.routes
 import users.routes
 from agents.controller import check_agent_heartbeat
 from auth.routes import router as auth_router
+from core.ai_mode import start_probe_background_thread
 from core.embedding_setup import start_embedding_preload_background_thread
 from core.llm_setup import start_llm_preload_background_thread
 from core.logger import get_logger, log_error, log_startup, log_success
 from core.middleware import LoggingMiddleware
 from core.rabbitmq_tool import rabbitmq_instance
 from core.tracing import init_tracing
+from core.version import HORUS_VERSION
 from db.database import engine
 from db.init_setup import init_db
-from tasks.controller import check_task_timeout
+from tasks.controller import check_task_timeout, fail_interrupted_routing, run_task_heartbeats
+from tasks.task_jobs import task_jobs
 
 instrumentator = None
 
@@ -59,7 +63,7 @@ def create_app_environment():
         - **Conversations**: History and management
         - **Users**: User administration
         """,
-        version="1.0.0",
+        version=HORUS_VERSION,
         openapi_tags=[
             {
                 "name": "Health",
@@ -84,6 +88,7 @@ def create_app_environment():
             },
             {"name": "Users", "description": "User management (Admin only)"},
             {"name": "RabbitMQ", "description": "Message queue management"},
+            {"name": "System", "description": "Which AI answers: a language model or the mock"},
         ],
     )
 
@@ -109,6 +114,7 @@ def create_app_environment():
         (auth_router, "Authentication"),
         (users.routes.router, "Users"),
         (core.rabbitmq_tool.router, "RabbitMQ"),
+        (system.routes.router, "System"),
     ]
 
     for router, name in routers:
@@ -145,6 +151,8 @@ async def lifespan(app: FastAPI):
         log_error("lifespan", f"Failed to initialize database: {str(e)}", exc_info=True)
         raise
 
+    await fail_interrupted_routing()
+
     task = asyncio.create_task(check_agent_heartbeat())
     log_success("lifespan", "Agent heartbeat monitoring started")
 
@@ -161,16 +169,24 @@ async def lifespan(app: FastAPI):
     start_llm_preload_background_thread()
     log_success("lifespan", "LLM background preload started (if LLM_AUTOINIT=1)")
 
+    start_probe_background_thread()
+    log_success("lifespan", "AI mode probe started (asks the model server what it serves)")
+
     start_embedding_preload_background_thread()
     log_success(
         "lifespan",
         "Sentence-embedding model background preload started (warms skill cache)",
     )
 
+    task_heartbeats = asyncio.create_task(run_task_heartbeats())
+    log_success("lifespan", "Task heartbeats started")
+
     yield
     logger.info("Shutting down application...")
     task.cancel()
     task_timeout_checker.cancel()
+    task_heartbeats.cancel()
+    await task_jobs.shutdown()
     try:
         await task
     except asyncio.CancelledError:

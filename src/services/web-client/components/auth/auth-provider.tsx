@@ -52,6 +52,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     void refresh();
   }, []);
 
+  useEffect(() => {
+    const recheckSessionOnBackForwardRestore = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        void refresh();
+      }
+    };
+
+    window.addEventListener('pageshow', recheckSessionOnBackForwardRestore);
+    return () => {
+      window.removeEventListener('pageshow', recheckSessionOnBackForwardRestore);
+    };
+  }, []);
+
   const login = async (username: string, password: string) => {
     const result = await authApi.login({ username, password });
 

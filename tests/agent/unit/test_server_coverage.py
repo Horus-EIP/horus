@@ -522,6 +522,35 @@ class TestSendResult:
         assert payload["task_id"] == "task-1"
         assert payload["skill_used"] == "financial_analysis"
 
+    def test_the_sources_and_status_of_the_answer_are_posted(self):
+        source = {"doc_id": "doc-q4", "chunk_id": "doc-q4:3", "title": "q4.md", "page": 2}
+        resp = _make_response(200)
+        with (
+            patch.object(server, "_build_headers", return_value={}),
+            patch.object(server.requests, "post", return_value=resp) as mock_post,
+        ):
+            server.send_result(
+                "Revenue was $4.2M.",
+                "conv-1",
+                "task-1",
+                status="not_found",
+                reason="not_in_documents",
+                sources=[source],
+            )
+        payload = mock_post.call_args.kwargs["json"]
+        assert payload["status"] == "not_found"
+        assert payload["reason"] == "not_in_documents"
+        assert payload["sources"] == [source]
+
+    def test_no_sources_field_is_posted_when_none_are_given(self):
+        resp = _make_response(200)
+        with (
+            patch.object(server, "_build_headers", return_value={}),
+            patch.object(server.requests, "post", return_value=resp) as mock_post,
+        ):
+            server.send_result("r", "c", "t")
+        assert "sources" not in mock_post.call_args.kwargs["json"]
+
     def test_uses_matching_profile_for_assigned_agent(self, restore_module_state):
         target = server.PROFILES[1]
         target.agent_id = "assignee-xyz"
@@ -631,18 +660,53 @@ class TestLifespan:
             def start(self):
                 started.append(self.target)
 
+        order = []
         with (
-            patch.object(server, "register_agent") as mock_register,
+            patch.object(
+                server, "register_agent", side_effect=lambda: order.append("register")
+            ) as mock_register,
+            patch.object(
+                server,
+                "fail_abandoned_claims",
+                side_effect=lambda: order.append("abandoned") or [],
+            ),
             patch.object(threading, "Thread", FakeThread),
         ):
             async with server.lifespan(server.app):
                 pass
 
         mock_register.assert_called_once()
+        assert order == ["register", "abandoned"]
         # Heartbeat + task consumer + agent-message consumer = 3 daemon threads.
         assert server.heartbeat_task in started
         assert server._consume_messages in started
         assert server._consume_agent_messages in started
+
+    @pytest.mark.parametrize("mode, warned", [("mock", 1), ("local", 0), ("", 0)])
+    async def test_mock_ai_mode_is_one_warning_at_start(self, monkeypatch, caplog, mode, warned):
+        monkeypatch.setenv("HORUS_AI_MODE", mode)
+        with (
+            patch.object(server, "register_agent"),
+            patch.object(server, "fail_abandoned_claims", return_value=[]),
+            patch.object(threading, "Thread"),
+            caplog.at_level("WARNING"),
+        ):
+            async with server.lifespan(server.app):
+                pass
+        warnings = [r for r in caplog.records if "Mock AI mode" in r.getMessage()]
+        assert len(warnings) == warned
+        assert all(r.levelname == "WARNING" for r in warnings)
+
+    def test_the_mock_warning_says_what_is_off(self, monkeypatch):
+        monkeypatch.setenv("HORUS_SPACY", "off")
+        monkeypatch.setenv("OTEL_SDK_DISABLED", "true")
+        text = server.mock_ai_warning()
+        assert "llm-mock answers this agent's model calls" in text
+        assert "spaCy is off, so payments are extracted with regular expressions" in text
+        assert "the agent exports no trace" in text
+        monkeypatch.delenv("HORUS_SPACY")
+        monkeypatch.delenv("OTEL_SDK_DISABLED")
+        assert "spaCy" not in server.mock_ai_warning()
 
 
 # --------------------------------------------------------------------------- #
@@ -694,6 +758,36 @@ class TestTaskEndpoint:
         # Result was forwarded back to MAS.
         assert mock_send.called
         assert mock_send.call_args.args[0] == "general answer"
+
+    def test_the_answer_contract_reaches_mas(self, client, restore_module_state):
+        server.AGENT_ID = "agent-007"
+        source = {"doc_id": "doc-q4", "chunk_id": "doc-q4:3", "title": "q4.md", "page": 2}
+        fake_pipeline = MagicMock()
+
+        async def fake_process_task(task_dict):
+            return {
+                "response": "Revenue was $4.2M.",
+                "status": "completed",
+                "agent_answer": {
+                    "status": "ok",
+                    "answer": "Revenue was $4.2M.",
+                    "sources": [source],
+                    "reason": None,
+                },
+            }
+
+        fake_pipeline.process_task = fake_process_task
+        primary = MagicMock()
+        primary.type = "general"
+        with (
+            patch.object(server, "get_primary_profile", return_value=primary),
+            patch.object(server, "get_pipeline_for_type", return_value=fake_pipeline),
+            patch.object(server, "send_result") as mock_send,
+        ):
+            r = client.post("/task", json={"query": "q", "conversation_id": "c-1"})
+        assert r.json()["result"] == "Revenue was $4.2M."
+        assert mock_send.call_args.kwargs["status"] == "completed"
+        assert mock_send.call_args.kwargs["sources"] == [source]
 
     def test_auto_generates_task_id_when_missing(self, client, restore_module_state):
         server.AGENT_ID = "agent-1"

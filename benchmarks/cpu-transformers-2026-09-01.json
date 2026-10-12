@@ -1,0 +1,41 @@
+{
+  "kind": "horus-recorded",
+  "schema_version": 1,
+  "label": "cpu-transformers",
+  "recorded": {
+    "date": "2026-09-01",
+    "runtime": "Transformers in-process (no llama.cpp)",
+    "how": "One grounded question asked through the chat of a full install, timed end to end by hand.",
+    "sources": [
+      "installer/profiles.py (cpu-standard notes)",
+      "installer/horus_install.py (CPU warning)",
+      "packaging/RELEASE-NOTES.md (Known limitations)"
+    ]
+  },
+  "setup": {
+    "profile": "cpu-standard before B-90",
+    "router": "Qwen/Qwen2.5-1.5B-Instruct in MAS, Transformers, CPU",
+    "worker": "Qwen/Qwen3-4B-Instruct-2507 in bf16 in the agent, Transformers, CPU"
+  },
+  "machine": {
+    "reference": null,
+    "cpu_model": "12-core laptop CPU (model not recorded)",
+    "physical_cores": 12,
+    "ram": "64 GB",
+    "ram_speed": null,
+    "disk_type": null
+  },
+  "metrics": {
+    "questions": {"value": 1},
+    "total_median_s": {"value": 854.0, "n": 1, "note": "14m 14s"},
+    "total_sum_s": {"value": 854.0, "n": 1},
+    "answer_correct_reviewed_pct": {"value": 0.0, "n": 1, "note": "judged by hand"},
+    "fallbacks": {"value": 1, "n": 1, "note": "anti-spiral guard"}
+  },
+  "notes": [
+    "Retrieval was fine: the right document ranked first and held the figure. Generation failed: the anti-spiral guard replaced the answer.",
+    "One question: the time is the solid part, the wrong answer is a single sample.",
+    "Measured on a 12-core laptop with 64 GB of RAM, not on the 16 GB reference machine. The same laptop answers in about 4 seconds on its GPU.",
+    "The 100-question test set did not exist yet, so this result cannot be compared item by item."
+  ]
+}

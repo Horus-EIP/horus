@@ -9,6 +9,7 @@ Tests the new database-backed agent registry functions:
 - get_available_agents
 """
 
+import asyncio
 import datetime as dt
 from unittest.mock import MagicMock
 
@@ -34,6 +35,11 @@ from agents.registry_tool_functions import (
 from db.database import Base, SessionLocal, engine
 from db.models import Agents, AgentTypes
 
+
+def _create_agent(*args, **kwargs):
+    return asyncio.run(create_agent(*args, **kwargs))
+
+
 # ---------- Fixtures ----------
 
 
@@ -54,7 +60,7 @@ def db_session():
 
 def test_create_agent_returns_uuid_and_sets_fields(db_session: Session):
     """Test that create_agent returns a valid UUID and sets all fields."""
-    agent_id, _ = create_agent(
+    agent_id, _ = _create_agent(
         "Alice",
         ["nlp", "retrieval"],
         "Agent to retrieve informations",
@@ -78,7 +84,7 @@ def test_create_multiple_agents_unique_ids(db_session: Session):
     """Test that multiple agents have unique IDs."""
     ids = set()
     for i in range(5):
-        agent_id, _ = create_agent(f"agent{i}", [], "", db_session, AgentTypes.GENERAL)
+        agent_id, _ = _create_agent(f"agent{i}", [], "", db_session, AgentTypes.GENERAL)
         ids.add(agent_id)
 
     assert len(ids) == 5
@@ -86,7 +92,7 @@ def test_create_multiple_agents_unique_ids(db_session: Session):
 
 def test_create_agent_allows_empty_skills(db_session: Session):
     """Test that agents can be created with no skills."""
-    agent_id, _ = create_agent("NoSkills", [], "", db_session, AgentTypes.GENERAL)
+    agent_id, _ = _create_agent("NoSkills", [], "", db_session, AgentTypes.GENERAL)
     agent = db_session.query(Agents).filter(Agents.id == agent_id).first()
     assert agent.skills == []
 
@@ -96,8 +102,8 @@ def test_create_agent_allows_empty_skills(db_session: Session):
 
 def test_get_all_agents_reflects_created_agents(db_session: Session):
     """Test that get_all_agents returns all created agents."""
-    a1, _ = create_agent("A1", [], "", db_session, AgentTypes.GENERAL)
-    a2, _ = create_agent("A2", ["x"], "", db_session, AgentTypes.GENERAL)
+    a1, _ = _create_agent("A1", [], "", db_session, AgentTypes.GENERAL)
+    a2, _ = _create_agent("A2", ["x"], "", db_session, AgentTypes.GENERAL)
 
     all_agents = get_all_agents(db_session)
 
@@ -112,7 +118,7 @@ def test_get_all_agents_reflects_created_agents(db_session: Session):
 
 def test_get_agent_details_found_returns_expected_tuple(db_session: Session):
     """Test that get_agent_details returns all required information."""
-    agent_id, _ = create_agent(
+    agent_id, _ = _create_agent(
         "Bob",
         ["vision"],
         "Agent to retrieve informations",
@@ -153,7 +159,7 @@ def test_get_agent_details_not_found_returns_nones(db_session: Session):
 
 def test_update_alive_agent_status_updates_timestamp_and_status(db_session: Session):
     """Test that update_alive_agent_status updates status and heartbeat."""
-    agent_id, _ = create_agent("Carol", ["nlp"], "", db_session, AgentTypes.GENERAL)
+    agent_id, _ = _create_agent("Carol", ["nlp"], "", db_session, AgentTypes.GENERAL)
 
     # Get initial heartbeat
     agent_before = db_session.query(Agents).filter(Agents.id == agent_id).first()
@@ -185,7 +191,7 @@ def test_update_alive_agent_status_returns_false_if_missing(db_session: Session)
 
 def test_update_dead_agent_status_sets_inactive(db_session: Session):
     """Test that update_dead_agent_status sets status to inactive."""
-    agent_id, _ = create_agent("Dave", [], "", db_session, AgentTypes.GENERAL)
+    agent_id, _ = _create_agent("Dave", [], "", db_session, AgentTypes.GENERAL)
 
     updated = update_dead_agent_status(agent_id, db_session)
 
@@ -206,7 +212,7 @@ def test_update_dead_agent_status_returns_false_if_missing(db_session: Session):
 
 def test_delete_agent_success_removes_entry(db_session: Session):
     """Test that delete_agent removes the agent."""
-    agent_id, _ = create_agent("Eve", [], "", db_session, AgentTypes.GENERAL)
+    agent_id, _ = _create_agent("Eve", [], "", db_session, AgentTypes.GENERAL)
     assert db_session.query(Agents).filter(Agents.id == agent_id).first() is not None
 
     ok = delete_agent(agent_id, db_session)
@@ -226,7 +232,7 @@ def test_delete_agent_returns_false_when_not_found(db_session: Session):
 
 def test_get_agent_id_returns_matching_id(db_session: Session):
     """Test that get_agent_id returns the correct agent ID by name."""
-    agent_id, _ = create_agent(
+    agent_id, _ = _create_agent(
         "Grace",
         ["nlp"],
         "Agent to retrieve informations",
@@ -241,7 +247,7 @@ def test_get_agent_id_returns_matching_id(db_session: Session):
 
 def test_get_agent_id_returns_none_when_not_found(db_session: Session):
     """Test that get_agent_id returns None for non-existent name."""
-    create_agent("Heidi", [], "", db_session, AgentTypes.GENERAL)
+    _create_agent("Heidi", [], "", db_session, AgentTypes.GENERAL)
 
     result = get_agent_id("NotExisting", db_session)
 
@@ -253,7 +259,7 @@ def test_get_agent_id_returns_none_when_not_found(db_session: Session):
 
 def test_is_agent_recently_alive_with_recent_heartbeat(db_session: Session):
     """Test that recently heartbeat agent is considered alive."""
-    agent_id, _ = create_agent(
+    agent_id, _ = _create_agent(
         "RecentAgent", ["test"], "Test", db_session, AgentTypes.GENERAL
     )
     agent = db_session.query(Agents).filter(Agents.id == agent_id).first()
@@ -265,7 +271,7 @@ def test_is_agent_recently_alive_with_recent_heartbeat(db_session: Session):
 
 def test_is_agent_recently_alive_with_old_heartbeat(db_session: Session):
     """Test that old heartbeat agent is considered dead."""
-    agent_id, _ = create_agent(
+    agent_id, _ = _create_agent(
         "OldAgent", ["test"], "Test", db_session, AgentTypes.GENERAL
     )
     agent = db_session.query(Agents).filter(Agents.id == agent_id).first()
@@ -311,12 +317,12 @@ def test_is_agent_recently_alive_returns_false_if_invalid_heartbeat():
 def test_get_available_agents_returns_recently_alive(db_session: Session):
     """Test that get_available_agents returns only recently alive agents."""
     # Create one active agent
-    agent1_id, _ = create_agent(
+    agent1_id, _ = _create_agent(
         "Active", ["test"], "Active agent", db_session, AgentTypes.GENERAL
     )
 
     # Create one inactive agent (by not updating heartbeat)
-    agent2_id, _ = create_agent(
+    agent2_id, _ = _create_agent(
         "Inactive", ["test"], "Inactive agent", db_session, AgentTypes.GENERAL
     )
     agent2 = db_session.query(Agents).filter(Agents.id == agent2_id).first()
@@ -340,7 +346,7 @@ def test_get_available_agents_returns_empty_list_when_no_agents(db_session: Sess
 
 def test_get_available_agents_returns_agent_info(db_session: Session):
     """Test that get_available_agents returns correct agent information."""
-    agent_id, _ = create_agent(
+    agent_id, _ = _create_agent(
         "TestAgent",
         ["skill1", "skill2"],
         "Test description",
@@ -362,7 +368,7 @@ def test_get_available_agents_returns_agent_info(db_session: Session):
 
 def test_get_all_agents_internal(db_session: Session):
     """Test internal get_all_agents function."""
-    create_agent("InternalAgent", [], "", db_session, AgentTypes.GENERAL)
+    _create_agent("InternalAgent", [], "", db_session, AgentTypes.GENERAL)
     agents = _get_all_agents_internal(db_session)
     assert len(agents) == 1
     assert agents[0].name == "InternalAgent"
@@ -380,7 +386,7 @@ def test_get_all_agents_internal_error(db_session: Session):
 
 def test_update_alive_agent_status_internal(db_session: Session):
     """Test internal update_alive_agent_status function."""
-    agent_id, _ = create_agent("AliveInternal", [], "", db_session, AgentTypes.GENERAL)
+    agent_id, _ = _create_agent("AliveInternal", [], "", db_session, AgentTypes.GENERAL)
 
     # Set to inactive first
     agent = db_session.query(Agents).filter(Agents.id == agent_id).first()
@@ -412,7 +418,7 @@ def test_update_alive_agent_status_internal_error(db_session: Session):
 
 def test_update_dead_agent_status_internal(db_session: Session):
     """Test internal update_dead_agent_status function."""
-    agent_id, _ = create_agent("DeadInternal", [], "", db_session, AgentTypes.GENERAL)
+    agent_id, _ = _create_agent("DeadInternal", [], "", db_session, AgentTypes.GENERAL)
 
     result = _update_dead_agent_status_internal(agent_id, db_session)
     assert result is True
@@ -439,8 +445,8 @@ def test_update_dead_agent_status_internal_error(db_session: Session):
 
 def test_batch_update_agent_status_internal(db_session: Session):
     """Test batch update of agent statuses."""
-    a1, _ = create_agent("Batch1", [], "", db_session, AgentTypes.GENERAL)
-    a2, _ = create_agent("Batch2", [], "", db_session, AgentTypes.GENERAL)
+    a1, _ = _create_agent("Batch1", [], "", db_session, AgentTypes.GENERAL)
+    a2, _ = _create_agent("Batch2", [], "", db_session, AgentTypes.GENERAL)
 
     # Need to query the agent objects to pass to bulk_update_mappings if that's what it expects
     # But based on typical sqlalchemy updates, let's see what _batch_update_agent_status_internal expects.
@@ -484,7 +490,7 @@ def test_create_agent_error_handling(db_session: Session):
     mock_db = MagicMock()
     mock_db.add.side_effect = Exception("DB Error")
 
-    result = create_agent("ErrorAgent", [], "", mock_db, AgentTypes.GENERAL)
+    result = _create_agent("ErrorAgent", [], "", mock_db, AgentTypes.GENERAL)
     assert result == (None, None)
     mock_db.rollback.assert_called_once()
 
@@ -530,7 +536,7 @@ def test_update_dead_agent_status_error_handling(db_session: Session):
 
 def test_update_active_status(db_session: Session):
     """Test update_active_status function."""
-    agent_id, _ = create_agent("ActiveStatus", [], "", db_session, AgentTypes.GENERAL)
+    agent_id, _ = _create_agent("ActiveStatus", [], "", db_session, AgentTypes.GENERAL)
 
     # Set to inactive
     agent = db_session.query(Agents).filter(Agents.id == agent_id).first()

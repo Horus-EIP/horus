@@ -28,7 +28,12 @@ This is the **operational** companion to [security.md](../security.md) (which co
 | **NDA template** | ✅ Ready to send | `docs/ip_protection/nda/Horus_NDA_Template.pdf` |
 | **Signed NDAs — team members** | ✅ Matheus Lopez, Noah Gibelli | `docs/ip_protection/nda/Horus_NDA_Matheus_Lopez.pdf`, `Horus_NDA_Noah_Gibelli.pdf` |
 | **Signed NDAs — external beta testers** | ⚠️ To collect before each external test | Use the template |
-| **Proprietary license** | ✅ In repo | [LICENSE](../../LICENSE) |
+| **Proprietary licence v2.1** (all rights reserved; use only under a commercial, evaluation or contributor agreement; EU-mandatory rights kept; licence keys; `opensource/horus-bench-kit/` left to its own Apache-2.0 licence) | ✅ In repo (08/10/2026) | [LICENSE](../../LICENSE); justification in [ADR-004](../adr/ADR-004-closed-source-licence.md) and [ADR-007](../adr/ADR-007-open-source-benchmark-kit.md) |
+| **Dependency licence inventory** (1,463 third-party components; all compatible with closed source) | ✅ Done (26/09/2026) | [dependency-licence-inventory.xlsx](dependency-licence-inventory.xlsx) |
+| **Contributor Agreement** (confidentiality + rights assignment + credit) | ⚠️ To write before the first external contributor | — |
+| **Evaluation Licence** (90 days, non-production, confidential) | ⚠️ To write before the next external test | — |
+| **THIRD_PARTY_NOTICES** (licence texts of the shipped components) | ✅ Generated (07/10/2026), checked in CI, shipped in the release ZIP | [THIRD_PARTY_NOTICES](../../THIRD_PARTY_NOTICES), [LICENSES/](../../LICENSES/), [NOTICES/](../../NOTICES/) |
+| **Time-limited licence key** | 🗓 Planned (ADR-004) | — |
 
 > **Verification:** any holder of the original `horus_mvp_v1.0.zip` archive can run `ots verify horus_mvp_v1.0.zip.ots` to confirm the snapshot existed on the date encoded in the proof.
 
@@ -68,15 +73,15 @@ Mapped to the protected assets above:
 
 ## What we will not do
 
-- **Open-source the orchestration core.** It's the differentiator. See [diffusion strategy](diffusion-strategy.md) for the public/private split.
+- **Open-source any part of Horus.** The whole product stays closed ([ADR-004](../adr/ADR-004-closed-source-licence.md)); see the [diffusion strategy](diffusion-strategy.md) for what we do share.
 - **Ship a hosted version.** Horus is self-hosted by design — that's both a feature and a protection.
-- **Accept external contributions to the core agent code without NDA + CLA.** Bug reports and doc PRs are welcome on the public-facing surface only.
+- **Accept any external contribution without an NDA + Contributor Agreement.** There is no public repository: contributors are invited to the private repo (ADR-004).
 
 ---
 
 ## Review
 
 - **Owner:** Loup Marquez (project lead)
-- **Last review:** `[ TO FILL ]`
+- **Last review:** 26/09/2026 (licence decision, ADR-004)
 - **Next review:** before each EIP milestone and before any external demo
-- **Linked docs:** [security.md](../security.md) · [diffusion-strategy.md](diffusion-strategy.md) · [ADRs](../adr/)
+- **Linked docs:** [security.md](../security.md) · [diffusion-strategy.md](diffusion-strategy.md) · [ADR-004](../adr/ADR-004-closed-source-licence.md) · [ADRs](../adr/)

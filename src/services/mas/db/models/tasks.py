@@ -1,6 +1,7 @@
 """``Task`` + ``TaskResult`` ORM models with audit listeners."""
 
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, event
 from sqlalchemy import Enum as SQLEnum
@@ -9,7 +10,7 @@ from sqlalchemy.sql import func
 
 from core.logger import log_db_operation
 from db.database import Base
-from tasks.status import TaskStatus
+from tasks.status import TaskStatus, is_final_status
 
 
 class Task(Base):
@@ -30,6 +31,11 @@ class Task(Base):
     )
     query = Column(String, nullable=False)
     order = Column(Integer, nullable=True)
+    skills_required = Column(JSON, nullable=True)
+    owner_username = Column(String, nullable=True, index=True)
+    claimed_by = Column(String, nullable=True, index=True)
+    claim_run = Column(String, nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -39,6 +45,7 @@ class Task(Base):
         onupdate=func.now(),
         nullable=False,
     )
+    completed_at = Column(DateTime(timezone=True), nullable=True)
 
     conversation = relationship(
         "Conversations", back_populates="tasks", passive_deletes=True
@@ -59,11 +66,19 @@ class TaskResult(Base):
     result_data = Column(JSON, nullable=True)
     history = Column(JSON, nullable=True)
     future_actions = Column(JSON, nullable=True)
+    sources = Column(JSON, nullable=True)
+    ai_provider = Column(String, nullable=True)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
     task = relationship("Task", back_populates="result")
+
+
+@event.listens_for(Task.status, "set")
+def stamp_completed_at_on_final_status(target, value, oldvalue, initiator):
+    if is_final_status(value) and target.completed_at is None:
+        target.completed_at = datetime.now(UTC)
 
 
 @event.listens_for(Task, "after_insert")

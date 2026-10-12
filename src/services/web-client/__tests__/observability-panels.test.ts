@@ -1,0 +1,167 @@
+import { readFileSync } from "fs";
+import path from "path";
+import { describe, it, expect } from "vitest";
+import {
+  LATENCY_PANELS,
+  METRIC_PANELS,
+  PROMPT_TOKEN_PANELS,
+  ROUTING_DECISION_HISTOGRAM,
+  ROUTING_DECISIONS_COUNTER,
+  ROUTING_PANELS,
+  averagePerCallQuery,
+  latencyQuantilesQuery,
+} from "@/lib/metrics/panels";
+import { TRACED_SERVICES } from "@/lib/traces/services";
+
+const servicesDir = path.resolve(__dirname, "../..");
+
+function read(relativePath: string): string {
+  return readFileSync(path.resolve(servicesDir, relativePath), "utf-8");
+}
+
+const declaredHistograms = [
+  "mas/core/metrics.py",
+  "agent/app/core/metrics.py",
+  "knowledge-store/app/core/metrics.py",
+].flatMap((file) =>
+  Array.from(read(file).matchAll(/Histogram\(\s*"([a-z_]+)"/g), (match) => match[1])
+);
+
+const scrapedHosts = Array.from(
+  read("../infra/observability/prometheus.yaml").matchAll(/targets: \['([\w-]+):\d+'\]/g),
+  (match) => match[1]
+);
+
+const HOST_BY_METRIC_PREFIX: Record<string, string> = {
+  mas_: "mas",
+  agent_: "agent",
+  knowledge_store_: "knowledge_store",
+};
+
+function scrapeHostOf(histogram: string): string | undefined {
+  const prefix = Object.keys(HOST_BY_METRIC_PREFIX).find((p) => histogram.startsWith(p));
+  return prefix ? HOST_BY_METRIC_PREFIX[prefix] : undefined;
+}
+
+describe("metrics latency panels", () => {
+  it("chart the MAS task histogram, the agent's latency histograms and the knowledge store's query histogram", () => {
+    expect(LATENCY_PANELS.map((panel) => panel.histogram)).toEqual([
+      "mas_task_processing_seconds",
+      "agent_task_processing_duration_seconds",
+      "agent_model_inference_duration_seconds",
+      "agent_knowledge_store_request_duration_seconds",
+      "knowledge_store_query_duration_seconds",
+    ]);
+  });
+
+  it("query p50 and p95 from each histogram's buckets", () => {
+    for (const panel of LATENCY_PANELS) {
+      const rate = `sum by (le) (rate(${panel.histogram}_bucket[5m]))`;
+      expect(panel.query).toContain(`histogram_quantile(0.5, ${rate})`);
+      expect(panel.query).toContain(`histogram_quantile(0.95, ${rate})`);
+      expect(panel.nameLabel).toBe("quantile");
+      expect(panel.unit).toBe(" s");
+    }
+  });
+
+  it("name the two series p50 and p95 so the legend tells them apart", () => {
+    const parts = latencyQuantilesQuery("mas_task_processing_seconds").split(" or ");
+
+    expect(parts).toHaveLength(2);
+    expect(parts[0]).toMatch(/^label_replace\(histogram_quantile\(0\.5, .*"quantile", "p50", "", ""\)$/);
+    expect(parts[1]).toMatch(/^label_replace\(histogram_quantile\(0\.95, .*"quantile", "p95", "", ""\)$/);
+  });
+
+  it("only chart histograms a service declares", () => {
+    for (const panel of LATENCY_PANELS) {
+      expect(declaredHistograms).toContain(panel.histogram);
+    }
+  });
+
+  it("only chart histograms from services Prometheus scrapes", () => {
+    for (const panel of LATENCY_PANELS) {
+      expect(scrapedHosts).toContain(scrapeHostOf(panel.histogram));
+    }
+  });
+
+  it("keep the overview panels ahead of the latency, routing and prompt token panels", () => {
+    expect(METRIC_PANELS.map((panel) => panel.title)).toEqual([
+      "Task Queue Depth",
+      "Task Errors Rate",
+      "Active Agents",
+      ...LATENCY_PANELS.map((panel) => panel.title),
+      ...ROUTING_PANELS.map((panel) => panel.title),
+      ...PROMPT_TOKEN_PANELS.map((panel) => panel.title),
+    ]);
+  });
+});
+
+describe("prompt token panels", () => {
+  it("chart the agent's and the orchestrator's prompt token histograms", () => {
+    expect(PROMPT_TOKEN_PANELS.map((panel) => panel.histogram)).toEqual([
+      "agent_llm_prompt_tokens",
+      "mas_llm_prompt_tokens",
+    ]);
+  });
+
+  it("divide the summed tokens by the number of calls, one series per call", () => {
+    expect(averagePerCallQuery("mas_llm_prompt_tokens")).toBe(
+      "sum by (call) (rate(mas_llm_prompt_tokens_sum[5m])) / sum by (call) (rate(mas_llm_prompt_tokens_count[5m]))"
+    );
+    for (const panel of PROMPT_TOKEN_PANELS) {
+      expect(panel.query).toBe(averagePerCallQuery(panel.histogram));
+      expect(panel.nameLabel).toBe("call");
+      expect(panel.unit).toBe(" tokens");
+    }
+  });
+
+  it("only chart histograms a scraped service declares", () => {
+    for (const panel of PROMPT_TOKEN_PANELS) {
+      expect(declaredHistograms).toContain(panel.histogram);
+      expect(scrapedHosts).toContain(scrapeHostOf(panel.histogram));
+    }
+  });
+});
+
+describe("routing panels", () => {
+  const masMetrics = read("mas/core/metrics.py");
+
+  it("chart the router's decisions and its p95 time, one series per method", () => {
+    const [decisions, latency] = ROUTING_PANELS;
+
+    expect(decisions.query).toBe(
+      `sum by (method) (rate(${ROUTING_DECISIONS_COUNTER}[5m]))`
+    );
+    expect(decisions.unit).toBe("/s");
+    expect(latency.query).toBe(
+      `histogram_quantile(0.95, sum by (le, method) (rate(${ROUTING_DECISION_HISTOGRAM}_bucket[5m])))`
+    );
+    expect(latency.unit).toBe(" s");
+    for (const panel of ROUTING_PANELS) {
+      expect(panel.nameLabel).toBe("method");
+    }
+  });
+
+  it("only chart routing metrics MAS declares", () => {
+    expect(masMetrics).toMatch(new RegExp(`Counter\\(\\s*"${ROUTING_DECISIONS_COUNTER.replace("_total", "")}`));
+    expect(declaredHistograms).toContain(ROUTING_DECISION_HISTOGRAM);
+    expect(scrapedHosts).toContain("mas");
+  });
+});
+
+describe("traces service filter", () => {
+  it("offers exactly the service names the compose stack reports", () => {
+    const compose = read("../infra/docker-compose.yml");
+    const reported = new Set(
+      Array.from(compose.matchAll(/OTEL_SERVICE_NAME=([\w-]+)/g), (match) => match[1])
+    );
+
+    expect([...TRACED_SERVICES].sort()).toEqual([...reported].sort());
+  });
+
+  it("includes the name MAS reports when OTEL_SERVICE_NAME is unset", () => {
+    const defaultName = read("mas/core/tracing.py").match(/DEFAULT_SERVICE_NAME = "([\w-]+)"/);
+
+    expect(TRACED_SERVICES).toContain(defaultName?.[1]);
+  });
+});

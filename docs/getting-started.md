@@ -8,14 +8,14 @@ This chapter covers everything you need to go from a fresh clone to a running st
 
 This guide helps you set up a local environment for the Horus multi-agent system.
 
-### Quick setup (under 30 minutes)
+### Quick setup
 
 **Typical timing**
 
 - Prerequisites: 2–5 minutes  
 - Clone repository: 1–2 minutes  
 - Environment file: 2–3 minutes  
-- First Docker build: 10–15 minutes  
+- First install (image downloads, build, model download): 1.5 to 2 hours  
 - Verification: 2–3 minutes  
 
 ---
@@ -27,9 +27,10 @@ This guide helps you set up a local environment for the Horus multi-agent system
 - **Git** (2.30+)  
   [Download Git](https://git-scm.com/downloads)
 
-- **Docker** with Compose v2 (`docker compose`)  
+- **Docker** with Compose 2.33.0 or newer (`docker compose`)  
+  The compose files use `gpus: all`, which older versions reject, and the installer stops on an older Compose; see [Installer preflight](operations.md#installer-preflight).  
   [Docker Desktop](https://www.docker.com/products/docker-desktop)  
-  Allocate at least 4 CPUs and 8 GB RAM in Docker settings.
+  Allocate at least 4 CPUs in Docker settings. Without an NVIDIA GPU, give Docker at least 13.5 GiB of memory (15.0 GiB for the `cpu-standard` profile); see [Hardware decision](operations.md#hardware-decision).
 
 #### Optional (running services outside Docker)
 
@@ -82,10 +83,10 @@ git checkout <your-working-branch>
 
 ```bash
 cd src/infra
-cp .env.example .env
+bash init-env.sh
 ```
 
-Review values in `.env`. Defaults are suitable for many local setups. Important keys include `POSTGRES_*`, `REDIS_PASSWORD`, `RABBITMQ_*`, `JWT_SECRET_KEY`, and `SUPER_USER_*`. Never commit `.env`; only `.env.example` is tracked.
+`init-env.sh` writes a random `JWT_SECRET_KEY`, `REDIS_PASSWORD` and `SUPER_USER_PASSWORD`, the admin's password, which you read in `.env`; if you copy `.env.example` by hand instead, set all three (`openssl rand -hex 32`): with an empty password Valkey refuses the other containers, and MAS refuses to create the admin account with an empty password or `admin`. Review the other values in `.env`. Defaults are suitable for many local setups. Important keys include `POSTGRES_*`, `REDIS_PASSWORD`, `RABBITMQ_*`, `JWT_SECRET_KEY`, and `SUPER_USER_*`. Never commit `.env`; only `.env.example` is tracked.
 
 #### Step 3: Start the stack
 
@@ -94,7 +95,7 @@ cd src/infra
 docker compose up --build
 ```
 
-First run builds images and can take several minutes. The stack includes PostgreSQL, Redis, RabbitMQ, MAS, Agent, Knowledge Store, Web Client, PgAdmin, RedisInsight, and the observability backends Prometheus, Loki, and Tempo (all internal). Logs, metrics, and traces are viewed from the admin-only observability pages in the web client (`/admin/logs`, `/admin/metrics`, `/admin/traces`). See **`src/infra/docker-compose.yml`** for the authoritative list.
+The first run downloads and builds the images, then the language models download on first start: expect 1.5 to 2 hours in all. The beta installer does not build: it pulls the prebuilt, signed images of the release instead (see [Prebuilt images](operations.md#prebuilt-images)), unless it runs with `--build-from-source`. Builds from this folder keep local image names as long as `HORUS_REGISTRY` stays unset in `.env`. The stack includes PostgreSQL, Valkey (the `redis` service), RabbitMQ, MAS, Agent, Knowledge Store, Web Client, and the observability backends Prometheus, Loki, and Tempo (all internal). The development tool PgAdmin starts only with `docker compose --profile dev-tools up`; the installer never starts it. Logs, metrics, and traces are viewed from the admin-only observability pages in the web client (`/admin/logs`, `/admin/metrics`, `/admin/traces`). See **`src/infra/docker-compose.yml`** for the authoritative list.
 
 #### Step 4: Verify containers
 
@@ -105,16 +106,28 @@ cd src/infra
 docker compose ps
 ```
 
+Every application service declares a healthcheck, so wait until `mas`, `agent`, `knowledge_store` and `web-client` show `(healthy)`, not just `Up`, together with the model server: `vllm` on a GPU machine, `llm` (llama-server) with the CPU overlay. Each one probes an unauthenticated endpoint inside its own container:
+
+| Service | Probe | Allowed first start |
+|---------|-------|---------------------|
+| `mas` | `POST /rabbitmq/heartbeat` (python) | 15 min (router model download) |
+| `agent` | `GET /health` on :8001 (python) | 30 min (decision model download and load) |
+| `knowledge_store` | `GET /health` on :8080 (python) | 10 min |
+| `web-client` | `GET /api/health` on :3000 (wget) | 2 min |
+| `llm` (CPU only) | `GET /health` on :8080 inside `horus-net` (curl) | 10 min (model load) |
+
+A service is only marked `unhealthy` after that start window, so `(health: starting)` during a first install is normal. The agent starts only once `mas` and `knowledge_store` are healthy, and `mas` only once `postgres`, `redis` and `rabbitmq` are. With the CPU overlay, `mas` and `agent` also wait for `llm`, which starts after the one-shot `llm-model` has found the 2.5 GB model in `models/` (the installer puts it there; without the installer `llm-model` downloads and checks it, and `docker compose logs llm-model` shows the download). To fetch it with a progress display first, run `python installer/horus_install.py --download-model` from the top of the repository. On the CPU, MAS and the agent load no model of their own, so their start windows are mostly unused.
+
 **PostgreSQL** (adjust user and database to match `.env`):
 
 ```bash
 docker compose exec postgres psql -U postgres -d mas_db -c "SELECT version();"
 ```
 
-**Redis** (password from `REDIS_PASSWORD` in `.env`):
+**Valkey**, the `redis` service (password from `REDIS_PASSWORD` in `.env`):
 
 ```bash
-docker compose exec redis redis-cli -a "$REDIS_PASSWORD" ping
+docker compose exec redis sh -c 'VALKEYCLI_AUTH="$REDIS_PASSWORD" valkey-cli ping'
 ```
 
 ---
@@ -124,15 +137,14 @@ docker compose exec redis redis-cli -a "$REDIS_PASSWORD" ping
 | Service | URL | Notes |
 |---------|-----|--------|
 | RabbitMQ management | http://localhost:15672 | User/password from `RABBITMQ_USER` / `RABBITMQ_PASSWORD` |
-| PgAdmin | http://localhost:5433 | `PGADMIN_DEFAULT_EMAIL` / `PGADMIN_DEFAULT_PASSWORD` |
-| RedisInsight | http://localhost:5540 | Configure connection to host `redis` from inside Docker |
+| PgAdmin | http://localhost:5433 | Only with `--profile dev-tools`. `PGADMIN_DEFAULT_EMAIL` / `PGADMIN_DEFAULT_PASSWORD` |
 | MAS API docs | http://localhost:8000/docs | When `mas` is running |
 | Web client | http://localhost:3000 | When `web-client` is running |
 | Logs | http://localhost:3000/admin/logs | Admin-only (requires `admin` role); backed by Loki |
 | Metrics | http://localhost:3000/admin/metrics | Admin-only; backed by Prometheus (Task Queue Depth, Task Errors Rate, Active Agents) |
 | Traces | http://localhost:3000/admin/traces | Admin-only; backed by Tempo (trace search + span waterfall) |
 
-**Prometheus** is not published on the host in the default Compose file. View metrics from the admin **Metrics** page (http://localhost:3000/admin/metrics) or see [Monitoring](../operations/monitoring.md).
+**Prometheus** is not published on the host in the default Compose file. View metrics from the admin **Metrics** page (http://localhost:3000/admin/metrics) or see [Monitoring](operations.md#monitoring-and-observability).
 
 There is **no** Metabase or PostgreSQL Exporter service in the default `docker-compose.yml`.
 
@@ -178,7 +190,7 @@ source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-From the repo root, with `DB_HOST`, `REDIS_HOST`, and `RABBITMQ_HOST` pointing at localhost (see CI workflow for patterns):
+From the repo root, with `DB_HOST`, `REDIS_HOST`, and `RABBITMQ_HOST` pointing at 127.0.0.1, where Compose publishes their ports (on Windows `localhost` adds about 2 s to every connection):
 
 ```bash
 bash scripts/dev/run-mas.sh
@@ -228,22 +240,22 @@ Run from `src/services/mas` with `PYTHONPATH` including that directory, or use t
 
 ### Development workflow
 
-1. Create a branch from your team’s integration branch.  
+1. Create a branch from `Sprint#1_September2026_Tek5` ([branches](../CONTRIBUTING.md#branches)).  
 2. Make changes and run tests locally.  
-3. Commit using [commit convention](../contributing/commit-convention.md).  
+3. Commit using the [commit convention](../CONTRIBUTING.md#commits).  
 4. Open a pull request and request review.  
 
 ---
 
 ### Further reading
 
-- [Architecture overview](../architecture/overview.md)  
-- [Configuration](configuration.md)  
-- [RBAC](../security/rbac.md)  
-- [Secrets management](../operations/secrets-management.md)  
-- [Workflow](../contributing/workflow.md)  
-- [Testing policy](../contributing/testing-policy.md)  
-- [Troubleshooting (extended)](troubleshooting.md)  
+- [Architecture overview](architecture.md)  
+- [Configuration](#12-factor-configuration-management)  
+- [RBAC](security.md#role-based-access-control-rbac)  
+- [Secrets management](operations.md#secrets-management-guide)  
+- [Contributing](../CONTRIBUTING.md)  
+- [Test strategy](../TESTING.md)  
+- [Troubleshooting (extended)](#troubleshooting-guide)  
 
 ---
 
@@ -261,7 +273,7 @@ Run from `src/services/mas` with `PYTHONPATH` including that directory, or use t
 
 ### Need help?
 
-1. See [Troubleshooting](troubleshooting.md) and logs: `docker compose logs <service>`.  
+1. See [Troubleshooting](#troubleshooting-guide) and logs: `docker compose logs <service>`.  
 2. Confirm `src/infra/.env` matches **`src/infra/.env.example`**.  
 3. Open an issue or ask your team channel.  
 
@@ -357,7 +369,7 @@ postgres:
     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
 redis:
-  command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${REDIS_PASSWORD}"]
+  command: ["valkey-server", "/usr/local/etc/valkey/valkey.conf", "--requirepass", "${REDIS_PASSWORD}"]
 ```
 
 #### Quick Start with Docker Compose
@@ -370,16 +382,15 @@ chmod +x stack-up.sh && ./stack-up.sh -d
 ## Option B — manual steps (from src/infra)
 cd src/infra
 bash init-env.sh   # skips if .env already exists
-## (Alternative: cp .env.example .env && set JWT_SECRET_KEY manually, e.g. openssl rand -hex 32)
+## (Alternative: cp .env.example .env && set JWT_SECRET_KEY and REDIS_PASSWORD manually, e.g. openssl rand -hex 32 for each)
 nano .env          # optional: tune values for local/production
 docker compose up --build -d
 
-## Services are now available (host ports from docker-compose.yml):
-## - PostgreSQL: localhost:${DB_PORT:-5432}
-## - Redis: localhost:${REDIS_PORT:-6379}
-## - RabbitMQ: AMQP localhost:${RABBITMQ_PORT:-5672}, UI http://localhost:15672
-## - PgAdmin: http://localhost:5433
-## - RedisInsight: http://localhost:5540
+## Services are now available on this machine only (every host port is bound to 127.0.0.1; HORUS_WEB_BIND=0.0.0.0 in .env opens 3000 to the network):
+## - PostgreSQL: 127.0.0.1:${DB_PORT:-5432}
+## - Valkey (service redis): 127.0.0.1:${REDIS_PORT:-6379}
+## - RabbitMQ: AMQP 127.0.0.1:${RABBITMQ_PORT:-5672}, UI http://localhost:15672
+## - PgAdmin: only with docker compose --profile dev-tools up (port 5433)
 ## - Web client: http://localhost:3000 (observability lives here: /admin/logs, /admin/metrics, /admin/traces — admin role required)
 ## - Prometheus, Loki, Tempo: no host ports by default (internal-only backends); view logs/metrics/traces from the admin pages above or add a port mapping (see docs/operations.md)
 ```
@@ -739,16 +750,15 @@ docker restart mas
 ```bash
 ## Get a new token
 curl -X POST http://localhost:8000/auth/token \
-  -d "username=admin&password=admin"
+  --data-urlencode "username=admin" --data-urlencode "password=$SUPER_USER_PASSWORD"
 
 ## Check if user exists (in database)
 docker exec -it postgres psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-mas_db}" -c "SELECT * FROM users;"
 ```
 
-**If admin user doesn't exist:**
+**If admin user doesn't exist:** MAS does not create it while `SUPER_USER_PASSWORD` in `src/infra/.env` is empty or `admin`; its log says so. Set a password there, then recreate MAS and the agent so they read it:
 ```bash
-## Restart MAS to trigger init_db
-docker restart mas
+cd src/infra && docker compose up -d mas agent
 ```
 
 ---

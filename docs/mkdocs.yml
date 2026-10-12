@@ -55,23 +55,35 @@ nav:
   - Architecture: architecture.md
   - API Reference: api-reference.md
   - Operations: operations.md
+  - Mock AI mode: mock-ai.md
   - Security & Compliance: security.md
-  - Contributing: contributing.md
+  - Validation & Error Handling: validation-and-error-handling.md
+  - Code Style: contributing.md
   - Demo: demo.md
   - Changelog: ../CHANGELOG.md
   - EIP Deliverables:
       - Index: eip/README.md
       - Objectives Audit: eip/objectives-audit.md
       - Performance (Point D): eip/performance.md
+      - Regression Log: eip/regressions.md
       - Tech Watch (Point 1): eip/tech-watch.md
+      - Tech Watch — Integrated GPUs and NPUs: tech-watch/IGPU_NPU_RESEARCH.md
       - Community Contributions (Point 1): eip/community-contributions.md
+      - Community Outreach: eip/community-outreach.md
       - Protection Plan (Point A): eip/protection-plan.md
       - Diffusion Strategy (Point A): eip/diffusion-strategy.md
+      - Reproducibility Test: eip/reproducibility-test.md
+      - Who Made What — Noah: who-made-what-noah.md
       - Code-vs-Docs Audit (archived): eip/code-vs-docs-audit.md
   - ADRs:
       - ADR-001 RabbitMQ: adr/ADR-001-rabbitmq.md
       - ADR-002 ChromaDB: adr/ADR-002-chromadb.md
       - ADR-003 FastAPI: adr/ADR-003-fastapi.md
+      - ADR-004 Closed-source licence: adr/ADR-004-closed-source-licence.md
+      - ADR-005 Accepted quality debt: adr/ADR-005-accepted-quality-debt.md
+      - ADR-006 Machines under 16 GB: adr/ADR-006-low-ram-machines.md
+      - ADR-007 Open-source benchmark kit: adr/ADR-007-open-source-benchmark-kit.md
+      - ADR-008 Mock AI mode: adr/ADR-008-mock-ai-mode.md
   - Assets:
       - Horus Presentation v8: assets/horus_presentation_v8.pdf
       - Research — Agent Management: assets/research/mas/Agent_Management.pdf

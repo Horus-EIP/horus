@@ -17,7 +17,7 @@ DB_USER = settings.postgres_user
 DB_PASSWORD = settings.postgres_password
 DB_PORT = settings.db_port
 
-URL_DATABASE = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+URL_DATABASE = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 # Allow override for testing via environment variable
 if os.getenv("TEST_MODE") == "1":

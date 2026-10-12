@@ -1,74 +1,163 @@
-HORUS AI - PROPRIETARY SOFTWARE LICENSE AGREEMENT
+HORUS - PROPRIETARY SOFTWARE LICENCE
+Version 2.1 - 8 October 2026
 
-Copyright (c) 2025-2026 Loup Marquez, Matheus Lopez, Noah Gibelli.
+Copyright (c) 2025-2026 Loup Marquez-Luttringer, Noah Gibelli, Matheus Lopez.
 All rights reserved.
 
-NOTICE: This software and its associated documentation files (the "Software")
-are the proprietary and confidential property of the copyright holders listed
-above (the "Licensor"). The Software is licensed, not sold.
+1. DEFINITIONS
 
-1. GRANT OF LICENSE
+   "Licensor" means the copyright holders named above, or any company to
+   which they assign their rights in the Software.
 
-   The Licensor grants you a non-exclusive, non-transferable, revocable license
-   to use the Software solely in accordance with the terms of a separately
-   executed commercial license agreement (the "Commercial Agreement") between
-   you and the Licensor. Use of the Software without a valid Commercial
-   Agreement is strictly prohibited.
+   "Software" means Horus in every form: source code, object code, container
+   images, installer, desktop application, configuration files, prompts,
+   documentation and any update, patch or new version of them. The folder
+   opensource/horus-bench-kit/ is not part of the Software: it is licensed
+   separately under the Apache License 2.0, in the LICENSE file of that
+   folder.
 
-2. RESTRICTIONS
+   "Agreement" means a written agreement signed with the Licensor: a
+   Commercial Licence Agreement, an Evaluation Licence, or a Contributor
+   Agreement.
 
-   Unless expressly authorized by the Commercial Agreement, you may NOT:
+   "Third-Party Components" means software, models or data that are not
+   owned by the Licensor and are distributed with, or downloaded by, the
+   Software. They are listed in the THIRD_PARTY_NOTICES file distributed
+   with the Software.
 
-   a. Copy, reproduce, or duplicate the Software, in whole or in part;
-   b. Distribute, sublicense, lease, rent, lend, or otherwise transfer the
-      Software or any rights therein to any third party;
-   c. Modify, adapt, translate, reverse engineer, decompile, disassemble, or
-      create derivative works based on the Software;
-   d. Remove, alter, or obscure any proprietary notices, labels, or marks on
-      the Software;
-   e. Use the Software for any purpose other than as expressly permitted by
-      the Commercial Agreement;
-   f. Make the Software available over a network or other environment
-      permitting access or use by multiple users simultaneously, except as
-      expressly permitted by the Commercial Agreement.
+2. NO RIGHTS WITHOUT AN AGREEMENT
 
-3. OWNERSHIP
+   The Software is licensed, not sold. Having access to the Software,
+   including its source code, gives you no right to use, copy or distribute
+   it. Any use requires a valid Agreement, and is limited to what that
+   Agreement allows. If this licence and an Agreement conflict, the
+   Agreement prevails.
 
-   The Software is protected by copyright laws and international treaty
-   provisions. The Licensor retains all right, title, and interest in and to
-   the Software, including all intellectual property rights therein. No title
-   to or ownership of the Software is transferred to you.
+3. COMMERCIAL USE
 
-4. NO WARRANTY
+   Under a Commercial Licence Agreement, the Licensor grants a
+   non-exclusive, non-transferable, non-sublicensable licence to install and
+   use the Software, for the licensee's internal business purposes only, on
+   infrastructure the licensee controls, for the sites, number of users and
+   period stated in the Agreement.
 
-   THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-   FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. THE ENTIRE RISK
-   ARISING OUT OF THE USE OR PERFORMANCE OF THE SOFTWARE REMAINS WITH YOU.
+4. EVALUATION USE
 
-5. LIMITATION OF LIABILITY
+   Under an Evaluation Licence (pilot, beta test, jury or partner review),
+   the Software may only be used to evaluate it, not in production, and
+   only for the period stated in the Evaluation Licence (90 days if no
+   period is stated). The Licensor may use any feedback it receives without
+   obligation.
 
-   IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY INDIRECT, INCIDENTAL,
-   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
-   TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-   PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-   LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THE SOFTWARE,
-   EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+5. LICENCE KEYS
 
-6. TERMINATION
+   The Licensor may require a licence key to use the Software. Where it
+   does, the key states the licensed customer, site, number of users,
+   features and validity period, and the Software checks it on the
+   licensee's own infrastructure without contacting the Licensor.
 
-   This license is effective until terminated. It will terminate automatically
-   without notice if you fail to comply with any term of this agreement or
-   the Commercial Agreement. Upon termination, you must destroy all copies of
-   the Software in your possession or control.
+   The key is valid for the period paid for or granted under the Agreement.
+   Before the key expires, the Software warns administrators in advance.
+   After the end date, and after any grace period stated in the Agreement,
+   the Software switches to a restricted mode: its features stop working,
+   but administrators can still sign in, export the licensee's documents
+   and data, and install a new key. The Software never deletes, encrypts or
+   withholds the licensee's data because a key has expired. A renewed key
+   restores full use without reinstallation.
 
-7. GOVERNING LAW
+   You may not create, modify, share or circumvent licence keys, or change
+   system clocks or other settings in order to extend a key's validity.
 
-   This agreement shall be governed by and construed in accordance with the
-   laws of France, without regard to its conflict of law provisions.
+6. RESTRICTIONS
 
-8. CONTACT
+   Unless an Agreement expressly allows it, you may not:
 
-   For licensing inquiries, contact:
-   Loup Marquez - loup.m.marquez@gmail.com
+   a. copy the Software, except to install it as allowed and to make one
+      backup copy;
+   b. distribute, sell, sublicense, rent, lend or otherwise transfer the
+      Software to anyone;
+   c. make the Software, or its functionality, available to third parties
+      as a hosted, managed or online service;
+   d. modify, adapt, translate or create derivative works of the Software;
+   e. reverse engineer, decompile or disassemble the Software;
+   f. remove or alter any notice, licence key or usage limit, or work
+      around any technical measure that enforces this licence (see
+      section 5);
+   g. use the Software, or any knowledge of its source code, to build or
+      help build a competing product;
+   h. disclose the Software or its source code to anyone who is not bound
+      by this licence and by confidentiality obligations.
+
+   Nothing in this licence limits a right that applicable law grants and
+   does not allow a contract to exclude, in particular the rights to make a
+   backup copy, to observe, study and test the Software, and to decompile it
+   for interoperability, under Articles 5 and 6 of Directive 2009/24/EC and
+   the national laws that implement it.
+
+7. CONFIDENTIALITY
+
+   The Software, including its source code, architecture and prompts, is
+   confidential information of the Licensor. You must protect it with at
+   least the care you use for your own confidential information, and never
+   less than reasonable care.
+
+8. THIRD-PARTY COMPONENTS
+
+   Third-Party Components are licensed under their own terms, listed in
+   THIRD_PARTY_NOTICES. Nothing in this licence restricts any right those
+   terms grant you, and where they require it the Licensor will provide
+   their source code or tell you where to obtain it.
+
+9. CONTRIBUTIONS
+
+   The Licensor accepts code, documentation, tests or other contributions
+   only under a signed Contributor Agreement. Suggestions and feedback sent
+   without one may be used by the Licensor freely and without obligation.
+
+10. YOUR DATA
+
+   Documents and data you process with the Software remain yours. The
+   Software runs on your infrastructure; the Licensor receives no access to
+   your data except as expressly agreed in writing, for example for
+   support.
+
+11. OWNERSHIP
+
+   The Licensor keeps all rights, title and interest in the Software,
+   including all intellectual property rights. All rights not expressly
+   granted are reserved.
+
+12. NO WARRANTY
+
+   To the extent permitted by applicable law and unless an Agreement says
+   otherwise, the Software is provided "as is", without warranty of any
+   kind, express or implied, including merchantability, fitness for a
+   particular purpose and non-infringement.
+
+13. LIMITATION OF LIABILITY
+
+   To the extent permitted by applicable law and unless an Agreement says
+   otherwise, the Licensor is not liable for any indirect, incidental,
+   special or consequential damages, including loss of data, profits or
+   business, however caused.
+
+14. TERMINATION
+
+   This licence ends automatically if you breach it or if your Agreement
+   ends. You must then stop using the Software and delete every copy in
+   your possession or control, except that you may export your data
+   (using the restricted mode described in section 5 where available)
+   during the export period stated in the Agreement (30 days if none is
+   stated). Sections 5, 6, 7,
+   11, 12, 13 and 15 survive termination.
+
+15. GOVERNING LAW
+
+   This licence is governed by the laws of France, without regard to its
+   conflict-of-law rules.
+
+16. CONTACT
+
+   Licensing enquiries: Loup Marquez-Luttringer - loup.marquez@epitech.eu
+                        Noah Gibelli - noah.gibelli@epitech.eu
+                        Matheus Lopez - matheus.lopez@epitech.eu

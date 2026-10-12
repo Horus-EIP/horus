@@ -15,26 +15,32 @@ REPO = Path(__file__).resolve().parent.parent
 PACKAGING = REPO / "packaging"
 SIZE_LIMIT = 50 * 1024 * 1024
 
-VERSION_FILE = REPO / "installer" / "common.py"
+VERSION_FILE = REPO / "VERSION"
 
 def read_version() -> str:
-    for line in VERSION_FILE.read_text(encoding="utf-8").splitlines():
-        if line.startswith("VERSION"):
-            return line.split("=", 1)[1].strip().strip('"').strip("'")
-    return "0.0.0"
+    try:
+        text = VERSION_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        return "0.0.0"
+    return text or "0.0.0"
 
 SOURCE_INCLUDE = [
     "src/services/mas",
     "src/services/agent",
     "src/services/web-client",
     "src/services/knowledge-store",
+    "src/services/llm-mock",
     "src/infra",
     "demo_assets",
+    "models",
+    "LICENSES",
+    "NOTICES",
 ]
 
 SOURCE_FILES = [
     "stack-up.sh",
     "LICENSE",
+    "THIRD_PARTY_NOTICES",
 ]
 
 PRUNE_DIRS = {
@@ -49,6 +55,8 @@ PRUNE_GLOBS = [
     ".env", ".env.bak.*", "*.pyc", "*.pyo", "*.log", "*.tmp", "*.swp",
     ".DS_Store", "Thumbs.db", "*.sqlite3", "*.db",
     "install-log.txt", "horus-profile.json",
+    "*.gguf", "*.part", "*.gguf.sha256",
+    "registry-token.txt",
 ]
 
 PRUNE_PATHS = (
@@ -258,6 +266,10 @@ def _fill(partial: Path, target: Path, args) -> int:
                 print(f"  ERROR: missing {src}")
                 return 1
             section += add(zf, src, name)
+        if not VERSION_FILE.is_file():
+            print(f"  ERROR: missing {VERSION_FILE}")
+            return 1
+        section += add(zf, VERSION_FILE, "VERSION")
         totals["launchers + README"] = section
 
         section = 0

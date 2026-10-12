@@ -8,19 +8,23 @@ leaves it.
 | **Docker Desktop** | installed **and running** |
 | **Python 3.11+** | only used to run the installer |
 | **NVIDIA GPU** | strongly recommended — see Known limitations |
+| **Memory without a GPU** | at least 13.5 GiB for Docker (15.0 GiB for the larger CPU profile). On Windows Docker gets only half of the RAM unless you raise it, so in practice that takes a 24 GB machine. Planning figures, kept until the run on the 16 GB reference machine (a first run on a development laptop gives 10.5 GiB for the larger CPU profile, see ADR-006): the installer checks them first and stops before any download when the machine is too small |
 | **Free disk** | 150 GB while installing (125 GB with an NVIDIA GPU), settling to 130 GB / 110 GB |
-| **Time** | 30–60 minutes for the first install |
+| **Time** | 1.5 to 2 hours for the first install when testers built the containers; downloading the prebuilt ones has not been timed yet |
+| **Access token** | the one we sent you, saved as `registry-token.txt` next to `START-HERE`, on one line: `USERNAME:TOKEN` |
 
 ## Install
 
 1. Download `Horus-Beta-<version>.zip` below and extract **all** of it
-2. From inside the extracted folder:
+2. Save your access token as `registry-token.txt` in the extracted folder
+3. From inside the extracted folder:
    - **Windows** — double-click `START-HERE-Windows.bat`
    - **macOS** — right-click `START-HERE-macOS.command` → Open
    - **Linux** — `./START-HERE-Linux.sh`
-3. It asks two or three questions, then downloads and builds everything.
+4. It asks two or three questions, then downloads everything. Horus's own
+   containers come prebuilt, so nothing is built on your machine.
    It is not frozen — leave it running.
-4. When it finishes, open Horus from the `app/` folder:
+5. When it finishes, open Horus from the `app/` folder:
    - Windows: `app/Horus.exe`
    - macOS: `app/Horus.app`
    - Linux: install `app/Horus_<version>_amd64.deb`, then launch Horus
@@ -45,9 +49,23 @@ Would rather not bypass an OS warning? Fair. Use the browser at
   took **14 minutes** and returned a wrong answer. With a GPU the same question
   answers in about 4 seconds. If you have no NVIDIA GPU, the stack will install
   and every part of it works except the model itself.
-- The first install downloads about 25 GB (CPU) or 26.5 GB (GPU) of
-  container images and model weights, and needs 150 GB / 125 GB of free
-  disk while it builds, settling to 130 GB / 110 GB afterwards.
+- The first install downloads about 26.5 GB of container images and model
+  weights with an NVIDIA GPU (measured). On the CPU it is about 16.6 GB,
+  derived from the 25 GB we measured before the CPU model changed: the two
+  models the containers downloaded (11.2 GB) are gone, and a 2.5 GB model
+  file and a 0.3 GB model server came in. The install needs 150 GB / 125 GB
+  of free disk while it builds, settling to 130 GB / 110 GB afterwards
+  (measured before that change).
+- All of those figures were measured when testers built the containers. The
+  containers now come prebuilt; the download size, the time and
+  the disk they need have not been measured yet, so the installer still asks
+  for the same free space.
+- The prebuilt containers are built for x86-64 processors. On an Apple
+  Silicon Mac Docker runs them through emulation; if that fails, run your
+  `START-HERE` file with `--build-from-source` to build them on the Mac.
+- On the CPU the installer downloads the language model itself, shows its
+  size, speed and time left, resumes an interrupted download and checks its
+  SHA-256. It is kept in `horus/models`, also after `--uninstall`.
 - Your documents are mounted **read-only**. Horus cannot modify anything you own.
 
 ## If something goes wrong

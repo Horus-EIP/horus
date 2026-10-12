@@ -6,6 +6,7 @@ API contract.
 """
 
 import re
+from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -53,6 +54,7 @@ class KnowledgeStoreFileRef(BaseModel):
     """
 
     filename: str
+    doc_id: str | None = None
 
 
 class InlineFile(BaseModel):
@@ -117,6 +119,22 @@ class TaskStepForm(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class TaskResultStatus(str, Enum):
+    COMPLETED = "completed"
+    NOT_FOUND = "not_found"
+    FAILED = "failed"
+
+
+MAX_ANSWER_SOURCES = 100
+
+
+class AnswerSource(BaseModel):
+    doc_id: str | None = None
+    chunk_id: str | None = None
+    title: str | None = None
+    page: int | None = None
+
+
 class TaskResultForm(BaseModel):
     """Agent-submitted task result.
 
@@ -131,6 +149,20 @@ class TaskResultForm(BaseModel):
     task_id: str
     agent_name: str | None = None
     skill_used: str | None = None
+    sources: list[AnswerSource] | None = Field(default=None, max_length=MAX_ANSWER_SOURCES)
+    status: TaskResultStatus = TaskResultStatus.COMPLETED
+    reason: str | None = Field(default=None, max_length=64)
+
+
+class TaskClaimForm(BaseModel):
+    agent_id: str
+    worker_id: str = Field(min_length=1, max_length=200)
+    run_id: str = Field(min_length=1, max_length=200)
+
+
+class WorkerRunForm(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=200)
+    run_id: str = Field(min_length=1, max_length=200)
 
 
 class CreateUserRequest(BaseModel):

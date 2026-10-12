@@ -227,7 +227,7 @@ class AgentCommunicator:
         )
 
         event = self.delegation_registry.register(message.id)
-        sent = self.send_message(message)
+        sent = await asyncio.to_thread(self.send_message, message)
 
         if not sent:
             self.delegation_registry.cancel(message.id)
