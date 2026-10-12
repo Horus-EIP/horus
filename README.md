@@ -193,15 +193,17 @@ Tests that need a running stack are in [scripts/integration-checks/](scripts/int
 
 ## Test coverage
 
-As CI measured it on 10/10/2026, in run #270 on `Sprint#1_September2026_Tek5` (commit `cf0b622`):
+As CI measured it on 13/10/2026, in run #274 on `Sprint#1_September2026_Tek5` (commit `047fd47`):
 
 | Suite | Lines | Lines and branches | Tests | CI gate |
 |---|---:|---:|---|---:|
-| MAS | 93.8 % | — | 1691 passed, 2 skipped | 85 % |
-| Agent | 94.8 % | — | 811 passed, 2 skipped | 90 % |
-| Knowledge store | 92.1 % | — | 375 passed | 85 % |
+| MAS | 93.8 % | 92.69 % | 1691 passed, 2 skipped | 85 % |
+| Agent | 94.8 % | 94.06 % | 811 passed, 2 skipped | 90 % |
+| Knowledge store | 92.1 % | 90.72 % | 375 passed | 85 % |
+| Installer | 79.3 % | 77.00 % | 779 passed, 9 skipped | none |
+| LLM mock | 98.0 % | 97.40 % | 164 passed | 90 % |
 
-Each CI run prints both figures in the summaries of its test jobs and gathers them in one table (job `coverage-summary`). Lines is the share of lines covered. Lines and branches counts both together (`--cov-branch`, see [TESTING.md](TESTING.md#coverage)): it is the figure the gate compares with its minimum, the same as the job log's `Total coverage`, and usually the lower of the two. Run #270 came before the summaries gave it; the next green run fills that column.
+Each CI run prints both figures in the summaries of its test jobs and gathers them in one table (job `coverage-summary`). Lines is the share of lines covered. Lines and branches counts both together (`--cov-branch`, see [TESTING.md](TESTING.md#coverage)): it is the figure a gate compares with its minimum, the same as the job log's `Total coverage`, and usually the lower of the two. The installer's tests have no gate.
 
 ## Documentation
 
