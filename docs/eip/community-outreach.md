@@ -50,6 +50,15 @@ Our goal is to gather architectural advice on CPU-only optimization and recruit 
   * **Python Stack & Binary Compilation:** The 21–46 min installation time is largely driven by PyTorch/CUDA wheels. On CPU paths, switch to lightweight binaries (like `llama.cpp` / `llama-cpp-python` CPU wheels) or compile Python code into standalone binaries using tools like **Nuitka**.
   * **WebSocket Resilience & Job Queuing:** Long CPU generations/load times cause WebSocket drops. Treat long calls as asynchronous jobs (return a job ID immediately), stream tokens, and send regular heartbeat/progress frames.
   * **Fixed Tiering Profiles:** Rather than trying to auto-tune everything dynamically, detect system capabilities at first run (RAM, AVX2/AVX-512) and select from 2–3 pre-tested fixed configuration profiles.
+
+* **Multi-Agent Handoffs & Communication Patterns:**
+  * Instead of passing heavy text summaries up the chain, low-level agents can use **handoff documents** detailing their references/actions and pass file paths up, or use a shared **message board** that other agents read (ideal for deep-search pipelines needing grounding sources).
+  * **Failure Handling:** For minor failures (e.g., opening too many pages exceeding context), no explicit retries are needed; parent agents can interpret failures or reroute dynamically. Generic errors (like out-of-context) transmit clean error messages upward.
+  * **Specialized Model Tiers & Tool Usage:**
+    * Small models load fast and bring distinct strengths. For luxury/high VRAM setups, use larger workers (e.g., 35B/Qwen 27B IQ3_S as a brain) combined with fast 4B models for search. For tight hardware, models like **Sharp Spark (4B)** excel at actions/exploration, **Neo Horse** for analytics/summaries, and **Agents A1** for orchestration.
+    * For simple extraction/summarization tasks requiring maximum speed, consider ultra-light alternatives like *Minicpm 2b*, *Lfm 2.6b*, or *Ling Tiny*.
+    * **Tool Constraints:** Small models can reliably call tools *if* the tool set is strictly limited (avoid giving them 20+ tools at once).
+    
 ---
 ### 2. Reddit: r/selfhosted
 
@@ -130,7 +139,7 @@ Our goal is to gather architectural advice on CPU-only optimization and recruit 
   * Saving users from a broken first download is more critical than having a faster model; resumable range requests and multiple regional mirrors prevent users from abandoning the app right at the start.
   * Keep routing off the heavy path: a small classifier or embedding lookup in front drastically reduces initial blocking time.
 
-#### Feedback from Reddit (r/LocalLLm & r/LocalLLaMA)
+#### Feedback from Reddit (r/LocalLLm)
 
     The 25 GB Problem & App/Weights Separation:
 
@@ -248,6 +257,16 @@ Published Post Content:
         To be transparent: Horus is closed source and will be licensed to companies. Contributing is voluntary and unpaid. Before seeing any code, contributors sign a short confidentiality and contributor agreement, and the code they contribute becomes part of Horus. In return we offer thorough code reviews, full credit in the project and a professional reference on request.
 
         We're not sharing code or private links publicly. If this interests you, comment below or DM me with your experience in local inference, CPU optimisation or offline apps.
+
+* **KV-Cache Quantization (`q8_0` vs `f16`):**
+  * `q8_0` K/V quantization is not completely lossless, especially in heavy RAG workloads where passages occupy most of the context.
+  * **Testing Strategy:** Don't rely on perplexity alone. Compare `q8_0` against `f16` on actual RAG workloads (same retrieved chunks, prompts, and max context). Specifically check factual accuracy, citations, and degradation when relevant passages are located far back in the context.
+  * **Recommendation for 16 GB targets:** Try `q8_0` first for memory savings. If measurable regression occurs, test K and V caches separately before falling back to full `f16`.
+* **Hardware-Aware Selection & Execution:**
+  * Detect RAM/VRAM first and dynamically select models + quantization tiers instead of relying on a static configuration.
+  * Keep context sizes conservative, as KV-cache consumption scales heavily on CPU-only systems.
+  * Use adaptive GPU offloading (offload what fits in VRAM, gracefully fall back to CPU for the rest).
+  * Keep the runtime simple: a single shared model instance, limited concurrency, appropriate context limits, and using `mmap` to manage physical memory loading.
 
 ---
 
