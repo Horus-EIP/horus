@@ -67,8 +67,8 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install PyYAML
-        run: pip install pyyaml
+      - name: Install PyYAML and pytest-cov
+        run: pip install pyyaml pytest-cov
 
       - name: Test the version check
         run: python -m unittest discover -s tests/ci -v

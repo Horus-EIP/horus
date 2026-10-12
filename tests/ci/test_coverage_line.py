@@ -4,7 +4,11 @@ import contextlib
 import importlib.util
 import io
 import os
+import re
+import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -37,8 +41,37 @@ coverage_line = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(coverage_line)
 
 needs_yaml = unittest.skipUnless(yaml is not None, "needs PyYAML to read the workflows")
+needs_pytest_cov = unittest.skipUnless(importlib.util.find_spec("pytest_cov") is not None,
+                                       "needs pytest-cov, which the versions job installs")
 
-COVERAGE = '<?xml version="1.0" ?><coverage line-rate="0.924" branch-rate="0.81"></coverage>'
+GATES = {"test-mas": 85, "test-agent": 90, "test-knowledge-store": 85, "test-llm-mock": 90}
+COVERAGE = ('<?xml version="1.0" ?><coverage line-rate="0.924" branch-rate="0.81" lines-valid="1000" '
+            'lines-covered="924" branches-valid="300" branches-covered="243"></coverage>')
+SAMPLE = textwrap.dedent("""
+    def grade(score):
+        if score > 50:
+            return "pass"
+        return "fail"
+
+
+    def kind(value):
+        if isinstance(value, int):
+            return "int"
+        if isinstance(value, str):
+            return "str"
+        return "other"
+""")
+SAMPLE_TESTS = textwrap.dedent("""
+    from sample import grade, kind
+
+
+    def test_grade():
+        assert grade(80) == "pass"
+
+
+    def test_kind():
+        assert kind(1) == "int"
+""")
 JUNIT = ('<?xml version="1.0"?><testsuites><testsuite tests="40" failures="1" errors="1" skipped="2">'
          + '<testcase classname="t" name="ok"/>' * 6
          + '<testcase classname="t" name="bad"><failure message="no"/></testcase>'
@@ -86,7 +119,7 @@ class CoverageLine(unittest.TestCase):
 
     def test_a_suite_line_gives_lines_covered_and_the_test_counts(self):
         self.run_script("line", "MAS", *self.reports())
-        row = "| MAS | 92.4 % | 6 passed, 2 failed, 2 skipped |"
+        row = "| MAS | 92.4 % | 89.77 % | 6 passed, 2 failed, 2 skipped |"
         self.assertEqual(self.summary.read_text(encoding="utf-8"), f"{coverage_line.HEADER}\n{row}\n")
         self.assertEqual(self.output.read_text(encoding="utf-8"), f"row={row}\n")
 
@@ -109,12 +142,28 @@ class CoverageLine(unittest.TestCase):
 
     def test_reports_a_crashed_run_never_wrote_say_so(self):
         printed = self.run_script("line", "Installer", *self.reports(coverage=None, junit=None))
-        self.assertEqual(printed.strip(), "| Installer | no report | no report |")
+        self.assertEqual(printed.strip(), "| Installer | no report | no report | no report |")
+
+    def test_lines_and_branches_together_is_covered_over_valid_of_both(self):
+        coverage = ('<coverage line-rate="0.5" lines-valid="10" lines-covered="5" '
+                    'branches-valid="10" branches-covered="9"/>')
+        self.assertIn("| 50.0 % | 70.00 % |", self.run_script("line", "MAS", *self.reports(coverage=coverage)))
+
+    def test_without_branches_both_figures_count_lines(self):
+        coverage = ('<coverage line-rate="0.875" lines-valid="8" lines-covered="7" '
+                    'branches-valid="0" branches-covered="0"/>')
+        self.assertIn("| 87.5 % | 87.50 % |", self.run_script("line", "MAS", *self.reports(coverage=coverage)))
+
+    def test_a_report_without_the_totals_still_gives_its_lines(self):
+        coverage = '<coverage line-rate="0.924" branch-rate="0.81"></coverage>'
+        self.assertIn("| 92.4 % | no report |", self.run_script("line", "MAS", *self.reports(coverage=coverage)))
 
     def test_the_summary_job_adds_what_arrived_and_names_what_did_not(self):
-        printed = self.run_script("collect", "MAS=| MAS | 92.4 % | 6 passed, 2 failed, 2 skipped |", "Agent=")
-        self.assertIn("| MAS | 92.4 % |", printed)
-        self.assertIn("| Agent | nothing arrived | nothing arrived |", printed)
+        printed = self.run_script("collect", "MAS=| MAS | 92.4 % | 89.77 % | 6 passed, 2 failed, 2 skipped |",
+                                  "Agent=")
+        self.assertIn(coverage_line.HEADER, printed)
+        self.assertIn("| MAS | 92.4 % | 89.77 % |", printed)
+        self.assertIn("| Agent | nothing arrived | nothing arrived | nothing arrived |", printed)
         self.assertNotIn("No test job sent", printed)
 
     def test_the_summary_job_says_so_when_nothing_arrived(self):
@@ -199,6 +248,63 @@ class Workflows(unittest.TestCase):
             suite = next(suite for name, (suite, _, _) in TEST_JOBS.items() if f"needs.{name}." in value)
             with self.subTest(suite):
                 self.assertIn(f'"{suite}=${variable}"', collect["run"])
+
+
+@needs_pytest_cov
+class GateFigure(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.tmp = Path(self._tmp.name)
+        (self.tmp / "sample.py").write_text(SAMPLE, encoding="utf-8")
+        (self.tmp / "test_sample.py").write_text(SAMPLE_TESTS, encoding="utf-8")
+
+    def gate(self, fail_under: int) -> tuple[int, str]:
+        done = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--cov=sample", "--cov-branch",
+             f"--cov-fail-under={fail_under}", "--cov-report=xml:coverage.xml", "test_sample.py"],
+            cwd=self.tmp, env={**os.environ, "PYTHONPATH": str(self.tmp)},
+            capture_output=True, text=True, timeout=120, check=False,
+        )
+        return done.returncode, done.stdout + done.stderr
+
+    def summary_figures(self) -> list[str]:
+        row = coverage_line.suite_row("Sample", self.tmp / "coverage.xml", self.tmp / "junit.xml")
+        return [cell.strip() for cell in row.strip("|").split("|")][1:3]
+
+    def test_the_lines_and_branches_figure_is_the_total_the_gate_compares_with_its_minimum(self):
+        code, log = self.gate(1)
+        self.assertEqual(code, 0, log)
+        total = re.search(r"Total coverage: (\d+\.\d\d)%", log).group(1)
+        lines, lines_and_branches = self.summary_figures()
+        self.assertEqual(lines_and_branches, f"{total} %")
+        self.assertLess(float(total), float(lines.removesuffix(" %")))
+        reached = round(float(total))
+        self.assertEqual(self.gate(reached)[0], 0)
+        self.assertNotEqual(self.gate(reached + 1)[0], 0)
+
+
+@needs_yaml
+class GateReports(unittest.TestCase):
+    def test_each_summary_reads_the_report_of_the_run_its_gate_checked(self):
+        jobs = workflow("ci.yml")["jobs"]
+        for job, (suite, coverage, junit) in TEST_JOBS.items():
+            run = next(step["run"] for step in jobs[job]["steps"]
+                       if f"--cov-report=xml:{coverage}" in str(step.get("run", "")))
+            with self.subTest(job):
+                self.assertIn("--cov-branch", run)
+                self.assertIn(f"--junitxml={junit}", run)
+                gates = re.findall(r"--cov-fail-under=(\d+)", run)
+                self.assertEqual(gates, [str(GATES[job])] if job in GATES else [])
+
+    def test_the_versions_job_installs_pytest_cov_so_the_gate_check_runs_in_ci(self):
+        steps = workflow("ci.yml")["jobs"]["versions"]["steps"]
+        installs = " ".join(str(step.get("run", "")) for step in steps if "pip install" in str(step.get("run", "")))
+        self.assertIn("pytest-cov", installs.split())
+        names = [str(step.get("run", "")) for step in steps]
+        install = next(i for i, run in enumerate(names) if "pytest-cov" in run)
+        tests = next(i for i, run in enumerate(names) if "unittest discover -s tests/ci" in run)
+        self.assertLess(install, tests)
 
 
 if __name__ == "__main__":

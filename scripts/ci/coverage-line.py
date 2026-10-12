@@ -9,16 +9,33 @@ import xml.etree.ElementTree as ET
 from collections.abc import Sequence
 from pathlib import Path
 
-HEADER = "| Suite | Lines covered | Tests |\n|---|---:|---|"
+HEADER = "| Suite | Lines | Lines and branches | Tests |\n|---|---:|---:|---|"
 NO_REPORT = "no report"
+NOTHING_ARRIVED = "nothing arrived"
 
 
-def line_rate(coverage_xml: Path) -> str:
+def coverage_figures(coverage_xml: Path) -> tuple[str, str]:
     try:
-        root = ET.parse(coverage_xml).getroot()
-        return f"{float(root.attrib['line-rate']) * 100:.1f} %"
-    except (OSError, ET.ParseError, KeyError, ValueError):
+        totals = ET.parse(coverage_xml).getroot().attrib
+    except (OSError, ET.ParseError):
+        return NO_REPORT, NO_REPORT
+    return line_rate(totals), gate_total(totals)
+
+
+def line_rate(totals: dict[str, str]) -> str:
+    try:
+        return f"{float(totals['line-rate']) * 100:.1f} %"
+    except (KeyError, ValueError):
         return NO_REPORT
+
+
+def gate_total(totals: dict[str, str]) -> str:
+    try:
+        valid = int(totals["lines-valid"]) + int(totals["branches-valid"])
+        covered = int(totals["lines-covered"]) + int(totals["branches-covered"])
+    except (KeyError, ValueError):
+        return NO_REPORT
+    return f"{100.0 * covered / valid if valid else 100.0:.2f} %"
 
 
 def test_counts(junit_xml: Path) -> str:
@@ -39,13 +56,14 @@ def outcome(case: ET.Element) -> str:
 
 
 def suite_row(suite: str, coverage_xml: Path, junit_xml: Path) -> str:
-    return f"| {suite} | {line_rate(coverage_xml)} | {test_counts(junit_xml)} |"
+    lines, lines_and_branches = coverage_figures(coverage_xml)
+    return f"| {suite} | {lines} | {lines_and_branches} | {test_counts(junit_xml)} |"
 
 
 def collected_table(rows: dict[str, str]) -> str:
     lines = ["## Coverage", "", HEADER]
     for suite, row in rows.items():
-        lines.append(row.strip() or f"| {suite} | nothing arrived | nothing arrived |")
+        lines.append(row.strip() or f"| {suite} | {NOTHING_ARRIVED} | {NOTHING_ARRIVED} | {NOTHING_ARRIVED} |")
     if not any(row.strip() for row in rows.values()):
         lines += ["", "No test job sent its coverage line."]
     return "\n".join(lines)

@@ -217,13 +217,13 @@ Five agent tests fail on Windows only. CI runs on Linux. All are in `tests/agent
 
 ### Coverage
 
-| Service | CI gate (`--cov-fail-under`, with `--cov-branch`) | Lines covered, latest measured on CI |
-|---|---:|---:|
-| MAS | 85 % | 93.8 % |
-| Agent | 90 % | 94.8 % |
-| Knowledge store | 85 % | 92.1 % |
+| Service | CI gate (`--cov-fail-under`, with `--cov-branch`) | Lines | Lines and branches |
+|---|---:|---:|---:|
+| MAS | 85 % | 93.8 % | — |
+| Agent | 90 % | 94.8 % | — |
+| Knowledge store | 85 % | 92.1 % | — |
 
-The figures are from CI run #270 of 10/10/2026 on `Sprint#1_September2026_Tek5` (commit `cf0b622`), as its test jobs' summaries give them; the README publishes the same table. A summary's figure is the line rate of the coverage report: lines only. With `--cov-branch`, the percentage the gate checks counts lines and branches together, so it is lower; the job's log prints it (`Total coverage`). What counts as code is set in `pyproject.toml` (`[tool.coverage.*]`: tests, alembic and migrations are left out). Each CI run writes a coverage table to its summary (job `coverage-summary`). A MAS, agent or knowledge-store job that fails also uploads its reports, the HTML one included, as `coverage-mas`, `coverage-agent` or `coverage-knowledge-store`, kept 3 days; a green run uploads nothing.
+The figures are the latest measured on CI, from run #270 of 10/10/2026 on `Sprint#1_September2026_Tek5` (commit `cf0b622`), as its test jobs' summaries give them; the README publishes the same table. Each test job's summary gives two figures. Lines is the line rate of the coverage report. Lines and branches is the total a job's gate compares with its minimum (`test-installer` has no gate): with `--cov-branch` it counts lines and branches together, which usually makes it the lower of the two, and it is the same as the job log's `Total coverage`. `scripts/ci/coverage-line.py` computes it from the coverage report as (lines covered + branches covered) / (lines + branches), and `tests/ci/test_coverage_line.py` checks it against a real pytest-cov gate. The gate rounds it to a whole percent before comparing, since no `precision` is set: 84.6 % passes a gate of 85, although pytest-cov's log line then says the 85 % was not reached. Run #270 came before the summaries gave this figure; the next green run fills the column. What counts as code is set in `pyproject.toml` (`[tool.coverage.*]`: tests, alembic and migrations are left out). Each CI run writes a coverage table to its summary (job `coverage-summary`). A MAS, agent or knowledge-store job that fails also uploads its reports, the HTML one included, as `coverage-mas`, `coverage-agent` or `coverage-knowledge-store`, kept 3 days; a green run uploads nothing.
 
 ### Grounding evaluation
 
@@ -281,7 +281,7 @@ The plan is to turn the critical ones into tests under `tests/<service>/` marked
 | `test-knowledge-store` | Knowledge-store tests, coverage at least 85 %. It downloads the BGE model first (cached between runs) and sets `HORUS_REQUIRE_MODEL_TESTS=1`, so `tests/knowledge_store/unit/test_real_fastembed.py` runs real search with FastEmbed instead of skipping |
 | `test-installer` | `pytest installer/tests` with coverage, no gate |
 | `test-llm-mock` | `tests/llm_mock`, coverage at least 90 %, then `tests/contract` on the mock |
-| `coverage-summary` | Collects the coverage line of the five test jobs; needs no artifact |
+| `coverage-summary` | Collects the coverage line of the five test jobs (lines, and lines and branches, the figure the four gated jobs check); needs no artifact |
 | `e2e-mock` | Builds every image of the stack and starts it with `docker-compose.mock.yml` and `docker-compose.monitoring-off.yml`, so no model runs: `llm-mock` answers and embeds, spaCy and monitoring are off. Uploads `demo_assets/`, runs `installer/smoke.py` and requires its 9 steps, checks that `/system/ai` says mock, mock embeddings, spaCy off and monitoring off, and fails if any service logged a model load (`scripts/ci/no-model-loads.py`); reports its duration |
 
 **`eval-testset.yml`** runs `pytest tests/eval -q` on the same pushes and pull requests, when the evaluation files change (section 2.6).
