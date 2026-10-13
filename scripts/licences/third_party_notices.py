@@ -982,7 +982,7 @@ def render(report: Report) -> str:
         "",
         "Each entry gives the licence and where it was read: the package's own",
         "metadata where it has one, else the licence inventory",
-        "(docs/eip/dependency-licence-inventory.xlsx) or the project page.",
+        "(in the team's private repository) or the project page.",
         "",
         "The full licence texts are in LICENSES/, one file per licence, named by its",
         f"SPDX id and taken from the SPDX licence list {records.get('spdx_list', licence_files.SPDX_LIST_VERSION)}.",

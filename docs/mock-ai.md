@@ -215,7 +215,7 @@ A service whose URL is not set is skipped; a `_MODEL` left unset asks for the mo
 
 ## ATP v8: F18 to F20 in mock mode
 
-The acceptance test plan in the repository is v7 (`docs/eip_pool_tek5/Horus_ATP_v7.xlsx`); there is no v8 yet. For v8, every scenario can run in mock mode. F18 to F20, the three answer scenarios, then check the path, not the quality of the answer:
+The acceptance test plan is v7 (`docs/eip_pool_tek5/Horus_ATP_v7.xlsx`, in the team's private repository); there is no v8 yet. For v8, every scenario can run in mock mode. F18 to F20, the three answer scenarios, then check the path, not the quality of the answer:
 
 | Scenario | In mock mode, pass when |
 |---|---|

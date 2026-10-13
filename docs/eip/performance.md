@@ -43,7 +43,7 @@ This section records every optimization we shipped, with measured impact. Empty 
   2. `python scripts/perf/benchmark-mas.py --label baseline-no-cache`
   3. `MAS_READ_CACHE_ENABLED=1 docker compose up -d --force-recreate mas`
   4. `python scripts/perf/benchmark-mas.py --label optimized-cache`
-  5. Take Grafana screenshot of MAS Overview during step 4 → `greenlight/grafana-screenshots/opt1-cache-on.png`
+  5. Take Grafana screenshot of MAS Overview during step 4 → `greenlight/grafana-screenshots/opt1-cache-on.png`, in the team's private repository
 - **Result (2026-05-31):** no measurable delta — the `MAS_READ_CACHE_ENABLED` flag is accepted by the compose restart but the Redis read-cache path is **not yet active in code**, so baseline ≈ optimized within run-to-run noise (mean ms, baseline → optimized): Conversation List 8.4 → 9.4 · Agent List 7.7 → 7.8 · Task Queue Stats 7.5 → 9.3 · Conversation Create 11.3 → 11.8 · Health 15.5 → 15.3. Both phases 100 % success over 200 iterations. The A/B harness is wired and ready to demonstrate the speed-up the moment the `@cache_aside` decorator lands. Raw JSONs: `scripts/perf/results-archive/cache-baseline-20260531-163910Z.json` and `cache-optimized-20260531-163910Z.json`.
 - **Trade-off (per guide):** quality + 0 (read-only data, stale by ≤ 10 s) · performance + measured · cost: trivial (single Redis already running) · time: ~half a day.
 
@@ -98,7 +98,7 @@ The comparison prints the dev plan's §10 table (tokens per second, time to firs
 
 Raw benchmark output (JSON) is committed to [`scripts/perf/results-archive/`](../../scripts/perf/results-archive/). Each file is named `<benchmark>-<label>-<YYYYMMDD>.json` so before/after pairs are obvious at a glance.
 
-Dashboard screenshots taken during load tests live under [`greenlight/grafana-screenshots/`](../../greenlight/grafana-screenshots/). Use [`scripts/perf/capture-dashboards.sh`](../../scripts/perf/capture-dashboards.sh) to capture them automatically.
+Dashboard screenshots taken during load tests live under `greenlight/grafana-screenshots/`, in the team's private repository. Use [`scripts/perf/capture-dashboards.sh`](../../scripts/perf/capture-dashboards.sh) to capture them automatically.
 
 ---
 

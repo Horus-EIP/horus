@@ -38,7 +38,7 @@ Everything the jury looks at, grouped under [`eip/`](eip/):
 | [ADRs](adr/) | Individual architecture decision records (one per file). |
 | [Assets](assets/) | Presentation slides and internal research PDFs. |
 
-Confidential material lives under `ip_protection/` and is excluded from the published site. Historical sprint notes are under `archive/` and are also excluded.
+Team-internal documents (agreements, school material) are in the team's private repository.
 
 ## Building the site
 

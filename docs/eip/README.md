@@ -11,9 +11,9 @@ If you arrived here from the MkDocs sidebar or a jury hand-out, start with [obje
 | Objective | What the guide asks for | Where it lives |
 |-----------|--------------------------|----------------|
 | **1 — Tech Watch** | Active monitoring, comparative briefs, POCs, decision rationale, community engagement | [tech-watch.md](tech-watch.md) + [community-contributions.md](community-contributions.md) + [../adr/](../adr/) + [../assets/research/](../assets/research/) + [../../CHANGELOG.md](../../CHANGELOG.md) |
-| **2 — Structure, document, harden the architecture** | Clear architecture, complete README, quality + reliability + minimal security | [../README.md](../README.md) + [../architecture.md](../architecture.md) + [../operations.md](../operations.md) + [../../CONTRIBUTING.md](../../CONTRIBUTING.md) + [../contributing.md](../contributing.md) + [../security.md](../security.md) + [../../greenlight/code-quality-review/](../../greenlight/code-quality-review/) |
-| **A — Protect and valorize the technology** | Legal protection, technical protection, security review, valorization | [protection-plan.md](protection-plan.md) + [diffusion-strategy.md](diffusion-strategy.md) + [../security.md](../security.md) + [../ip_protection/](../ip_protection/) (NDAs + OTS proof — not in published site) |
-| **D — Measure, test, optimize performance** | KPIs, load/stress tests, before/after, dashboards, analysis | [performance.md](performance.md) + [../../scripts/perf/](../../scripts/perf/) + [../../greenlight/grafana-screenshots/](../../greenlight/grafana-screenshots/) |
+| **2 — Structure, document, harden the architecture** | Clear architecture, complete README, quality + reliability + minimal security | [../README.md](../README.md) + [../architecture.md](../architecture.md) + [../operations.md](../operations.md) + [../../CONTRIBUTING.md](../../CONTRIBUTING.md) + [../contributing.md](../contributing.md) + [../security.md](../security.md) + the code-quality reports (in the team's private repository) |
+| **A — Protect and valorize the technology** | Legal protection, technical protection, security review, valorization | [protection-plan.md](protection-plan.md) + [diffusion-strategy.md](diffusion-strategy.md) + [../security.md](../security.md) + the NDAs and the OpenTimestamps proof (in the team's private repository) |
+| **D — Measure, test, optimize performance** | KPIs, load/stress tests, before/after, dashboards, analysis | [performance.md](performance.md) + [../../scripts/perf/](../../scripts/perf/) + the Grafana screenshots (in the team's private repository) |
 
 ---
 
@@ -29,7 +29,7 @@ If you arrived here from the MkDocs sidebar or a jury hand-out, start with [obje
 | [reproducibility-test.md](reproducibility-test.md) | Protocol and form for someone outside Epitech who installs Horus from the readme and the installer (B-39). | Fill in after the test |
 | [performance.md](performance.md) | KPIs (K1 chat p95, K2 RAG precision@5, K3 read throughput) with targets, benchmark scripts, optimization log. | Fill in numbers after the A/B run |
 | [code-vs-docs-audit.md](code-vs-docs-audit.md) | Historical audit (May 2026) of documentation drift against the codebase. Findings were addressed. Kept as evidence of process rigor. | Archived — already acted upon |
-| [Technical-Track-Student-Guide-Tech-4.pdf](Technical-Track-Student-Guide-Tech-4.pdf) | Official EIP guide we are graded against. Kept here for reference and to anchor the objectives-audit cross-refs. | Reference |
+| `Technical-Track-Student-Guide-Tech-4.pdf`, in the team's private repository | Official EIP guide we are graded against, Epitech's document; the objectives audit cross-refers to it. | Reference |
 
 ---
 
@@ -43,11 +43,11 @@ These are working artifacts the jury will want to see, but they belong in the lo
 | `CONTRIBUTING.md` | At the root of the repo, so GitHub shows it next to issues and pull requests | [../../CONTRIBUTING.md](../../CONTRIBUTING.md) |
 | ADRs | Industry-standard pattern is one file per decision under `docs/adr/` | [../adr/](../adr/) |
 | Research dossiers (5 PDFs) | Binary assets grouped with presentation slides | [../assets/research/mas/](../assets/research/mas/) |
-| Signed NDAs + OpenTimestamps proof | Confidential — `ip_protection/` is excluded from the published MkDocs site | [../ip_protection/](../ip_protection/) |
+| Signed NDAs + OpenTimestamps proof | Confidential, with personal data | `docs/ip_protection/`, in the team's private repository |
 | Performance benchmark scripts | Run from the repo, not read like prose | [../../scripts/perf/](../../scripts/perf/) |
-| Code-quality reports (ruff, pylint, coverage) | Generated outputs grouped with greenlight materials | [../../greenlight/code-quality-review/](../../greenlight/code-quality-review/) |
-| Greenlight slide deck + tech brief | EIP milestone-specific artifacts | [../../greenlight/](../../greenlight/) |
-| Comparative tech brief (`.docx`) | Word format for jury hand-out, not for the web site | [../../greenlight/track-objectives-report/Comparative_Tech_Brief.docx](../../greenlight/track-objectives-report/Comparative_Tech_Brief.docx) |
+| Code-quality reports (ruff, pylint, coverage) | Generated outputs grouped with greenlight materials | `greenlight/code-quality-review/`, in the team's private repository |
+| Greenlight slide deck + tech brief | EIP milestone-specific artifacts | `greenlight/`, in the team's private repository |
+| Comparative tech brief (`.docx`) | Word format for jury hand-out, not for the web site | `greenlight/track-objectives-report/Comparative_Tech_Brief.docx`, in the team's private repository |
 
 ---
 

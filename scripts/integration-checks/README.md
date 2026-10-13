@@ -18,7 +18,7 @@ These files use the same imports they did when they lived under `tests/`. Many c
 | File | What it proves |
 |------|----------------|
 | `mas-integration.py` | MAS end-to-end (auth, tasks, conversations, chat) against a live server |
-| `mas-beta-criteria.py` | The 24 success criteria (F1-F24) from `beta_test_plan.md` |
+| `mas-beta-criteria.py` | The 24 success criteria (F1-F24) from the beta test plan (`beta_test_plan.md`, in the team's private repository) |
 | `mas-beta-integration.py` | Beta integration scenarios |
 | `mas-task-workflow.py` | Task lifecycle through RabbitMQ + Agent |
 | `mas-task-cancellation.py` | Task cancellation through the running orchestrator |

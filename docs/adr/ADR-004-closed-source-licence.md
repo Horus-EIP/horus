@@ -9,7 +9,7 @@
 **Related:**
 
 - `LICENSE` (Horus Proprietary Software Licence v2.1)
-- `docs/eip/dependency-licence-inventory.xlsx`
+- `docs/eip/dependency-licence-inventory.xlsx` (in the team's private repository)
 - `docs/eip/protection-plan.md`
 - `docs/eip/diffusion-strategy.md`
 
@@ -21,7 +21,7 @@
 
 ### How we plan to sell Horus
 
-Source: the pitch deck (`docs/eip_pool_tek5/Horus_Pitch_Demo.pptx`, Sept 2026).
+Source: the pitch deck (`docs/eip_pool_tek5/Horus_Pitch_Demo.pptx`, Sept 2026, in the team's private repository).
 
 - **Product.** A private AI assistant that runs **on the customer's own servers**, works fully offline, and answers from the company's documents with sources (slides 1 and 3). It is delivered as one ZIP plus a desktop app.
 - **Revenue line 1: a recurring licence, billed per quarter, per site** (slide 6). Updates, support and the desktop app are included.
@@ -108,7 +108,7 @@ We keep the existing `LICENSE` as the base and fix its gaps (see "Changes from t
 
 ### 3. Legal: no dependency forces us to open anything
 
-The inventory covers 1,463 third-party components as of 26/09/2026 (`docs/eip/dependency-licence-inventory.xlsx`).
+The inventory covers 1,463 third-party components as of 26/09/2026 (`docs/eip/dependency-licence-inventory.xlsx`, in the team's private repository).
 
 | Category | Count | Effect on our code |
 |---|---|---|
@@ -273,10 +273,10 @@ Every customer receives a copy, so these measures matter.
 
 ## References
 
-- Pitch deck: `docs/eip_pool_tek5/Horus_Pitch_Demo.pptx` (slides 1, 3, 5, 6, 7, 9)
+- Pitch deck: `docs/eip_pool_tek5/Horus_Pitch_Demo.pptx` (slides 1, 3, 5, 6, 7, 9; in the team's private repository)
 - Mentor follow-up, 19/09/2026: Objective 1, actions 1–3
-- `docs/eip/dependency-licence-inventory.xlsx`
-- `LICENSE`, `docs/eip/protection-plan.md`, `docs/eip/diffusion-strategy.md`, `docs/ip_protection/`
+- `docs/eip/dependency-licence-inventory.xlsx` (in the team's private repository)
+- `LICENSE`, `docs/eip/protection-plan.md`, `docs/eip/diffusion-strategy.md`, `docs/ip_protection/` (in the team's private repository)
 - Directive 2009/24/EC on the legal protection of computer programs, Art. 5, 6, 7(1)(c) and 8: https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32009L0024
 - Licence-key legality:
   - French Code civil art. 1104 (good faith), 1112-1 (pre-contract information) and 1171 (significant imbalance in standard-form contracts)

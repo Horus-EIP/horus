@@ -23,13 +23,13 @@ What we share, what stays closed, and why. Companion to the [protection plan](pr
 | Presentation deck (`docs/assets/horus_presentation_v8.pdf`) | Public | Hand-out during pitches | Marketing-grade content, no implementation details |
 | MkDocs site | Restricted | Self-hosted (not GitHub Pages) for now; URL shared to authorized viewers only | Aggregates internals; published only behind auth |
 | Tech fiche / one-pager | Public | PDF for recruiters / partner emails | Distilled value proposition |
-| Beta test plan (`beta_test_plan.md`) | Restricted | Sent to beta partners after NDA | Reveals testing scope and current limits |
+| Beta test plan (`beta_test_plan.md`, in the team's private repository) | Restricted | Sent to beta partners after NDA | Reveals testing scope and current limits |
 | Source code | Restricted (will stay closed) | Private GitHub repo + branch protection | Core IP per [protection plan](protection-plan.md) |
 | ADRs (`docs/adr/`) | Restricted | Shared in technical interviews with the jury / partners | Demonstrates engineering rigor; reveals chosen architecture |
 | Research papers (`docs/assets/research/mas/`) | Restricted | Shared on request | Team's own work; not for public republication |
 | Performance numbers (`docs/performance.md` + benchmark outputs) | Public (summary) / Restricted (raw) | Summary in the tech fiche; raw under NDA | Aggregate KPIs make us look good; raw data could leak optimization tricks |
-| Greenlight materials (`greenlight/`) | Restricted | EIP jury + Epitech only | Course deliverables, not for outside circulation |
-| Signed NDAs | Internal only | Excluded from public site via `mkdocs.yml exclude_docs` | Contains counterparties' personal information |
+| Greenlight materials (`greenlight/`, in the team's private repository) | Restricted | EIP jury + Epitech only | Course deliverables, not for outside circulation |
+| Signed NDAs | Internal only | Kept in the team's private repository, not in this one, so never on the MkDocs site | Contains counterparties' personal information |
 
 ---
 

@@ -220,7 +220,7 @@ The ATP always names the exact version under test.
    - `desktop-release.yml` builds the desktop app (Windows `Horus.exe`, macOS `Horus.app`, Linux `.deb`) and `Horus-Beta-0.2.0.zip`, and drafts a GitHub release "Horus Beta 0.2.0" with `packaging/RELEASE-NOTES.md` as its text.
 
    Never push a `v*` tag to try something: it publishes.
-7. **Publish the draft release**, then timestamp the archive with OpenTimestamps (`ots stamp Horus-Beta-0.2.0.zip`, proof of authorship and date, ADR-004). Keep the `.ots` file in `docs/ip_protection/deposit_proof/`, next to the MVP proof.
+7. **Publish the draft release**, then timestamp the archive with OpenTimestamps (`ots stamp Horus-Beta-0.2.0.zip`, proof of authorship and date, ADR-004). Keep the `.ots` file next to the MVP proof, in `docs/ip_protection/deposit_proof/` in the team's private repository.
 8. **Date the `CHANGELOG.md` heading** and name the tag and its commit, as for 0.1.1: `## 0.1.1 - 2026-09-07`, then ``Tag `v0.1.1` (`0fc5378`).``
 9. **Hotfix** (urgent PATCH on a released version): branch from the tag, fix with a test, bump to `X.Y.(Z+1)` with its `CHANGELOG.md` section, and open a PR so CI runs. Tag the hotfix commit itself: the working branch has moved on, and its `VERSION` names another release. Then merge the fix into the working branch, keeping that branch's own version number.
 

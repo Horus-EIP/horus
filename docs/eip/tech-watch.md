@@ -68,7 +68,7 @@ Internal deep-dives produced by the team, beyond per-tool watch entries:
 | Orchestrator infrastructure | [assets/research/mas/Orchestrator_infrastructure.pdf](../assets/research/mas/Orchestrator_infrastructure.pdf) | ✅ |
 | Security process | [assets/research/mas/Security_Process.pdf](../assets/research/mas/Security_Process.pdf) | ✅ |
 | Integrated GPUs and NPUs for the CPU profiles (B-101) | [tech-watch/IGPU_NPU_RESEARCH.md](../tech-watch/IGPU_NPU_RESEARCH.md) | Note done; spike not run |
-| Comparative tech brief (jury-facing) | [../greenlight/track-objectives-report/Comparative_Tech_Brief.docx](../../greenlight/track-objectives-report/Comparative_Tech_Brief.docx) | ✅ |
+| Comparative tech brief (jury-facing) | `greenlight/track-objectives-report/Comparative_Tech_Brief.docx`, in the team's private repository | ✅ |
 
 ---
 
