@@ -1,10 +1,12 @@
-# ADR-004: Horus stays fully closed source under a proprietary licence
+# ADR-004: Horus stays closed source under a proprietary licence
 
-> **Amended on 08/10/2026 by [ADR-007](ADR-007-open-source-benchmark-kit.md):** `opensource/horus-bench-kit/`, our benchmark and evaluation tools, is open source under the Apache License 2.0, and `LICENSE` version 2.1 (08/10/2026) says that folder is not part of the Software. The rest of the repository stays closed, as decided below.
+> **Amended on 08/10/2026 by [ADR-007](ADR-007-open-source-benchmark-kit.md):** `opensource/horus-bench-kit/`, our benchmark and evaluation tools, is open source under the Apache License 2.0, and `LICENSE` version 2.1 (08/10/2026) says that folder is not part of the Software. Since 13/10/2026 it is public as [Horus-EIP/horus-bench-kit](https://github.com/Horus-EIP/horus-bench-kit). The rest of the repository stays closed, as decided below.
+>
+> **Updated on 13/10/2026:** whether the agent marketplace on the roadmap will be open or closed source is not decided yet (see "Why closed", point 1). If we open it, a new ADR will amend this one, as ADR-007 did for the kit.
 
 **Date:** 2026-09-24
-**Status:** Accepted by the team (24/09/2026). Sent to the study supervisor for validation of the fully closed scope (Tek5 Objective 1, due 30/09/2026).
-**Last updated:** 2026-09-26
+**Status:** Accepted by the team (24/09/2026), amended by ADR-007 (08/10/2026). Not yet validated by the study supervisor: this ADR and ADR-007 go with the scope email (Tek5 Objective 1, due 30/09/2026).
+**Last updated:** 2026-10-13
 **Deciders:** Loup Marquez-Luttringer, Noah Gibelli, Matheus Lopez
 **Related:**
 
@@ -63,7 +65,7 @@ The mentor mentioned partial opening (agent open, MAS closed) as *one valid opti
 
 ## Decision
 
-### 1. All of Horus stays closed source
+### 1. Horus stays closed source
 
 This covers:
 
@@ -71,7 +73,7 @@ This covers:
 - the desktop app, installer, packaging and scripts
 - the documentation
 
-No part is released under an open-source licence. The only code under open licences in the product is **third-party dependencies**, used under their own licences (see the inventory).
+No part of it is released under an open-source licence. The only code under open licences in the product is **third-party dependencies**, used under their own licences (see the inventory). The benchmark kit is not part of the product: it holds no Horus code and has been open source since ADR-007.
 
 ### 2. Licence choice: a proprietary licence framework made of four documents
 
@@ -90,7 +92,7 @@ We keep the existing `LICENSE` as the base and fix its gaps (see "Changes from t
 
 ---
 
-## Why fully closed
+## Why closed
 
 ### 1. Business: the licence is the product
 
@@ -98,7 +100,7 @@ We keep the existing `LICENSE` as the base and fix its gaps (see "Changes from t
 - **Open source adds nothing to our customers' buying decision.** Our customers get privacy from **self-hosting**, not from reading the code. What they buy is a finished, supported product with a vendor who is accountable.
 - **Opening the code would give away our differentiator.** Open toolkits already exist (slide 7). What makes us different is the finished product.
 - **Clean, closed IP is an asset.** Pilots, a hardware partner (slide 9), investors or an acquirer value a codebase whose rights belong clearly to the company.
-- **The marketplace (roadmap) needs control.** If agents are shared across companies, we have to control what runs on the platform and on what terms. A closed platform with its own marketplace terms fits that.
+- **The agent marketplace (roadmap) is not decided yet.** If agents are shared across companies, we have to control what runs on the platform and on what terms. A closed marketplace with its own terms would do that; our Tek5 roadmap also leaves room to publish it as open source on top of the closed product. Nothing is decided. If we open it, a new ADR will amend this one, as ADR-007 did for the kit.
 
 ### 2. Protection: nobody builds a product from our work
 
@@ -128,8 +130,8 @@ A public project means reviewing public issues and PRs, running security disclos
 ### Can all of it be closed, or does something have to be open?
 
 - **Legally: everything can be closed.** See point 3 above.
-- **For the school:** the objective asks us to *decide and justify* open or closed. Partial opening was offered as an option, not imposed. The Tek5 brief (meeting of 18/09/2026) does ask to justify the choice "even if it is only a part of it that is open source". So **a fully closed choice is allowed, but the study supervisor must validate it**; this ADR is the document sent for that validation.
-- **Fallback, only if the supervisor requires something public:** the cheapest option that keeps the product closed is a separate public repository containing **no Horus code**. For example: the fictional demo corpus, the `check-docstring-length.py` pre-commit hook, or documentation templates, under MIT or CC-BY. This is not decided; it only exists in case it's needed.
+- **For the school:** the objective asks us to *decide and justify* open or closed. Partial opening was offered as an option, not imposed. The Tek5 brief (meeting of 18/09/2026) does ask to justify the choice "even if it is only a part of it that is open source". So **a closed choice is allowed, but the study supervisor must validate it**; this ADR and ADR-007 are the documents sent for that validation.
+- **Fallback, if the supervisor requires more to be public:** the benchmark and evaluation kit already is a separate public repository containing **no Horus code** (ADR-007). The next cheapest options of the same kind are the fictional demo corpus, the `check-docstring-length.py` pre-commit hook, or documentation templates, under MIT or CC-BY. None of these is decided; they only exist in case they are needed.
 
 ---
 
@@ -239,9 +241,9 @@ This fits the business model exactly:
 ### For contributors, and the Tek5 "2 external contributions" objective
 
 - External contributions are still possible, **by invitation**: the person signs the NDA plus the Contributor Agreement, then gets access to the private repo.
-  - Check whether the EpitechPromo2027 organisation allows outside collaborators. If not, use a private mirror the team controls.
+  - Since 13/10/2026 the code is in the Horus-EIP organisation: once the agreement is signed, a maintainer adds the person to the `signed-contributors` team, which can read `Horus-EIP/horus`, and they work from a fork (CONTRIBUTING.md, "Outside contributors").
 - Contributors are credited in a CONTRIBUTORS file, which also feeds the "who made what" document. The rights to their contribution are assigned to the Horus owners, so the product stays sellable.
-- **Outreach changes shape.** The 8–10 spaces and 5 calls become calls to join a **closed contributor or beta programme**, not "fork our repo".
+- **Outreach changes shape.** The 8–10 spaces and 5 calls become calls to join a **closed contributor or beta programme**, not "fork our repo". The benchmark kit is the exception: anyone can fork it and contribute under Apache-2.0 (ADR-007).
   - This adds friction (an NDA before any work). Mitigations: a one-page agreement, small scoped tasks (the 3 easy GitHub issues), and public credit.
   - **This is the main risk to present to the supervisor.**
 
@@ -257,7 +259,7 @@ This fits the business model exactly:
 ### Risks we accept
 
 - Fewer spontaneous external contributions. This is mitigated by the invited contributor programme.
-- The supervisor may refuse a fully closed scope. The fallback is above.
+- The supervisor may refuse this scope (closed, with the benchmark kit open). The fallback is above.
 - A licence only protects us if we can enforce it. The contracts, NDAs, OpenTimestamps proofs and technical measures support enforcement.
 
 ### Technical protection to add
