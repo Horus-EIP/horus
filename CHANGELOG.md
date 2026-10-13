@@ -190,6 +190,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - MAS and the agent name each model call in an `X-Horus-Purpose` header (`intent`, `plan`, `announce`, `review`, `aggregate`, `task_route`; `answer`, `react_step`, `grounded`, `instruction`), which real model servers ignore (B-71, `cff8243`)
 - CI runs on pushes to `main` and `master`, on every pull request and by hand, no longer on `pre-release-fix` and `Sprint#1_September2026_Tek5`. A new push to a pull request cancels its older run, never a run on `main` or `master`. No pull request job reads a secret or gets a write token: the `checks` and `pull-requests` write permissions are gone. `tests/ci` checks the triggers, the cancelling, and the SHA pins of every workflow file in the repository, nested ones included (`d255edc`)
 - The repository lives at `github.com/Horus-EIP/horus`, working branch `main`: the README's badge and clone commands, CONTRIBUTING, getting started, operations, VERSIONING and TESTING say so. The Epitech repository's `master` gets the work through a sync pull request (`ec98b68`)
+- ADR-004 and the diffusion strategy say what the team decided: Horus stays closed, the benchmark kit is the one open-source part (ADR-007, public as `Horus-EIP/horus-bench-kit`), the agent marketplace is not decided yet, and ADR-004 is not yet validated by the study supervisor. ADR-004 also says how an outside contributor gets access in the Horus-EIP organisation (B-145, `1084a9a`, `1ab19cc`)
 
 ### Removed
 
