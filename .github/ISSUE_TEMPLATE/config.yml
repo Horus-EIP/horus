@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Benchmarks and evaluation
+    url: https://github.com/Horus-EIP/horus-bench-kit
+    about: The benchmark and evaluation kit, horus-bench-kit, is developed in its own public repository. Open issues and pull requests about it there.

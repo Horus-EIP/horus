@@ -1,0 +1,62 @@
+name: Bug report
+description: Something in Horus doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security issues don't go here: write to the three maintainers (CONTRIBUTING.md, "Reporting a problem").
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Horus version or commit
+      placeholder: 0.1.1, or a commit id
+    validations:
+      required: true
+  - type: dropdown
+    id: profile
+    attributes:
+      label: Hardware profile
+      description: The one in horus-profile.json, or what the installer chose.
+      options:
+        - cpu-standard
+        - cpu-lean
+        - gpu-8g
+        - gpu-16g
+        - gpu-24g
+        - gpu-large
+        - mock
+        - Not installed, or not sure
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS and Docker version
+      placeholder: Windows 11, Docker Desktop 4.x (Engine 29.x)
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The relevant log lines. For the installer, attach install-log.txt and horus-profile.json.
+    validations:
+      required: false

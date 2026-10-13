@@ -1,0 +1,34 @@
+name: Task
+description: A piece of work to do on Horus, small enough for one pull request.
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: What to do, and why
+    validations:
+      required: true
+  - type: textarea
+    id: where
+    attributes:
+      label: Where to look
+      description: The files, docs or issues to start from.
+    validations:
+      required: false
+  - type: textarea
+    id: done-when
+    attributes:
+      label: Done when
+      description: What a reviewer checks to call it done, tests included.
+    validations:
+      required: true
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      options:
+        - XS (under an hour)
+        - S (a few hours)
+        - M (a day or two)
+        - L (more; split it if you can)
+    validations:
+      required: false

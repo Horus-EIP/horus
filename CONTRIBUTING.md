@@ -11,8 +11,8 @@ Contact, the three maintainers: **loup.marquez@epitech.eu**, **noah.gibelli@epit
 ## 1. Before you start
 
 1. **Sign the Contributor Agreement.** Nobody outside the team gets access to the code or the private documents before signing it. It covers confidentiality and, if you send work, the transfer of the rights in it; in return you get credit in [CONTRIBUTORS.md](CONTRIBUTORS.md), code review and a reference. Ask one of the maintainers for it (addresses under Contact above).
-2. **Get access.** Once the agreement is signed by you and by the three maintainers, a maintainer gives you access to the repository. Turn on two-factor authentication on your GitHub account.
-3. **Set up the project.** Follow [docs/getting-started.md](docs/getting-started.md). The short version is in the [README](README.md#quickstart).
+2. **Get access.** Once the agreement is signed by you and by the three maintainers, a maintainer adds you to the Horus-EIP organisation (see [Outside contributors](#outside-contributors)). Turn on two-factor authentication on your GitHub account: the organisation requires it.
+3. **Set up the project.** Follow [docs/getting-started.md](docs/getting-started.md). The short version is in the [README](README.md#contributors-from-the-repository).
 
 Contributing is voluntary and unpaid. You choose what you work on and when, and you can stop at any time.
 
@@ -28,6 +28,15 @@ Contributing is voluntary and unpaid. You choose what you work on and when, and 
 ---
 
 ## 3. Sending a change
+
+### Outside contributors
+
+If you are not one of the three maintainers:
+
+1. Once your Contributor Agreement has all four signatures, yours and the three maintainers', a maintainer invites you to the [Horus-EIP](https://github.com/Horus-EIP) organisation as a member, in the team `signed-contributors`. That team has Read access to this repository, so you can read it and fork it, but not push to it.
+2. Fork `Horus-EIP/horus`, create your branch in your fork (see [Branches](#branches)), follow the [commit norm](#commits), and open a pull request against `main` in `Horus-EIP/horus`.
+3. CI on your pull request waits for a maintainer's approval, at every push: in a private repository, GitHub runs workflows from a fork only once someone with write access approves them (**Approve workflows to run**).
+4. A maintainer reviews and merges, as described in [How we merge](#how-we-merge).
 
 ### Branches
 
@@ -62,12 +71,17 @@ with the request id, and the client gets a fixed message.
 ### Pull requests
 
 1. Link the issue in the description: `Fixes #<number>`.
-2. Say what you changed, why, and how you tested it.
+2. Say what you changed, why, and how you tested it. The pull request template lists what to check.
 3. If an AI assistant wrote a large part of the change, say so (see section 5).
-4. CI must be green. Run the tests locally first (section 4).
-5. **One approval** from a maintainer who did not write the change is needed. Changes to authentication, permissions or the installer's security checks need **two**. So will the licence-key check, once it is written ([ADR-004](docs/adr/ADR-004-closed-source-licence.md)).
-6. The reviewer who approves merges the pull request, with a **merge commit** (not squash): the changelog cites commit ids.
-7. The branch is deleted after the merge.
+4. Run the tests locally first (section 4).
+
+### How we merge
+
+- **CI is green.**
+- **One approval** from a maintainer who did not write the change. Changes to authentication, permissions or the installer's security checks need **two**. So will the licence-key check, once it is written ([ADR-004](docs/adr/ADR-004-closed-source-licence.md)).
+- **A merge commit, never squash:** the changelog cites commit ids. The reviewer who approves merges the pull request. GitHub then deletes the branch if it is in `Horus-EIP/horus`; delete a branch in your fork yourself.
+
+GitHub can't enforce these rules on a private repository on the Free plan: required reviews and required checks need a paid plan there. So we hold ourselves to them. `.github/CODEOWNERS` names the `maintainers` team as the owner of every file; GitHub acts on it in a private repository only on a paid plan, so until then it records who reviews.
 
 ---
 
@@ -134,6 +148,7 @@ When you change a Dockerfile's base image or the system packages its final stage
 
 ## 6. Reporting a problem
 
-- **Bugs:** open an issue with the steps to reproduce, what you expected, what happened, your OS, Docker version and hardware profile, and the relevant logs. For the installer, attach `install-log.txt` and `horus-profile.json`: they are written next to the START-HERE files, or at the repository root when you run `installer/horus_install.py` from a clone.
-- **Ideas:** open an issue labelled `enhancement` with the problem it solves.
+- Issues are opened with a form: **Bug report** or **Task**. Blank issues are off. Issues about the benchmark and evaluation kit go to its own repository, [`Horus-EIP/horus-bench-kit`](https://github.com/Horus-EIP/horus-bench-kit).
+- **Bugs:** open an issue with the Bug report form: the steps to reproduce, what you expected, what happened, your OS, Docker version and hardware profile, and the relevant logs. For the installer, attach `install-log.txt` and `horus-profile.json`: they are written next to the START-HERE files, or at the repository root when you run `installer/horus_install.py` from a clone.
+- **Ideas:** open an issue with the Task form, starting from the problem it solves.
 - **Security issues:** don't open a public issue. Write to the three maintainers (addresses under Contact above) with the details; we answer within a week.
