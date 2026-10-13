@@ -1,6 +1,8 @@
 # horus-bench-kit
 
-Tools to measure language models that you run yourself.
+[![CI](https://github.com/Horus-EIP/horus-bench-kit/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Horus-EIP/horus-bench-kit/actions/workflows/ci.yml)
+
+Tools to measure language models that you run yourself. The kit's home is [github.com/Horus-EIP/horus-bench-kit](https://github.com/Horus-EIP/horus-bench-kit).
 
 - **Evaluation** (`hbk-eval`): write a small question-answering test set over your own documents, check it, ask every question to a model behind any OpenAI-compatible chat endpoint (llama.cpp's `llama-server`, vLLM, Ollama, LM Studio and others), score the answers and the cited sources, then review and compare the runs.
 - **Benchmarks**: check that a model's JSON answers fit a schema (`hbk-contract-probe`), run llama-bench in Docker with the facts of the machine and the SHA-256 of every model (`hbk-llama-bench`), compare runs as Markdown (`hbk-compare`), and take a catalog of GGUF models through download, benchmark, probe and evaluation (`hbk-model-candidates`). See [Benchmark tools](#benchmark-tools).
@@ -12,6 +14,8 @@ The kit needs only the Python standard library. Every result is a plain JSON fil
 Python 3.10 or later.
 
 ```sh
+git clone https://github.com/Horus-EIP/horus-bench-kit.git
+cd horus-bench-kit
 python -m venv .venv
 . .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install .                   # from this folder
@@ -325,16 +329,9 @@ The tests start a small fake OpenAI-compatible server on `127.0.0.1`; they need 
 
 ## Contributing
 
-Contributions are welcome: open an issue or a pull request. By Apache License 2.0 section 5, any contribution you submit for inclusion is licensed under the same Apache License 2.0, with no extra terms; you need no separate agreement.
+Contributions are welcome. Pick an issue labelled `good first issue` or `help wanted` and comment "I'd like to work on this": a bot assigns it to you. [CONTRIBUTING.md](CONTRIBUTING.md) has the steps, the kit's rules, the commit norm and the sign-off every commit needs. Questions go to [Discussions](https://github.com/Horus-EIP/horus-bench-kit/discussions).
 
-Please keep the kit's rules:
-
-- no runtime dependency outside the standard library (PyYAML stays optional);
-- Python 3.10 compatible;
-- `# SPDX-License-Identifier: Apache-2.0` as the first line of every Python file, and right after the shebang of a shell script;
-- a change to a report format updates [docs/FORMATS.md](docs/FORMATS.md), and a change that removes, renames or changes the meaning of a key raises that format's `schema_version`;
-- tests for every change, on synthetic data;
-- `python scripts/make-zip.py` builds without a problem.
+By Apache License 2.0 section 5, any contribution you submit for inclusion is licensed under the same Apache License 2.0, with no extra terms; you need no separate agreement. Everyone who takes part follows the [Code of Conduct](CODE_OF_CONDUCT.md). Report a vulnerability privately, as [SECURITY.md](SECURITY.md) explains.
 
 ## Licence
 

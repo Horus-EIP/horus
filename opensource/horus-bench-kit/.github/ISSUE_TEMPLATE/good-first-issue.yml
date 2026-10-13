@@ -1,0 +1,39 @@
+name: Good first issue (maintainers)
+description: For maintainers. A small, self-contained task for a first contribution.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For maintainers. A good first issue takes a newcomer a few hours, and says which files to look at and how to know it is done.
+
+        Once the issue is written, a maintainer adds the `good first issue` label by hand. The form adds no label, so that an issue opened with it by anyone else cannot be claimed.
+  - type: textarea
+    id: task
+    attributes:
+      label: What to do
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Files to look at
+      placeholder: |
+        - src/horus_bench_kit/compare.py
+        - tests/test_compare.py
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: What the pull request shows, for example a new test that passes.
+    validations:
+      required: true
+  - type: textarea
+    id: hints
+    attributes:
+      label: Hints
+  - type: markdown
+    attributes:
+      value: |
+        To take this issue, comment "I'd like to work on this" or `/assign`. See CONTRIBUTING.md for the rules.

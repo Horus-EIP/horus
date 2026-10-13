@@ -83,6 +83,27 @@ with the request id, and the client gets a fixed message.
 
 GitHub can't enforce these rules on a private repository on the Free plan: required reviews and required checks need a paid plan there. So we hold ourselves to them. `.github/CODEOWNERS` names the `maintainers` team as the owner of every file; GitHub acts on it in a private repository only on a paid plan, so until then it records who reviews.
 
+### The benchmark kit
+
+The benchmark and evaluation kit in `opensource/horus-bench-kit/` is open source, under the Apache License 2.0, and lives in its public repository, [`Horus-EIP/horus-bench-kit`](https://github.com/Horus-EIP/horus-bench-kit). Once that repository is published, change the kit only there, with a pull request that follows its own CONTRIBUTING.md: never in this repository.
+
+Its changes come back here through a pull request in `Horus-EIP/horus` that pulls the public repository into the folder (the `git remote add` is needed once per clone):
+
+```bash
+git remote add kit https://github.com/Horus-EIP/horus-bench-kit.git
+git switch -c kit-update main
+git subtree pull --prefix=opensource/horus-bench-kit kit main -m "[~] Bench kit: changes from the public repo"
+git push -u origin kit-update
+```
+
+The first time, run this before the `git subtree pull`:
+
+```bash
+git subtree split --prefix=opensource/horus-bench-kit --rejoin -m "[~] Bench kit: join the public repository's history"
+```
+
+The public repository was made with `git subtree split`, which leaves no trace in `main`, so a first `git subtree pull` stops with "refusing to merge unrelated histories". The `--rejoin` split rebuilds the same commits as the published ones and joins them to `main` with a merge commit. Once that pull request is merged, later pulls don't need it: `git log --oneline --grep="git-subtree-dir: opensource/horus-bench-kit" main` lists the join once it is there.
+
 ---
 
 ## 4. Tests and style

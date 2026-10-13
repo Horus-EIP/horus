@@ -1,0 +1,14 @@
+{
+  "phrases": [
+    "I'd like to work on",
+    "I would like to work on",
+    "can I work on",
+    "may I work on",
+    "I want to work on",
+    "assign me",
+    "je voudrais travailler sur",
+    "je peux m'en occuper"
+  ],
+  "commands": ["/assign", "/take"],
+  "release": ["/unassign"]
+}
