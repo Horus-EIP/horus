@@ -1,0 +1,9 @@
+[
+  {"name": "good first issue", "color": "7057ff", "description": "Small and self-contained, for a first contribution"},
+  {"name": "help wanted", "color": "008672", "description": "Open to anyone who wants to take it"},
+  {"name": "bug", "color": "d73a4a", "description": "A tool fails or gives a wrong result"},
+  {"name": "enhancement", "color": "a2eeef", "description": "A new tool, option or report field"},
+  {"name": "documentation", "color": "0075ca", "description": "README, CONTRIBUTING or docs/FORMATS.md"},
+  {"name": "needs triage", "color": "fbca04", "description": "Waiting for a maintainer to look at it"},
+  {"name": "claimed", "color": "c5def5", "description": "Someone is working on this issue"}
+]

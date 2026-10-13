@@ -2,7 +2,7 @@ name: Eval test set
 
 on:
   push:
-    branches: [master, main, pre-release-fix, 'Sprint#1_September2026_Tek5']
+    branches: [main, master]
     paths:
       - demo_assets/**
       - tests/eval/**
@@ -25,6 +25,10 @@ on:
       - opensource/horus-bench-kit/src/**
       - .github/workflows/eval-testset.yml
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

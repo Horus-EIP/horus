@@ -8,8 +8,8 @@ Running Horus in dev/staging/prod: deployment, monitoring, secrets, and the per-
 
 ### Repository branches
 
-- **`Sprint#1_September2026_Tek5`**: the working branch until later in the year, where `master` would be. Start from it and open pull requests against it ([CONTRIBUTING.md](../CONTRIBUTING.md#branches)).  
-- **`master`**: the default branch on GitHub.  
+- **`main`** in [`Horus-EIP/horus`](https://github.com/Horus-EIP/horus): the working branch and the default branch. Start from it and open pull requests against it ([CONTRIBUTING.md](../CONTRIBUTING.md#branches)).  
+- **`master`** in the Epitech repository: the graded copy. It receives `main` through a sync pull request after each batch of merged work; nobody commits there directly.  
 - **Feature branches**: `issue-<number>-<short-description>`.  
 
 This repository’s canonical remote is the project GitHub org; avoid unapproved mirrors.
@@ -18,7 +18,7 @@ This repository’s canonical remote is the project GitHub org; avoid unapproved
 
 ### CI pipeline
 
-Continuous integration is defined in **`.github/workflows/ci.yml`** at the repository root. It runs on every pull request, on pushes to `master`, `main`, `pre-release-fix` and `Sprint#1_September2026_Tek5`, and by hand. The service and installer test jobs use the Python of the images, read from `src/services/PYTHON_VERSION` (3.11.17), which `tests/ci/test_image_python.py` checks against every `FROM python:` line. The bench-kit job runs on 3.10 and 3.13; the other jobs run tools, on Python **3.13**. Every action in the four workflows is pinned by its full commit SHA, with its version in a comment, at a release that runs on Node 24, and every Linux job names its runner image, `ubuntu-24.04` (`ubuntu-22.04` in `desktop-release.yml`), so that GitHub moving `ubuntu-latest` does not change CI mid-sprint. `tests/ci/test_workflow_pins.py` checks both.
+Continuous integration is defined in **`.github/workflows/ci.yml`** at the repository root. It runs on every pull request, on pushes to `main` and to the Epitech repository's `master`, and by hand. A new commit on a pull request cancels that pull request's run still in progress; a run on a branch or by hand has a concurrency group of its own, so it is never cancelled or held back. The coverage summary job runs when a test job fails but not in a cancelled run (`!cancelled()`), so a superseded run ends at once. `ci.yml` and `eval-testset.yml` only read the repository and use no secret, so a pull request from a fork, which gets a read-only token and no secrets, runs every job; `tests/ci/test_workflow_triggers.py` checks the triggers, the concurrency group and this. The service and installer test jobs use the Python of the images, read from `src/services/PYTHON_VERSION` (3.11.17), which `tests/ci/test_image_python.py` checks against every `FROM python:` line. The bench-kit job runs on 3.10 and 3.13; the other jobs run tools, on Python **3.13**. Every action in every workflow file of the repository, nested ones included, is pinned by its full commit SHA, with its version in a comment, at a release that runs on Node 24, and every Linux job names its runner image, `ubuntu-24.04` (`ubuntu-22.04` in `desktop-release.yml`), so that GitHub moving `ubuntu-latest` does not change CI mid-sprint. `tests/ci/test_workflow_pins.py` checks both.
 
 **Summary**
 
@@ -63,7 +63,7 @@ On GHCR, check after the first release that each `horus-*` package under the org
 
 ```bash
 cosign verify \
-  --certificate-identity "https://github.com/EpitechPromo2027/G-EIP-600-BAR-6-1-eip-loup.marquez/.github/workflows/images.yml@refs/tags/v0.1.2" \
+  --certificate-identity "https://github.com/Horus-EIP/horus/.github/workflows/images.yml@refs/tags/v0.1.2" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   ghcr.io/epitechpromo2027/horus-mas:0.1.2-cpu
 ```
@@ -618,7 +618,7 @@ name: Deploy to Staging
 
 on:
   push:
-    branches: ['Sprint#1_September2026_Tek5']
+    branches: [main]
 
 jobs:
   deploy:
@@ -1100,7 +1100,7 @@ TLS_KEY_PATH=/etc/ssl/staging-key.pem
 name: Deploy to Staging
 on:
   push:
-    branches: ['Sprint#1_September2026_Tek5']
+    branches: [main]
 
 jobs:
   deploy:

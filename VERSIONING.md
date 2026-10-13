@@ -8,7 +8,7 @@
 
 ## 1. The scheme: Semantic Versioning 2.0.0
 
-Every Horus release has a number **MAJOR.MINOR.PATCH** (see <https://semver.org>) and a git tag `vMAJOR.MINOR.PATCH`. Tags go on the working branch: `master`, or `Sprint#1_September2026_Tek5` while it stands in for `master`.
+Every Horus release has a number **MAJOR.MINOR.PATCH** (see <https://semver.org>) and a git tag `vMAJOR.MINOR.PATCH`. Tags go on the working branch, `main` in `Horus-EIP/horus`.
 
 | Part | Goes up when… | Example |
 |---|---|---|
@@ -68,7 +68,7 @@ An existing `src/infra/.env` keeps the number it was created with: the installer
 
 **Where the check runs:**
 
-- The CI job `versions` in `.github/workflows/ci.yml`, on every pull request and on every push to `master`, `main`, `pre-release-fix` and `Sprint#1_September2026_Tek5`. It runs the tests in `tests/ci/` first (the check's own tests are in `tests/ci/test_check_versions.py`, and one of them checks the repository itself), then the check.
+- The CI job `versions` in `.github/workflows/ci.yml`, on every pull request, on every push to `main` and to the Epitech repository's `master`, and by hand. It runs the tests in `tests/ci/` first (the check's own tests are in `tests/ci/test_check_versions.py`, and one of them checks the repository itself), then the check.
 - `.github/workflows/desktop-release.yml` and `.github/workflows/images.yml`, on every `v*` tag. They also run `python scripts/ci/check-versions.py --tag "$GITHUB_REF_NAME"`, which fails when the tag is not `v` followed by `VERSION`. Then nothing is built or published.
 
 ---
@@ -168,7 +168,7 @@ Before removing something in a MAJOR release, **deprecate it for at least one MI
 - **v0.1.0** (02/09/2026, `18704c0`): the first tagged beta.
 - **v0.1.1** (07/09/2026, `0fc5378`): installer fixes (free disk raised to 150 GB, 125 GB with a GPU; one retry of `docker compose up`; offer to reclaim the Docker build cache; `--skip-disk-check`). Its installer still reported 0.1.0, because the bump commit only changed a document. This is why `VERSION` and the check exist.
 
-Both tags are on the `archive/Year_2025-2026` branch, not on `master` or `Sprint#1_September2026_Tek5`.
+Both tags point at commits of the `archive/Year_2025-2026` branch, which is in the Epitech repository; neither is on `main` or on the Epitech `master`.
 
 **Not tagged yet:**
 
@@ -220,7 +220,7 @@ The ATP always names the exact version under test.
    - `desktop-release.yml` builds the desktop app (Windows `Horus.exe`, macOS `Horus.app`, Linux `.deb`) and `Horus-Beta-0.2.0.zip`, and drafts a GitHub release "Horus Beta 0.2.0" with `packaging/RELEASE-NOTES.md` as its text.
 
    Never push a `v*` tag to try something: it publishes.
-7. **Publish the draft release**, then timestamp the archive with OpenTimestamps (`ots stamp Horus-Beta-0.2.0.zip`, proof of authorship and date, ADR-004). Keep the `.ots` file in `docs/ip_protection/deposit_proof/`, next to the MVP proof.
+7. **Publish the draft release**, then timestamp the archive with OpenTimestamps (`ots stamp Horus-Beta-0.2.0.zip`, proof of authorship and date, ADR-004). Keep the `.ots` file next to the MVP proof, in `docs/ip_protection/deposit_proof/` in the team's private repository.
 8. **Date the `CHANGELOG.md` heading** and name the tag and its commit, as for 0.1.1: `## 0.1.1 - 2026-09-07`, then ``Tag `v0.1.1` (`0fc5378`).``
 9. **Hotfix** (urgent PATCH on a released version): branch from the tag, fix with a test, bump to `X.Y.(Z+1)` with its `CHANGELOG.md` section, and open a PR so CI runs. Tag the hotfix commit itself: the working branch has moved on, and its `VERSION` names another release. Then merge the fix into the working branch, keeping that branch's own version number.
 

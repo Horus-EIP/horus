@@ -238,9 +238,9 @@ class Workflows(unittest.TestCase):
         self.assertFalse(any("download-artifact" in str(step.get("uses", "")) for step in job["steps"]))
         self.assertFalse(any("upload-artifact" in str(step.get("uses", "")) for step in job["steps"]))
 
-    def test_the_summary_job_runs_when_a_test_job_fails_and_collects_every_suite(self):
+    def test_the_summary_job_runs_when_a_test_job_fails_not_when_the_run_is_cancelled(self):
         job = workflow("ci.yml")["jobs"]["coverage-summary"]
-        self.assertEqual(job["if"], "always()")
+        self.assertEqual(job["if"], "${{ !cancelled() }}")
         collect = next(step for step in job["steps"] if "coverage-line.py collect" in str(step.get("run", "")))
         sources = {value for value in collect["env"].values()}
         self.assertEqual(sources, {f"${{{{ needs.{name}.outputs.coverage-row }}}}" for name in TEST_JOBS})

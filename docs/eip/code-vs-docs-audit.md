@@ -1,7 +1,7 @@
 # Documentation Audit Report
 
 **Date:** 2026-05-29
-**Scope:** All Markdown docs under `/docs`, root-level docs, and `greenlight/*.md`
+**Scope:** All Markdown docs under `/docs`, root-level docs, and `greenlight/*.md` (now in the team's private repository)
 **Source-of-truth:** `src/` code, `src/infra/docker-compose.yml`, `src/infra/.env.example`, `pyproject.toml`, `package.json`, `scripts/`
 **Method:** Five parallel Explore subagents read every in-scope doc and verified claims against the code with file:line citations.
 
@@ -88,7 +88,7 @@
 | Doc | Status | Issue |
 |-----|--------|-------|
 | `README.md` | NEEDS_UPDATE | Python 3.13 → 3.11; check Next.js minor version label. |
-| `beta_test_plan.md` | OK | Module ID and F1-F24 structure align with implemented API. |
+| `beta_test_plan.md` (now in the team's private repository) | OK | Module ID and F1-F24 structure align with implemented API. |
 | `docs/README.md` | OK | Index links resolve. |
 | `contributing/contributing.md` | OK | Branch naming, pytest commands match real `pytest.ini` paths. |
 | `contributing/code_style.md` | OK | Minor: references `docs/architecture/adr/` subdir but ADRs are flat in `architecture/`. |
@@ -113,8 +113,8 @@
 
 ## What's intentionally NOT audited
 
-- `docs/archive/**` (frozen historical content)
-- `docs/ip_protection/**` (legal docs, not technical)
+- `docs/archive/**` (frozen historical content, now in the team's private repository)
+- `docs/ip_protection/**` (legal docs, not technical, now in the team's private repository)
 - PDFs, pptx, docx
 - `docs/contributing/mas/README_PROJECT.md` (out of audit scope — service-specific)
 

@@ -50,9 +50,9 @@ These need their own, stricter tests.
 | 2.8 | **Integration checks** | Two or more real services together (MAS, RabbitMQ, Postgres, agent, knowledge store) | `scripts/integration-checks/` (20 files) | pytest or python, against a live stack | By hand. Not in CI (section 7) |
 | 2.9 | **MAS client scripts** | Manual calls to a running MAS on `localhost:8000` | `tests/mas/client_tests/` | python | By hand. pytest does not collect them (file names start with `client_`) |
 | 2.10 | **End-to-end smoke** | Knowledge store health, unauthenticated call refused, admin login, token accepted, a worker agent registers, the demo document is ingested, a question about it, the answer is grounded, a negative control question | `installer/smoke.py` (9 steps) | Run by the installer, or `python installer/smoke.py` on a running stack | End of every install (unless `--skip-smoke`); every release candidate on a clean CPU machine and on a GPU machine; every push and pull request with no model at all (`ci.yml` job `e2e-mock`, [mock AI mode](docs/mock-ai.md)) |
-| 2.11 | **Acceptance (manual)** | Real users following written scenarios | `docs/eip_pool_tek5/Horus_ATP_v7.xlsx` (37 scenarios, F1 to F37) | Testers and the results sheet | Before each beta or MINOR release |
+| 2.11 | **Acceptance (manual)** | Real users following written scenarios | `docs/eip_pool_tek5/Horus_ATP_v7.xlsx` in the team's private repository (37 scenarios, F1 to F37) | Testers and the results sheet | Before each beta or MINOR release |
 | 2.12 | **Performance and load** | Latency, throughput, retrieval quality, llama.cpp speed | `scripts/perf/` (locust, benchmarks), `scripts/benchmarks/` | locust, Python scripts | Before a MINOR release, and after a performance change. See `scripts/perf/README.md` and `benchmarks/README.md` |
-| 2.13 | **Static checks** | Lint, import order, likely bugs | Repo-wide | ruff 0.16.6 (CI), pre-commit (ruff `--fix`, `ruff-format`, docstring length), bandit (by hand) | ruff in CI; the last bandit report is `greenlight/code-quality-review/bandit_report.txt` (31/05/2026) |
+| 2.13 | **Static checks** | Lint, import order, likely bugs | Repo-wide | ruff 0.16.6 (CI), pre-commit (ruff `--fix`, `ruff-format`, docstring length), bandit (by hand) | ruff in CI; the last bandit report is `greenlight/code-quality-review/bandit_report.txt` (31/05/2026), in the team's private repository |
 | 2.14 | **Model contract** | Every structured reply valid against its schema, no factual question answered directly (F20), answers cite a source, out-of-corpus questions refused, on the requests MAS and the agent really send; on the embeddings requests MAS and the knowledge store send, one vector per text at the size the service needs, the same vector for the same text, and each question closest to a passage of the document that answers it | `tests/contract/` | pytest | CI on the mock (`test-llm-mock`); by hand on a real model (`-m real_llm`) and on real embeddings servers (`-m real_embeddings`) |
 
 **What counts as a regression test:** any test written *because a bug happened* (section 4). It can be of any type above.
@@ -269,7 +269,7 @@ The plan is to turn the critical ones into tests under `tests/<service>/` marked
 
 ## 8. What CI enforces
 
-**`ci.yml`** runs on every pull request, on pushes to `master`, `main`, `pre-release-fix` and `Sprint#1_September2026_Tek5`, and by hand.
+**`ci.yml`** runs on every pull request, on pushes to `main` and to the Epitech repository's `master`, and by hand. A new commit on a pull request cancels that pull request's run still in progress; runs on `main` and `master` are never cancelled.
 
 | Job | What it runs |
 |---|---|

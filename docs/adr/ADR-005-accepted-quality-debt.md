@@ -142,7 +142,7 @@ Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at 
 | A1 | `.github/workflows/ci.yml` runs no npm command. `cc10222` made `npm run typecheck` and `npm run lint` run; `npm run lint` now reports 31 problems (20 errors, 11 warnings) and exits 1. The F25 and F37 fixes have Vitest regression tests (`0b93375`, `ae538f3`), which CI does not run either. |
 | A2 | `.pre-commit-config.yaml` line 7 still names a mypy configuration; `pyproject.toml` has none. |
 | A3 | `.github/workflows/ci.yml` line 64 runs `ruff check` only; `ruff-format` is in `.pre-commit-config.yaml` (line 26). |
-| A5 | No workflow runs bandit. The one report is `greenlight/code-quality-review/bandit_report.txt` (31/05/2026, `docs/eip/objectives-audit.md`, line 54). |
+| A5 | No workflow runs bandit. The one report is `greenlight/code-quality-review/bandit_report.txt` (now in the team's private repository; 31/05/2026, `docs/eip/objectives-audit.md`, line 54). |
 | A6 | Repaid on 09/10/2026: `ci.yml` runs `pytest installer/tests` in its `test-installer` job on every push and pull request, on the images' Python. `desktop-release.yml` and `images.yml` still run them on a `v*` tag. |
 | B3 | `src/services/knowledge-store/tests/test_corpus_safety.py` is still there; CI runs `tests/knowledge_store` only (`ci.yml`, line 295). |
 | B4 | The repository records no ATP after v7 (18/09/2026, `docs/eip/regressions.md`), so the rule has not been applied yet. |

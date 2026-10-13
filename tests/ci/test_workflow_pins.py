@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import unittest
 from pathlib import Path
@@ -10,7 +11,23 @@ except ImportError:
     yaml = None
 
 REPO = Path(__file__).resolve().parents[2]
-WORKFLOWS = sorted((REPO / ".github" / "workflows").glob("*.y*ml"))
+NOT_OURS = {".git", "node_modules", ".venv", "venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+            ".next", "target", "dist", "build"}
+ROOT_WORKFLOWS = ["ci.yml", "desktop-release.yml", "eval-testset.yml", "images.yml"]
+KIT_WORKFLOWS = ["ci.yml", "claims.yml", "dco.yml", "stale-claims.yml", "welcome.yml"]
+
+
+def workflow_files() -> list[Path]:
+    found = []
+    for folder, children, files in os.walk(REPO):
+        children[:] = [child for child in children if child not in NOT_OURS]
+        here = Path(folder)
+        if here.name == "workflows" and here.parent.name == ".github":
+            found += [here / name for name in files if name.endswith((".yml", ".yaml"))]
+    return sorted(found)
+
+
+WORKFLOWS = workflow_files()
 USES = re.compile(r"^\s*(?:-\s+)?uses:\s*(\S+)(.*)$")
 PINNED = re.compile(r"^[\w.-]+/[\w./-]+@[0-9a-f]{40}$")
 VERSION_COMMENT = re.compile(r"^\s+#\s+v\d+(?:\.\d+){0,2}\s*$")
@@ -23,13 +40,14 @@ def uses_lines():
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             match = USES.match(line)
             if match:
-                yield f"{path.name}:{number}", match.group(1), match.group(2)
+                yield f"{path.relative_to(REPO).as_posix()}:{number}", match.group(1), match.group(2)
 
 
 class WorkflowPins(unittest.TestCase):
-    def test_the_four_workflows_are_checked(self):
-        self.assertEqual([path.name for path in WORKFLOWS],
-                         ["ci.yml", "desktop-release.yml", "eval-testset.yml", "images.yml"])
+    def test_every_workflow_file_in_the_repository_is_checked(self):
+        found = [path.relative_to(REPO).as_posix() for path in WORKFLOWS]
+        self.assertEqual(found, [f".github/workflows/{name}" for name in ROOT_WORKFLOWS]
+                         + [f"opensource/horus-bench-kit/.github/workflows/{name}" for name in KIT_WORKFLOWS])
 
     def test_every_action_is_pinned_by_commit_with_its_version_in_a_comment(self):
         found = list(uses_lines())
