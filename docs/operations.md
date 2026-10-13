@@ -8,8 +8,8 @@ Running Horus in dev/staging/prod: deployment, monitoring, secrets, and the per-
 
 ### Repository branches
 
-- **`Sprint#1_September2026_Tek5`**: the working branch until later in the year, where `master` would be. Start from it and open pull requests against it ([CONTRIBUTING.md](../CONTRIBUTING.md#branches)).  
-- **`master`**: the default branch on GitHub.  
+- **`main`** in [`Horus-EIP/horus`](https://github.com/Horus-EIP/horus): the working branch and the default branch. Start from it and open pull requests against it ([CONTRIBUTING.md](../CONTRIBUTING.md#branches)).  
+- **`master`** in the Epitech repository: the graded copy. It receives `main` through a sync pull request after each batch of merged work; nobody commits there directly.  
 - **Feature branches**: `issue-<number>-<short-description>`.  
 
 This repository’s canonical remote is the project GitHub org; avoid unapproved mirrors.
@@ -63,7 +63,7 @@ On GHCR, check after the first release that each `horus-*` package under the org
 
 ```bash
 cosign verify \
-  --certificate-identity "https://github.com/EpitechPromo2027/G-EIP-600-BAR-6-1-eip-loup.marquez/.github/workflows/images.yml@refs/tags/v0.1.2" \
+  --certificate-identity "https://github.com/Horus-EIP/horus/.github/workflows/images.yml@refs/tags/v0.1.2" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   ghcr.io/epitechpromo2027/horus-mas:0.1.2-cpu
 ```
@@ -618,7 +618,7 @@ name: Deploy to Staging
 
 on:
   push:
-    branches: ['Sprint#1_September2026_Tek5']
+    branches: [main]
 
 jobs:
   deploy:
@@ -1100,7 +1100,7 @@ TLS_KEY_PATH=/etc/ssl/staging-key.pem
 name: Deploy to Staging
 on:
   push:
-    branches: ['Sprint#1_September2026_Tek5']
+    branches: [main]
 
 jobs:
   deploy:

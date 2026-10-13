@@ -1,6 +1,6 @@
 # Horus AI
 
-[![CI](https://github.com/EpitechPromo2027/G-EIP-600-BAR-6-1-eip-loup.marquez/actions/workflows/ci.yml/badge.svg?branch=Sprint%231_September2026_Tek5)](https://github.com/EpitechPromo2027/G-EIP-600-BAR-6-1-eip-loup.marquez/actions/workflows/ci.yml)
+[![CI](https://github.com/Horus-EIP/horus/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Horus-EIP/horus/actions/workflows/ci.yml)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-red.svg)](LICENSE)
 
@@ -54,8 +54,8 @@ Contributions need a signed Contributor Agreement first (see [Contributing](#con
 The simplest way is the installer, which picks the profile and writes `src/infra/.env` for you, then builds the images on your machine:
 
 ```bash
-git clone https://github.com/EpitechPromo2027/G-EIP-600-BAR-6-1-eip-loup.marquez.git
-cd G-EIP-600-BAR-6-1-eip-loup.marquez
+git clone https://github.com/Horus-EIP/horus.git
+cd horus
 python installer/horus_install.py --build-from-source
 ```
 

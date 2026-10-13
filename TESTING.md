@@ -269,7 +269,7 @@ The plan is to turn the critical ones into tests under `tests/<service>/` marked
 
 ## 8. What CI enforces
 
-**`ci.yml`** runs on every pull request, on pushes to `master`, `main`, `pre-release-fix` and `Sprint#1_September2026_Tek5`, and by hand.
+**`ci.yml`** runs on every pull request, on pushes to `main` and to the Epitech repository's `master`, and by hand. A new commit on a pull request cancels that pull request's run still in progress; runs on `main` and `master` are never cancelled.
 
 | Job | What it runs |
 |---|---|

@@ -37,7 +37,8 @@ What we share, what stays closed, and why. Companion to the [protection plan](pr
 
 | Channel | Purpose | Status |
 |---------|---------|--------|
-| **Private GitHub repo** (EpitechPromo2027/G-EIP-600-…) | Source of truth, version control, CI | ✅ Active |
+| **Private GitHub repo** ([`Horus-EIP/horus`](https://github.com/Horus-EIP/horus)) | Source of truth, version control, CI | ✅ Active |
+| **Epitech GitHub repo** (EpitechPromo2027/G-EIP-600-…) | The graded copy; receives our work by sync pull request | ✅ Active |
 | **Self-hosted MkDocs** (planned URL: `docs.horus.internal`) | Restricted-tier documentation portal | ⚠️ To deploy before jury |
 | **EIP jury submission portal** | Greenlight / beta / final defence deliverables | ✅ Used per milestone |
 | **Live demo environment** | Show running stack to partners under NDA | ✅ Local + on-demand |

@@ -240,10 +240,10 @@ Run from `src/services/mas` with `PYTHONPATH` including that directory, or use t
 
 ### Development workflow
 
-1. Create a branch from `Sprint#1_September2026_Tek5` ([branches](../CONTRIBUTING.md#branches)).  
+1. Create a branch from `main` in `Horus-EIP/horus` ([branches](../CONTRIBUTING.md#branches)).  
 2. Make changes and run tests locally.  
 3. Commit using the [commit convention](../CONTRIBUTING.md#commits).  
-4. Open a pull request and request review.  
+4. Open a pull request against `main` and request review.  
 
 ---
 

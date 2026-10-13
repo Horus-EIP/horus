@@ -31,7 +31,8 @@ Contributing is voluntary and unpaid. You choose what you work on and when, and 
 
 ### Branches
 
-- The working branch is **`Sprint#1_September2026_Tek5`**: until later in the year it plays the role of `master`. Start from it and open your pull request against it.
+- The working branch is **`main`** in [`Horus-EIP/horus`](https://github.com/Horus-EIP/horus). Start from it and open your pull request against it.
+- The Epitech repository's `master` receives our work through a sync pull request from `main` after each batch of merged work. Nobody commits there directly.
 - Name your branch `issue-<number>-<short-description>`, for example `issue-42-agent-heartbeat`.
 
 ### Commits
