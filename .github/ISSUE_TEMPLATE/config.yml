@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question
+    url: https://github.com/Horus-EIP/horus-bench-kit/discussions
+    about: Ask how to use the kit, or share results, in Discussions.
+  - name: Security vulnerability
+    url: https://github.com/Horus-EIP/horus-bench-kit/security/advisories/new
+    about: Report it privately, never in a public issue.

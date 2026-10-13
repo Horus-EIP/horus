@@ -65,7 +65,7 @@ FORBIDDEN = (
         "a maintainer email domain",
         "a459ebb6e7f7f9e932cb840f11bb99418a9947842ef57a97e6fae8932139bc25",
         11,
-        allowed_in=frozenset({"LICENSE", "NOTICE"}),
+        allowed_in=frozenset({"LICENSE", "NOTICE", "CODE_OF_CONDUCT.md"}),
     ),
     Forbidden("a product container path", "8f446954d61fc9b34bd1e9235dcb9a1fd431c26ac4c08a4c9e0a9b05121e5b87", 10),
     Forbidden("a product setting", "230922a8bc86275ec43c08794f5a7e248def15d202f5cada9b9e667d27b6ae13", 20),

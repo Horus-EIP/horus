@@ -2,6 +2,18 @@
 
 Every release of horus-bench-kit, newest first. Versions follow [Semantic Versioning](https://semver.org/). Report formats carry their own `schema_version`, described in [docs/FORMATS.md](docs/FORMATS.md).
 
+## Unreleased
+
+### Added
+
+- The files of the public repository: CONTRIBUTING.md (claiming an issue, branches, the commit norm, the sign-off, pull requests), CODE_OF_CONDUCT.md (Contributor Covenant 2.1), SECURITY.md (private vulnerability reporting), issue forms, a pull request template and CODEOWNERS.
+- GitHub workflows: CI runs the tests on Python 3.10 and 3.13 and builds the zip; a check that every commit of a pull request is signed off by its author; a bot that assigns an issue to whoever claims it in a comment, reminds them after 7 days without activity and frees the issue after 14; a welcome on a newcomer's issue or pull request. Their tests are in `tests/github/`.
+- `.github/rulesets/main.json`, the default branch's protection to import, and `.github/labels.json`, the repository's labels.
+
+### Changed
+
+- `horus_bench_kit.publishable` accepts the maintainers' email domain in CODE_OF_CONDUCT.md, which gives their addresses for reports.
+
 ## 0.1.1 - 2026-10-09
 
 ### Fixed

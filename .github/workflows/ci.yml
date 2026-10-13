@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  tests:
+    name: Tests and zip (Python ${{ matrix.python }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.13']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install the kit in a fresh environment
+        run: |
+          python -m venv "$RUNNER_TEMP/kit-venv"
+          "$RUNNER_TEMP/kit-venv/bin/pip" install ".[test]"
+
+      - name: Run the tests against the installed package
+        run: '"$RUNNER_TEMP/kit-venv/bin/python" -m pytest -o pythonpath= -q -p no:cacheprovider'
+
+      - name: Build the zip, which refuses to when a publishing check fails
+        run: '"$RUNNER_TEMP/kit-venv/bin/python" scripts/make-zip.py --out "$RUNNER_TEMP/kit-zip"'

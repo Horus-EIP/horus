@@ -133,7 +133,9 @@ def test_the_built_in_rules_hold_only_digests():
     assert len({rule.sha256 for rule in FORBIDDEN}) == 8
     assert all(re.fullmatch(r"[0-9a-f]{64}", rule.sha256) for rule in FORBIDDEN)
     assert sum(rule.words for rule in FORBIDDEN) == 1
-    assert [rule.allowed_in for rule in FORBIDDEN if rule.allowed_in] == [frozenset({"LICENSE", "NOTICE"})]
+    assert [rule.allowed_in for rule in FORBIDDEN if rule.allowed_in] == [
+        frozenset({"LICENSE", "NOTICE", "CODE_OF_CONDUCT.md"})
+    ]
 
 
 def test_the_checks_module_stands_alone():
