@@ -58,7 +58,7 @@ The sync merge commit stays in `master`: it carries no change of its own, so `ma
 
 ## What CI runs
 
-The workflows are in `.github/workflows/`, and the same files are in both repositories.
+The workflows are in `.github/workflows/`; each sync pull request brings the same files to the Epitech `master`.
 
 | Workflow | Runs on | What for |
 |---|---|---|
@@ -76,11 +76,11 @@ On a pull request, a new push cancels the run still going for that pull request;
 | Security (bandit) | bandit 1.9.4 on `src/`, `installer/` and `scripts/`, without the tests and `scripts/integration-checks/`. Every finding goes to the job summary; the job fails on a high-severity one. |
 | Version numbers match VERSION | The `tests/ci` suite, then every version number in the repository against `VERSION`. |
 | Licences | `THIRD_PARTY_NOTICES` is up to date, and there is no GPL, AGPL or SSPL licence among the Python packages, the web client and the desktop app. |
-| Bench kit (Python 3.10 and 3.13) | The kit installed on its own, its tests, its zip, and no Horus content in it. |
+| Bench kit (standalone, Python 3.10 and 3.13) | The kit installed on its own, its tests, its zip, and no Horus content in it. |
 | CPU build wiring | The torch pin, the Dockerfiles, the CPU overlay and the image job. |
 | CPU image · mas, agent, knowledge_store | Each image builds through the CPU overlay, with no CUDA package and no torch; its size and build time go to the job summary. |
-| Tests · MAS, Agent, Knowledge Store, Installer, LLM mock | The unit tests with coverage, on the images' Python (`src/services/PYTHON_VERSION`). Minimum coverage, lines and branches: 85 %, 90 %, 85 %, none and 90 % ([TESTING.md](../TESTING.md)). LLM mock also runs the contract tests. A failed job uploads its reports, kept 3 days; a green one uploads none. |
-| End to end · mock AI | The whole stack in mock AI mode, with no model: the demo documents uploaded and `installer/smoke.py` run ([docs/mock-ai.md](mock-ai.md)). It usually takes 7 to 10 minutes; the job is stopped after 40 (`timeout-minutes`). |
+| Tests · MAS, Agent, Knowledge Store, Installer, LLM mock | Each part's tests with coverage, on the images' Python (`src/services/PYTHON_VERSION`). Minimum coverage, lines and branches: 85 %, 90 %, 85 %, none and 90 % ([TESTING.md](../TESTING.md)). LLM mock also runs the contract tests. When MAS, Agent or Knowledge Store fails, the job uploads its coverage and test reports, kept 3 days; Installer and LLM mock upload nothing. |
+| End to end · mock AI | The whole stack in mock AI mode, with no model: the demo documents uploaded and `installer/smoke.py` run ([docs/mock-ai.md](mock-ai.md)). It took 7 to 10 minutes in our runs; the job is stopped after 40 (`timeout-minutes`). |
 | Coverage summary | One table with the coverage of the five test suites, in the run's summary. |
 
 ### Not in CI yet
