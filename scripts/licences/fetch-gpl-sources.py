@@ -54,7 +54,7 @@ def fetch(url: str, attempts: int = 4) -> bytes:
 
 
 def download(url: str, folder: Path, digest: str = "", algorithm: str = "sha1", attempts: int = 4) -> Path:
-    target = folder / hashlib.sha1(url.encode()).hexdigest()
+    target = folder / hashlib.sha1(url.encode()).hexdigest() # nosec B324 - Non-cryptographic usage for unique filename generation
     for attempt in range(attempts):
         hasher = hashlib.new(algorithm)
         try:

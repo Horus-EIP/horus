@@ -76,8 +76,12 @@ jobs:
         run: pip install bandit[toml]==1.8.2
 
       - name: Run bandit
-        continue-on-error: true 
-        run: bandit -c pyproject.toml -r src/ installer/ scripts/ 
+        run: |
+          bandit -c pyproject.toml -lll -r src/ installer/ scripts/
+          echo "### Bandit Security Scan Results" >> \$GITHUB_STEP_SUMMARY
+          echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
+          bandit -c pyproject.toml -r src/ installer/ scripts/ >> $GITHUB_STEP_SUMMARY 2>&1 || true
+          echo "\`\`\`" >> \$GITHUB_STEP_SUMMARY
         
   versions:
     name: Version numbers match VERSION
