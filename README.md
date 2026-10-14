@@ -217,6 +217,7 @@ Full documentation lives under [`docs/`](docs/) and is published as a browsable 
 | Mock AI mode (Horus without a language model) | [docs/mock-ai.md](docs/mock-ai.md) |
 | Security and compliance (RBAC, audit, data, telemetry) | [docs/security.md](docs/security.md) |
 | How to contribute | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| CI and branches (branch model, sync to the Epitech repository, CI jobs) | [docs/ci-and-branches.md](docs/ci-and-branches.md) |
 | Code style | [docs/contributing.md](docs/contributing.md) |
 | Test strategy | [TESTING.md](TESTING.md) |
 | Versions and releases | [VERSIONING.md](VERSIONING.md) |

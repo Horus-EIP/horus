@@ -42,6 +42,7 @@ If you are not one of the three maintainers:
 
 - The working branch is **`main`** in [`Horus-EIP/horus`](https://github.com/Horus-EIP/horus). Start from it and open your pull request against it.
 - The Epitech repository's `master` receives our work through a sync pull request from `main` after each batch of merged work. Nobody commits there directly.
+- How the branches, the sync to the Epitech repository and CI fit together: [docs/ci-and-branches.md](docs/ci-and-branches.md).
 - Name your branch `issue-<number>-<short-description>`, for example `issue-42-agent-heartbeat`.
 
 ### Commits
