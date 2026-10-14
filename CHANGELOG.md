@@ -108,6 +108,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 ### Added
 
 - A dedicated, least-privilege MAS account for agent workers (B-116): the installer and `init-env.sh` generate `SUPER_AGENT_PASSWORD`, MAS creates or upgrades the account at startup, and agent containers no longer authenticate with the super-user login. The role can register agents and execute agent work; it does not receive admin permissions (`ac5236e`, `05178b7`).
+- CI runs Bandit to scan Python code for security issues (B-42, `8561544`)
 - One llama-server (`ghcr.io/ggml-org/llama.cpp:server-b11382`, Qwen3-4B-Instruct-2507 Q4_K_M) serves MAS and every agent on the CPU profiles; neither service loads a local model (B-90, `9739864`)
 - `POST /tasks/new_task` answers 202 with the task id at once; task events are stored in Redis Streams, replayed with `GET /tasks/{id}/events?since=`, and a heartbeat arrives every 5 s; an `Idempotency-Key` keeps a retried request from creating a second task (B-93, `fd8778b`)
 - Bounded work queues with publisher confirms ("Busy, position N"), a claim-based agent worker that never runs a task twice, and a timeout that fails the task instead of answering with a canned text (B-94, `84fc34b`)
@@ -151,6 +152,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 ### Changed
 
+- MAS passes Alembic commands as argument lists with shell execution disabled (B-42, `aae370c`)
 - CPU images install the CPU PyTorch wheel, and torch is pinned to 2.14.1 (B-87, `c0f89b3`); since B-96 the CPU images contain no torch at all
 - Memory limits for the agent and the knowledge store, thread budgets from the physical core count, and one MAS generation at a time (B-88, `39fc78c`)
 - CPU profiles use fewer passages and a 6,000-character context cap, and stream the answer (B-89, `1d5dd31`)
@@ -383,3 +385,4 @@ Tag `v0.1.0` (`18704c0`), the first tagged beta. Covers the commits after the Ma
 ### Fixed
 
 - Fix missing pytest-cov dependency for CI coverage (`da3f731`)
+

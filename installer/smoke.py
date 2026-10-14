@@ -183,7 +183,7 @@ class MessageAssembler:
         return opcode, payload
 
 def expected_accept(key: str) -> str:
-    digest = hashlib.sha1((key + WS_GUID).encode("ascii")).digest()
+    digest = hashlib.sha1((key + WS_GUID).encode("ascii"), usedforsecurity=False).digest()
     return base64.b64encode(digest).decode("ascii")
 
 def build_handshake(host_header: str, path: str, key: str) -> bytes:
