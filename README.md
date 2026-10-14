@@ -13,6 +13,26 @@ What Horus is not:
 - **Not open source.** Horus is proprietary. Using it needs a signed agreement (see [License](#license)).
 - **Not finished.** Horus is a beta for invited testers. Its version is in `VERSION`.
 
+## What it looks like
+
+![Chat: a question about the Q4 2025 financial report, answered with the document it came from](docs/assets/readme/chat.png)
+
+A question about the demo documents: the agents search them and answer, citing the documents they used.
+
+![Knowledge store with the five demo documents](docs/assets/readme/knowledge-store.png)
+
+The knowledge store. Each document added gets a category, its entities and a summary.
+
+![Dashboard with the agents online and the task counts](docs/assets/readme/dashboard.png)
+
+The dashboard: the agents online, their skills, and the tasks.
+
+![The trace of one question across the services](docs/assets/readme/admin-traces.png)
+
+For admins, the logs, metrics and traces of the whole stack, inside the web client. Here, one trace across the agent and MAS: the agent handing back an answer, down to each database call.
+
+Taken on 14/10/2026 with Horus 0.1.2, local mode, `cpu-standard` profile (Qwen3-4B-Instruct-2507, Q4_K_M), with the five documents in `demo_assets/`.
+
 ## Requirements
 
 | | |
