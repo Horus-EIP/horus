@@ -778,21 +778,21 @@ class TestRunCommand:
     def test_success_returns_true(self):
         with patch.object(alembic_helper.subprocess, "run") as run:
             run.return_value = MagicMock(returncode=0)
-            assert alembic_helper.run_command("alembic current", "desc") is True
+            assert alembic_helper.run_command(["alembic", "current"], "desc") is True
         run.assert_called_once()
-        # Runs inside the db/ working directory via the shell.
+        # Runs inside the db/ working directory without invoking a shell.
         assert run.call_args.kwargs["cwd"] == "db"
-        assert run.call_args.kwargs["shell"] is True
+        assert run.call_args.kwargs["shell"] is False
 
     def test_nonzero_returncode_returns_false(self):
         with patch.object(alembic_helper.subprocess, "run") as run:
             run.return_value = MagicMock(returncode=1)
-            assert alembic_helper.run_command("alembic bogus") is False
+            assert alembic_helper.run_command(["alembic", "bogus"]) is False
 
     def test_subprocess_exception_returns_false(self):
         with patch.object(alembic_helper.subprocess, "run",
                           side_effect=OSError("no alembic")):
-            assert alembic_helper.run_command("alembic current", "d") is False
+            assert alembic_helper.run_command(["alembic", "current"], "d") is False
 
 
 class TestAlembicMain:
@@ -815,12 +815,12 @@ class TestAlembicMain:
     @pytest.mark.parametrize(
         "command, expected_cmd",
         [
-            ("status", "alembic current"),
-            ("history", "alembic history"),
-            ("upgrade", "alembic upgrade head"),
-            ("downgrade", "alembic downgrade base"),
-            ("rollback-1", "alembic downgrade -1"),
-            ("current", "alembic current"),
+            ("status", ["alembic", "current"]),
+            ("history", ["alembic", "history"]),
+            ("upgrade", ["alembic", "upgrade", "head"]),
+            ("downgrade", ["alembic", "downgrade", "base"]),
+            ("rollback-1", ["alembic", "downgrade", "-1"]),
+            ("current", ["alembic", "current"]),
         ],
     )
     def test_simple_commands_dispatch(self, command, expected_cmd, monkeypatch):
@@ -830,15 +830,16 @@ class TestAlembicMain:
 
     def test_command_is_case_insensitive(self, monkeypatch):
         run = self._run_main(["alembic_helper.py", "STATUS"], monkeypatch)
-        assert run.call_args.args[0] == "alembic current"
+        assert run.call_args.args[0] == ["alembic", "current"]
 
     def test_create_with_description_builds_autogenerate(self, monkeypatch):
         run = self._run_main(
             ["alembic_helper.py", "create", "Add", "email", "column"], monkeypatch
         )
         cmd = run.call_args.args[0]
-        assert "alembic revision --autogenerate" in cmd
-        assert 'Add email column' in cmd
+        assert cmd == [
+            "alembic", "revision", "--autogenerate", "-m", "Add email column"
+        ]
 
     def test_create_without_description_exits_1(self, monkeypatch):
         monkeypatch.setattr(alembic_helper.sys, "argv", ["alembic_helper.py", "create"])
@@ -852,9 +853,9 @@ class TestAlembicMain:
         run = self._run_main(["alembic_helper.py", "test"], monkeypatch)
         called_cmds = [c.args[0] for c in run.call_args_list]
         # The cycle drives downgrade-to-base then upgrade-to-head plus status checks.
-        assert "alembic downgrade base" in called_cmds
-        assert "alembic upgrade head" in called_cmds
-        assert called_cmds.count("alembic current") >= 2
+        assert ["alembic", "downgrade", "base"] in called_cmds
+        assert ["alembic", "upgrade", "head"] in called_cmds
+        assert called_cmds.count(["alembic", "current"]) >= 2
 
     def test_unknown_command_exits_1(self, monkeypatch):
         monkeypatch.setattr(

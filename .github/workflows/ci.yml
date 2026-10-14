@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: ['main', 'master']
   pull_request:
   workflow_dispatch:
 
@@ -59,6 +59,28 @@ jobs:
       - name: Run ruff
         run: ruff check src tests scripts installer packaging opensource
 
+  security:
+    name: Security (bandit)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install Bandit
+        run: "pip install bandit[toml]==1.9.4"
+
+      - name: Generate Bandit Security Summary
+        run: |
+          echo "### Bandit General Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          bandit -c pyproject.toml -r src/ installer/ scripts/ >> $GITHUB_STEP_SUMMARY 2>&1 || true
+
+      - name: Enforce High Severity Security Gates
+        run: |
+          bandit -c pyproject.toml -lll -r src/ installer/ scripts/
+
+        
   versions:
     name: Version numbers match VERSION
     runs-on: ubuntu-24.04

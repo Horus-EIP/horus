@@ -18,7 +18,7 @@ def run_command(cmd, description=""):
 
     try:
         result = subprocess.run(
-            cmd, shell=True, cwd="db", capture_output=False, text=True
+            cmd, shell=False, cwd="db", capture_output=False, text=True
         )
         return result.returncode == 0
     except Exception as e:
@@ -57,19 +57,19 @@ Run from: src/services/mas/
     command = sys.argv[1].lower()
 
     if command == "status":
-        run_command("alembic current", "Current Migration Status")
+        run_command(["alembic",  "current"], "Current Migration Status")
 
     elif command == "history":
-        run_command("alembic history", "Migration History")
+        run_command(["alembic", "history"], "Migration History")
 
     elif command == "upgrade":
-        run_command("alembic upgrade head", "Applying all pending migrations")
+        run_command(["alembic", "upgrade", "head"], "Applying all pending migrations")
 
     elif command == "downgrade":
-        run_command("alembic downgrade base", "Rolling back all migrations to base")
+        run_command(["alembic", "downgrade", "base"], "Rolling back all migrations to base")
 
     elif command == "rollback-1":
-        run_command("alembic downgrade -1", "Rolling back last migration")
+        run_command(["alembic", "downgrade", "-1"], "Rolling back last migration")
 
     elif command == "create":
         if len(sys.argv) < 3:
@@ -79,7 +79,7 @@ Run from: src/services/mas/
             )
             sys.exit(1)
         description = " ".join(sys.argv[2:])
-        cmd = f'alembic revision --autogenerate -m "{description}"'
+        cmd = ["alembic", "revision", "--autogenerate", "-m", description]
         run_command(cmd, f"Creating new migration: {description}")
 
     elif command == "test":
@@ -91,19 +91,19 @@ Run from: src/services/mas/
 
         # Test sequence
         print("1️⃣ Checking current status...")
-        run_command("alembic current", "Current Status")
+        run_command(["alembic", "current"], "Current Status")
 
         print("\n2️⃣ Showing history...")
-        run_command("alembic history", "Migration History")
+        run_command(["alembic", "history"], "Migration History")
 
         print("\n3️⃣ Testing downgrade to base...")
-        run_command("alembic downgrade base", "Downgrade Test")
+        run_command(["alembic", "downgrade", "base"], "Downgrade Test")
 
         print("\n4️⃣ Testing upgrade to head...")
-        run_command("alembic upgrade head", "Upgrade Test")
+        run_command(["alembic", "upgrade", "head"], "Upgrade Test")
 
         print("\n5️⃣ Verifying final status...")
-        run_command("alembic current", "Final Status")
+        run_command(["alembic", "current"], "Final Status")
 
         print("""
 ✅ Migration cycle test complete!
@@ -113,7 +113,7 @@ Run from: src/services/mas/
         """)
 
     elif command == "current":
-        run_command("alembic current", "Current Revision Details")
+        run_command(["alembic", "current"], "Current Revision Details")
 
     else:
         print(f"❌ Unknown command: {command}")
