@@ -235,12 +235,16 @@ On first application startup:
 ## - Role assignments
 ## - Permission mappings
 
-## Environment variables set in .env (the installer and init-env.sh generate the password):
+## Environment variables set in .env (the installer and init-env.sh generate the passwords):
 SUPER_USER_USERNAME=admin
 SUPER_USER_PASSWORD=<24 generated characters>
+SUPER_AGENT_USERNAME=agent
+SUPER_AGENT_PASSWORD=<generated agent password>
 ```
 
 MAS creates the admin account once, on its first start, and refuses to create it when `SUPER_USER_PASSWORD` is empty or `admin`: it logs an error that says how to set one. On every start it also checks the stored password (`src/services/mas/db/admin_account.py`): an account still on the shipped `admin` gets the `SUPER_USER_PASSWORD` from `.env`, and an account whose password was changed in Horus is never touched. The installer shows a password it generated once, at the end, with the login name, and only on a terminal; it never writes it to `install-log.txt`, the `--json-events` stream or `horus-profile.json`. [Upgrades and uninstall](operations.md#upgrades-and-uninstall) says what an upgrade does.
+
+MAS also creates the dedicated `agent` login from `SUPER_AGENT_USERNAME` and `SUPER_AGENT_PASSWORD` on startup (`src/services/mas/db/agent_account.py`). The installer and `init-env.sh` generate this password when needed; unlike the admin password, the installer does not display it. Agent workers use this login only to obtain a MAS token and register themselves. The role has only `agent:create` and `agent:execute`; task claims, results and step events are authenticated with each registered worker's API key.
 
 ##### 2. Creating Users
 
@@ -624,20 +628,7 @@ This document provides a security assessment of the Horus Multi-Agent System, co
 
 #### 2.2 Role Matrix
 
-| Permission | Admin | Manager | User | System | Agent |
-|------------|-------|---------|------|--------|-------|
-| user:create | Yes | No | No | No | No |
-| user:read | Yes | Yes | Yes | No | No |
-| task:create | Yes | Yes | Yes | No | No |
-| task:read | Yes | Yes | Yes | Yes | No |
-| task:delete | Yes | Yes | Yes | No | No |
-| agent:create | Yes | No | No | No | Yes |
-| agent:read | Yes | Yes | Yes | Yes | No |
-| agent:delete | Yes | No | No | No | No |
-| agent:execute | Yes | Yes | Yes | Yes | Yes |
-| system:config | Yes | No | No | No | No |
-
-Note: Permission names in code use enums such as `TASK_DELETE`, not `task:cancel`. Verify `auth/permissions.py` for the authoritative matrix.
+See the [Role-Permission Matrix](#role-permission-matrix) above for the complete current mapping. In particular, the `agent` role has `agent:create` and `agent:execute` only; worker API-key routes are separately authenticated and do not grant role-based access to tasks or administration.
 
 #### 2.3 Strengths
 
@@ -799,7 +790,7 @@ READ_ONLY_ROOTFS true
 - Local `.env` (not committed) for Compose  
 - The installer and `src/infra/init-env.sh` generate `JWT_SECRET_KEY` and `REDIS_PASSWORD` (64 hex characters each) and `SUPER_USER_PASSWORD` (24 characters that meet the MAS password policy) into `src/infra/.env`, and the installer also generates `CORPUS_SCAN_TOKEN`; `.env.example` leaves `REDIS_PASSWORD` and `SUPER_USER_PASSWORD` empty. On an install that still has the password earlier releases shipped (`redis_password`) or an empty one, the installer writes a generated one, and the `docker compose up -d` it ends with recreates `redis`, `mas` and `agent` with it.
 - `POSTGRES_PASSWORD`, `RABBITMQ_PASSWORD` and `PGADMIN_DEFAULT_PASSWORD` still ship as defaults; their ports answer on 127.0.0.1 only (see 6.3 for the Linux Engine caveat).
-- `SUPER_USER_PASSWORD` was `admin` in every release before this one, and no install keeps it now. On an install whose `.env` still has `admin` or an empty value, the installer writes a generated one; on its next start MAS gives it to an account still on `admin` (an account whose password was changed in Horus keeps its own), and the installer shows it once, at the end. The agent signs in with the same value (`ORCHESTRATOR_PASSWORD`), so the account and `.env` must agree: once the stack is up the installer runs `python -m db.admin_account` in the `mas` container and warns when they do not. The web client forwards every `/api/orchestrator/*` request to MAS, `/auth/token` included; port 3000 answers on 127.0.0.1 only, unless `HORUS_WEB_BIND` opens it to the network (6.3).
+- `SUPER_USER_PASSWORD` was `admin` in earlier releases, and no install keeps it now. On an install whose `.env` still has `admin` or an empty value, the installer writes a generated one; on its next start MAS gives it to an account still on `admin` (an account whose password was changed in Horus keeps its own), and the installer shows it once, at the end. Before B-116, the agent also used this admin login; it now uses the separate `SUPER_AGENT_USERNAME` / `SUPER_AGENT_PASSWORD` account described above. The web client forwards every `/api/orchestrator/*` request to MAS, `/auth/token` included; port 3000 answers on 127.0.0.1 only, unless `HORUS_WEB_BIND` opens it to the network (6.3).
 
 **Recommendations:**
 - Use Docker secrets for production

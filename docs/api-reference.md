@@ -218,7 +218,7 @@ Invalidate the current JWT token by adding it to a Redis blacklist. The token st
 
 Register a new agent with specified skills and capabilities. Ensures the **shared** RabbitMQ work queue for that agent’s `type` exists (e.g. `horus.work.general`), so multiple pool workers can consume the same queue.
 
-**Auth:** JWT Bearer (requires `agent:create` permission -- admin only)
+**Auth:** JWT bearer token with `agent:create` permission. The `admin` role and the dedicated `agent` role can register workers; `agent` is limited to `agent:create` and `agent:execute`. Subsequent worker task operations use the registered worker's API key.
 
 **Request:** `application/json`
 
@@ -244,8 +244,8 @@ Register a new agent with specified skills and capabilities. Ensures the **share
 | Code | Detail |
 |------|--------|
 | `401` | `Authentication Failed` |
-| `403` | Insufficient permissions (admin required). |
-| `409` | `An agent already has the name 'DocumentAnalyzer'` -- duplicate name. |
+| `403` | Insufficient permissions for `agent:create`. |
+| `409` | An agent with that name is already active. |
 | `500` | Database or RabbitMQ provisioning error. |
 
 ---
@@ -1540,25 +1540,25 @@ Returns an empty array `[]` if no messages exist for the agent.
 
 ### Appendix: RBAC Permission Matrix
 
-| Permission | admin | manager | user | system |
-|------------|:-----:|:-------:|:----:|:------:|
-| `user:create` | x | | | |
-| `user:read` | x | x | x | |
-| `user:update` | x | | | |
-| `user:delete` | x | | | |
-| `task:create` | x | x | x | |
-| `task:read` | x | x | x | x |
-| `task:execute` | x | x | | x |
-| `task:delete` | x | x | x | |
-| `task:approve` | x | x | | |
-| `analytics:view` | x | x | x | |
-| `data:export` | x | x | | |
-| `system:config` | x | | | |
-| `agent:create` | x | | | |
-| `agent:read` | x | x | x | x |
-| `agent:update` | x | | | |
-| `agent:delete` | x | | | |
-| `agent:execute` | x | x | x | x |
+| Permission | admin | manager | user | system | agent |
+|------------|:-----:|:-------:|:----:|:------:|:-----:|
+| `user:create` | x | | | | |
+| `user:read` | x | x | x | | |
+| `user:update` | x | | | | |
+| `user:delete` | x | | | | |
+| `task:create` | x | x | x | | |
+| `task:read` | x | x | x | x | |
+| `task:execute` | x | x | | x | |
+| `task:delete` | x | x | x | | |
+| `task:approve` | x | x | | | |
+| `analytics:view` | x | x | x | | |
+| `data:export` | x | x | | | |
+| `system:config` | x | | | | |
+| `agent:create` | x | | | | x |
+| `agent:read` | x | x | x | x | |
+| `agent:update` | x | | | | |
+| `agent:delete` | x | | | | |
+| `agent:execute` | x | x | x | x | x |
 
 ---
 
