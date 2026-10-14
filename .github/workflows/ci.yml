@@ -69,15 +69,17 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
       - name: Install Bandit
-        run: pip install bandit[toml]==1.8.2
+        run: "pip install bandit[toml]==1.9.4"
 
-      - name: Run bandit
+      - name: Generate Bandit Security Summary
+        run: |
+          echo "### Bandit General Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          bandit -c pyproject.toml -r src/ installer/ scripts/ >> $GITHUB_STEP_SUMMARY 2>&1 || true
+
+      - name: Enforce High Severity Security Gates
         run: |
           bandit -c pyproject.toml -lll -r src/ installer/ scripts/
-          echo "### Bandit Security Scan Results" >> \$GITHUB_STEP_SUMMARY
-          echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
-          bandit -c pyproject.toml -r src/ installer/ scripts/ >> $GITHUB_STEP_SUMMARY 2>&1 || true
-          echo "\`\`\`" >> \$GITHUB_STEP_SUMMARY
+
         
   versions:
     name: Version numbers match VERSION

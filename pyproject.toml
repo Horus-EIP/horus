@@ -92,4 +92,5 @@ known-first-party = [
 exclude_dirs = [
     "tests",
     "*/tests/*",
+    "scripts/integration-checks/",
 ]

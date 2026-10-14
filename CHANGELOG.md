@@ -106,6 +106,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 ### Added
 
+- CI runs Bandit to scan Python code for security issues (B-42, `8561544`)
 - One llama-server (`ghcr.io/ggml-org/llama.cpp:server-b11382`, Qwen3-4B-Instruct-2507 Q4_K_M) serves MAS and every agent on the CPU profiles; neither service loads a local model (B-90, `9739864`)
 - `POST /tasks/new_task` answers 202 with the task id at once; task events are stored in Redis Streams, replayed with `GET /tasks/{id}/events?since=`, and a heartbeat arrives every 5 s; an `Idempotency-Key` keeps a retried request from creating a second task (B-93, `fd8778b`)
 - Bounded work queues with publisher confirms ("Busy, position N"), a claim-based agent worker that never runs a task twice, and a timeout that fails the task instead of answering with a canned text (B-94, `84fc34b`)
@@ -149,6 +150,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 ### Changed
 
+- MAS passes Alembic commands as argument lists with shell execution disabled (B-42, `aae370c`)
 - CPU images install the CPU PyTorch wheel, and torch is pinned to 2.14.1 (B-87, `c0f89b3`); since B-96 the CPU images contain no torch at all
 - Memory limits for the agent and the knowledge store, thread budgets from the physical core count, and one MAS generation at a time (B-88, `39fc78c`)
 - CPU profiles use fewer passages and a 6,000-character context cap, and stream the answer (B-89, `1d5dd31`)
@@ -217,14 +219,12 @@ Fixes for what the ATP beta testers hit. Not tagged yet: the tag waits for the s
 - Healthchecks for the agent (new unauthenticated `GET /health`), the knowledge store and the web client (new `GET /api/health`); dependents wait for `service_healthy` (B-59, `8d1da93`)
 - One version number: `VERSION` at the repository root feeds the installer, the bundle name, the services' `/health` and OpenAPI version, the web client and the desktop shell; `scripts/ci/check-versions.py` fails CI when a copy differs (B-51, `2cdc325`)
 - 100-question evaluation set on `demo_assets/` (`tests/eval/testset.yaml`) and `scripts/eval/run-eval.py`, which writes `benchmarks/<label>-<date>.json` (B-54, `084a1c2`)
-- The bandit script has been added to the ci.yml.
 
 ### Changed
 
 - The first-install time is given as 1.5 to 2 hours everywhere, the figure the beta testers measured (`78bb12e`)
 - Task attachments carry an optional `doc_id` next to the filename; filename-only requests work as before (`0b93375`)
 - `DELETE /{id}` on the knowledge store returns `deleted_ids` and `removed_files`, and answers 404 for an unknown id (`3e4e54a`)
-- I converted inside 'mas/alembic_helper.py' the string that was representing command into a list of arguments to be able to deactivate shell parameter inisde the run_command function.
 
 
 ## 0.1.1 - 2026-09-07
@@ -383,5 +383,4 @@ Tag `v0.1.0` (`18704c0`), the first tagged beta. Covers the commits after the Ma
 ### Fixed
 
 - Fix missing pytest-cov dependency for CI coverage (`da3f731`)
-
 
