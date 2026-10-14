@@ -217,12 +217,14 @@ Fixes for what the ATP beta testers hit. Not tagged yet: the tag waits for the s
 - Healthchecks for the agent (new unauthenticated `GET /health`), the knowledge store and the web client (new `GET /api/health`); dependents wait for `service_healthy` (B-59, `8d1da93`)
 - One version number: `VERSION` at the repository root feeds the installer, the bundle name, the services' `/health` and OpenAPI version, the web client and the desktop shell; `scripts/ci/check-versions.py` fails CI when a copy differs (B-51, `2cdc325`)
 - 100-question evaluation set on `demo_assets/` (`tests/eval/testset.yaml`) and `scripts/eval/run-eval.py`, which writes `benchmarks/<label>-<date>.json` (B-54, `084a1c2`)
+- The bandit script has been added to the ci.yml.
 
 ### Changed
 
 - The first-install time is given as 1.5 to 2 hours everywhere, the figure the beta testers measured (`78bb12e`)
 - Task attachments carry an optional `doc_id` next to the filename; filename-only requests work as before (`0b93375`)
 - `DELETE /{id}` on the knowledge store returns `deleted_ids` and `removed_files`, and answers 404 for an unknown id (`3e4e54a`)
+- I converted inside 'mas/alembic_helper.py' the string that was representing command into a list of arguments to be able to deactivate shell parameter inisde the run_command function.
 
 
 ## 0.1.1 - 2026-09-07
