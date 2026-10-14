@@ -1,7 +1,6 @@
+from core import ai_mode
 from fastapi import APIRouter
 from pydantic import BaseModel
-
-from core import ai_mode
 
 router = APIRouter(prefix="/system", tags=["System"])
 

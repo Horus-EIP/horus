@@ -1,11 +1,10 @@
 """``Conversations`` ORM model + audit listeners."""
 
+from core.logger import log_db_operation
+from db.database import Base
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, event
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-
-from core.logger import log_db_operation
-from db.database import Base
 
 
 class Conversations(Base):

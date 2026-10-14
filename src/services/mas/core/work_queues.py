@@ -7,10 +7,9 @@ rows still identify each instance for heartbeats, API keys, and orchestration;
 ``Task.agent_id`` remains the orchestrator-chosen assignee.
 """
 
-from sqlalchemy.orm import Session
-
 from core.config import settings
 from db.models import Agents
+from sqlalchemy.orm import Session
 
 
 def work_queue_name_for_agent_type(agent_type) -> str:

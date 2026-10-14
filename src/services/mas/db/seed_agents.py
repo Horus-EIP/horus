@@ -15,12 +15,11 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy.orm import Session
-
 from auth.auth_tool_functions import bcrypt_context
 from core.logger import get_logger, log_db_operation, log_success
 from db.models import Agents
 from db.models.agent_types import AgentTypes
+from sqlalchemy.orm import Session
 
 logger = get_logger("seed_agents")
 
@@ -55,7 +54,12 @@ DEFAULT_AGENTS: list[dict] = [
     {
         "name": "Finance-Analyst",
         "type": AgentTypes.ANALYST,
-        "skills": ["financial_analysis", "expense_review", "budget_summary", "knowledge_retrieval"],
+        "skills": [
+            "financial_analysis",
+            "expense_review",
+            "budget_summary",
+            "knowledge_retrieval",
+        ],
         "description": "Financial analysis specialist. Reads quarterly reports, expense data, and budget figures.",
     },
     {
@@ -73,7 +77,12 @@ DEFAULT_AGENTS: list[dict] = [
     {
         "name": "Researcher",
         "type": AgentTypes.RESEARCHER,
-        "skills": ["research", "literature_review", "citation_lookup", "knowledge_retrieval"],
+        "skills": [
+            "research",
+            "literature_review",
+            "citation_lookup",
+            "knowledge_retrieval",
+        ],
         "description": "Multi-source researcher. Pulls and synthesises information across the knowledge store.",
     },
 ]
@@ -90,9 +99,7 @@ def seed_default_agents(db: Session) -> int:
     """
     log_db_operation("SEED", "agents", "Seeding default agent directory...")
 
-    existing_names = {
-        name for (name,) in db.query(Agents.name).all() if name
-    }
+    existing_names = {name for (name,) in db.query(Agents.name).all() if name}
     inserted = 0
     # Stagger heartbeat in the past so the UI's "stale" indicator visibly fires
     # — these are placeholders until a real worker registers and overrides them.

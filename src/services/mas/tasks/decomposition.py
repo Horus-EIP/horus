@@ -9,29 +9,21 @@ synthesis helper (``aggregate_results``) that consolidates sub-task output.
 import json
 from graphlib import TopologicalSorter
 
-from opentelemetry import trace
-from sqlalchemy.orm import Session
-
-from agents.registry_tool_functions import (
-    _is_agent_recently_alive,
-    get_agent_by_type,
-    get_agent_id,
-    get_available_agents,
-)
+from agents.registry_tool_functions import (_is_agent_recently_alive,
+                                            get_agent_by_type, get_agent_id,
+                                            get_available_agents)
 from core.llm_setup import ask_llm
 from core.logger import get_logger
 from core.rabbitmq_tool import rabbitmq_instance
 from db.database import SessionLocal
 from db.models import Agents, AgentTypes
+from opentelemetry import trace
+from sqlalchemy.orm import Session
 from tasks.collaborative_task import CollaborativeTask
 from tasks.demo_log import pretty_log
 from tasks.intent_rules import classify_trivial_intent
-from tasks.prompts import (
-    clean_json_output,
-    get_decomposition_prompt,
-    get_prompt,
-    get_prompt_final_answer_generation,
-)
+from tasks.prompts import (clean_json_output, get_decomposition_prompt,
+                           get_prompt, get_prompt_final_answer_generation)
 
 logger = get_logger("task_tool_functions")
 tracer = trace.get_tracer(__name__)
@@ -313,7 +305,12 @@ def decompose_task(user_input: str, db: Session = None):
         # it or types it wrong. Default to "pending" so an otherwise-valid plan
         # isn't thrown away over a missing key.
         for st in json_output["sub_tasks"]:
-            if isinstance(st, dict) and "status" not in st or isinstance(st, dict) and st.get("status") != "pending":
+            if (
+                isinstance(st, dict)
+                and "status" not in st
+                or isinstance(st, dict)
+                and st.get("status") != "pending"
+            ):
                 st["status"] = "pending"
             if isinstance(st, dict) and "depends_on" not in st:
                 st["depends_on"] = []
@@ -353,11 +350,7 @@ def get_manager_agent(db: Session):
     """
     from db.models import Agents
 
-    return (
-        db.query(Agents)
-        .filter(Agents.name == "Manager")
-        .first()
-    )
+    return db.query(Agents).filter(Agents.name == "Manager").first()
 
 
 def _planned_steps_from_actions(action_list: list, db: Session) -> list[dict]:
@@ -380,9 +373,7 @@ def _planned_steps_from_actions(action_list: list, db: Session) -> list[dict]:
         row = by_id.get(agent_id)
         out.append(
             {
-                "agent_type": (
-                    row.type.value if (row and row.type) else "general"
-                ),
+                "agent_type": (row.type.value if (row and row.type) else "general"),
                 "agent_name": row.name if row else "?",
                 "description": demand,
             }
@@ -391,9 +382,7 @@ def _planned_steps_from_actions(action_list: list, db: Session) -> list[dict]:
 
 
 @tracer.start_as_current_span("announce_plan")
-def manager_announce_plan(
-    user_demand: str, action_list: list, db: Session
-) -> str:
+def manager_announce_plan(user_demand: str, action_list: list, db: Session) -> str:
     """Ask the Manager LLM to draft the chat message that announces a plan.
 
     Returns plain text (no JSON, no code fences) — the message is fanned out
@@ -414,7 +403,7 @@ def manager_announce_plan(
         # being told plain text.
         for fence in ("```text", "```markdown", "```"):
             if text.startswith(fence):
-                text = text[len(fence):].lstrip()
+                text = text[len(fence) :].lstrip()
             if text.endswith("```"):
                 text = text[:-3].rstrip()
         if not text:
@@ -426,9 +415,7 @@ def manager_announce_plan(
         listing = "; ".join(
             f"{s['agent_name']} ({s['description'][:80]})" for s in steps[:4]
         )
-        return (
-            f"I'll handle this in {len(steps)} step(s). Dispatching: {listing}."
-        )
+        return f"I'll handle this in {len(steps)} step(s). Dispatching: {listing}."
 
 
 @tracer.start_as_current_span("review_step")
@@ -461,7 +448,9 @@ def manager_review_step(
         cleaned = clean_json_output(raw)
         parsed = json.loads(cleaned)
     except Exception as exc:
-        logger.warning("Manager review LLM call failed: %s — defaulting to CONTINUE", exc)
+        logger.warning(
+            "Manager review LLM call failed: %s — defaulting to CONTINUE", exc
+        )
         return {"decision": "CONTINUE"}
 
     decision = (parsed.get("decision") or "CONTINUE").upper()
@@ -568,7 +557,10 @@ def choose_route_with_llm(user_input: str, db: Session) -> tuple[str | None, tup
     classification = json_output.get("classification", "UNKNOWN")
     pretty_log(f"ROUTER CLASSIFICATION: {classification.upper()}", "🎯")
 
-    if classification == "DIRECT_ANSWER" and classify_trivial_intent(user_input) is None:
+    if (
+        classification == "DIRECT_ANSWER"
+        and classify_trivial_intent(user_input) is None
+    ):
         return "SINGLE_AGENT", _reroute_direct_answer_to_single_agent(
             user_input, json_output.get("agent_name"), available_agents
         )
@@ -625,7 +617,9 @@ def _reroute_direct_answer_to_single_agent(
     return agent_id, user_input, None, []
 
 
-def _available_agent_id_by_name(agent_name: str | None, available_agents: list) -> str | None:
+def _available_agent_id_by_name(
+    agent_name: str | None, available_agents: list
+) -> str | None:
     for agent_id, name, _description, _agent_type in available_agents:
         if name == agent_name:
             return agent_id
@@ -634,7 +628,10 @@ def _available_agent_id_by_name(agent_name: str | None, available_agents: list) 
 
 def _default_agent_id(available_agents: list) -> str:
     for agent_id, _name, _description, agent_type in available_agents:
-        if str(getattr(agent_type, "value", agent_type)).lower() == AgentTypes.GENERAL.value:
+        if (
+            str(getattr(agent_type, "value", agent_type)).lower()
+            == AgentTypes.GENERAL.value
+        ):
             return agent_id
     return available_agents[0][0]
 

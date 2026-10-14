@@ -6,25 +6,23 @@ Endpoints are RBAC-gated; owner-only except for admin reads. See
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import Session
-
 from auth.auth_tool_functions import PermissionChecker
 from auth.permissions import Permission, Role
 from chat.chat_tool_functions import active_connections
-from conversations.conversation_tool_functions import get_conversations, get_history
-from conversations.openapi_docs import (
-    CREATE_CONVERSATION_OPENAPI_EXTRA,
-    CREATE_CONVERSATION_RESPONSES,
-    DELETE_CONVERSATION_RESPONSES,
-    GET_HISTORY_RESPONSES,
-    LIST_CONVERSATIONS_RESPONSES,
-)
+from conversations.conversation_tool_functions import (get_conversations,
+                                                       get_history)
+from conversations.openapi_docs import (CREATE_CONVERSATION_OPENAPI_EXTRA,
+                                        CREATE_CONVERSATION_RESPONSES,
+                                        DELETE_CONVERSATION_RESPONSES,
+                                        GET_HISTORY_RESPONSES,
+                                        LIST_CONVERSATIONS_RESPONSES)
 from core.logger import get_logger
 from db.database import get_db
 from db.models import Conversations
+from fastapi import APIRouter, Depends, HTTPException
 from schemas.schemas import ConversationCreation
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
 logger = get_logger("conversations")
@@ -109,7 +107,8 @@ async def get_conversation_history(
         and user.get("role") != Role.ADMIN.value
     ):
         raise HTTPException(
-            status_code=403, detail="Only the conversation's owner or an admin can read it"
+            status_code=403,
+            detail="Only the conversation's owner or an admin can read it",
         )
 
     history = get_history(chat_id, db)

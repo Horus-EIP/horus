@@ -92,9 +92,7 @@ REGISTER_AGENT_RESPONSES = {
                     },
                     "database_error": {
                         "summary": "Database transaction error",
-                        "value": {
-                            "detail": "Failed to create agent: database error"
-                        },
+                        "value": {"detail": "Failed to create agent: database error"},
                     },
                 }
             }

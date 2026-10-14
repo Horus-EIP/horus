@@ -21,10 +21,10 @@ correlation_id_var: ContextVar[str | None] = ContextVar("correlation_id", defaul
 def set_correlation_id(corr_id: str | None = None) -> str:
     """
     Set correlation ID for current context.
-    
+
     Args:
         corr_id: Optional correlation ID. If None, generates a new UUID.
-    
+
     Returns:
         The correlation ID that was set.
     """
@@ -47,7 +47,7 @@ def clear_correlation_id():
 class JSONFormatter(logging.Formatter):
     """
     JSON log formatter for structured logging.
-    
+
     Outputs logs as JSON objects with consistent fields for easy parsing
     by log aggregation systems like ELK, Loki, or CloudWatch.
     """
@@ -74,17 +74,36 @@ class JSONFormatter(logging.Formatter):
         # Add exception info if present
         if record.exc_info:
             log_data["exception"] = self.formatException(record.exc_info)
-            log_data["exception_type"] = record.exc_info[0].__name__ if record.exc_info[0] else None
+            log_data["exception_type"] = (
+                record.exc_info[0].__name__ if record.exc_info[0] else None
+            )
 
         # Add extra fields from record
         extra_fields = {}
         for key, value in record.__dict__.items():
             if key not in {
-                "name", "msg", "args", "created", "filename", "funcName",
-                "levelname", "levelno", "lineno", "module", "msecs",
-                "pathname", "process", "processName", "relativeCreated",
-                "stack_info", "exc_info", "exc_text", "thread", "threadName",
-                "message", "asctime"
+                "name",
+                "msg",
+                "args",
+                "created",
+                "filename",
+                "funcName",
+                "levelname",
+                "levelno",
+                "lineno",
+                "module",
+                "msecs",
+                "pathname",
+                "process",
+                "processName",
+                "relativeCreated",
+                "stack_info",
+                "exc_info",
+                "exc_text",
+                "thread",
+                "threadName",
+                "message",
+                "asctime",
             }:
                 try:
                     # Ensure value is JSON serializable
@@ -102,7 +121,7 @@ class JSONFormatter(logging.Formatter):
 class StructuredLogger:
     """
     Singleton structured logger manager.
-    
+
     Provides centralized logger configuration with support for both
     JSON file output and colored console output.
     """
@@ -145,19 +164,24 @@ class StructuredLogger:
         else:
             # Colored console format for development
             from core.logger import ColoredFormatter
+
             console_handler.setFormatter(ColoredFormatter())
 
         root_logger.addHandler(console_handler)
 
         # JSON file handler - always JSON for log aggregation
-        json_log_file = log_dir / f"mas_structured_{datetime.now().strftime('%Y%m%d')}.json"
+        json_log_file = (
+            log_dir / f"mas_structured_{datetime.now().strftime('%Y%m%d')}.json"
+        )
         json_handler = logging.FileHandler(json_log_file, encoding="utf-8")
         json_handler.setLevel(logging.DEBUG)
         json_handler.setFormatter(JSONFormatter())
         root_logger.addHandler(json_handler)
 
         # Error-only JSON file
-        error_log_file = log_dir / f"mas_errors_{datetime.now().strftime('%Y%m%d')}.json"
+        error_log_file = (
+            log_dir / f"mas_errors_{datetime.now().strftime('%Y%m%d')}.json"
+        )
         error_handler = logging.FileHandler(error_log_file, encoding="utf-8")
         error_handler.setLevel(logging.ERROR)
         error_handler.setFormatter(JSONFormatter())
@@ -179,15 +203,10 @@ def get_structured_logger(name: str) -> logging.Logger:
     return _structured_logger.get_logger(name)
 
 
-def log_with_context(
-    logger: logging.Logger,
-    level: int,
-    message: str,
-    **extra_fields
-):
+def log_with_context(logger: logging.Logger, level: int, message: str, **extra_fields):
     """
     Log a message with additional context fields.
-    
+
     Args:
         logger: Logger instance
         level: Log level (logging.INFO, logging.ERROR, etc.)
@@ -205,7 +224,7 @@ def log_request(
     duration_ms: float,
     client_ip: str = None,
     user_id: int = None,
-    **extra
+    **extra,
 ):
     """Log an HTTP request with structured fields."""
     logger = get_structured_logger("http")
@@ -219,8 +238,8 @@ def log_request(
             "duration_ms": round(duration_ms, 2),
             "client_ip": client_ip,
             "user_id": user_id,
-            **extra
-        }
+            **extra,
+        },
     )
 
 
@@ -230,7 +249,7 @@ def log_task_event(
     agent_id: str = None,
     conversation_id: int = None,
     duration_ms: float = None,
-    **extra
+    **extra,
 ):
     """Log a task lifecycle event."""
     logger = get_structured_logger("task")
@@ -243,17 +262,12 @@ def log_task_event(
             "agent_id": agent_id,
             "conversation_id": conversation_id,
             "duration_ms": round(duration_ms, 2) if duration_ms else None,
-            **extra
-        }
+            **extra,
+        },
     )
 
 
-def log_agent_event(
-    agent_id: str,
-    event: str,
-    agent_name: str = None,
-    **extra
-):
+def log_agent_event(agent_id: str, event: str, agent_name: str = None, **extra):
     """Log an agent lifecycle event."""
     logger = get_structured_logger("agent")
     logger.info(
@@ -263,8 +277,8 @@ def log_agent_event(
             "agent_id": agent_id,
             "event": event,
             "agent_name": agent_name,
-            **extra
-        }
+            **extra,
+        },
     )
 
 
@@ -273,7 +287,7 @@ def log_security_event(
     username: str = None,
     client_ip: str = None,
     success: bool = True,
-    **extra
+    **extra,
 ):
     """Log a security-related event."""
     logger = get_structured_logger("security")
@@ -287,6 +301,6 @@ def log_security_event(
             "username": username,
             "client_ip": client_ip,
             "success": success,
-            **extra
-        }
+            **extra,
+        },
     )

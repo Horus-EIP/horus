@@ -1,9 +1,8 @@
 from typing import Annotated
 
+from db.database import SessionLocal, get_db
 from fastapi import Depends
 from sqlalchemy.orm import Session
-
-from db.database import SessionLocal, get_db
 
 db_dependency = Annotated[Session, Depends(get_db)]
 

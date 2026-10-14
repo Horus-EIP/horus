@@ -2,21 +2,15 @@ import asyncio
 import datetime
 import time
 
-from fastapi import HTTPException
-from starlette.concurrency import run_in_threadpool
-
 from chat.chat_tool_functions import connected_conversation_ids
 from core.config import settings
 from core.logger import get_logger
-from core.task_events import (
-    TaskEventType,
-    TaskStage,
-    current_task_stage,
-    publish_agent_message,
-    publish_heartbeat,
-)
+from core.task_events import (TaskEventType, TaskStage, current_task_stage,
+                              publish_agent_message, publish_heartbeat)
 from db.database import SessionLocal
 from db.models import Task
+from fastapi import HTTPException
+from starlette.concurrency import run_in_threadpool
 from tasks.status import IN_PROGRESS_STATUSES, TaskStatus
 from tasks.task_tool_functions import get_tasks_in_progress, interrupt_task
 

@@ -7,11 +7,10 @@ import uuid
 from collections.abc import Callable
 
 import structlog
-from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
-
 from core.hybrid_logging import log_system_performance
 from core.logger import get_logger, log_api_request
+from fastapi import Request, Response
+from starlette.middleware.base import BaseHTTPMiddleware
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):

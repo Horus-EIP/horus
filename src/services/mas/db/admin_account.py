@@ -53,7 +53,9 @@ def create_admin(db, username: str, password: str) -> str:
     db.refresh(admin)
     log_success("init_db", f"Default admin user created: {username}")
     log_user_action(
-        "CREATE_ADMIN_USER", user_id=admin.id, details=f"Initial admin user created: {username}"
+        "CREATE_ADMIN_USER",
+        user_id=admin.id,
+        details=f"Initial admin user created: {username}",
     )
     return CREATED
 

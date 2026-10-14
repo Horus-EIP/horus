@@ -19,7 +19,6 @@ import threading
 from dataclasses import dataclass
 
 import numpy as np
-
 from core.embedding_setup import embed_text, embed_texts
 from core.logger import get_logger
 from db.database import SessionLocal
@@ -54,7 +53,9 @@ def _agent_skill_text(agent_name: str, skill: str, description: str) -> str:
     return base
 
 
-def _build_rows_for_agent(agent_id: str, agent_name: str, skills: list[str], description: str) -> list[_SkillRow]:
+def _build_rows_for_agent(
+    agent_id: str, agent_name: str, skills: list[str], description: str
+) -> list[_SkillRow]:
     if not skills:
         return []
     texts = [_agent_skill_text(agent_name, s, description) for s in skills]
@@ -90,7 +91,9 @@ def warm_skill_cache() -> None:
     )
 
 
-def upsert_agent(agent_id: str, agent_name: str, skills: list[str], description: str) -> None:
+def upsert_agent(
+    agent_id: str, agent_name: str, skills: list[str], description: str
+) -> None:
     """Replace all rows for ``agent_id`` with freshly-embedded rows."""
     new_rows = _build_rows_for_agent(agent_id, agent_name, skills, description or "")
     with _lock:

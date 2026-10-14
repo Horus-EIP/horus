@@ -7,27 +7,24 @@ error codes.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
-from auth.auth_tool_functions import PermissionChecker, get_current_user, modify_user_password
+from auth.auth_tool_functions import (PermissionChecker, get_current_user,
+                                      modify_user_password)
 from auth.permissions import Permission
 from core.logger import get_logger
 from db.database import get_db
 from db.models import Users
+from fastapi import APIRouter, Depends, HTTPException
 from schemas.schemas import UpdateRole, UserPasswordModification
-from users.openapi_docs import (
-    CHANGE_PASSWORD_OPENAPI_EXTRA,
-    CHANGE_PASSWORD_RESPONSES,
-    CHANGE_USERNAME_RESPONSES,
-    DELETE_USER_RESPONSES,
-    ME_RESPONSES,
-    UPDATE_ROLE_RESPONSES,
-    USER_DETAILS_RESPONSES,
-    USERS_LIST_RESPONSES,
-)
+from sqlalchemy.orm import Session
+from users.openapi_docs import (CHANGE_PASSWORD_OPENAPI_EXTRA,
+                                CHANGE_PASSWORD_RESPONSES,
+                                CHANGE_USERNAME_RESPONSES,
+                                DELETE_USER_RESPONSES, ME_RESPONSES,
+                                UPDATE_ROLE_RESPONSES, USER_DETAILS_RESPONSES,
+                                USERS_LIST_RESPONSES)
 from users.user_tool_functions import delete_user as delete_user_tool
-from users.user_tool_functions import get_all_users, get_user_details, modify_user_username
+from users.user_tool_functions import (get_all_users, get_user_details,
+                                       modify_user_username)
 
 router = APIRouter(prefix="/users", tags=["Users"])
 logger = get_logger("users_routes")

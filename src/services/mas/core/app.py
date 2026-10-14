@@ -8,10 +8,6 @@ lifespan that boots/teardown background tasks.
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from prometheus_fastapi_instrumentator import Instrumentator
-
 import agents.routes
 import analytics.routes
 import chat.routes
@@ -32,7 +28,11 @@ from core.tracing import init_tracing
 from core.version import HORUS_VERSION
 from db.database import engine
 from db.init_setup import init_db
-from tasks.controller import check_task_timeout, fail_interrupted_routing, run_task_heartbeats
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
+from tasks.controller import (check_task_timeout, fail_interrupted_routing,
+                              run_task_heartbeats)
 from tasks.task_jobs import task_jobs
 
 instrumentator = None
@@ -88,7 +88,10 @@ def create_app_environment():
             },
             {"name": "Users", "description": "User management (Admin only)"},
             {"name": "RabbitMQ", "description": "Message queue management"},
-            {"name": "System", "description": "Which AI answers: a language model or the mock"},
+            {
+                "name": "System",
+                "description": "Which AI answers: a language model or the mock",
+            },
         ],
     )
 
@@ -170,7 +173,9 @@ async def lifespan(app: FastAPI):
     log_success("lifespan", "LLM background preload started (if LLM_AUTOINIT=1)")
 
     start_probe_background_thread()
-    log_success("lifespan", "AI mode probe started (asks the model server what it serves)")
+    log_success(
+        "lifespan", "AI mode probe started (asks the model server what it serves)"
+    )
 
     start_embedding_preload_background_thread()
     log_success(

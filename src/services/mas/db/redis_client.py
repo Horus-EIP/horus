@@ -1,5 +1,4 @@
 import redis
-
 from core.config import settings
 
 redis_db = redis.Redis(

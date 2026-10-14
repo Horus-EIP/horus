@@ -7,13 +7,12 @@ session-management rules.
 
 from typing import Any
 
-from fastapi import Depends
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
-
 from core.logger import get_logger
 from db.database import SessionLocal, get_db
 from db.models import Conversations, Messages
+from fastapi import Depends
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 logger = get_logger("conversations")
 

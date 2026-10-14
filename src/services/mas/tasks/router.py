@@ -10,16 +10,15 @@ from pathlib import Path
 
 import numpy as np
 import yaml
-from opentelemetry import trace
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
-
 from agents.registry_tool_functions import is_available_worker
 from core.embedding_setup import embed_texts
 from core.llm_setup import ask_llm_with_json_schema, llm_server_backend
 from core.logger import get_logger
 from core.metrics import observe_routing_decision
 from db.models import Agents
+from opentelemetry import trace
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 from tasks.decomposition import choose_route_with_llm, decompose_task
 from tasks.demo_log import pretty_log
 from tasks.direct_answers import direct_answer
@@ -91,7 +90,10 @@ class RouteDecision:
     scores: tuple[AgentScore, ...] = ()
 
     def logged_scores(self) -> dict[str, float]:
-        return {entry.agent.name: round(entry.score, 3) for entry in self.scores[:LOGGED_SCORES]}
+        return {
+            entry.agent.name: round(entry.score, 3)
+            for entry in self.scores[:LOGGED_SCORES]
+        }
 
 
 @dataclass(frozen=True)
@@ -105,7 +107,9 @@ class RouterSettings:
         return cls(
             min_score=_env_number("ROUTER_MIN_SCORE", DEFAULT_MIN_SCORE, float),
             min_margin=_env_number("ROUTER_MIN_MARGIN", DEFAULT_MIN_MARGIN, float),
-            llm_max_tokens=_env_number("ROUTER_LLM_MAX_TOKENS", DEFAULT_LLM_MAX_TOKENS, int),
+            llm_max_tokens=_env_number(
+                "ROUTER_LLM_MAX_TOKENS", DEFAULT_LLM_MAX_TOKENS, int
+            ),
         )
 
 
@@ -177,7 +181,11 @@ class ExampleIndex:
         if self._vectors is None:
             with self._lock:
                 if self._vectors is None:
-                    texts = [text for group in self.examples.groups for text in group.examples]
+                    texts = [
+                        text
+                        for group in self.examples.groups
+                        for text in group.examples
+                    ]
                     started = time.perf_counter()
                     vectors = self.embed(texts)
                     rows, start = [], 0
@@ -202,7 +210,9 @@ class ExampleIndex:
         rows: dict[str, list[np.ndarray]] = {}
         for group_index, agent in owners.items():
             agents[agent.name] = agent
-            rows.setdefault(agent.name, []).append(similarities[self._group_rows[group_index]])
+            rows.setdefault(agent.name, []).append(
+                similarities[self._group_rows[group_index]]
+            )
         scores = [
             AgentScore(agents[name], _closest_examples_mean(np.concatenate(agent_rows)))
             for name, agent_rows in rows.items()
@@ -220,7 +230,9 @@ def assign_example_groups(
     by_name = {agent.name: agent for agent in roster}
     owners: dict[int, RosterAgent] = {}
     for index, group in enumerate(groups):
-        owner = by_name.get(group.agent_name) or _agent_sharing_most_skills(group, roster)
+        owner = by_name.get(group.agent_name) or _agent_sharing_most_skills(
+            group, roster
+        )
         if owner is not None:
             owners[index] = owner
     return owners
@@ -255,7 +267,10 @@ def confident_agent(
         return None
     runner_up = scores[1].score if len(scores) > 1 else 0.0
     best = scores[0]
-    if best.score >= settings.min_score and best.score - runner_up >= settings.min_margin:
+    if (
+        best.score >= settings.min_score
+        and best.score - runner_up >= settings.min_margin
+    ):
         return best.agent
     return None
 
@@ -266,7 +281,10 @@ def rule_decision(question: str, roster: Sequence[RosterAgent]) -> RouteDecision
         reply = direct_answer(question, [agent.name for agent in roster])
         if reply is not None:
             return RouteDecision(
-                Route.DIRECT_ANSWER, RouteMethod.RULES, direct_answer=reply, cue=intent.value
+                Route.DIRECT_ANSWER,
+                RouteMethod.RULES,
+                direct_answer=reply,
+                cue=intent.value,
             )
     cue = find_complex_cue(question)
     if cue is not None:
@@ -290,21 +308,32 @@ def embedding_decision(
         agent = confident_agent(scores, settings)
         if agent is None:
             return None, scores
-        return RouteDecision(Route.SINGLE_AGENT, RouteMethod.EMBEDDING, agent, scores=scores), scores
+        return (
+            RouteDecision(
+                Route.SINGLE_AGENT, RouteMethod.EMBEDDING, agent, scores=scores
+            ),
+            scores,
+        )
     part_agents = [
-        confident_agent(index.agent_scores(vector, owners), settings) for vector in vectors[1:]
+        confident_agent(index.agent_scores(vector, owners), settings)
+        for vector in vectors[1:]
     ]
     if any(agent is None for agent in part_agents):
         return None, scores
     if len({agent.name for agent in part_agents}) > 1:
         return (
             RouteDecision(
-                Route.COMPLEX_TASK, RouteMethod.EMBEDDING, cue=SUB_QUESTIONS_CUE, scores=scores
+                Route.COMPLEX_TASK,
+                RouteMethod.EMBEDDING,
+                cue=SUB_QUESTIONS_CUE,
+                scores=scores,
             ),
             scores,
         )
     return (
-        RouteDecision(Route.SINGLE_AGENT, RouteMethod.EMBEDDING, part_agents[0], scores=scores),
+        RouteDecision(
+            Route.SINGLE_AGENT, RouteMethod.EMBEDDING, part_agents[0], scores=scores
+        ),
         scores,
     )
 
@@ -318,7 +347,10 @@ def llm_route_schema(roster: Sequence[RosterAgent]) -> dict:
         "type": "object",
         "properties": {
             "route": {"type": "string", "enum": [route.value for route in LLM_ROUTES]},
-            "agent": {"type": "string", "enum": sorted({agent.name for agent in roster})},
+            "agent": {
+                "type": "string",
+                "enum": sorted({agent.name for agent in roster}),
+            },
         },
         "required": ["route", "agent"],
         "additionalProperties": False,
@@ -368,7 +400,9 @@ def llm_decision(
         raise ValueError(f"The LLM router chose {route.value}, which it may not choose")
     agent = next((agent for agent in roster if agent.name == choice.get("agent")), None)
     if route is Route.SINGLE_AGENT and agent is None:
-        raise ValueError(f"The LLM router chose an unknown agent: {choice.get('agent')!r}")
+        raise ValueError(
+            f"The LLM router chose an unknown agent: {choice.get('agent')!r}"
+        )
     return RouteDecision(route, RouteMethod.LLM, agent)
 
 
@@ -403,7 +437,9 @@ class TaskRouter:
         try:
             decision = llm_decision(question, roster, settings, ask)
         except Exception:
-            logger.exception("The constrained LLM router failed; leaving the task unrouted")
+            logger.exception(
+                "The constrained LLM router failed; leaving the task unrouted"
+            )
             return RouteDecision(Route.UNROUTED, RouteMethod.LLM, scores=scores)
         return replace(decision, scores=scores)
 
@@ -446,7 +482,9 @@ def available_roster(db: Session) -> list[RosterAgent]:
 
 
 @tracer.start_as_current_span("route_task")
-def route_task(user_input: str, db: Session, *, task_id: str | None = None) -> RoutingOutcome:
+def route_task(
+    user_input: str, db: Session, *, task_id: str | None = None
+) -> RoutingOutcome:
     started = time.perf_counter()
     roster = available_roster(db)
     settings = RouterSettings.from_env()
@@ -460,7 +498,9 @@ def route_task(user_input: str, db: Session, *, task_id: str | None = None) -> R
         )
     full_router_outcome = None
     if decision is None:
-        classification, full_router_outcome = _route_with_the_full_llm_router(user_input, db)
+        classification, full_router_outcome = _route_with_the_full_llm_router(
+            user_input, db
+        )
         decision = _decision_from_full_llm_router(
             classification, full_router_outcome, roster, scores
         )
@@ -476,7 +516,9 @@ def _route_with_the_full_llm_router(
     try:
         return choose_route_with_llm(user_input, db)
     except Exception:
-        logger.exception("The LLM router failed; leaving the task to the fallback agents")
+        logger.exception(
+            "The LLM router failed; leaving the task to the fallback agents"
+        )
         return None, _unrouted()
 
 
@@ -492,7 +534,10 @@ def _decision_from_full_llm_router(
     agent = next((agent for agent in roster if agent.agent_id == agent_id), None)
     if direct_response:
         return RouteDecision(
-            Route.DIRECT_ANSWER, RouteMethod.LLM, direct_answer=direct_response, scores=scores
+            Route.DIRECT_ANSWER,
+            RouteMethod.LLM,
+            direct_answer=direct_response,
+            scores=scores,
         )
     if agent_id:
         return RouteDecision(Route.SINGLE_AGENT, RouteMethod.LLM, agent, scores=scores)
@@ -525,7 +570,9 @@ def _unrouted() -> RoutingOutcome:
     return None, None, None, []
 
 
-def _record_decision(decision: RouteDecision, task_id: str | None, seconds: float) -> None:
+def _record_decision(
+    decision: RouteDecision, task_id: str | None, seconds: float
+) -> None:
     observe_routing_decision(decision.method.value, decision.route.value, seconds)
     agent_name = decision.agent.name if decision.agent is not None else None
     span = trace.get_current_span()

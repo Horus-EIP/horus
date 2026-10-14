@@ -8,13 +8,12 @@ Wires ``core.app.create_app_environment()`` and exposes the public
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
-
 from auth.auth_tool_functions import get_current_user
 from core.app import create_app_environment
 from core.logger import get_logger, log_error, log_startup, log_success
 from core.version import HORUS_VERSION
 from db.dependency import db_dependency as db_dependency
+from fastapi import Depends, HTTPException, status
 
 logger = get_logger("main")
 log_startup("MAS", "Multi-Agent System starting up...")

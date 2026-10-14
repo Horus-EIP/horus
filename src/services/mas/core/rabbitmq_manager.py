@@ -2,12 +2,11 @@ import threading
 import time
 
 import pika
+from core.config import settings
+from core.logger import get_logger
 from opentelemetry import trace
 from opentelemetry.propagate import extract, inject
 from pika.exceptions import ChannelClosedByBroker, NackError, UnroutableError
-
-from core.config import settings
-from core.logger import get_logger
 
 logger = get_logger("rabbitmq_manager")
 tracer = trace.get_tracer(__name__)
@@ -20,7 +19,9 @@ PRECONDITION_FAILED = 406
 
 class WorkQueueFull(Exception):
     def __init__(self, queue: str, depth: int) -> None:
-        super().__init__(f"Work queue {queue} is full: {depth} task(s) are waiting in it")
+        super().__init__(
+            f"Work queue {queue} is full: {depth} task(s) are waiting in it"
+        )
         self.queue = queue
         self.depth = depth
 
@@ -32,7 +33,10 @@ class WorkQueueUnroutable(Exception):
 
 
 def work_queue_max_length() -> int:
-    return getattr(settings, "work_queue_max_length", None) or DEFAULT_WORK_QUEUE_MAX_LENGTH
+    return (
+        getattr(settings, "work_queue_max_length", None)
+        or DEFAULT_WORK_QUEUE_MAX_LENGTH
+    )
 
 
 def work_queue_arguments(max_length: int) -> dict:
@@ -234,7 +238,9 @@ class RabbitMQ:
         self._open_channel()
         return self._redeclare_when_empty(queue_name, max_length)
 
-    def _redeclare_when_empty(self, queue_name: str, max_length: int) -> tuple[int, bool]:
+    def _redeclare_when_empty(
+        self, queue_name: str, max_length: int
+    ) -> tuple[int, bool]:
         depth = self._ready_count(queue_name)
         if depth == 0:
             try:

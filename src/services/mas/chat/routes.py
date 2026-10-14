@@ -5,16 +5,15 @@ See ``docs/architecture.md`` for the wire protocol, error codes,
 and client examples.
 """
 
-
-from fastapi import APIRouter, Depends, Query, WebSocket, status
-from sqlalchemy.orm import Session
-
 from auth.auth_tool_functions import get_current_user_from_token
 from auth.permissions import Permission, Role, check_permission
-from chat.chat_tool_functions import _extract_token_from_ws, delete_client, save_new_client
+from chat.chat_tool_functions import (_extract_token_from_ws, delete_client,
+                                      save_new_client)
 from core.logger import get_logger
 from db.dependency import get_db
 from db.models import Conversations
+from fastapi import APIRouter, Depends, Query, WebSocket, status
+from sqlalchemy.orm import Session
 
 logger = get_logger("chat")
 

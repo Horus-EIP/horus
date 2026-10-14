@@ -4,12 +4,11 @@ import asyncio
 import json
 from uuid import uuid4
 
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
-
 from core.logger import get_logger
 from core.rabbitmq_tool import rabbitmq_instance
 from db.models import Task, TaskResult
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
 from tasks.demo_log import pretty_log
 from tasks.status import TaskStatus
 from tasks.task_access import TASK_CANCEL_REFUSED, may_cancel_task

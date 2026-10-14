@@ -7,34 +7,26 @@ All endpoints are RBAC-gated; heartbeats additionally require the agent's
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
-from agents.openapi_docs import (
-    AGENT_DETAILS_RESPONSES,
-    HEARTBEAT_RESPONSES,
-    LIST_AGENTS_RESPONSES,
-    REGENERATE_KEY_RESPONSES,
-    REGISTER_AGENT_OPENAPI_EXTRA,
-    REGISTER_AGENT_RESPONSES,
-    UNREGISTER_AGENT_RESPONSES,
-)
-from agents.registry_tool_functions import (
-    create_agent,
-    delete_agent,
-    get_agent_details,
-    get_agent_id,
-    get_all_agents,
-    regenerate_agent_api_key,
-    update_alive_agent_status,
-)
+from agents.openapi_docs import (AGENT_DETAILS_RESPONSES, HEARTBEAT_RESPONSES,
+                                 LIST_AGENTS_RESPONSES,
+                                 REGENERATE_KEY_RESPONSES,
+                                 REGISTER_AGENT_OPENAPI_EXTRA,
+                                 REGISTER_AGENT_RESPONSES,
+                                 UNREGISTER_AGENT_RESPONSES)
+from agents.registry_tool_functions import (create_agent, delete_agent,
+                                            get_agent_details, get_agent_id,
+                                            get_all_agents,
+                                            regenerate_agent_api_key,
+                                            update_alive_agent_status)
 from auth.auth_tool_functions import PermissionChecker, verify_agent_api_key
 from auth.permissions import Permission
 from core.logger import log_agent_operation, log_error
 from core.metrics import AGENT_COUNT
 from db.database import get_db
 from db.models import AgentTypes
+from fastapi import APIRouter, Depends, HTTPException
 from schemas.schemas import RegistrationForm
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/agents", tags=["Agents"])
 

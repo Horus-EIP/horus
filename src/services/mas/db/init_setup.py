@@ -2,14 +2,13 @@ import os
 import subprocess
 import sys
 
-from sqlalchemy import text
-
 from core.config import settings
 from core.logger import get_logger, log_db_operation, log_error, log_success
 from db.admin_account import ensure_admin_account
 from db.agent_account import ensure_agent_account
 from db.database import Base, SessionLocal, engine
 from db.migrate_critical_logs import create_critical_logs_table
+from sqlalchemy import text
 from tasks.status import TaskStatus
 
 logger = get_logger("init_db")
@@ -25,7 +24,9 @@ def ensure_task_status_enum(bind) -> list[str]:
         return []
     with bind.connect() as connection:
         present = {row[0] for row in connection.execute(text(TASK_STATUS_LABELS_SQL))}
-    missing = [status.value for status in TaskStatus if present and status.value not in present]
+    missing = [
+        status.value for status in TaskStatus if present and status.value not in present
+    ]
     if missing:
         with bind.connect() as connection:
             autocommit = connection.execution_options(isolation_level="AUTOCOMMIT")
@@ -124,15 +125,21 @@ def init_db():
     try:
         ensure_task_status_enum(engine)
     except Exception as e:
-        log_error("init_db", f"Could not check the taskstatus enum: {str(e)}", exc_info=True)
+        log_error(
+            "init_db", f"Could not check the taskstatus enum: {str(e)}", exc_info=True
+        )
 
     if not create_critical_logs_table():
         log_error("init_db", "Failed to create critical_logs table")
 
     db = SessionLocal()
     try:
-        ensure_admin_account(db, settings.super_user_username, settings.super_user_password)
-        ensure_agent_account(db, settings.super_agent_username, settings.super_agent_password)
+        ensure_admin_account(
+            db, settings.super_user_username, settings.super_user_password
+        )
+        ensure_agent_account(
+            db, settings.super_agent_username, settings.super_agent_password
+        )
 
         # The five specialist agents are no longer DB-seeded — the agent worker
         # registers them itself at startup as real, heartbeating identities (see

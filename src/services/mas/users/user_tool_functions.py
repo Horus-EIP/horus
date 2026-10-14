@@ -1,10 +1,8 @@
-
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
-
 from auth.permissions import Role
 from core.logger import get_logger
 from db.models import Users
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
 
 logger = get_logger("users_tool_functions")
 

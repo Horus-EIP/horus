@@ -8,19 +8,10 @@ from pathlib import Path
 
 import numpy as np
 import yaml
-
 from core.llm_setup import ask_llm_with_json_schema, llm_server_backend
-from tasks.router import (
-    ROUTER_EXAMPLES_PATH,
-    ExampleIndex,
-    RosterAgent,
-    Route,
-    RouteDecision,
-    RouteMethod,
-    RouterSettings,
-    TaskRouter,
-    load_router_examples,
-)
+from tasks.router import (ROUTER_EXAMPLES_PATH, ExampleIndex, RosterAgent,
+                          Route, RouteDecision, RouteMethod, RouterSettings,
+                          TaskRouter, load_router_examples)
 
 TESTSET_IN_REPOSITORY = Path("tests", "mas", "data", "router_testset.yaml")
 METHODS = (RouteMethod.RULES, RouteMethod.EMBEDDING, RouteMethod.LLM)
@@ -67,7 +58,10 @@ class RoutedQuestion:
         if self.decision.route is not self.item.route:
             return False
         if self.item.route is Route.SINGLE_AGENT:
-            return self.decision.agent is not None and self.decision.agent.name in self.item.agents
+            return (
+                self.decision.agent is not None
+                and self.decision.agent.name in self.item.agents
+            )
         return True
 
 
@@ -103,7 +97,8 @@ def load_router_testset(path: Path) -> RouterTestset:
         for entry in document["items"]
     )
     owners = {
-        source: tuple(agents) for source, agents in (document.get("document_owners") or {}).items()
+        source: tuple(agents)
+        for source, agents in (document.get("document_owners") or {}).items()
     }
     return RouterTestset(str(document["version"]), roster, items, owners)
 
@@ -119,9 +114,13 @@ def route_testset(
     routed = []
     for item in testset.items:
         started = time.perf_counter()
-        decision, scores = router.decide_without_llm(item.question, testset.roster, settings)
+        decision, scores = router.decide_without_llm(
+            item.question, testset.roster, settings
+        )
         if decision is None and ask is not None:
-            decision = router.decide_with_llm(item.question, testset.roster, settings, scores, ask)
+            decision = router.decide_with_llm(
+                item.question, testset.roster, settings, scores, ask
+            )
         routed.append(RoutedQuestion(item, decision, time.perf_counter() - started))
     return routed
 
@@ -153,7 +152,9 @@ def summarise(
             "count": len(chosen),
             "rate": _ratio(len(chosen), total),
             "correct": sum(1 for entry in judged if entry.correct),
-            "accuracy": _ratio(sum(1 for entry in judged if entry.correct), len(judged)),
+            "accuracy": _ratio(
+                sum(1 for entry in judged if entry.correct), len(judged)
+            ),
             "p50_ms": _milliseconds([entry.seconds for entry in chosen], 50),
             "p95_ms": _milliseconds([entry.seconds for entry in chosen], 95),
         }
@@ -163,7 +164,9 @@ def summarise(
         expected = [entry for entry in routed if entry.item.route is route]
         routes[route.value] = {
             "count": len(expected),
-            "decided_without_llm": sum(1 for entry in expected if not entry.reached_the_llm),
+            "decided_without_llm": sum(
+                1 for entry in expected if not entry.reached_the_llm
+            ),
             "correct": sum(1 for entry in expected if entry.correct),
         }
     return {
@@ -173,11 +176,17 @@ def summarise(
         "min_score": settings.min_score,
         "min_margin": settings.min_margin,
         "llm_ran": llm_ran,
-        "fallback_rate": _ratio(sum(1 for entry in routed if entry.reached_the_llm), total),
+        "fallback_rate": _ratio(
+            sum(1 for entry in routed if entry.reached_the_llm), total
+        ),
         "accuracy_without_llm": _ratio(
             sum(1 for entry in without_llm if entry.correct), len(without_llm)
         ),
-        "accuracy": _ratio(sum(1 for entry in routed if entry.correct), total) if llm_ran else None,
+        "accuracy": (
+            _ratio(sum(1 for entry in routed if entry.correct), total)
+            if llm_ran
+            else None
+        ),
         "latency_without_llm_ms": {
             "p50": _milliseconds([entry.seconds for entry in without_llm], 50),
             "p95": _milliseconds([entry.seconds for entry in without_llm], 95),
@@ -185,7 +194,9 @@ def summarise(
         "methods": methods,
         "routes": routes,
         "misrouted": [_miss(entry) for entry in routed if entry.correct is False],
-        "sent_to_llm": [entry.item.item_id for entry in routed if entry.reached_the_llm],
+        "sent_to_llm": [
+            entry.item.item_id for entry in routed if entry.reached_the_llm
+        ],
     }
 
 
@@ -195,7 +206,10 @@ def _miss(entry: RoutedQuestion) -> dict:
         "id": entry.item.item_id,
         "question": entry.item.question,
         "expected": [entry.item.route.value, *entry.item.agents],
-        "got": [decision.route.value, *([decision.agent.name] if decision.agent else [])],
+        "got": [
+            decision.route.value,
+            *([decision.agent.name] if decision.agent else []),
+        ],
         "method": decision.method.value,
         "scores": decision.logged_scores(),
     }
@@ -218,7 +232,11 @@ def format_report(summary: dict) -> str:
         f"{'method':<10} {'count':>5} {'share':>7} {'accuracy':>9} {'p50':>10} {'p95':>10}",
     ]
     for method, row in summary["methods"].items():
-        accuracy, p50, p95 = _percent(row["accuracy"]), _ms(row["p50_ms"]), _ms(row["p95_ms"])
+        accuracy, p50, p95 = (
+            _percent(row["accuracy"]),
+            _ms(row["p50_ms"]),
+            _ms(row["p95_ms"]),
+        )
         if method == RouteMethod.LLM.value and not summary["llm_ran"]:
             accuracy = p50 = p95 = NOT_RUN
         lines.append(
@@ -231,7 +249,11 @@ def format_report(summary: dict) -> str:
         f"Fallback rate (questions sent to the LLM): {_percent(summary['fallback_rate'])}",
         f"Accuracy without the LLM fallback: {_percent(summary['accuracy_without_llm'])}",
         "Accuracy with the LLM fallback: "
-        + (_percent(summary["accuracy"]) if summary["llm_ran"] else "not run (pass --llm)"),
+        + (
+            _percent(summary["accuracy"])
+            if summary["llm_ran"]
+            else "not run (pass --llm)"
+        ),
         f"Latency when no fallback is needed: p50 {_ms(latency['p50'])}, p95 {_ms(latency['p95'])}",
         "",
         "By expected route:",
@@ -274,14 +296,18 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Send undecided questions to the constrained LLM router (needs LLM_BACKEND=vllm).",
     )
-    parser.add_argument("--json", type=Path, help="Also write the report as JSON to this file.")
+    parser.add_argument(
+        "--json", type=Path, help="Also write the report as JSON to this file."
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.llm and not llm_server_backend():
-        print("--llm needs LLM_BACKEND=vllm and LLM_VLLM_URL pointing at llama-server or vLLM.")
+        print(
+            "--llm needs LLM_BACKEND=vllm and LLM_VLLM_URL pointing at llama-server or vLLM."
+        )
         return 2
     defaults = RouterSettings.from_env()
     settings = RouterSettings(

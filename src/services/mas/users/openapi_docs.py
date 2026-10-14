@@ -376,9 +376,7 @@ CHANGE_PASSWORD_RESPONSES = {
                 "examples": {
                     "db_error": {
                         "summary": "Database error during update",
-                        "value": {
-                            "detail": "User Password Modification Error : ..."
-                        },
+                        "value": {"detail": "User Password Modification Error : ..."},
                     }
                 }
             }

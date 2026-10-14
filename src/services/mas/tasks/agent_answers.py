@@ -22,8 +22,7 @@ INLINE_FILE_SOURCE = "inline"
 
 _QUERY_WORD = re.compile(r"[\w$€£%][\w$€£%.'’-]*")
 _QUERY_NOISE = re.compile(r"[^\w$€£%]+")
-STOPWORDS = frozenset(
-    """
+STOPWORDS = frozenset("""
     a about above after again all also am an and any are as at be been before being
     below between both but by can could did do does doing down during each few for
     from further give had has have having he her here hers him his how i if in into
@@ -32,8 +31,7 @@ STOPWORDS = frozenset(
     summarize tell than that the their theirs them then there these they this those
     through to too under until up us very was we were what when where which while who
     whom why will with would you your yours describe explain
-    """.split()
-)
+    """.split())
 
 
 @dataclass(frozen=True)
@@ -53,7 +51,9 @@ def source_key(source: dict[str, Any]) -> str:
     return f"document:{source.get('doc_id') or ''}:{source.get('title') or ''}"
 
 
-def merge_sources(source_lists: Iterable[list[dict[str, Any]] | None]) -> list[dict[str, Any]] | None:
+def merge_sources(
+    source_lists: Iterable[list[dict[str, Any]] | None],
+) -> list[dict[str, Any]] | None:
     merged: dict[str, dict[str, Any]] = {}
     sent_any = False
     for sources in source_lists:
@@ -84,7 +84,9 @@ def _comparable(query: str) -> str:
     return _QUERY_NOISE.sub(" ", query.lower()).strip()
 
 
-def alternative_retrieval_query(payload: dict[str, Any], user_question: str | None) -> str | None:
+def alternative_retrieval_query(
+    payload: dict[str, Any], user_question: str | None
+) -> str | None:
     used = payload.get("retrieval_query") or payload.get("demand") or ""
     for candidate in (user_question, keyword_query(used)):
         if candidate and _comparable(candidate) != _comparable(used):
@@ -98,7 +100,10 @@ def dispatch_record_key(task_id: str) -> str:
 
 def _replayable_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
     files = payload.get("files") or []
-    if any(isinstance(entry, dict) and entry.get("source") == INLINE_FILE_SOURCE for entry in files):
+    if any(
+        isinstance(entry, dict) and entry.get("source") == INLINE_FILE_SOURCE
+        for entry in files
+    ):
         return None
     return {key: value for key, value in payload.items() if key not in CREDENTIAL_KEYS}
 
@@ -143,7 +148,9 @@ def recall_dispatch(task_id: str) -> dict[str, Any] | None:
 
 def _retry_detail(status: TaskResultStatus, reason: str | None, new_query: bool) -> str:
     if status == TaskResultStatus.NOT_FOUND:
-        return "The documents found did not answer it; searching again with another query."
+        return (
+            "The documents found did not answer it; searching again with another query."
+        )
     again = "with another query" if new_query else "once more"
     return f"The answer failed ({reason or 'error'}); trying {again}."
 

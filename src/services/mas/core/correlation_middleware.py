@@ -8,15 +8,11 @@ import time
 import uuid
 from collections.abc import Callable
 
+from core.structured_logging import (clear_correlation_id,
+                                     get_structured_logger, log_request,
+                                     set_correlation_id)
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
-
-from core.structured_logging import (
-    clear_correlation_id,
-    get_structured_logger,
-    log_request,
-    set_correlation_id,
-)
 
 logger = get_structured_logger("middleware")
 
@@ -24,7 +20,7 @@ logger = get_structured_logger("middleware")
 class CorrelationIDMiddleware(BaseHTTPMiddleware):
     """
     Middleware to manage correlation IDs for request tracing.
-    
+
     Features:
     - Extracts correlation ID from incoming request headers
     - Generates new correlation ID if not present
@@ -77,7 +73,9 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
                 status_code=response.status_code,
                 duration_ms=duration_ms,
                 client_ip=client_ip,
-                query_params=str(request.query_params) if request.query_params else None,
+                query_params=(
+                    str(request.query_params) if request.query_params else None
+                ),
             )
 
             return response
@@ -98,7 +96,7 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
                     "error": str(e),
                     "error_type": type(e).__name__,
                 },
-                exc_info=True
+                exc_info=True,
             )
             raise
         finally:

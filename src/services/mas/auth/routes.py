@@ -7,28 +7,19 @@ a Redis blacklist keyed by the JWT's ``nonce``.
 from datetime import datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.exc import IntegrityError
-from starlette import status
-
-from auth.auth_tool_functions import (
-    authenticate_user,
-    bcrypt_context,
-    create_access_token,
-    get_current_user,
-)
-from auth.openapi_docs import (
-    LOGOUT_RESPONSES,
-    REGISTER_OPENAPI_EXTRA,
-    REGISTER_RESPONSES,
-    TOKEN_OPENAPI_EXTRA,
-    TOKEN_RESPONSES,
-)
+from auth.auth_tool_functions import (authenticate_user, bcrypt_context,
+                                      create_access_token, get_current_user)
+from auth.openapi_docs import (LOGOUT_RESPONSES, REGISTER_OPENAPI_EXTRA,
+                               REGISTER_RESPONSES, TOKEN_OPENAPI_EXTRA,
+                               TOKEN_RESPONSES)
 from db.dependency import db_dependency
 from db.models import Users
 from db.redis_client import redis_db
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import OAuth2PasswordRequestForm
 from schemas.schemas import CreateUserRequest, Token
+from sqlalchemy.exc import IntegrityError
+from starlette import status
 
 user_dependency = Annotated[dict, Depends(get_current_user)]
 

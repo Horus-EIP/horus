@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from sqlalchemy import or_, select
-from sqlalchemy.orm import Query, Session
-
 from auth.permissions import Role
 from db.models import Conversations, Task
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Query, Session
 
 ROLES_THAT_READ_EVERY_TASK = frozenset({Role.ADMIN.value, Role.MANAGER.value})
 
@@ -58,7 +57,9 @@ def _root_of(task: Task, db: Session) -> Task:
 def _conversation_owner(conversation_id: int | None, db: Session) -> str | None:
     if conversation_id is None:
         return None
-    conversation = db.query(Conversations).filter(Conversations.id == conversation_id).first()
+    conversation = (
+        db.query(Conversations).filter(Conversations.id == conversation_id).first()
+    )
     return conversation.owner_username if conversation is not None else None
 
 
@@ -72,7 +73,9 @@ def may_read_task(user: dict, task: Task, db: Session) -> bool:
     if (task.owner_username or root.owner_username) == username:
         return True
     conversation_id = (
-        task.conversation_id if task.conversation_id is not None else root.conversation_id
+        task.conversation_id
+        if task.conversation_id is not None
+        else root.conversation_id
     )
     return _conversation_owner(conversation_id, db) == username
 
@@ -93,7 +96,12 @@ def root_tasks_visible_to(user: dict, query: Query) -> Query:
     if reads_every_task(user):
         return query
     username = user.get("username")
-    owned_conversations = select(Conversations.id).where(Conversations.owner_username == username)
+    owned_conversations = select(Conversations.id).where(
+        Conversations.owner_username == username
+    )
     return query.filter(
-        or_(Task.owner_username == username, Task.conversation_id.in_(owned_conversations))
+        or_(
+            Task.owner_username == username,
+            Task.conversation_id.in_(owned_conversations),
+        )
     )

@@ -14,7 +14,9 @@ def upgrade() -> None:
         with op.get_context().autocommit_block():
             op.execute("ALTER TYPE taskstatus ADD VALUE IF NOT EXISTS 'queued'")
     op.add_column("tasks", sa.Column("owner_username", sa.String(), nullable=True))
-    op.create_index("ix_tasks_owner_username", "tasks", ["owner_username"], unique=False)
+    op.create_index(
+        "ix_tasks_owner_username", "tasks", ["owner_username"], unique=False
+    )
     op.execute(
         "UPDATE tasks SET owner_username = ("
         "SELECT conversations.owner_username FROM conversations "

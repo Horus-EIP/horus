@@ -11,30 +11,16 @@ This module keeps the original import path working so callers can do
 ``from tasks.task_tool_functions import <name>`` unchanged.
 """
 
-from tasks.decomposition import (
-    aggregate_results,
-    build_action_list,
-    build_subtask_list,
-    decompose_task,
-    select_agent_by_mode,
-    select_agent_for_task,
-    sort_subtasks_by_dependency,
-)
+from tasks.decomposition import (aggregate_results, build_action_list,
+                                 build_subtask_list, decompose_task,
+                                 select_agent_by_mode, select_agent_for_task,
+                                 sort_subtasks_by_dependency)
 from tasks.demo_log import pretty_log
-from tasks.prompts import (
-    clean_json_output,
-    get_decomposition_prompt,
-    get_prompt,
-    get_prompt_final_answer_generation,
-)
-from tasks.task_crud import (
-    _get_all_tasks_internal,
-    get_tasks_in_progress,
-    insert_new_task,
-    insert_queued_task,
-    interrupt_task,
-    validating_task_results,
-)
+from tasks.prompts import (clean_json_output, get_decomposition_prompt,
+                           get_prompt, get_prompt_final_answer_generation)
+from tasks.task_crud import (_get_all_tasks_internal, get_tasks_in_progress,
+                             insert_new_task, insert_queued_task,
+                             interrupt_task, validating_task_results)
 
 __all__ = [
     "aggregate_results",

@@ -20,7 +20,9 @@ _IDENTITY = re.compile(
     r"|\bare\s+you\s+there\b"
 )
 _THANKS = re.compile(r"\bthank|\bthx\b|\bty\b|\bcheers\b|\bappreciate")
-_CLOSING = re.compile(r"\bthat(?:'s|\s+is|\s+will\s+be|'ll\s+be)\s+all\b|\bnothing\s+else\b")
+_CLOSING = re.compile(
+    r"\bthat(?:'s|\s+is|\s+will\s+be|'ll\s+be)\s+all\b|\bnothing\s+else\b"
+)
 _FAREWELL = re.compile(
     r"\b(?:good\s*)?bye\b|\bsee\s+(?:you|ya)\b|\bgood\s+night\b|\btake\s+care\b"
 )
@@ -30,7 +32,9 @@ def direct_answer(text: str | None, agent_names: Sequence[str] = ()) -> str | No
     clauses = trivial_clauses(text)
     if not clauses:
         return None
-    expressions = [clause.text for clause in clauses if clause.intent is TrivialIntent.ARITHMETIC]
+    expressions = [
+        clause.text for clause in clauses if clause.intent is TrivialIntent.ARITHMETIC
+    ]
     if expressions:
         return _arithmetic_reply(expressions)
     greeted = any(clause.intent is TrivialIntent.GREETING for clause in clauses)
@@ -47,7 +51,9 @@ def _arithmetic_reply(expressions: list[str]) -> str | None:
     return "\n".join(answers)
 
 
-def _small_talk_reply(greeted: bool, small_talk: str, agent_names: Sequence[str]) -> str:
+def _small_talk_reply(
+    greeted: bool, small_talk: str, agent_names: Sequence[str]
+) -> str:
     thanked = bool(_THANKS.search(small_talk))
     leaving = bool(_CLOSING.search(small_talk) or _FAREWELL.search(small_talk))
     sentences: list[str] = []
