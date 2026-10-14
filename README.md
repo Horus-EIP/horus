@@ -21,13 +21,13 @@ A question about the demo documents: the agents search them and answer, citing t
 
 ![Knowledge store with the five demo documents](docs/assets/readme/knowledge-store.png)
 
-The knowledge store. Each document added gets a category, its entities and a summary.
+The knowledge store. Each document added gets a category and a summary.
 
 ![Dashboard with the agents online and the task counts](docs/assets/readme/dashboard.png)
 
 The dashboard: the agents online, their skills, and the tasks.
 
-![The trace of one question across the services](docs/assets/readme/admin-traces.png)
+![One trace: the agent handing an answer back to MAS, with each database call](docs/assets/readme/admin-traces.png)
 
 For admins, the logs, metrics and traces of the whole stack, inside the web client. Here, one trace across the agent and MAS: the agent handing back an answer, down to each database call.
 
