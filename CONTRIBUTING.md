@@ -2,7 +2,7 @@
 
 Horus is a self-hosted platform where several AI agents answer questions from an organisation's own documents. It is built by three Epitech students as their final-year project (EIP), and it is **closed source**: see [LICENSE](LICENSE) and [ADR-004](docs/adr/ADR-004-closed-source-licence.md).
 
-This page says how to take part: what to sign first, how work is tracked and how to send a change.
+This page says how to take part: what to sign first, how work is tracked, how to send a change, and how the maintainers decide.
 
 Contact, the three maintainers: **loup.marquez@epitech.eu**, **noah.gibelli@epitech.eu** and **matheus.lopez@epitech.eu**.
 
@@ -173,3 +173,44 @@ When you change a Dockerfile's base image or the system packages its final stage
 - **Bugs:** open an issue with the Bug report form: the steps to reproduce, what you expected, what happened, your OS, Docker version and hardware profile, and the relevant logs. For the installer, attach `install-log.txt` and `horus-profile.json`: they are written next to the START-HERE files, or at the repository root when you run `installer/horus_install.py` from a clone.
 - **Ideas:** open an issue with the Task form, starting from the problem it solves.
 - **Security issues:** don't open a public issue. Write to the three maintainers (addresses under Contact above) with the details; we answer within a week.
+
+---
+
+## 7. How we decide
+
+Horus belongs to its three maintainers together: Loup Marquez-Luttringer, Noah Gibelli and Matheus Lopez. This section says how the three of us take decisions beyond a single change; the review of a change follows [How we merge](#how-we-merge). Contributors don't vote, but anyone can propose something in an issue, and we answer there.
+
+### Two of three
+
+Most decisions need two of the three maintainers to agree:
+
+- technical choices: the architecture, dependencies, tools and CI;
+- what goes into a release, and when it is tagged;
+- the backlog and the sprints: priorities, who does what, and the dates.
+
+### All three
+
+These need all three maintainers to agree:
+
+- the licence: any change to [LICENSE](LICENSE), and what is open source and what stays closed ([ADR-004](docs/adr/ADR-004-closed-source-licence.md), [ADR-007](docs/adr/ADR-007-open-source-benchmark-kit.md));
+- anything that gives someone rights in Horus or the right to use it: a Contributor Agreement, an Evaluation Licence, a commercial licence, or a transfer of the rights to a company;
+- adding a maintainer, or giving someone write access to a Horus-EIP repository.
+
+An all-three decision waits for the third maintainer: the other two can't take it alone, even when he is away.
+
+### Every decision is a pull request
+
+A decision counts only once it is approved in a pull request on GitHub, so anyone can see what was decided, who agreed and why. Talking it over at a meeting or on another platform is fine, but nothing is decided there. A decision follows the same steps as any other work:
+
+1. **An issue.** Whoever proposes the decision opens an issue that says what is to be decided and why: in `Horus-EIP/horus` for a decision about how Horus is built, licensed or run, in `Horus-EIP/horus-team` for a planning decision (priorities, who does what, dates).
+2. **A branch** for that issue, named `issue-<number>-<short-description>` (see [Branches](#branches)), with:
+   - for a decision about how Horus is built, licensed or run: a new **ADR** in [`docs/adr/`](docs/adr/), one ADR per decision, whose **Deciders** line names who agreed;
+   - for a planning decision: the change to the sprint document.
+3. **A pull request** that says `Fixes #<number>` and requests a review from the two other maintainers. They answer there: **Approve** if they agree, **Request changes** if they don't, and comments for questions.
+4. **The merge**, once enough of us approve: one approval for a two-of-three decision (the author is the second voice), the two others' approvals for an all-three decision. A two-of-three pull request stays open at least 48 hours, unless all three have reviewed it, so the third maintainer can see it and comment first.
+
+A decision stays until a new one replaces it, through the same steps: the new ADR says which one it supersedes, and the old one's status becomes "Superseded by ADR-NNN".
+
+Choices inside a single task, like how to write a function, are settled in that task's own pull request.
+
+Until two of us agree, or all three for the decisions above, nothing changes.
