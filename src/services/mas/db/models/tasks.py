@@ -3,13 +3,13 @@
 import uuid
 from datetime import UTC, datetime
 
-from core.logger import log_db_operation
-from db.database import Base
-from sqlalchemy import JSON, Column, DateTime
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, event
 from sqlalchemy import Enum as SQLEnum
-from sqlalchemy import ForeignKey, Integer, String, event
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+
+from core.logger import log_db_operation
+from db.database import Base
 from tasks.status import TaskStatus, is_final_status
 
 

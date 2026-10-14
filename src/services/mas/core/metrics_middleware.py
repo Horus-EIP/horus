@@ -9,7 +9,7 @@ This middleware collects Prometheus metrics for all HTTP requests:
 Usage:
     from fastapi import FastAPI
     from core.metrics_middleware import MetricsMiddleware
-
+    
     app = FastAPI()
     app.add_middleware(MetricsMiddleware)
 """
@@ -17,11 +17,16 @@ Usage:
 import time
 from collections.abc import Callable
 
-from core.metrics import (increment_request_count, observe_request_latency,
-                          record_error, track_request_in_progress)
-from core.structured_logging import get_structured_logger
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
+
+from core.metrics import (
+    increment_request_count,
+    observe_request_latency,
+    record_error,
+    track_request_in_progress,
+)
+from core.structured_logging import get_structured_logger
 
 logger = get_structured_logger("metrics_middleware")
 
@@ -71,23 +76,23 @@ class MetricsMiddleware(BaseHTTPMiddleware):
     def _normalize_endpoint(self, path: str) -> str:
         """
         Normalize endpoint path to avoid high cardinality metrics.
-
+        
         Replaces dynamic path segments (IDs, UUIDs) with placeholders.
         """
         import re
 
         # Replace UUIDs
         path = re.sub(
-            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
-            "{id}",
+            r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
+            '{id}',
             path,
-            flags=re.IGNORECASE,
+            flags=re.IGNORECASE
         )
 
         # Replace numeric IDs
-        path = re.sub(r"/\d+", "/{id}", path)
+        path = re.sub(r'/\d+', '/{id}', path)
 
         # Remove trailing slashes for consistency
-        path = path.rstrip("/")
+        path = path.rstrip('/')
 
-        return path or "/"
+        return path or '/'

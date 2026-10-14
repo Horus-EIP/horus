@@ -43,11 +43,11 @@ def logs():
         yield mocks
 
 
-def add_agent(db, password: str) -> Users:
+def add_agent(db, password: str, role: str = Role.AGENT.value) -> Users:
     agent = Users(
         username="agent",
         hashed_password=bcrypt_context.hash(password),
-        role=Role.AGENT.value,
+        role=role,
     )
     db.add(agent)
     db.commit()
@@ -119,6 +119,19 @@ class TestAnUpgradeWhereTheAgentChangedThePassword:
         assert stored_hash(session) == before
         assert bcrypt_context.verify(CHOSEN, stored_hash(session))
         assert "SUPER_AGENT_PASSWORD" in logs["logger"].warning.call_args.args[0]
+
+    def test_an_existing_admin_account_is_restricted_without_changing_its_password(
+        self, session, logs
+    ):
+        add_agent(session, CHOSEN, role=Role.ADMIN.value)
+        before = stored_hash(session)
+
+        assert agent_account.ensure_agent_account(session, "agent", GENERATED) == "differs"
+
+        account = session.query(Users).filter_by(username="agent").one()
+        assert account.role == Role.AGENT.value
+        assert account.hashed_password == before
+        assert bcrypt_context.verify(CHOSEN, account.hashed_password)
 
 
 class TestTheCommandTheInstallerRuns:

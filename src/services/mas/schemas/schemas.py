@@ -9,10 +9,11 @@ import re
 from enum import Enum
 from typing import Any, Literal
 
-from auth.permissions import Role
-from db.models import AgentTypes
 from pydantic import BaseModel, Field, field_validator
 from pydantic_core import PydanticCustomError
+
+from auth.permissions import Role
+from db.models import AgentTypes
 
 PASSWORD_POLICY = (
     "Password must be at least 10 characters and include uppercase, "
@@ -31,7 +32,6 @@ def check_password_policy(value: str) -> str:
     if not strong:
         raise PydanticCustomError("password_policy", PASSWORD_POLICY)
     return value
-
 
 class RegistrationForm(BaseModel):
     """Agent registration payload (name, skills, description, type)."""
@@ -149,9 +149,7 @@ class TaskResultForm(BaseModel):
     task_id: str
     agent_name: str | None = None
     skill_used: str | None = None
-    sources: list[AnswerSource] | None = Field(
-        default=None, max_length=MAX_ANSWER_SOURCES
-    )
+    sources: list[AnswerSource] | None = Field(default=None, max_length=MAX_ANSWER_SOURCES)
     status: TaskResultStatus = TaskResultStatus.COMPLETED
     reason: str | None = Field(default=None, max_length=64)
 

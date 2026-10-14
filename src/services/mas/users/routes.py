@@ -7,24 +7,28 @@ error codes.
 
 from typing import Annotated
 
-from auth.auth_tool_functions import (PermissionChecker, get_current_user,
-                                      modify_user_password)
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from auth.auth_tool_functions import PermissionChecker, get_current_user, modify_user_password
 from auth.permissions import Permission
+from core.config import settings
 from core.logger import get_logger
 from db.database import get_db
 from db.models import Users
-from fastapi import APIRouter, Depends, HTTPException
 from schemas.schemas import UpdateRole, UserPasswordModification
-from sqlalchemy.orm import Session
-from users.openapi_docs import (CHANGE_PASSWORD_OPENAPI_EXTRA,
-                                CHANGE_PASSWORD_RESPONSES,
-                                CHANGE_USERNAME_RESPONSES,
-                                DELETE_USER_RESPONSES, ME_RESPONSES,
-                                UPDATE_ROLE_RESPONSES, USER_DETAILS_RESPONSES,
-                                USERS_LIST_RESPONSES)
+from users.openapi_docs import (
+    CHANGE_PASSWORD_OPENAPI_EXTRA,
+    CHANGE_PASSWORD_RESPONSES,
+    CHANGE_USERNAME_RESPONSES,
+    DELETE_USER_RESPONSES,
+    ME_RESPONSES,
+    UPDATE_ROLE_RESPONSES,
+    USER_DETAILS_RESPONSES,
+    USERS_LIST_RESPONSES,
+)
 from users.user_tool_functions import delete_user as delete_user_tool
-from users.user_tool_functions import (get_all_users, get_user_details,
-                                       modify_user_username)
+from users.user_tool_functions import get_all_users, get_user_details, modify_user_username
 
 router = APIRouter(prefix="/users", tags=["Users"])
 logger = get_logger("users_routes")
@@ -53,6 +57,14 @@ async def update_roles(
         raise HTTPException(status_code=401, detail="Authentication Failed")
 
     try:
+        if user_info.user_id == settings.super_agent_username:
+            logger.warning(
+                f"Failed to update user role: User {user_info.user_id} can't have an another role than {user_info.new_role.value}"
+            )
+            raise HTTPException(
+                status_code=403,
+                detail=f"Agent already has role {user_info.new_role.value} and it can't be modified",
+            )
         existing_user_with_role = (
             db.query(Users)
             .filter(
@@ -186,6 +198,10 @@ def delete_user(
     if user.get("id") == user_id:
         logger.warning(f"Admin {user.get('username')} attempted to delete themselves")
         raise HTTPException(status_code=403, detail="Cannot delete your own account")
+
+    if user_id == settings.super_agent_username:
+        logger.warning(f"{user.get('username')} attempted to delete Agent profile")
+        raise HTTPException(status_code=403, detail="Cannot delete your agent account")
 
     return delete_user_tool(user_id, db)
 

@@ -1,12 +1,13 @@
 import os
 import time
 
-from core.config import settings
-from core.logger import get_logger, log_error, log_success
-from db.pool_monitor import attach_pool_monitor
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import StaticPool
+
+from core.config import settings
+from core.logger import get_logger, log_error, log_success
+from db.pool_monitor import attach_pool_monitor
 
 logger = get_logger("database")
 
@@ -16,9 +17,7 @@ DB_USER = settings.postgres_user
 DB_PASSWORD = settings.postgres_password
 DB_PORT = settings.db_port
 
-URL_DATABASE = (
-    f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-)
+URL_DATABASE = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 # Allow override for testing via environment variable
 if os.getenv("TEST_MODE") == "1":

@@ -1,11 +1,11 @@
 """``Agents`` ORM model — one row per registered AI agent."""
 
+from sqlalchemy import JSON, Column, DateTime, String
+from sqlalchemy import Enum as SQLEnum
+from sqlalchemy.sql import func
+
 from db.database import Base
 from db.models.agent_types import AgentTypes
-from sqlalchemy import JSON, Column, DateTime
-from sqlalchemy import Enum as SQLEnum
-from sqlalchemy import String
-from sqlalchemy.sql import func
 
 
 class Agents(Base):

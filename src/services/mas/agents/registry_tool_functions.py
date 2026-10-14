@@ -10,19 +10,18 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Optional
 
-from core.logger import get_logger
-from core.rabbitmq_tool import rabbitmq_instance
-from core.work_queues import work_queue_name_for_agent_type
-from db.models import Agents, AgentTypes
 from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
+from core.logger import get_logger
+from core.rabbitmq_tool import rabbitmq_instance
+from core.work_queues import work_queue_name_for_agent_type
+from db.models import Agents, AgentTypes
 
-def _skill_cache_upsert(
-    agent_id: str, name: str, skills: list, description: str
-) -> None:
+
+def _skill_cache_upsert(agent_id: str, name: str, skills: list, description: str) -> None:
     """Best-effort skill-cache update; never let it crash the registry path."""
     try:
         from core.skill_cache import upsert_agent
@@ -39,7 +38,6 @@ def _skill_cache_evict(agent_id: str) -> None:
         evict_agent(agent_id)
     except Exception:
         logger.exception("Skill cache evict failed for agent %s", agent_id)
-
 
 logger = get_logger("registry_tool_functions")
 
@@ -138,12 +136,10 @@ def _batch_update_agent_status_internal(agent_statuses: dict, db: Session) -> bo
         logger.error(f"Error batch updating agents: {str(e)}")
         return False
 
-
 # ============================================================================
 # PUBLIC FUNCTIONS - With Depends (used by FastAPI routes)
 # Can be called from routes and internally from controller via wrappers
 # ============================================================================
-
 
 def get_agent_by_name(name: str, db: Session) -> Optional[Agents]:
     """Retrieve an agent by their exact name.
@@ -155,7 +151,6 @@ def get_agent_by_name(name: str, db: Session) -> Optional[Agents]:
     result = db.execute(query)
 
     return result.scalar_one_or_none()
-
 
 async def create_agent(
     name: str, skills: list, description: str, db: Session, Agent_type: AgentTypes
@@ -169,17 +164,10 @@ async def create_agent(
     api_key = secrets.token_urlsafe(32)
     hash_api_key = bcrypt_context.hash(api_key)
     try:
-
         existing_agent = get_agent_by_name(name, db)
-        if existing_agent != None and existing_agent.status == "dead":
-            delete_agent(existing_agent.id, db)
-
-        if existing_agent != None and existing_agent.status == "active":
-            logger.debug(
-                f"An agent already has the name {existing_agent.name} and is active"
-            )
-            return None, None, True
-
+        if existing_agent is not None:
+            if not delete_agent(existing_agent.id, db):
+                return None, None, False
         new_agent = Agents(
             id=agent_id,
             name=name,
@@ -198,13 +186,10 @@ async def create_agent(
 
         # Shared pool queue for this specialization (all workers of this type consume it).
         await asyncio.to_thread(
-            rabbitmq_instance.ensure_work_queue,
-            work_queue_name_for_agent_type(Agent_type),
+            rabbitmq_instance.ensure_work_queue, work_queue_name_for_agent_type(Agent_type)
         )
 
-        await asyncio.to_thread(
-            _skill_cache_upsert, agent_id, name, skills, description
-        )
+        await asyncio.to_thread(_skill_cache_upsert, agent_id, name, skills, description)
         return agent_id, api_key, False
     except Exception as e:
         db.rollback()
@@ -411,26 +396,13 @@ def get_agent_by_type(agent_type: str, db: Session) -> str:
         # agent's NAME and SKILLS (plus a few synonyms) so a multi-step plan
         # routes to the right distinct specialists.
         _syn = {
-            "finance": "analyst",
-            "financial": "analyst",
-            "budget": "analyst",
-            "accounting": "analyst",
-            "analysis": "analyst",
-            "compliance": "compliance",
-            "legal": "compliance",
-            "policy": "compliance",
-            "audit": "compliance",
-            "risk": "compliance",
-            "security": "compliance",
-            "hr": "hr",
-            "people": "hr",
-            "human": "hr",
-            "communication": "writer",
-            "writer": "writer",
-            "write": "writer",
-            "draft": "writer",
-            "messaging": "writer",
-            "memo": "writer",
+            "finance": "analyst", "financial": "analyst", "budget": "analyst",
+            "accounting": "analyst", "analysis": "analyst",
+            "compliance": "compliance", "legal": "compliance", "policy": "compliance",
+            "audit": "compliance", "risk": "compliance", "security": "compliance",
+            "hr": "hr", "people": "hr", "human": "hr",
+            "communication": "writer", "writer": "writer", "write": "writer",
+            "draft": "writer", "messaging": "writer", "memo": "writer",
         }
         mapped = _syn.get(target)
 
@@ -475,9 +447,7 @@ def _is_agent_recently_alive(agent_info, max_age_seconds: int = 90) -> bool:
 
 
 def is_available_worker(agent_info) -> bool:
-    return agent_info.name != MANAGER_AGENT_NAME and _is_agent_recently_alive(
-        agent_info
-    )
+    return agent_info.name != MANAGER_AGENT_NAME and _is_agent_recently_alive(agent_info)
 
 
 def get_available_agents(db: Session) -> list:

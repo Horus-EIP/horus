@@ -14,9 +14,14 @@ from collections.abc import Callable
 from typing import Any
 
 from core.logger import get_logger
-from schemas.agent_message import (AgentMessage, DelegationContextEntry,
-                                   DelegationRequest, DelegationResponse,
-                                   MessageStatus, MessageType)
+from schemas.agent_message import (
+    AgentMessage,
+    DelegationContextEntry,
+    DelegationRequest,
+    DelegationResponse,
+    MessageStatus,
+    MessageType,
+)
 
 logger = get_logger("agent_communication")
 
@@ -200,13 +205,11 @@ class AgentCommunicator:
         chain.append(request.sender_agent_id)
 
         context = list(request.delegation_context)
-        context.append(
-            DelegationContextEntry(
-                agent_id=request.sender_agent_id,
-                request=request.request,
-                data=request.data,
-            )
-        )
+        context.append(DelegationContextEntry(
+            agent_id=request.sender_agent_id,
+            request=request.request,
+            data=request.data,
+        ))
 
         message = AgentMessage(
             sender_agent_id=request.sender_agent_id,
@@ -240,7 +243,9 @@ class AgentCommunicator:
         except TimeoutError:
             self.message_store.update_status(message.id, MessageStatus.TIMEOUT)
             self.delegation_registry.cancel(message.id)
-            logger.warning(f"Delegation {message.id} timed out after {timeout}s")
+            logger.warning(
+                f"Delegation {message.id} timed out after {timeout}s"
+            )
             return DelegationResponse(
                 delegation_id=message.id,
                 status="timeout",
@@ -260,11 +265,7 @@ class AgentCommunicator:
         return DelegationResponse(
             delegation_id=message.id,
             status="error",
-            error=(
-                result.get("error", "Unknown delegation error")
-                if result
-                else "No result"
-            ),
+            error=result.get("error", "Unknown delegation error") if result else "No result",
         )
 
     def receive_delegation_result(

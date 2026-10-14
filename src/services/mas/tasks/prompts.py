@@ -13,6 +13,7 @@ Three prompts live here:
 returns JSON that needs the same markdown-fence strip.
 """
 
+
 SYNTHESIS_SYSTEM_PROMPT = (
     "You are an expert synthesizer. Your goal is to provide a final, comprehensive answer "
     "to the user's original request, based on the results from the executed sub-tasks.\n\n"
@@ -207,9 +208,7 @@ def get_decomposition_prompt(user_input, suitable_agents):
     ]
 
 
-def get_manager_announcement_prompt(
-    user_demand: str, planned_steps: list[dict]
-) -> list[dict]:
+def get_manager_announcement_prompt(user_demand: str, planned_steps: list[dict]) -> list[dict]:
     """Build the prompt that turns a decomposition plan into a Manager chat message.
 
     The plan is a list of ``{agent_type, description}`` entries returned by the
@@ -251,9 +250,7 @@ def get_manager_review_prompt(
 
     Returns a list of OpenAI-style chat messages ready for ``ask_llm``.
     """
-    types_block = (
-        ", ".join(available_agent_types) if available_agent_types else "general"
-    )
+    types_block = ", ".join(available_agent_types) if available_agent_types else "general"
     remaining_block = (
         "\n".join(
             f"  - {s.get('agent_type', '?')}: {s.get('description', '')}"

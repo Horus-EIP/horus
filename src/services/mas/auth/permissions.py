@@ -83,6 +83,7 @@ ROLE_PERMISSION: dict[Role, set[Permission]] = {
     Role.AGENT: {
         Permission.AGENT_CREATE,
         Permission.AGENT_EXECUTE,
+
     },
 }
 

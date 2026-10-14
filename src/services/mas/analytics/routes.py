@@ -9,14 +9,15 @@ existing per-domain endpoints already use, so behaviour is consistent.
 from datetime import UTC, datetime
 from typing import Annotated
 
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
 from agents.registry_tool_functions import _is_agent_recently_alive
 from auth.auth_tool_functions import PermissionChecker
 from auth.permissions import Permission
 from core.logger import get_logger
 from db.dependency import get_db
 from db.models import Agents
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 from tasks.routes import get_task_queue_stats
 
 logger = get_logger("analytics_routes")

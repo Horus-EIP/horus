@@ -57,6 +57,20 @@ class TestUserUpdateRole:
         )
         assert r.status_code == 404
 
+    def test_admin_cannot_change_the_agent_account_role(
+        self, make_client, mock_db, as_admin, monkeypatch
+    ):
+        monkeypatch.setattr("users.routes.settings.super_agent_username", "agent")
+        client = make_client(router, current_user=as_admin)
+
+        response = client.post(
+            "/users/update_role",
+            json={"user_id": "agent", "new_role": "admin"},
+        )
+
+        assert response.status_code == 403
+        mock_db.query.assert_not_called()
+
     @pytest.mark.parametrize("bad_role", ["root", "", "ADMIN", "xx"])
     def test_update_role_rejects_invalid_role_string(self, make_client, mock_db, as_admin, bad_role):
         client = make_client(router, current_user=as_admin)
@@ -124,3 +138,22 @@ class TestUserErrors:
         client = make_client(router, current_user=as_manager)
         r = client.delete("/users/99")
         assert r.status_code == 403
+
+    def test_agent_role_is_denied_user_routes(self, make_client, mock_db, as_agent):
+        client = make_client(router, current_user=as_agent)
+
+        response = client.get("/users/users_list")
+
+        assert response.status_code == 403
+        mock_db.query.assert_not_called()
+
+    def test_agent_role_is_denied_admin_routes(self, make_client, mock_db, as_agent):
+        client = make_client(router, current_user=as_agent)
+
+        response = client.post(
+            "/users/update_role",
+            json={"user_id": "target-user", "new_role": "admin"},
+        )
+
+        assert response.status_code == 403
+        mock_db.query.assert_not_called()

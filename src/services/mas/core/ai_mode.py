@@ -58,17 +58,8 @@ def served_by(base_url: str) -> tuple[str | None, str | None] | None:
         served = listed[0]
         owner = served.get("owned_by")
         model = served.get("id")
-    except (
-        OSError,
-        ValueError,
-        KeyError,
-        IndexError,
-        TypeError,
-        AttributeError,
-    ) as exc:
-        logger.warning(
-            "Could not ask the model server what it serves", url=url, error=str(exc)
-        )
+    except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError) as exc:
+        logger.warning("Could not ask the model server what it serves", url=url, error=str(exc))
         return None
     return (str(owner) if owner else None), (str(model) if model else None)
 
@@ -85,9 +76,7 @@ def probe() -> AiMode:
 
 
 def switched_off(name: str) -> bool:
-    return (
-        os.getenv(name, "").split("#", 1)[0].strip().strip("\"'").lower() in OFF_VALUES
-    )
+    return os.getenv(name, "").split("#", 1)[0].strip().strip("\"'").lower() in OFF_VALUES
 
 
 def embeddings() -> str | None:
@@ -116,10 +105,8 @@ def mock_warning() -> str:
     faked = "answers MAS's model calls"
     if embeddings() == MOCK:
         faked += " and computes its embeddings from the words of each text"
-    message = (
-        f"Mock AI mode: llm-mock {faked}, so routing, plans and answers are simulated, "
-        "not produced by a model"
-    )
+    message = (f"Mock AI mode: llm-mock {faked}, so routing, plans and answers are simulated, "
+               "not produced by a model")
     if os.getenv(TRACES_OFF_ENV, "").strip().lower() in TRUE_VALUES:
         message += "; monitoring is off, so MAS exports no trace"
     return message

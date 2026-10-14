@@ -4,12 +4,15 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
-from chat.chat_tool_functions import (agent_message_payload,
-                                      broadcast_to_conversation,
-                                      task_step_payload)
+from starlette.concurrency import run_in_threadpool
+
+from chat.chat_tool_functions import (
+    agent_message_payload,
+    broadcast_to_conversation,
+    task_step_payload,
+)
 from core.logger import get_logger
 from db.redis_client import redis_db
-from starlette.concurrency import run_in_threadpool
 
 logger = get_logger("task_events")
 

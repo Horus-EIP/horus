@@ -4,6 +4,13 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
+from fastapi import Depends, HTTPException, Security, status
+from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.orm import Session
+
 from auth.permissions import Permission, check_permission
 from core.config import settings
 from core.hybrid_logging import log_security_event
@@ -11,12 +18,6 @@ from core.logger import get_logger, log_auth_operation, log_error, log_warning
 from db.dependency import get_db
 from db.models import Agents, Users
 from db.redis_client import redis_db
-from fastapi import Depends, HTTPException, Security, status
-from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from sqlalchemy.exc import ProgrammingError
-from sqlalchemy.orm import Session
 
 logger = get_logger("auth")
 
@@ -325,7 +326,9 @@ def invalidate_agent_api_key_cache(agent_id: str) -> None:
     for k in stale:
         _AGENT_AUTH_L1.pop(k, None)
     try:
-        for rk in redis_db.scan_iter(match=f"{_AGENT_AUTH_REDIS_PREFIX}{agent_id}:*"):
+        for rk in redis_db.scan_iter(
+            match=f"{_AGENT_AUTH_REDIS_PREFIX}{agent_id}:*"
+        ):
             redis_db.delete(rk)
     except Exception as exc:  # noqa: BLE001 - invalidation is best-effort
         logger.debug(f"Agent auth cache invalidation failed for {agent_id}: {exc}")

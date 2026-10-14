@@ -1,10 +1,11 @@
 """``Users`` ORM model + CRUD audit listeners."""
 
+from sqlalchemy import Column, Integer, String, event
+from sqlalchemy.orm import relationship
+
 from auth.permissions import Role
 from core.logger import log_db_operation
 from db.database import Base
-from sqlalchemy import Column, Integer, String, event
-from sqlalchemy.orm import relationship
 
 
 class Users(Base):

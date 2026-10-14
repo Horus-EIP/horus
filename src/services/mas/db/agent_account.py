@@ -24,10 +24,8 @@ HOW_TO_SET = (
     "(openssl rand -hex 16 makes one), then run `docker compose up -d mas agent` in src/infra."
 )
 
-
 def usable_agent_password(password: str | None) -> bool:
     return bool(password and password.strip()) and password.strip() != SHIPPED_PASSWORD
-
 
 def create_agent(db, username: str, password: str) -> str:
     if not usable_agent_password(password):
@@ -47,12 +45,9 @@ def create_agent(db, username: str, password: str) -> str:
     db.refresh(agent)
     log_success("init_db", f"Default agent user created: {username}")
     log_user_action(
-        "CREATE_AGENT_USER",
-        user_id=agent.id,
-        details=f"Initial agent user created: {username}",
+        "CREATE_AGENT_USER", user_id=agent.id, details=f"Initial agent user created: {username}"
     )
     return CREATED
-
 
 def replace_shipped_agent_password(db, agent: Users, password: str) -> str:
     if not usable_agent_password(password):
@@ -72,11 +67,13 @@ def replace_shipped_agent_password(db, agent: Users, password: str) -> str:
     )
     return REPLACED
 
-
 def ensure_agent_account(db, username: str, password: str) -> str:
     agent = db.query(Users).filter_by(username=username).first()
     if agent is None:
         return create_agent(db, username, password)
+    if agent.role != Role.AGENT.value:
+        agent.role = Role.AGENT.value
+        db.commit()
     if has_password(agent, SHIPPED_PASSWORD):
         return replace_shipped_agent_password(db, agent, password)
     if has_password(agent, password):
@@ -89,7 +86,6 @@ def ensure_agent_account(db, username: str, password: str) -> str:
     )
     return DIFFERS
 
-
 def main() -> int:
     db = SessionLocal()
     try:
@@ -100,7 +96,6 @@ def main() -> int:
         db.close()
     print(OUTCOME_PREFIX + outcome, flush=True)
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

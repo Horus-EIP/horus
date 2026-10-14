@@ -1,8 +1,10 @@
+
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+
 from auth.permissions import Role
 from core.logger import get_logger
 from db.models import Users
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
 
 logger = get_logger("users_tool_functions")
 
@@ -71,7 +73,7 @@ def delete_user(user_id: int, db: Session):
         logger.warning(f"Attempt to delete non-existent user ID: {user_id}")
         raise HTTPException(status_code=404, detail="User not found")
 
-    if target_user.username == Role.ADMIN.value:
+    if target_user.username == Role.ADMIN.value or target_user.username == Role.AGENT.value:
         logger.warning("Attempt to delete main admin account")
         raise HTTPException(
             status_code=403, detail="Cannot delete the main admin account"

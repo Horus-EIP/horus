@@ -2,10 +2,11 @@ import datetime
 import json
 import uuid
 
-from core.logger import get_logger
-from db.redis_client import redis_db
 from fastapi import WebSocket, WebSocketException, status
 from fastapi.security.utils import get_authorization_scheme_param
+
+from core.logger import get_logger
+from db.redis_client import redis_db
 
 logger = get_logger("chat")
 

@@ -180,11 +180,7 @@ _QUESTION_WORD = re.compile(r"[\w']+")
 
 def classify_trivial_intent(text: str | None) -> TrivialIntent | None:
     found = {clause.intent for clause in trivial_clauses(text)}
-    for intent in (
-        TrivialIntent.ARITHMETIC,
-        TrivialIntent.SMALL_TALK,
-        TrivialIntent.GREETING,
-    ):
+    for intent in (TrivialIntent.ARITHMETIC, TrivialIntent.SMALL_TALK, TrivialIntent.GREETING):
         if intent in found:
             return intent
     return None
@@ -219,9 +215,7 @@ def find_complex_cue(text: str | None) -> ComplexCue | None:
         return ComplexCue.COMPARISON
     if _AND_ALSO.search(normalised):
         return ComplexCue.AND_ALSO
-    questions = sum(
-        1 for asked in normalised.split("?")[:-1] if _is_a_full_question(asked)
-    )
+    questions = sum(1 for asked in normalised.split("?")[:-1] if _is_a_full_question(asked))
     if questions >= 2:
         return ComplexCue.SEVERAL_QUESTIONS
     return None

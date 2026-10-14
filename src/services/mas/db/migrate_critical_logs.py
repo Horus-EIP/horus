@@ -2,9 +2,10 @@
 Migration pour ajouter la table critical_logs
 """
 
+from sqlalchemy import text
+
 from core.logger import log_db_operation, log_error, log_success
 from db.database import engine
-from sqlalchemy import text
 
 
 def create_critical_logs_table():

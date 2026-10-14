@@ -12,9 +12,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.add_column("tasks", sa.Column("claimed_by", sa.String(), nullable=True))
     op.add_column("tasks", sa.Column("claim_run", sa.String(), nullable=True))
-    op.add_column(
-        "tasks", sa.Column("started_at", sa.DateTime(timezone=True), nullable=True)
-    )
+    op.add_column("tasks", sa.Column("started_at", sa.DateTime(timezone=True), nullable=True))
     op.create_index("ix_tasks_claimed_by", "tasks", ["claimed_by"], unique=False)
 
 

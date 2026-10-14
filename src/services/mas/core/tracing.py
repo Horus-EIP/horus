@@ -1,17 +1,16 @@
 import os
 
-from core.config import settings
-from core.version import HORUS_VERSION
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
-    OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.trace.sampling import (Decision, ParentBased, Sampler,
-                                              SamplingResult)
+from opentelemetry.sdk.trace.sampling import Decision, ParentBased, Sampler, SamplingResult
 from opentelemetry.trace import SpanKind
+
+from core.config import settings
+from core.version import HORUS_VERSION
 
 DEFAULT_SERVICE_NAME = "mas"
 

@@ -12,6 +12,7 @@ import threading
 import time
 
 import numpy as np
+
 from core.embeddings_client import EmbeddingsClient
 from core.logger import get_logger
 
@@ -120,15 +121,15 @@ def start_embedding_preload_background_thread() -> None:
 
                 warm_router_examples()
             except Exception:
-                logger.exception(
-                    "Router examples warm failed during embedding preload."
-                )
+                logger.exception("Router examples warm failed during embedding preload.")
         except Exception:
             logger.exception(
                 "Background embedder preload failed; first suggest call will retry."
             )
 
-    threading.Thread(target=_worker, name="mas-embedder-preload", daemon=True).start()
+    threading.Thread(
+        target=_worker, name="mas-embedder-preload", daemon=True
+    ).start()
 
 
 def embed_texts(texts: list[str]) -> np.ndarray:

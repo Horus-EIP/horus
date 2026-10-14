@@ -7,8 +7,7 @@ from pathlib import Path
 
 try:
     import torch
-    from transformers import (AutoModelForCausalLM, AutoTokenizer,
-                              BitsAndBytesConfig)
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 except ImportError:
     torch = None
     AutoModelForCausalLM = None
@@ -51,11 +50,7 @@ def record_prompt_tokens(call: str, tokens: int, source: PromptTokenSource) -> N
     budget = prompt_token_budget()
     over_budget = observe_prompt_tokens(call, source.value, tokens, budget)
     logger.info(
-        "LLM prompt tokens",
-        call=call,
-        prompt_tokens=tokens,
-        source=source.value,
-        budget=budget,
+        "LLM prompt tokens", call=call, prompt_tokens=tokens, source=source.value, budget=budget
     )
     if over_budget:
         logger.warning(
@@ -140,7 +135,6 @@ def _cpu_dtype() -> torch.dtype:
         return torch.bfloat16
     except Exception:
         return torch.float32
-
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 # MAS is a thin router/classifier — it picks an agent, sometimes decomposes a

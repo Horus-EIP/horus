@@ -3,7 +3,9 @@ import datetime
 import os
 
 from agents.registry_tool_functions import (
-    _batch_update_agent_status_internal, _get_all_agents_internal)
+    _batch_update_agent_status_internal,
+    _get_all_agents_internal,
+)
 from core.logger import get_logger, log_agent_operation
 from db.database import SessionLocal
 

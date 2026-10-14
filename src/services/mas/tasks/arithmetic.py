@@ -96,10 +96,7 @@ def _square_root(value: Fraction) -> Fraction:
         raise NotArithmeticError("square root of a negative number")
     numerator_root = math.isqrt(value.numerator)
     denominator_root = math.isqrt(value.denominator)
-    if (
-        numerator_root**2 == value.numerator
-        and denominator_root**2 == value.denominator
-    ):
+    if numerator_root**2 == value.numerator and denominator_root**2 == value.denominator:
         return Fraction(numerator_root, denominator_root)
     return Fraction(math.sqrt(value))
 
@@ -153,9 +150,7 @@ class _Parser:
         value = self._signed()
         while (operator := self._take("*", "/", "%", _PERCENT_OF)) is not None:
             if operator == "%" and not self._operand_follows():
-                raise NotArithmeticError(
-                    "a percent sign needs 'of' or a second operand"
-                )
+                raise NotArithmeticError("a percent sign needs 'of' or a second operand")
             right = self._signed()
             if operator == "*":
                 value = value * right

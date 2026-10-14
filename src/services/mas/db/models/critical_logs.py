@@ -1,8 +1,9 @@
 """``CriticalLogs`` — append-only audit log for security and compliance events."""
 
-from db.database import Base
 from sqlalchemy import Column, DateTime, Index, Integer, String, Text
 from sqlalchemy.sql import func
+
+from db.database import Base
 
 
 class CriticalLogs(Base):

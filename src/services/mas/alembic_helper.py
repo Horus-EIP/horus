@@ -57,7 +57,7 @@ Run from: src/services/mas/
     command = sys.argv[1].lower()
 
     if command == "status":
-        run_command(["alembic", "current"], "Current Migration Status")
+        run_command(["alembic",  "current"], "Current Migration Status")
 
     elif command == "history":
         run_command(["alembic", "history"], "Migration History")
@@ -66,9 +66,7 @@ Run from: src/services/mas/
         run_command(["alembic", "upgrade", "head"], "Applying all pending migrations")
 
     elif command == "downgrade":
-        run_command(
-            ["alembic", "downgrade", "base"], "Rolling back all migrations to base"
-        )
+        run_command(["alembic", "downgrade", "base"], "Rolling back all migrations to base")
 
     elif command == "rollback-1":
         run_command(["alembic", "downgrade", "-1"], "Rolling back last migration")

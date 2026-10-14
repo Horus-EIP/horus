@@ -24,7 +24,6 @@ from pathlib import Path
 
 REQUIRED_FILES = ("config.json", "tokenizer.json")
 
-
 # Match the model dir name to the trailing path segment of the hub id so a
 # user who flips LLM_MODEL_ID also gets a fresh, predictable directory.
 def _default_model_dir(base: Path, model_id: str) -> Path:
@@ -53,17 +52,13 @@ def main() -> int:
     # blocks container startup (and the Docker healthcheck) on a large HF
     # download that isn't even used.
     if os.environ.get("LLM_BACKEND", "").strip().lower() == "vllm":
-        print(
-            "[bootstrap_llm] LLM_BACKEND=vllm -> no local model needed; skipping download."
-        )
+        print("[bootstrap_llm] LLM_BACKEND=vllm -> no local model needed; skipping download.")
         return 0
 
     here = Path(__file__).resolve().parent
     model_id = os.environ.get("LLM_MODEL_ID", "Qwen/Qwen2.5-1.5B-Instruct").strip()
     explicit_dir = os.environ.get("LLM_MODEL_DIR", "").strip()
-    model_dir = (
-        Path(explicit_dir) if explicit_dir else _default_model_dir(here, model_id)
-    )
+    model_dir = Path(explicit_dir) if explicit_dir else _default_model_dir(here, model_id)
 
     print(f"[bootstrap_llm] target model={model_id!r} dir={model_dir}")
 

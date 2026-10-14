@@ -269,8 +269,9 @@ class TestBatchUpdateInternal:
 
 
 class TestCreateAgent:
-    async def test_success_returns_id_and_plaintext_key(self):
+    async def test_success_returns_id_and_plaintext_key(self, monkeypatch):
         db = MagicMock()
+        monkeypatch.setattr(rtf, "get_agent_by_name", lambda _name, _db: None)
         agent_id, api_key, already_active = await rtf.create_agent(
             "ResearchBot", ["search"], "desc", db, AgentTypes.RESEARCHER
         )
@@ -290,8 +291,9 @@ class TestCreateAgent:
         assert stored.api_key != api_key
         assert rtf.bcrypt_context.verify(api_key, stored.api_key)
 
-    async def test_failure_rolls_back_and_returns_none_none(self):
+    async def test_failure_rolls_back_and_returns_none_none(self, monkeypatch):
         db = MagicMock()
+        monkeypatch.setattr(rtf, "get_agent_by_name", lambda _name, _db: None)
         db.commit.side_effect = RuntimeError("db down")
         agent_id, api_key, already_active = await rtf.create_agent(
             "Bot", ["s"], "d", db, AgentTypes.GENERAL
@@ -308,6 +310,7 @@ class TestCreateAgent:
         waits: list[bool] = []
         broker.ensure_work_queue.side_effect = lambda _queue: waits.append(release.wait(timeout=2))
         monkeypatch.setattr(rtf, "rabbitmq_instance", broker)
+        monkeypatch.setattr(rtf, "get_agent_by_name", lambda _name, _db: None)
 
         async def another_request():
             release.set()
@@ -322,20 +325,49 @@ class TestCreateAgent:
         assert already_active is False
         broker.ensure_work_queue.assert_called_once_with("horus.work.general")
 
-    async def test_an_active_registration_is_reported_without_replacing_the_agent(
-        self, monkeypatch
-    ):
+    @pytest.mark.parametrize("status", ["active", "inactive", "dead"])
+    async def test_existing_agent_is_replaced_regardless_of_status(self, monkeypatch, status):
         db = MagicMock()
-        existing = _make_agent(name="ResearchBot", status="active")
+        existing = _make_agent(
+            name="ResearchBot",
+            status=status,
+            last_heartbeat=datetime.now(UTC),
+        )
         monkeypatch.setattr(rtf, "get_agent_by_name", lambda _name, _db: existing)
+        delete_agent = MagicMock(return_value=True)
+        monkeypatch.setattr(rtf, "delete_agent", delete_agent)
+
+        agent_id, api_key, already_active = await rtf.create_agent(
+            "ResearchBot", ["search"], "desc", db, AgentTypes.RESEARCHER
+        )
+
+        delete_agent.assert_called_once_with(existing.id, db)
+        assert isinstance(agent_id, str) and agent_id != existing.id
+        assert isinstance(api_key, str) and len(api_key) >= 20
+        assert already_active is False
+        new_agent = db.add.call_args.args[0]
+        assert new_agent.name == existing.name
+        assert new_agent.status == "active"
+        assert new_agent.last_heartbeat > existing.last_heartbeat
+        db.commit.assert_called_once()
+        rtf.rabbitmq_instance.ensure_work_queue.assert_called_once_with(
+            "horus.work.researcher"
+        )
+
+    async def test_existing_agent_is_not_replaced_when_deletion_fails(self, monkeypatch):
+        db = MagicMock()
+        existing = _make_agent(name="ResearchBot", status="inactive")
+        monkeypatch.setattr(rtf, "get_agent_by_name", lambda _name, _db: existing)
+        delete_agent = MagicMock(return_value=False)
+        monkeypatch.setattr(rtf, "delete_agent", delete_agent)
 
         result = await rtf.create_agent(
             "ResearchBot", ["search"], "desc", db, AgentTypes.RESEARCHER
         )
 
-        assert result == (None, None, True)
+        assert result == (None, None, False)
+        delete_agent.assert_called_once_with(existing.id, db)
         db.add.assert_not_called()
-        db.commit.assert_not_called()
         rtf.rabbitmq_instance.ensure_work_queue.assert_not_called()
 
 
