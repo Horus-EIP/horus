@@ -273,9 +273,11 @@ The plan is to turn the critical ones into tests under `tests/<service>/` marked
 
 | Job | What it runs |
 |---|---|
-| `lint` | `ruff check src tests scripts installer packaging`, ruff 0.16.6 |
+| `lint` | `ruff check src tests scripts installer packaging opensource`, ruff 0.16.6 |
+| `security` | bandit 1.9.4 (`bandit -c pyproject.toml`) on `src/`, `installer/` and `scripts/`: the full report goes to the job summary, then the job fails on a high-severity finding (`-lll`) |
 | `versions` | `python -m unittest discover -s tests/ci -v`, then `python scripts/ci/check-versions.py` |
 | `licences` | The licence scripts' tests, `scripts/licences/third_party_notices.py --check`, then `scripts/licences/check_licences.py`: fails on GPL, AGPL or SSPL in the Python packages, the web client's production dependencies or the desktop app's crates (LGPL is a warning) |
+| `bench-kit` | On Python 3.10 and 3.13: installs `opensource/horus-bench-kit` alone in a fresh venv, runs its tests against the installed package, builds its zip (`make-zip.py`), then `tests.ci.test_bench_kit` checks the kit holds no Horus content |
 | `cpu-build-wiring` | `python -m unittest discover -s tests/ci -p "test_cpu_torch_build.py" -v` |
 | `cpu-images` | Builds the mas, agent and knowledge-store images through the CPU overlay; fails on any CUDA package or torch (`scripts/ci/check-cpu-image.py`) |
 | `test-mas` | MAS tests, `-m "not requires_stack"`, coverage at least 85 % |
@@ -294,7 +296,7 @@ The plan is to turn the critical ones into tests under `tests/<service>/` marked
 |---|---|---|
 | `ruff check` | Yes | |
 | Python tests with coverage gates (MAS 85, agent 90, knowledge store 85) | Yes | |
-| Coverage table on every run, HTML reports when a test job fails | Yes; the README publishes the figures of 13/10/2026 | |
+| Coverage table on every run; the MAS, agent and knowledge-store reports when that job fails | Yes; the README publishes the figures of 13/10/2026 | |
 | Evaluation set checks | Yes, when its files change | |
 | Web client: `npm run lint`, `npm run typecheck`, `npm test` | No | Add a CI job |
 | Installer tests on every PR | Yes | |
