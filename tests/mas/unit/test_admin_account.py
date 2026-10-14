@@ -169,12 +169,17 @@ class TestTheCommandTheInstallerRuns:
         assert not admin_account.has_password(MagicMock(hashed_password="not-a-hash"), "admin")
 
 
-def test_startup_checks_the_admin_account_with_the_configured_values():
+def test_startup_checks_both_accounts_with_the_configured_values():
     inspector = MagicMock()
     inspector.get_table_names.return_value = ["users"]
     engine = MagicMock()
     engine.dialect.name = "sqlite"
-    settings = MagicMock(super_user_username="root", super_user_password=GENERATED)
+    settings = MagicMock(
+        super_user_username="root",
+        super_user_password=GENERATED,
+        super_agent_username="agent",
+        super_agent_password=CHOSEN,
+    )
     with ExitStack() as stack:
         stack.enter_context(patch.object(init_setup, "run_migrations", return_value=True))
         stack.enter_context(patch.object(init_setup, "engine", engine))
@@ -187,6 +192,8 @@ def test_startup_checks_the_admin_account_with_the_configured_values():
         stack.enter_context(patch("db.seed_agents.seed_manager_agent"))
         stack.enter_context(patch.object(init_setup, "settings", settings))
         ensure = stack.enter_context(patch.object(init_setup, "ensure_admin_account"))
+        ensure_agent = stack.enter_context(patch.object(init_setup, "ensure_agent_account"))
         init_setup.init_db()
 
     ensure.assert_called_once_with(session, "root", GENERATED)
+    ensure_agent.assert_called_once_with(session, "agent", CHOSEN)

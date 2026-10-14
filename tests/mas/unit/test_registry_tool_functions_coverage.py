@@ -271,9 +271,10 @@ class TestBatchUpdateInternal:
 class TestCreateAgent:
     async def test_success_returns_id_and_plaintext_key(self):
         db = MagicMock()
-        agent_id, api_key = await rtf.create_agent(
+        agent_id, api_key, already_active = await rtf.create_agent(
             "ResearchBot", ["search"], "desc", db, AgentTypes.RESEARCHER
         )
+        assert already_active is False
         assert isinstance(agent_id, str) and len(agent_id) > 0
         # Plaintext key is returned (not the bcrypt hash) and is non-trivial.
         assert isinstance(api_key, str) and len(api_key) >= 20
@@ -292,10 +293,10 @@ class TestCreateAgent:
     async def test_failure_rolls_back_and_returns_none_none(self):
         db = MagicMock()
         db.commit.side_effect = RuntimeError("db down")
-        agent_id, api_key = await rtf.create_agent(
+        agent_id, api_key, already_active = await rtf.create_agent(
             "Bot", ["s"], "d", db, AgentTypes.GENERAL
         )
-        assert agent_id is None and api_key is None
+        assert (agent_id, api_key, already_active) == (None, None, False)
         db.rollback.assert_called_once()
         # Side effects must NOT fire on the failure path.
         rtf.rabbitmq_instance.ensure_work_queue.assert_not_called()
@@ -311,14 +312,31 @@ class TestCreateAgent:
         async def another_request():
             release.set()
 
-        (agent_id, _api_key), _ = await asyncio.gather(
+        (agent_id, _api_key, already_active), _ = await asyncio.gather(
             rtf.create_agent("Bot", ["s"], "d", MagicMock(), AgentTypes.GENERAL),
             another_request(),
         )
 
         assert waits == [True]
         assert agent_id
+        assert already_active is False
         broker.ensure_work_queue.assert_called_once_with("horus.work.general")
+
+    async def test_an_active_registration_is_reported_without_replacing_the_agent(
+        self, monkeypatch
+    ):
+        db = MagicMock()
+        existing = _make_agent(name="ResearchBot", status="active")
+        monkeypatch.setattr(rtf, "get_agent_by_name", lambda _name, _db: existing)
+
+        result = await rtf.create_agent(
+            "ResearchBot", ["search"], "desc", db, AgentTypes.RESEARCHER
+        )
+
+        assert result == (None, None, True)
+        db.add.assert_not_called()
+        db.commit.assert_not_called()
+        rtf.rabbitmq_instance.ensure_work_queue.assert_not_called()
 
 
 # --------------------------------------------------------------------------- #

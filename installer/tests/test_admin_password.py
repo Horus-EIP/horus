@@ -109,6 +109,37 @@ class AdminPassword(InfraCase):
         self.assertNotIn(password, self.events.getvalue())
 
 
+class AgentPassword(InfraCase):
+    key = horus_install.AGENT_PASSWORD_KEY
+
+    def password(self) -> tuple[str, bool]:
+        return horus_install.agent_password(self.log, self.infra)
+
+    def test_a_first_install_generates_one_that_meets_the_password_policy(self):
+        password, generated = self.password()
+        self.assertTrue(generated)
+        self.assertGenerated(password)
+
+    def test_every_generated_password_meets_the_policy(self):
+        for _ in range(200):
+            self.assertGenerated(horus_install.generated_agent_password())
+
+    def test_the_shipped_password_and_an_empty_one_are_replaced(self):
+        for value in ("agent", "", "   "):
+            with self.subTest(value=value):
+                self.write_env(f"{self.key}={value}\n")
+                password, generated = self.password()
+                self.assertTrue(generated)
+                self.assertGenerated(password)
+
+    def test_a_password_the_admin_set_is_kept(self):
+        self.write_env(f"{self.key}={CHOSEN}\n")
+        self.assertEqual(self.password(), (CHOSEN, False))
+
+    def test_agent_username_defaults_to_agent(self):
+        self.assertEqual(horus_install.agent_username(self.infra), "agent")
+
+
 class AnUpgradeRewritesOnlyTheShippedPassword(InfraCase):
     def upgrade(self) -> str:
         password, _generated = horus_install.admin_password(self.log, self.infra)
@@ -184,6 +215,35 @@ class TheAdminAccountCheck(InfraCase):
         self.assertIn("MAS refused the SUPER_USER_PASSWORD", self.out.getvalue())
 
 
+class TheAgentAccountCheck(InfraCase):
+    def outcome(self, out: str, code: int = 0) -> tuple[str, list]:
+        calls = []
+
+        def run(cmd, _log, timeout=60, cwd=None, env=None, log_output=True, stdin_text=None):
+            calls.append((cmd, log_output, stdin_text))
+            return Result(code, out, "")
+
+        with mock.patch.object(horus_install, "run", run):
+            return horus_install.check_agent_account(self.log, self.infra), calls
+
+    def test_it_runs_the_mas_agent_account_command(self):
+        outcome, calls = self.outcome("agent-account: matches\n")
+        self.assertEqual(outcome, "matches")
+        self.assertEqual(calls, [(["docker", "compose", "exec", "-T", "mas", "python", "-m",
+                                   "db.agent_account"], False, "")])
+        self.assertNotIn("Could not check the agent account", self.out.getvalue())
+
+    def test_a_missing_outcome_is_reported_as_unverified(self):
+        self.outcome("No module named db.agent_account\n", code=1)
+        self.assertIn("Could not check the agent account", self.out.getvalue())
+
+    def test_a_refused_agent_password_is_reported_as_agent_password(self):
+        self.outcome("agent-account: refused\n")
+        self.assertIn("SUPER_AGENT_PASSWORD", self.out.getvalue())
+        self.assertIn("'agent'", self.out.getvalue())
+        self.assertNotIn("SUPER_USER_PASSWORD", self.out.getvalue())
+
+
 class TheEndOfTheInstallShowsThePasswordOnce(InfraCase):
     def succeed(self, password: str | None, terminal: bool = True, outcome: str = "") -> str:
         self.write_env("SUPER_USER_USERNAME=root\n")
@@ -243,6 +303,9 @@ class InstallChecksTheAdminAccount(InfraCase):
             order.attach_mock(patch(mock.patch.object(horus_install, "check_admin_account",
                                                       return_value=outcome)),
                               "check_admin_account")
+            order.attach_mock(patch(mock.patch.object(horus_install, "check_agent_account",
+                                                      return_value="matches")),
+                              "check_agent_account")
             code = horus_install._dispatch(self.log, args)
         self.assertEqual(code, EXIT_OK)
         return order
@@ -256,6 +319,7 @@ class InstallChecksTheAdminAccount(InfraCase):
     def test_a_new_install_shows_the_password_it_generated(self):
         order = self.install("created")
         self.assertGenerated(self.written(order))
+        self.assertGenerated(order.apply_env.call_args.args[2][horus_install.AGENT_PASSWORD_KEY])
         self.assertEqual(self.shown(order), self.written(order))
 
     def test_an_upgrade_from_admin_shows_the_new_password(self):
@@ -281,18 +345,21 @@ class InstallChecksTheAdminAccount(InfraCase):
     def test_the_account_is_checked_once_the_stack_is_healthy(self):
         names = [call[0] for call in self.install("matches").mock_calls if call[0]]
         self.assertEqual(names, ["apply_env", "pull_and_build", "wait_for_health",
-                                 "check_admin_account", "_success"])
+                                 "check_admin_account", "check_agent_account", "_success"])
 
 
-class TheTemplateShipsNoAdminPassword(InfraCase):
+class TheTemplateShipsNoInitialPasswords(InfraCase):
     def test_the_env_example_leaves_it_empty(self):
         self.assertEqual(smoke.read_env(INFRA / ".env.example")[KEY], "")
+        self.assertEqual(smoke.read_env(INFRA / ".env.example")[
+            horus_install.AGENT_PASSWORD_KEY], "")
 
     def test_the_built_in_bootstrap_generates_it(self):
         shutil.copy(INFRA / ".env.example", self.infra / ".env.example")
         with mock.patch.object(horus_install.shutil, "which", return_value=None):
             horus_install._bootstrap_env(self.log, self.infra, reset=False)
         self.assertGenerated(self.env_value(KEY))
+        self.assertGenerated(self.env_value(horus_install.AGENT_PASSWORD_KEY))
 
     @unittest.skipUnless(shutil.which("bash"), "needs bash to run init-env.sh")
     def test_init_env_generates_it(self):
@@ -302,6 +369,7 @@ class TheTemplateShipsNoAdminPassword(InfraCase):
                                 cwd=self.infra, capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertGenerated(self.env_value(KEY))
+        self.assertGenerated(self.env_value(horus_install.AGENT_PASSWORD_KEY))
         self.assertEqual(len(re.findall(rf"(?m)^{KEY}=", self.env_text())), 1)
         self.assertNotIn(self.env_value(KEY), result.stdout + result.stderr)
 

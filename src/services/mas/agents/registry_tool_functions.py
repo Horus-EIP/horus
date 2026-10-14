@@ -13,6 +13,9 @@ from passlib.context import CryptContext
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
+from sqlalchemy import select
+from typing import Optional
+
 from core.logger import get_logger
 from core.rabbitmq_tool import rabbitmq_instance
 from core.work_queues import work_queue_name_for_agent_type
@@ -134,17 +137,26 @@ def _batch_update_agent_status_internal(agent_statuses: dict, db: Session) -> bo
         logger.error(f"Error batch updating agents: {str(e)}")
         return False
 
-
 # ============================================================================
 # PUBLIC FUNCTIONS - With Depends (used by FastAPI routes)
 # Can be called from routes and internally from controller via wrappers
 # ============================================================================
 
+def get_agent_by_name(name: str, db: Session) -> Optional[Agents]:
+    """Retrieve an agent by their exact name.
+
+    Returns the Agents instance if found, otherwise None.
+    """
+    query = select(Agents).where(Agents.name == name)
+
+    result = db.execute(query)
+
+    return result.scalar_one_or_none()
 
 async def create_agent(
     name: str, skills: list, description: str, db: Session, Agent_type: AgentTypes
-) -> tuple[str, str]:
-    """Register a new agent and return ``(agent_id, plaintext_api_key)``.
+) -> tuple[str, str, bool]:
+    """Register an agent and return ``(agent_id, plaintext_api_key, already_active)``.
 
     The API key is bcrypt-hashed before storage; the plaintext is shown to
     the caller exactly once. Also creates the agent's RabbitMQ queue.
@@ -153,6 +165,15 @@ async def create_agent(
     api_key = secrets.token_urlsafe(32)
     hash_api_key = bcrypt_context.hash(api_key)
     try:
+
+        existing_agent = get_agent_by_name(name, db)
+        if existing_agent != None and existing_agent.status == "dead":
+            delete_agent(existing_agent.id, db)
+
+        if existing_agent != None and existing_agent.status == "active":
+            logger.debug(f"An agent already has the name {existing_agent.name} and is active")
+            return None, None, True
+
         new_agent = Agents(
             id=agent_id,
             name=name,
@@ -175,11 +196,11 @@ async def create_agent(
         )
 
         await asyncio.to_thread(_skill_cache_upsert, agent_id, name, skills, description)
-        return agent_id, api_key
+        return agent_id, api_key, False
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating agent: {str(e)}")
-        return None, None
+        return None, None, False
 
 
 def regenerate_agent_api_key(agent_id: str, db: Session) -> str | None:

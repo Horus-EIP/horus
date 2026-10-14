@@ -60,6 +60,7 @@ class AgentProfile:
     type: str  # general | analyst | writer | researcher
     skills: list[str]
     description: str
+    status: str = field(default="Pending")
     # Optional persona injected into the LLM system prompt for this profile.
     # When None, the pipeline uses its built-in default. Specialists set it
     # to scope behaviour to their domain documents.

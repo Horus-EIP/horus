@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     super_user_username: str
     super_user_password: str
 
+    # Initial Agent Account Configuration
+    super_agent_username: str
+    super_agent_password: str
+
     # Redis Cache Configuration
     redis_password: str
     redis_host: str = "localhost"

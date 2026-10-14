@@ -1151,7 +1151,7 @@ async def _route_by_selection(
                 + ". Backed by the General-Assistant worker pool."
             )
             try:
-                new_id, new_key = await create_agent(
+                new_id, new_key, alive = await create_agent(
                     name=spec_name,
                     skills=missing_skills,
                     description=spec_desc,
@@ -1160,7 +1160,7 @@ async def _route_by_selection(
                 )
             except Exception:
                 logger.exception("Auto-create specialist failed; falling through.")
-                new_id, new_key = None, None
+                new_id, new_key, alive = None, None, False
             if new_id and new_key:
                 logger.info(
                     "Auto-created specialist agent",

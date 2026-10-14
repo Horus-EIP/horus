@@ -115,9 +115,11 @@ set_key() {
 JWT_SECRET="$(random_hex)"
 VALKEY_PASSWORD="$(random_hex)"
 ADMIN_PASSWORD="$(random_password)"
+AGENT_PASSWORD="$(random_password)"
 set_key JWT_SECRET_KEY "$JWT_SECRET"
 set_key REDIS_PASSWORD "$VALKEY_PASSWORD"
 set_key SUPER_USER_PASSWORD "$ADMIN_PASSWORD"
+set_key SUPER_AGENT_PASSWORD "$AGENT_PASSWORD"
 
 # The file holds database, broker and admin passwords. Owner-only where the OS supports it.
 chmod 600 "$TARGET" 2>/dev/null || true
