@@ -467,7 +467,7 @@ Queue a new task. The task is stored with status `queued` and the call answers `
 
 The `task_id` returned here is the one to follow for the whole request: a single-agent task keeps it, and a multi-agent chain uses it as the Manager-owned root of its subtasks.
 
-**Auth:** JWT Bearer (requires `task:create` permission). A `conversation_id` must be a conversation of the user who posts, unless that user is an admin; anyone else gets `403`, and an unknown `conversation_id` gets `404`, both checked before the `Idempotency-Key`, so a replayed key cannot get around them. A task without a `conversation_id` is accepted as before.
+**Auth:** JWT Bearer (requires `task:create` permission). A `conversation_id` must be a conversation of the user who posts, unless that user is an admin; another user's conversation and an unknown `conversation_id` both get `404 Conversation not found`, checked before the `Idempotency-Key`, so a replayed key cannot get around the check. A caller without `task:create` (such as the `system` role) gets `403 Insufficient permissions` before the conversation is checked. A task without a `conversation_id` is accepted as before.
 
 **Headers:**
 
@@ -525,8 +525,8 @@ The user message is saved to the conversation when the task is queued, before ro
 |------|--------|
 | `400` | Invalid base64 in an inline file. Nothing is stored. |
 | `401` | `Authentication Failed` |
-| `403` | `Only the conversation's owner or an admin can add a task to it`. Nothing is stored. |
-| `404` | `Conversation not found`: the `conversation_id` does not exist. Nothing is stored and the `Idempotency-Key` stays free. |
+| `403` | `Insufficient permissions` (checked before looking up the conversation). |
+| `404` | `Conversation not found`: the `conversation_id` does not exist or belongs to someone else. Nothing is stored and the `Idempotency-Key` stays free. |
 | `413` | Inline file too large. Nothing is stored. |
 | `422` | Request body or `Idempotency-Key` validation error. |
 | `500` | `Failed to create task` (the queued task could not be stored). |
@@ -578,13 +578,13 @@ The task, its result and its subtasks. `result` is the final answer (the aggrega
 
 The conversation's top-level tasks that are not finished yet (`queued`, `pending` or `running`), newest first. The chat page calls it when it opens a conversation, to pick up a request that is still running.
 
-**Auth:** JWT Bearer (requires `task:read` permission). Only the conversation's owner, a manager or an admin; anyone else gets `403`. An unknown conversation gets `404` first.
+**Auth:** JWT Bearer (requires `task:read` permission). Only the conversation's owner or an admin can list its running tasks. Other users, managers and the `system` role get the same `404 Conversation not found` as for an unknown conversation.
 
 **Response 200:** a list of `{id, status, agent_id, conversation_id, query, created_at, parent_task_id}`, empty when nothing runs.
 
 | Code | Detail |
 |------|--------|
-| `403` | `Only the conversation's owner, a manager or an admin can list its running tasks` |
+| `403` | `Insufficient permissions` (the caller lacks `task:read`). |
 | `404` | `Conversation not found` |
 
 ---
@@ -880,8 +880,8 @@ Retrieve the complete message history for a conversation. Only the owner or an a
 | Code | Detail |
 |------|--------|
 | `401` | `Authentication Failed` |
-| `403` | Insufficient permissions, or `Only the conversation's owner or an admin can read it`. |
-| `404` | `Conversation {chat_id} not found` -- the conversation does not exist. |
+| `403` | Insufficient permissions. |
+| `404` | `Conversation {chat_id} not found` -- the conversation does not exist or belongs to someone else. |
 | `500` | Database error. |
 
 ---
@@ -954,8 +954,8 @@ Permanently delete a conversation and all associated messages (cascade). Closes 
 | Code | Detail |
 |------|--------|
 | `401` | `Authentication failed` |
-| `403` | Insufficient permissions or not owner. |
-| `404` | `Conversation not found` |
+| `403` | Insufficient permissions. |
+| `404` | `Conversation not found` -- the conversation does not exist or belongs to someone else. |
 | `409` | `Conversation has dependent records` -- foreign key constraint. |
 | `500` | Database or WebSocket error. |
 
@@ -2245,7 +2245,7 @@ ws://localhost:8000/chat/1/?token=eyJhbGciOiJIUzI1NiI...
 3. The user's role is checked for `TASK_READ` permission.
 4. The conversation is verified to exist in the database.
 5. Ownership is verified: the user must be the conversation owner or an admin; a manager is refused for another user's conversation.
-6. If any check fails, the connection is closed with code `1008` (Policy Violation). The ownership refusal carries the reason `Only the conversation's owner or an admin can open its chat`.
+6. If the conversation does not exist or the caller is not its owner or an admin, the connection is closed with code `1008` (Policy Violation), with no close reason.
 
 #### Required permission
 
