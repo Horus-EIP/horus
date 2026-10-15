@@ -30,7 +30,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 ### Fixed
 
-- [x] Refused access to another user's conversation now returns the same `404` response as a missing conversation, preventing enumeration of sequential IDs (B-117; commit SHA pending).
+- [x] Refused access to another user's conversation now returns the same `404` response as a missing conversation, preventing enumeration of sequential IDs (B-117; ca7b7da).
 
 ### Upgrading an existing install
 
