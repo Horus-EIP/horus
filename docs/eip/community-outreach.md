@@ -539,6 +539,7 @@ Quantization Sweet Spot: For GGUF/CPU, Q4_K_M is acceptable, but Q5_K_M is prefe
   * **Peak RSS is the Critical Metric:** Peak Resident Set Size (RSS) must be the primary metric monitored to establish stability limits; if Peak RSS breaches memory caps, OOM kills render latency metrics irrelevant.
   * **Latency vs Stability:** First-token latency measures UX, whereas Peak RSS measures system survival under memory caps.
   * **Memory Bandwidth Bottlenecks:** Memory bandwidth saturation explains unexpected CPU performance dips, though tracking it requires dedicated profiling tooling.
+  * **Benchmark Priorities:** Focus benchmarking efforts on **Peak RAM usage** and **First Token Latency** (UX metric), paired with long-run stability testing to verify that memory allocation remains stable and leak-free across extended multi-agent reasoning loops.
 
 ---
 
@@ -603,6 +604,7 @@ Quantization Sweet Spot: For GGUF/CPU, Q4_K_M is acceptable, but Q5_K_M is prefe
   * **Replace PyTorch with ONNX Runtime:** To avoid pulling massive PyTorch/CUDA binaries, export non-generative models or embedding/routing classifiers to ONNX format and execute them via `onnxruntime` (CPU).
   * **Fast Package Resolution with `uv`:** Replace `pip` with `uv` for dependency resolution during setup, or ship pre-built runtime containers/executables so end-users perform zero local package compilation.
   * **`llama.cpp` + Docker Stack Validation:** Standardizing on a pre-packaged Docker container executing `llama.cpp` directly is recommended as the cleanest distribution path, isolating the Python orchestrator from C++ binary execution and avoiding client system contamination.
+  * **Astral Optimized Wheels (`wheels.astral.sh`):** Leverage pre-built, ultra-fast Python wheels from the Astral ecosystem (`uv`) to bypass PyTorch/CUDA compilation stages and minimize installation time on end-user machines.
 
 ---
 
