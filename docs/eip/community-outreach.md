@@ -626,5 +626,8 @@ Quantization Sweet Spot: For GGUF/CPU, Q4_K_M is acceptable, but Q5_K_M is prefe
   > 
   > *Note on context:* Horus is a commercial, closed-source project (student final-year project), but our testing tools are open source (`Horus-EIP/horus-bench-kit`). Voluntary, unpaid code reviews on our async WebSocket queue are welcomed under NDA with full credit and references provided.
 * **Status:** Published & Active
+* **Key Community Feedback & Advice Received (FastAPI Discussions):**
+  * **Provide a Minimal Reproducible Example (MRE):** Abstract questions often trigger automated or vague responses. Providing a runnable MRE using dummy CPU loops (`time.sleep` / heavy CPU functions) yields direct, code-level architectural fixes from maintainers.
+  * **Event Loop Isolation:** Ensure blocking tasks are offloaded to `asyncio.to_thread` or a `ProcessPoolExecutor` so worker pings continue emitting during execution.
 
 ---
