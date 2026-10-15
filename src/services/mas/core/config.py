@@ -7,7 +7,7 @@ Reads environment variables (optionally from ``.env``) into a typed
 
 from pathlib import Path
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -31,6 +31,16 @@ class Settings(BaseSettings):
     # Initial Admin User Configuration
     super_user_username: str
     super_user_password: str
+
+    # Initial Agent Account Configuration
+    super_agent_username: str = "agent"
+    super_agent_password: str = ""
+
+    @model_validator(mode="after")
+    def use_legacy_agent_password(self):
+        if not self.super_agent_password:
+            self.super_agent_password = self.super_user_password
+        return self
 
     # Redis Cache Configuration
     redis_password: str

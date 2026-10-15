@@ -637,7 +637,7 @@ class TestCreateNewTaskSingleAgent:
 
 
 class TestCreateNewTaskAutoCreateAndCatchAll:
-    @patch("tasks.routes.create_agent", return_value=("auto-id", "auto-key"))
+    @patch("tasks.routes.create_agent", return_value=("auto-id", "auto-key", False))
     @patch("tasks.routes.route_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))
     async def test_auto_creates_specialist_for_missing_skill(
@@ -730,7 +730,7 @@ class TestCreateNewTaskDecompositionFallback:
         assert _stored(routing_db, task_id).agent_id == "dagent"
         assert _dispatched(dispatch)[1]["task_id"] == task_id
 
-    @patch("tasks.routes.create_agent", return_value=("auto-id", "auto-key"))
+    @patch("tasks.routes.create_agent", return_value=("auto-id", "auto-key", False))
     @patch("tasks.routes.decompose_task")
     @patch("tasks.routes.route_task", return_value=(None, None, None, []))
     @patch("tasks.routes.select_agent_by_mode", return_value=(None, None, None, []))

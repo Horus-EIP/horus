@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create .env from .env.example and set JWT_SECRET_KEY, REDIS_PASSWORD and SUPER_USER_PASSWORD to random values.
+# Create .env from .env.example and generate the JWT, Valkey, admin and agent passwords.
 # If .env already exists, does nothing (exit 0) so wrapper scripts can call this safely.
 #
 # Usage: from this directory: ./init-env.sh   or: bash init-env.sh
@@ -115,13 +115,16 @@ set_key() {
 JWT_SECRET="$(random_hex)"
 VALKEY_PASSWORD="$(random_hex)"
 ADMIN_PASSWORD="$(random_password)"
+AGENT_PASSWORD="$(random_password)"
 set_key JWT_SECRET_KEY "$JWT_SECRET"
 set_key REDIS_PASSWORD "$VALKEY_PASSWORD"
 set_key SUPER_USER_PASSWORD "$ADMIN_PASSWORD"
+set_key SUPER_AGENT_PASSWORD "$AGENT_PASSWORD"
 
-# The file holds database, broker and admin passwords. Owner-only where the OS supports it.
+# The file holds database, broker and account passwords. Owner-only where the OS supports it.
 chmod 600 "$TARGET" 2>/dev/null || true
 
-say "Created $TARGET with a generated JWT_SECRET_KEY and REDIS_PASSWORD (64 hex chars each)."
+say "Created $TARGET with generated JWT_SECRET_KEY and REDIS_PASSWORD (64 hex chars each), plus admin and agent account passwords."
 say "The admin account signs in with the SUPER_USER_USERNAME and the generated SUPER_USER_PASSWORD in $TARGET."
+say "The Agent service uses SUPER_AGENT_USERNAME and SUPER_AGENT_PASSWORD from $TARGET to register its workers."
 say "Next: docker compose up --build from this directory, or ./stack-up.sh from the top of this folder, then sign in in the web UI."
