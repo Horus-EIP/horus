@@ -70,28 +70,20 @@ Our goal is to gather architectural advice on CPU-only optimization and recruit 
 
 
 * **Why it fits Horus:** Perfect for gathering feedback on resource exhaustion, offline setup constraints, and low-end hardware management.
-* **Published Post Content:**
-> Running local multi-agent LLMs on modest hardware (CPU-only): How do you prevent resource exhaustion?
+* **Revised Post Copy (live edit pending):**
+> **Running a local LLM stack in a home lab: how do you control memory and concurrency?**
+>
 > Hi everyone,
-> We're three final-year students at Epitech building Horus, a multi-agent assistant that runs entirely locally and offline. Our current challenge is hardware: keeping it usable on machines without a powerful GPU, without long setup times, excessive RAM/VRAM use or crashes.
-> Where we are today, from our last beta test:
-> * One tester needed over 2 hours to install. The Python dependencies alone take 21–46 min, and the download is about 25 GB.
-> * On CPU only, routing a question can take around 40 s, long enough for our WebSocket connection to drop.
-> 
-> 
-> [Models we use + the smallest machine we've tested on]
-> We'd love advice from anyone experienced with:
-> * CPU-only LLM inference and memory-efficient loading
-> * Quantization and model choice for low-end hardware
-> * GPU/CPU fallback strategies
-> * Hardware detection and adaptive configuration
-> * Preventing resource exhaustion during setup and execution
-> 
-> 
-> Advice in the comments is very welcome, with no strings attached.
-> **Looking for contributors:** we also have a few small, well-scoped tasks or code reviews (about 1–4 hours), for example [reviewing our hardware detection and model selection, or benchmarking a quantized model on a 16 GB RAM laptop].
-> To be transparent: Horus is closed source and will be licensed to companies. Contributing is voluntary and unpaid. Before seeing any code, contributors sign a short confidentiality and contributor agreement, and the code they contribute becomes part of Horus. In return we offer thorough code reviews, full credit in the project and a professional reference on request.
-> We're not sharing code or private links publicly. If this interests you, comment below or DM me with your experience in local inference, CPU optimisation or offline apps.
+>
+> We're three final-year students at Epitech building Horus, a proprietary multi-agent assistant that runs locally. An earlier beta install took over two hours; we're now separating install-time costs from runtime and trying to keep the inference service within a predictable memory budget.
+>
+> Our latest CPU benchmark used Qwen3-4B-Instruct-2507 Q4_K_M through llama.cpp on a development laptop with a Ryzen AI 9 HX 370 (12 cores), 64 GB RAM and 31 GiB available to Docker. We have not run this benchmark on a 16 GB reference machine yet.
+>
+> For a self-hosted deployment, would you use one shared inference server with a bounded request queue, or isolate each agent in its own process? Which memory and concurrency limits have worked reliably for you?
+>
+> We're particularly interested in peak RSS, context/KV-cache limits and host-level safeguards such as cgroups. Advice is welcome; we are not asking anyone to endorse the product.
+>
+> Horus is closed source and intended for commercial licensing; its benchmark kit is open source. Any contribution is voluntary and unpaid, under a short agreement, with review, credit and a reference offered.
 
 * **Key Community Feedback & Advice Received:**
   * **Treat Agents as Logical Actors:** Do not treat agents as separate model processes; instead, use a single inference service with a bounded queue and admission control based on resident model memory plus the KV-cache budget.
@@ -112,28 +104,18 @@ Our goal is to gather architectural advice on CPU-only optimization and recruit 
 
 
 * **Why it fits Horus:** Highly focused on local execution constraints, making it an ideal place to discuss CPU inference bottlenecks and memory footprints.
-* **Published Post Content:**
-> How do you keep a local multi-agent app usable on CPU-only / low-RAM machines?
-> Hi everyone,
-> We're three final-year students at Epitech building Horus, a multi-agent assistant that runs entirely locally and offline. Our current challenge is hardware: keeping it usable on machines without a powerful GPU, without long setup times, excessive RAM/VRAM use or crashes.
-> Where we are today, from our last beta test:
-> * One tester needed over 2 hours to install. The Python dependencies alone take 21–46 min, and the download is about 25 GB.
-> * On CPU only, routing a question can take around 40 s, long enough for our WebSocket connection to drop.
-> 
-> 
-> [Models we use + the smallest machine we've tested on]
-> We'd love advice from anyone experienced with:
-> * CPU-only LLM inference and memory-efficient loading
-> * Quantization and model choice for low-end hardware
-> * GPU/CPU fallback strategies
-> * Hardware detection and adaptive configuration
-> * Preventing resource exhaustion during setup and execution
-> 
-> 
-> Advice in the comments is very welcome, with no strings attached.
-> **Looking for contributors:** we also have a few small, well-scoped tasks or code reviews (about 1–4 hours), for example [reviewing our hardware detection and model selection, or benchmarking a quantized model on a 16 GB RAM laptop].
-> To be transparent: Horus is closed source and will be licensed to companies. Contributing is voluntary and unpaid. Before seeing any code, contributors sign a short confidentiality and contributor agreement, and the code they contribute becomes part of Horus. In return we offer thorough code reviews, full credit in the project and a professional reference on request.
-> We're not sharing code or private links publicly. If this interests you, comment below or DM me with your experience in local inference, CPU optimisation or offline apps.
+* **Revised Post Copy (live edit pending):**
+> **Which CPU quantization would you trust for a 4B model with RAG?**
+>
+> Hi,
+>
+> We're three Epitech students working on Horus, a proprietary local multi-agent assistant. We are comparing CPU-friendly model configurations and want to understand which quality and memory measurements matter most in real retrieval-augmented tasks.
+>
+> Our current CPU evaluation uses Qwen3-4B-Instruct-2507 in Q4_K_M through llama.cpp. It was measured on a Ryzen AI 9 HX 370 laptop with 64 GB RAM (31 GiB available to Docker); the 16 GB reference machine has not been tested yet. The same model's GPU evaluation uses AWQ with vLLM on an RTX 4070 Laptop GPU (8 GB).
+>
+> For a 16 GB target, would you start with Q4_K_M or a higher quant and reduce context/KV-cache instead? Which RAG-specific checks do you use beyond perplexity—citation accuracy, retrieval placement, or long-context degradation?
+>
+> Horus is closed source and intended for commercial licensing; the benchmark kit is open source. We are looking for technical feedback, not endorsements. Contributions are voluntary and unpaid, with a short agreement, review, credit and a reference.
 
 * **Expert Insights from Offline App Developers (e.g., NoNetPlay feedback):** 
   * Saving users from a broken first download is more critical than having a faster model; resumable range requests and multiple regional mirrors prevent users from abandoning the app right at the start.
@@ -183,28 +165,18 @@ Our goal is to gather architectural advice on CPU-only optimization and recruit 
 
 
 * **Why it fits Horus:** Directly aligns with stack optimization (Docker, runtimes, pipelines) for local AI environments.
-* **Published Post Content:**
-> How do you keep a local multi-agent app usable on CPU-only / low-RAM machines?
+* **Revised Post Copy (live edit pending):**
+> **How would you package a local AI stack without a huge first download?**
+>
 > Hi everyone,
-> We're three final-year students at Epitech building Horus, a multi-agent assistant that runs entirely locally and offline. Our current challenge is hardware: keeping it usable on machines without a powerful GPU, without long setup times, excessive RAM/VRAM use or crashes.
-> Where we are today, from our last beta test:
-> * One tester needed over 2 hours to install. The Python dependencies alone take 21–46 min, and the download is about 25 GB.
-> * On CPU only, routing a question can take around 40 s, long enough for our WebSocket connection to drop.
-> 
-> 
-> [Models we use + the smallest machine we've tested on]
-> We'd love advice from anyone experienced with:
-> * CPU-only LLM inference and memory-efficient loading
-> * Quantization and model choice for low-end hardware
-> * GPU/CPU fallback strategies
-> * Hardware detection and adaptive configuration
-> * Preventing resource exhaustion during setup and execution
-> 
-> 
-> Advice in the comments is very welcome, with no strings attached.
-> **Looking for contributors:** we also have a few small, well-scoped tasks or code reviews (about 1–4 hours), for example [reviewing our hardware detection and model selection, or benchmarking a quantized model on a 16 GB RAM laptop].
-> To be transparent: Horus is closed source and will be licensed to companies. Contributing is voluntary and unpaid. Before seeing any code, contributors sign a short confidentiality and contributor agreement, and the code they contribute becomes part of Horus. In return we offer thorough code reviews, full credit in the project and a professional reference on request.
-> We're not sharing code or private links publicly. If this interests you, comment below or DM me with your experience in local inference, CPU optimisation or offline apps.
+>
+> We're three final-year students at Epitech building Horus, a proprietary assistant that runs locally. An earlier beta install took over two hours, and its initial download was about 25 GB. We're looking at how to make the app, model weights and runtime easier to install and update independently.
+>
+> Our current CPU benchmark uses Qwen3-4B-Instruct-2507 Q4_K_M with llama.cpp on a Ryzen AI 9 HX 370 laptop (64 GB RAM; 31 GiB available to Docker). We have not measured on the 16 GB reference machine. The GPU run uses Qwen3-4B-Instruct-2507 AWQ with vLLM on an RTX 4070 Laptop GPU (8 GB).
+>
+> For a Docker-based offline application, what has worked best for resumable model downloads, smaller CPU dependency sets and keeping app upgrades separate from model updates? We would especially value lessons from projects that ship to machines with limited disk and memory.
+>
+> Horus is closed source and intended for commercial licensing; our benchmark kit is open source. We are sharing the engineering problem transparently and welcome advice, not endorsements. Contributions are voluntary and unpaid, with a short agreement, review, credit and a reference.
 
 ---
 
@@ -222,41 +194,17 @@ Date checked: Oct 2, 2026
 
 Why it fits Horus: The absolute reference hub for developers tackling low-resource and CPU-only inference bottlenecks.
 
-Published Post Content:
+Revised Post Copy (live edit pending):
 
-        How do you keep a local multi-agent app usable on CPU-only / low-RAM machines?
-
-        Hi everyone,
-
-        We're three final-year students at Epitech building Horus, a multi-agent assistant that runs entirely locally and offline. Our current challenge is hardware: keeping it usable on machines without a powerful GPU, without long setup times, excessive RAM/VRAM use or crashes.
-
-        Where we are today, from our last beta test:
-
-            One tester needed over 2 hours to install. The Python dependencies alone take 21–46 min, and the download is about 25 GB.
-
-            On CPU only, routing a question can take around 40 s, long enough for our WebSocket connection to drop.
-
-        [Models we use + the smallest machine we've tested on]
-
-        We'd love advice from anyone experienced with:
-
-            CPU-only LLM inference and memory-efficient loading
-
-            Quantization and model choice for low-end hardware
-
-            GPU/CPU fallback strategies
-
-            Hardware detection and adaptive configuration
-
-            Preventing resource exhaustion during setup and execution
-
-        Advice in the comments is very welcome, with no strings attached.
-
-        Looking for contributors: we also have a few small, well-scoped tasks or code reviews (about 1–4 hours), for example [reviewing our hardware detection and model selection, or benchmarking a quantized model on a 16 GB RAM laptop].
-
-        To be transparent: Horus is closed source and will be licensed to companies. Contributing is voluntary and unpaid. Before seeing any code, contributors sign a short confidentiality and contributor agreement, and the code they contribute becomes part of Horus. In return we offer thorough code reviews, full credit in the project and a professional reference on request.
-
-        We're not sharing code or private links publicly. If this interests you, comment below or DM me with your experience in local inference, CPU optimisation or offline apps.
+> **CPU-only llama-server configuration for a 4B RAG assistant**
+>
+> We're three final-year Epitech students building Horus, a proprietary local multi-agent assistant. We have moved our CPU path to llama.cpp and are tuning a shared llama-server rather than running a separate model process per agent.
+>
+> Our current CPU evaluation uses Qwen3-4B-Instruct-2507 Q4_K_M. The 100-question benchmark reached 93 correct answers with an 18.2-second median on a Ryzen AI 9 HX 370 (12 cores), 64 GB RAM, with 31 GiB available to Docker. This is not a 16 GB reference-machine result. The GPU run used Qwen3-4B-Instruct-2507 AWQ with vLLM on an RTX 4070 Laptop GPU (8 GB).
+>
+> For llama-server on CPU, which settings have had the biggest impact on RAG quality and first-token latency? We would especially value practical advice on context size, `--threads`, KV-cache type, `mmap`, and metrics to collect (peak RSS, tokens/s, citation accuracy).
+>
+> Horus is closed source and intended for commercial licensing; the benchmark kit is open source. This is a technical question, not a request for endorsement. Any contribution is voluntary and unpaid, under a short agreement, with review, credit and a reference offered.
 
 * **KV-Cache Quantization (`q8_0` vs `f16`):**
   * `q8_0` K/V quantization is not completely lossless, especially in heavy RAG workloads where passages occupy most of the context.
@@ -284,41 +232,17 @@ Date checked: Oct 2, 2026
 
 Why it fits Horus: Excellent platform to frame resource optimization as a core engineering challenge and attract developers who love solving deep performance bottlenecks.
 
-Published Post Content:
+Revised Post Copy (live edit pending):
 
-        How do you keep a local multi-agent app usable on CPU-only / low-RAM machines?
-
-        Hi everyone,
-
-        We're three final-year students at Epitech building Horus, a multi-agent assistant that runs entirely locally and offline. Our current challenge is hardware: keeping it usable on machines without a powerful GPU, without long setup times, excessive RAM/VRAM use or crashes.
-
-        Where we are today, from our last beta test:
-
-            One tester needed over 2 hours to install. The Python dependencies alone take 21–46 min, and the download is about 25 GB.
-
-            On CPU only, routing a question can take around 40 s, long enough for our WebSocket connection to drop.
-
-        [Models we use + the smallest machine we've tested on]
-
-        We'd love advice from anyone experienced with:
-
-            CPU-only LLM inference and memory-efficient loading
-
-            Quantization and model choice for low-end hardware
-
-            GPU/CPU fallback strategies
-
-            Hardware detection and adaptive configuration
-
-            Preventing resource exhaustion during setup and execution
-
-        Advice in the comments is very welcome, with no strings attached.
-
-        Looking for contributors: we also have a few small, well-scoped tasks or code reviews (about 1–4 hours), for example [reviewing our hardware detection and model selection, or benchmarking a quantized model on a 16 GB RAM laptop].
-
-        To be transparent: Horus is closed source and will be licensed to companies. Contributing is voluntary and unpaid. Before seeing any code, contributors sign a short confidentiality and contributor agreement, and the code they contribute becomes part of Horus. In return we offer thorough code reviews, full credit in the project and a professional reference on request.
-
-        We're not sharing code or private links publicly. If this interests you, comment below or DM me with your experience in local inference, CPU optimisation or offline apps.
+> **What we learned packaging a local LLM app for CPU-only machines**
+>
+> We're three final-year Epitech students building Horus, a proprietary assistant that runs locally. In an earlier beta, one install took over two hours and the first download was about 25 GB. That made us rethink how app binaries, Python dependencies and model weights should be installed and updated.
+>
+> Our current CPU benchmark runs Qwen3-4B-Instruct-2507 Q4_K_M through llama.cpp. It scored 93/100 with an 18.2-second median on a Ryzen AI 9 HX 370 laptop with 64 GB RAM (31 GiB available to Docker). We have not yet run on the 16 GB reference machine.
+>
+> For offline desktop software, what has worked for you: separating models from the application, resumable downloads, prebuilt CPU wheels, or a small bootstrap installer? What would you measure first to make the first-run experience reliable?
+>
+> Horus is closed source and intended for commercial licensing; our benchmark kit is open source. We welcome practical packaging advice, not endorsements. Contributions are voluntary and unpaid, with a short agreement, review, credit and a reference.
 
 ### 7. Discord: Hugging Face (#help-and-feedback & #jobs-and-collaboration)
 
@@ -334,41 +258,17 @@ Date checked: Oct 2, 2026
 
 Why it fits Horus: Perfect for engaging directly with machine learning engineers who face hardware constraints and local deployment challenges every day.
 
-Published Post Content:
+Draft Post Copy (publication status not verified):
 
-        How do you keep a local multi-agent app usable on CPU-only / low-RAM machines?
-
-        Hi everyone,
-
-        We're three final-year students at Epitech building Horus, a multi-agent assistant that runs entirely locally and offline. Our current challenge is hardware: keeping it usable on machines without a powerful GPU, without long setup times, excessive RAM/VRAM use or crashes.
-
-        Where we are today, from our last beta test:
-
-            One tester needed over 2 hours to install. The Python dependencies alone take 21–46 min, and the download is about 25 GB.
-
-            On CPU only, routing a question can take around 40 s, long enough for our WebSocket connection to drop.
-
-        [Models we use + the smallest machine we've tested on]
-
-        We'd love advice from anyone experienced with:
-
-            CPU-only LLM inference and memory-efficient loading
-
-            Quantization and model choice for low-end hardware
-
-            GPU/CPU fallback strategies
-
-            Hardware detection and adaptive configuration
-
-            Preventing resource exhaustion during setup and execution
-
-        Advice in the comments is very welcome, with no strings attached.
-
-        Looking for contributors: we also have a few small, well-scoped tasks or code reviews (about 1–4 hours), for example [reviewing our hardware detection and model selection, or benchmarking a quantized model on a 16 GB RAM laptop].
-
-        To be transparent: Horus is closed source and will be licensed to companies. Contributing is voluntary and unpaid. Before seeing any code, contributors sign a short confidentiality and contributor agreement, and the code they contribute becomes part of Horus. In return we offer thorough code reviews, full credit in the project and a professional reference on request.
-
-        We're not sharing code or private links publicly. If this interests you, comment below or DM me with your experience in local inference, CPU optimisation or offline apps.
+> **Question for Hugging Face: choosing quantization and hardware tiers for local inference**
+>
+> We're three final-year students at Epitech building Horus, a proprietary local multi-agent assistant. Our current CPU evaluation uses Qwen3-4B-Instruct-2507 Q4_K_M with llama.cpp; the GPU evaluation uses the AWQ model with vLLM on an RTX 4070 Laptop GPU (8 GB).
+>
+> These measurements are from a Ryzen AI 9 HX 370 laptop with 64 GB host RAM and 31 GiB assigned to Docker. We have not measured on a 16 GB reference machine, so we are looking for practical guidance before claiming that tier works.
+>
+> If you deploy local models across mixed hardware, how do you choose between quantization, a smaller model, and a hard minimum-memory requirement? Which benchmark dimensions best predict a stable user experience: peak RSS, time to first token, total latency, or quality on the target workload?
+>
+> Horus is closed source and intended for commercial licensing; the benchmark kit is open source. This is an architecture question; any contribution would be voluntary and unpaid under a short agreement, with review, credit and a reference.
 
 #### Feedback 
 
@@ -388,68 +288,34 @@ Quantization Sweet Spot: For GGUF/CPU, Q4_K_M is acceptable, but Q5_K_M is prefe
 * **Posting rules:** Standard tech community guidelines; great reception for infrastructure-heavy and resource-optimization questions.
   * *Date checked:* Oct 2, 2026
 * **Why it fits Horus:** Directly targets self-hosters running local AI stacks, making it ideal for gathering insights on resource limits, Docker setups, and container performance on modest hardware.
-* **Published Post Content:**
-  > Running local multi-agent LLMs on modest hardware (CPU-only): How do you prevent resource exhaustion?
-  > 
-  > Hi everyone,
-  > 
-  > We're three final-year students at Epitech building Horus, a multi-agent assistant that runs entirely locally and offline. Our current challenge is hardware: keeping it usable on machines without a powerful GPU, without long setup times, excessive RAM/VRAM use or crashes.
-  > 
-  > Where we are today, from our last beta test:
-  > * One tester needed over 2 hours to install. The Python dependencies alone take 21–46 min, and the download is about 25 GB.
-  > * On CPU only, routing a question can take around 40 s, long enough for our WebSocket connection to drop.
-  > 
-  > [Models we use + the smallest machine we've tested on]
-  > 
-  > We'd love advice from anyone experienced with:
-  > - CPU-only LLM inference and memory-efficient loading
-  > - Quantization and model choice for low-end hardware
-  > - GPU/CPU fallback strategies
-  > - Hardware detection and adaptive configuration
-  > - Preventing resource exhaustion during setup and execution
-  > 
-  > Advice in the comments is very welcome, with no strings attached.
-  > 
-  > **Looking for contributors:** we also have a few small, well-scoped tasks or code reviews (about 1–4 hours), for example [reviewing our hardware detection and model selection, or benchmarking a quantized model on a 16 GB RAM laptop].
-  > 
-  > To be transparent: Horus is closed source and will be licensed to companies. Contributing is voluntary and unpaid. Before seeing any code, contributors sign a short confidentiality and contributor agreement, and the code they contribute becomes part of Horus. In return we offer thorough code reviews, full credit in the project and a professional reference on request.
-  > 
-  > We're not sharing code or private links publicly. If this interests you, comment below or DM me with your experience in local inference, CPU optimisation or offline apps.
+* **Revised Post Copy (live edit pending):**
+  > **How do you keep one local model process within a home server's memory budget?**
+  >
+  > We're three final-year Epitech students building Horus, a proprietary local multi-agent assistant. We are moving CPU inference to one shared llama-server so several agents can queue requests without loading separate model copies.
+  >
+  > Our CPU benchmark uses Qwen3-4B-Instruct-2507 Q4_K_M and currently runs on a Ryzen AI 9 HX 370 laptop with 64 GB host RAM (31 GiB available to Docker). We have not tested the 16 GB reference machine yet.
+  >
+  > For a self-hosted AI service, what is a safe way to budget resident model memory, KV cache and concurrent requests? Do you enforce a hard cgroup/container limit, and what signals tell you the service is approaching an OOM or swapping?
+  >
+  > Horus is closed source and intended for commercial licensing; its benchmark kit is open source. We are asking for operational advice, not endorsements. Contributions are voluntary and unpaid, with a short agreement, review, credit and a reference.
 
-  ### 9. Reddit: r/homelab
+### 9. Reddit: r/homelab
 * **Name + link:** Reddit - r/homelab (https://www.reddit.com/r/homelab/comments/1ww0xpm/how_do_you_keep_a_local_multiagent_app_usable_on/)
 * **Type:** Subreddit / Online Community
 * **Audience:** Hardware enthusiasts, systems administrators, and self-hosters managing physical servers, recycled enterprise hardware, and resource-constrained home labs.
 * **Posting rules:** Strict rules against low-effort posts, but deep infrastructure and resource-management discussions are highly valued.
   * *Date checked:* Oct 2, 2026
 * **Why it fits Horus:** Excellent for capturing physical constraints (CPU throttling, RAM pressure, disk I/O bottlenecks) on modest or older hardware setups.
-* **Published Post Content:**
-  > Running local multi-agent LLMs on modest hardware (CPU-only): How do you prevent resource exhaustion?
-  > 
-  > Hi everyone,
-  > 
-  > We're three final-year students at Epitech building Horus, a multi-agent assistant that runs entirely locally and offline. Our current challenge is hardware: keeping it usable on machines without a powerful GPU, without long setup times, excessive RAM/VRAM use or crashes.
-  > 
-  > Where we are today, from our last beta test:
-  > * One tester needed over 2 hours to install. The Python dependencies alone take 21–46 min, and the download is about 25 GB.
-  > * On CPU only, routing a question can take around 40 s, long enough for our WebSocket connection to drop.
-  > 
-  > [Models we use + the smallest machine we've tested on]
-  > 
-  > We'd love advice from anyone experienced with:
-  > - CPU-only LLM inference and memory-efficient loading
-  > - Quantization and model choice for low-end hardware
-  > - GPU/CPU fallback strategies
-  > - Hardware detection and adaptive configuration
-  > - Preventing resource exhaustion during setup and execution
-  > 
-  > Advice in the comments is very welcome, with no strings attached.
-  > 
-  > **Looking for contributors:** we also have a few small, well-scoped tasks or code reviews (about 1–4 hours), for example [reviewing our hardware detection and model selection, or benchmarking a quantized model on a 16 GB RAM laptop].
-  > 
-  > To be transparent: Horus is closed source and will be licensed to companies. Contributing is voluntary and unpaid. Before seeing any code, contributors sign a short confidentiality and contributor agreement, and the code they contribute becomes part of Horus. In return we offer thorough code reviews, full credit in the project and a professional reference on request.
-  > 
-  > We're not sharing code or private links publicly. If this interests you, comment below or DM me with your experience in local inference, CPU optimisation or offline apps.
+* **Revised Post Copy (live edit pending):**
+  > **What should I measure before running a 4B model on older homelab hardware?**
+  >
+  > We're three final-year students at Epitech building Horus, a proprietary multi-agent assistant that runs locally. We want to make CPU inference stable on home servers and older machines, not just fast on a development workstation.
+  >
+  > Our current CPU setup is Qwen3-4B-Instruct-2507 Q4_K_M via llama.cpp, benchmarked on a Ryzen AI 9 HX 370 laptop (12 cores, 64 GB RAM; 31 GiB available to Docker). We have not run the benchmark on a 16 GB reference machine.
+  >
+  > For your homelab, what has mattered most when hosting a quantized model: sustained memory bandwidth, thermal throttling, disk/mmap behaviour, or limiting context and concurrency? What minimum monitoring would you want before calling a setup stable?
+  >
+  > Horus is closed source and intended for commercial licensing; the benchmark kit is open source. We welcome technical feedback, not endorsements. Contributions are voluntary and unpaid, with a short agreement, review, credit and a reference.
 
 ### 10. Reddit: r/LangChain
 * **Name + link:** Reddit - r/LangChain (https://www.reddit.com/r/LangChain/comments/1ww0ypn/how_do_you_keep_a_local_multiagent_app_usable_on/)
@@ -458,30 +324,11 @@ Quantization Sweet Spot: For GGUF/CPU, Q4_K_M is acceptable, but Q5_K_M is prefe
 * **Posting rules:** Focus on technical application patterns, framework design, and agent loops.
   * *Date checked:* Oct 2, 2026
 * **Why it fits Horus:** Directly targets multi-agent loop optimization, delegation strategies, context bloat management, and orchestration overhead under strict resource bounds.
-* **Published Post Content:**
-  > How do you keep a local multi-agent app usable on CPU-only / low-RAM machines?
-  > 
-  > Hi everyone,
-  > 
-  > We're three final-year students at Epitech building Horus, a multi-agent assistant that runs entirely locally and offline. Our current challenge is hardware: keeping it usable on machines without a powerful GPU, without long setup times, excessive RAM/VRAM use or crashes.
-  > 
-  > Where we are today, from our last beta test:
-  > * One tester needed over 2 hours to install. The Python dependencies alone take 21–46 min, and the download is about 25 GB.
-  > * On CPU only, routing a question can take around 40 s, long enough for our WebSocket connection to drop.
-  > 
-  > [Models we use + the smallest machine we've tested on]
-  > 
-  > We'd love advice from anyone experienced with:
-  > - CPU-only LLM inference and memory-efficient loading
-  > - Quantization and model choice for low-end hardware
-  > - GPU/CPU fallback strategies
-  > - Hardware detection and adaptive configuration
-  > - Preventing resource exhaustion during setup and execution
-  > 
-  > Advice in the comments is very welcome, with no strings attached.
-  > 
-  > **Looking for contributors:** we also have a few small, well-scoped tasks or code reviews (about 1–4 hours), for example [reviewing our hardware detection and model selection, or benchmarking a quantized model on a 16 GB RAM laptop].
-  > 
-  > To be transparent: Horus is closed source and will be licensed to companies. Contributing is voluntary and unpaid. Before seeing any code, contributors sign a short confidentiality and contributor agreement, and the code they contribute becomes part of Horus. In return we offer thorough code reviews, full credit in the project and a professional reference on request.
-  > 
-  > We're not sharing code or private links publicly. If this interests you, comment below or DM me with your experience in local inference, CPU optimisation or offline apps.
+* **Revised Post Copy (live edit pending):**
+  > **How should a local agent graph share one CPU-bound model server?**
+  >
+  > We're three final-year Epitech students building Horus, a proprietary local multi-agent assistant. Our current CPU path uses one llama-server with Qwen3-4B-Instruct-2507 Q4_K_M; the benchmark on a Ryzen AI 9 HX 370 laptop (64 GB RAM, 31 GiB available to Docker) reached an 18.2-second median across 100 questions. We have not measured on a 16 GB reference machine yet.
+  >
+  > For agent frameworks, how do you bound work when several nodes depend on the same slow inference endpoint? We are interested in queueing/backpressure, keeping context small across handoffs, and avoiding duplicate model calls for routing or tool selection.
+  >
+  > Horus is closed source and intended for commercial licensing; the benchmark kit is open source. We welcome architecture feedback, not endorsements. Contributions are voluntary and unpaid, with a short agreement, review, credit and a reference.
