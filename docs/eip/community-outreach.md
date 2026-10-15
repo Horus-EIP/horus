@@ -562,7 +562,12 @@ Quantization Sweet Spot: For GGUF/CPU, Q4_K_M is acceptable, but Q5_K_M is prefe
   > 
   > *Context:* Architectural query regarding container limits on client endpoints.
 * **Status:** Published & Active
-
+* **Key Community Feedback & Advice Received (r/docker):**
+  * **Zero Container Swap (`memory.swap.max 0`):** Set `--memory-swap` equal to `--memory` in cgroups v2. This ensures internal container OOM rather than host-wide swap death, keeping the user's OS responsive.
+  * **Soft Cap Throttling (`memory.high`):** Set `memory.high` at 80–90% of `memory.max` to trigger kernel memory reclamation before hitting hard OOM limits, smoothing out context spikes.
+  * **The 70% Physical RAM Rule:** Cap total container allocations to <= 70% of physical RAM (e.g., max 11 GB capped on a 16 GB laptop), leaving ~30% for host OS, display drivers, and user applications.
+  * **Data-Driven Sizing & Telemetry:** Read `memory.peak` to determine the actual high watermark under load, and monitor `memory.events` (`oom_kill` counter) to detect silent crashes.
+  * **CPU Throttling (`cpu.max`):** Enforce CPU quotas to prevent multithreaded inference from freezing the desktop UI.
 ---
 
 ### 14. Reddit: r/Python
