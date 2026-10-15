@@ -30,7 +30,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 ### Added
 
-- [+] Added four community outreach profiles and published technical questions, with gathered feedback on asynchronous CPU-bound work, memory limits, container isolation and Python packaging (`docs/eip/community-outreach.md`; pending commit SHA).
+- [+] Added outreach posts for five communities and recorded feedback on asynchronous CPU-bound work, memory limits, container isolation and Python packaging (`docs/eip/community-outreach.md`; `64c7632`).
 
 ### Upgrading an existing install
 
