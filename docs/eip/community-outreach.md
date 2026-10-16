@@ -511,6 +511,8 @@ Quantization Sweet Spot: For GGUF/CPU, Q4_K_M is acceptable, but Q5_K_M is prefe
   * **Event Loop Non-Blocking Imperative:** CPU-bound tasks must run in dedicated background processes/workers rather than blocking the main asyncio thread, otherwise heartbeats and pings will freeze regardless.
   * **Job Persistence vs WebSocket Lifecycles:** Decouple job execution from connection state so that background inference survives client drops and clients can reconnect using a `job_id`.
   * **Bounded Work Queues:** Implement hard capacity limits on the job queue to prevent memory and CPU overload from stacked client requests.
+  * **Job Persistence Beyond Socket Drops:** Store execution results under the `job_id` so background tasks survive client disconnections. Clients can re-attach using `{"resume": job_id}` instead of re-running CPU passes.
+  * **Native Ping/Pong Usage:** Use native WebSocket ping/pong frames to keep connections alive efficiently without over-engineering custom protocol frames.
 
 ---
 
@@ -540,6 +542,7 @@ Quantization Sweet Spot: For GGUF/CPU, Q4_K_M is acceptable, but Q5_K_M is prefe
   * **Latency vs Stability:** First-token latency measures UX, whereas Peak RSS measures system survival under memory caps.
   * **Memory Bandwidth Bottlenecks:** Memory bandwidth saturation explains unexpected CPU performance dips, though tracking it requires dedicated profiling tooling.
   * **Benchmark Priorities:** Focus benchmarking efforts on **Peak RAM usage** and **First Token Latency** (UX metric), paired with long-run stability testing to verify that memory allocation remains stable and leak-free across extended multi-agent reasoning loops.
+  * **Benchmarking Priority Stack:** Prioritize **Peak RAM usage** (hard stability ceiling) and **First Token Latency** (UX metric), backed by long-run stability testing to verify zero memory accumulation across multi-agent loops.
 
 ---
 
@@ -605,6 +608,9 @@ Quantization Sweet Spot: For GGUF/CPU, Q4_K_M is acceptable, but Q5_K_M is prefe
   * **Fast Package Resolution with `uv`:** Replace `pip` with `uv` for dependency resolution during setup, or ship pre-built runtime containers/executables so end-users perform zero local package compilation.
   * **`llama.cpp` + Docker Stack Validation:** Standardizing on a pre-packaged Docker container executing `llama.cpp` directly is recommended as the cleanest distribution path, isolating the Python orchestrator from C++ binary execution and avoiding client system contamination.
   * **Astral Optimized Wheels (`wheels.astral.sh`):** Leverage pre-built, ultra-fast Python wheels from the Astral ecosystem (`uv`) to bypass PyTorch/CUDA compilation stages and minimize installation time on end-user machines.
+  * * **llama-cpp-python Adoption:** Recommended for shipping lightweight cross-platform CPU binaries without multi-GB PyTorch wheels. Allocate engineering effort for the runtime adapter layer.
+  * **Packaging Tooling:** Start with PyInstaller for distribution builds; Nuitka introduces high friction when bundling C-extension bindings like `llama-cpp-python`.
+  * **CI Prebuilt Wheels:** Build and pin platform-specific wheels in CI to avoid native C++ compilation on user hardware.
 
 ---
 
@@ -631,5 +637,15 @@ Quantization Sweet Spot: For GGUF/CPU, Q4_K_M is acceptable, but Q5_K_M is prefe
 * **Key Community Feedback & Advice Received (FastAPI Discussions):**
   * **Provide a Minimal Reproducible Example (MRE):** Abstract questions often trigger automated or vague responses. Providing a runnable MRE using dummy CPU loops (`time.sleep` / heavy CPU functions) yields direct, code-level architectural fixes from maintainers.
   * **Event Loop Isolation:** Ensure blocking tasks are offloaded to `asyncio.to_thread` or a `ProcessPoolExecutor` so worker pings continue emitting during execution.
+  * **Root Cause Identified:** WebSocket dropouts are caused by `asyncio` event loop starvation during 40s CPU calls, preventing Uvicorn from responding to keepalive pings (20s interval / 20s timeout).
+  * **ProcessPoolExecutor Pattern:** Offload CPU tasks to `ProcessPoolExecutor` with model pre-loading in `initializer=_init_worker` and explicit core thread limits (`OMP_NUM_THREADS`).
+  * **Dedicated Routing Pool:** Run light classification/routing in a isolated `ProcessPoolExecutor(max_workers=1)` so short tasks never queue behind heavy 40s generations.
+  * **Resumable Protocol Implementation:**
+    ```python
+    # Core async state pattern for CPU-bound tasks in FastAPI
+    fut = loop.run_in_executor(app.state.pool, route_request, payload)
+    jobs[job_id] = fut
+    fut.add_done_callback(lambda f, j=job_id: loop.call_later(300, jobs.pop, j, None))
+    ```
 
 ---
