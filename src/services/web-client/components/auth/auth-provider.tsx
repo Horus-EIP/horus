@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -34,7 +35,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [status, setStatus] = useState<AuthStatus>('loading');
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setStatus('loading');
 
     const currentUser = await userApi.getCurrentUser();
@@ -46,10 +47,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(null);
       setStatus('unauthenticated');
     }
-  };
+  }, []);
 
   useEffect(() => {
-    void refresh();
+    let ignore = false;
+    void userApi.getCurrentUser().then((currentUser) => {
+      if (ignore) return;
+      if (currentUser) {
+        setUser(currentUser);
+        setStatus('authenticated');
+      } else {
+        setUser(null);
+        setStatus('unauthenticated');
+      }
+    });
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -63,7 +77,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       window.removeEventListener('pageshow', recheckSessionOnBackForwardRestore);
     };
-  }, []);
+  }, [refresh]);
 
   const login = async (username: string, password: string) => {
     const result = await authApi.login({ username, password });
