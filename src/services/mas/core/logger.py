@@ -72,7 +72,7 @@ class MASLogger:
     """Singleton coordinator for structlog-based MAS loggers."""
 
     _instance = None
-    _loggers = dict[str, logging.Logger] = {}
+    _loggers: dict[str, logging.Logger] = {}
 
     def __new__(cls):
         if cls._instance is None:
@@ -308,7 +308,7 @@ class MASLogger:
             )
 
     def log_api_request(
-        self, method: str, endpoint: str, status_code: int, duration: float = None
+        self, method: str, endpoint: str, status_code: int, duration: float | None = None
     ):
         """
         Log an API request.
