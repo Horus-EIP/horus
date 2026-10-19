@@ -25,6 +25,7 @@ class CriticalLogs(Base):
     details = Column(Text, nullable=True)
     ip_address = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
+    agent_id = Column(Text, nullable=True)
 
     __table_args__ = (
         Index("idx_critical_logs_timestamp", "timestamp"),

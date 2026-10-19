@@ -56,6 +56,7 @@ class HybridLogger:
         user_id: int | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        agent_id: str | None = None,
     ):
         """
         Log a critical event to the database and standard logger.
@@ -84,6 +85,7 @@ class HybridLogger:
                     user_id=user_id,
                     ip_address=ip_address,
                     user_agent=user_agent,
+                    agent_id=agent_id
                 )
 
                 db.add(critical_log)
