@@ -144,7 +144,7 @@ hybrid_logger = HybridLogger()
 
 
 def log_security_event(
-    operation: str, user_id: int | None = None, details: str | None = None, ip_address: str | None = None
+    operation: str, user_id: int | None = None, details: str | None = None, ip_address: str | None = None, agent_id: str | None = None
 ):
     """
     Convenience function for logging security events.
@@ -163,6 +163,7 @@ def log_security_event(
         details,
         user_id,
         ip_address,
+        agent_id
     )
 
 
