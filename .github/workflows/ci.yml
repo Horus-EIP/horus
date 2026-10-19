@@ -2,11 +2,7 @@ name: CI
 
 on:
   push:
-    branches: 
-      - main
-      - master
-      - 'issue-*'
-      - '*mypy*'
+    branches: ['main', 'master']
   pull_request:
   workflow_dispatch:
 
