@@ -4,3 +4,5 @@ pytest-asyncio
 httpx
 fakeredis
 mypy
+types-python-jose
+types-passlib

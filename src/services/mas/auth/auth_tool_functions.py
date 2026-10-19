@@ -27,7 +27,7 @@ oauth2_bearer = OAuth2PasswordBearer(tokenUrl="auth/token")
 api_key = APIKeyHeader(name="x-api-key")
 
 
-def authenticate_user(username: str, password: str, db, ip_address: str = None):
+def authenticate_user(username: str, password: str, db, ip_address: str | None = None):
     """
     Verifies the username and password against stored hashed password.
     Returns the user if authentication is successful, otherwise returns False.
@@ -253,7 +253,7 @@ def modify_user_password(
         return True
     except Exception as e:
         db.rollback()
-        error_message = str(e.orig)
+        error_message = str(e)
         message = f"User Password Modification Error : {error_message}"
         raise HTTPException(status_code=409, detail=message)
 
