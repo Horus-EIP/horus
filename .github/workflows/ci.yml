@@ -270,7 +270,7 @@ jobs:
         run: cp src/infra/.env.example src/infra/.env
 
       - name: Provide mypy checking on mas/auth routes
-        run: MYPYPATH=src/services/mas mypy src/services/mas/auth/
+        run: MYPYPATH=src/services/mas mypy --explicit-package-bases src/services/mas/auth/
 
       - name: Run MAS tests with coverage
         working-directory: ${{ github.workspace }}
