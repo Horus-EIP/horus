@@ -72,7 +72,7 @@ class MASLogger:
     """Singleton coordinator for structlog-based MAS loggers."""
 
     _instance = None
-    _loggers = {}
+    _loggers = dict[str, logging.Logger] = {}
 
     def __new__(cls):
         if cls._instance is None:
@@ -179,7 +179,12 @@ class MASLogger:
         """
         logger = self.get_logger(component)
         logger.info(
-            "startup_event", component=component.upper(), message=message, icon="🚀"
+            "startup_event", 
+            extra={
+                "component": component.upper(), 
+                "message": message, 
+                "icon": "🚀"
+            }
         )
 
     def log_success(self, component: str, message: str):
@@ -191,7 +196,14 @@ class MASLogger:
             message (str): Success message
         """
         logger = self.get_logger(component)
-        logger.info("success_event", component=component, message=message, icon="✅")
+        logger.info(
+            "success_event", 
+            extra={
+                "component": component, 
+                "message": message, 
+                "icon": "✅"
+            }
+        )
 
     def log_warning(self, component: str, message: str):
         """
@@ -202,7 +214,7 @@ class MASLogger:
             message (str): Warning message
         """
         logger = self.get_logger(component)
-        logger.warning("warning_event", component=component, message=message, icon="⚠️")
+        logger.warning("warning_event", extra={"component": component, "message": message, "icon": "⚠️"})
 
     def log_error(self, component: str, message: str, exc_info=False):
         """
@@ -216,10 +228,12 @@ class MASLogger:
         logger = self.get_logger(component)
         logger.error(
             "error_event",
-            component=component,
-            message=message,
-            icon="❌",
-            exc_info=exc_info,
+            extra={
+                "component": component,
+                "message": message,
+                "icon": "❌",
+                "exc_info": exc_info,
+            }
         )
 
     def log_db_operation(self, operation: str, table: str, details: str = ""):
@@ -247,10 +261,12 @@ class MASLogger:
         # logger.info(f"{emoji} {operation.upper()} {table} {details}")
         logger.info(
             "db_operations",
-            icon=emoji,
-            operation=operation.upper(),
-            table=table,
-            details=details,
+            extra={
+                "icon": emoji,
+                "operation": operation.upper(),
+                "table": table,
+                "details": details,
+            }
         )
 
     def log_auth_operation(self, operation: str, username: str, success: bool = True):
@@ -273,18 +289,22 @@ class MASLogger:
             description = f"{operation.upper()} successful for user: {username}"
             logger.info(
                 "authentification_event",
-                icon=emoji,
-                operation=operation.upper(),
-                details=description,
+                extra={
+                    "icon": emoji,
+                    "operation": operation.upper(),
+                    "details": description,
+                }
             )
         else:
             emoji = "🚫"
             description = f"{operation.upper()} failed for user: {username}"
             logger.warning(
                 "authentification_event_failure",
-                icon=emoji,
-                operation=operation.upper(),
-                details=description,
+                extra={
+                    "icon": emoji,
+                    "operation": operation.upper(),
+                    "details": description,
+                }
             )
 
     def log_api_request(
@@ -345,10 +365,12 @@ class MASLogger:
 
         logger.info(
             "agent_operation",
-            icon=emoji,
-            agent_name=agent_name,
-            operation=operation.upper(),
-            details=details,
+            extra={
+                "icon": emoji,
+                "agent_name": agent_name,
+                "operation": operation.upper(),
+                "details": details,
+            }
         )
 
 
