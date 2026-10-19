@@ -6,3 +6,4 @@ fakeredis
 mypy
 types-python-jose
 types-passlib
+types-colorama
