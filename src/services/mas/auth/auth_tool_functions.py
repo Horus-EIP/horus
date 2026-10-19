@@ -211,6 +211,14 @@ class PermissionChecker:
         logger.info(
             f"DEBUG: PermissionChecker called for user {user.get('username')}, required: {self.required_permission}"
         )
+
+        role = user.get("role")
+        if not isinstance(role, str):
+            raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Invalid user data format: role must be a string"
+        )
+        
         if not check_permission(user.get("role"), self.required_permission):
             log_warning(
                 "auth",
