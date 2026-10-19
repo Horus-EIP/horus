@@ -81,6 +81,9 @@ class Settings(BaseSettings):
 
 # Initialize settings
 # This will raise a ValidationError if required environment variables are missing
+
+settings: Settings | None = None
+
 try:
     settings = Settings()
 except Exception as e:
