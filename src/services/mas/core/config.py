@@ -10,6 +10,8 @@ from pathlib import Path
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from typing import Any
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 SERVICES_DIR = BASE_DIR.parent
 SRC_DIR = SERVICES_DIR.parent
@@ -90,7 +92,7 @@ except Exception as e:
     print(f"Warning: Configuration validation failed: {e}")
 
     class DummySettings:
-        def __getattr__(self, name):
+        def __getattr__(self, name: str) -> Any:
             return None
 
     settings = DummySettings()
