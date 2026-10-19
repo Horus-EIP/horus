@@ -11,9 +11,6 @@ from db.pool_monitor import attach_pool_monitor
 
 logger = get_logger("database")
 
-if settings is None:
-    raise RuntimeError("MAS settings are not configured")
-
 DB_HOST = settings.db_host
 DB_NAME = settings.postgres_db
 DB_USER = settings.postgres_user

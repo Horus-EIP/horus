@@ -84,15 +84,15 @@ class Settings(BaseSettings):
 # Initialize settings
 # This will raise a ValidationError if required environment variables are missing
 
-settings: Settings | None = None
+class DummySettings:
+    def __getattr__(self, name: str) -> Any:
+        return None
+
+settings: Settings | DummySettings
 
 try:
     settings = Settings()
 except Exception as e:
     print(f"Warning: Configuration validation failed: {e}")
-
-    class DummySettings:
-        def __getattr__(self, name: str) -> Any:
-            return None
 
     settings = DummySettings()
