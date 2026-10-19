@@ -219,7 +219,7 @@ class PermissionChecker:
             detail="Invalid user data format: role must be a string"
         )
         
-        if not check_permission(user.get("role"), self.required_permission):
+        if not check_permission(role, self.required_permission):
             log_warning(
                 "auth",
                 f"User {user.get('username')} (role: {user.get('role')}) denied permission {self.required_permission}",
