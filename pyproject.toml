@@ -94,3 +94,8 @@ exclude_dirs = [
     "*/tests/*",
     "scripts/integration-checks/",
 ]
+
+[tool.mypy]
+plugins = [
+    "pydantic.mypy"
+]
