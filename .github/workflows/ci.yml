@@ -2,7 +2,11 @@ name: CI
 
 on:
   push:
-    branches: ['main', 'master']
+    branches: 
+      - main
+      - master
+      - 'issue-*'
+      - '*mypy*'
   pull_request:
   workflow_dispatch:
 
@@ -264,6 +268,9 @@ jobs:
 
       - name: Provide test configuration (workaround, see the comment of this job)
         run: cp src/infra/.env.example src/infra/.env
+
+      - name: Provide mypy checking on mas/auth routes
+        run: mypy src/services/mas/auth/
 
       - name: Run MAS tests with coverage
         working-directory: ${{ github.workspace }}
