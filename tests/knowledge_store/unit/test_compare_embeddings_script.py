@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 import yaml
-
 from packaging.requirements import Requirement
 
 REPO = Path(__file__).resolve().parents[3]

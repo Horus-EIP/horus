@@ -12,7 +12,7 @@ except ImportError:
 REPO = Path(__file__).resolve().parents[2]
 WORKFLOWS = REPO / ".github" / "workflows"
 PULL_REQUEST_WORKFLOWS = ("ci.yml", "eval-testset.yml")
-BRANCHES = ["main", "master", "issue-*", "*mypy*"]
+BRANCHES = ["main", "master"]
 EVAL_BRANCHES = ["main", "master"]
 GROUP = ("${{ github.workflow }}-${{ github.event_name == 'pull_request' && "
          "format('pr-{0}', github.event.pull_request.number) || github.run_id }}")
