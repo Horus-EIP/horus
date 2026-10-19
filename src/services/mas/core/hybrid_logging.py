@@ -91,12 +91,20 @@ class HybridLogger:
 
                 # logger.info(f"Critical log stored in DB: {category.value}/{operation}")
                 logger.info(
-                    "critical_log_stored", category=category.value, operation=operation
+                    "critical_log_stored", 
+                    extra={
+                        "category": category.value, 
+                        "operation": operation
+                    }
                 )
 
             except Exception as e:
                 # logger.error(f"Failed to store critical log: {str(e)}")
-                logger.error("critical_log_storage_failed", details=str(e))
+                logger.error("critical_log_storage_failed", 
+                    extra={
+                        "details": str(e)
+                    }
+                )
                 log_db_operation(
                     operation="ERROR",
                     table="critical_logs",
