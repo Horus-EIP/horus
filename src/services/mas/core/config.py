@@ -6,11 +6,10 @@ Reads environment variables (optionally from ``.env``) into a typed
 """
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-from typing import Any
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SERVICES_DIR = BASE_DIR.parent

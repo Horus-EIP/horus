@@ -156,7 +156,9 @@ class MASLogger:
         for noisy in ("pika", "httpx", "httpcore"):
             logging.getLogger(noisy).setLevel(logging.WARNING)
 
-    def get_logger(self, name: str, level: int | None = None) -> logging.Logger:
+    def get_logger(
+        self, name: str, level: int | None = None
+    ) -> structlog.stdlib.BoundLogger:
         """
         Get or create a structlog logger instance with the specified name.
         """
@@ -179,12 +181,10 @@ class MASLogger:
         """
         logger = self.get_logger(component)
         logger.info(
-            "startup_event", 
-            extra={
-                "component": component.upper(), 
-                "message": message, 
-                "icon": "🚀"
-            }
+            "startup_event",
+            component=component.upper(),
+            message=message,
+            icon="🚀",
         )
 
     def log_success(self, component: str, message: str):
@@ -197,12 +197,7 @@ class MASLogger:
         """
         logger = self.get_logger(component)
         logger.info(
-            "success_event", 
-            extra={
-                "component": component, 
-                "message": message, 
-                "icon": "✅"
-            }
+            "success_event", component=component, message=message, icon="✅"
         )
 
     def log_warning(self, component: str, message: str):
@@ -214,7 +209,9 @@ class MASLogger:
             message (str): Warning message
         """
         logger = self.get_logger(component)
-        logger.warning("warning_event", extra={"component": component, "message": message, "icon": "⚠️"})
+        logger.warning(
+            "warning_event", component=component, message=message, icon="⚠️"
+        )
 
     def log_error(self, component: str, message: str, exc_info=False):
         """
@@ -228,12 +225,10 @@ class MASLogger:
         logger = self.get_logger(component)
         logger.error(
             "error_event",
-            extra={
-                "component": component,
-                "message": message,
-                "icon": "❌",
-                "exc_info": exc_info,
-            }
+            component=component,
+            message=message,
+            icon="❌",
+            exc_info=exc_info,
         )
 
     def log_db_operation(self, operation: str, table: str, details: str = ""):
@@ -261,12 +256,10 @@ class MASLogger:
         # logger.info(f"{emoji} {operation.upper()} {table} {details}")
         logger.info(
             "db_operations",
-            extra={
-                "icon": emoji,
-                "operation": operation.upper(),
-                "table": table,
-                "details": details,
-            }
+            icon=emoji,
+            operation=operation.upper(),
+            table=table,
+            details=details,
         )
 
     def log_auth_operation(self, operation: str, username: str, success: bool = True):
@@ -289,22 +282,18 @@ class MASLogger:
             description = f"{operation.upper()} successful for user: {username}"
             logger.info(
                 "authentification_event",
-                extra={
-                    "icon": emoji,
-                    "operation": operation.upper(),
-                    "details": description,
-                }
+                icon=emoji,
+                operation=operation.upper(),
+                details=description,
             )
         else:
             emoji = "🚫"
             description = f"{operation.upper()} failed for user: {username}"
             logger.warning(
                 "authentification_event_failure",
-                extra={
-                    "icon": emoji,
-                    "operation": operation.upper(),
-                    "details": description,
-                }
+                icon=emoji,
+                operation=operation.upper(),
+                details=description,
             )
 
     def log_api_request(
@@ -365,19 +354,17 @@ class MASLogger:
 
         logger.info(
             "agent_operation",
-            extra={
-                "icon": emoji,
-                "agent_name": agent_name,
-                "operation": operation.upper(),
-                "details": details,
-            }
+            icon=emoji,
+            agent_name=agent_name,
+            operation=operation.upper(),
+            details=details,
         )
 
 
 mas_logger = MASLogger()
 
 
-def get_logger(name: str) -> logging.Logger:
+def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     return mas_logger.get_logger(name)
 
 

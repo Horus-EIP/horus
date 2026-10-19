@@ -8,11 +8,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 import yaml
+
 from packaging.requirements import Requirement
 
 REPO = Path(__file__).resolve().parents[3]
 SCRIPT = REPO / "scripts" / "compare-embeddings.py"
-KNOWLEDGE_STORE_REQUIREMENTS = REPO / "src" / "services" / "knowledge-store" / "requirements.txt"
+KNOWLEDGE_STORE_REQUIREMENTS = (
+    REPO / "src" / "services" / "knowledge-store" / "requirements.txt"
+)
 spec = importlib.util.spec_from_file_location("compare_embeddings", SCRIPT)
 compare_embeddings = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = compare_embeddings

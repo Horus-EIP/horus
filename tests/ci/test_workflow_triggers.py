@@ -12,7 +12,8 @@ except ImportError:
 REPO = Path(__file__).resolve().parents[2]
 WORKFLOWS = REPO / ".github" / "workflows"
 PULL_REQUEST_WORKFLOWS = ("ci.yml", "eval-testset.yml")
-BRANCHES = ["main", "master"]
+BRANCHES = ["main", "master", "issue-*", "*mypy*"]
+EVAL_BRANCHES = ["main", "master"]
 GROUP = ("${{ github.workflow }}-${{ github.event_name == 'pull_request' && "
          "format('pr-{0}', github.event.pull_request.number) || github.run_id }}")
 CANCEL = "${{ github.event_name == 'pull_request' }}"
@@ -57,7 +58,7 @@ class Triggers(unittest.TestCase):
     def test_the_evaluation_set_runs_on_the_same_branches_when_its_files_change(self):
         on = triggers(load("eval-testset.yml"))
         self.assertEqual(set(on), {"push", "pull_request", "workflow_dispatch"})
-        self.assertEqual(on["push"]["branches"], BRANCHES)
+        self.assertEqual(on["push"]["branches"], EVAL_BRANCHES)
         self.assertEqual(on["push"]["paths"], on["pull_request"]["paths"])
         self.assertEqual(set(on["pull_request"]), {"paths"})
 

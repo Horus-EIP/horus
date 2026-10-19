@@ -85,7 +85,7 @@ class HybridLogger:
                     user_id=user_id,
                     ip_address=ip_address,
                     user_agent=user_agent,
-                    agent_id=agent_id
+                    **({"agent_id": agent_id} if agent_id is not None else {}),
                 )
 
                 db.add(critical_log)
@@ -93,20 +93,14 @@ class HybridLogger:
 
                 # logger.info(f"Critical log stored in DB: {category.value}/{operation}")
                 logger.info(
-                    "critical_log_stored", 
-                    extra={
-                        "category": category.value, 
-                        "operation": operation
-                    }
+                    "critical_log_stored",
+                    category=category.value,
+                    operation=operation,
                 )
 
             except Exception as e:
                 # logger.error(f"Failed to store critical log: {str(e)}")
-                logger.error("critical_log_storage_failed", 
-                    extra={
-                        "details": str(e)
-                    }
-                )
+                logger.error("critical_log_storage_failed", details=str(e))
                 log_db_operation(
                     operation="ERROR",
                     table="critical_logs",
@@ -155,6 +149,7 @@ def log_security_event(
         details (str): Details
         ip_address (str): Source IP
     """
+    agent_fields = {"agent_id": agent_id} if agent_id is not None else {}
     hybrid_logger.log_critical(
         LogLevel.WARNING,
         LogCategory.SECURITY,
@@ -163,7 +158,7 @@ def log_security_event(
         details,
         user_id,
         ip_address,
-        agent_id
+        **agent_fields,
     )
 
 
