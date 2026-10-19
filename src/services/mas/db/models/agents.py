@@ -28,7 +28,7 @@ class Agents(Base):
         nullable=False,
         index=True,
     )
-    type = Column(SQLEnum(AgentTypes), nullable=False, default=AgentTypes.GENERAL)
+    type: Column = Column(SQLEnum(AgentTypes), nullable=False, default=AgentTypes.GENERAL)
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
