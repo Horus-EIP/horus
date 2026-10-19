@@ -406,7 +406,7 @@ def log_auth_operation(operation: str, username: str, success: bool = True):
 
 
 def log_api_request(
-    method: str, endpoint: str, status_code: int, duration: float = None
+    method: str, endpoint: str, status_code: int, duration: float | None = None
 ):
     mas_logger.log_api_request(method, endpoint, status_code, duration)
 
