@@ -134,13 +134,18 @@ def get_current_user(
         raw_nonce = payload.get("nonce")
         raw_exp = payload.get("exp")
 
-        if not all([raw_username, raw_user_id, raw_nonce, raw_exp]):
-            raise jwt.InvalidTokenError("Mandatory fiels missing in the JWT's payload")
+        if (
+            not isinstance(raw_username, str)
+            or not isinstance(raw_user_id, int)
+            or not isinstance(raw_nonce, str)
+            or not isinstance(raw_exp, int)
+        ):
+            raise JWTError("Mandatory fiels missing in the JWT's payload")
 
-        username: str = raw_username
-        user_id: str = raw_user_id
-        nonce: str = raw_nonce
-        exp: int = raw_exp
+        username = raw_username
+        user_id = raw_user_id
+        nonce = raw_nonce
+        exp = raw_exp
 
         if username is None or user_id is None:
             log_error("auth", "Token validation failed: missing username or user_id")
