@@ -52,10 +52,10 @@ class HybridLogger:
         category: LogCategory,
         component: str,
         operation: str,
-        details: str = None,
-        user_id: int = None,
+        details: str | None = None,
+        user_id: int | None = None,
         ip_address: str | None = None,
-        user_agent: str = None,
+        user_agent: str | None = None,
     ):
         """
         Log a critical event to the database and standard logger.
@@ -110,7 +110,7 @@ class HybridLogger:
         )
 
     def log_system(
-        self, level: LogLevel, component: str, operation: str, details: str = None
+        self, level: LogLevel, component: str, operation: str, details: str | None = None
     ):
         """
         Log a system event to the standard logger.
@@ -134,7 +134,7 @@ hybrid_logger = HybridLogger()
 
 
 def log_security_event(
-    operation: str, user_id: int = None, details: str = None, ip_address: str | None = None
+    operation: str, user_id: int | None = None, details: str | None = None, ip_address: str | None = None
 ):
     """
     Convenience function for logging security events.
@@ -156,7 +156,7 @@ def log_security_event(
     )
 
 
-def log_user_action(operation: str, user_id: int, details: str = None):
+def log_user_action(operation: str, user_id: int, details: str | None = None):
     """
     Convenience function for logging user actions (audit trail).
 
@@ -170,7 +170,7 @@ def log_user_action(operation: str, user_id: int, details: str = None):
     )
 
 
-def log_business_operation(operation: str, details: str = None, user_id: int = None):
+def log_business_operation(operation: str, details: str | None = None, user_id: int | None = None):
     """
     Convenience function for logging business logic events.
 
@@ -185,7 +185,7 @@ def log_business_operation(operation: str, details: str = None, user_id: int = N
 
 
 def log_system_performance(
-    component: str, operation: str, duration: float = None, details: str = None
+    component: str, operation: str, duration: float | None = None, details: str | None = None
 ):
     """
     Convenience function for logging system performance metrics.
