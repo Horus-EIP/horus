@@ -63,6 +63,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - Tests · Agent failed 4 tests. The fake `transformers` made `_SpiralStoppingCriteria` a MagicMock that answers once and then raises `StopIteration`, and the fake generation had no `.shape` for the token count; both fakes are fixed, and `test_logger.py` puts back the logger state it changes (`93aeeae`)
 - The CI test jobs failed when the artifact storage quota was full, and the coverage summary was then empty (`f15a1be`)
 - Every CI run warned that six actions run on Node 20 (`14a0974`)
+- The desktop release workflow still used end-of-life Node.js 20; it now uses Node.js 24 LTS (B-135, `fc7d39d8`)
 - **F27** The chat socket no longer drops after about 40 s on CPU (WebSocket ping timeout 120 s, aggregation off the event loop), and a result that finished while the browser was disconnected is shown after the reconnect (`ef05b6b`)
 - **F29/F36** The task page shows the skills and the start and end times, its spinner follows the task's status, and the documents tile refreshes once after an upload (`cd8247a`)
 - **F37** No horizontal page scroll at 1366x768 or on a 768 px tablet (`ae538f3`)
