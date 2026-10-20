@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import re
 import shutil
 import subprocess
@@ -22,6 +23,11 @@ import hardware  # noqa: E402
 import horus_install  # noqa: E402
 import smoke  # noqa: E402
 from common import EXIT_OK, Log  # noqa: E402
+
+try:
+    import pty
+except ImportError:
+    pty = None
 
 REPO = Path(__file__).resolve().parent.parent.parent
 INFRA = REPO / "src" / "infra"
@@ -181,7 +187,8 @@ class TheTemplateShipsNoPassword(InfraCase):
         self.assertGenerated(self.env_value("JWT_SECRET_KEY"))
         self.assertNotEqual(self.env_value("REDIS_PASSWORD"), self.env_value("JWT_SECRET_KEY"))
 
-    @unittest.skipUnless(shutil.which("bash"), "needs bash to run init-env.sh")
+    @unittest.skipUnless(shutil.which("bash") and shutil.which("openssl"),
+                         "needs bash and OpenSSL")
     def test_init_env_generates_it(self):
         for name in (".env.example", "init-env.sh"):
             shutil.copy(INFRA / name, self.infra / name)
@@ -191,6 +198,96 @@ class TheTemplateShipsNoPassword(InfraCase):
         self.assertGenerated(self.env_value("REDIS_PASSWORD"))
         self.assertGenerated(self.env_value("JWT_SECRET_KEY"))
         self.assertNotEqual(self.env_value("REDIS_PASSWORD"), self.env_value("JWT_SECRET_KEY"))
+        cert = self.infra / "certs/horus.crt"
+        key = self.infra / "certs/horus.key"
+        self.assertTrue(cert.is_file())
+        self.assertTrue(key.is_file())
+        details = subprocess.run(
+            [shutil.which("openssl"), "x509", "-in", str(cert), "-noout", "-ext", "subjectAltName"],
+            capture_output=True, text=True, check=True,
+        )
+        self.assertIn("DNS:localhost", details.stdout)
+        self.assertIn("IP Address:127.0.0.1", details.stdout)
+        self.assertIn("IP Address:0:0:0:0:0:0:0:1", details.stdout)
+
+    @unittest.skipUnless(shutil.which("bash"), "needs bash to run init-env.sh")
+    def test_init_env_can_enable_lan_access(self):
+        for name in (".env.example", "init-env.sh"):
+            shutil.copy(INFRA / name, self.infra / name)
+        result = self.run_init_env_interactively("y\n192.168.1.55\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.env_value("HORUS_WEB_BIND"), "0.0.0.0")
+        self.assertIn("LAN access enabled", result.stdout)
+        cert = self.infra / "certs/horus.crt"
+        details = subprocess.run(
+            [shutil.which("openssl"), "x509", "-in", str(cert), "-noout", "-ext", "subjectAltName"],
+            capture_output=True, text=True, check=True,
+        )
+        self.assertIn("IP Address:192.168.1.55", details.stdout)
+
+    @unittest.skipUnless(shutil.which("bash") and os.name == "posix" and pty is not None,
+                         "needs bash and a POSIX pseudo-terminal")
+    def test_init_env_keeps_lan_access_disabled_by_default(self):
+        for name in (".env.example", "init-env.sh"):
+            shutil.copy(INFRA / name, self.infra / name)
+        result = self.run_init_env_interactively("\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.env_value("HORUS_WEB_BIND"), "127.0.0.1")
+        self.assertIn("LAN access disabled", result.stdout)
+
+    @unittest.skipUnless(shutil.which("bash") and shutil.which("openssl"),
+                         "needs bash and OpenSSL")
+    def test_existing_env_still_generates_missing_local_certificate(self):
+        shutil.copy(INFRA / ".env.example", self.infra / ".env.example")
+        (self.infra / ".env").write_text("HORUS_WEB_BIND=127.0.0.1\n", encoding="utf-8")
+        shutil.copy(INFRA / "init-env.sh", self.infra / "init-env.sh")
+        result = subprocess.run([shutil.which("bash"), "init-env.sh", "--quiet"],
+                                cwd=self.infra, capture_output=True, text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.infra / "certs/horus.crt").is_file())
+        self.assertTrue((self.infra / "certs/horus.key").is_file())
+
+    @unittest.skipUnless(shutil.which("bash") and shutil.which("openssl")
+                         and os.name == "posix" and pty is not None,
+                         "needs bash, OpenSSL and a POSIX pseudo-terminal")
+    def test_existing_install_can_enable_lan_and_back_up_its_local_certificate(self):
+        for name in (".env.example", "init-env.sh"):
+            shutil.copy(INFRA / name, self.infra / name)
+        (self.infra / ".env").write_text("HORUS_WEB_BIND=127.0.0.1\n", encoding="utf-8")
+        local = subprocess.run([shutil.which("bash"), "init-env.sh", "--quiet"],
+                               cwd=self.infra, capture_output=True, text=True, timeout=60)
+        self.assertEqual(local.returncode, 0, local.stderr)
+
+        result = self.run_init_env_interactively("y\n192.168.1.55\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.env_value("HORUS_WEB_BIND"), "0.0.0.0")
+        self.assertTrue(list((self.infra / "certs").glob("horus.crt.*.bak")))
+        details = subprocess.run(
+            [shutil.which("openssl"), "x509", "-in",
+             str(self.infra / "certs/horus.crt"), "-noout", "-ext", "subjectAltName"],
+            capture_output=True, text=True, check=True,
+        )
+        self.assertIn("IP Address:192.168.1.55", details.stdout)
+
+    def run_init_env_interactively(self, answer: str) -> subprocess.CompletedProcess:
+        master, slave = pty.openpty()
+        try:
+            process = subprocess.Popen(
+                [shutil.which("bash"), "init-env.sh"],
+                cwd=self.infra,
+                stdin=slave,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        finally:
+            os.close(slave)
+        os.write(master, answer.encode())
+        try:
+            stdout, stderr = process.communicate(timeout=60)
+        finally:
+            os.close(master)
+        return subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
 
 @needs_yaml
 class ComposePassesThePassword(unittest.TestCase):

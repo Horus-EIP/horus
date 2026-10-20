@@ -80,13 +80,13 @@ After starting the demo:
 
 | Service | URL |
 |---------|-----|
-| Web Client | http://localhost:3000 |
+| Web Client | https://localhost:3000 |
 | MAS API | http://localhost:8000 |
 | API Docs | http://localhost:8000/docs |
 | Knowledge Store | http://localhost:8080 |
-| Logs | http://localhost:3000/admin/logs (admin role) |
-| Metrics | http://localhost:3000/admin/metrics (admin role) |
-| Traces | http://localhost:3000/admin/traces (admin role) |
+| Logs | https://localhost:3000/admin/logs (admin role) |
+| Metrics | https://localhost:3000/admin/metrics (admin role) |
+| Traces | https://localhost:3000/admin/traces (admin role) |
 
 ## Troubleshooting
 

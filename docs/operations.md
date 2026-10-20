@@ -242,9 +242,9 @@ Logs, metrics, and traces are viewed in the Next.js web client's admin pages. Th
 
 | Page | URL | Backend |
 |------|-----|---------|
-| Logs | http://localhost:3000/admin/logs | Loki |
-| Metrics | http://localhost:3000/admin/metrics | Prometheus |
-| Traces | http://localhost:3000/admin/traces | Tempo |
+| Logs | https://localhost:3000/admin/logs | Loki |
+| Metrics | https://localhost:3000/admin/metrics | Prometheus |
+| Traces | https://localhost:3000/admin/traces | Tempo |
 
 The **Metrics** page replicates the former "MAS Overview" dashboard: Task Queue Depth, Task Errors Rate, and Active Agents. The **Traces** page offers trace search and a span waterfall.
 

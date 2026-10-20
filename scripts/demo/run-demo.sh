@@ -28,7 +28,7 @@ INFRA_DIR="$PROJECT_ROOT/src/infra"
 # URLs
 MAS_URL="http://localhost:8000"
 KNOWLEDGE_STORE_URL="http://localhost:8080"
-WEB_CLIENT_URL="http://localhost:3000"
+WEB_CLIENT_URL="https://localhost:3000"
 PROMETHEUS_URL="http://localhost:9090"
 
 print_header() {

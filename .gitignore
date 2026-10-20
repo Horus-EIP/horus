@@ -22,6 +22,7 @@ docs/agent_architecture.md
 registry-token.txt
 !.env.example
 !.env.*.example
+/src/infra/certs/
 
 # Beta installer output (machine-specific; regenerated on every run)
 # The knowledge-store logger writes to a relative logs/ dir, so running its

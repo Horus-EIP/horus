@@ -801,9 +801,9 @@ READ_ONLY_ROOTFS true
 
 | Service | Host port | Bound to | Reached from the host by |
 |---|---|---|---|
-| Web client | 3000 | 127.0.0.1, or the address in `HORUS_WEB_BIND` | the browser, the desktop app |
-| MAS | 8000 | 127.0.0.1 | the browser's chat WebSocket, the installer's smoke test, scripts |
-| Knowledge store | 8080 | 127.0.0.1 | the browser (`NEXT_PUBLIC_KNOWLEDGE_STORE_URL`), the smoke test, scripts |
+| HTTPS gateway (web client, chat, knowledge store) | 3000 | 127.0.0.1, or the address in `HORUS_WEB_BIND` | browser and desktop app |
+| MAS | 8000 | 127.0.0.1 | gateway, installer smoke test, scripts |
+| Knowledge store | 8080 | 127.0.0.1 | gateway, smoke test, scripts |
 | Agent | 8001 | 127.0.0.1 | `scripts/perf/prompt-tokens.py` (metrics) |
 | vLLM (GPU profiles) | 18000 (`VLLM_HOST_PORT`) | 127.0.0.1 | debugging only; it has no API key |
 | PostgreSQL | 5432 (`DB_PORT`) | 127.0.0.1 | MAS run on the host |
@@ -813,15 +813,15 @@ READ_ONLY_ROOTFS true
 | PgAdmin (`dev-tools` profile) | 5433 | 127.0.0.1 | the browser |
 | Prometheus, Loki, Tempo queries, llama-server | none | not published | containers on `horus-net` only |
 
-By default no port answers other machines, provided Docker Engine is 28.0 or newer on Linux: on older Engines, hosts on the same network segment can reach ports published to 127.0.0.1 (moby/moby#45610, fixed in 28.0.0). The installer, START-HERE and the desktop app open `http://localhost:3000`.
+The gateway terminates HTTPS on host port 3000 using the installation's own certificate (`src/infra/certs/horus.crt` and `horus.key`). The certificate must cover the hostname/IP used by the browser and be trusted by every client. The private key is ignored by Git and must never be committed. See [Getting started](getting-started.md#https-and-lan-access). The installer, START-HERE and desktop app open `https://localhost:3000`.
 
-`HORUS_WEB_BIND=0.0.0.0` in `src/infra/.env`, then `START-HERE --start` (or `docker compose up -d`), opens the web client, and only it, to the network on purpose. What that means:
+By default the gateway only answers on loopback, provided Docker Engine is 28.0 or newer on Linux: on older Engines, hosts on the same network segment can reach ports published to 127.0.0.1 (moby/moby#45610, fixed in 28.0.0). Set `HORUS_WEB_BIND=0.0.0.0` in `src/infra/.env`, then run `START-HERE --start` (or `docker compose up -d`) to allow trusted LAN devices through the HTTPS gateway. Do not expose Horus to the public Internet. The gateway is the only network-facing service; it proxies web pages and MAS REST, upgrades the chat WebSocket to MAS, and forwards Knowledge Store requests.
 
-- The sign-in page is on the network. The web client proxies the whole MAS REST API under `/api/orchestrator`, `/auth/token` included, so any machine that reaches port 3000 can try passwords and, once signed in, use the API with that account's role. Binding 8000 to 127.0.0.1 does not change that.
-- Chat and the knowledge store do not work from other machines yet (B-133): the chat socket and the knowledge-store calls go to ports that answer on 127.0.0.1 only, and the knowledge store accepts only the origins `http://localhost:3000` and `http://127.0.0.1:3000`. Other machines can sign in, but chat and the knowledge-store page fail.
-- Use 127.0.0.1 or 0.0.0.0. With any other address, `http://localhost:3000` no longer answers on the machine itself.
+- Every device that uses the LAN URL must trust the issuing CA and use a hostname/IP included in the certificate. A locally generated CA is suitable for a private LAN; a public or organizational CA can be used when available.
+- The sign-in page and whole MAS REST API (`/api/orchestrator`, including `/auth/token`), chat WebSocket, and Knowledge Store are reachable through the gateway. Any device that reaches port 3000 can attempt sign-in and, once authenticated, use APIs with that account's role.
+- Use 127.0.0.1 or 0.0.0.0. With any other address, `https://localhost:3000` may not answer on the machine itself.
 
-`tests/ci/test_published_ports.py` fails when a port is published on every interface, except 3000 through `HORUS_WEB_BIND`, and when a launcher opens anything but `http://localhost:3000`.
+`tests/ci/test_published_ports.py` fails when a port is published on every interface, except 3000 through `HORUS_WEB_BIND`, or when a launcher opens anything but `https://localhost:3000`.
 
 ---
 

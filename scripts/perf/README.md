@@ -249,16 +249,16 @@ When using `--csv=results/prefix`, Locust generates:
 
 While running load tests, monitor:
 
-1. **Metrics** (Prometheus): http://localhost:3000/admin/metrics
+1. **Metrics** (Prometheus): https://localhost:3000/admin/metrics
    - Task Queue Depth
    - Task Errors Rate
    - Active Agents
 
-2. **Logs** (Loki): http://localhost:3000/admin/logs
+2. **Logs** (Loki): https://localhost:3000/admin/logs
    - Request errors
    - Service log streams
 
-3. **Traces** (Tempo): http://localhost:3000/admin/traces
+3. **Traces** (Tempo): https://localhost:3000/admin/traces
    - Trace slow requests
    - Find bottlenecks
 

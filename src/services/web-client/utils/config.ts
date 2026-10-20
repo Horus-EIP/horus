@@ -1,9 +1,9 @@
 import { isDockerInternalHostname } from "@/utils/docker-internal-hosts";
 
 /**
- * WebSocket must reach MAS directly (Next.js HTTP rewrites do not upgrade to WS).
- * If NEXT_PUBLIC_WS_URL is unset, use the same hostname as the page with port 8000
- * so LAN access (e.g. http://192.168.x.x:3000) still connects to MAS on :8000.
+ * Modernized WebSocket URL resolution:
+ * - Directs traffic through Nginx (/ws) using the current page's origin (host + port).
+ * - Avoids bypassing Nginx via hardcoded :8000 port on local networks.
  */
 function wsBaseUrl(): string {
   const explicit = process.env.NEXT_PUBLIC_WS_URL?.trim().replace(/\/$/, "");
@@ -17,14 +17,15 @@ function wsBaseUrl(): string {
         return explicit;
       }
     } catch {
-      /* use derived URL below */
+      /* fallback to derived URL below */
     }
   }
   if (typeof window !== "undefined") {
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return `${proto}//${window.location.hostname}:8000`;
+    // Utile window.location.host (ip:3000) et la route /ws gérée par Nginx
+    return `${proto}//${window.location.host}/ws`;
   }
-  return explicit || "ws://localhost:8000";
+  return explicit || "ws://localhost:3000/ws";
 }
 
 function knowledgeStorePathPrefix(): string {

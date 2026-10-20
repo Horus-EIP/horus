@@ -60,7 +60,7 @@ from common import (  # noqa: E402
 LOG_PATH = BUNDLE_DIR / "install-log.txt"
 PROFILE_JSON = BUNDLE_DIR / "horus-profile.json"
 
-WEB_URL = "http://localhost:3000"
+WEB_URL = "https://localhost:3000"
 
 CORE_SERVICES = [
     "postgres", "redis", "rabbitmq", "mas", "agent", "knowledge_store", "web-client",
