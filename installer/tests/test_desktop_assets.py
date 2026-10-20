@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import importlib.util
 import io
 import json
 import re
@@ -367,11 +368,20 @@ class IconMaster(unittest.TestCase):
                 capture_output=True, text=True, timeout=120,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
+
+            spec = importlib.util.spec_from_file_location("make_icon_source", tool)
+            if spec is None or spec.loader is None:
+                self.fail(f"could not load PNG reader from {tool}")
+            generator = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(generator)
+            generated = generator.read_png(out)
+            committed_image = generator.read_png(committed)
             self.assertEqual(
-                out.read_bytes(), committed.read_bytes(),
-                "desktop/icon-source.png is not what make_icon_source.py "
-                "produces from the current logo.png. Re-run the tool and "
-                "regenerate the icon set.",
+                (generated.width, generated.height, generated.data),
+                (committed_image.width, committed_image.height, committed_image.data),
+                "desktop/icon-source.png does not contain the image produced by "
+                "make_icon_source.py from the current logo.png. Re-run the tool "
+                "and regenerate the icon set.",
             )
 
 @skip_without_desktop
