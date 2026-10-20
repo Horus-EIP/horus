@@ -2098,9 +2098,9 @@ def checking_backup_env_attendance(log: Log, infra: Path) -> None:
             )
 
         if not volumes:
-            log.info("✅ No Docker volumes found. Safe to generate a new .env file.")
+            log.info("No Docker volumes found. Safe to generate a new .env file.")
         else:
-            log.warn(f"🔎 Detected {len(volumes)} existing Docker volumes.")
+            log.warn(f"Detected {len(volumes)} existing Docker volumes.")
 
         for name, label in volumes:
             if label in DATA_VOLUMES:
