@@ -102,6 +102,12 @@ system_overrides:
     reason: Copyright file not machine-readable; LGPL-2.1+ librtmp, GPL-2+ tools.
 
 images:
+  nginx:
+    licence: BSD-2-Clause, and Alpine packages under their own licences
+    spdx: BSD-2-Clause
+    source: project page, LICENSE
+    url: https://github.com/nginx/nginx
+    note: HTTPS gateway, separate process, unmodified; Alpine base packages retain their own licences
   rabbitmq:
     licence: MPL-2.0
     spdx: MPL-2.0

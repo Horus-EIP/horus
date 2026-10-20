@@ -5596,6 +5596,11 @@ The tag is the one the Compose files or Dockerfiles name.
   https://github.com/grafana/tempo
   AGPL, run as a separate process, unmodified; Horus only sends it traces over OTLP; used by src/infra/docker-compose.yml
   Licence text (AGPL-3.0-only): LICENSES/AGPL-3.0-only.txt
+- nginx 1.30.6-alpine
+  Licence: BSD-2-Clause, and Alpine packages under their own licences (source: project page, LICENSE)
+  https://github.com/nginx/nginx
+  HTTPS gateway, separate process, unmodified; Alpine base packages retain their own licences; used by src/infra/docker-compose.yml
+  Licence text (BSD-2-Clause): LICENSES/BSD-2-Clause.txt
 - node 20.20.2-alpine
   Licence: MIT, and the Alpine packages of the image under their own licences (source: project page, LICENSE)
   https://github.com/nodejs/node/blob/main/LICENSE

@@ -22,7 +22,7 @@ services:
   # =============================================================================
 
   gateway:
-    image: nginx:alpine
+    image: nginx:1.30.6-alpine
     container_name: gateway
     logging: *logging
     restart: unless-stopped
@@ -185,6 +185,8 @@ services:
     container_name: web_client
     logging: *logging
     restart: unless-stopped
+    expose:
+      - "3000"
     depends_on:
       mas:
         condition: service_healthy
