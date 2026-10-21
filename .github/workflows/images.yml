@@ -153,7 +153,7 @@ jobs:
         run: |
           size="$(docker image inspect --format '{{.Size}}' "${IMAGE:-none}" 2>/dev/null || echo 0)"
           {
-            echo "### $SERVICE · $FLAVOR"
+            echo "### ${SERVICE} ·${FLAVOR}"
             echo ""
             echo "- image: \`${IMAGE:-not named}\`"
             echo "- pushed tags: ${PUSHED_TAGS:-none}"
@@ -169,8 +169,9 @@ jobs:
                 
                 has_copyleft=false
                 while IFS=';' read -r pkg ver; do
-                  if awk '/## 7\./{flag=1;next} /## 8\./{flag=0} flag' THIRD_PARTY_NOTICES | grep -qi "${pkg}"; then
-                    match_info=$(awk '/## 7\./{flag=1;next} /## 8\./{flag=0} flag' THIRD_PARTY_NOTICES \vert{} grep -i "${pkg}" | head -n 1)
+                  # Regex assouplie : capture tout entre un titre 7 (ex: ## 7 ou ### 7.1) et un titre 8
+                  if awk '/^#+ 7/{flag=1} /^#+ 8/{flag=0} flag' THIRD_PARTY_NOTICES | grep -qi "${pkg}"; then
+                    match_info=$(awk '/^#+ 7/{flag=1} /^#+ 8/{flag=0} flag' THIRD_PARTY_NOTICES \vert{} grep -i "${pkg}" | head -n 1)
                     echo "| \`${pkg}\` | \`${ver}\` | 🚨 Match Section 7: \`${match_info}\` |"
                     has_copyleft=true
                   fi
