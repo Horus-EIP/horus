@@ -148,6 +148,53 @@ jobs:
           docker compose --progress plain build "$SERVICE"
           echo "BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
 
+      - name: Report the image
+        if: always()
+        run: |
+          size="\$(docker image inspect --format '{{.Size}}' "\${IMAGE:-none}" 2>/dev/null || echo 0)"
+          {
+            echo "### SERVICE · FLAVOR"
+            echo ""
+            echo "- image: \`${IMAGE:-not named}\`"
+            echo "- pushed tags: \${PUSHED_TAGS:-none}"
+            echo "- digest: \`${DIGEST:-none}\`"
+            echo "- size unpacked: (( size / 1000000 )) MB, built in {BUILD_SECONDS:-?} s"
+            echo ""
+            
+            if [ -n "\${{ matrix.requirements }}" ]; then
+              # Extract installed packages inside the final Docker image
+              docker run --rm --entrypoint python "\$IMAGE" -m pip list --format=freeze > installed_packages.txt 2>/dev/null || true
+              
+              if [ -f installed_packages.txt ] && [ -s installed_packages.txt ]; then
+                echo "#### 📜 GPL / LGPL License Compliance Scan"
+                echo "| Package Status (Cross-referenced with THIRD_PARTY_NOTICES) |"
+                echo "| :--- |"
+                
+                has_gpl=false
+                while read -r line; do
+                  pkg="\${line%%==*}"
+                  # Search case-insensitively for the package name in your notices file
+                  if grep -qi "\$pkg" THIRD_PARTY_NOTICES; then
+                    # Fetch the full matching line from THIRD_PARTY_NOTICES to print its license info
+                    notice_line="(grep -i "pkg" THIRD_PARTY_NOTICES | head -n 1)"
+                    echo "| 🚨 Found: \`${notice_line:-$line}\` |"
+                    has_gpl=true
+                  fi
+                done < installed_packages.txt
+                
+                if [ "\$has_gpl" = "false" ]; then
+                  echo "| ✅ No GPL/LGPL components detected in this image. |"
+                fi
+              else
+                echo "⚠️ Could not audit packages: pip list output is empty or unavailable."
+              fi
+            else
+              echo "✅ No Python requirements defined. Skipped GPL/LGPL scanning."
+            fi
+            echo ""
+          } | tee -a "\$GITHUB_STEP_SUMMARY"
+
+
       - name: Fail on CUDA packages or any torch in the CPU image
         if: matrix.flavor == 'cpu' && matrix.requirements
         run: |
