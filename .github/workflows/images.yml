@@ -63,7 +63,7 @@ jobs:
             echo "::warning::Pushing to $registry; installers built from this commit pull from $installer_registry unless run with --registry $registry or HORUS_REGISTRY=$registry"
           fi
           release=false
-          if [ "$GITHUB_REF" = "refs/tags/v$version" ]; then
+          if [[ "$GITHUB_REF" =~ ^refs/tags/v${version}(-rc[0-9]+|-rc\.[0-9]+)?$ ]]; then
             release=true
           fi
           {
@@ -174,13 +174,21 @@ jobs:
         env:
           COMMIT_TAG: ${{ needs.plan.outputs.commit_tag }}-${{ matrix.flavor }}
           RELEASE: ${{ needs.plan.outputs.release }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           docker tag "$IMAGE" "$REPOSITORY:$COMMIT_TAG"
           docker push "$REPOSITORY:$COMMIT_TAG"
           tags="$COMMIT_TAG"
           if [ "$RELEASE" = "true" ]; then
-            docker push "$IMAGE"
-            tags="$tags ${IMAGE##*:}"
+            if [[ "$REF_NAME" == *-rc* || "$REF_NAME" == *-RC* ]]; then
+              RC_TAG="${REF_NAME#v}-${FLAVOR}"
+              docker tag "$IMAGE" "$REPOSITORY:$RC_TAG"
+              docker push "$REPOSITORY:$RC_TAG"
+              tags="$tags $RC_TAG"
+            else
+              docker push "$IMAGE"
+              tags="$tags ${IMAGE##*:}"
+            fi
           fi
           digest="$(docker buildx imagetools inspect "$REPOSITORY:$COMMIT_TAG" --format '{{.Manifest.Digest}}')"
           {
@@ -213,3 +221,152 @@ jobs:
             echo "- digest: \`${DIGEST:-none}\`"
             echo "- size unpacked: $(( size / 1000000 )) MB, built in ${BUILD_SECONDS:-?} s"
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  bundle:
+    name: Bundle · ${{ matrix.service }} · ${{ matrix.flavor }}
+    needs: [plan, image]
+    if: needs.plan.outputs.release == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [mas, agent, knowledge_store, web-client, llm-mock]
+        flavor: [cpu, gpu]
+        exclude:
+          - service: llm-mock
+            flavor: gpu
+        include:
+          - flavor: cpu
+            compose_files: docker-compose.yml:docker-compose.cpu.yml
+          - flavor: gpu
+            compose_files: docker-compose.yml
+          - service: mas
+            requirements: src/services/mas/requirements.txt
+          - service: agent
+            requirements: src/services/agent/requirements.txt
+          - service: knowledge_store
+            requirements: src/services/knowledge-store/requirements.txt
+          - service: llm-mock
+            compose_files: docker-compose.yml:docker-compose.cpu.yml:docker-compose.mock.yml
+    env:
+      SERVICE: ${{ matrix.service }}
+      FLAVOR: ${{ matrix.flavor }}
+      HORUS_REGISTRY: ${{ needs.plan.outputs.registry }}
+      HORUS_VERSION: ${{ needs.plan.outputs.version }}
+      COMMIT_TAG: ${{ needs.plan.outputs.commit_tag }}
+      REF_NAME: ${{ github.ref_name }}
+      EVENT_NAME: ${{ github.event_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: src/services/PYTHON_VERSION
+
+      - name: Provide the compose configuration
+        run: cp src/infra/.env.example src/infra/.env
+
+      - name: Generate and package the bundle
+        run: |
+          BUNDLE_NAME="bundle-${{ matrix.service }}-${{ matrix.flavor }}-${{ needs.plan.outputs.version }}"
+          STAGING_DIR="dist/$BUNDLE_NAME"
+          mkdir -p "$STAGING_DIR"
+          COMPOSE_STR="${{ matrix.compose_files }}"
+          COMPOSE_FLAGS=$(echo "$COMPOSE_STR" | sed 's/:/ -f /g' | sed 's/^/-f /')
+          cd src/infra
+          docker compose $COMPOSE_FLAGS config > "../../$STAGING_DIR/docker-compose.yml"
+          cd ../..
+
+          cp VERSION "$STAGING_DIR/VERSION"
+
+          if [ -n "${{ matrix.requirements }}" ] && [ -f "${{ matrix.requirements }}" ]; then
+            cp "${{ matrix.requirements }}" "$STAGING_DIR/requirements.txt"
+          fi
+
+          SAFE_SERVICE="${SERVICE//_/-}"
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            IMAGE="${HORUS_REGISTRY}/horus-${SAFE_SERVICE}:${COMMIT_TAG}-${FLAVOR}"
+          elif [[ "$REF_NAME" == *-rc* || "$REF_NAME" == *-RC* ]]; then
+            RC_TAG="${REF_NAME#v}-${FLAVOR}"
+            IMAGE="${HORUS_REGISTRY}/horus-${SAFE_SERVICE}:${RC_TAG}"
+          else
+            IMAGE="${HORUS_REGISTRY}/horus-${SAFE_SERVICE}:${HORUS_VERSION}-${FLAVOR}"
+          fi
+          docker pull "$IMAGE"
+
+          python -m pip install pyyaml
+          python scripts/licences/fetch-gpl-sources.py "$IMAGE" --out "$STAGING_DIR/gpl-sources"
+
+          tar -czvf "${BUNDLE_NAME}.tar.gz" -C "dist/$BUNDLE_NAME" .
+
+      - name: Verify bundle contents and version
+        run: |
+          BUNDLE_FILE="bundle-${{ matrix.service }}-${{ matrix.flavor }}-${{ needs.plan.outputs.version }}.tar.gz"
+
+          if [ ! -s "$BUNDLE_FILE" ]; then
+            echo "::error::$BUNDLE_FILE archive is empty or not found."
+            exit 1
+          fi
+
+          for file in "docker-compose.yml" "VERSION"; do
+            if ! tar -tf "$BUNDLE_FILE" | grep -q "$file"; then
+              echo "::error::Invalid Bundle : $file is missing."
+              exit 1
+            fi
+          done
+
+          tar -tvf "$BUNDLE_FILE"
+          if [ -n "${{ matrix.requirements }}" ]; then
+            if ! tar -tf "$BUNDLE_FILE" | grep -q "requirements.txt"; then
+              echo "::error::Invalid Bundle : requirements.txt is missing."
+              exit 1
+            fi
+            if ! tar -tf "$BUNDLE_FILE" | grep -q "gpl-sources"; then
+              echo "::error::Invalid Bundle : gpl-sources folder is missing for this service."
+              exit 1
+            fi
+          fi
+
+          ARCHIVE_VERSION=$(tar -xOf "$BUNDLE_FILE" VERSION | tr -d '[:space:]')
+          if [ "$ARCHIVE_VERSION" != "${HORUS_VERSION}" ]; then
+            echo "::error::Mismatch de version ! L'archive contient $ARCHIVE_VERSION mais on attend ${HORUS_VERSION}."
+            exit 1
+          fi
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.4.0
+        with:
+          name: bundle-${{ matrix.service }}-${{ matrix.flavor }}
+          path: bundle-${{ matrix.service }}-${{ matrix.flavor }}-${{ needs.plan.outputs.version }}.tar.gz
+          retention-days: 14
+
+
+  release:
+    name: Create GitHub Release
+    needs: [plan, image, bundle]
+    if: needs.plan.outputs.release == 'true' # Uniquement si c'est un tag de version (v*)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download all bundles
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          pattern: bundle-*
+          path: all-bundles
+
+      - name: Flatten directory structure
+        run: |
+          mkdir -p assets
+          find all-bundles -name "*.tar.gz" -exec cp {} assets/ \;
+          ls -lh assets/
+
+      - name: Publish Release and Upload Assets
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ needs.plan.outputs.version }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-RC') }}
+          files: assets/*.tar.gz

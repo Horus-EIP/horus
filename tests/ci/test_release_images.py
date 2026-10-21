@@ -173,6 +173,7 @@ class ReleaseWorkflow(unittest.TestCase):
         cls.workflow = load_yaml(WORKFLOW)
         cls.plan = cls.workflow["jobs"]["plan"]
         cls.job = cls.workflow["jobs"]["image"]
+        cls.bundle = cls.workflow["jobs"]["bundle"]
         cls.matrix = cls.job["strategy"]["matrix"]
         cls.steps = cls.job["steps"]
 
@@ -258,13 +259,26 @@ class ReleaseWorkflow(unittest.TestCase):
     def test_every_build_gets_a_commit_tag_and_only_a_release_moves_the_version_tag(self):
         _, plan = self.step(self.plan, "GITHUB_OUTPUT")
         self.assertIn('commit_tag=sha-${GITHUB_SHA::12}', plan["run"])
-        self.assertIn('if [ "$GITHUB_REF" = "refs/tags/v$version" ]; then\n  release=true',
-                      plan["run"])
+        self.assertIn('^refs/tags/v${version}(-rc[0-9]+|-rc\\.[0-9]+)?$', plan["run"])
         _, push = self.step(self.job, "docker push")
         self.assertIn('docker push "$REPOSITORY:$COMMIT_TAG"', push["run"])
-        self.assertIn('if [ "$RELEASE" = "true" ]; then\n  docker push "$IMAGE"', push["run"])
+        self.assertIn('RC_TAG="${REF_NAME#v}-${FLAVOR}"', push["run"])
+        self.assertIn('docker push "$IMAGE"', push["run"])
         self.assertEqual(push["env"]["COMMIT_TAG"],
                          "${{ needs.plan.outputs.commit_tag }}-${{ matrix.flavor }}")
+
+    def test_bundle_uses_the_same_rc_and_dispatch_image_tags_as_the_image_job(self):
+        env = self.bundle["env"]
+        self.assertEqual(env["SERVICE"], "${{ matrix.service }}")
+        self.assertEqual(env["FLAVOR"], "${{ matrix.flavor }}")
+        self.assertEqual(env["COMMIT_TAG"], "${{ needs.plan.outputs.commit_tag }}")
+        self.assertEqual(env["REF_NAME"], "${{ github.ref_name }}")
+        _, push = self.step(self.job, "docker push")
+        _, generate = self.step(self.bundle, "docker pull")
+        self.assertIn('RC_TAG="${REF_NAME#v}-${FLAVOR}"', push["run"])
+        self.assertIn('RC_TAG="${REF_NAME#v}-${FLAVOR}"', generate["run"])
+        self.assertIn('SAFE_SERVICE="${SERVICE//_/-}"', generate["run"])
+        self.assertIn('${COMMIT_TAG}-${FLAVOR}', generate["run"])
 
     def test_a_release_tag_must_name_the_version_file(self):
         _, step = self.step(self.plan, "check-versions.py --tag")
