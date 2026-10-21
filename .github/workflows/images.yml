@@ -306,7 +306,9 @@ jobs:
           python -m pip install pyyaml
           python scripts/licences/fetch-gpl-sources.py "$IMAGE" --out "$STAGING_DIR/gpl-sources"
 
-          tar -czvf "${BUNDLE_NAME}.tar.gz" -C "dist/$BUNDLE_NAME" .
+          cd "dist/$BUNDLE_NAME"
+          tar -czvf "../../${BUNDLE_NAME}.tar.gz" *
+          cd ../..
 
       - name: Verify bundle contents and version
         run: |
