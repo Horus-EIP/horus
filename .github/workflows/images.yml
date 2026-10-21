@@ -153,7 +153,7 @@ jobs:
         run: |
           size=\$(docker image inspect --format '{{.Size}}' "\${IMAGE:-none}" 2>/dev/null || echo 0)
           {
-            echo "### SERVICE · FLAVOR"
+            echo "### SERVICE · {FLAVOR}"
             echo ""
             echo "- image: \`${IMAGE:-not named}\`"
             echo "- pushed tags: \${PUSHED_TAGS:-none}"
@@ -194,8 +194,6 @@ jobs:
             fi
             echo ""
           } | tee -a "\$GITHUB_STEP_SUMMARY"
-
-
 
       - name: Fail on CUDA packages or any torch in the CPU image
         if: matrix.flavor == 'cpu' && matrix.requirements
