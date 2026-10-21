@@ -263,6 +263,14 @@ jobs:
         with:
           python-version-file: src/services/PYTHON_VERSION
 
+
+      - name: Sign in to the registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ needs.plan.outputs.registry_host }}
+          username: ${{ vars.HORUS_REGISTRY_USERNAME || github.actor }}
+          password: ${{ secrets.HORUS_REGISTRY_TOKEN || secrets.GITHUB_TOKEN }}
+
       - name: Provide the compose configuration
         run: cp src/infra/.env.example src/infra/.env
 
