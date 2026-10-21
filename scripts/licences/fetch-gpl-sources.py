@@ -23,6 +23,7 @@ COMPONENTS = Path(__file__).resolve().parent / "components.yaml"
 SNAPSHOT = "https://snapshot.debian.org"
 DEBIAN_ARCHIVES = ("debian", "debian-security")
 APORTS = "https://gitlab.alpinelinux.org/alpine/aports"
+APORTS_MIRROR_RAW = "https://raw.githubusercontent.com/alpinelinux/aports"
 ALPINE_REPOSITORIES = ("main", "community")
 DISTFILES = "https://distfiles.alpinelinux.org/distfiles"
 APKBUILD_SOURCES = ('cat > /tmp/APKBUILD && cd /tmp && . ./APKBUILD >/dev/null 2>&1; '
@@ -101,10 +102,16 @@ def choose_debian_files(listing: dict) -> list[dict]:
 
 def alpine_recipe(origin: str, commit: str) -> tuple[str, bytes]:
     for repository in ALPINE_REPOSITORIES:
-        try:
-            return repository, fetch(f"{APORTS}/-/raw/{commit}/{repository}/{origin}/APKBUILD")
-        except urllib.error.HTTPError:
-            continue
+        urls = (
+            f"{APORTS}/-/raw/{commit}/{repository}/{origin}/APKBUILD",
+            f"{APORTS_MIRROR_RAW}/{commit}/{repository}/{origin}/APKBUILD",
+        )
+        for url in urls:
+            try:
+                return repository, fetch(url)
+            except urllib.error.HTTPError as error:
+                error.close()
+                continue
     raise OSError(f"{origin}: no APKBUILD at aports commit {commit}")
 
 
@@ -131,17 +138,24 @@ def parse_apkbuild_sources(out: str) -> list[dict]:
             url, name = entry, entry.rsplit("/", 1)[-1]
         if "://" in url:
             found.append({"name": name, "url": url, "sha512": digests.get(name, "")})
+        else:
+            found.append({"name": name, "path": url, "sha512": digests.get(name, "")})
     return found
 
 
 def alpine_files(image: str, origin: str, commit: str, branch: str) -> list[dict]:
     repository, apkbuild = alpine_recipe(origin, commit)
-    files = [{"name": f"aports-{origin}-{commit[:12]}.tar.gz", "sha1": "",
-              "url": f"{APORTS}/-/archive/{commit}/aports-{commit}.tar.gz?path={repository}/{origin}"}]
+    raw_recipe = f"{APORTS_MIRROR_RAW}/{commit}/{repository}/{origin}"
+    files = [{"name": "APKBUILD", "sha512": "", "url": f"{raw_recipe}/APKBUILD"}]
     for source in apkbuild_sources(image, apkbuild):
-        mirror = f"{DISTFILES}/{branch}/{source['name']}"
-        files.append({"name": source["name"], "sha512": source["sha512"],
-                      "url": mirror if exists(mirror) else source["url"]})
+        if "path" in source:
+            path = urllib.parse.quote(source["path"], safe="/")
+            files.append({"name": source["name"], "sha512": source["sha512"],
+                          "url": f"{raw_recipe}/{path}"})
+        else:
+            mirror = f"{DISTFILES}/{branch}/{source['name']}"
+            files.append({"name": source["name"], "sha512": source["sha512"],
+                          "url": mirror if exists(mirror) else source["url"]})
     return files
 
 

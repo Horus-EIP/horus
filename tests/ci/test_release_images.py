@@ -280,6 +280,12 @@ class ReleaseWorkflow(unittest.TestCase):
         self.assertIn('SAFE_SERVICE="${SERVICE//_/-}"', generate["run"])
         self.assertIn('${COMMIT_TAG}-${FLAVOR}', generate["run"])
 
+    def test_bundle_verification_lists_archive_once_without_a_sigpipe_pipeline(self):
+        _, verify = self.step(self.bundle, 'tar -tzf "$BUNDLE_FILE"')
+        self.assertIn('tar -tzf "$BUNDLE_FILE" > bundle-files.txt', verify["run"])
+        self.assertNotIn('tar -tf "$BUNDLE_FILE" | grep', verify["run"])
+        self.assertIn('grep -F -q "gpl-sources/" bundle-files.txt', verify["run"])
+
     def test_a_release_tag_must_name_the_version_file(self):
         _, step = self.step(self.plan, "check-versions.py --tag")
         self.assertEqual(step["if"], "startsWith(github.ref, 'refs/tags/')")

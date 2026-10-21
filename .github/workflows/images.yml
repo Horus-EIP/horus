@@ -319,20 +319,20 @@ jobs:
             exit 1
           fi
 
+          tar -tzf "$BUNDLE_FILE" > bundle-files.txt
           for file in "docker-compose.yml" "VERSION"; do
-            if ! tar -tf "$BUNDLE_FILE" | grep -q "$file"; then
+            if ! grep -F -x -q "$file" bundle-files.txt; then
               echo "::error::Invalid Bundle : $file is missing."
               exit 1
             fi
           done
 
-          tar -tvf "$BUNDLE_FILE"
           if [ -n "${{ matrix.requirements }}" ]; then
-            if ! tar -tf "$BUNDLE_FILE" | grep -q "requirements.txt"; then
+            if ! grep -F -x -q "requirements.txt" bundle-files.txt; then
               echo "::error::Invalid Bundle : requirements.txt is missing."
               exit 1
             fi
-            if ! tar -tf "$BUNDLE_FILE" | grep -q "gpl-sources"; then
+            if ! grep -F -q "gpl-sources/" bundle-files.txt; then
               echo "::error::Invalid Bundle : gpl-sources folder is missing for this service."
               exit 1
             fi
@@ -340,7 +340,7 @@ jobs:
 
           ARCHIVE_VERSION=$(tar -xOf "$BUNDLE_FILE" VERSION | tr -d '[:space:]')
           if [ "$ARCHIVE_VERSION" != "${HORUS_VERSION}" ]; then
-            echo "::error::Mismatch de version ! L'archive contient $ARCHIVE_VERSION mais on attend ${HORUS_VERSION}."
+            echo "::error::Mismatch of version ! Archive contains $ARCHIVE_VERSION but we are expecting ${HORUS_VERSION}."
             exit 1
           fi
 
