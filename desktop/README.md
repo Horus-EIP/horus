@@ -28,7 +28,7 @@ desktop/
    one row per service with its health, elapsed time, and the raw Docker
    output behind a disclosure triangle.
 4. On the installer's `ready` event, opens a second window at
-   `http://localhost:3000` and hides the status window.
+   `https://localhost:3000` and hides the status window.
 5. Leaves Stop / Restart / Open install-log.txt / Open horus-profile.json on the
    native menu **and** on the status window, because the app window shows a
    remote page that has no way to call back into the shell.
@@ -71,7 +71,7 @@ it. A later install run that gets past the hardware decision clears it.
 
 The status screen is a local page; the Horus client is a remote one. They cannot
 be the same document, and the client **must** keep being served from
-`http://localhost:3000` by its own container:
+`https://localhost:3000` by its own container:
 
 * its session token lives in the `localStorage` of that origin, so re-hosting
   the client - bundling a static export, proxying it, serving it from the app -

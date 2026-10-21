@@ -34,7 +34,7 @@ npm ci
 npm run dev
 ```
 
-Open http://localhost:3000. Unit tests (Vitest, `__tests__/`) and the type check:
+The deployed stack is served at `https://localhost:3000` through the HTTPS gateway; provide its certificate and key as described in [Getting Started](../../../docs/getting-started.md#https-and-lan-access). When running `npm run dev` directly, use the development server's local URL. Unit tests (Vitest, `__tests__/`) and the type check:
 
 ```bash
 npx vitest run

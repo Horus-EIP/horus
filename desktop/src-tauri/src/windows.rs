@@ -9,7 +9,7 @@ use crate::state::Shell;
 pub const STATUS_LABEL: &str = "status";
 pub const APP_LABEL: &str = "main";
 
-pub const WEB_URL: &str = "http://localhost:3000";
+pub const WEB_URL: &str = "https://localhost:3000";
 
 const HARDEN_SCRIPT: &str = r#"
 (function () {

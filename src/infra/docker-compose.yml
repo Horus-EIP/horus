@@ -20,7 +20,49 @@ services:
   # =============================================================================
   # CORE APPLICATION SERVICES
   # =============================================================================
-  
+
+  gateway:
+    image: nginx:1.30.6-alpine
+    container_name: gateway
+    logging: *logging
+    restart: unless-stopped
+    ports:
+      - "${HORUS_WEB_BIND:-127.0.0.1}:3000:443"
+    env_file:
+      - .env
+    environment:
+      - CLIENT_HOST=web_client
+      - CLIENT_PORT=3000
+      - MAS_HOST=mas
+      - MAS_PORT=8000
+      - KNOWLEDGE_HOST=knowledge_store
+      - KNOWLEDGE_PORT=8080
+    volumes:
+      - ./nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - type: bind
+        source: ./certs/horus.crt
+        target: /etc/nginx/certs/horus.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./certs/horus.key
+        target: /etc/nginx/certs/horus.key
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - horus-net
+    depends_on:
+      mas:
+        condition: service_healthy
+      knowledge_store:
+        condition: service_healthy
+      agent:
+        condition: service_healthy
+      web-client:
+        condition: service_healthy
+
   rabbitmq:
     image: rabbitmq:4.1.2-management
     container_name: rabbitmq
@@ -138,12 +180,13 @@ services:
         notices: ../..
       args:
         ORCHESTRATOR_URL: http://mas:8000
-        NEXT_PUBLIC_KNOWLEDGE_STORE_URL: http://localhost:8080
-        # Browser calls KS on host port; leave empty unless a gateway adds a path prefix.
-        NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX: ${NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX:-}
+        NEXT_PUBLIC_KNOWLEDGE_STORE_URL: ""
+        NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX: "${NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX:-/api/knowledge}"
     container_name: web_client
     logging: *logging
     restart: unless-stopped
+    expose:
+      - "3000"
     depends_on:
       mas:
         condition: service_healthy
@@ -159,8 +202,6 @@ services:
       timeout: 15s
       retries: 5
       start_period: 120s
-    ports:
-      - "${HORUS_WEB_BIND:-127.0.0.1}:3000:3000"
     networks:
       - horus-net
     environment:
@@ -171,8 +212,8 @@ services:
       - LOKI_URL=http://loki:3100
       - PROMETHEUS_URL=http://prometheus:9090
       - TEMPO_URL=http://tempo:3200
-      - NEXT_PUBLIC_KNOWLEDGE_STORE_URL=http://localhost:8080
-      - NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX=${NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX:-}
+      - NEXT_PUBLIC_KNOWLEDGE_STORE_URL=
+      - NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX=${NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX:-/api/knowledge}
 
   agent:
     image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-agent:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-gpu}

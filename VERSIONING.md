@@ -87,7 +87,7 @@ SemVer only makes sense once we say what counts as a break. For Horus, these thi
    - database schema (Alembic migrations)
    - ChromaDB collections and the embedding model
 4. **The licence-key format**, once licence keys exist (ADR-004).
-5. **What the desktop app relies on:** the installer's `--start`, `--restart`, `--stop` and `--json-events`, and the web client at `http://localhost:3000`.
+5. **What the desktop app relies on:** the installer's `--start`, `--restart`, `--stop` and `--json-events`, and the web client at `https://localhost:3000`.
 6. **Documented behaviour:** roles and permissions (admin / manager / user, see "Who can see what" in `docs/security.md`), the password policy, what each page does.
 
 Anything else (internal modules, refactors, test code, internal prompts that don't change behaviour) can change in any release.

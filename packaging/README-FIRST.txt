@@ -45,7 +45,7 @@ Prefer not to bypass a warning? Fair. Use the browser instead (below).
 
 WHEN IT FINISHES
 Open Horus from the app folder here (Linux: install the .deb in it) -
-it starts and stops Horus for you. Or use http://localhost:3000.
+it starts and stops Horus for you. Or use https://localhost:3000.
 Sign in with the username and password the installer prints at the end.
 It shows a password it generated only once; it is also in
 src/infra/.env, as SUPER_USER_PASSWORD.

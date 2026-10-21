@@ -60,7 +60,7 @@ You need the Horus-Beta ZIP and the access token we sent you.
    - macOS: right-click `START-HERE-macOS.command` and choose Open
    - Linux: `./START-HERE-Linux.sh`
 
-The START-HERE files run `installer/horus_install.py`. It checks Docker, Compose, the disk, the network and the ports, picks a profile for your hardware, asks which folders Horus may read (read-only), downloads the prebuilt images and the model, and starts everything. It does not build anything. When it finishes, open http://localhost:3000 and sign in with the user name and password it prints.
+The START-HERE files run `installer/horus_install.py`. It checks Docker, Compose, the disk, the network and the ports, picks a profile for your hardware, asks which folders Horus may read (read-only), downloads the prebuilt images and the model, and starts everything. It does not build anything. Configure a trusted TLS certificate for your hostname/IP first (see [Getting started](docs/getting-started.md#https-and-lan-access)). When it finishes, open https://localhost:3000 and sign in with the user name and password it prints.
 
 - To see which profile it would pick without changing anything: `--dry-run`.
 - To stop and keep your data: run your START-HERE file with `--stop`. To remove everything: `--uninstall` (this deletes the documents you added).
@@ -84,7 +84,7 @@ Or, on a machine with an NVIDIA GPU, with Docker Compose directly:
 
 ```bash
 cd src/infra
-./init-env.sh             # creates .env from .env.example with a random JWT secret and Valkey password
+./init-env.sh             # creates .env and the local HTTPS certificate if missing
 docker compose up --build
 ```
 
@@ -182,7 +182,7 @@ LICENSES/, NOTICES/       Licence texts and NOTICE files of the third-party comp
 
 | Service | URL | Notes |
 |---------|-----|-------|
-| Web Client | http://localhost:3000 | Dashboard, chat, knowledge store UI |
+| Web Client | https://localhost:3000 | Dashboard, chat, knowledge store UI |
 | MAS API | http://localhost:8000 | Swagger at `/docs` |
 | Agent | http://localhost:8001 | |
 | Knowledge Store | http://localhost:8080 | Swagger at `/docs` (`root_path` is only for proxies) |
@@ -190,7 +190,7 @@ LICENSES/, NOTICES/       Licence texts and NOTICE files of the third-party comp
 | RabbitMQ UI | http://localhost:15672 | `RABBITMQ_USER` / `RABBITMQ_PASSWORD` in `.env` |
 | PostgreSQL, Valkey, RabbitMQ (AMQP) | 5432, 6379, 5672 | `DB_PORT`, `REDIS_PORT`, `RABBITMQ_PORT` |
 | Tempo (OTLP) | 4317 (gRPC), 4318 (HTTP) | |
-| Observability | http://localhost:3000/admin/logs · /admin/metrics · /admin/traces | Admin role, in the web client |
+| Observability | https://localhost:3000/admin/logs · /admin/metrics · /admin/traces | Admin role, in the web client |
 | PgAdmin | http://localhost:5433 | Development tool, only with `docker compose --profile dev-tools up` |
 
 Every port is published on 127.0.0.1, the web client's included, so Horus answers on this machine only; Prometheus, Loki, Tempo's query port and the CPU model server are not published at all. To reach the web client from other machines, set `HORUS_WEB_BIND=0.0.0.0` in `src/infra/.env`: the web client, its sign-in page and the MAS API behind it then answer on the network, but chat and the knowledge store still do not work from another machine. From scripts, use `127.0.0.1` rather than `localhost`: on Windows a client that tries `::1` first waits about 2 s per connection before it falls back to 127.0.0.1.
