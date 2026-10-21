@@ -23,7 +23,6 @@ from agents.registry_tool_functions import (
     create_agent,
     delete_agent,
     get_agent_details,
-    get_agent_id,
     get_all_agents,
     regenerate_agent_api_key,
     update_alive_agent_status,
@@ -78,20 +77,17 @@ async def handle_agent_creation(
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
 
-    agent_exists = get_agent_id(agent.name, db)
-
-    if agent_exists is not None:
-        raise HTTPException(
-            status_code=409, detail=f"An agent already has the name '{agent.name}'"
-        )
-
-    agent_id, api_key = await create_agent(
+    agent_id, api_key, alive = await create_agent(
         agent.name,
         agent.skills,
         agent.description,
         db,
         agent.type or AgentTypes.GENERAL,
     )
+
+    if alive:
+        log_error("AGENT", f"An agent already has the name {agent.name} and is active")
+        raise HTTPException(status_code=409, detail="Failed to create agent")
 
     if agent_id is None:
         log_error("AGENT", f"Failed to create agent {agent.name}")

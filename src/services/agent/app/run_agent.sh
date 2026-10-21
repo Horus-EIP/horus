@@ -4,7 +4,7 @@
 export ORCHESTRATOR_URL="http://localhost:8000"
 
 # Credentials matching src/infra/.env
-export ORCHESTRATOR_USERNAME="admin"
+export ORCHESTRATOR_USERNAME="agent"
 export ORCHESTRATOR_PASSWORD="secret"
 
 # RabbitMQ Credentials (from src/infra/.env)

@@ -10,8 +10,28 @@ What Horus is not:
 
 - **Not a cloud service.** Nothing is hosted for you. Horus runs on your machine and your documents stay there. The install downloads the container images and the language model once.
 - **Not a general chatbot.** It is built to answer from the documents you give it.
-- **Not open source.** Horus is proprietary. Using it needs a signed agreement (see [License](#license)).
+- **Not open source.** Horus is proprietary. Using it needs a signed agreement; only its benchmark and evaluation kit is open source (see [License](#license)).
 - **Not finished.** Horus is a beta for invited testers. Its version is in `VERSION`.
+
+## What it looks like
+
+![Chat: a question about the Q4 2025 financial report, answered with the document it came from](docs/assets/readme/chat.png)
+
+A question about the demo documents: the agents search them and answer, citing the documents they used.
+
+![Knowledge store with the five demo documents](docs/assets/readme/knowledge-store.png)
+
+The knowledge store. Each document added gets a category and a summary.
+
+![Dashboard with the agents online and the task counts](docs/assets/readme/dashboard.png)
+
+The dashboard: the agents online, their skills, and the tasks.
+
+![One trace: the agent handing an answer back to MAS, with each database call](docs/assets/readme/admin-traces.png)
+
+For admins, the logs, metrics and traces of the whole stack, inside the web client. Here, one trace across the agent and MAS: the agent handing back an answer, down to each database call.
+
+Taken on 14/10/2026 with Horus 0.1.2, local mode, `cpu-standard` profile (Qwen3-4B-Instruct-2507, Q4_K_M), with the five documents in `demo_assets/`.
 
 ## Requirements
 
@@ -22,6 +42,7 @@ What Horus is not:
 | Free disk | **150 GB**. The installer checks this and stops below it. With an NVIDIA GPU 125 GB is enough: re-run with `--skip-disk-check`. It settles to about 130 GB (CPU) or 110 GB (GPU) after the install. These figures were measured when the images were built on a tester's machine; the download of the prebuilt images has not been measured yet. |
 | With an NVIDIA GPU | Docker must be able to use the card (NVIDIA Container Toolkit; on Windows, WSL 2 and the NVIDIA driver). At least 6.0 GiB of VRAM. The installer picks `gpu-8g` from 6.0 to under 10.0 GiB, `gpu-16g` from 10.0 to under 17.0, `gpu-24g` from 17.0 to under 25.0, and `gpu-large` from 25.0. Only `gpu-8g` has been measured. AMD and Intel GPUs, and every Mac, run on the CPU. |
 | Without a usable NVIDIA GPU | Memory Docker can use: **15.0 GiB** or more for `cpu-standard`, **13.5 to under 15.0 GiB** for `cpu-lean`. Under 13.5 GiB the installer stops before any large download and says what to change. On Windows Docker gets half of the RAM unless WSL is given more, so in practice that takes a 24 GB machine. These are the planning figures of [ADR-006](docs/adr/ADR-006-low-ram-machines.md), kept until the run on the 16 GB reference machine. A first run on a development laptop gives 10.5 GiB for `cpu-standard` by the ADR's rule. |
+| Mock AI mode | No GPU and no model download: **3.0 GiB** of memory for Docker and **12 GiB** of free disk (23 GiB with `--build-from-source`). The answers and the search are simulated, so it is for demos and tests ([Mock AI mode](#mock-ai-mode-horus-without-any-ai-model)). |
 | Time | A first install that built the images took 1.5 to 2 hours. The beta installer downloads prebuilt images instead; that has not been timed yet. |
 
 The prebuilt images are built for x86-64 only. On Apple Silicon Docker runs them through emulation.
@@ -146,12 +167,14 @@ src/
 installer/                Beta installer: hardware profiles, preflight, model download
 packaging/                START-HERE scripts, README-FIRST.txt, release notes, bundle builder
 desktop/                  Desktop app (Tauri) that starts and stops Horus
+opensource/               The benchmark and evaluation kit (Apache-2.0), a copy of Horus-EIP/horus-bench-kit
 models/                   Model manifest; the CPU model file lands here
 benchmarks/               Measured results (JSON) and how to produce them
 tests/                    pytest suites (MAS, agent, knowledge store, CI wiring) and the eval test set
 scripts/                  Benchmarks, evaluation, load and resilience tests, integration checks
 demo_assets/              The sample documents used by demos and the test set
 docs/                     Project documentation (MkDocs site); adr/ holds the decision records
+LICENSES/, NOTICES/       Licence texts and NOTICE files of the third-party components
 .github/workflows/        CI, eval test set, release images, desktop release
 ```
 
@@ -170,7 +193,7 @@ docs/                     Project documentation (MkDocs site); adr/ holds the de
 | Observability | http://localhost:3000/admin/logs · /admin/metrics · /admin/traces | Admin role, in the web client |
 | PgAdmin | http://localhost:5433 | Development tool, only with `docker compose --profile dev-tools up` |
 
-Only the web client listens on every network interface. Every other port is published on 127.0.0.1, so it answers on this machine only; Prometheus, Loki, Tempo's query port and the CPU model server are not published at all. From scripts, use `127.0.0.1` rather than `localhost`: on Windows a client that tries `::1` first waits about 2 s per connection before it falls back to 127.0.0.1.
+Every port is published on 127.0.0.1, the web client's included, so Horus answers on this machine only; Prometheus, Loki, Tempo's query port and the CPU model server are not published at all. To reach the web client from other machines, set `HORUS_WEB_BIND=0.0.0.0` in `src/infra/.env`: the web client, its sign-in page and the MAS API behind it then answer on the network, but chat and the knowledge store still do not work from another machine. From scripts, use `127.0.0.1` rather than `localhost`: on Windows a client that tries `::1` first waits about 2 s per connection before it falls back to 127.0.0.1.
 
 ## Running tests
 
@@ -217,6 +240,7 @@ Full documentation lives under [`docs/`](docs/) and is published as a browsable 
 | Mock AI mode (Horus without a language model) | [docs/mock-ai.md](docs/mock-ai.md) |
 | Security and compliance (RBAC, audit, data, telemetry) | [docs/security.md](docs/security.md) |
 | How to contribute | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| CI and branches (branch model, sync to the Epitech repository, CI jobs) | [docs/ci-and-branches.md](docs/ci-and-branches.md) |
 | Code style | [docs/contributing.md](docs/contributing.md) |
 | Test strategy | [TESTING.md](TESTING.md) |
 | Versions and releases | [VERSIONING.md](VERSIONING.md) |

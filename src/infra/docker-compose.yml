@@ -196,8 +196,10 @@ services:
       - HORUS_AI_MODE=local
       # Overrides host-oriented .env (localhost) with Docker network hosts.
       - ORCHESTRATOR_URL=http://mas:8000
-      - ORCHESTRATOR_USERNAME=${SUPER_USER_USERNAME}
-      - ORCHESTRATOR_PASSWORD=${SUPER_USER_PASSWORD}
+      # Legacy .env files have no agent credentials; use the old login until an upgrade
+      # generates the dedicated agent password.
+      - ORCHESTRATOR_USERNAME=${SUPER_AGENT_USERNAME:-agent}
+      - ORCHESTRATOR_PASSWORD=${SUPER_AGENT_PASSWORD:-${SUPER_USER_PASSWORD}}
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=${RABBITMQ_USER}

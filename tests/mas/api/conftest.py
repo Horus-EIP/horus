@@ -62,6 +62,11 @@ def as_user() -> dict:
     return _user_payload("user", user_id=3, username="user")
 
 
+@pytest.fixture
+def as_agent() -> dict:
+    return _user_payload("agent", user_id=4, username="agent")
+
+
 # --------------------------------------------------------------------------- #
 # App / client factory
 # --------------------------------------------------------------------------- #
@@ -155,4 +160,3 @@ def submit_task(routing_db, mas_client, monkeypatch):
         )
 
     return _submit
-

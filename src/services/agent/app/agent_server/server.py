@@ -26,6 +26,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from typing import Literal
 
 import requests
 from fastapi import FastAPI, Request
@@ -208,139 +209,107 @@ def _build_headers(
     return headers
 
 
-def _register_one_profile(profile) -> bool:
-    """Register a single profile with MAS. Returns True on success.
+RegistrationStatus = Literal["Pending", "Accepted", "Refused"]
 
-    Handles the 409 case by cleaning up any inactive entry with the same name
-    (e.g. from a previous container run) and retrying.
-    """
+
+def _register_one_profile(profile) -> RegistrationStatus:
+    """Register a profile, returning its outcome without cleaning up conflicts."""
     url = f"{ORCHESTRATOR_URL}/agents/register"
-    base_name = profile.name
-    name_variant = base_name
-    while True:
-        try:
-            payload = {
-                "name": name_variant,
-                "skills": profile.skills,
-                "description": profile.description,
-                "type": profile.type,
-            }
-            response = requests.post(
-                url, json=payload, headers=_build_headers(), timeout=5
-            )
-            if response.status_code == 200:
-                data = response.json()
-                profile.agent_id = data.get("agent_id")
-                profile.api_key = data.get("api_key")
-                logger.info(
-                    "Profile registered: name=%s id=%s type=%s",
-                    profile.name,
-                    profile.agent_id,
-                    profile.type,
-                )
-                return True
-            if response.status_code == 409:
-                # The worker is the canonical owner of its default profile
-                # names — any row in MAS with this name is from a previous
-                # container run and must be evicted, regardless of whether
-                # MAS still thinks it's active (a heartbeat 25s ago wins
-                # against MAS's 30s staleness check on a quick redeploy).
-                # Delete all rows matching the name, then retry with the same
-                # label so the UI never accumulates ``Foo-abc123`` ghosts.
-                logger.warning(
-                    "Profile '%s' already registered; reclaiming the name",
-                    name_variant,
-                )
-                deleted_any = False
-                try:
-                    list_resp = requests.get(
-                        f"{ORCHESTRATOR_URL}/agents/details/",
-                        headers=_build_headers(),
-                        timeout=5,
-                    )
-                    if list_resp.status_code == 200:
-                        ghosts = [
-                            a for a in list_resp.json()
-                            if a.get("name") == name_variant
-                        ]
-                        for ghost in ghosts:
-                            del_resp = requests.delete(
-                                f"{ORCHESTRATOR_URL}/agents/unregister/{ghost['id']}",
-                                headers=_build_headers(),
-                                timeout=5,
-                            )
-                            if del_resp.status_code == 200:
-                                logger.info(
-                                    "Evicted stale row name=%s id=%s",
-                                    name_variant,
-                                    ghost.get("id"),
-                                )
-                                deleted_any = True
-                            else:
-                                logger.warning(
-                                    "Could not delete %s: %s - %s",
-                                    ghost.get("id"),
-                                    del_resp.status_code,
-                                    del_resp.text,
-                                )
-                except Exception as cleanup_err:
-                    logger.warning("Stale cleanup failed: %s", cleanup_err)
-                if deleted_any:
-                    continue  # retry with the same name
-                # Cleanup couldn't free the name (permissions, race) — fall
-                # back to a unique suffix so registration at least succeeds.
-                name_variant = f"{base_name}-{uuid.uuid4().hex[:6]}"
-                continue
-            logger.error(
-                "Registration failed for %s: %s - %s",
+    try:
+        payload = {
+            "name": profile.name,
+            "skills": profile.skills,
+            "description": profile.description,
+            "type": profile.type,
+        }
+        response = requests.post(
+            url, json=payload, headers=_build_headers(), timeout=5
+        )
+        if response.status_code == 200:
+            data = response.json()
+            profile.agent_id = data.get("agent_id")
+            profile.api_key = data.get("api_key")
+            profile.status = "Accepted"
+            logger.info(
+                "Profile registered: name=%s id=%s type=%s",
                 profile.name,
-                response.status_code,
-                response.text,
+                profile.agent_id,
+                profile.type,
             )
-            agent_errors_total.labels(error_type="registration").inc()
-            return False
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
-            # Expected while MAS is still starting up; register_profiles() retries
-            # with backoff. Log without a traceback to avoid boot-time spam.
-            logger.warning(
-                "MAS not reachable yet for %s, will retry: %s", profile.name, exc
-            )
-            agent_errors_total.labels(error_type="registration").inc()
-            return False
-        except Exception as exc:
-            logger.error(
-                "Error registering %s (will retry): %s", profile.name, exc, exc_info=True
-            )
-            agent_errors_total.labels(error_type="registration").inc()
-            return False
+            return "Accepted"
+        if response.status_code == 409:
+            logger.warning("Profile '%s' is already registered.", profile.name)
+            return "Refused"
+
+        logger.error(
+            "Registration failed for %s: %s - %s",
+            profile.name,
+            response.status_code,
+            response.text,
+        )
+        agent_errors_total.labels(error_type="registration").inc()
+        return "Pending"
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+        logger.warning(
+            "MAS not reachable yet for %s, will retry: %s", profile.name, exc
+        )
+        agent_errors_total.labels(error_type="registration").inc()
+        return "Pending"
+    except Exception as exc:
+        logger.error(
+            "Error registering %s (will retry): %s", profile.name, exc, exc_info=True
+        )
+        agent_errors_total.labels(error_type="registration").inc()
+        return "Pending"
 
 
 def register_profiles():
-    """Register every profile with MAS; keeps retrying until at least one succeeds.
+    """Register profiles, retrying temporary failures and requiring the primary.
 
     Backward-compat: ``AGENT_ID`` / ``AGENT_API_KEY`` module globals are aliased
-    to the first successfully registered profile so older imports keep working.
+    to the primary profile so older imports keep working.
     """
     global AGENT_ID, AGENT_API_KEY
     backoff_seconds = 1
     while True:
-        any_success = False
         for profile in PROFILES:
-            if profile.agent_id:
+            if profile.agent_id or profile.status == "Refused":
                 continue
-            if _register_one_profile(profile):
-                any_success = True
-        if any(p.agent_id for p in PROFILES):
-            primary = get_primary_profile()
+            status = _register_one_profile(profile)
+            if status == "Refused":
+                profile.status = "Refused"
+            else:
+                profile.status = "Pending"
+
+        primary = get_primary_profile()
+        if primary.status == "Refused":
+            message = f"Primary agent profile {primary.name!r} is already registered"
+            logger.error(message)
+            agent_errors_total.labels(error_type="registration").inc()
+            raise RuntimeError(message)
+
+        if primary.agent_id:
             AGENT_ID = primary.agent_id
             AGENT_API_KEY = primary.api_key
+
+        unresolved = [
+            profile
+            for profile in PROFILES
+            if not profile.agent_id and profile.status != "Refused"
+        ]
+        if not unresolved:
+            if not primary.agent_id:
+                message = "No agent profiles could be registered with MAS"
+                logger.error(message)
+                agent_errors_total.labels(error_type="registration").inc()
+                raise RuntimeError(message)
             agent_registered.set(1)
             registered = [p.name for p in PROFILES if p.agent_id]
             logger.info("Registered %d profile(s): %s", len(registered), ", ".join(registered))
             return
-        if not any_success:
-            time.sleep(backoff_seconds)
-            backoff_seconds = min(backoff_seconds * 2, 30)
+
+        time.sleep(backoff_seconds)
+        backoff_seconds = min(backoff_seconds * 2, 30)
 
 
 # Legacy alias for any caller still importing ``register_agent``.

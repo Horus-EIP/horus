@@ -52,7 +52,7 @@ These need their own, stricter tests.
 | 2.10 | **End-to-end smoke** | Knowledge store health, unauthenticated call refused, admin login, token accepted, a worker agent registers, the demo document is ingested, a question about it, the answer is grounded, a negative control question | `installer/smoke.py` (9 steps) | Run by the installer, or `python installer/smoke.py` on a running stack | End of every install (unless `--skip-smoke`); every release candidate on a clean CPU machine and on a GPU machine; every push and pull request with no model at all (`ci.yml` job `e2e-mock`, [mock AI mode](docs/mock-ai.md)) |
 | 2.11 | **Acceptance (manual)** | Real users following written scenarios | `docs/eip_pool_tek5/Horus_ATP_v7.xlsx` in the team's private repository (37 scenarios, F1 to F37) | Testers and the results sheet | Before each beta or MINOR release |
 | 2.12 | **Performance and load** | Latency, throughput, retrieval quality, llama.cpp speed | `scripts/perf/` (locust, benchmarks), `scripts/benchmarks/` | locust, Python scripts | Before a MINOR release, and after a performance change. See `scripts/perf/README.md` and `benchmarks/README.md` |
-| 2.13 | **Static checks** | Lint, import order, likely bugs | Repo-wide | ruff 0.16.6 (CI), pre-commit (ruff `--fix`, `ruff-format`, docstring length), bandit (by hand) | ruff in CI; the last bandit report is `greenlight/code-quality-review/bandit_report.txt` (31/05/2026), in the team's private repository |
+| 2.13 | **Static checks** | Lint, import order, likely bugs | Repo-wide | ruff 0.16.6 (CI), pre-commit (ruff `--fix`, `ruff-format`, docstring length), bandit 1.9.4 (CI) | ruff and bandit in CI, on every push and pull request; bandit's report is in the job summary, and the job fails on a high-severity finding ([docs/ci-and-branches.md](docs/ci-and-branches.md)) |
 | 2.14 | **Model contract** | Every structured reply valid against its schema, no factual question answered directly (F20), answers cite a source, out-of-corpus questions refused, on the requests MAS and the agent really send; on the embeddings requests MAS and the knowledge store send, one vector per text at the size the service needs, the same vector for the same text, and each question closest to a passage of the document that answers it | `tests/contract/` | pytest | CI on the mock (`test-llm-mock`); by hand on a real model (`-m real_llm`) and on real embeddings servers (`-m real_embeddings`) |
 
 **What counts as a regression test:** any test written *because a bug happened* (section 4). It can be of any type above.
@@ -273,9 +273,11 @@ The plan is to turn the critical ones into tests under `tests/<service>/` marked
 
 | Job | What it runs |
 |---|---|
-| `lint` | `ruff check src tests scripts installer packaging`, ruff 0.16.6 |
+| `lint` | `ruff check src tests scripts installer packaging opensource`, ruff 0.16.6 |
+| `security` | bandit 1.9.4 (`bandit -c pyproject.toml`) on `src/`, `installer/` and `scripts/`: the full report goes to the job summary, then the job fails on a high-severity finding (`-lll`) |
 | `versions` | `python -m unittest discover -s tests/ci -v`, then `python scripts/ci/check-versions.py` |
 | `licences` | The licence scripts' tests, `scripts/licences/third_party_notices.py --check`, then `scripts/licences/check_licences.py`: fails on GPL, AGPL or SSPL in the Python packages, the web client's production dependencies or the desktop app's crates (LGPL is a warning) |
+| `bench-kit` | On Python 3.10 and 3.13: installs `opensource/horus-bench-kit` alone in a fresh venv, runs its tests against the installed package, builds its zip (`make-zip.py`), then `tests.ci.test_bench_kit` checks the kit holds no Horus content |
 | `cpu-build-wiring` | `python -m unittest discover -s tests/ci -p "test_cpu_torch_build.py" -v` |
 | `cpu-images` | Builds the mas, agent and knowledge-store images through the CPU overlay; fails on any CUDA package or torch (`scripts/ci/check-cpu-image.py`) |
 | `test-mas` | MAS tests, `-m "not requires_stack"`, coverage at least 85 % |
@@ -294,13 +296,13 @@ The plan is to turn the critical ones into tests under `tests/<service>/` marked
 |---|---|---|
 | `ruff check` | Yes | |
 | Python tests with coverage gates (MAS 85, agent 90, knowledge store 85) | Yes | |
-| Coverage table on every run, HTML reports when a test job fails | Yes; the README publishes the figures of 13/10/2026 | |
+| Coverage table on every run; the MAS, agent and knowledge-store reports when that job fails | Yes; the README publishes the figures of 13/10/2026 | |
 | Evaluation set checks | Yes, when its files change | |
 | Web client: `npm run lint`, `npm run typecheck`, `npm test` | No | Add a CI job |
 | Installer tests on every PR | Yes | |
 | `ruff format --check` | No (pre-commit only, ruff v0.6.9 there) | Add to CI |
 | Type checking (mypy) | No | Start with MAS auth and new code |
-| bandit | No (report run by hand) | Add to CI |
+| bandit | Yes, fails on high severity | Fail on medium too, once the 32 medium findings are fixed |
 | Smoke test | Yes, on the mock model server (`e2e-mock`) | On a real model by hand before a release |
 | Integration checks, grounding evaluation | No (live stack) | Run by hand before a release |
 

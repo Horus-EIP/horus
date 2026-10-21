@@ -11,8 +11,8 @@ What's exercised here:
   auto-generated ``task_id`` path, correlation-ID propagation, and the
   exception path that re-raises into a 500).
 * The MAS-facing helpers that ``requests`` drives — token caching / login /
-  failure, header building, profile registration (200 / 409-reclaim /
-  409-suffix-fallback / error / exception), heartbeat (success / 401-retry /
+  failure, header building, profile registration (accepted / refused /
+  temporary failure), heartbeat (success / 401-retry /
   non-200 / exception), ``send_result`` and ``send_step`` (success / non-200 /
   exception), and the ``lifespan`` startup that spins up the daemon threads.
 
@@ -85,6 +85,7 @@ def restore_module_state():
         live.name = snap.name
         live.type = snap.type
         live.skills = snap.skills
+        live.status = snap.status
 
 
 # --------------------------------------------------------------------------- #
@@ -231,106 +232,26 @@ class TestRegisterOneProfile:
             patch.object(server, "_build_headers", return_value={}),
             patch.object(server.requests, "post", return_value=resp) as mock_post,
         ):
-            assert server._register_one_profile(profile) is True
+            assert server._register_one_profile(profile) == "Accepted"
         assert profile.agent_id == "AID"
         assert profile.api_key == "AKEY"
         # Registered against the right endpoint with a JSON payload.
         assert mock_post.call_args.args[0].endswith("/agents/register")
         assert mock_post.call_args.kwargs["json"]["name"] == "Tester"
 
-    def test_conflict_reclaims_name_then_succeeds(self, restore_module_state):
+    def test_conflict_is_refused_without_agent_side_cleanup(self, restore_module_state):
         profile = self._profile()
-        register_resps = [
-            _make_response(409, text="exists"),  # first register -> conflict
-            _make_response(200, {"agent_id": "AID2", "api_key": "AKEY2"}),  # retry ok
-        ]
-        list_resp = _make_response(200, [{"name": "Tester", "id": "ghost-1"}])
-        del_resp = _make_response(200)
         with (
             patch.object(server, "_build_headers", return_value={}),
-            patch.object(server.requests, "post", side_effect=register_resps),
-            patch.object(server.requests, "get", return_value=list_resp),
-            patch.object(server.requests, "delete", return_value=del_resp) as mock_del,
+            patch.object(server.requests, "post", return_value=_make_response(409, text="exists")) as mock_post,
+            patch.object(server.requests, "get") as mock_get,
+            patch.object(server.requests, "delete") as mock_delete,
         ):
-            assert server._register_one_profile(profile) is True
-        assert profile.agent_id == "AID2"
-        # The stale ghost row was deleted.
-        assert mock_del.call_args.args[0].endswith("/agents/unregister/ghost-1")
-
-    def test_conflict_no_ghosts_falls_back_to_suffix(self, restore_module_state):
-        profile = self._profile()
-        register_resps = [
-            _make_response(409, text="exists"),  # conflict on base name
-            _make_response(200, {"agent_id": "AID3", "api_key": "AKEY3"}),  # suffix ok
-        ]
-        # Listing returns no rows matching the name -> nothing to delete.
-        list_resp = _make_response(200, [{"name": "SomethingElse", "id": "x"}])
-        with (
-            patch.object(server, "_build_headers", return_value={}),
-            patch.object(server.requests, "post", side_effect=register_resps) as mock_post,
-            patch.object(server.requests, "get", return_value=list_resp),
-            patch.object(server.requests, "delete") as mock_del,
-        ):
-            assert server._register_one_profile(profile) is True
-        mock_del.assert_not_called()
-        # Second attempt used a uniquified "Tester-xxxxxx" name.
-        retried_name = mock_post.call_args_list[1].kwargs["json"]["name"]
-        assert retried_name.startswith("Tester-") and retried_name != "Tester"
-
-    def test_conflict_delete_failure_then_suffix(self, restore_module_state):
-        profile = self._profile()
-        register_resps = [
-            _make_response(409, text="exists"),
-            _make_response(200, {"agent_id": "AID4", "api_key": "AKEY4"}),
-        ]
-        list_resp = _make_response(200, [{"name": "Tester", "id": "ghost-2"}])
-        del_resp = _make_response(500, text="forbidden")  # delete fails
-        with (
-            patch.object(server, "_build_headers", return_value={}),
-            patch.object(server.requests, "post", side_effect=register_resps) as mock_post,
-            patch.object(server.requests, "get", return_value=list_resp),
-            patch.object(server.requests, "delete", return_value=del_resp),
-        ):
-            assert server._register_one_profile(profile) is True
-        # delete failed -> deleted_any False -> suffix path
-        retried_name = mock_post.call_args_list[1].kwargs["json"]["name"]
-        assert retried_name.startswith("Tester-")
-
-    def test_conflict_list_non_200_falls_back_to_suffix(self, restore_module_state):
-        profile = self._profile()
-        register_resps = [
-            _make_response(409, text="exists"),
-            _make_response(200, {"agent_id": "AID6", "api_key": "AKEY6"}),
-        ]
-        # Listing the agents returns a non-200 -> ghost discovery is skipped.
-        list_resp = _make_response(403, text="forbidden")
-        with (
-            patch.object(server, "_build_headers", return_value={}),
-            patch.object(server.requests, "post", side_effect=register_resps) as mock_post,
-            patch.object(server.requests, "get", return_value=list_resp),
-            patch.object(server.requests, "delete") as mock_del,
-        ):
-            assert server._register_one_profile(profile) is True
-        mock_del.assert_not_called()
-        retried_name = mock_post.call_args_list[1].kwargs["json"]["name"]
-        assert retried_name.startswith("Tester-")
-
-    def test_conflict_list_raises_then_suffix(self, restore_module_state):
-        profile = self._profile()
-        register_resps = [
-            _make_response(409, text="exists"),
-            _make_response(200, {"agent_id": "AID5", "api_key": "AKEY5"}),
-        ]
-        with (
-            patch.object(server, "_build_headers", return_value={}),
-            patch.object(server.requests, "post", side_effect=register_resps) as mock_post,
-            patch.object(server.requests, "get", side_effect=RuntimeError("boom")),
-            patch.object(server.requests, "delete") as mock_del,
-        ):
-            assert server._register_one_profile(profile) is True
-        mock_del.assert_not_called()
-        retried_name = mock_post.call_args_list[1].kwargs["json"]["name"]
-        assert retried_name.startswith("Tester-")
+            assert server._register_one_profile(profile) == "Refused"
+        assert profile.agent_id is None
+        mock_post.assert_called_once()
+        mock_get.assert_not_called()
+        mock_delete.assert_not_called()
 
     def test_error_status_returns_false(self, restore_module_state):
         profile = self._profile()
@@ -340,7 +261,7 @@ class TestRegisterOneProfile:
             patch.object(server.requests, "post", return_value=resp),
             patch.object(server.agent_errors_total, "labels") as mock_labels,
         ):
-            assert server._register_one_profile(profile) is False
+            assert server._register_one_profile(profile) == "Pending"
         mock_labels.assert_called_with(error_type="registration")
 
     def test_exception_returns_false(self, restore_module_state):
@@ -350,7 +271,7 @@ class TestRegisterOneProfile:
             patch.object(server.requests, "post", side_effect=ConnectionError("x")),
             patch.object(server.agent_errors_total, "labels") as mock_labels,
         ):
-            assert server._register_one_profile(profile) is False
+            assert server._register_one_profile(profile) == "Pending"
         mock_labels.assert_called_with(error_type="registration")
 
 
@@ -367,7 +288,8 @@ class TestRegisterProfiles:
         def fake_register(profile):
             profile.agent_id = f"id-{profile.name}"
             profile.api_key = f"key-{profile.name}"
-            return True
+            profile.status = "Accepted"
+            return "Accepted"
 
         with (
             patch.object(server, "_register_one_profile", side_effect=fake_register),
@@ -401,10 +323,11 @@ class TestRegisterProfiles:
             # First full sweep fails for everyone; second sweep, primary wins.
             calls["n"] += 1
             if calls["n"] <= len(server.PROFILES):
-                return False
+                return "Pending"
             profile.agent_id = f"id-{profile.name}"
             profile.api_key = "k"
-            return True
+            profile.status = "Accepted"
+            return "Accepted"
 
         with (
             patch.object(server, "_register_one_profile", side_effect=flaky_register),
@@ -414,6 +337,66 @@ class TestRegisterProfiles:
             server.register_profiles()
         # Slept at least once because the first sweep produced no successes.
         assert mock_sleep.called
+
+    def test_refused_primary_aborts_startup_even_if_secondary_registers(
+        self, restore_module_state
+    ):
+        primary, secondary = server.PROFILES[:2]
+        primary.agent_id = None
+        primary.api_key = None
+        primary.status = "Pending"
+        secondary.agent_id = None
+        secondary.api_key = None
+        secondary.status = "Pending"
+
+        def register(profile):
+            if profile is primary:
+                profile.status = "Refused"
+                return "Refused"
+            profile.agent_id = "secondary-id"
+            profile.api_key = "secondary-key"
+            profile.status = "Accepted"
+            return "Accepted"
+
+        with patch.object(server, "_register_one_profile", side_effect=register):
+            with pytest.raises(RuntimeError, match="Primary agent profile"):
+                server.register_profiles()
+
+        assert server.AGENT_ID is None
+        assert server.AGENT_API_KEY is None
+
+    def test_retries_pending_primary_then_sets_primary_globals(self, restore_module_state):
+        primary = server.get_primary_profile()
+        for profile in server.PROFILES:
+            profile.agent_id = None
+            profile.api_key = None
+            profile.status = "Pending"
+        calls = 0
+
+        def register(profile):
+            nonlocal calls
+            if profile is primary:
+                calls += 1
+                if calls == 1:
+                    return "Pending"
+                profile.agent_id = "primary-id"
+                profile.api_key = "primary-key"
+                profile.status = "Accepted"
+                return "Accepted"
+            profile.status = "Refused"
+            return "Refused"
+
+        with (
+            patch.object(server, "_register_one_profile", side_effect=register),
+            patch.object(server.time, "sleep") as mock_sleep,
+            patch.object(server.agent_registered, "set") as mock_set,
+        ):
+            server.register_profiles()
+
+        assert server.AGENT_ID == "primary-id"
+        assert server.AGENT_API_KEY == "primary-key"
+        assert mock_sleep.called
+        mock_set.assert_called_once_with(1)
 
 
 # --------------------------------------------------------------------------- #

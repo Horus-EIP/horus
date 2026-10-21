@@ -11,7 +11,7 @@ The Horus system implements a comprehensive Role-Based Access Control (RBAC) mec
 ### Overview
 
 RBAC provides:
-- **Roles**: Groups of users with similar permissions (Admin, Manager, User, System)
+- **Roles**: Groups of users with similar permissions (Admin, Manager, User, System, Agent)
 - **Permissions**: Granular rights to perform specific actions
 - **Role-Permission Mapping**: Defines which permissions each role has
 - **API Protection**: Endpoints enforce permission checks before executing actions
@@ -20,7 +20,7 @@ RBAC provides:
 
 ### Roles
 
-The system defines four standard roles:
+The system defines five roles:
 
 #### 1. **Admin** (`admin`)
 - **Purpose**: Full system access and administration
@@ -60,6 +60,16 @@ The system defines four standard roles:
   - Read tasks and agents
   - Execute tasks and agents
 - **Cannot**: Create/modify/delete resources, access management functions
+
+#### 5. **Agent** (`agent`)
+- **Purpose**: Allow the Agent service to register its worker identities without using the administrator account
+- **Use Case**: The MAS login used by the Agent service at startup
+- **Permissions**: `agent:create` and `agent:execute` only
+- **Can do**:
+  - Register agent identities with MAS
+  - Send heartbeats (the endpoint also requires that identity's API key)
+- **Cannot**: Read or manage users, read agents, delete agents, or access task and system administration routes through role permissions
+- **Separate authentication**: Task claim, abandoned-claim, result, and step endpoints authenticate the registered worker with its agent API key; they do not grant the account access to user or admin routes.
 
 ---
 
@@ -106,29 +116,29 @@ Permissions are granular rights that control access to specific API operations.
 
 Complete permission mapping for all roles:
 
-| Permission | Admin | Manager | User | System |
-|:-----------|:-----:|:-------:|:----:|:------:|
-| **User management** | | | | |
-| `user:create` | Yes | No | No | No |
-| `user:read` | Yes | Yes | Yes | No |
-| `user:update` | Yes | No | No | No |
-| `user:delete` | Yes | No | No | No |
-| **Task management** | | | | |
-| `task:create` | Yes | Yes | Yes | No |
-| `task:read` | Yes | Yes | Yes | Yes |
-| `task:execute` | Yes | Yes | No | Yes |
-| `task:delete` | Yes | Yes | Yes | No |
-| `task:approve` | Yes | Yes | No | No |
-| **Agent management** | | | | |
-| `agent:create` | Yes | No | No | No |
-| `agent:read` | Yes | Yes | Yes | Yes |
-| `agent:update` | Yes | No | No | No |
-| `agent:delete` | Yes | No | No | No |
-| `agent:execute` | Yes | Yes | Yes | Yes |
-| **System and analytics** | | | | |
-| `analytics:view` | Yes | Yes | Yes | No |
-| `data:export` | Yes | Yes | No | No |
-| `system:config` | Yes | No | No | No |
+| Permission | Admin | Manager | User | System | Agent |
+|:-----------|:-----:|:-------:|:----:|:------:|:-----:|
+| **User management** | | | | | |
+| `user:create` | Yes | No | No | No | No |
+| `user:read` | Yes | Yes | Yes | No | No |
+| `user:update` | Yes | No | No | No | No |
+| `user:delete` | Yes | No | No | No | No |
+| **Task management** | | | | | |
+| `task:create` | Yes | Yes | Yes | No | No |
+| `task:read` | Yes | Yes | Yes | Yes | No |
+| `task:execute` | Yes | Yes | No | Yes | No |
+| `task:delete` | Yes | Yes | Yes | No | No |
+| `task:approve` | Yes | Yes | No | No | No |
+| **Agent management** | | | | | |
+| `agent:create` | Yes | No | No | No | Yes |
+| `agent:read` | Yes | Yes | Yes | Yes | No |
+| `agent:update` | Yes | No | No | No | No |
+| `agent:delete` | Yes | No | No | No | No |
+| `agent:execute` | Yes | Yes | Yes | Yes | Yes |
+| **System and analytics** | | | | | |
+| `analytics:view` | Yes | Yes | Yes | No | No |
+| `data:export` | Yes | Yes | No | No | No |
+| `system:config` | Yes | No | No | No | No |
 
 Source of truth: `src/services/mas/auth/permissions.py` (`ROLE_PERMISSION`). These permissions say which routes a role may call; [Who can see what](#who-can-see-what) says which tasks and conversations it then reaches.
 
@@ -144,10 +154,12 @@ The permissions above open the task and conversation routes to several roles; ow
 | `manager` | any | every task | only their own | any | only their own |
 | `user` | the tasks they own, and every task in a conversation they own | the same tasks | only their own | the same tasks as they read | only their own |
 | `system` | as `user` | as `user` | only their own | no (`task:delete` missing) | no (`task:create` missing) |
+| `agent` | no role-based task access | no | no | no | no |
 
 - A task's owner is its `owner_username` (the user who queued it), else the owner of its root task. A subtask therefore belongs to whoever owns its chain.
 - `GET /tasks/conversation/{id}/running` is for the conversation's owner, a manager or an admin. The agent routes (`/claim`, `/task-result/`, `/task-step/`, `/abandoned-claims`) use the agent's API key, not a role.
-- No Horus service logs in as `system`: the agents log in as the super user and use their API key on the agent routes.
+- The Agent service logs in to MAS with the dedicated `agent` account to register its worker identities. That account is not an administrator and has only `agent:create` and `agent:execute`. Worker heartbeats require both the role permission and that worker's API key.
+- Task claim, abandoned-claim, result and step routes authenticate with a worker API key and verify the worker's relationship to the task; this does not give the `agent` account role-based access to task lists, user data or administrator routes.
 - **A conversation's owner reads and cancels every task in it, whoever posted it.** An admin may post into a user's conversation; the answer reaches the user's chat and history anyway, so refusing them the task protected nothing.
 - **Managers read every task but not other users' conversations.** A task carries what oversight needs (the question, its status, the answer, the timings and the sources); reading or watching a whole chat live gives more access than that. Least privilege.
 
@@ -223,12 +235,16 @@ On first application startup:
 ## - Role assignments
 ## - Permission mappings
 
-## Environment variables set in .env (the installer and init-env.sh generate the password):
+## Environment variables set in .env (the installer and init-env.sh generate the passwords):
 SUPER_USER_USERNAME=admin
 SUPER_USER_PASSWORD=<24 generated characters>
+SUPER_AGENT_USERNAME=agent
+SUPER_AGENT_PASSWORD=<generated agent password>
 ```
 
 MAS creates the admin account once, on its first start, and refuses to create it when `SUPER_USER_PASSWORD` is empty or `admin`: it logs an error that says how to set one. On every start it also checks the stored password (`src/services/mas/db/admin_account.py`): an account still on the shipped `admin` gets the `SUPER_USER_PASSWORD` from `.env`, and an account whose password was changed in Horus is never touched. The installer shows a password it generated once, at the end, with the login name, and only on a terminal; it never writes it to `install-log.txt`, the `--json-events` stream or `horus-profile.json`. [Upgrades and uninstall](operations.md#upgrades-and-uninstall) says what an upgrade does.
+
+MAS also creates the dedicated `agent` login from `SUPER_AGENT_USERNAME` and `SUPER_AGENT_PASSWORD` on startup (`src/services/mas/db/agent_account.py`). Whenever that account already exists, MAS enforces the `agent` role even if the account previously had administrator privileges; the `users/update_role` route also refuses role changes for the configured agent username. The installer and `init-env.sh` generate this password when needed; unlike the admin password, the installer does not display it. For a direct update from an older install whose `.env` lacks these values, startup temporarily uses the existing admin password for the agent login so the stack remains available; run the installer to generate and store a distinct agent password. Agent workers use this login only to obtain a MAS token and register themselves. The role has only `agent:create` and `agent:execute`; task claims, results and step events are authenticated with each registered worker's API key.
 
 ##### 2. Creating Users
 
@@ -606,23 +622,13 @@ This document provides a security assessment of the Horus Multi-Agent System, co
 
 - Role-based access control (RBAC)  
 - Permission-based endpoint protection  
-- Roles: admin, manager, user, system  
+- Roles: admin, manager, user, system, agent
 
 **Code Location:** `src/services/mas/auth/permissions.py`
 
 #### 2.2 Role Matrix
 
-| Permission | Admin | Manager | User | System |
-|------------|-------|---------|------|--------|
-| user:create | Yes | No | No | No |
-| user:read | Yes | Yes | Yes | No |
-| task:create | Yes | Yes | Yes | No |
-| task:read | Yes | Yes | Yes | Yes |
-| task:delete | Yes | Yes | Yes | No |
-| agent:read | Yes | Yes | Yes | Yes |
-| system:config | Yes | No | No | No |
-
-Note: Permission names in code use enums such as `TASK_DELETE`, not `task:cancel`. Verify `auth/permissions.py` for the authoritative matrix.
+See the [Role-Permission Matrix](#role-permission-matrix) above for the complete current mapping. In particular, the `agent` role has `agent:create` and `agent:execute` only; worker API-key routes are separately authenticated and do not grant role-based access to tasks or administration.
 
 #### 2.3 Strengths
 
@@ -784,7 +790,7 @@ READ_ONLY_ROOTFS true
 - Local `.env` (not committed) for Compose  
 - The installer and `src/infra/init-env.sh` generate `JWT_SECRET_KEY` and `REDIS_PASSWORD` (64 hex characters each) and `SUPER_USER_PASSWORD` (24 characters that meet the MAS password policy) into `src/infra/.env`, and the installer also generates `CORPUS_SCAN_TOKEN`; `.env.example` leaves `REDIS_PASSWORD` and `SUPER_USER_PASSWORD` empty. On an install that still has the password earlier releases shipped (`redis_password`) or an empty one, the installer writes a generated one, and the `docker compose up -d` it ends with recreates `redis`, `mas` and `agent` with it.
 - `POSTGRES_PASSWORD`, `RABBITMQ_PASSWORD` and `PGADMIN_DEFAULT_PASSWORD` still ship as defaults; their ports answer on 127.0.0.1 only (see 6.3 for the Linux Engine caveat).
-- `SUPER_USER_PASSWORD` was `admin` in every release before this one, and no install keeps it now. On an install whose `.env` still has `admin` or an empty value, the installer writes a generated one; on its next start MAS gives it to an account still on `admin` (an account whose password was changed in Horus keeps its own), and the installer shows it once, at the end. The agent signs in with the same value (`ORCHESTRATOR_PASSWORD`), so the account and `.env` must agree: once the stack is up the installer runs `python -m db.admin_account` in the `mas` container and warns when they do not. The web client forwards every `/api/orchestrator/*` request to MAS, `/auth/token` included; port 3000 answers on 127.0.0.1 only, unless `HORUS_WEB_BIND` opens it to the network (6.3).
+- `SUPER_USER_PASSWORD` was `admin` in earlier releases, and no install keeps it now. On an install whose `.env` still has `admin` or an empty value, the installer writes a generated one; on its next start MAS gives it to an account still on `admin` (an account whose password was changed in Horus keeps its own), and the installer shows it once, at the end. Before B-116, the agent also used this admin login; it now uses the separate `SUPER_AGENT_USERNAME` / `SUPER_AGENT_PASSWORD` account described above. The web client forwards every `/api/orchestrator/*` request to MAS, `/auth/token` included; port 3000 answers on 127.0.0.1 only, unless `HORUS_WEB_BIND` opens it to the network (6.3).
 
 **Recommendations:**
 - Use Docker secrets for production
