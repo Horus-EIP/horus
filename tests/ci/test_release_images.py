@@ -322,6 +322,15 @@ class ReleaseWorkflow(unittest.TestCase):
         self.assertEqual(step["env"]["CONFIGURED_REGISTRY"], "${{ vars.HORUS_REGISTRY }}")
         self.assertIn('registry="${registry,,}"', step["run"])
 
+    def test_release_publishes_bundles_with_the_github_cli(self):
+        release = self.workflow["jobs"]["release"]
+        _, publish = self.step(release, "gh release create")
+        self.assertNotIn("uses", publish)
+        self.assertEqual(publish["env"]["GH_TOKEN"], "${{ secrets.GITHUB_TOKEN }}")
+        self.assertIn("assets=(assets/*.tar.gz)", publish["run"])
+        self.assertIn('args+=(--prerelease)', publish["run"])
+        self.assertEqual(release["permissions"], {"contents": "write"})
+
     def test_registry_credentials_come_from_repository_variables_and_secrets(self):
         _, step = self.step(self.job, "docker/login-action")
         self.assertEqual(step["with"], {
