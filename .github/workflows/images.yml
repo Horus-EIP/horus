@@ -148,47 +148,14 @@ jobs:
           docker compose --progress plain build "$SERVICE"
           echo "BUILD_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
 
-      - name: Report image summary & B-127 Copyleft compliance
-        if: always()
-        run: |
-          size="$(docker image inspect --format '{{.Size}}' "${IMAGE:-none}" 2>/dev/null || echo 0)"
-          {
-            echo "### ${SERVICE} ·${FLAVOR}"
-            echo ""
-            echo "- image: \`${IMAGE:-not named}\`"
-            echo "- pushed tags: ${PUSHED_TAGS:-none}"
-            echo "- digest: \`${DIGEST:-none}\`"
-            echo "- size unpacked: $(( size / 1000000 )) MB, built in${BUILD_SECONDS:-?} s"
-            echo ""
-            echo "#### 📜 B-127 GPL / LGPL System & Binary Compliance Scan"
-            
-            if docker run --rm --entrypoint dpkg-query "${IMAGE}" -W -f='${Package};${Version}\n' > apt_packages.txt 2>/dev/null; then
-              if [ -f THIRD_PARTY_NOTICES ] && [ -s apt_packages.txt ]; then
-                echo "| System Package | Version | THIRD_PARTY_NOTICES Match |"
-                echo "| :--- | :--- | :--- |"
-                
-                has_copyleft=false
-                while IFS=';' read -r pkg ver; do
-                  # Regex assouplie : capture tout entre un titre 7 (ex: ## 7 ou ### 7.1) et un titre 8
-                  if awk '/^#+ 7/{flag=1} /^#+ 8/{flag=0} flag' THIRD_PARTY_NOTICES | grep -qi "${pkg}"; then
-                    match_info=$(awk '/^#+ 7/{flag=1} /^#+ 8/{flag=0} flag' THIRD_PARTY_NOTICES \vert{} grep -i "${pkg}" | head -n 1)
-                    echo "| \`${pkg}\` | \`${ver}\` | 🚨 Match Section 7: \`${match_info}\` |"
-                    has_copyleft=true
-                  fi
-                done < apt_packages.txt
-                
-                if [ "${has_copyleft}" = "false" ]; then
-                  echo "| ✅ No OS packages matched GPL/LGPL Section 7 notices. |"
-                fi
-              else
-                echo "⚠️ Missing THIRD_PARTY_NOTICES file or apt_packages.txt is empty."
-              fi
-            else
-              echo "ℹ️ Image does not use dpkg/apt package manager (e.g. static/Alpine image)."
-            fi
-            echo ""
-          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Install PyYAML for the licence scan
+        run: python -m pip install pyyaml
 
+      - name: Check GPL and LGPL system packages against the source offer
+        run: |
+          python scripts/licences/report_image_copyleft.py \
+            --service "$SERVICE" \
+            --image "$IMAGE" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Fail on CUDA packages or any torch in the CPU image
         if: matrix.flavor == 'cpu' && matrix.requirements

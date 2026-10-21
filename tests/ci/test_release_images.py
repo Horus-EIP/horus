@@ -241,6 +241,20 @@ class ReleaseWorkflow(unittest.TestCase):
         self.assertLess(check_at, login_at)
         self.assertLess(login_at, push_at)
 
+    def test_copyleft_scan_checks_real_section_7_before_push(self):
+        check_at, check = self.step(self.job, "report_image_copyleft.py")
+        login_at, _ = self.step(self.job, "docker/login-action")
+        push_at, _ = self.step(self.job, "docker push")
+        self.assertIn('--service "$SERVICE"', check["run"])
+        self.assertIn('--image "$IMAGE"', check["run"])
+        self.assertLess(check_at, login_at)
+        self.assertLess(login_at, push_at)
+
+        report_at, report = self.step(self.job, "size unpacked")
+        self.assertEqual(report["if"], "always()")
+        self.assertGreater(report_at, push_at)
+        self.assertIn("built in ${BUILD_SECONDS:-?} s", report["run"])
+
     def test_every_build_gets_a_commit_tag_and_only_a_release_moves_the_version_tag(self):
         _, plan = self.step(self.plan, "GITHUB_OUTPUT")
         self.assertIn('commit_tag=sha-${GITHUB_SHA::12}', plan["run"])
