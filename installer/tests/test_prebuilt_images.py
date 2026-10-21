@@ -251,6 +251,7 @@ class DispatchChoosesTheImageSource(TempDirCase):
             patch = stack.enter_context
             patch(mock.patch.object(horus_install, "find_repo", return_value=self.tmp))
             patch(mock.patch.object(horus_install, "banner"))
+            patch(mock.patch.object(horus_install, "existing_volumes", return_value=[]))
             for name in ("preflight", "sign_in_to_registry", "apply_env", "pull_and_build",
                          "wait_for_health", "_success"):
                 mocks[name] = patch(mock.patch.object(horus_install, name))

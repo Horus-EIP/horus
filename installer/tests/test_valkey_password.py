@@ -126,6 +126,7 @@ class InstallWritesTheValkeyPassword(InfraCase):
             patch = stack.enter_context
             patch(mock.patch.object(horus_install, "find_repo", return_value=self.repo))
             patch(mock.patch.object(horus_install, "banner"))
+            patch(mock.patch.object(horus_install, "existing_volumes", return_value=[]))
             patch(mock.patch.object(horus_install, "preflight"))
             patch(mock.patch.object(horus_install, "sign_in_to_registry"))
             consent = patch(mock.patch.object(horus_install, "consent"))
