@@ -175,15 +175,15 @@ jobs:
                 while read -r line; do
                   pkg="\${line%%==*}"
                   # Search case-insensitively for the package name in your notices file
-                  if grep -qi "\$pkg" THIRD_PARTY_NOTICES; then
+                  if grep -qi "\${pkg}" THIRD_PARTY_NOTICES; then
                     # Fetch the full matching line from THIRD_PARTY_NOTICES to print its license info
-                    notice_line=(grep -i "pkg" THIRD_PARTY_NOTICES | head -n 1)
+                    notice_line=(grep -i "{pkg}" THIRD_PARTY_NOTICES | head -n 1)
                     echo "| 🚨 Found: \`${notice_line:-$line}\` |"
                     has_gpl=true
                   fi
                 done < installed_packages.txt
                 
-                if [ "\$has_gpl" = "false" ]; then
+                if [ "\${has_gpl}" = "false" ]; then
                   echo "| ✅ No GPL/LGPL components detected in this image. |"
                 fi
               else
@@ -194,6 +194,7 @@ jobs:
             fi
             echo ""
           } | tee -a "\$GITHUB_STEP_SUMMARY"
+
 
       - name: Fail on CUDA packages or any torch in the CPU image
         if: matrix.flavor == 'cpu' && matrix.requirements
