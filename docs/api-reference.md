@@ -433,7 +433,7 @@ Retrieve the top-level tasks (the subtasks of a multi-agent chain are left out).
 
 #### GET /tasks/stats/queue
 
-Retrieve task counts by status (queued, pending, running, completed, failed, cancelled) and their total. Only top-level tasks are counted, like `GET /tasks/list`: the subtasks of a multi-agent chain are excluded.
+Retrieve task counts by status (queued, pending, running, completed, failed, cancelled) and their total. Only top-level tasks are counted, like `GET /tasks/list`: the subtasks of a multi-agent chain are excluded. Managers and admins see global counts; other callers see counts only for tasks they can list (their own tasks and tasks in conversations they own).
 
 **Auth:** JWT Bearer (requires `analytics:view` permission)
 
@@ -747,7 +747,7 @@ Called by an agent worker when it takes a task message from its work queue, befo
 
 #### POST /tasks/abandoned-claims
 
-Called once by an agent worker when it starts, after it registered. Every task still `queued` or `running` that was claimed by the same `worker_id` under another `run_id`, or claimed by any worker for an agent that is no longer registered (a recreated container has a new host name and replaces its agents when it registers), is marked `failed` (with the root of its chain), with a chat message and an `error` event (`status: "failed"`, `reason: "agent_restarted"`) asking the user to send the request again.
+Called once by an agent worker when it starts, after it registered. A task still `queued` or `running` that was claimed by the same `worker_id` under another `run_id` is marked `failed` only if the authenticated agent may run the task's assigned agent (the same agent or an agent of the same type). Tasks whose assigned agent is no longer registered are still cleaned up regardless of worker. Failed tasks include the root of their chain, a chat message, and an `error` event (`status: "failed"`, `reason: "agent_restarted"`) asking the user to send the request again.
 
 **Auth:** Agent API Key (`X-API-Key` + `Agent-ID` headers)
 

@@ -575,14 +575,13 @@ def _build_files_payload(task: "TaskForm") -> list[dict]:
     return files
 
 
-def get_task_queue_stats(db: Session) -> dict[str, Any]:
+def get_task_queue_stats(db: Session, user: dict) -> dict[str, Any]:
     """Aggregate task counts by status from the database."""
-    rows = (
-        db.query(Task.status, func.count(Task.id))
-        .filter(Task.parent_task_id.is_(None))
-        .group_by(Task.status)
-        .all()
-    )
+
+    query = db.query(Task.status, func.count(Task.id)).filter(Task.parent_task_id.is_(None))
+    rows = root_tasks_visible_to(user, query).group_by(Task.status).all()
+
+
     counts = {
         "queued": 0,
         "pending": 0,
@@ -661,7 +660,7 @@ async def get_queue_stats(
     Returns:
         dict: Counts by status and total.
     """
-    stats = get_task_queue_stats(db)
+    stats = get_task_queue_stats(db, user)
     logger.info("Queue statistics retrieved", stats=stats)
     return stats
 
@@ -2286,6 +2285,7 @@ async def fail_abandoned_claims(
     verified_agent: Annotated[tuple[str, str], Depends(verify_agent_api_key)],
     db: Session = Depends(get_db),
 ):
+    verified_agent_id, _ = verified_agent
     abandoned = (
         db.query(Task)
         .filter(
@@ -2298,6 +2298,14 @@ async def fail_abandoned_claims(
         )
         .all()
     )
+
+    agent_info = db.query(Agents).filter(Agents.id == verified_agent_id).first()
+
+    for task in abandoned[:]:
+        agent_info = db.query(Agents).filter(Agents.id == task.agent_id).first()
+        if not agent_may_submit_task_result(verified_agent_id, task.agent_id, db) and agent_info:
+            abandoned.remove(task)
+
     failed = [task.id for task in abandoned]
     for task in abandoned:
         await _fail_task_tree(

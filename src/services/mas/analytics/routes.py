@@ -65,7 +65,7 @@ async def overview(
     payload = {
         "generated_at": datetime.now(UTC).isoformat(),
         "agents": _agent_snapshot(db),
-        "tasks": get_task_queue_stats(db),
+        "tasks": get_task_queue_stats(db, user),
     }
     logger.info("Analytics overview retrieved", payload=payload)
     return payload

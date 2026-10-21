@@ -73,6 +73,20 @@ def agent_client(routing_db):
 
 
 @pytest.fixture
+def agent_client_for(routing_db):
+    def _factory(agent_id):
+        app = FastAPI()
+        app.include_router(routes.router)
+        app.dependency_overrides[get_db] = lambda: routing_db
+        app.dependency_overrides[verify_agent_api_key] = lambda: (agent_id, "key")
+        return httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://mas"
+        )
+
+    return _factory
+
+
+@pytest.fixture
 def chat_messages():
     with patch.object(routes, "add_messages", return_value={"id": 5}) as add_messages:
         yield add_messages
@@ -186,6 +200,31 @@ class TestClaim:
 
 
 class TestAbandonedClaims:
+    async def test_worker_id_for_an_agent_of_another_type_fails_none_of_its_tasks(
+        self, agent_client_for, routing_db, chat_messages
+    ):
+        _add_agent(routing_db, "agent-1", AgentTypes.GENERAL)
+        _add_agent(routing_db, "agent-writer", AgentTypes.WRITER)
+        _add_task(
+            routing_db,
+            "general-task",
+            claimed_by=WORKER,
+            claim_run="run-old",
+            agent_id="agent-1",
+        )
+
+        client = agent_client_for("agent-writer")
+        async with client:
+            response = await client.post(
+                "/tasks/abandoned-claims",
+                json={"worker_id": WORKER, "run_id": "run-new"},
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {"failed": []}
+        assert _stored(routing_db, "general-task").status == "running"
+        chat_messages.assert_not_called()
+
     async def test_tasks_left_by_an_earlier_run_of_the_worker_fail(
         self, agent_client, routing_db, chat_messages
     ):
