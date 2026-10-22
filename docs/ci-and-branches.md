@@ -64,7 +64,7 @@ The workflows are in `.github/workflows/`; each sync pull request brings the sam
 |---|---|---|
 | `ci.yml` | Every push to `main` or `master`, every pull request, and by hand | The jobs below |
 | `eval-testset.yml` | The same, but only when the evaluation files change: `demo_assets/`, `tests/eval/`, `scripts/eval/`, `scripts/benchmarks/`, the two benchmark scripts in `scripts/perf/`, the bench kit or the workflow itself | **Tests · Eval test set:** the test set, its runner and the bench kit's tests |
-| `images.yml`, `desktop-release.yml` | A `v*` tag, and by hand | The release: the service images and the desktop app ([VERSIONING.md](../VERSIONING.md)) |
+| `images.yml`, `desktop-release.yml` | A `v*` tag, and by hand | The release: service images, source bundles and the desktop app ([VERSIONING.md](../VERSIONING.md)); RC tags also run the full GPU evaluation on a `horus-gpu-8gb` self-hosted runner when one is registered |
 
 On a pull request, a new push cancels the run still going for that pull request; runs on `main` and `master` are never cancelled. A pull request from a fork waits until a maintainer clicks **Approve workflows to run**, at every push.
 

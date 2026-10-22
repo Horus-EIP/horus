@@ -28,11 +28,12 @@ TEST_JOBS = {
     "test-installer": ("Installer", "coverage-installer.xml", "junit-installer.xml"),
     "test-llm-mock": ("LLM mock", "coverage-llm-mock.xml", "junit-llm-mock.xml"),
 }
-RETENTION = {"coverage-": 3, "app-": 7, "bundle-": 14, "Horus-Beta-zip": 14}
+RETENTION = {"coverage-": 3, "app-": 7, "bundle-": 14, "gpu-evaluation-": 14, "Horus-Beta-zip": 14}
 RELEASE_UPLOADS = {
     ("desktop-release.yml", "build"),
     ("desktop-release.yml", "bundle"),
     ("images.yml", "bundle"),
+    ("images.yml", "gpu-eval"),
 }
 REPORT_UPLOADS = {
     "test-mas": ("coverage-mas", ("coverage-mas.xml", "junit-mas.xml", "htmlcov-mas/")),

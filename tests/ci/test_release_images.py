@@ -190,6 +190,8 @@ class ReleaseWorkflow(unittest.TestCase):
         triggers = workflow_triggers(self.workflow)
         self.assertEqual(set(triggers), {"push", "workflow_dispatch"})
         self.assertEqual(triggers["push"], {"tags": ["v*"]})
+        self.assertEqual(triggers["workflow_dispatch"]["inputs"]["run_gpu_eval"]["default"], False)
+        self.assertEqual(triggers["workflow_dispatch"]["inputs"]["run_gpu_eval"]["type"], "boolean")
 
     def test_the_matrix_builds_every_app_service_for_both_flavors(self):
         self.assertEqual(set(self.matrix["service"]), {*images.APP_SERVICES, images.MOCK_SERVICE})
@@ -336,6 +338,33 @@ class ReleaseWorkflow(unittest.TestCase):
         self.assertIn("assets=(assets/*.tar.gz)", publish["run"])
         self.assertIn('args+=(--prerelease)', publish["run"])
         self.assertEqual(release["permissions"], {"contents": "write"})
+
+    def test_rc_gpu_evaluation_requires_a_labelled_runner_and_sufficient_vram(self):
+        job = self.workflow["jobs"]["gpu-eval"]
+        self.assertEqual(job["needs"], ["plan", "image", "bundle"])
+        self.assertEqual(job["runs-on"], ["self-hosted", "linux", "x64", "horus-gpu-8gb"])
+        self.assertEqual(
+            job["env"]["IMAGE_VERSION"],
+            "${{ github.event_name == 'workflow_dispatch' && needs.plan.outputs.commit_tag || github.ref_name }}",
+        )
+        self.assertIn("contains(github.ref_name, '-rc')", job["if"])
+        self.assertIn("inputs.run_gpu_eval", job["if"])
+        self.assertNotIn("gpu-eval", self.workflow["jobs"]["release"]["needs"])
+        _, capacity = self.step(job, "nvidia-smi")
+        self.assertIn("total >= 8192", capacity["run"])
+        self.assertIn("free >= 7168", capacity["run"])
+        self.assertIn("docker run --rm --gpus all", capacity["run"])
+
+    def test_gpu_evaluation_runs_the_full_set_and_keeps_its_report(self):
+        job = self.workflow["jobs"]["gpu-eval"]
+        _, evaluate = self.step(job, "run-eval.py")
+        for argument in ("--reference gpu8", "--sample-resources", '--llm-container ""',
+                         "--corpus-token", "--out-dir"):
+            with self.subTest(argument):
+                self.assertIn(argument, evaluate["run"])
+        _, upload = self.step(job, "actions/upload-artifact")
+        self.assertEqual(upload["if"], "always()")
+        self.assertEqual(upload["with"]["retention-days"], 14)
 
     def test_registry_credentials_come_from_repository_variables_and_secrets(self):
         _, step = self.step(self.job, "docker/login-action")
