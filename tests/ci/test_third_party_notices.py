@@ -333,7 +333,70 @@ class FetchGplSources(unittest.TestCase):
             {"name": "busybox-1.37.0.tar.bz2", "url": "https://busybox.net/downloads/busybox-1.37.0.tar.bz2",
              "sha512": "aaa"},
             {"name": "extra-1.0.tar.gz", "url": "https://example.org/extra-1.0.tar.gz", "sha512": "bbb"},
+            {"name": "fix-mount.patch", "path": "fix-mount.patch", "sha512": "ccc"},
         ])
+
+    def test_alpine_recipe_falls_back_to_the_github_mirror(self):
+        original = fetch.fetch
+        urls = []
+
+        def get(url, **kwargs):
+            urls.append(url)
+            if "gitlab.alpinelinux.org" in url:
+                raise fetch.urllib.error.HTTPError(url, 404, "not found", None, None)
+            return b"pkgname=busybox\n"
+
+        fetch.fetch = get
+        try:
+            repository, apkbuild = fetch.alpine_recipe("busybox", "a" * 40)
+        finally:
+            fetch.fetch = original
+
+        self.assertEqual(repository, "main")
+        self.assertEqual(apkbuild, b"pkgname=busybox\n")
+        self.assertIn("https://raw.githubusercontent.com/alpinelinux/aports/" + "a" * 40
+                      + "/main/busybox/APKBUILD", urls)
+
+    def test_alpine_recipe_falls_back_when_gitlab_is_unreachable(self):
+        original = fetch.fetch
+        urls = []
+
+        def get(url, **kwargs):
+            urls.append(url)
+            if "gitlab.alpinelinux.org" in url:
+                raise OSError("Network is unreachable")
+            return b"pkgname=busybox\n"
+
+        fetch.fetch = get
+        try:
+            repository, apkbuild = fetch.alpine_recipe("busybox", "a" * 40)
+        finally:
+            fetch.fetch = original
+
+        self.assertEqual(repository, "main")
+        self.assertEqual(apkbuild, b"pkgname=busybox\n")
+        self.assertIn("https://raw.githubusercontent.com/alpinelinux/aports/" + "a" * 40
+                      + "/main/busybox/APKBUILD", urls)
+
+    def test_alpine_recipe_uses_a_bounded_request_for_each_mirror(self):
+        original = fetch.fetch
+        requests = []
+
+        def get(url, **kwargs):
+            requests.append((url, kwargs))
+            if "gitlab.alpinelinux.org" in url:
+                raise OSError("timed out")
+            return b"pkgname=busybox\n"
+
+        fetch.fetch = get
+        try:
+            repository, _ = fetch.alpine_recipe("busybox", "a" * 40)
+        finally:
+            fetch.fetch = original
+
+        self.assertEqual(repository, "main")
+        self.assertEqual(len(requests), 2)
+        self.assertTrue(all(kwargs == {"attempts": 1, "timeout": 30} for _, kwargs in requests))
 
 
 if __name__ == "__main__":

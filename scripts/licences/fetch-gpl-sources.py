@@ -23,6 +23,7 @@ COMPONENTS = Path(__file__).resolve().parent / "components.yaml"
 SNAPSHOT = "https://snapshot.debian.org"
 DEBIAN_ARCHIVES = ("debian", "debian-security")
 APORTS = "https://gitlab.alpinelinux.org/alpine/aports"
+APORTS_MIRROR_RAW = "https://raw.githubusercontent.com/alpinelinux/aports"
 ALPINE_REPOSITORIES = ("main", "community")
 DISTFILES = "https://distfiles.alpinelinux.org/distfiles"
 APKBUILD_SOURCES = ('cat > /tmp/APKBUILD && cd /tmp && . ./APKBUILD >/dev/null 2>&1; '
@@ -35,14 +36,14 @@ def overrides() -> dict[str, dict]:
     return (yaml.safe_load(COMPONENTS.read_text(encoding="utf-8")) or {}).get("system_overrides") or {}
 
 
-def request(url: str, method: str = "GET"):
-    return urllib.request.urlopen(urllib.request.Request(url, method=method), timeout=600)
+def request(url: str, method: str = "GET", timeout: int = 600):
+    return urllib.request.urlopen(urllib.request.Request(url, method=method), timeout=timeout)
 
 
-def fetch(url: str, attempts: int = 4) -> bytes:
+def fetch(url: str, attempts: int = 4, timeout: int = 600) -> bytes:
     for attempt in range(attempts):
         try:
-            with request(url) as response:
+            with request(url, timeout=timeout) as response:
                 return response.read()
         except urllib.error.HTTPError:
             raise
@@ -101,10 +102,18 @@ def choose_debian_files(listing: dict) -> list[dict]:
 
 def alpine_recipe(origin: str, commit: str) -> tuple[str, bytes]:
     for repository in ALPINE_REPOSITORIES:
-        try:
-            return repository, fetch(f"{APORTS}/-/raw/{commit}/{repository}/{origin}/APKBUILD")
-        except urllib.error.HTTPError:
-            continue
+        urls = (
+            f"{APORTS}/-/raw/{commit}/{repository}/{origin}/APKBUILD",
+            f"{APORTS_MIRROR_RAW}/{commit}/{repository}/{origin}/APKBUILD",
+        )
+        for url in urls:
+            try:
+                return repository, fetch(url, attempts=1, timeout=30)
+            except urllib.error.HTTPError as error:
+                error.close()
+                continue
+            except OSError:
+                continue
     raise OSError(f"{origin}: no APKBUILD at aports commit {commit}")
 
 
@@ -131,17 +140,24 @@ def parse_apkbuild_sources(out: str) -> list[dict]:
             url, name = entry, entry.rsplit("/", 1)[-1]
         if "://" in url:
             found.append({"name": name, "url": url, "sha512": digests.get(name, "")})
+        else:
+            found.append({"name": name, "path": url, "sha512": digests.get(name, "")})
     return found
 
 
 def alpine_files(image: str, origin: str, commit: str, branch: str) -> list[dict]:
     repository, apkbuild = alpine_recipe(origin, commit)
-    files = [{"name": f"aports-{origin}-{commit[:12]}.tar.gz", "sha1": "",
-              "url": f"{APORTS}/-/archive/{commit}/aports-{commit}.tar.gz?path={repository}/{origin}"}]
+    raw_recipe = f"{APORTS_MIRROR_RAW}/{commit}/{repository}/{origin}"
+    files = [{"name": "APKBUILD", "sha512": "", "url": f"{raw_recipe}/APKBUILD"}]
     for source in apkbuild_sources(image, apkbuild):
-        mirror = f"{DISTFILES}/{branch}/{source['name']}"
-        files.append({"name": source["name"], "sha512": source["sha512"],
-                      "url": mirror if exists(mirror) else source["url"]})
+        if "path" in source:
+            path = urllib.parse.quote(source["path"], safe="/")
+            files.append({"name": source["name"], "sha512": source["sha512"],
+                          "url": f"{raw_recipe}/{path}"})
+        else:
+            mirror = f"{DISTFILES}/{branch}/{source['name']}"
+            files.append({"name": source["name"], "sha512": source["sha512"],
+                          "url": mirror if exists(mirror) else source["url"]})
     return files
 
 
@@ -154,7 +170,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Download the exact source code of every GPL or LGPL operating-system package in one of our "
                     "images into a single tar archive, to answer a request under the written offer in "
                     "THIRD_PARTY_NOTICES.")
-    parser.add_argument("image", help="the image, for example ghcr.io/epitechpromo2027/horus-mas:0.1.2-cpu "
+    parser.add_argument("image", help="the image, for example ghcr.io/horus-eip/horus-mas:0.1.2-cpu "
                                       "(pulled or built locally)")
     parser.add_argument("--out", type=Path, default=Path("."), help="folder for the archive (default: .)")
     parser.add_argument("--dry-run", action="store_true", help="list the source files without downloading them")

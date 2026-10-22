@@ -93,8 +93,10 @@ def check(root: Path, tag: str | None = None) -> list[str]:
         return [f"VERSION: {expected!r} is not MAJOR.MINOR.PATCH"]
 
     problems = []
-    if tag is not None and tag.removeprefix("v") != expected:
-        problems.append(f"git tag {tag!r} does not name VERSION {expected!r}")
+    if tag is not None:
+            core_tag_version = tag.removeprefix("v").split("-")[0]
+            if core_tag_version != expected:
+                problems.append(f"git tag {tag!r} does not name VERSION {expected!r}")
     for rel, field, read in CHECKS:
         try:
             found = read((root / rel).read_text(encoding="utf-8"))
