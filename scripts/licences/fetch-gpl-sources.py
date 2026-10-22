@@ -112,6 +112,8 @@ def alpine_recipe(origin: str, commit: str) -> tuple[str, bytes]:
             except urllib.error.HTTPError as error:
                 error.close()
                 continue
+            except OSError:
+                continue
     raise OSError(f"{origin}: no APKBUILD at aports commit {commit}")
 
 

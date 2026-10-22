@@ -357,6 +357,27 @@ class FetchGplSources(unittest.TestCase):
         self.assertIn("https://raw.githubusercontent.com/alpinelinux/aports/" + "a" * 40
                       + "/main/busybox/APKBUILD", urls)
 
+    def test_alpine_recipe_falls_back_when_gitlab_is_unreachable(self):
+        original = fetch.fetch
+        urls = []
+
+        def get(url):
+            urls.append(url)
+            if "gitlab.alpinelinux.org" in url:
+                raise OSError("Network is unreachable")
+            return b"pkgname=busybox\n"
+
+        fetch.fetch = get
+        try:
+            repository, apkbuild = fetch.alpine_recipe("busybox", "a" * 40)
+        finally:
+            fetch.fetch = original
+
+        self.assertEqual(repository, "main")
+        self.assertEqual(apkbuild, b"pkgname=busybox\n")
+        self.assertIn("https://raw.githubusercontent.com/alpinelinux/aports/" + "a" * 40
+                      + "/main/busybox/APKBUILD", urls)
+
 
 if __name__ == "__main__":
     unittest.main()
