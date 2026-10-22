@@ -202,7 +202,7 @@ class ModelServerRegistry(LogCase):
         self.assertEqual(hosts["llama.cpp server image layers"], GHCR_LAYERS)
 
     def test_ghcr_is_checked_once_when_it_serves_both(self):
-        hosts = self.install_checks("ghcr.io/epitechpromo2027", cpu_profile=True)
+        hosts = self.install_checks("ghcr.io/horus-eip", cpu_profile=True)
         urls = [url for _label, url in hosts]
         self.assertEqual(len(urls), len(set(urls)))
         labels = {url: label for label, url in hosts}

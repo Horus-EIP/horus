@@ -49,11 +49,11 @@ Testers and customers do not build the Horus images. `.github/workflows/images.y
 
 **Names.** `<registry>/horus-<service>:<version>-<flavor>` for `mas`, `agent`, `knowledge-store` and `web-client`, and `horus-llm-mock:<version>-cpu`, the mock model server of [mock AI mode](mock-ai.md), defined in `docker-compose.mock.yml`. `<version>` is `VERSION`; `<flavor>` is `cpu` for the `cpu-*` profiles and `gpu` for the others. Compose builds each name from `HORUS_REGISTRY`, `HORUS_VERSION` and the compose files: `docker-compose.yml` ends the tag in `-gpu`, and `docker-compose.cpu.yml`, which also selects the CPU requirement set (see [Local deployment with Docker](#local-deployment-with-docker)), ends it in `-cpu`. When `HORUS_REGISTRY` is unset, as in `.env.example`, the `image:` fields resolve to nothing and Compose keeps its local build names (`<project>-mas` and so on), so `docker compose up --build`, `stack-up.sh` and the `cpu-images` CI job build exactly as before. Every build also gets a commit tag, `sha-<12 hex digits>-<flavor>`.
 
-**Workflow.** It runs on a `v*` tag and by hand. The `plan` job runs `tests/ci/test_release_images.py` and the installer tests, checks the version numbers and that the tag is `v` followed by `VERSION`, then picks the registry: the repository variable `HORUS_REGISTRY`, else the installer's default `ghcr.io/epitechpromo2027`. The `image` job builds each of the 4 app services in both flavors on its own runner, through the same compose files the profiles use, and `llm-mock` once, as `cpu`, through `docker-compose.mock.yml`. It rejects a CPU image that contains a CUDA package or any torch, pushes the commit tag and, only when the run's ref is the tag `v<VERSION>`, the version tag, then signs the digest and checks the signature. A run started by hand from a branch publishes commit tags only, so it can never replace a release.
+**Workflow.** It runs on a `v*` tag and by hand. The `plan` job runs `tests/ci/test_release_images.py` and the installer tests, checks the version numbers and that the tag is `v` followed by `VERSION`, then picks the registry: the repository variable `HORUS_REGISTRY`, else the installer's default `ghcr.io/horus-eip`. The `image` job builds each of the 4 app services in both flavors on its own runner, through the same compose files the profiles use, and `llm-mock` once, as `cpu`, through `docker-compose.mock.yml`. It rejects a CPU image that contains a CUDA package or any torch, pushes the commit tag and, only when the run's ref is the tag `v<VERSION>`, the version tag, then signs the digest and checks the signature. A run started by hand from a branch publishes commit tags only, so it can never replace a release.
 
 | Setting (Settings > Secrets and variables > Actions) | Kind | Default |
 |---|---|---|
-| `HORUS_REGISTRY` | variable | `ghcr.io/epitechpromo2027`, the installer's default. Change it only together with the installer's `--registry`; the workflow warns when they differ. |
+| `HORUS_REGISTRY` | variable | `ghcr.io/horus-eip`, the installer's default. Change it only together with the installer's `--registry`; the workflow warns when they differ. |
 | `HORUS_REGISTRY_USERNAME` | variable | the account that started the run |
 | `HORUS_REGISTRY_TOKEN` | secret | the run's `GITHUB_TOKEN` with `packages: write`, which is enough for GHCR |
 
@@ -65,13 +65,13 @@ On GHCR, check after the first release that each `horus-*` package under the org
 cosign verify \
   --certificate-identity "https://github.com/Horus-EIP/horus/.github/workflows/images.yml@refs/tags/v0.1.2" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/epitechpromo2027/horus-mas:0.1.2-cpu
+  ghcr.io/horus-eip/horus-mas:0.1.2-cpu
 ```
 
 **GPL and LGPL sources.** The images contain GPL and LGPL packages from Debian and Alpine, so each release comes with the written offer in section 7 of `THIRD_PARTY_NOTICES`, also in `/usr/share/doc/horus/` in every image: for three years after we last distribute a version, its source on request. To answer a request, run `scripts/licences/fetch-gpl-sources.py` on the image concerned. It reads the package list from the image, downloads each source package (from snapshot.debian.org for Debian, the aports repository and the Alpine distfiles for Alpine), checks its hash and writes one tar archive with a `PACKAGES.tsv` and a `SOURCES.tsv`. Add `--dry-run` to see the list and the size first. It needs Docker and the network; the knowledge-store image needs about 350 MB.
 
 ```bash
-python scripts/licences/fetch-gpl-sources.py ghcr.io/epitechpromo2027/horus-knowledge-store:0.1.2-cpu --out gpl-sources
+python scripts/licences/fetch-gpl-sources.py ghcr.io/horus-eip/horus-knowledge-store:0.1.2-cpu --out gpl-sources
 ```
 
 When a Dockerfile's base image or the system packages of its final stage change, build the four CPU images and run `scripts/licences/third_party_notices.py --refresh system --image mas=IMAGE --image agent=IMAGE --image knowledge-store=IMAGE --image web-client=IMAGE` so that the list in `THIRD_PARTY_NOTICES` follows; `--check` fails until then.

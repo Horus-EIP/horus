@@ -57,8 +57,8 @@ class TempDirCase(unittest.TestCase):
 
 class RegistryChoice(unittest.TestCase):
     def test_without_any_choice_it_is_ghcr_under_the_org(self):
-        self.assertEqual(images.registry_to_use(None, {}, None), "ghcr.io/epitechpromo2027")
-        self.assertEqual(images.DEFAULT_REGISTRY, "ghcr.io/epitechpromo2027")
+        self.assertEqual(images.registry_to_use(None, {}, None), "ghcr.io/horus-eip")
+        self.assertEqual(images.DEFAULT_REGISTRY, "ghcr.io/horus-eip")
 
     def test_the_flag_beats_the_variable_which_beats_the_previous_install(self):
         env = {images.REGISTRY_KEY: "env.example/team"}
@@ -68,8 +68,8 @@ class RegistryChoice(unittest.TestCase):
         self.assertEqual(images.registry_to_use("", {}, "old.example/x"), "old.example/x")
 
     def test_case_and_a_trailing_slash_are_normalised(self):
-        self.assertEqual(images.registry_to_use("GHCR.io/EpitechPromo2027/", {}, None),
-                         "ghcr.io/epitechpromo2027")
+        self.assertEqual(images.registry_to_use("ghcr.io/horus-eip/", {}, None),
+                         "ghcr.io/horus-eip")
 
     def test_the_host_is_the_first_path_segment(self):
         self.assertEqual(images.registry_host("ghcr.io/acme/team"), "ghcr.io")

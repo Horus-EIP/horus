@@ -168,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Download the exact source code of every GPL or LGPL operating-system package in one of our "
                     "images into a single tar archive, to answer a request under the written offer in "
                     "THIRD_PARTY_NOTICES.")
-    parser.add_argument("image", help="the image, for example ghcr.io/epitechpromo2027/horus-mas:0.1.2-cpu "
+    parser.add_argument("image", help="the image, for example ghcr.io/horus-eip/horus-mas:0.1.2-cpu "
                                       "(pulled or built locally)")
     parser.add_argument("--out", type=Path, default=Path("."), help="folder for the archive (default: .)")
     parser.add_argument("--dry-run", action="store_true", help="list the source files without downloading them")
