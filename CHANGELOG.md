@@ -32,10 +32,6 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 - [+] Added outreach posts for five communities and recorded feedback on asynchronous CPU-bound work, memory limits, container isolation and Python packaging (`docs/eip/community-outreach.md`; `64c7632`).
 
-### Changed
-
-- [~] Reworked community outreach copy with current benchmark details, fixed Markdown rendering and the section 9 heading, and recorded the Reddit moderation report (9ad8169).
-
 ### Upgrading an existing install
 
 - Database migrations add the `queued` task status, `tasks.owner_username`, `tasks.skills_required` and `tasks.completed_at`, and the worker-claim columns. MAS also adds a missing `queued` value to a `taskstatus` enum built by the `create_all` fallback.
