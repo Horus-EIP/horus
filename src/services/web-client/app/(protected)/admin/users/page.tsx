@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { userApi } from "@/lib/users/api";
 import { registerField } from "@/lib/auth/schemas";
 import type { User, UserRole } from "@/lib/types";
@@ -25,7 +25,7 @@ const header = ["ID", "Username", "Role"];
 
 const AdminUsersPage = () => {
   const [users, setUsers] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
 
@@ -48,21 +48,38 @@ const AdminUsersPage = () => {
     return ROLES_OPTIONS.filter((r) => r.value !== "all");
   }, []);
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     try {
       setIsLoading(true);
       const list = await userApi.listUsers();
       setUsers(list);
-    } catch (e) {
+    } catch {
       notifyError("Failed to load users.");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [notifyError]);
 
   useEffect(() => {
-    void loadUsers();
-  }, []);
+    let ignore = false;
+    void userApi
+      .listUsers()
+      .then((list) => {
+        if (!ignore) {
+          setUsers(list);
+          setIsLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          notifyError("Failed to load users.");
+          setIsLoading(false);
+        }
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [notifyError]);
 
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
@@ -150,7 +167,7 @@ const AdminUsersPage = () => {
       }
       await loadUsers();
       close();
-    } catch (error) {
+    } catch {
       notifyError("Failed to update user role.");
     } finally {
       setIsSaving(false);
@@ -188,7 +205,7 @@ const AdminUsersPage = () => {
       } else {
         notifyError(result.error || "Failed to create user");
       }
-    } catch (error) {
+    } catch {
       notifyError("Failed to create user");
     } finally {
       setIsCreating(false);

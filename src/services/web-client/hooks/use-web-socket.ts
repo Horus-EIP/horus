@@ -59,6 +59,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
   const intentionalCloseRef = useRef(false);  // Track intentional closes
   const keepReconnectingRef = useRef(keepReconnecting);
   const gaveUpRef = useRef(false);
+  const connectRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     onMessageRef.current = onMessage;
@@ -171,10 +172,14 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
       setStatus("reconnecting");
       const delay = Math.min(backoffBaseMs * 2 ** Math.min(attempt, 16), maxBackoffMs);
       reconnectTimeoutRef.current = window.setTimeout(() => {
-        connect();
+        connectRef.current();
       }, delay);
     };
   }, [autoReconnect, backoffBaseMs, maxBackoffMs, maxRetries, notifyError, url]);
+
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   useEffect(() => {
     if (!url) {

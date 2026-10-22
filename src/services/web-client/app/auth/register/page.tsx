@@ -19,7 +19,7 @@ export default function RegisterPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const router = useRouter();
-  const { error: notifyError, success: notifySuccess } = useNotification();
+  const { error: notifyError } = useNotification();
 
   const form = useForm({
     defaultValues: {

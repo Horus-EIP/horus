@@ -1,10 +1,8 @@
 'use client';
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
     
 export default function NotFoundPage() {
-  const router = useRouter();
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--bg)] text-[var(--text)] px-4">

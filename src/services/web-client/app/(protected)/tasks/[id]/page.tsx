@@ -106,12 +106,13 @@ export default function TaskDetailPage() {
   const { error: notifyError } = useNotification();
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadedTaskId, setLoadedTaskId] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+
+  const loading = Boolean(taskId) && loadedTaskId !== taskId;
 
   useEffect(() => {
     if (!taskId) {
-      setLoading(false);
       return;
     }
     let cancelled = false;
@@ -122,8 +123,6 @@ export default function TaskDetailPage() {
     const ac = new AbortController();
 
     const fetchOnce = async (isInitial: boolean) => {
-      if (isInitial) setLoading(true);
-
       const taskRes = await chatApi.getTask(taskId, { signal: ac.signal });
       if (cancelled || ac.signal.aborted) return;
       if (!taskRes.ok || !taskRes.data) {
@@ -134,6 +133,7 @@ export default function TaskDetailPage() {
               : taskRes.error || 'Failed to load task'
           );
           setTask(null);
+          setLoadedTaskId(taskId);
         }
       } else {
         setTask(buildTaskDetail(taskRes.data));
@@ -146,10 +146,10 @@ export default function TaskDetailPage() {
           window.clearInterval(pollId);
           pollId = null;
         }
+        if (isInitial) {
+          setLoadedTaskId(taskId);
+        }
       }
-      // Drop the spinner as soon as the task itself is resolved — the agent
-      // list below fills in independently and shouldn't gate first paint.
-      if (isInitial) setLoading(false);
 
       const agentsRes = await agentApi.getAgents({ signal: ac.signal });
       if (cancelled || ac.signal.aborted) return;

@@ -69,37 +69,52 @@ const AdminTracesPage = () => {
   const [service, setService] = useState("all");
   const [since, setSince] = useState("1h");
   const [traces, setTraces] = useState<TraceSummary[]>([]);
-  const [loadingList, setLoadingList] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<TraceDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
-  const loadList = useCallback(async () => {
-    setLoadingList(true);
-    const res = await tracesApi.search({
-      service: service === "all" ? undefined : service,
-      since,
-      limit: 50,
-    });
-    if (!res.ok) {
-      notifyError(res.error || "Failed to search traces.");
-    } else {
-      setTraces(res.traces);
-    }
-    setLoadingList(false);
-  }, [service, since, notifyError]);
+  const currentQueryKey = `${service}|${since}|${refreshTrigger}`;
+  const [completedQueryKey, setCompletedQueryKey] = useState<string | null>(null);
+
+  const loadingList = currentQueryKey !== completedQueryKey;
+
+  const handleRefresh = useCallback(() => {
+    setRefreshTrigger((prev) => prev + 1);
+  }, []);
 
   useEffect(() => {
-    void loadList();
-  }, [loadList]);
+    const queryKey = `${service}|${since}|${refreshTrigger}`;
+    let ignore = false;
+    tracesApi
+      .search({
+        service: service === "all" ? undefined : service,
+        since,
+        limit: 50,
+      })
+      .then((res) => {
+        if (ignore) return;
+        if (!res.ok) {
+          notifyError(res.error || "Failed to search traces.");
+        } else {
+          setTraces(res.traces);
+        }
+        setCompletedQueryKey(queryKey);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [service, since, refreshTrigger, notifyError]);
 
   useEffect(() => {
     if (!autoRefresh) return;
-    const id = setInterval(() => void loadList(), 10000);
+    const id = setInterval(() => {
+      setRefreshTrigger((prev) => prev + 1);
+    }, 10000);
     return () => clearInterval(id);
-  }, [autoRefresh, loadList]);
+  }, [autoRefresh, service, since, notifyError]);
 
   const openTrace = useCallback(
     async (traceID: string) => {
@@ -138,7 +153,12 @@ const AdminTracesPage = () => {
           <Select
             value={service}
             data={SERVICE_OPTIONS}
-            onChange={(v) => v && setService(v)}
+            onChange={(v) => {
+              if (v && v !== service) {
+                setService(v);
+                setRefreshTrigger((prev) => prev + 1);
+              }
+            }}
             rightSection={<IconChevronDown size={14} className="text-[var(--textSoft)]" />}
             classNames={selectClassNames}
             comboboxProps={{ transitionProps: { transition: "pop", duration: 150 }, offset: 8 }}
@@ -149,14 +169,19 @@ const AdminTracesPage = () => {
           <Select
             value={since}
             data={SINCE_OPTIONS}
-            onChange={(v) => v && setSince(v)}
+            onChange={(v) => {
+              if (v && v !== since) {
+                setSince(v);
+                setRefreshTrigger((prev) => prev + 1);
+              }
+            }}
             rightSection={<IconChevronDown size={14} className="text-[var(--textSoft)]" />}
             classNames={selectClassNames}
             comboboxProps={{ transitionProps: { transition: "pop", duration: 150 }, offset: 8 }}
           />
         </div>
         <button
-          onClick={() => void loadList()}
+          onClick={handleRefresh}
           disabled={loadingList}
           className="rounded-xl bg-blue-600 px-3 py-2 text-sm text-white shadow hover:bg-blue-700 cursor-pointer flex items-center gap-2 disabled:opacity-60"
         >
@@ -273,4 +298,5 @@ const GatedAdminTracesPage = () => (
   </MonitoringGate>
 );
 
+export { AdminTracesPage };
 export default GatedAdminTracesPage;
