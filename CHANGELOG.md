@@ -52,6 +52,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 ### Fixed
 
+- Mypy now checks `mas/auth` in CI without blocking the build, and the MAS and knowledge-store embeddings client copies remain identical (B-43; d03c69d).
 - `compare-benchmarks.py` crashed on every llama-bench report (B-122, `3711a7b`)
 - `ruff` failed CI on a `dict()` call in the agent (C408, `0ebc769`)
 - Valkey answered on every network interface with the password every install shipped, `redis_password`; it is bound to 127.0.0.1 and gets a generated password (B-123, `d586e09`)

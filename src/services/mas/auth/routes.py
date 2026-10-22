@@ -101,7 +101,13 @@ def user_logout(user: user_dependency):
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
 
+    exp = None
+
     exp = user.get("exp")
+
+    if not exp:
+        raise HTTPException(status_code=401, detail="Authentication Failed")
+    
     nonce = user.get("nonce")
 
     ttl = exp - int(datetime.now().timestamp())

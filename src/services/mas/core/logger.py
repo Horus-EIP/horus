@@ -72,7 +72,7 @@ class MASLogger:
     """Singleton coordinator for structlog-based MAS loggers."""
 
     _instance = None
-    _loggers = {}
+    _loggers: dict[str, logging.Logger] = {}
 
     def __new__(cls):
         if cls._instance is None:
@@ -156,7 +156,9 @@ class MASLogger:
         for noisy in ("pika", "httpx", "httpcore"):
             logging.getLogger(noisy).setLevel(logging.WARNING)
 
-    def get_logger(self, name: str, level: int | None = None) -> logging.Logger:
+    def get_logger(
+        self, name: str, level: int | None = None
+    ) -> structlog.stdlib.BoundLogger:
         """
         Get or create a structlog logger instance with the specified name.
         """
@@ -179,7 +181,10 @@ class MASLogger:
         """
         logger = self.get_logger(component)
         logger.info(
-            "startup_event", component=component.upper(), message=message, icon="🚀"
+            "startup_event",
+            component=component.upper(),
+            message=message,
+            icon="🚀",
         )
 
     def log_success(self, component: str, message: str):
@@ -191,7 +196,9 @@ class MASLogger:
             message (str): Success message
         """
         logger = self.get_logger(component)
-        logger.info("success_event", component=component, message=message, icon="✅")
+        logger.info(
+            "success_event", component=component, message=message, icon="✅"
+        )
 
     def log_warning(self, component: str, message: str):
         """
@@ -202,7 +209,9 @@ class MASLogger:
             message (str): Warning message
         """
         logger = self.get_logger(component)
-        logger.warning("warning_event", component=component, message=message, icon="⚠️")
+        logger.warning(
+            "warning_event", component=component, message=message, icon="⚠️"
+        )
 
     def log_error(self, component: str, message: str, exc_info=False):
         """
@@ -288,7 +297,7 @@ class MASLogger:
             )
 
     def log_api_request(
-        self, method: str, endpoint: str, status_code: int, duration: float = None
+        self, method: str, endpoint: str, status_code: int, duration: float | None = None
     ):
         """
         Log an API request.
@@ -355,7 +364,7 @@ class MASLogger:
 mas_logger = MASLogger()
 
 
-def get_logger(name: str) -> logging.Logger:
+def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     return mas_logger.get_logger(name)
 
 
@@ -384,7 +393,7 @@ def log_auth_operation(operation: str, username: str, success: bool = True):
 
 
 def log_api_request(
-    method: str, endpoint: str, status_code: int, duration: float = None
+    method: str, endpoint: str, status_code: int, duration: float | None = None
 ):
     mas_logger.log_api_request(method, endpoint, status_code, duration)
 
