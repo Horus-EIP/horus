@@ -181,10 +181,15 @@ def _parse_env(text: str) -> list[tuple[str | None, str]]:
 
 ADMIN_USERNAME_KEY = "SUPER_USER_USERNAME"
 ADMIN_PASSWORD_KEY = "SUPER_USER_PASSWORD"
+AGENT_USERNAME_KEY = "SUPER_AGENT_USERNAME"
+AGENT_PASSWORD_KEY = "SUPER_AGENT_PASSWORD"
 SHIPPED_ADMIN_PASSWORDS = frozenset({"", "admin"})
+SHIPPED_AGENT_PASSWORDS = frozenset({"", "agent"})
 ADMIN_PASSWORD_SHAPE = tuple(re.compile(pattern) for pattern in
                              ("^[A-Za-z0-9]", "[a-z]", "[A-Z]", "[0-9]", "[-_]"))
-GENERATED_SECRETS = ("JWT_SECRET_KEY", "REDIS_PASSWORD", ADMIN_PASSWORD_KEY)
+AGENT_PASSWORD_SHAPE = tuple(re.compile(pattern) for pattern in
+                             ("^[A-Za-z0-9]", "[a-z]", "[A-Z]", "[0-9]", "[-_]"))
+GENERATED_SECRETS = ("JWT_SECRET_KEY", "REDIS_PASSWORD", ADMIN_PASSWORD_KEY, AGENT_PASSWORD_KEY)
 
 def generated_admin_password() -> str:
     while True:
@@ -192,8 +197,18 @@ def generated_admin_password() -> str:
         if all(shape.search(candidate) for shape in ADMIN_PASSWORD_SHAPE):
             return candidate
 
+def generated_agent_password() -> str:
+    while True:
+        candidate = secrets.token_urlsafe(18)
+        if all(shape.search(candidate) for shape in AGENT_PASSWORD_SHAPE):
+            return candidate
+
 def generated_secret(key: str) -> str:
-    return generated_admin_password() if key == ADMIN_PASSWORD_KEY else secrets.token_hex(32)
+    if key == ADMIN_PASSWORD_KEY:
+        return generated_admin_password()
+    if key == AGENT_PASSWORD_KEY:
+        return generated_agent_password()
+    return secrets.token_hex(32)
 
 def env_line_value(infra: Path, key: str) -> str | None:
     try:
@@ -374,11 +389,28 @@ def admin_password(log: Log, infra: Path) -> tuple[str, bool]:
         log.info(f"Generated a new {ADMIN_PASSWORD_KEY}; it is shown once, at the end")
     return generated_admin_password(), True
 
+def agent_password(log: Log, infra: Path) -> tuple[str, bool]:
+    existing = smoke.read_env(infra / ".env").get(AGENT_PASSWORD_KEY, "").strip()
+    if existing not in SHIPPED_AGENT_PASSWORDS:
+        log.info(f"Keeping the {AGENT_PASSWORD_KEY} in src/infra/.env")
+        return env_line_value(infra, AGENT_PASSWORD_KEY) or existing, False
+    if existing:
+        log.ok("Replacing the shipped agent password with a generated one.")
+    else:
+        log.info(f"Generated a new {AGENT_PASSWORD_KEY}")
+    return generated_agent_password(), True
+
 ADMIN_CHECK = ["exec", "-T", "mas", "python", "-m", "db.admin_account"]
 ADMIN_OUTCOME = re.compile(r"^admin-account: (\w+)$")
 ADMIN_USES_ENV = frozenset({"created", "replaced", "matches"})
 ADMIN_REFUSED = frozenset({"shipped", "refused"})
 ADMIN_NOT_ON_ENV = ADMIN_REFUSED | {"differs"}
+
+AGENT_CHECK = ["exec", "-T", "mas", "python", "-m", "db.agent_account"]
+AGENT_OUTCOME = re.compile(r"^agent-account: (\w+)$")
+AGENT_USES_ENV = frozenset({"created", "replaced", "matches"})
+AGENT_REFUSED = frozenset({"shipped", "refused"})
+AGENT_NOT_ON_ENV = AGENT_REFUSED | {"differs"}
 
 def admin_account_outcome(log: Log, infra: Path) -> str:
     res = run(compose(ADMIN_CHECK), log, timeout=180, cwd=infra, log_output=False,
@@ -389,6 +421,17 @@ def admin_account_outcome(log: Log, infra: Path) -> str:
             log.info(f"admin account: {match.group(1)}")
             return match.group(1)
     log.info(f"admin account: no outcome (exit {res.code})")
+    return ""
+
+def agent_account_outcome(log: Log, infra: Path) -> str:
+    res = run(compose(AGENT_CHECK), log, timeout=180, cwd=infra, log_output=False,
+              stdin_text="")
+    for line in reversed(res.out.splitlines()):
+        match = AGENT_OUTCOME.match(line.strip())
+        if match:
+            log.info(f"agent account: {match.group(1)}")
+            return match.group(1)
+    log.info(f"agent account: no outcome (exit {res.code})")
     return ""
 
 def check_admin_account(log: Log, infra: Path) -> str:
@@ -409,8 +452,29 @@ def check_admin_account(log: Log, infra: Path) -> str:
                  f"{' '.join(ADMIN_CHECK)}` gave no answer). The log has the details.")
     return outcome
 
+def check_agent_account(log: Log, infra: Path) -> str:
+    outcome = agent_account_outcome(log, infra)
+    username = agent_username(infra)
+    if outcome == "differs":
+        log.warn(f"The password of {username} is not the {AGENT_PASSWORD_KEY} in src/infra/.env, "
+                 "so Horus kept it: it was changed in Horus.")
+        log.say(f"  The agent signs in with {AGENT_PASSWORD_KEY}. Put the password of "
+                f"{username} there,")
+        log.say("  then run  START-HERE (your platform) --start")
+    elif outcome in AGENT_REFUSED:
+        log.warn(f"MAS refused the {AGENT_PASSWORD_KEY} in src/infra/.env: it is empty or "
+                 "'agent'. Set a password of your own there, then run "
+                 "START-HERE (your platform) --start")
+    elif outcome not in AGENT_USES_ENV:
+        log.warn(f"Could not check the agent account (`docker compose "
+                 f"{' '.join(AGENT_CHECK)}` gave no answer). The log has the details.")
+    return outcome
+
 def admin_username(infra: Path) -> str:
     return smoke.read_env(infra / ".env").get(ADMIN_USERNAME_KEY, "").strip() or "admin"
+
+def agent_username(infra: Path) -> str:
+    return smoke.read_env(infra / ".env").get(AGENT_USERNAME_KEY, "").strip() or "agent"
 
 def terminal_output() -> bool:
     try:
@@ -2027,6 +2091,7 @@ def _dispatch(log: Log, args) -> int:
     env["CORPUS_SCAN_TOKEN"] = corpus_scan_token(log, infra)
     env["REDIS_PASSWORD"] = valkey_password(log, infra)
     env[ADMIN_PASSWORD_KEY], admin_password_generated = admin_password(log, infra)
+    env[AGENT_PASSWORD_KEY], _agent_password_generated = agent_password(log, infra)
     env["HORUS_VERSION"] = VERSION
     if registry is not None:
         env[images.REGISTRY_KEY] = registry
@@ -2052,6 +2117,7 @@ def _dispatch(log: Log, args) -> int:
     wait_for_health(log, infra, expect, timeout=args.timeout)
     wait_for_reindex(log, infra, may_start=False)
     admin_outcome = check_admin_account(log, infra)
+    check_agent_account(log, infra)
     shown_password = (env[ADMIN_PASSWORD_KEY] if admin_password_generated
                       and admin_outcome not in ADMIN_NOT_ON_ENV else None)
 

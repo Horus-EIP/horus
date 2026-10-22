@@ -11,7 +11,7 @@ Routes under test (``src/services/mas/agents/routes.py``):
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -19,18 +19,18 @@ from agents.routes import router
 
 
 class TestAgentRegistration:
-    @patch("agents.routes.create_agent")
-    def test_register_returns_409_on_duplicate_name(self, mock_create, make_client, mock_db, as_admin):
-        # First query is the duplicate-name check — returning a row triggers 409.
-        mock_db.query.return_value.filter.return_value.first.return_value = MagicMock()
+    @patch("agents.routes.create_agent", return_value=(None, None, True))
+    def test_register_returns_409_on_duplicate_name(self, mock_create, make_client, as_admin):
+        # A registration conflict with an active agent is reported as 409.
         client = make_client(router, current_user=as_admin)
         r = client.post(
             "/agents/register",
             json={"name": "dup", "skills": ["s1"], "description": "x", "type": "researcher"},
         )
         assert r.status_code == 409
+        mock_create.assert_awaited_once()
 
-    @patch("agents.routes.create_agent", return_value=("new-id", "api-key"))
+    @patch("agents.routes.create_agent", return_value=("new-id", "api-key", False))
     def test_register_returns_200_on_new_agent(self, _create, make_client, mock_db, as_admin):
         mock_db.query.return_value.filter.return_value.first.return_value = None
         client = make_client(router, current_user=as_admin)

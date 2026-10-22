@@ -55,6 +55,7 @@ nav:
   - Security & Compliance: security.md
   - Validation & Error Handling: validation-and-error-handling.md
   - Code Style: contributing.md
+  - CI & Branches: ci-and-branches.md
   - Demo: demo.md
   - Changelog: ../CHANGELOG.md
   - EIP Deliverables:

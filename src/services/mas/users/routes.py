@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from auth.auth_tool_functions import PermissionChecker, get_current_user, modify_user_password
 from auth.permissions import Permission
+from core.config import settings
 from core.logger import get_logger
 from db.database import get_db
 from db.models import Users
@@ -56,6 +57,14 @@ async def update_roles(
         raise HTTPException(status_code=401, detail="Authentication Failed")
 
     try:
+        if user_info.user_id == settings.super_agent_username:
+            logger.warning(
+                f"Failed to update user role: User {user_info.user_id} can't have an another role than {user_info.new_role.value}"
+            )
+            raise HTTPException(
+                status_code=403,
+                detail=f"Agent already has role {user_info.new_role.value} and it can't be modified",
+            )
         existing_user_with_role = (
             db.query(Users)
             .filter(
@@ -189,6 +198,10 @@ def delete_user(
     if user.get("id") == user_id:
         logger.warning(f"Admin {user.get('username')} attempted to delete themselves")
         raise HTTPException(status_code=403, detail="Cannot delete your own account")
+
+    if user_id == settings.super_agent_username:
+        logger.warning(f"{user.get('username')} attempted to delete Agent profile")
+        raise HTTPException(status_code=403, detail="Cannot delete your agent account")
 
     return delete_user_tool(user_id, db)
 

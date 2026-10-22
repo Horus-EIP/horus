@@ -128,6 +128,8 @@ All configuration is loaded from environment variables. A reference file is loca
 | `JWT_ALGORITHM`        | JWT signing algorithm                    | `HS256`       |
 | `SUPER_USER_USERNAME`  | Initial admin username                   | (required)    |
 | `SUPER_USER_PASSWORD`  | Initial admin password                   | (required)    |
+| `SUPER_AGENT_USERNAME` | Initial agent-service login              | `agent`       |
+| `SUPER_AGENT_PASSWORD` | Generated password for the least-privilege agent role; legacy `.env` files fall back to `SUPER_USER_PASSWORD` | (optional) |
 | `REDIS_HOST`           | Redis server host                        | `localhost`   |
 | `REDIS_PORT`           | Redis server port                        | `6379`        |
 | `REDIS_PASSWORD`       | Redis password                           | (required)    |

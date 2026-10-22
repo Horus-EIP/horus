@@ -91,6 +91,65 @@ class TestConfigVariables:
         assert isinstance(settings.rabbitmq_host, str)
 
 
+class TestLegacyAgentCredentials:
+    def test_agent_credentials_fall_back_for_an_existing_env_file(
+        self, monkeypatch, tmp_path
+    ):
+        for key in (
+            "POSTGRES_USER",
+            "POSTGRES_PASSWORD",
+            "POSTGRES_DB",
+            "JWT_SECRET_KEY",
+            "SUPER_USER_USERNAME",
+            "SUPER_USER_PASSWORD",
+            "SUPER_AGENT_USERNAME",
+            "SUPER_AGENT_PASSWORD",
+            "REDIS_PASSWORD",
+        ):
+            monkeypatch.delenv(key, raising=False)
+
+        from core.config import Settings
+
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "\n".join(
+                (
+                    "POSTGRES_USER=horus",
+                    "POSTGRES_PASSWORD=db-password",
+                    "POSTGRES_DB=horus",
+                    "JWT_SECRET_KEY=jwt-secret",
+                    "SUPER_USER_USERNAME=admin",
+                    "SUPER_USER_PASSWORD=legacy-admin-password",
+                    "REDIS_PASSWORD=redis-password",
+                )
+            ),
+            encoding="utf-8",
+        )
+        settings = Settings(_env_file=env_file)
+
+        assert settings.super_agent_username == "agent"
+        assert settings.super_agent_password == "legacy-admin-password"
+
+    def test_configured_agent_credentials_take_precedence(self):
+        from core.config import Settings
+
+        settings = Settings(
+            _env_file=None,
+            postgres_user="horus",
+            postgres_password="db-password",
+            postgres_db="horus",
+            jwt_secret_key="jwt-secret",
+            super_user_username="admin",
+            super_user_password="legacy-admin-password",
+            super_agent_username="worker",
+            super_agent_password="dedicated-agent-password",
+            redis_password="redis-password",
+        )
+
+        assert settings.super_agent_username == "worker"
+        assert settings.super_agent_password == "dedicated-agent-password"
+
+
 class TestEnvLoadingLogic:
     """Test the env loading logic with real file scenarios"""
 

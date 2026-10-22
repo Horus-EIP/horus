@@ -80,6 +80,13 @@ class MockOverlay(unittest.TestCase):
                                  f"http://{profiles.MOCK_MODEL_SERVER}:{mock_settings.DEFAULT_PORT}/v1")
                 self.assertEqual(env["LLM_VLLM_MODEL"], profiles.MOCK_MODEL_NAME)
 
+    def test_legacy_env_files_keep_the_agent_login_working(self):
+        env = environment(self.base["agent"])
+        self.assertEqual(env["ORCHESTRATOR_USERNAME"], "${SUPER_AGENT_USERNAME:-agent}")
+        self.assertEqual(
+            env["ORCHESTRATOR_PASSWORD"], "${SUPER_AGENT_PASSWORD:-${SUPER_USER_PASSWORD}}"
+        )
+
     def test_the_answer_cache_can_never_mix_mock_and_model_answers(self):
         local_names = {profiles.env_for(name)["LLM_VLLM_MODEL"] for name in profiles.PROFILE_ORDER}
         self.assertNotIn(profiles.MOCK_MODEL_NAME, local_names)

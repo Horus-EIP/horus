@@ -127,7 +127,7 @@ class TestCreateAppEnvironment:
         assert callable(app.router.lifespan_context)
 
     def test_factory_registers_expected_routes_and_middleware(self):
-        """All routers and both custom middlewares are mounted, plus /metrics."""
+        """All routers and the single correlation middleware are mounted."""
         app = app_module.create_app_environment()
 
         paths = _collect_route_paths(app)
@@ -136,9 +136,10 @@ class TestCreateAppEnvironment:
         # Instrumentator.expose() adds the Prometheus scrape endpoint.
         assert "/metrics" in paths
 
-        # CORS + logging middleware both present in the stack.
+        # CORS and the single correlation-ID middleware are present.
         middleware_classes = {m.cls.__name__ for m in app.user_middleware}
-        assert "LoggingMiddleware" in middleware_classes
+        assert "CorrelationIDMiddleware" in middleware_classes
+        assert "LoggingMiddleware" not in middleware_classes
         assert "CORSMiddleware" in middleware_classes
 
     def test_factory_sets_module_level_instrumentator(self):
@@ -360,15 +361,15 @@ class TestCorrelationMiddleware:
         assert response.status_code == 200
         assert response.headers["X-Request-ID"]
 
-    def test_excluded_path_skips_correlation_headers(self):
-        """Excluded paths short-circuit before any correlation header is added."""
+    def test_metrics_path_also_gets_correlation_headers(self):
+        """Every response, including /metrics, carries both correlation headers."""
         client = TestClient(_build_correlation_app())
         response = client.get("/metrics")
 
         assert response.status_code == 200
         assert response.text == "metrics-body"
-        assert "X-Request-ID" not in response.headers
-        assert "X-Correlation-ID" not in response.headers
+        assert response.headers["X-Request-ID"]
+        assert response.headers["X-Correlation-ID"] == response.headers["X-Request-ID"]
 
     def test_exception_is_logged_and_reraised(self):
         """A handler exception is logged then propagated (500), id cleared after."""

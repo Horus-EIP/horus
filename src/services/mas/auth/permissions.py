@@ -6,6 +6,7 @@ class Role(str, Enum):
     USER = "user"
     MANAGER = "manager"
     SYSTEM = "system"
+    AGENT = "agent"
 
 
 class Permission(str, Enum):
@@ -78,6 +79,11 @@ ROLE_PERMISSION: dict[Role, set[Permission]] = {
         Permission.TASK_READ,
         Permission.AGENT_READ,
         Permission.AGENT_EXECUTE,
+    },
+    Role.AGENT: {
+        Permission.AGENT_CREATE,
+        Permission.AGENT_EXECUTE,
+
     },
 }
 

@@ -7,6 +7,7 @@ from sqlalchemy import text
 from core.config import settings
 from core.logger import get_logger, log_db_operation, log_error, log_success
 from db.admin_account import ensure_admin_account
+from db.agent_account import ensure_agent_account
 from db.database import Base, SessionLocal, engine
 from db.migrate_critical_logs import create_critical_logs_table
 from tasks.status import TaskStatus
@@ -131,6 +132,7 @@ def init_db():
     db = SessionLocal()
     try:
         ensure_admin_account(db, settings.super_user_username, settings.super_user_password)
+        ensure_agent_account(db, settings.super_agent_username, settings.super_agent_password)
 
         # The five specialist agents are no longer DB-seeded — the agent worker
         # registers them itself at startup as real, heartbeating identities (see

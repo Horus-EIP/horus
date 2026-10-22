@@ -23,10 +23,10 @@ import users.routes
 from agents.controller import check_agent_heartbeat
 from auth.routes import router as auth_router
 from core.ai_mode import start_probe_background_thread
+from core.correlation_middleware import CorrelationIDMiddleware
 from core.embedding_setup import start_embedding_preload_background_thread
 from core.llm_setup import start_llm_preload_background_thread
 from core.logger import get_logger, log_error, log_startup, log_success
-from core.middleware import LoggingMiddleware
 from core.rabbitmq_tool import rabbitmq_instance
 from core.tracing import init_tracing
 from core.version import HORUS_VERSION
@@ -92,8 +92,8 @@ def create_app_environment():
         ],
     )
 
-    app.add_middleware(LoggingMiddleware)
-    log_success("app", "Logging middleware added")
+    app.add_middleware(CorrelationIDMiddleware)
+    log_success("app", "Correlation middleware added")
 
     app.add_middleware(
         CORSMiddleware,
