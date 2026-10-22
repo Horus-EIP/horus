@@ -59,7 +59,7 @@ class Forbidden:
 
 FORBIDDEN = (
     Forbidden("a product source path", "5c06cdf845c9f116b645eae3b6de0d31f723a0c9598c614c86a60b32e8e59ad8", 12),
-    Forbidden("a private registry", "ee91dfadf795111bd5180b8075b8af974036ed66d6772ae3e11b38ce1dfb6d8a", 24),
+    Forbidden("a private registry", "ae9362d38572c2c28f4cc38da58880975bbe4fb3fa45b7ebc32ec5e833bc183f", 17),
     Forbidden("closed licence wording", "9049697da52b7e0efb06ef942d752352a8336c4cc657b095b882a63495d75d51", 11),
     Forbidden(
         "a maintainer email domain",
