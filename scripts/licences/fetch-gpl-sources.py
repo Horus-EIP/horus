@@ -36,14 +36,14 @@ def overrides() -> dict[str, dict]:
     return (yaml.safe_load(COMPONENTS.read_text(encoding="utf-8")) or {}).get("system_overrides") or {}
 
 
-def request(url: str, method: str = "GET"):
-    return urllib.request.urlopen(urllib.request.Request(url, method=method), timeout=600)
+def request(url: str, method: str = "GET", timeout: int = 600):
+    return urllib.request.urlopen(urllib.request.Request(url, method=method), timeout=timeout)
 
 
-def fetch(url: str, attempts: int = 4) -> bytes:
+def fetch(url: str, attempts: int = 4, timeout: int = 600) -> bytes:
     for attempt in range(attempts):
         try:
-            with request(url) as response:
+            with request(url, timeout=timeout) as response:
                 return response.read()
         except urllib.error.HTTPError:
             raise
@@ -108,7 +108,7 @@ def alpine_recipe(origin: str, commit: str) -> tuple[str, bytes]:
         )
         for url in urls:
             try:
-                return repository, fetch(url)
+                return repository, fetch(url, attempts=1, timeout=30)
             except urllib.error.HTTPError as error:
                 error.close()
                 continue
