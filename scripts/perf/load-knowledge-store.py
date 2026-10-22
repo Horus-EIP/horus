@@ -31,15 +31,15 @@ SAMPLE_QUERIES = [
 SAMPLE_DOCS = [
     {
         "title": "Q1 Financial Report",
-        "content": "The company reported strong Q1 results with revenue of $10M, representing a 15% increase year-over-year. Key drivers include expansion into new markets and improved customer retention."
+        "content": "The company reported strong Q1 results with revenue of $10M, representing a 15% increase year-over-year. Key drivers include expansion into new markets and improved customer retention.",
     },
     {
         "title": "Sales Analysis",
-        "content": "Sales performance exceeded expectations in all regions. North America led with 25% growth, followed by Europe at 18%. The sales team closed 150 new enterprise accounts."
+        "content": "Sales performance exceeded expectations in all regions. North America led with 25% growth, followed by Europe at 18%. The sales team closed 150 new enterprise accounts.",
     },
     {
         "title": "Product Update",
-        "content": "The new product line launched in March has been well received. Customer feedback indicates high satisfaction with the improved features and user experience."
+        "content": "The new product line launched in March has been well received. Customer feedback indicates high satisfaction with the improved features and user experience.",
     },
 ]
 
@@ -59,9 +59,7 @@ class KnowledgeStoreUser(HttpUser):
         """Query the knowledge store (high frequency)."""
         query = random.choice(SAMPLE_QUERIES)
         with self.client.post(
-            "/store/query",
-            json={"query": query, "k": 5},
-            catch_response=True
+            "/store/query", json={"query": query, "k": 5}, catch_response=True
         ) as response:
             if response.status_code == 200:
                 response.success()
@@ -77,11 +75,7 @@ class KnowledgeStoreUser(HttpUser):
         doc = random.choice(SAMPLE_DOCS).copy()
         doc["id"] = f"load_test_{random.randint(10000, 99999)}_{time.time()}"
 
-        with self.client.post(
-            "/store/add",
-            json=doc,
-            catch_response=True
-        ) as response:
+        with self.client.post("/store/add", json=doc, catch_response=True) as response:
             if response.status_code in [200, 201]:
                 response.success()
             else:
@@ -107,10 +101,7 @@ class QueryOnlyUser(HttpUser):
         query = random.choice(SAMPLE_QUERIES)
         k = random.choice([3, 5, 10])  # Vary number of results
 
-        self.client.post(
-            "/store/query",
-            json={"query": query, "k": k}
-        )
+        self.client.post("/store/query", json={"query": query, "k": k})
 
 
 class BurstUser(HttpUser):
@@ -124,7 +115,4 @@ class BurstUser(HttpUser):
     @task
     def burst_query(self):
         """Rapid-fire queries."""
-        self.client.post(
-            "/store/query",
-            json={"query": random.choice(SAMPLE_QUERIES), "k": 3}
-        )
+        self.client.post("/store/query", json={"query": random.choice(SAMPLE_QUERIES), "k": 3})

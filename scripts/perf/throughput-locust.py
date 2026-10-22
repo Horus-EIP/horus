@@ -33,13 +33,15 @@ class ReadThroughputUser(HttpUser):
 
     @task(2)
     def conversations(self):
-        self.client.get("/conversations/get-conversations/", headers=self._h(),
-                        name="GET /conversations/get-conversations/")
+        self.client.get(
+            "/conversations/get-conversations/",
+            headers=self._h(),
+            name="GET /conversations/get-conversations/",
+        )
 
     @task(1)
     def agents(self):
-        self.client.get("/agents/details/", headers=self._h(),
-                        name="GET /agents/details/")
+        self.client.get("/agents/details/", headers=self._h(), name="GET /agents/details/")
 
 
 @events.test_start.add_listener

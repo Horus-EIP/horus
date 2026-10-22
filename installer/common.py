@@ -11,12 +11,14 @@ from pathlib import Path
 VERSION_FILE = Path(__file__).resolve().parent.parent / "VERSION"
 UNKNOWN_VERSION = "0.0.0"
 
+
 def read_version(path: Path = VERSION_FILE) -> str:
     try:
         text = path.read_text(encoding="utf-8").strip()
     except OSError:
         return UNKNOWN_VERSION
     return text or UNKNOWN_VERSION
+
 
 VERSION = read_version()
 
@@ -58,8 +60,10 @@ _EXIT_NAMES = {
     v: k for k, v in list(globals().items()) if k.startswith("EXIT_") and isinstance(v, int)
 }
 
+
 def exit_name(code: int) -> str:
     return _EXIT_NAMES.get(code, "EXIT_UNKNOWN")
+
 
 def _enable_utf8_console() -> None:
     for stream in (sys.stdout, sys.stderr):
@@ -68,7 +72,9 @@ def _enable_utf8_console() -> None:
         except Exception:
             pass
 
+
 _enable_utf8_console()
+
 
 def _supports_colour() -> bool:
     if os.environ.get("NO_COLOR"):
@@ -79,25 +85,33 @@ def _supports_colour() -> bool:
         return False
     return True
 
+
 _COLOUR = _supports_colour()
+
 
 def _c(code: str, text: str) -> str:
     return f"\033[{code}m{text}\033[0m" if _COLOUR else text
 
+
 def bold(t: str) -> str:
     return _c("1", t)
+
 
 def green(t: str) -> str:
     return _c("32", t)
 
+
 def yellow(t: str) -> str:
     return _c("33", t)
+
 
 def red(t: str) -> str:
     return _c("31", t)
 
+
 def dim(t: str) -> str:
     return _c("2", t)
+
 
 def rule(title: str = "") -> str:
     width = 72
@@ -105,10 +119,11 @@ def rule(title: str = "") -> str:
         return "-" * width
     return "-- " + title + " " + "-" * max(0, width - len(title) - 4)
 
+
 EVENT_PREFIX = "@@HORUS "
 
-class Events:
 
+class Events:
     def __init__(self, enabled: bool = False, stream=None):
         self.enabled = bool(enabled)
         self._stream = stream if stream is not None else sys.stderr
@@ -127,8 +142,8 @@ class Events:
         except (OSError, ValueError):
             pass
 
-class Log:
 
+class Log:
     def __init__(self, path: Path, events: "Events | None" = None):
         self.path = path
         self.events = events if events is not None else Events(False)
@@ -207,6 +222,7 @@ class Log:
                 pass
             self._fh = None
 
+
 def _strip_ansi(text: str) -> str:
     out, i = [], 0
     while i < len(text):
@@ -220,8 +236,8 @@ def _strip_ansi(text: str) -> str:
         i += 1
     return "".join(out)
 
-class InstallError(Exception):
 
+class InstallError(Exception):
     def __init__(self, code: int, headline: str, detail: str = "", fix: str = ""):
         super().__init__(headline)
         self.code = code
@@ -248,6 +264,7 @@ class InstallError(Exception):
         log.say(f"  Exit code {self.code} ({exit_name(self.code)})")
         log.say("")
 
+
 class Result:
     __slots__ = ("code", "out", "err", "timed_out")
 
@@ -267,6 +284,7 @@ class Result:
                 if line.strip():
                     return line.strip()
         return ""
+
 
 def run(
     cmd: list[str],
@@ -316,11 +334,14 @@ def run(
                 log.debug(f"  {label}: {line}")
     return Result(proc.returncode, out, err)
 
+
 def have(executable: str) -> bool:
     return shutil.which(executable) is not None
 
+
 INSTALLER_DIR = Path(__file__).resolve().parent
 BUNDLE_DIR = INSTALLER_DIR.parent
+
 
 def find_repo(explicit: str | None = None) -> Path:
     marker = Path("src") / "infra" / "docker-compose.yml"
@@ -351,8 +372,10 @@ def find_repo(explicit: str | None = None) -> Path:
         "Or pass the path explicitly:  --repo /path/to/horus",
     )
 
+
 def infra_dir(repo: Path) -> Path:
     return repo / "src" / "infra"
+
 
 def human_bytes(n: float) -> str:
     for unit in ("B", "KB", "MB", "GB", "TB"):
@@ -360,6 +383,7 @@ def human_bytes(n: float) -> str:
             return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
         n /= 1024.0
     return f"{n:.1f} PB"
+
 
 def elapsed(seconds: float) -> str:
     seconds = int(seconds)

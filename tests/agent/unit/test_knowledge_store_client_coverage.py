@@ -179,10 +179,7 @@ class TestExtractProbableFilename:
         )
 
     def test_single_quoted_filename(self):
-        assert (
-            extract_probable_filename_from_query("show me 'notes.md' contents")
-            == "notes.md"
-        )
+        assert extract_probable_filename_from_query("show me 'notes.md' contents") == "notes.md"
 
     def test_file_keyword_pattern(self):
         assert (
@@ -246,9 +243,7 @@ class TestInitAndApiRoot:
         assert client._api_prefix == "/api/knowledge-store"
 
     def test_prefix_trailing_slash_stripped(self):
-        client = KnowledgeStoreClient(
-            base_url="http://example.com", api_prefix="/api/ks/"
-        )
+        client = KnowledgeStoreClient(base_url="http://example.com", api_prefix="/api/ks/")
         assert client._api_prefix == "/api/ks"
 
     def test_api_root_without_prefix(self):
@@ -256,9 +251,7 @@ class TestInitAndApiRoot:
         assert client._api_root() == "http://example.com"
 
     def test_api_root_with_prefix(self):
-        client = KnowledgeStoreClient(
-            base_url="http://example.com", api_prefix="/api/ks"
-        )
+        client = KnowledgeStoreClient(base_url="http://example.com", api_prefix="/api/ks")
         assert client._api_root() == "http://example.com/api/ks"
 
 
@@ -290,9 +283,7 @@ class TestQuery:
 
     async def test_success_with_custom_n_results(self, patched_httpx):
         client = make_client()
-        patched_httpx.handler = lambda m, u, k: FakeResponse(
-            json_data={"documents": [["x"]]}
-        )
+        patched_httpx.handler = lambda m, u, k: FakeResponse(json_data={"documents": [["x"]]})
 
         await client.query("hi", n_results=3)
 
@@ -367,9 +358,7 @@ class TestQuery:
 
         result = await client.query("slowq")
 
-        assert result["data"].startswith(
-            "Error: Failed to query knowledge store after 2 attempts"
-        )
+        assert result["data"].startswith("Error: Failed to query knowledge store after 2 attempts")
         assert "slow" in result["data"]
         assert len(patched_httpx.calls) == 2
 
@@ -406,9 +395,7 @@ class TestQuery:
         # When metrics are unavailable the success path skips metric emission.
         monkeypatch.setattr(ksc, "_METRICS_AVAILABLE", False)
         client = make_client()
-        patched_httpx.handler = lambda m, u, k: FakeResponse(
-            json_data={"documents": [["ok"]]}
-        )
+        patched_httpx.handler = lambda m, u, k: FakeResponse(json_data={"documents": [["ok"]]})
 
         result = await client.query("q")
         assert (result["query"], result["data"]) == ("q", "ok")
@@ -565,9 +552,7 @@ class TestResolveByFilename:
         ]
         assert all(p["chunk_id"] is None and p["page"] is None for p in result["passages"])
 
-    async def test_an_older_store_still_gives_its_single_match_as_a_passage(
-        self, patched_httpx
-    ):
+    async def test_an_older_store_still_gives_its_single_match_as_a_passage(self, patched_httpx):
         client = make_client()
         patched_httpx.handler = lambda m, u, k: FakeResponse(
             json_data={"text": "only body", "matched_titles": ["One.md"], "doc_ids": ["id9"]}
@@ -576,7 +561,13 @@ class TestResolveByFilename:
         result = await client.resolve_by_filename("One.md")
 
         assert result["passages"] == [
-            {"chunk_id": None, "doc_id": "id9", "title": "One.md", "page": None, "text": "only body"}
+            {
+                "chunk_id": None,
+                "doc_id": "id9",
+                "title": "One.md",
+                "page": None,
+                "text": "only body",
+            }
         ]
 
     async def test_an_older_store_with_several_matches_gives_no_passages(self, patched_httpx):
@@ -655,9 +646,7 @@ class TestFetchForRag:
         # The query names a file; resolve returns content -> used directly.
         def handler(method, url, kwargs):
             assert url == "http://ks.test/file/resolve"
-            return FakeResponse(
-                json_data={"text": "resolved body", "matched_titles": ["a.txt"]}
-            )
+            return FakeResponse(json_data={"text": "resolved body", "matched_titles": ["a.txt"]})
 
         patched_httpx.handler = handler
 
@@ -708,9 +697,7 @@ class TestFetchForRag:
 
         result = await client.fetch_for_rag("a generic question")
         assert result["query"] == "a generic question"
-        assert result["data"].startswith(
-            "Semantic search did not return close excerpts"
-        )
+        assert result["data"].startswith("Semantic search did not return close excerpts")
         assert "- Inv Doc " in result["data"]
 
     async def test_empty_query_and_empty_inventory(self, patched_httpx):
@@ -736,9 +723,7 @@ class TestFetchForRag:
 class TestCall:
     async def test_call_delegates_to_fetch_for_rag(self, patched_httpx):
         client = make_client()
-        patched_httpx.handler = lambda m, u, k: FakeResponse(
-            json_data={"documents": [["called"]]}
-        )
+        patched_httpx.handler = lambda m, u, k: FakeResponse(json_data={"documents": [["called"]]})
 
         result = await client("just text")
         assert (result["query"], result["data"]) == ("just text", "called")
@@ -939,9 +924,7 @@ class TestGetCategories:
     async def test_recovers_after_error(self, patched_httpx):
         client = make_client(max_retries=3)
         payload = {"total_documents": 1, "categories": ["x"]}
-        patched_httpx.set_sequence(
-            [httpx.ConnectError("first"), FakeResponse(json_data=payload)]
-        )
+        patched_httpx.set_sequence([httpx.ConnectError("first"), FakeResponse(json_data=payload)])
 
         result = await client.get_categories()
         assert result == payload
@@ -955,10 +938,12 @@ class TestQueryPassages:
             json_data={
                 "ids": [["doc-a:3", "doc-b:0"]],
                 "documents": [["Hotel cap is $250.", "Laptops are leased."]],
-                "metadatas": [[
-                    {"doc_id": "doc-a", "title": "4_Expense_Policy.md", "chunk_index": 3},
-                    {"doc_id": "doc-b", "title": "IT.pdf", "chunk_index": 0, "page": 2},
-                ]],
+                "metadatas": [
+                    [
+                        {"doc_id": "doc-a", "title": "4_Expense_Policy.md", "chunk_index": 3},
+                        {"doc_id": "doc-b", "title": "IT.pdf", "chunk_index": 0, "page": 2},
+                    ]
+                ],
                 "distances": [[0.12, 0.4]],
             }
         )
@@ -967,25 +952,27 @@ class TestQueryPassages:
 
         first, second = result["passages"]
         assert (first["chunk_id"], first["doc_id"], first["title"]) == (
-            "doc-a:3", "doc-a", "4_Expense_Policy.md"
+            "doc-a:3",
+            "doc-a",
+            "4_Expense_Policy.md",
         )
         assert first["chunk_index"] == 3
         assert first["distance"] == 0.12
         assert first["metadata"]["doc_id"] == "doc-a"
         assert (second["chunk_id"], second["page"]) == ("doc-b:0", 2)
 
-    async def test_each_passage_is_shown_to_the_model_under_its_document_title(
-        self, patched_httpx
-    ):
+    async def test_each_passage_is_shown_to_the_model_under_its_document_title(self, patched_httpx):
         client = make_client()
         patched_httpx.handler = lambda m, u, k: FakeResponse(
             json_data={
                 "ids": [["doc-a:3", "doc-b:0"]],
                 "documents": [["Hotel cap is $250.", "Laptops are leased."]],
-                "metadatas": [[
-                    {"doc_id": "doc-a", "title": "4_Expense_Policy.md"},
-                    {"doc_id": "doc-b", "title": "IT.pdf", "page": 2},
-                ]],
+                "metadatas": [
+                    [
+                        {"doc_id": "doc-a", "title": "4_Expense_Policy.md"},
+                        {"doc_id": "doc-b", "title": "IT.pdf", "page": 2},
+                    ]
+                ],
             }
         )
 
@@ -1001,7 +988,12 @@ class TestResolveByDocId:
     async def test_success_returns_the_document_text_under_its_title(self, patched_httpx):
         client = make_client()
         patched_httpx.handler = lambda m, u, k: FakeResponse(
-            json_data={"doc_id": "abc", "title": "q4.md", "text": "Q4 revenue 4.2M", "chunk_count": 2}
+            json_data={
+                "doc_id": "abc",
+                "title": "q4.md",
+                "text": "Q4 revenue 4.2M",
+                "chunk_count": 2,
+            }
         )
 
         result = await client.resolve_by_doc_id("abc")

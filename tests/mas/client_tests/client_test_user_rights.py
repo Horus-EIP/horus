@@ -17,9 +17,7 @@ def bearer_headers(token: str) -> dict:
 
 async def register_user(username: str, password: str):
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=120.0) as client:
-        r = await client.post(
-            "/auth/register", json={"username": username, "password": password}
-        )
+        r = await client.post("/auth/register", json={"username": username, "password": password})
         if r.is_success:
             print(f"REGISTERED {username} →", r.json())
         else:
@@ -40,17 +38,13 @@ async def login(username: str, password: str) -> str:
 
 
 async def logout(headers: dict):
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=120.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=120.0) as client:
         r = await client.post("/auth/logout")
         print("LOGOUT →", r.json())
 
 
 async def make_admin(target_user: str, headers: dict):
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=120.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=120.0) as client:
         r = await client.post(
             "/users/update_role",
             json={"user_id": target_user, "new_role": "admin"},
@@ -59,9 +53,7 @@ async def make_admin(target_user: str, headers: dict):
 
 
 async def remove_admin(target_user: str, headers: dict):
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=120.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=120.0) as client:
         r = await client.post(
             "/users/update_role",
             json={"user_id": target_user, "new_role": "user"},
@@ -102,9 +94,7 @@ async def main():
 
     except httpx.HTTPStatusError as e:
         resp = e.response
-        print(
-            f"HTTP error {resp.status_code} on {resp.request.method} {resp.request.url}"
-        )
+        print(f"HTTP error {resp.status_code} on {resp.request.method} {resp.request.url}")
         try:
             print("Body:", resp.json())
         except Exception:

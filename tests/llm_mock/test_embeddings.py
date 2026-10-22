@@ -31,11 +31,18 @@ def post(server, body):
 
 
 def vector_in_a_new_process(text: str, dimensions: int, seed: str) -> list[float]:
-    script = ("import json, sys; from llm_mock.embeddings import embed; "
-              "print(json.dumps(embed(sys.argv[1], int(sys.argv[2]))))")
+    script = (
+        "import json, sys; from llm_mock.embeddings import embed; "
+        "print(json.dumps(embed(sys.argv[1], int(sys.argv[2]))))"
+    )
     env = {**os.environ, "PYTHONHASHSEED": seed, "PYTHONPATH": str(MOCK)}
-    out = subprocess.run([sys.executable, "-B", "-c", script, text, str(dimensions)],
-                         capture_output=True, text=True, env=env, check=True)
+    out = subprocess.run(
+        [sys.executable, "-B", "-c", script, text, str(dimensions)],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=True,
+    )
     return json.loads(out.stdout)
 
 
@@ -75,8 +82,9 @@ def test_features_that_cancel_still_give_a_unit_vector(monkeypatch):
     for dimensions in (1, 2):
         assert length(embed("revenue margin profit cash budget", dimensions)) == pytest.approx(1.0)
     monkeypatch.setattr(embeddings, "features", lambda text: Counter({"w:up": 1, "w:down": 1}))
-    monkeypatch.setattr(embeddings, "slot",
-                        lambda feature, dimensions: (0, -1.0 if feature == "w:down" else 1.0))
+    monkeypatch.setattr(
+        embeddings, "slot", lambda feature, dimensions: (0, -1.0 if feature == "w:down" else 1.0)
+    )
     assert embeddings.embed("up down", 4) == [1.0, 0.0, 0.0, 0.0]
 
 
@@ -110,19 +118,22 @@ def test_the_default_size_and_model(mock_server):
     assert body["model"] == "horus-mock"
 
 
-@pytest.mark.parametrize("body", [
-    ["revenue"],
-    {"input": []},
-    {"model": "m"},
-    {"input": ["text", 3]},
-    {"input": [[1, 2, 3]]},
-    {"input": "text", "dimensions": 0},
-    {"input": "text", "dimensions": "384"},
-    {"input": "text", "dimensions": True},
-    {"input": "text", "dimensions": 10_000},
-    {"input": "text", "encoding_format": "base64"},
-    {"input": ["x"] * 2049},
-])
+@pytest.mark.parametrize(
+    "body",
+    [
+        ["revenue"],
+        {"input": []},
+        {"model": "m"},
+        {"input": ["text", 3]},
+        {"input": [[1, 2, 3]]},
+        {"input": "text", "dimensions": 0},
+        {"input": "text", "dimensions": "384"},
+        {"input": "text", "dimensions": True},
+        {"input": "text", "dimensions": 10_000},
+        {"input": "text", "encoding_format": "base64"},
+        {"input": ["x"] * 2049},
+    ],
+)
 def test_a_request_the_api_cannot_serve_is_400(server, body):
     status, answer = post(server, body)
     assert status == 400

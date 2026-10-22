@@ -60,11 +60,7 @@ SYSTEM_PROMPT = (
     "- Maximum {max_steps} reasoning steps.\n"
 )
 
-STEP_PROMPT = (
-    "{history}\n"
-    "OBSERVATION: {observation}\n"
-    "Continue reasoning.\n"
-)
+STEP_PROMPT = "{history}\nOBSERVATION: {observation}\nContinue reasoning.\n"
 
 
 def react_system_prompt(tool_names: Sequence[str], max_steps: int) -> str:
@@ -78,10 +74,9 @@ def react_step_prompt(query: str, reasoning_trace: Sequence[str], step_number: i
     sections = [f"User query: {query}"]
     if reasoning_trace:
         sections.append("Reasoning so far:\n" + "\n".join(reasoning_trace))
-    sections.append(
-        f"Step {step_number}: Provide your next THOUGHT and ACTION (or FINAL_ANSWER)."
-    )
+    sections.append(f"Step {step_number}: Provide your next THOUGHT and ACTION (or FINAL_ANSWER).")
     return "\n\n".join(sections)
+
 
 # --- Data structures  (L5-T6 – execution history tracking) ---
 
@@ -229,9 +224,7 @@ class ReactAgent:
 
     # --- Core ReAct loop ---
 
-    async def _react_loop(
-        self, query: str, history: ExecutionHistory
-    ) -> str:
+    async def _react_loop(self, query: str, history: ExecutionHistory) -> str:
         """
         Execute the iterative THOUGHT → ACTION → OBSERVATION loop.
         """
@@ -276,14 +269,10 @@ class ReactAgent:
                     tool_args=tool_args,
                 )
             )
-            reasoning_trace.append(
-                f"ACTION: {tool_name}({', '.join(tool_args)})"
-            )
+            reasoning_trace.append(f"ACTION: {tool_name}({', '.join(tool_args)})")
 
             # ---------- OBSERVATION processing  (L5-T5) ----------
-            observation, source = await self._execute_action(
-                tool_name, tool_args
-            )
+            observation, source = await self._execute_action(tool_name, tool_args)
 
             obs_step = ReActStep(
                 step_number=step_num,
@@ -323,9 +312,7 @@ class ReactAgent:
         )
 
         # Parse for FINAL_ANSWER
-        final_match = re.search(
-            r"FINAL_ANSWER:\s*(.+)", raw, re.DOTALL | re.IGNORECASE
-        )
+        final_match = re.search(r"FINAL_ANSWER:\s*(.+)", raw, re.DOTALL | re.IGNORECASE)
         if final_match:
             return raw.strip(), True, final_match.group(1).strip()
 
@@ -344,9 +331,7 @@ class ReactAgent:
             (tool_name, [arg1, arg2, ...])  or  (None, []) if no valid action.
         """
         # Try structured format first
-        match = re.search(
-            r"ACTION:\s*(\w+)\(([^)]*)\)", thought_text, re.IGNORECASE
-        )
+        match = re.search(r"ACTION:\s*(\w+)\(([^)]*)\)", thought_text, re.IGNORECASE)
         if match:
             tool_name = match.group(1).strip().lower()
             raw_args = match.group(2).strip()
@@ -354,9 +339,7 @@ class ReactAgent:
             return tool_name, args
 
         # Fallback: ACTION: tool_name arg1
-        match2 = re.search(
-            r"ACTION:\s*(\w+)\s+(.*)", thought_text, re.IGNORECASE
-        )
+        match2 = re.search(r"ACTION:\s*(\w+)\s+(.*)", thought_text, re.IGNORECASE)
         if match2:
             tool_name = match2.group(1).strip().lower()
             args = [match2.group(2).strip()] if match2.group(2).strip() else []
@@ -378,9 +361,7 @@ class ReactAgent:
 
     # --- L5-T5 – Observation processing (action execution) ---
 
-    async def _execute_action(
-        self, tool_name: str, tool_args: list[str]
-    ) -> tuple[str, str | None]:
+    async def _execute_action(self, tool_name: str, tool_args: list[str]) -> tuple[str, str | None]:
         """
         Execute the selected tool and return (observation_text, source_label).
         """
@@ -390,17 +371,14 @@ class ReactAgent:
 
         if handler is None:
             return (
-                f"[Error] Unknown tool '{tool_name}'. "
-                f"Available: {', '.join(tool_names)}",
+                f"[Error] Unknown tool '{tool_name}'. Available: {', '.join(tool_names)}",
                 None,
             )
 
         try:
             observation, source = await handler(tool_args)
             elapsed = (time.perf_counter() - start) * 1000
-            logger.debug(
-                f"Tool '{tool_name}' executed in {elapsed:.1f}ms"
-            )
+            logger.debug(f"Tool '{tool_name}' executed in {elapsed:.1f}ms")
             return observation, source
         except Exception as exc:
             elapsed = (time.perf_counter() - start) * 1000
@@ -434,9 +412,7 @@ class ReactAgent:
             return tuple(self._tool_handlers)
         return tuple(name for name in identity_tools if name in self._tool_handlers)
 
-    async def _handle_search_knowledge(
-        self, args: list[str]
-    ) -> tuple[str, str | None]:
+    async def _handle_search_knowledge(self, args: list[str]) -> tuple[str, str | None]:
         """Search the knowledge store."""
         query = args[0] if args else ""
         if not query:
@@ -449,9 +425,7 @@ class ReactAgent:
         source = f"knowledge_store:{query}"
         return text, source
 
-    async def _handle_extract_data(
-        self, args: list[str]
-    ) -> tuple[str, str | None]:
+    async def _handle_extract_data(self, args: list[str]) -> tuple[str, str | None]:
         """Extract data from a file via the file parser tool."""
         file_ref = args[0] if args else ""
         file_type = args[1] if len(args) > 1 else "txt"
@@ -463,15 +437,11 @@ class ReactAgent:
             "file_type": file_type,
             "query": file_ref,
         }
-        result = await asyncio.to_thread(
-            self.tool_registry.run, "parse", payload
-        )
+        result = await asyncio.to_thread(self.tool_registry.run, "parse", payload)
         source = f"file:{file_ref}"
         return result, source
 
-    async def _handle_analyze_payments(
-        self, args: list[str]
-    ) -> tuple[str, str | None]:
+    async def _handle_analyze_payments(self, args: list[str]) -> tuple[str, str | None]:
         """Analyze payments by searching the knowledge store with a payments focus."""
         query = args[0] if args else "payment analysis"
         payment_query = f"payment analysis: {query}"
@@ -483,24 +453,18 @@ class ReactAgent:
         source = f"payment_analysis:{query}"
         return text, source
 
-    async def _handle_calc(
-        self, args: list[str]
-    ) -> tuple[str, str | None]:
+    async def _handle_calc(self, args: list[str]) -> tuple[str, str | None]:
         """Evaluate a mathematical expression."""
         expression = args[0] if args else ""
         if not expression:
             return "[Error] calc requires a mathematical expression.", None
 
         payload = {"expression": expression}
-        result = await asyncio.to_thread(
-            self.tool_registry.run, "calc", payload
-        )
+        result = await asyncio.to_thread(self.tool_registry.run, "calc", payload)
         source = f"calculation:{expression}"
         return f"Result: {result}", source
 
-    async def _handle_delegate(
-        self, args: list[str]
-    ) -> tuple[str, str | None]:
+    async def _handle_delegate(self, args: list[str]) -> tuple[str, str | None]:
         """Delegate a sub-task to another agent type."""
         if not args:
             return "[Error] delegate requires at least (to_agent_type, request).", None
@@ -557,9 +521,7 @@ class ReactAgent:
     def _build_timeout_answer(self, history: ExecutionHistory) -> str:
         """Build an answer when the reasoning loop times out."""
         gathered = [
-            s.content
-            for s in history.steps
-            if s.step_type == StepType.OBSERVATION and s.content
+            s.content for s in history.steps if s.step_type == StepType.OBSERVATION and s.content
         ]
         if gathered:
             summary = " ".join(gathered)[:500]
@@ -574,9 +536,7 @@ class ReactAgent:
             )
         return self._attach_citations(answer, history.sources)
 
-    def _build_error_answer(
-        self, history: ExecutionHistory, exc: Exception
-    ) -> str:
+    def _build_error_answer(self, history: ExecutionHistory, exc: Exception) -> str:
         """Build an answer when an unexpected error occurs."""
         answer = (
             "I encountered an error during my analysis. "
@@ -609,9 +569,6 @@ class ReactAgent:
                 context=combined_context,
             )
         except Exception:
-            answer = (
-                "Based on my research, here is what I found:\n\n"
-                + combined_context[:500]
-            )
+            answer = "Based on my research, here is what I found:\n\n" + combined_context[:500]
 
         return self._attach_citations(answer, history.sources)

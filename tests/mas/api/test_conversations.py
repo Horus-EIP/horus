@@ -23,6 +23,7 @@ class TestConversationCreate:
         # Simulate that so the response model (conversation_id: int) validates.
         def _refresh(conv):
             conv.id = 42
+
         mock_db.refresh.side_effect = _refresh
         client = make_client(router, current_user=as_user)
         r = client.post(

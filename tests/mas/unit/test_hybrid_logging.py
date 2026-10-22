@@ -123,9 +123,7 @@ class TestHybridLogger:
         mock_db.close.assert_called_once()
 
     @patch("core.hybrid_logging.log_db_operation")
-    def test_log_critical_skips_database_for_non_critical_categories(
-        self, mock_log_db_operation
-    ):
+    def test_log_critical_skips_database_for_non_critical_categories(self, mock_log_db_operation):
         """Test that non-critical categories don't go to database"""
         with patch("core.hybrid_logging.SessionLocal") as mock_session_local:
             logger_instance = HybridLogger()
@@ -169,9 +167,7 @@ class TestHybridLogger:
 
         logger_instance.log_system(LogLevel.INFO, "test_component", "test_operation")
 
-        mock_logger_instance.info.assert_called_once_with(
-            "system_log", message="test_operation"
-        )
+        mock_logger_instance.info.assert_called_once_with("system_log", message="test_operation")
 
 
 class TestConvenienceFunctions:
@@ -200,9 +196,7 @@ class TestConvenienceFunctions:
     @patch.object(hybrid_logger, "log_critical")
     def test_log_user_action(self, mock_log_critical):
         """Test user action logging"""
-        log_user_action(
-            "file_download", user_id=456, details="Downloaded sensitive.pdf"
-        )
+        log_user_action("file_download", user_id=456, details="Downloaded sensitive.pdf")
 
         mock_log_critical.assert_called_once_with(
             LogLevel.INFO,
@@ -216,9 +210,7 @@ class TestConvenienceFunctions:
     @patch.object(hybrid_logger, "log_critical")
     def test_log_business_operation(self, mock_log_critical):
         """Test business operation logging"""
-        log_business_operation(
-            "order_created", details="Order #12345 for $100", user_id=789
-        )
+        log_business_operation("order_created", details="Order #12345 for $100", user_id=789)
 
         mock_log_critical.assert_called_once_with(
             LogLevel.INFO,
@@ -245,18 +237,14 @@ class TestConvenienceFunctions:
         """Test system performance logging without duration"""
         log_system_performance("cache", "cache_hit", details="Redis cache")
 
-        mock_log_system.assert_called_once_with(
-            LogLevel.INFO, "cache", "cache_hit", "Redis cache"
-        )
+        mock_log_system.assert_called_once_with(LogLevel.INFO, "cache", "cache_hit", "Redis cache")
 
     @patch.object(hybrid_logger, "log_system")
     def test_log_system_performance_minimal_params(self, mock_log_system):
         """Test system performance logging with minimal parameters"""
         log_system_performance("api", "request_processed")
 
-        mock_log_system.assert_called_once_with(
-            LogLevel.INFO, "api", "request_processed", ""
-        )
+        mock_log_system.assert_called_once_with(LogLevel.INFO, "api", "request_processed", "")
 
 
 class TestIntegration:
@@ -264,9 +252,7 @@ class TestIntegration:
 
     @patch("core.hybrid_logging.SessionLocal")
     @patch("core.hybrid_logging.CriticalLogs")
-    def test_critical_log_creation_with_all_fields(
-        self, mock_critical_logs, mock_session_local
-    ):
+    def test_critical_log_creation_with_all_fields(self, mock_critical_logs, mock_session_local):
         """Test that CriticalLogs is created with all provided fields"""
         mock_db = MagicMock()
         mock_session_local.return_value = mock_db

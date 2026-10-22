@@ -92,7 +92,9 @@ def schema_errors(testset: dict[str, Any]) -> list[str]:
             errors.extend(_pattern_errors(label, "evidence_patterns", item["evidence_patterns"]))
         if "context_file" in item and not _is_text(item["context_file"]):
             errors.append(f"{label}: context_file must be a non-empty string")
-        errors.extend(_category_errors(label, category if isinstance(category, str) else None, item))
+        errors.extend(
+            _category_errors(label, category if isinstance(category, str) else None, item)
+        )
     return errors
 
 
@@ -122,7 +124,9 @@ def _category_errors(label: str, category: str | None, item: dict[str, Any]) -> 
         return [f"{label}: expected_source must be null, a file name or a list of file names"]
     errors = []
     if category in IN_CORPUS_CATEGORIES:
-        if not expected_sources(item) or not all(isinstance(s, str) for s in expected_sources(item)):
+        if not expected_sources(item) or not all(
+            isinstance(s, str) for s in expected_sources(item)
+        ):
             errors.append(f"{label}: an in-corpus item needs expected_source")
         if "absent_terms" in item:
             errors.append(f"{label}: absent_terms is only for not_in_corpus items")
@@ -133,7 +137,9 @@ def _category_errors(label: str, category: str | None, item: dict[str, Any]) -> 
         if not (isinstance(terms, list) and terms and all(isinstance(t, str) for t in terms)):
             errors.append(f"{label}: a not_in_corpus item needs a non-empty absent_terms list")
     if "evidence_patterns" in item and category not in ("numeric", "multi_hop"):
-        errors.append(f"{label}: evidence_patterns is only for derived numeric or multi_hop answers")
+        errors.append(
+            f"{label}: evidence_patterns is only for derived numeric or multi_hop answers"
+        )
     return errors
 
 

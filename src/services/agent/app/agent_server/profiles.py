@@ -35,12 +35,8 @@ DEFAULT_TOOLS: tuple[str, ...] = ("search_knowledge", "extract_data", "calc", "d
 # so :meth:`DecisionMakingAgent.decide` can read it and tailor the system
 # message without every intermediate function having to accept a new arg.
 # Defaults to ``None`` (vanilla helpful-assistant prompt).
-current_persona: ContextVar[str | None] = ContextVar(
-    "current_persona", default=None
-)
-current_agent_name: ContextVar[str | None] = ContextVar(
-    "current_agent_name", default=None
-)
+current_persona: ContextVar[str | None] = ContextVar("current_persona", default=None)
+current_agent_name: ContextVar[str | None] = ContextVar("current_agent_name", default=None)
 current_tools: ContextVar[tuple[str, ...] | None] = ContextVar("current_tools", default=None)
 # Per-task "thought process" emitter. The consumer sets it to a closure that
 # POSTs a step JSON envelope to MAS; pipeline helpers call it through
@@ -180,10 +176,7 @@ DEFAULT_PROFILES: list[AgentProfile] = [
             "expense_review",
             "knowledge_retrieval",
         ],
-        description=(
-            "HR specialist. Grounded in the Employee Handbook and the "
-            "Expense Policy."
-        ),
+        description=("HR specialist. Grounded in the Employee Handbook and the Expense Policy."),
         system_prompt=(
             "You are FinCorp's HR Assistant. You answer employees' questions from the "
             "Employee Handbook and the Expense Policy.\n"
@@ -200,8 +193,7 @@ DEFAULT_PROFILES: list[AgentProfile] = [
         type="researcher",
         skills=["research", "literature_review", "citation_lookup", "knowledge_retrieval"],
         description=(
-            "Multi-source researcher. Pulls and synthesises information "
-            "across the knowledge store."
+            "Multi-source researcher. Pulls and synthesises information across the knowledge store."
         ),
         system_prompt=(
             "You are FinCorp's Researcher. You gather information across several "

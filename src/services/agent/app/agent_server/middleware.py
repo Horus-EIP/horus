@@ -16,9 +16,7 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
     """Propagate a correlation ID across the request lifecycle."""
 
     async def dispatch(self, request: Request, call_next):
-        corr_id = request.headers.get("X-Request-ID") or request.headers.get(
-            "X-Correlation-ID"
-        )
+        corr_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
         if corr_id:
             set_correlation_id(corr_id)
         else:

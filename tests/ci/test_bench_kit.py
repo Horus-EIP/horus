@@ -17,8 +17,10 @@ except ImportError:
 REPO = Path(__file__).resolve().parents[2]
 KIT = REPO / "opensource" / "horus-bench-kit"
 ROOT_LICENCE = REPO / "LICENSE"
-KIT_CARVE_OUT = ("The folder opensource/horus-bench-kit/ is not part of the Software: it is licensed separately "
-                 "under the Apache License 2.0, in the LICENSE file of that folder.")
+KIT_CARVE_OUT = (
+    "The folder opensource/horus-bench-kit/ is not part of the Software: it is licensed separately "
+    "under the Apache License 2.0, in the LICENSE file of that folder."
+)
 PROMPT_SOURCES = (
     REPO / "src" / "services" / "agent" / "app" / "ai_agents" / "answer_contract.py",
     REPO / "src" / "services" / "mas" / "tasks" / "prompts.py",
@@ -47,12 +49,16 @@ TICKET_OR_DECISION = re.compile(r"\b(?:B-\d{2,3}|ADR-\d{1,3})\b")
 PERMISSIVE = {"MIT", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0", "ISC"}
 WORD = re.compile(r"[a-z0-9]+")
 
-spec = importlib.util.spec_from_file_location("hbk_publishable", KIT / "src" / "horus_bench_kit" / "publishable.py")
+spec = importlib.util.spec_from_file_location(
+    "hbk_publishable", KIT / "src" / "horus_bench_kit" / "publishable.py"
+)
 publishable = importlib.util.module_from_spec(spec)
 sys.modules["hbk_publishable"] = publishable
 spec.loader.exec_module(publishable)
 
-needs_yaml = unittest.skipUnless(yaml is not None, "needs PyYAML to read the Horus test set and router examples")
+needs_yaml = unittest.skipUnless(
+    yaml is not None, "needs PyYAML to read the Horus test set and router examples"
+)
 
 
 def words(text: str) -> list[str]:
@@ -60,12 +66,15 @@ def words(text: str) -> list[str]:
 
 
 def windows(found: list[str], size: int) -> set[tuple[str, ...]]:
-    return {tuple(found[index:index + size]) for index in range(len(found) - size + 1)}
+    return {tuple(found[index : index + size]) for index in range(len(found) - size + 1)}
 
 
 def string_literals(path: Path) -> list[str]:
-    return [node.value for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-            if isinstance(node, ast.Constant) and isinstance(node.value, str)]
+    return [
+        node.value
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    ]
 
 
 def yaml_strings(value) -> list[str]:
@@ -96,8 +105,11 @@ def minimal_kit(folder: Path) -> Path:
 
 
 def kit_texts() -> dict[str, str]:
-    return {relative.as_posix(): publishable.read_text(KIT, relative)
-            for relative in publishable.packaged_files(KIT) if publishable.is_text(relative)}
+    return {
+        relative.as_posix(): publishable.read_text(KIT, relative)
+        for relative in publishable.packaged_files(KIT)
+        if publishable.is_text(relative)
+    }
 
 
 class Publishable(unittest.TestCase):
@@ -123,7 +135,9 @@ class Publishable(unittest.TestCase):
     def test_the_checks_catch_each_forbidden_string(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = minimal_kit(Path(tmp))
-            (root / "notes.md").write_text("\n".join(FORBIDDEN_STRINGS.values()) + "\n", encoding="utf-8")
+            (root / "notes.md").write_text(
+                "\n".join(FORBIDDEN_STRINGS.values()) + "\n", encoding="utf-8"
+            )
             found = "\n".join(publishable.problems(root))
         for label in FORBIDDEN_STRINGS:
             with self.subTest(label):
@@ -140,7 +154,9 @@ class Publishable(unittest.TestCase):
 
     def test_every_dependency_is_permissive_and_listed_with_its_licence(self):
         readme = (KIT / "README.md").read_text(encoding="utf-8")
-        declared = publishable.declared_dependencies((KIT / "pyproject.toml").read_text(encoding="utf-8"))
+        declared = publishable.declared_dependencies(
+            (KIT / "pyproject.toml").read_text(encoding="utf-8")
+        )
         self.assertTrue(declared)
         for requirement in declared:
             name = publishable.requirement_name(requirement)
@@ -162,13 +178,18 @@ class NoHorusContent(unittest.TestCase):
         self.assertEqual(found, [f"notes.md: holds {label}" for label in HORUS_ONLY])
 
     def test_no_horus_ticket_or_decision_id(self):
-        found = [f"{path}: {match}" for path, text in kit_texts().items()
-                 for match in TICKET_OR_DECISION.findall(text)]
+        found = [
+            f"{path}: {match}"
+            for path, text in kit_texts().items()
+            for match in TICKET_OR_DECISION.findall(text)
+        ]
         self.assertEqual(found, [])
 
     def setUp(self) -> None:
         self.texts = kit_texts()
-        self.windows = {path: windows(words(text), PROMPT_WINDOW) for path, text in self.texts.items()}
+        self.windows = {
+            path: windows(words(text), PROMPT_WINDOW) for path, text in self.texts.items()
+        }
 
     def assert_absent(self, phrases: set[tuple[str, ...]], what: str) -> None:
         for path, found in self.windows.items():
@@ -187,13 +208,18 @@ class NoHorusContent(unittest.TestCase):
     def test_no_router_example_or_evaluation_question(self):
         router = yaml.safe_load(ROUTER_EXAMPLES.read_text(encoding="utf-8"))
         testset = yaml.safe_load(TESTSET.read_text(encoding="utf-8"))
-        short = [text for text in yaml_strings(router) + yaml_strings(testset) + [WARMUP_QUESTION]
-                 if len(words(text)) >= SHORT_TEXT_WORDS]
+        short = [
+            text
+            for text in yaml_strings(router) + yaml_strings(testset) + [WARMUP_QUESTION]
+            if len(words(text)) >= SHORT_TEXT_WORDS
+        ]
         self.assertTrue(short)
         for path, text in self.texts.items():
             flat = f" {' '.join(words(text))} "
             with self.subTest(path):
-                self.assertEqual([item for item in short if f" {' '.join(words(item))} " in flat], [])
+                self.assertEqual(
+                    [item for item in short if f" {' '.join(words(item))} " in flat], []
+                )
 
 
 if __name__ == "__main__":

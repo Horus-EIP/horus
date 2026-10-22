@@ -46,15 +46,21 @@ class TestCatalog:
     def test_a_candidate_needs_its_plan_name(self, catalog):
         missing = copy.deepcopy(catalog)
         del missing["candidates"][2]["plan_name"]
-        assert catalog_problems(missing) == [f"candidate {missing['candidates'][2]['id']}: missing plan_name"]
+        assert catalog_problems(missing) == [
+            f"candidate {missing['candidates'][2]['id']}: missing plan_name"
+        ]
         renamed = copy.deepcopy(catalog)
         renamed["candidates"][2]["name"] = renamed["candidates"][2].pop("plan_name")
-        assert catalog_problems(renamed) == [f"candidate {renamed['candidates'][2]['id']}: missing plan_name"]
+        assert catalog_problems(renamed) == [
+            f"candidate {renamed['candidates'][2]['id']}: missing plan_name"
+        ]
 
     def test_the_variants_show_the_plan_name_even_next_to_a_name(self, catalog):
         named = copy.deepcopy(catalog)
         named["candidates"][2]["name"] = "Another name"
-        variant = next(v for v in select_variants(named) if v.candidate["id"] == named["candidates"][2]["id"])
+        variant = next(
+            v for v in select_variants(named) if v.candidate["id"] == named["candidates"][2]["id"]
+        )
         assert variant.name == named["candidates"][2]["plan_name"]
 
     def test_it_holds_the_baseline_and_the_five_plan_candidates(self, catalog):
@@ -68,7 +74,11 @@ class TestCatalog:
         baseline = next(c for c in catalog["candidates"] if c["role"] == "baseline")
         for gguf in baseline["ggufs"]:
             known = KNOWN_MODELS[gguf["file"]]
-            assert (gguf["size_bytes"], gguf["sha256"], download_url(gguf)) == (known.size_bytes, known.sha256, known.url)
+            assert (gguf["size_bytes"], gguf["sha256"], download_url(gguf)) == (
+                known.size_bytes,
+                known.sha256,
+                known.url,
+            )
         manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
         q4 = next(m for m in manifest["models"] if m["id"] == "qwen3-4b-q4km")
         assert download_url(baseline["ggufs"][0]) in q4["mirrors"]
@@ -76,7 +86,9 @@ class TestCatalog:
     def test_the_pinned_build_is_the_stacks(self, catalog):
         assert catalog["llama_cpp"]["bench_image"] == BENCH_IMAGE
         assert catalog["llama_cpp"]["server_image"] == FETCH_IMAGE
-        compose = (REPO_ROOT / "src" / "infra" / "docker-compose.cpu.yml").read_text(encoding="utf-8")
+        compose = (REPO_ROOT / "src" / "infra" / "docker-compose.cpu.yml").read_text(
+            encoding="utf-8"
+        )
         assert catalog["llama_cpp"]["server_image"] in compose
 
     def test_every_licence_is_allowed_and_every_card_statement_is_recorded(self, catalog):
@@ -101,6 +113,7 @@ class TestCatalog:
             defaults = [g for g in candidate["ggufs"] if g["default"]]
             assert len(defaults) == 1, candidate["id"]
             assert defaults[0]["publisher"] == "model author", candidate["id"]
+
 
 class TestGate:
     def test_a_build_newer_than_the_stack_pin_is_gated_with_the_stack_wording(self, catalog):
@@ -137,13 +150,28 @@ class TestServerCommand:
             memory_bytes=6 * 2**30,
         )
         assert command == [
-            "docker", "run", "-d", "--name", CANDIDATE_CONTAINER,
-            "--network", "infra_horus-net", "--network-alias", "llm",
-            "--memory", str(6 * 2**30), "--memory-swap", str(6 * 2**30),
-            "-v", "/srv/horus/models:/models:ro",
-            "ghcr.io/ggml-org/llama.cpp:server-b11382", "--model", "/models/x.gguf",
+            "docker",
+            "run",
+            "-d",
+            "--name",
+            CANDIDATE_CONTAINER,
+            "--network",
+            "infra_horus-net",
+            "--network-alias",
+            "llm",
+            "--memory",
+            str(6 * 2**30),
+            "--memory-swap",
+            str(6 * 2**30),
+            "-v",
+            "/srv/horus/models:/models:ro",
+            "ghcr.io/ggml-org/llama.cpp:server-b11382",
+            "--model",
+            "/models/x.gguf",
         ]
-        unlimited = candidate_run_command(image="i", network="n", models_dir="m", args=[], memory_bytes=None)
+        unlimited = candidate_run_command(
+            image="i", network="n", models_dir="m", args=[], memory_bytes=None
+        )
         assert "--memory" not in unlimited
 
     def test_the_network_prefers_horus_net(self):
@@ -154,7 +182,17 @@ class TestServerCommand:
 
 @pytest.mark.parametrize(
     ("value", "enabled"),
-    [("1", True), ("true", True), (" Yes ", True), ("ON", True), ("0", False), ("false", False), ("", False), (None, False), ("2", False)],
+    [
+        ("1", True),
+        ("true", True),
+        (" Yes ", True),
+        ("ON", True),
+        ("0", False),
+        ("false", False),
+        ("", False),
+        (None, False),
+        ("2", False),
+    ],
 )
 def test_setting_enabled_reads_a_flag_as_the_agent_does(value, enabled):
     assert setting_enabled(value) is enabled
@@ -175,13 +213,46 @@ def test_response_cache_finding_names_a_cache_that_is_on_or_cannot_be_checked():
 def bench_report(file):
     rows = []
     for threads, scale in ((4, 1.0), (8, 1.5)):
-        for test, depth, tps in (("pp512", 0, 60.0), ("pp512", 4096, 40.0), ("pp2048", 0, 50.0), ("tg128", 0, 9.0), ("tg128", 4096, 7.0)):
-            rows.append({"model": file, "test": test, "n_depth": depth, "type_k": "f16", "type_v": "f16", "n_threads": threads, "avg_ts": tps * scale, "stddev_ts": 0.5})
-        rows.append({"model": file, "test": "tg128", "n_depth": 0, "type_k": "q8_0", "type_v": "q8_0", "n_threads": threads, "avg_ts": 99.0, "stddev_ts": 0.1})
+        for test, depth, tps in (
+            ("pp512", 0, 60.0),
+            ("pp512", 4096, 40.0),
+            ("pp2048", 0, 50.0),
+            ("tg128", 0, 9.0),
+            ("tg128", 4096, 7.0),
+        ):
+            rows.append(
+                {
+                    "model": file,
+                    "test": test,
+                    "n_depth": depth,
+                    "type_k": "f16",
+                    "type_v": "f16",
+                    "n_threads": threads,
+                    "avg_ts": tps * scale,
+                    "stddev_ts": 0.5,
+                }
+            )
+        rows.append(
+            {
+                "model": file,
+                "test": "tg128",
+                "n_depth": 0,
+                "type_k": "q8_0",
+                "type_v": "q8_0",
+                "n_threads": threads,
+                "avg_ts": 99.0,
+                "stddev_ts": 0.1,
+            }
+        )
     return {
         "kind": "horus-llama-bench",
         "llama_cpp": {"build": "b11382"},
-        "models": [{"file": file, "sha256": "246d67d45f5b0c7447ca0ce0bdb8b46b8a47b593c5068635dc16422c051d7be9"}],
+        "models": [
+            {
+                "file": file,
+                "sha256": "246d67d45f5b0c7447ca0ce0bdb8b46b8a47b593c5068635dc16422c051d7be9",
+            }
+        ],
         "summary": rows,
     }
 
@@ -248,8 +319,16 @@ class TestAggregation:
     def test_variant_summary_and_report(self, catalog):
         variant = variant_by_id(catalog, "ling-3.0-tiny-q4km")
         memory = {
-            "after_probe": {"process": {"vm_hwm_bytes": 5 * 2**30}, "cgroup_peak_bytes": 5 * 2**30 + 7, "oom_kills": 0},
-            "after_eval": {"process": {"vm_hwm_bytes": 5 * 2**30 + 9}, "cgroup_peak_bytes": None, "oom_kills": 0},
+            "after_probe": {
+                "process": {"vm_hwm_bytes": 5 * 2**30},
+                "cgroup_peak_bytes": 5 * 2**30 + 7,
+                "oom_kills": 0,
+            },
+            "after_eval": {
+                "process": {"vm_hwm_bytes": 5 * 2**30 + 9},
+                "cgroup_peak_bytes": None,
+                "oom_kills": 0,
+            },
         }
         summary = variant_summary(
             variant,
@@ -272,10 +351,16 @@ class TestAggregation:
             "contract": None,
             "eval": "model-candidates-2026-10-06/ling-3.0-tiny-q4km-eval-2026-10-06.json",
         }
-        report = build_report(run={"started_at": "2026-10-06T08:00:00Z", "steps": ["probe"]}, catalog={"version": "1.0.0"}, machine=None, variants=[summary])
+        report = build_report(
+            run={"started_at": "2026-10-06T08:00:00Z", "steps": ["probe"]},
+            catalog={"version": "1.0.0"},
+            machine=None,
+            variants=[summary],
+        )
         assert report["kind"] == REPORT_KIND
         assert report["machine"] == {}
         json.dumps(report)
+
 
 class TestMarkdown:
     def report(self, catalog):
@@ -284,7 +369,13 @@ class TestMarkdown:
             bench_report=bench_report("qwen3-4b-instruct-2507-Q4_K_M.gguf"),
             contract_report=contract_report(),
             eval_report=eval_report(),
-            memory={"after_eval": {"process": {"vm_hwm_bytes": 3 * 2**30}, "cgroup_peak_bytes": 4 * 2**30, "oom_kills": 0}},
+            memory={
+                "after_eval": {
+                    "process": {"vm_hwm_bytes": 3 * 2**30},
+                    "cgroup_peak_bytes": 4 * 2**30,
+                    "oom_kills": 0,
+                }
+            },
         )
         failed = variant_summary(
             variant_by_id(catalog, "agents-a1-4b-q4km"),
@@ -292,9 +383,22 @@ class TestMarkdown:
             problems=["download failed: HTTP 404"],
         )
         return build_report(
-            run={"started_at": "2026-10-06T08:00:00Z", "steps": ["fetch", "bench", "probe", "eval"], "reasoning": "off", "completed": True},
-            catalog={"path": "scripts/benchmarks/model-candidates.yaml", "version": "1.0.0", "pinned_build": "b11382"},
-            machine={"reference": "cpu16", "cpu_model": "AMD Ryzen 5 5600U", "ram": "16 GiB installed"},
+            run={
+                "started_at": "2026-10-06T08:00:00Z",
+                "steps": ["fetch", "bench", "probe", "eval"],
+                "reasoning": "off",
+                "completed": True,
+            },
+            catalog={
+                "path": "scripts/benchmarks/model-candidates.yaml",
+                "version": "1.0.0",
+                "pinned_build": "b11382",
+            },
+            machine={
+                "reference": "cpu16",
+                "cpu_model": "AMD Ryzen 5 5600U",
+                "ram": "16 GiB installed",
+            },
             variants=[done, failed],
         )
 
@@ -316,8 +420,14 @@ class TestMarkdown:
         failed = [line for line in lines if line.startswith("| Agents-A1-4B")]
         assert failed[0].count("–") == 8
         assert "- `agents-a1-4b-q4km`: download failed: HTTP 404" in lines
-        assert "stack peak: the evaluation's `stack_peak_mem_bytes`, the ADR-006 `P`: the peak memory of the whole stack" in text
-        assert any(line.startswith("- Agents-A1-4B: The licence is only in the card metadata") for line in lines)
+        assert (
+            "stack peak: the evaluation's `stack_peak_mem_bytes`, the ADR-006 `P`: the peak memory of the whole stack"
+            in text
+        )
+        assert any(
+            line.startswith("- Agents-A1-4B: The licence is only in the card metadata")
+            for line in lines
+        )
 
     def test_the_chat_columns_name_the_question_count_of_the_evaluation_that_ran(self, catalog):
         report = self.report(catalog)

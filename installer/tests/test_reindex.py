@@ -23,13 +23,27 @@ def response(status: int, body) -> smoke.Response:
     return smoke.Response(status, json.dumps(body).encode("utf-8"))
 
 
-def job(state: str, pending: int = 0, done: int = 0, failed: int = 0,
-        failures: tuple[str, ...] = (), error: str | None = None) -> dict:
+def job(
+    state: str,
+    pending: int = 0,
+    done: int = 0,
+    failed: int = 0,
+    failures: tuple[str, ...] = (),
+    error: str | None = None,
+) -> dict:
     return {
-        "job_id": "j1", "state": state, "trigger": "startup", "embed_model": "http:horus-mock:768",
+        "job_id": "j1",
+        "state": state,
+        "trigger": "startup",
+        "embed_model": "http:horus-mock:768",
         "error": error,
-        "totals": {"pending": pending, "migrated": 0, "reembedded": done - failed, "unchanged": 0,
-                   "failed": failed},
+        "totals": {
+            "pending": pending,
+            "migrated": 0,
+            "reembedded": done - failed,
+            "unchanged": 0,
+            "failed": failed,
+        },
         "failures": [{"doc_id": doc, "reason": "EmbeddingsRefused: 500"} for doc in failures],
     }
 
@@ -84,8 +98,11 @@ class LogCase(unittest.TestCase):
         return " ".join(self.out.getvalue().split())
 
     def emitted(self, kind: str) -> list[dict]:
-        rows = [json.loads(line[len(EVENT_PREFIX):]) for line in self.events.getvalue().splitlines()
-                if line.startswith(EVENT_PREFIX)]
+        rows = [
+            json.loads(line[len(EVENT_PREFIX) :])
+            for line in self.events.getvalue().splitlines()
+            if line.startswith(EVENT_PREFIX)
+        ]
         return [row for row in rows if row["event"] == kind]
 
 
@@ -95,6 +112,7 @@ class Counting(unittest.TestCase):
             if answer is UNREACHABLE:
                 raise smoke.Unreachable("refused")
             return response(*answer)
+
         with mock.patch.object(smoke, "http", side_effect=http) as call:
             corpus = reindex.stored_corpus(KS)
         if answer is not UNREACHABLE:
@@ -102,10 +120,19 @@ class Counting(unittest.TestCase):
         return corpus
 
     def test_the_documents_are_counted_with_the_passages_the_store_keeps(self):
-        documents = [{"chunk_count": 12, "size": 2_000_000}, {"chunk_count": 1}, {"size": 3400},
-                     {"size": 0}, {}, {"chunk_count": True, "size": 900}, "odd"]
-        self.assertEqual(self.corpus((200, {"documents": documents})),
-                         reindex.Corpus(7, 12 + 1 + 4 + 1 + 1 + 1 + 1))
+        documents = [
+            {"chunk_count": 12, "size": 2_000_000},
+            {"chunk_count": 1},
+            {"size": 3400},
+            {"size": 0},
+            {},
+            {"chunk_count": True, "size": 900},
+            "odd",
+        ]
+        self.assertEqual(
+            self.corpus((200, {"documents": documents})),
+            reindex.Corpus(7, 12 + 1 + 4 + 1 + 1 + 1 + 1),
+        )
 
     def test_a_knowledge_store_that_cannot_say_gives_no_count(self):
         for answer in (UNREACHABLE, (404, {"error": "x"}), (200, {"documents": "x"}), (200, [])):
@@ -113,13 +140,17 @@ class Counting(unittest.TestCase):
                 self.assertIsNone(self.corpus(answer))
 
     def test_a_passage_is_about_800_new_characters(self):
-        self.assertEqual([reindex.passages_in(size) for size in (1, 1000, 1001, 1800, 1801, True, -5)],
-                         [1, 1, 2, 2, 3, 1, 1])
+        self.assertEqual(
+            [reindex.passages_in(size) for size in (1, 1000, 1001, 1800, 1801, True, -5)],
+            [1, 1, 2, 2, 3, 1, 1],
+        )
 
     def test_a_large_or_unknown_corpus_asks_first(self):
         self.assertTrue(reindex.needs_confirmation(None))
         self.assertFalse(reindex.needs_confirmation(reindex.Corpus(reindex.ASK_ABOVE_DOCUMENTS, 1)))
-        self.assertTrue(reindex.needs_confirmation(reindex.Corpus(reindex.ASK_ABOVE_DOCUMENTS + 1, 1)))
+        self.assertTrue(
+            reindex.needs_confirmation(reindex.Corpus(reindex.ASK_ABOVE_DOCUMENTS + 1, 1))
+        )
 
     def test_the_wait_grows_with_the_corpus(self):
         self.assertEqual(reindex.patience(None), reindex.UNKNOWN_CORPUS_WAIT_SECONDS)
@@ -128,8 +159,15 @@ class Counting(unittest.TestCase):
         self.assertEqual(reindex.patience(large), reindex.WAIT_MARGIN * large.cpu_seconds)
 
     def test_the_startup_reindex_is_on_unless_turned_off(self):
-        for setting, expected in ((None, True), ("", True), ("1", True), ("0", False), ("off", False),
-                                  (" False ", False), ("no", False)):
+        for setting, expected in (
+            (None, True),
+            ("", True),
+            ("1", True),
+            ("0", False),
+            ("off", False),
+            (" False ", False),
+            ("no", False),
+        ):
             with self.subTest(setting=setting):
                 self.assertEqual(reindex.runs_at_start(setting), expected)
 
@@ -139,14 +177,18 @@ class Announcing(LogCase):
         reindex.announce(self.log, reindex.Corpus(40, 480), towards_local=True)
         self.assertIn("holds 40 documents (480 passages)", self.text())
         self.assertIn("On the processor that takes about 2m 00s", self.text())
-        self.assertEqual(self.emitted("reembed")[-1],
-                         {"event": "reembed", "documents": 40, "passages": 480, "cpu_seconds": 120})
+        self.assertEqual(
+            self.emitted("reembed")[-1],
+            {"event": "reembed", "documents": 40, "passages": 480, "cpu_seconds": 120},
+        )
 
     def test_towards_mock_it_says_the_way_back_costs_the_cpu_time(self):
         reindex.announce(self.log, reindex.Corpus(5, 22), towards_local=False)
         self.assertIn("llm-mock does it in seconds", self.text())
-        self.assertIn("Switching back to local later re-embeds them on the processor again: "
-                      "under a minute", self.text())
+        self.assertIn(
+            "Switching back to local later re-embeds them on the processor again: under a minute",
+            self.text(),
+        )
 
     def test_an_empty_or_silent_knowledge_store_is_said_plainly(self):
         reindex.announce(self.log, reindex.Corpus(0, 0), towards_local=True)
@@ -156,26 +198,51 @@ class Announcing(LogCase):
 
 
 class Following(LogCase):
-    def follow(self, store: FakeReindex, start_now: bool = False, may_start: bool = True,
-               startup: bool = True, wait_seconds: float = reindex.SHORTEST_WAIT_SECONDS):
+    def follow(
+        self,
+        store: FakeReindex,
+        start_now: bool = False,
+        may_start: bool = True,
+        startup: bool = True,
+        wait_seconds: float = reindex.SHORTEST_WAIT_SECONDS,
+    ):
         clock = Clock()
         with mock.patch.object(smoke, "http", side_effect=store):
-            result = reindex.follow(self.log, KS, "secret", start_now, may_start, startup, wait_seconds,
-                                    sleep=clock.sleep, clock=clock)
+            result = reindex.follow(
+                self.log,
+                KS,
+                "secret",
+                start_now,
+                may_start,
+                startup,
+                wait_seconds,
+                sleep=clock.sleep,
+                clock=clock,
+            )
         return result, clock
 
     def test_the_startup_reindex_is_followed_to_the_end(self):
-        store = FakeReindex([(200, job("running")), (200, job("running", 5, 2)),
-                             (200, job("running", 5, 2)), (200, job("completed", 5, 5))])
+        store = FakeReindex(
+            [
+                (200, job("running")),
+                (200, job("running", 5, 2)),
+                (200, job("running", 5, 2)),
+                (200, job("completed", 5, 5)),
+            ]
+        )
         result, clock = self.follow(store)
         self.assertEqual(result["state"], "completed")
         self.assertEqual(store.methods, ["GET"] * 4)
-        self.assertTrue(all(headers == {reindex.TOKEN_HEADER: "secret"} for _m, _u, headers in store.calls))
+        self.assertTrue(
+            all(headers == {reindex.TOKEN_HEADER: "secret"} for _m, _u, headers in store.calls)
+        )
         self.assertEqual(store.calls[0][1], f"{KS}/corpus/reindex")
         self.assertEqual(clock.slept, [reindex.POLL_SECONDS] * 3)
         self.assertIn("re-embedding the stored documents: 2/5", self.text())
         self.assertIn("Re-embedded 5 documents with http:horus-mock:768", self.text())
-        self.assertEqual([row["state"] for row in self.emitted("reindex")], ["running", "running", "completed"])
+        self.assertEqual(
+            [row["state"] for row in self.emitted("reindex")], ["running", "running", "completed"]
+        )
 
     def test_an_idle_knowledge_store_is_asked_to_reindex(self):
         store = FakeReindex([(200, {"state": "idle"}), (200, job("completed"))])
@@ -195,13 +262,16 @@ class Following(LogCase):
         self.assertEqual(store.methods, ["POST", "GET", "GET"])
 
     def test_a_restarted_knowledge_store_is_asked_again(self):
-        store = FakeReindex([(200, job("running", 3, 1)), (200, {"state": "idle"}),
-                             (200, job("completed", 3, 3))])
+        store = FakeReindex(
+            [(200, job("running", 3, 1)), (200, {"state": "idle"}), (200, job("completed", 3, 3))]
+        )
         self.follow(store)
         self.assertEqual(store.methods, ["GET", "GET", "POST", "GET"])
 
     def test_a_busy_store_is_asked_again_every_half_minute_only(self):
-        store = FakeReindex([(200, {"state": "idle"})] * 25 + [(200, job("completed", 2, 2))], post=409)
+        store = FakeReindex(
+            [(200, {"state": "idle"})] * 25 + [(200, job("completed", 2, 2))], post=409
+        )
         result, clock = self.follow(store)
         self.assertEqual(result["state"], "completed")
         self.assertEqual(store.methods.count("POST"), 3)
@@ -215,10 +285,14 @@ class Following(LogCase):
     def test_without_the_token_the_installer_says_it_cannot_follow(self):
         for status in (403, 503):
             with self.subTest(status=status):
-                store = FakeReindex([(status, {"error": "Missing or invalid X-Corpus-Token header."})])
+                store = FakeReindex(
+                    [(status, {"error": "Missing or invalid X-Corpus-Token header."})]
+                )
                 result, _clock = self.follow(store)
                 self.assertIsNone(result)
-                self.assertIn(f"cannot follow the knowledge store's re-index (HTTP {status}", self.text())
+                self.assertIn(
+                    f"cannot follow the knowledge store's re-index (HTTP {status}", self.text()
+                )
 
     def test_a_refused_start_is_said_too(self):
         store = FakeReindex([(200, job("completed"))], post=503)
@@ -232,7 +306,9 @@ class Following(LogCase):
         self.assertIn("2 of 7 documents could not be re-embedded (a, b)", self.text())
         self.assertIn("the next start of Horus tries them again", self.text())
         self.assertEqual(self.emitted("reindex")[-1]["failed"], 2)
-        self.follow(FakeReindex([(200, job("completed", 7, 7, failed=1, failures=("c",)))]), startup=False)
+        self.follow(
+            FakeReindex([(200, job("completed", 7, 7, failed=1, failures=("c",)))]), startup=False
+        )
         self.assertIn("run scripts/reindex-knowledge-store.py or this switch again", self.text())
 
     def test_a_failed_job_says_why(self):

@@ -210,11 +210,19 @@ class TestStreamedAnswer:
         lines = sse(
             chunk({"role": "assistant", "content": None}),
             chunk({"content": "Q4 2025 revenue"}),
-            {"error": {"code": 500, "message": "failed to decode the batch", "type": "server_error"}},
+            {
+                "error": {
+                    "code": 500,
+                    "message": "failed to decode the batch",
+                    "type": "server_error",
+                }
+            },
         )
-        with patch("requests.post", streaming_post(lines)), patch(
-            "ai_agents.step_emitter.emit_step", MagicMock()
-        ), pytest.raises(RuntimeError, match="failed to decode the batch"):
+        with (
+            patch("requests.post", streaming_post(lines)),
+            patch("ai_agents.step_emitter.emit_step", MagicMock()),
+            pytest.raises(RuntimeError, match="failed to decode the batch"),
+        ):
             remote_agent()._generate_vllm("What was Q4 revenue?", "Answer briefly.")
 
 
@@ -229,9 +237,10 @@ class TestNoLocalModel:
     def test_answering_a_question_loads_no_decision_model(self, llama_server_env):
         llama_server_env.setenv("AGENT_LAZY_DECISION_MODEL", "1")
         agent = DecisionMakingAgent(device="cpu")
-        with patch.object(DecisionMakingAgent, "_load_causal_model") as load, patch.object(
-            DecisionMakingAgent, "_generate_vllm", return_value="served"
-        ) as served:
+        with (
+            patch.object(DecisionMakingAgent, "_load_causal_model") as load,
+            patch.object(DecisionMakingAgent, "_generate_vllm", return_value="served") as served,
+        ):
             answer = agent.decide("What was Q4 revenue?", context="Q4 2025 revenue was $4.2M.")
         load.assert_not_called()
         served.assert_called_once()

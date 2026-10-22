@@ -174,7 +174,9 @@ class EvalClient(pipeline.PipelineBench):
         try:
             async with self.connect(url, max_size=16 * 1024 * 1024, open_timeout=20) as socket:
                 started = time.perf_counter()
-                await self._exchange(socket, question, conversation_id, observation, outcome, started)
+                await self._exchange(
+                    socket, question, conversation_id, observation, outcome, started
+                )
         except Exception as exc:  # noqa: BLE001
             if not outcome.get("task_id") and not outcome.get("error"):
                 outcome["error"] = f"websocket failed: {type(exc).__name__}: {exc}"
@@ -384,7 +386,9 @@ def docker_exec(container: str, *command: str) -> str | None:
 
 
 def docker_memory_usage() -> dict[str, int]:
-    output = docker_text(["stats", "--no-stream", "--format", "{{.Name}}\t{{.MemUsage}}"], timeout=60)
+    output = docker_text(
+        ["stats", "--no-stream", "--format", "{{.Name}}\t{{.MemUsage}}"], timeout=60
+    )
     return parse_docker_stats(output or "")
 
 
@@ -415,7 +419,9 @@ def container_cgroup_facts(names: list[str]) -> dict[str, dict[str, Any]]:
         peaks[name] = parse_whole_number(docker_exec(name, "cat", "/sys/fs/cgroup/memory.peak"))
         events = parse_memory_events(docker_exec(name, "cat", "/sys/fs/cgroup/memory.events"))
         oom_kills[name] = events.get("oom_kill")
-        memory_stats[name] = parse_memory_stat(docker_exec(name, "cat", "/sys/fs/cgroup/memory.stat"))
+        memory_stats[name] = parse_memory_stat(
+            docker_exec(name, "cat", "/sys/fs/cgroup/memory.stat")
+        )
     return {
         "container_lifetime_peak_mem_bytes": peaks,
         "container_oom_kills": oom_kills,
@@ -431,7 +437,9 @@ def container_restart_counts(names: list[str]) -> dict[str, int | None]:
 
 
 def llm_process_memory(container: str | None) -> dict[str, Any] | None:
-    return parse_process_status(docker_exec(container, "cat", "/proc/1/status")) if container else None
+    return (
+        parse_process_status(docker_exec(container, "cat", "/proc/1/status")) if container else None
+    )
 
 
 def llm_mapped_outside_now(container: str) -> int | None:
@@ -456,7 +464,9 @@ class ResourceSampler(threading.Thread):
 
     def sample(self) -> tuple[dict[str, int], int | None]:
         usage = docker_memory_usage()
-        llm_outside = llm_mapped_outside_now(self.llm_container) if self.llm_container in usage else None
+        llm_outside = (
+            llm_mapped_outside_now(self.llm_container) if self.llm_container in usage else None
+        )
         swap = swap_used_bytes()
         docker_host_swap = docker_host_swap_used_bytes(self.swap_container)
         with self._lock:
@@ -502,7 +512,9 @@ class ResourceSampler(threading.Thread):
         resources["llm_process"] = llm_process_memory(self.llm_container)
         questions = self.since_questions_start
         questions_swap_peak = questions.docker_host_swap_peak if questions else None
-        resources.update(questions_peak_checks(resources, self.at_questions_start, questions_swap_peak))
+        resources.update(
+            questions_peak_checks(resources, self.at_questions_start, questions_swap_peak)
+        )
         return resources
 
 
@@ -523,7 +535,9 @@ def llama_server_facts(container: str | None) -> dict[str, Any] | None:
     if not container:
         return None
     try:
-        config = json.loads(docker_text(["inspect", "--format", "{{json .Config}}", container]) or "")
+        config = json.loads(
+            docker_text(["inspect", "--format", "{{json .Config}}", container]) or ""
+        )
     except ValueError:
         return None
     if not isinstance(config, dict):
@@ -531,7 +545,9 @@ def llama_server_facts(container: str | None) -> dict[str, Any] | None:
     args = [str(arg) for arg in config.get("Cmd") or []]
     settings = parse_server_args(args)
     port = settings.get("port") or LLM_PORT
-    props = parse_props(docker_exec(container, "curl", "-fsS", "-m", "10", f"http://localhost:{port}/props"))
+    props = parse_props(
+        docker_exec(container, "curl", "-fsS", "-m", "10", f"http://localhost:{port}/props")
+    )
     model_path = props.get("model_path") or settings.get("model")
     verified = docker_exec(container, "cat", f"{model_path}.sha256") if model_path else None
     image = config.get("Image")
@@ -542,7 +558,8 @@ def llama_server_facts(container: str | None) -> dict[str, Any] | None:
         "settings": settings,
         "port": port,
         "build_info": props.get("build_info"),
-        "build": build_tag(props.get("build_info")) or build_tag(str(image or "").rsplit(":", 1)[-1]),
+        "build": build_tag(props.get("build_info"))
+        or build_tag(str(image or "").rsplit(":", 1)[-1]),
         "n_ctx": props.get("n_ctx"),
         "model_path": model_path,
         "model_sha256": (verified or "").strip().lower() if is_sha256(verified) else None,
@@ -611,12 +628,15 @@ def model_info(args: argparse.Namespace, llama_server: dict[str, Any] | None) ->
     if args.model_sha256:
         sha256_source = "given"
     elif sha256:
-        sha256_source = "llm container: the .sha256 written next to the GGUF once its hash was verified"
+        sha256_source = (
+            "llm container: the .sha256 written next to the GGUF once its hash was verified"
+        )
     else:
         sha256_source = None
     return {
         "name": args.model_name or (server.get("settings") or {}).get("alias"),
-        "file": args.model_file or (Path(server["model_path"]).name if server.get("model_path") else None),
+        "file": args.model_file
+        or (Path(server["model_path"]).name if server.get("model_path") else None),
         "sha256": sha256,
         "sha256_source": sha256_source,
     }
@@ -624,8 +644,14 @@ def model_info(args: argparse.Namespace, llama_server: dict[str, Any] | None) ->
 
 def testset_info(args: argparse.Namespace, testset: dict[str, Any], items: list[dict]) -> dict:
     filters = {"ids": args.ids, "categories": args.category, "limit": args.limit}
-    return testset_section(args.testset, testset, items, filters, root=REPO_ROOT,
-                           sha256=file_sha256(Path(args.testset).resolve()))
+    return testset_section(
+        args.testset,
+        testset,
+        items,
+        filters,
+        root=REPO_ROOT,
+        sha256=file_sha256(Path(args.testset).resolve()),
+    )
 
 
 class ChatTarget:
@@ -635,7 +661,9 @@ class ChatTarget:
         self.client = client
         self.label = label
 
-    async def ask(self, question: str, *, item_id: str, files: Sequence[Path] = ()) -> dict[str, Any]:
+    async def ask(
+        self, question: str, *, item_id: str, files: Sequence[Path] = ()
+    ) -> dict[str, Any]:
         return await self.client.ask(question, f"eval-{safe_label(self.label)}-{item_id}")
 
 
@@ -646,7 +674,9 @@ class RetrievalTarget:
         self.ks_url = ks_url
         self.top_k = top_k
 
-    async def ask(self, question: str, *, item_id: str, files: Sequence[Path] = ()) -> dict[str, Any]:
+    async def ask(
+        self, question: str, *, item_id: str, files: Sequence[Path] = ()
+    ) -> dict[str, Any]:
         return await asyncio.to_thread(retrieve, self.ks_url, question, self.top_k)
 
 
@@ -790,10 +820,14 @@ def main() -> int:
     out_path = report_path(args.out_dir, args.label, started_at.date())
     sampler = None
     if args.sample_resources:
-        sampler = ResourceSampler(args.sample_interval, args.swap_container or None, args.llm_container or None)
+        sampler = ResourceSampler(
+            args.sample_interval, args.swap_container or None, args.llm_container or None
+        )
     llama_server = llama_server_facts(args.llm_container or None)
     if llama_server is None and args.llm_container:
-        print(f"[info] no llama-server container {args.llm_container!r}: server metrics are not recorded")
+        print(
+            f"[info] no llama-server container {args.llm_container!r}: server metrics are not recorded"
+        )
     docker = host.docker_facts()
     run = {
         "mode": args.mode,

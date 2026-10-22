@@ -85,7 +85,10 @@ def written_report(output):
 class TestValidate:
     def test_the_json_example_is_valid(self, examples, capsys):
         assert main(["validate", str(examples / "testset.json")]) == 0
-        assert capsys.readouterr().out == "[ok] testset.json: version 1.0.0, 9 questions, 3 corpus documents\n"
+        assert (
+            capsys.readouterr().out
+            == "[ok] testset.json: version 1.0.0, 9 questions, 3 corpus documents\n"
+        )
 
     def test_the_yaml_example_is_valid(self, examples, capsys):
         pytest.importorskip("yaml")
@@ -108,7 +111,10 @@ class TestValidate:
         empty = tmp_path / "empty.json"
         empty.write_text("[]", encoding="utf-8")
         assert main(["validate", str(empty)]) == 2
-        assert capsys.readouterr().out == "[error] testset: empty.json does not hold a test set object\n"
+        assert (
+            capsys.readouterr().out
+            == "[error] testset: empty.json does not hold a test set object\n"
+        )
         assert main(["validate", str(tmp_path / "missing.json")]) == 2
         assert capsys.readouterr().out.startswith("[error] testset: cannot read missing.json")
 
@@ -116,23 +122,33 @@ class TestValidate:
         path = tmp_path / "t.json"
         path.write_text(json.dumps({"items": []}), encoding="utf-8")
         assert main(["validate", str(path)]) == 2
-        assert "[error] testset: missing top-level key 'corpus_dir'" in capsys.readouterr().out.splitlines()
+        assert (
+            "[error] testset: missing top-level key 'corpus_dir'"
+            in capsys.readouterr().out.splitlines()
+        )
 
     @pytest.mark.parametrize(
         ("change", "message"),
         [
             ({"items": ["fg-01"]}, "item #0: must be a mapping of fields"),
             ({"items": {"fg-01": {}}}, "items must be a list of questions"),
-            ({"corpus": ["garden-handbook.txt"]}, "corpus must map document file names to their SHA-256"),
+            (
+                {"corpus": ["garden-handbook.txt"]},
+                "corpus must map document file names to their SHA-256",
+            ),
         ],
     )
-    def test_a_test_set_of_the_wrong_shape_is_reported_not_raised(self, copied_examples, capsys, change, message):
+    def test_a_test_set_of_the_wrong_shape_is_reported_not_raised(
+        self, copied_examples, capsys, change, message
+    ):
         path = copied_examples / "testset.json"
         write_json(path, {**read_json(path), **change})
         assert main(["validate", str(path)]) == 2
         assert capsys.readouterr().out == f"[error] testset: {message}\n"
 
-    def test_an_expected_source_of_the_wrong_type_is_reported_not_raised(self, copied_examples, capsys):
+    def test_an_expected_source_of_the_wrong_type_is_reported_not_raised(
+        self, copied_examples, capsys
+    ):
         path = copied_examples / "testset.json"
         testset = read_json(path)
         testset["items"][0]["expected_source"] = 5
@@ -143,7 +159,9 @@ class TestValidate:
 
 
 class TestRun:
-    def test_a_run_writes_a_kit_report_and_prints_the_headline(self, run_args, fake_openai, example_answers, capsys):
+    def test_a_run_writes_a_kit_report_and_prints_the_headline(
+        self, run_args, fake_openai, example_answers, capsys
+    ):
         fake_openai.answer = example_answers(fg_04="It costs $80.")
         assert main(run_args("--warmup", "Say hello.")) == 0
         output = capsys.readouterr().out
@@ -151,9 +169,23 @@ class TestRun:
         today = datetime.now(timezone.utc).date().isoformat()
         assert output.splitlines()[0] == "[info] warmup (not scored): Say hello."
         assert output.splitlines()[1].endswith(f"garden-run-{today}.json")
-        assert list(report) == ["kind", "schema_version", "label", "run", "testset", "summary", "questions"]
-        assert (report["kind"], report["schema_version"], report["label"]) == ("horus-bench-kit-eval", 1, "garden run")
-        assert [question["id"] for question in report["questions"]] == [f"fg-0{n}" for n in range(1, 10)]
+        assert list(report) == [
+            "kind",
+            "schema_version",
+            "label",
+            "run",
+            "testset",
+            "summary",
+            "questions",
+        ]
+        assert (report["kind"], report["schema_version"], report["label"]) == (
+            "horus-bench-kit-eval",
+            1,
+            "garden run",
+        )
+        assert [question["id"] for question in report["questions"]] == [
+            f"fg-0{n}" for n in range(1, 10)
+        ]
         assert list(report["questions"][0]) == QUESTION_KEYS
         assert report["summary"]["answer_correct_auto"] == {"n": 9, "correct": 8, "pct": 88.9}
         assert report["summary"]["status"] == {"ok": 9}
@@ -182,7 +214,10 @@ class TestRun:
             "settings",
             "observed_models",
         ]
-        assert run["endpoint"] == "http://127.0.0.1:" + fake_openai.base_url.split(":")[2].split("/")[0]
+        assert (
+            run["endpoint"]
+            == "http://127.0.0.1:" + fake_openai.base_url.split(":")[2].split("/")[0]
+        )
         assert (run["target"], run["model"], run["completed"], run["kit_version"]) == (
             "openai",
             "harbour-7b",
@@ -200,13 +235,17 @@ class TestRun:
         assert str(tmp_path) not in text and tmp_path.name not in text
         assert fake_openai.requests[0]["headers"]["Authorization"] == "Bearer test-key-not-a-secret"
 
-    def test_context_files_are_sent_only_for_the_questions_that_have_one(self, run_args, fake_openai, capsys):
+    def test_context_files_are_sent_only_for_the_questions_that_have_one(
+        self, run_args, fake_openai, capsys
+    ):
         assert main(run_args("--ids", "fg-01,fg-09")) == 0
         users = [request["body"]["messages"][1]["content"] for request in fake_openai.requests]
         assert users[0].startswith("Context:\n[garden-handbook.txt]\nOpening hours")
         assert users[1] == "What is 15 multiplied by 4?"
 
-    def test_an_item_context_file_wins_over_the_context_folder(self, run_args, copied_examples, fake_openai, capsys):
+    def test_an_item_context_file_wins_over_the_context_folder(
+        self, run_args, copied_examples, fake_openai, capsys
+    ):
         path = copied_examples / "testset.json"
         testset = read_json(path)
         testset["items"][0]["context_file"] = "corpus/tool-shed.txt"
@@ -215,7 +254,9 @@ class TestRun:
         assert "[tool-shed.txt]" not in fake_openai.requests[0]["body"]["messages"][1]["content"]
         assert "Hand tools" in fake_openai.requests[0]["body"]["messages"][1]["content"]
 
-    def test_a_system_prompt_file_replaces_the_default(self, run_args, fake_openai, tmp_path, capsys):
+    def test_a_system_prompt_file_replaces_the_default(
+        self, run_args, fake_openai, tmp_path, capsys
+    ):
         prompt = tmp_path / "prompt.txt"
         prompt.write_text("Answer in one word.", encoding="utf-8")
         assert main(run_args("--ids", "fg-09", "--system-prompt-file", str(prompt))) == 0
@@ -230,7 +271,9 @@ class TestRun:
         assert report["testset"]["items_run"] == 2
         assert report["testset"]["filters"] == {"ids": None, "categories": ["lookup"], "limit": 2}
 
-    def test_an_unreachable_server_fails_the_run_and_keeps_the_report(self, run_args, fake_openai, capsys):
+    def test_an_unreachable_server_fails_the_run_and_keeps_the_report(
+        self, run_args, fake_openai, capsys
+    ):
         fake_openai.status = 500
         assert main(run_args("--ids", "fg-01")) == 1
         output = capsys.readouterr().out
@@ -248,16 +291,25 @@ class TestRun:
     @pytest.mark.parametrize(
         ("extra", "message"),
         [
-            (["--category", "trivia"], "--category must be among lookup, numeric, multi_hop, not_in_corpus, direct"),
+            (
+                ["--category", "trivia"],
+                "--category must be among lookup, numeric, multi_hop, not_in_corpus, direct",
+            ),
             (["--limit", "0"], "--limit must be at least 1"),
             (["--label", "///"], "--label: label must contain at least one letter or digit"),
             (["--base-url", "localhost:8080"], "--base-url must start with http:// or https://"),
-            (["--base-url", "http://127.0.0.1:abc/v1"], "--base-url: Port could not be cast to integer value as 'abc'"),
+            (
+                ["--base-url", "http://127.0.0.1:abc/v1"],
+                "--base-url: Port could not be cast to integer value as 'abc'",
+            ),
             (["--base-url", "http://127.0.0.1:99999/v1"], "--base-url: Port out of range 0-65535"),
             (["--max-tokens", "0"], "--max-tokens must be at least 1"),
             (["--timeout", "0"], "--timeout must be more than 0"),
             (["--context-dir", "nowhere"], "--context-dir 'nowhere' is not a folder"),
-            (["--system-prompt-file", "nowhere.txt"], "--system-prompt-file 'nowhere.txt' does not exist"),
+            (
+                ["--system-prompt-file", "nowhere.txt"],
+                "--system-prompt-file 'nowhere.txt' does not exist",
+            ),
         ],
     )
     def test_bad_options_exit_with_2(self, run_args, capsys, extra, message):
@@ -278,7 +330,10 @@ class TestRun:
         assert "[error] no test items match the filters" in capsys.readouterr().out
 
     def test_the_endpoint_keeps_only_scheme_host_and_port(self):
-        assert endpoint_origin("https://user:pw@Models.Example:8443/v1?x=1") == "https://models.example:8443"
+        assert (
+            endpoint_origin("https://user:pw@Models.Example:8443/v1?x=1")
+            == "https://models.example:8443"
+        )
         assert endpoint_origin("http://[::1]:8080/v1") == "http://[::1]:8080"
         assert endpoint_origin("http://127.0.0.1/v1") == "http://127.0.0.1"
 
@@ -288,7 +343,9 @@ class TestResummarizeAndCompare:
     def report_path(self, run_args, example_answers, fake_openai, capsys):
         fake_openai.answer = example_answers(fg_02="Ten hours.")
         assert main(run_args()) == 0
-        line = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("[done]"))
+        line = next(
+            line for line in capsys.readouterr().out.splitlines() if line.startswith("[done]")
+        )
         return Path(line.removeprefix("[done] wrote "))
 
     def test_resummarize_counts_the_reviews(self, report_path, capsys):

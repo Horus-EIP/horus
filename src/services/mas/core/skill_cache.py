@@ -54,7 +54,9 @@ def _agent_skill_text(agent_name: str, skill: str, description: str) -> str:
     return base
 
 
-def _build_rows_for_agent(agent_id: str, agent_name: str, skills: list[str], description: str) -> list[_SkillRow]:
+def _build_rows_for_agent(
+    agent_id: str, agent_name: str, skills: list[str], description: str
+) -> list[_SkillRow]:
     if not skills:
         return []
     texts = [_agent_skill_text(agent_name, s, description) for s in skills]
@@ -77,9 +79,7 @@ def warm_skill_cache() -> None:
     new_rows: list[_SkillRow] = []
     for a in agents:
         skills = list(a.skills or [])
-        new_rows.extend(
-            _build_rows_for_agent(a.id, a.name, skills, a.description or "")
-        )
+        new_rows.extend(_build_rows_for_agent(a.id, a.name, skills, a.description or ""))
 
     with _lock:
         _rows = new_rows

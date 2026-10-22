@@ -64,11 +64,34 @@ class TestCommands:
     def test_bench_command_runs_the_whole_matrix_in_one_call(self):
         command = bench_command(BENCH_IMAGE, "/srv/models", [SMALL, LARGE], BenchMatrix())
         assert command == [
-            "docker", "run", "--rm", "-v", "/srv/models:/models:ro", BENCH_IMAGE, "--bench",
-            "-m", f"/models/{SMALL}", "-m", f"/models/{LARGE}",
-            "-p", "512,2048", "-n", "128", "-d", "0,4096",
-            "-ctk", "f16,q8_0", "-ctv", "f16,q8_0", "-t", "4,8", "-r", "5",
-            "-o", "json", "--progress",
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            "/srv/models:/models:ro",
+            BENCH_IMAGE,
+            "--bench",
+            "-m",
+            f"/models/{SMALL}",
+            "-m",
+            f"/models/{LARGE}",
+            "-p",
+            "512,2048",
+            "-n",
+            "128",
+            "-d",
+            "0,4096",
+            "-ctk",
+            "f16,q8_0",
+            "-ctv",
+            "f16,q8_0",
+            "-t",
+            "4,8",
+            "-r",
+            "5",
+            "-o",
+            "json",
+            "--progress",
         ]
 
     def test_the_default_matrix_is_96_tests_for_two_models(self):
@@ -79,8 +102,15 @@ class TestCommands:
     def test_a_volume_is_mounted_by_name(self):
         command = checksum_command(BENCH_IMAGE, "bench_models", [SMALL])
         assert command == [
-            "docker", "run", "--rm", "-v", "bench_models:/models:ro",
-            "--entrypoint", "sha256sum", BENCH_IMAGE, f"/models/{SMALL}",
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            "bench_models:/models:ro",
+            "--entrypoint",
+            "sha256sum",
+            BENCH_IMAGE,
+            f"/models/{SMALL}",
         ]
 
     def test_listing_prints_size_and_name_of_each_gguf(self):
@@ -92,7 +122,13 @@ class TestCommands:
         assert container_path(SMALL) == f"/models/{SMALL}"
         assert recorded_model_path(f"C:\\Users\\x\\models\\{SMALL}") == f"<models-dir>/{SMALL}"
         command = ["docker", "run", "-v", "/srv/models:/models:ro", "image"]
-        assert recorded_command(command, "/srv/models") == ["docker", "run", "-v", "<models-dir>:/models:ro", "image"]
+        assert recorded_command(command, "/srv/models") == [
+            "docker",
+            "run",
+            "-v",
+            "<models-dir>:/models:ro",
+            "image",
+        ]
         assert recorded_command(command, None) == command
         assert recorded_command(None, "/srv/models") is None
 
@@ -124,7 +160,9 @@ class TestParsing:
 
 class TestEnrichment:
     def test_models_are_checked_against_the_known_hashes(self):
-        records = model_records([SMALL, LARGE], {SMALL: 812_000_000}, {SMALL: SMALL_SHA256, LARGE: "0" * 64}, KNOWN)
+        records = model_records(
+            [SMALL, LARGE], {SMALL: 812_000_000}, {SMALL: SMALL_SHA256, LARGE: "0" * 64}, KNOWN
+        )
         assert records[0] == {
             "file": SMALL,
             "size_bytes": 812_000_000,
@@ -147,7 +185,9 @@ class TestEnrichment:
         assert image_build("llama.cpp") is None
 
     def test_build_number_comes_from_the_results(self):
-        section = llama_cpp_section(BENCH_IMAGE, "ghcr.io/ggml-org/llama.cpp@sha256:abc", [bench_row()])
+        section = llama_cpp_section(
+            BENCH_IMAGE, "ghcr.io/ggml-org/llama.cpp@sha256:abc", [bench_row()]
+        )
         assert section == {
             "image": BENCH_IMAGE,
             "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:abc",
@@ -158,7 +198,9 @@ class TestEnrichment:
         }
 
     def test_string_build_number_and_a_different_tag(self):
-        section = llama_cpp_section("llama.cpp:full-b11000", None, [bench_row(build_number="11382")])
+        section = llama_cpp_section(
+            "llama.cpp:full-b11000", None, [bench_row(build_number="11382")]
+        )
         assert section["build"] == "b11382"
         assert section["image_tag_matches"] is False
 
@@ -183,28 +225,42 @@ class TestEnrichment:
                 "stddev_ts": 0.87,
             }
         ]
-        assert summary_lines(rows) == [f"{SMALL}  pp512 @ d4096  KV q8_0/q8_0  t=8  61.23 ± 0.87 t/s"]
+        assert summary_lines(rows) == [
+            f"{SMALL}  pp512 @ d4096  KV q8_0/q8_0  t=8  61.23 ± 0.87 t/s"
+        ]
 
 
 class TestReport:
     def report(self, **extra):
         rows = [bench_row(), bench_row(n_prompt=0, n_gen=128, avg_ts=9.5)]
         machine = {"reference": "bench-01", "cpu_model": "Example CPU 6C"}
-        return rows, machine, build_report(
-            label="bench-01",
-            run={"started_at": "2026-10-08T08:00:00Z"},
-            image=BENCH_IMAGE,
-            image_digest=None,
-            rows=rows,
-            models=model_records([SMALL], {SMALL: 812_000_000}, {SMALL: SMALL_SHA256}, KNOWN),
-            machine=machine,
-            **extra,
+        return (
+            rows,
+            machine,
+            build_report(
+                label="bench-01",
+                run={"started_at": "2026-10-08T08:00:00Z"},
+                image=BENCH_IMAGE,
+                image_digest=None,
+                rows=rows,
+                models=model_records([SMALL], {SMALL: 812_000_000}, {SMALL: SMALL_SHA256}, KNOWN),
+                machine=machine,
+                **extra,
+            ),
         )
 
     def test_report_keeps_the_raw_results_unchanged(self):
         rows, machine, report = self.report()
         assert list(report) == [
-            "kind", "schema_version", "label", "run", "llama_cpp", "models", "machine", "summary", "results",
+            "kind",
+            "schema_version",
+            "label",
+            "run",
+            "llama_cpp",
+            "models",
+            "machine",
+            "summary",
+            "results",
         ]
         assert (report["kind"], report["schema_version"]) == (REPORT_KIND, 1)
         assert REPORT_KIND == "horus-llama-bench"

@@ -28,9 +28,7 @@ class Messages(Base):
     id = Column(Integer, primary_key=True, autoincrement=True, index=True)
     role = Column(String, nullable=False)
     content = Column(String, nullable=False)
-    created_at = Column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     # Agent attribution captured at write time so chat history reloads keep
     # the Manager's violet bubble + each specialist's name chip. Nullable
@@ -51,9 +49,7 @@ class Messages(Base):
 
     conversation = relationship("Conversations", back_populates="messages")
 
-    __table_args__ = (
-        Index("idx_messages_conversation_created", "conversation_id", "created_at"),
-    )
+    __table_args__ = (Index("idx_messages_conversation_created", "conversation_id", "created_at"),)
 
 
 @event.listens_for(Messages, "after_insert")

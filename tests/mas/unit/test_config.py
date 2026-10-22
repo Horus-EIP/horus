@@ -92,9 +92,7 @@ class TestConfigVariables:
 
 
 class TestLegacyAgentCredentials:
-    def test_agent_credentials_fall_back_for_an_existing_env_file(
-        self, monkeypatch, tmp_path
-    ):
+    def test_agent_credentials_fall_back_for_an_existing_env_file(self, monkeypatch, tmp_path):
         for key in (
             "POSTGRES_USER",
             "POSTGRES_PASSWORD",

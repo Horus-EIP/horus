@@ -91,9 +91,7 @@ def stored(fake_collection):
 
 
 class TestQueryLatency:
-    def test_a_query_records_its_latency_and_how_many_documents_it_returned(
-        self, client, stored
-    ):
+    def test_a_query_records_its_latency_and_how_many_documents_it_returned(self, client, stored):
         recorded = Recorded()
 
         response = client.get("/", params={"query": "revenue", "n_results": 2})
@@ -143,9 +141,7 @@ class TestQueryLatency:
         assert recorded.since(QUERY_LATENCY_COUNT) == 1
 
     async def test_the_query_helpers_still_return_the_collection_results(self, stored, embedder):
-        results = await file_service.query_with_filters(
-            "revenue", {"category": {"$eq": "hr"}}, 5
-        )
+        results = await file_service.query_with_filters("revenue", {"category": {"$eq": "hr"}}, 5)
 
         assert results["ids"] == [["policy"]]
 

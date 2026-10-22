@@ -53,7 +53,9 @@ def source_key(source: dict[str, Any]) -> str:
     return f"document:{source.get('doc_id') or ''}:{source.get('title') or ''}"
 
 
-def merge_sources(source_lists: Iterable[list[dict[str, Any]] | None]) -> list[dict[str, Any]] | None:
+def merge_sources(
+    source_lists: Iterable[list[dict[str, Any]] | None],
+) -> list[dict[str, Any]] | None:
     merged: dict[str, dict[str, Any]] = {}
     sent_any = False
     for sources in source_lists:
@@ -98,7 +100,9 @@ def dispatch_record_key(task_id: str) -> str:
 
 def _replayable_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
     files = payload.get("files") or []
-    if any(isinstance(entry, dict) and entry.get("source") == INLINE_FILE_SOURCE for entry in files):
+    if any(
+        isinstance(entry, dict) and entry.get("source") == INLINE_FILE_SOURCE for entry in files
+    ):
         return None
     return {key: value for key, value in payload.items() if key not in CREDENTIAL_KEYS}
 

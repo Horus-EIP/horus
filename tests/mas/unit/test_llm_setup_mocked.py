@@ -18,9 +18,7 @@ def test_is_model_dir_exists_false():
 
 
 def test_is_model_dir_exists_missing_files():
-    with patch(
-        "os.path.exists", side_effect=lambda p: str(p) == "./models/Qwen3_instruct_4B"
-    ):
+    with patch("os.path.exists", side_effect=lambda p: str(p) == "./models/Qwen3_instruct_4B"):
         # MODEL_DIR exists, but files inside don't
         assert is_model_dir_exists() is False
 
@@ -41,9 +39,7 @@ def test_get_llm_mocked_cpu_path():
     mock_tokenizer = MagicMock()
     mock_model = MagicMock()
     with patch("torch.cuda.is_available", return_value=False):
-        with patch(
-            "core.llm_setup.AutoTokenizer.from_pretrained", return_value=mock_tokenizer
-        ):
+        with patch("core.llm_setup.AutoTokenizer.from_pretrained", return_value=mock_tokenizer):
             with patch(
                 "core.llm_setup.AutoModelForCausalLM.from_pretrained",
                 return_value=mock_model,
@@ -59,9 +55,7 @@ def test_get_llm_mocked_with_gpu():
     mock_tokenizer = MagicMock()
     mock_model = MagicMock()
 
-    with patch(
-        "core.llm_setup.AutoTokenizer.from_pretrained", return_value=mock_tokenizer
-    ):
+    with patch("core.llm_setup.AutoTokenizer.from_pretrained", return_value=mock_tokenizer):
         with patch(
             "core.llm_setup.AutoModelForCausalLM.from_pretrained",
             return_value=mock_model,

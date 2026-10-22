@@ -5,9 +5,7 @@ from pathlib import Path
 UNKNOWN_VERSION = "0.0.0"
 
 
-def resolve_version(
-    environ: Mapping[str, str] | None = None, start: Path | None = None
-) -> str:
+def resolve_version(environ: Mapping[str, str] | None = None, start: Path | None = None) -> str:
     environ = os.environ if environ is None else environ
     declared = environ.get("HORUS_VERSION", "").strip()
     if declared:

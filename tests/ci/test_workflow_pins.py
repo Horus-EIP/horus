@@ -11,8 +11,20 @@ except ImportError:
     yaml = None
 
 REPO = Path(__file__).resolve().parents[2]
-NOT_OURS = {".git", "node_modules", ".venv", "venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
-            ".next", "target", "dist", "build"}
+NOT_OURS = {
+    ".git",
+    "node_modules",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".next",
+    "target",
+    "dist",
+    "build",
+}
 ROOT_WORKFLOWS = ["ci.yml", "desktop-release.yml", "eval-testset.yml", "images.yml"]
 KIT_WORKFLOWS = ["ci.yml", "claims.yml", "dco.yml", "stale-claims.yml", "welcome.yml"]
 
@@ -40,14 +52,21 @@ def uses_lines():
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             match = USES.match(line)
             if match:
-                yield f"{path.relative_to(REPO).as_posix()}:{number}", match.group(1), match.group(2)
+                yield (
+                    f"{path.relative_to(REPO).as_posix()}:{number}",
+                    match.group(1),
+                    match.group(2),
+                )
 
 
 class WorkflowPins(unittest.TestCase):
     def test_every_workflow_file_in_the_repository_is_checked(self):
         found = [path.relative_to(REPO).as_posix() for path in WORKFLOWS]
-        self.assertEqual(found, [f".github/workflows/{name}" for name in ROOT_WORKFLOWS]
-                         + [f"opensource/horus-bench-kit/.github/workflows/{name}" for name in KIT_WORKFLOWS])
+        self.assertEqual(
+            found,
+            [f".github/workflows/{name}" for name in ROOT_WORKFLOWS]
+            + [f"opensource/horus-bench-kit/.github/workflows/{name}" for name in KIT_WORKFLOWS],
+        )
 
     def test_every_action_is_pinned_by_commit_with_its_version_in_a_comment(self):
         found = list(uses_lines())

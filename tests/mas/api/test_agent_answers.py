@@ -147,9 +147,7 @@ def _events(task_id, kind=None):
 
 
 class TestAnswerSources:
-    async def test_an_answer_keeps_the_sources_it_cites(
-        self, agent_client, routing_db, work_queue
-    ):
+    async def test_an_answer_keeps_the_sources_it_cites(self, agent_client, routing_db, work_queue):
         _add_task(routing_db, "t1")
 
         response = await _report(agent_client, "t1", sources=[Q4_SOURCE])
@@ -338,7 +336,6 @@ class TestNotFound:
 
         work_queue.assert_not_called()
         assert _events("t1", "progress") == []
-
 
     async def test_a_second_attempt_that_cannot_be_published_fails_the_task(
         self, agent_client, routing_db

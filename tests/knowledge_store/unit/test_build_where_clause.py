@@ -18,9 +18,7 @@ class TestBuildWhereClause:
         assert build_where_clause(_req()) is None
 
     def test_single_category_uses_eq(self):
-        assert build_where_clause(_req(categories=["finance"])) == {
-            "category": {"$eq": "finance"}
-        }
+        assert build_where_clause(_req(categories=["finance"])) == {"category": {"$eq": "finance"}}
 
     def test_multiple_categories_use_or(self):
         assert build_where_clause(_req(categories=["finance", "legal"])) == {
@@ -31,14 +29,10 @@ class TestBuildWhereClause:
         }
 
     def test_min_confidence_uses_gte(self):
-        assert build_where_clause(_req(min_confidence=0.5)) == {
-            "confidence_score": {"$gte": 0.5}
-        }
+        assert build_where_clause(_req(min_confidence=0.5)) == {"confidence_score": {"$gte": 0.5}}
 
     def test_entity_type_uses_eq(self):
-        assert build_where_clause(_req(entity_type="person")) == {
-            "entity_type": {"$eq": "person"}
-        }
+        assert build_where_clause(_req(entity_type="person")) == {"entity_type": {"$eq": "person"}}
 
     def test_single_entity_uses_contains(self):
         assert build_where_clause(_req(entities=["Alice"])) == {

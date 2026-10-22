@@ -12,20 +12,36 @@ REPO = Path(__file__).resolve().parents[2]
 MAS_PROMPTS = REPO / "src" / "services" / "mas" / "tasks" / "prompts.py"
 
 ROSTER = (
-    ("id-general", "General-Assistant",
-     "General-purpose RAG assistant. Default fallback when no specialised agent matches the demand.",
-     "general"),
-    ("id-finance", "Finance-Analyst",
-     "Financial analysis specialist. Grounded in the Q4 2025 Financial Report and the Expense Policy.",
-     "analyst"),
-    ("id-compliance", "Compliance-Officer",
-     "Policy and compliance reviewer. Grounded in the Compliance Guidelines and the IT Security Policy.",
-     "analyst"),
-    ("id-hr", "HR-Assistant",
-     "HR specialist. Grounded in the Employee Handbook and the Expense Policy.", "general"),
-    ("id-researcher", "Researcher",
-     "Multi-source researcher. Pulls and synthesises information across the knowledge store.",
-     "researcher"),
+    (
+        "id-general",
+        "General-Assistant",
+        "General-purpose RAG assistant. Default fallback when no specialised agent matches the demand.",
+        "general",
+    ),
+    (
+        "id-finance",
+        "Finance-Analyst",
+        "Financial analysis specialist. Grounded in the Q4 2025 Financial Report and the Expense Policy.",
+        "analyst",
+    ),
+    (
+        "id-compliance",
+        "Compliance-Officer",
+        "Policy and compliance reviewer. Grounded in the Compliance Guidelines and the IT Security Policy.",
+        "analyst",
+    ),
+    (
+        "id-hr",
+        "HR-Assistant",
+        "HR specialist. Grounded in the Employee Handbook and the Expense Policy.",
+        "general",
+    ),
+    (
+        "id-researcher",
+        "Researcher",
+        "Multi-source researcher. Pulls and synthesises information across the knowledge store.",
+        "researcher",
+    ),
 )
 
 
@@ -80,15 +96,25 @@ def answer_schema(labels) -> dict:
     if labels:
         properties["sources"] = {"type": "array", "items": {"type": "string", "enum": list(labels)}}
         required.append("sources")
-    return {"type": "object", "properties": properties, "required": required,
-            "additionalProperties": False}
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": False,
+    }
 
 
 def answer_body(context: str, request: str, labels=("S1",), stream=True) -> dict:
     messages = [
-        {"role": "system", "content": "You are FinCorp's Finance Analyst.\n\n---\n\nYou answer "
-                                      "one request from the passages you are given."},
-        {"role": "user", "content": f"Passages:\n{context or '(no passages)'}\n\nRequest: {request}"},
+        {
+            "role": "system",
+            "content": "You are FinCorp's Finance Analyst.\n\n---\n\nYou answer "
+            "one request from the passages you are given.",
+        },
+        {
+            "role": "user",
+            "content": f"Passages:\n{context or '(no passages)'}\n\nRequest: {request}",
+        },
     ]
     body = structured_body(messages, "agent_answer", answer_schema(labels), 1024)
     body["stream"] = stream
@@ -112,8 +138,13 @@ def structured_body(messages, name: str, schema: dict, max_tokens: int) -> dict:
 
 
 def text_body(messages, max_tokens: int = 256) -> dict:
-    return {"model": "qwen3-4b", "messages": messages, "max_tokens": max_tokens,
-            "temperature": 0.0, "stream": False}
+    return {
+        "model": "qwen3-4b",
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": 0.0,
+        "stream": False,
+    }
 
 
 class Running:
@@ -127,7 +158,9 @@ class Running:
     def request(self, method: str, path: str, body=None, headers=None):
         data = body if body is None or isinstance(body, bytes) else json.dumps(body).encode()
         request = urllib.request.Request(
-            self.url + path, data=data, method=method,
+            self.url + path,
+            data=data,
+            method=method,
             headers={"Content-Type": "application/json", **(headers or {})},
         )
         try:
@@ -155,4 +188,4 @@ def sse_events(raw: bytes) -> list[str]:
     assert text.endswith("\n\n")
     events = text[:-2].split("\n\n")
     assert all(event.startswith("data: ") and "\n" not in event for event in events)
-    return [event[len("data: "):] for event in events]
+    return [event[len("data: ") :] for event in events]

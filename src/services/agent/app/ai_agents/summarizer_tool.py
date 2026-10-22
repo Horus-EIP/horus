@@ -14,6 +14,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+
 class SummarizerTool:
     name = "summarize"
 
@@ -26,7 +27,9 @@ class SummarizerTool:
             return
         self._summarization_attempted = True
         if os.getenv("HF_HUB_OFFLINE", "").strip().lower() in ("1", "true", "yes"):
-            logger.debug("Skipping HF summarization pipeline (HF_HUB_OFFLINE=1); using extractive path.")
+            logger.debug(
+                "Skipping HF summarization pipeline (HF_HUB_OFFLINE=1); using extractive path."
+            )
             self._pipe = None
             return
         try:
@@ -40,10 +43,10 @@ class SummarizerTool:
     def run(self, payload: dict[str, Any]) -> str:
         """
         Run the summarization tool.
-        
+
         Args:
             payload: Dict containing 'text' or 'query', optional 'max_sentences', 'protect_keywords'.
-            
+
         Returns:
             The summary text.
         """
@@ -59,7 +62,9 @@ class SummarizerTool:
         protect_keywords: list[str] = []
         if protect_keywords_raw:
             if isinstance(protect_keywords_raw, list):
-                protect_keywords = [str(k).lower().strip() for k in protect_keywords_raw if str(k).strip()]
+                protect_keywords = [
+                    str(k).lower().strip() for k in protect_keywords_raw if str(k).strip()
+                ]
             elif isinstance(protect_keywords_raw, str):
                 parts = [p.strip() for p in re.split(r"[;,]", protect_keywords_raw) if p.strip()]
                 protect_keywords = [p.lower() for p in parts]
@@ -70,7 +75,12 @@ class SummarizerTool:
         if self._pipe is not None and not protect_keywords and not return_indices:
             try:
                 result = self._pipe(text, max_length=200, min_length=30, do_sample=False)
-                if isinstance(result, list) and result and isinstance(result[0], dict) and "summary_text" in result[0]:
+                if (
+                    isinstance(result, list)
+                    and result
+                    and isinstance(result[0], dict)
+                    and "summary_text" in result[0]
+                ):
                     return result[0]["summary_text"].strip()
             except Exception:
                 pass
@@ -81,6 +91,7 @@ class SummarizerTool:
         if return_indices:
             try:
                 import json  # local import to avoid dependency if unused
+
                 return json.dumps({"summary": summary, "kept_sentence_indices": indices})
             except Exception:
                 # Fallback to a readable plain-text footer if JSON fails for any reason
@@ -123,11 +134,7 @@ class SummarizerTool:
                 break
 
         # Rank remaining sentences by score
-        remaining = [
-            (score(s), i)
-            for i, s in enumerate(sentences)
-            if i not in set(selected)
-        ]
+        remaining = [(score(s), i) for i, s in enumerate(sentences) if i not in set(selected)]
         remaining.sort(key=lambda x: x[0], reverse=True)
         for _, i in remaining:
             if len(selected) >= max_sentences:
@@ -137,5 +144,3 @@ class SummarizerTool:
         selected.sort()
         summary = " ".join(sentences[i].strip() for i in selected).strip()
         return summary, selected
-
-

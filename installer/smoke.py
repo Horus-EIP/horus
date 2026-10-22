@@ -53,8 +53,10 @@ MANAGER_NAMES = {"manager"}
 PLANNING_SKILLS = {"planning", "orchestration"}
 TASK_ACCEPTED_STATUSES = (200, 202)
 
+
 def _sanitise_filename(name: str) -> str:
     return name.replace("\r", "").replace("\n", "").replace('"', "%22")
+
 
 def build_multipart(
     files: list[tuple[str, str, str, bytes]],
@@ -75,6 +77,7 @@ def build_multipart(
     body += marker + b"--\r\n"
     return "multipart/form-data; boundary=" + boundary, bytes(body)
 
+
 OP_CONT = 0x0
 OP_TEXT = 0x1
 OP_BINARY = 0x2
@@ -84,11 +87,12 @@ OP_PONG = 0xA
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
+
 class WebSocketError(Exception):
     pass
 
-class Frame:
 
+class Frame:
     __slots__ = ("fin", "opcode", "payload")
 
     def __init__(self, fin: bool, opcode: int, payload: bytes):
@@ -99,8 +103,10 @@ class Frame:
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"Frame(fin={self.fin}, opcode={self.opcode:#x}, len={len(self.payload)})"
 
+
 def _apply_mask(data: bytes, key: bytes) -> bytes:
     return bytes(b ^ key[i % 4] for i, b in enumerate(data))
+
 
 def encode_frame(opcode: int, payload: bytes = b"", mask_key: bytes | None = None) -> bytes:
     if mask_key is None:
@@ -121,6 +127,7 @@ def encode_frame(opcode: int, payload: bytes = b"", mask_key: bytes | None = Non
         head += struct.pack("!Q", n)
     return bytes(head) + mask_key + _apply_mask(payload, mask_key)
 
+
 def decode_frame(buf: bytes) -> tuple[Frame | None, int]:
     if len(buf) < 2:
         return None, 0
@@ -134,30 +141,30 @@ def decode_frame(buf: bytes) -> tuple[Frame | None, int]:
     if length == 126:
         if len(buf) < off + 2:
             return None, 0
-        length = struct.unpack("!H", buf[off:off + 2])[0]
+        length = struct.unpack("!H", buf[off : off + 2])[0]
         off += 2
     elif length == 127:
         if len(buf) < off + 8:
             return None, 0
-        length = struct.unpack("!Q", buf[off:off + 8])[0]
+        length = struct.unpack("!Q", buf[off : off + 8])[0]
         off += 8
 
     key = b""
     if masked:
         if len(buf) < off + 4:
             return None, 0
-        key = buf[off:off + 4]
+        key = buf[off : off + 4]
         off += 4
 
     if len(buf) < off + length:
         return None, 0
-    payload = buf[off:off + length]
+    payload = buf[off : off + length]
     if masked:
         payload = _apply_mask(payload, key)
     return Frame(fin, opcode, bytes(payload)), off + length
 
-class MessageAssembler:
 
+class MessageAssembler:
     def __init__(self) -> None:
         self._opcode: int | None = None
         self._parts: list[bytes] = []
@@ -182,9 +189,11 @@ class MessageAssembler:
         self._opcode, self._parts = None, []
         return opcode, payload
 
+
 def expected_accept(key: str) -> str:
     digest = hashlib.sha1((key + WS_GUID).encode("ascii"), usedforsecurity=False).digest()
     return base64.b64encode(digest).decode("ascii")
+
 
 def build_handshake(host_header: str, path: str, key: str) -> bytes:
     return (
@@ -197,6 +206,7 @@ def build_handshake(host_header: str, path: str, key: str) -> bytes:
         "User-Agent: horus-installer-smoke\r\n"
         "\r\n"
     ).encode("ascii")
+
 
 def is_bare_figure(text: str) -> bool:
     remainder = ANSWER_RE.sub(" ", text or "")
@@ -211,14 +221,19 @@ def check_answer(text: str) -> tuple[bool, str]:
         return True, "the figure, stated bare"
     if QUARTER_RE.search(t) or SUBJECT_RE.search(t):
         return True, "figure and grounding both present"
-    return False, ("the answer contains 4.2 million but says nothing about Q4, "
-                   "revenue or FinCorp, so the number looks coincidental")
+    return False, (
+        "the answer contains 4.2 million but says nothing about Q4, "
+        "revenue or FinCorp, so the number looks coincidental"
+    )
+
 
 def _redact_token(url: str) -> str:
     return re.sub(r"(token=)[^&\s]+", r"\1<redacted>", url)
 
+
 class Unreachable(Exception):
     pass
+
 
 class Response:
     __slots__ = ("status", "body")
@@ -235,6 +250,7 @@ class Response:
 
     def text(self, limit: int = 300) -> str:
         return self.body.decode("utf-8", "replace")[:limit].replace("\n", " ")
+
 
 def http(
     method: str,
@@ -264,6 +280,7 @@ def http(
     except OSError as exc:
         raise Unreachable(str(exc)) from exc
 
+
 def _json_post(url: str, payload: dict, token: str | None, timeout: float) -> Response:
     headers = {"Content-Type": "application/json"}
     if token:
@@ -271,11 +288,12 @@ def _json_post(url: str, payload: dict, token: str | None, timeout: float) -> Re
     body = json.dumps(payload).encode("utf-8")
     return http("POST", url, data=body, headers=headers, timeout=timeout)
 
+
 def _auth_get(url: str, token: str, timeout: float) -> Response:
     return http("GET", url, headers={"Authorization": "Bearer " + token}, timeout=timeout)
 
-class WSClient:
 
+class WSClient:
     def __init__(self, url: str, connect_timeout: float = 20.0):
         self.url = url
         self.connect_timeout = connect_timeout
@@ -396,8 +414,8 @@ class WSClient:
             pass
         self._sock = None
 
-class Steps:
 
+class Steps:
     def __init__(self, log: Log):
         self.log = log
         self.entries: list[dict] = []
@@ -437,9 +455,11 @@ class Steps:
             self._current["detail"] = detail
         self.log.fail(detail)
 
+
 def _fail(steps: Steps, headline: str, detail: str, fix: str) -> InstallError:
     steps.failed(headline)
     return InstallError(EXIT_SMOKE_FAILED, headline, detail, fix)
+
 
 def _remaining(deadline: float, steps: Steps, what: str) -> float:
     left = deadline - time.monotonic()
@@ -457,6 +477,7 @@ def _remaining(deadline: float, steps: Steps, what: str) -> float:
         )
     return left
 
+
 def read_env(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     try:
@@ -470,16 +491,18 @@ def read_env(path: Path) -> dict[str, str]:
         key, _, val = line.partition("=")
         key = key.strip()
         if key.startswith("export "):
-            key = key[len("export "):].strip()
+            key = key[len("export ") :].strip()
         val = val.strip()
         if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
             val = val[1:-1]
         values[key] = val
     return values
 
+
 def model_server_of(infra: Path) -> str:
     compose_file = read_env(infra / ".env").get("COMPOSE_FILE", "")
     return profiles.model_server_for_compose_file(compose_file)
+
 
 MODEL_SERVER_HINTS = {
     profiles.GPU_MODEL_SERVER: (
@@ -500,6 +523,7 @@ MODEL_SERVER_HINTS = {
     ),
 }
 
+
 def admin_credentials(infra: Path, steps: Steps) -> tuple[str, str]:
     env_path = infra / ".env"
     if not env_path.is_file():
@@ -516,6 +540,7 @@ def admin_credentials(infra: Path, steps: Steps) -> tuple[str, str]:
         env.get("SUPER_USER_USERNAME") or "admin",
         env.get("SUPER_USER_PASSWORD") or "admin",
     )
+
 
 def step_knowledge_health(steps: Steps, ks: str, deadline: float) -> None:
     steps.start("1/9  Knowledge store health")
@@ -544,6 +569,7 @@ def step_knowledge_health(steps: Steps, ks: str, deadline: float) -> None:
             "  docker compose -f src/infra/docker-compose.yml logs --tail 100 knowledge_store",
         )
     steps.passed(f"{ks}/health -> healthy")
+
 
 def step_unauthenticated_ping(steps: Steps, mas: str, deadline: float) -> None:
     steps.start("2/9  API rejects unauthenticated requests")
@@ -583,6 +609,7 @@ def step_unauthenticated_ping(steps: Steps, mas: str, deadline: float) -> None:
             "  docker compose -f src/infra/docker-compose.yml logs --tail 80 mas postgres",
         )
     steps.passed("GET / without a token -> 401 as expected")
+
 
 def step_login(steps: Steps, mas: str, username: str, password: str, deadline: float) -> str:
     steps.start("3/9  Log in as the seeded admin")
@@ -635,6 +662,7 @@ def step_login(steps: Steps, mas: str, username: str, password: str, deadline: f
     steps.passed(f"obtained token ({len(token)} chars)")
     return token
 
+
 def step_authenticated_ping(steps: Steps, mas: str, token: str, deadline: float) -> None:
     steps.start("4/9  API accepts the token")
     budget = min(HTTP_TIMEOUT, _remaining(deadline, steps, "authenticated ping"))
@@ -660,6 +688,7 @@ def step_authenticated_ping(steps: Steps, mas: str, token: str, deadline: float)
         )
     steps.passed("GET / with a token -> 200")
 
+
 def _list_agents(mas: str, token: str, timeout: float) -> tuple[int, list[dict]]:
     resp = _auth_get(mas + "/agents/details/", token, timeout)
     data = resp.json()
@@ -669,6 +698,7 @@ def _list_agents(mas: str, token: str, timeout: float) -> tuple[int, list[dict]]
         data = []
     return resp.status, [a for a in data if isinstance(a, dict)]
 
+
 def _worker_agents(agents: list[dict]) -> list[str]:
     names = []
     for agent in agents:
@@ -676,6 +706,7 @@ def _worker_agents(agents: list[dict]) -> list[str]:
         if name and name.lower() not in MANAGER_NAMES:
             names.append(name)
     return names
+
 
 def step_wait_for_agents(steps: Steps, mas: str, token: str, deadline: float) -> list[str]:
     steps.start("5/9  Wait for a worker agent to register")
@@ -750,6 +781,7 @@ def step_wait_for_agents(steps: Steps, mas: str, token: str, deadline: float) ->
         "  docker compose -f src/infra/docker-compose.yml logs --tail 120 mas",
     )
 
+
 def step_upload_document(steps: Steps, ks: str, repo: Path, deadline: float) -> str | None:
     steps.start("6/9  Ingest the demo document")
     doc = repo / "demo_assets" / DEMO_DOC
@@ -776,18 +808,14 @@ def step_upload_document(steps: Steps, ks: str, repo: Path, deadline: float) -> 
     def titles(resp: Response) -> list[str]:
         data = resp.json() or {}
         return [
-            str(d.get("title") or "")
-            for d in (data.get("documents") or [])
-            if isinstance(d, dict)
+            str(d.get("title") or "") for d in (data.get("documents") or []) if isinstance(d, dict)
         ]
 
     if DEMO_DOC in titles(listed):
         steps.passed(f"'{DEMO_DOC}' is already indexed (upload skipped)")
         return None
 
-    content_type, body = build_multipart(
-        [("files", DEMO_DOC, "text/markdown", doc.read_bytes())]
-    )
+    content_type, body = build_multipart([("files", DEMO_DOC, "text/markdown", doc.read_bytes())])
     budget = min(UPLOAD_TIMEOUT, _remaining(deadline, steps, "uploading the demo document"))
     try:
         up = http(
@@ -838,11 +866,13 @@ def step_upload_document(steps: Steps, ks: str, repo: Path, deadline: float) -> 
     steps.passed(f"'{DEMO_DOC}' uploaded and indexed")
     return uploaded_doc_id(up)
 
+
 def uploaded_doc_id(up: Response) -> str | None:
     for entry in up.json() or []:
         if isinstance(entry, dict) and entry.get("filename") == DEMO_DOC and entry.get("doc_id"):
             return str(entry["doc_id"])
     return None
+
 
 def remove_uploaded_document(log: Log, ks: str, doc_id: str) -> None:
     try:
@@ -852,15 +882,15 @@ def remove_uploaded_document(log: Log, ks: str, doc_id: str) -> None:
         return
     log.info(f"smoke: removed the uploaded demo document {doc_id} (HTTP {removed.status})")
 
+
 def _create_conversation(mas: str, token: str, name: str, timeout: float) -> int | None:
-    resp = _json_post(
-        mas + "/conversations/create-conversation/", {"name": name}, token, timeout
-    )
+    resp = _json_post(mas + "/conversations/create-conversation/", {"name": name}, token, timeout)
     if resp.status not in (200, 201):
         return None
     body = resp.json() or {}
     conv = body.get("conversation_id")
     return conv if isinstance(conv, int) else None
+
 
 def _extract_text(value) -> str:
     if isinstance(value, str):
@@ -883,6 +913,7 @@ def _extract_text(value) -> str:
                 return found
     return ""
 
+
 def _is_answer_frame(event: dict) -> bool:
     if event.get("type") not in ("task_complete", "agent"):
         return False
@@ -892,11 +923,17 @@ def _is_answer_frame(event: dict) -> bool:
         return False
     return bool((event.get("content") or "").strip())
 
+
 def _failed_task_note(event: dict) -> str | None:
     if event.get("event") != "error":
         return None
     reason = (event.get("content") or event.get("detail") or "").strip()
-    return f"the task ended without an answer: {reason}" if reason else "the task ended without an answer"
+    return (
+        f"the task ended without an answer: {reason}"
+        if reason
+        else "the task ended without an answer"
+    )
+
 
 def _poll_task(mas: str, token: str, task_id, timeout: float) -> str:
     try:
@@ -909,6 +946,7 @@ def _poll_task(mas: str, token: str, task_id, timeout: float) -> str:
     if str(body.get("status", "")).lower() not in ("completed", "complete", "done", "success"):
         return ""
     return _extract_text(body.get("result"))
+
 
 def ask(
     log: Log,
@@ -978,7 +1016,10 @@ def ask(
                     if late:
                         return late, "chat socket dropped; answer read from the task record"
                     time.sleep(min(TASK_POLL_INTERVAL, max(0.0, stop_at - time.monotonic())))
-                return "", f"the chat socket failed ({exc}) and no answer within {elapsed(answer_budget)}"
+                return (
+                    "",
+                    f"the chat socket failed ({exc}) and no answer within {elapsed(answer_budget)}",
+                )
 
             if message is not None:
                 _opcode, payload = message
@@ -1007,8 +1048,15 @@ def ask(
     finally:
         client.close()
 
-def step_chat(steps: Steps, log: Log, mas: str, deadline: float, token: str,
-              model_server: str = profiles.GPU_MODEL_SERVER) -> str:
+
+def step_chat(
+    steps: Steps,
+    log: Log,
+    mas: str,
+    deadline: float,
+    token: str,
+    model_server: str = profiles.GPU_MODEL_SERVER,
+) -> str:
     steps.start("7/9  Ask a question about the demo document")
     budget = _remaining(deadline, steps, "asking the demo question")
     answer, note = ask(log, mas, token, QUESTION, "horus-smoke", max(30.0, budget - 120.0))
@@ -1028,6 +1076,7 @@ def step_chat(steps: Steps, log: Log, mas: str, deadline: float, token: str,
     steps.passed(f"{note} ({len(answer)} chars)")
     log.debug("answer: " + answer[:1000].replace("\n", " "))
     return answer
+
 
 def step_check_answer(steps: Steps, answer: str, require_quality: bool = True) -> None:
     steps.start("8/9  Check the answer is grounded in the document")
@@ -1067,6 +1116,7 @@ def step_check_answer(steps: Steps, answer: str, require_quality: bool = True) -
         )
     steps.passed(why)
 
+
 def step_negative_control(steps: Steps, log: Log, mas: str, token: str, deadline: float) -> None:
     steps.start("9/9  Negative control (should not answer from memory)")
     left = deadline - time.monotonic()
@@ -1087,9 +1137,15 @@ def step_negative_control(steps: Steps, log: Log, mas: str, token: str, deadline
         return
     steps.passed("declined to answer outside the document set")
 
-def run(log: Log, repo: Path, base_urls: dict | None = None,
-        timeout: int = DEFAULT_TIMEOUT, require_answer_quality: bool = True,
-        model_server: str | None = None) -> dict:
+
+def run(
+    log: Log,
+    repo: Path,
+    base_urls: dict | None = None,
+    timeout: int = DEFAULT_TIMEOUT,
+    require_answer_quality: bool = True,
+    model_server: str | None = None,
+) -> dict:
     urls = dict(DEFAULT_BASE_URLS)
     urls.update(base_urls or {})
     mas = urls["mas"].rstrip("/")
@@ -1110,8 +1166,9 @@ def run(log: Log, repo: Path, base_urls: dict | None = None,
         workers = step_wait_for_agents(steps, mas, token, deadline)
         uploaded = step_upload_document(steps, ks, repo, deadline)
         try:
-            answer = step_chat(steps, log, mas, deadline, token,
-                               model_server or model_server_of(infra_dir(repo)))
+            answer = step_chat(
+                steps, log, mas, deadline, token, model_server or model_server_of(infra_dir(repo))
+            )
             step_check_answer(steps, answer, require_answer_quality)
             step_negative_control(steps, log, mas, token, deadline)
         finally:
@@ -1144,6 +1201,7 @@ def run(log: Log, repo: Path, base_urls: dict | None = None,
         "agents": sorted(workers),
     }
 
+
 def main() -> int:
     import argparse
 
@@ -1151,7 +1209,9 @@ def main() -> int:
     parser.add_argument("--repo", default=None, help="path to the Horus source tree")
     parser.add_argument("--mas", default=DEFAULT_BASE_URLS["mas"], help="API base URL")
     parser.add_argument("--ks", default=DEFAULT_BASE_URLS["ks"], help="knowledge store base URL")
-    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="global budget, seconds")
+    parser.add_argument(
+        "--timeout", type=int, default=DEFAULT_TIMEOUT, help="global budget, seconds"
+    )
     parser.add_argument("--log", default=None, help="where to write the log")
     args = parser.parse_args()
 
@@ -1177,6 +1237,7 @@ def main() -> int:
         log.say(f"  {mark}  {entry['name']:<52} {elapsed(entry['seconds'])}")
     log.close(0)
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

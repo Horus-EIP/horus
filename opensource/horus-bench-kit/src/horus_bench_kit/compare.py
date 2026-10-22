@@ -96,7 +96,9 @@ def gib(value: Any) -> float | None:
     return round(value / GIB, 2) if isinstance(value, (int, float)) else None
 
 
-def stat_metric(block: dict[str, Any], field_name: str, statistic: str, scale: float = 1.0) -> Metric:
+def stat_metric(
+    block: dict[str, Any], field_name: str, statistic: str, scale: float = 1.0
+) -> Metric:
     values = block.get(field_name) or {}
     value = values.get(statistic)
     scaled = round(value * scale, 3) if isinstance(value, (int, float)) else None
@@ -134,7 +136,9 @@ def eval_metrics(report: dict[str, Any]) -> dict[str, Metric]:
         "total_median_s": stat_metric(summary, "total_s", "median"),
         "total_p90_s": stat_metric(summary, "total_s", "p90"),
         "total_sum_s": stat_metric(summary, "total_s", "sum"),
-        "answer_correct_reviewed_pct": Metric(review.get("answer_correct_pct"), review.get("reviewed")),
+        "answer_correct_reviewed_pct": Metric(
+            review.get("answer_correct_pct"), review.get("reviewed")
+        ),
         "answer_correct_auto_pct": rate_metric(summary.get("answer_correct_auto")),
         "source_correct_auto_pct": rate_metric(summary.get("source_correct_auto")),
         "fallbacks": Metric(count_total(summary.get("fallbacks")), summary.get("questions")),
@@ -147,7 +151,9 @@ def eval_warnings(report: dict[str, Any]) -> list[str]:
         warnings.append(f"{report.get('label')}: the run did not complete.")
     pending = ((report.get("summary") or {}).get("manual_review") or {}).get("pending")
     if pending:
-        warnings.append(f"{report.get('label')}: {pending} answers still wait for the two reviewers.")
+        warnings.append(
+            f"{report.get('label')}: {pending} answers still wait for the two reviewers."
+        )
     return warnings
 
 
@@ -211,7 +217,12 @@ def headline_key(test: str, depth: int) -> str:
 def load_document(path: Path | str, profile: CompareProfile = DEFAULT_PROFILE) -> dict[str, Any]:
     data = read_json(path)
     if isinstance(data, list):
-        return {"kind": RAW_REPORT_KIND, "label": Path(path).stem, "results": data, "path": str(path)}
+        return {
+            "kind": RAW_REPORT_KIND,
+            "label": Path(path).stem,
+            "results": data,
+            "path": str(path),
+        }
     kind = data.get("kind") if isinstance(data, dict) else None
     family = profile.family(kind)
     if kind not in BENCH_KINDS and family is None:
@@ -250,7 +261,9 @@ def bench_metrics(
         candidates = [row for row in chosen if row["test"] == test and row["n_depth"] == depth]
         if candidates:
             best = max(candidates, key=lambda row: row["avg_ts"])
-            metrics[headline_key(test, depth)] = Metric(best["avg_ts"], note=f"t={best['n_threads']}")
+            metrics[headline_key(test, depth)] = Metric(
+                best["avg_ts"], note=f"t={best['n_threads']}"
+            )
     threads = f"{selection.threads} threads" if selection.threads else "the fastest thread count"
     choice = f"{model or 'no matching model'}, KV {selection.cache_type}/{selection.cache_type}, {threads}"
     return metrics, choice
@@ -302,7 +315,9 @@ def docker_memory(machine: dict[str, Any]) -> str | None:
     return f"{memory} GiB" if memory is not None else None
 
 
-def _document_value(document: dict[str, Any], profile: CompareProfile, name: str, default: Callable) -> Any:
+def _document_value(
+    document: dict[str, Any], profile: CompareProfile, name: str, default: Callable
+) -> Any:
     family = profile.family(document.get("kind"))
     return getattr(family, name)(document) if family else default(document)
 
@@ -373,8 +388,12 @@ def comparison_warnings(sides: list[Side], profile: CompareProfile = DEFAULT_PRO
     if len(sides) < 2:
         return warnings
     testsets = [(side.end_to_end or {}).get("testset") or {} for side in sides]
-    if all(testset.get("sha256") for testset in testsets) and testsets[0].get("sha256") != testsets[1].get("sha256"):
-        warnings.append("The two runs used different test sets: the answer and source rates are not comparable.")
+    if all(testset.get("sha256") for testset in testsets) and testsets[0].get("sha256") != testsets[
+        1
+    ].get("sha256"):
+        warnings.append(
+            "The two runs used different test sets: the answer and source rates are not comparable."
+        )
     machines = [(side.machine.get("cpu_model"), side.machine.get("ram")) for side in sides]
     if all(side.machine for side in sides) and machines[0] != machines[1]:
         warnings.append("The two sides come from different machines.")
@@ -390,7 +409,14 @@ def comparison_warnings(sides: list[Side], profile: CompareProfile = DEFAULT_PRO
 def bench_detail(sides: list[Side]) -> list[str]:
     keyed = [
         {
-            (row["model"], row["test"], row["n_depth"], row["type_k"], row["type_v"], str(row["n_threads"])): row
+            (
+                row["model"],
+                row["test"],
+                row["n_depth"],
+                row["type_k"],
+                row["type_v"],
+                str(row["n_threads"]),
+            ): row
             for row in side.bench
         }
         for side in sides
@@ -398,7 +424,14 @@ def bench_detail(sides: list[Side]) -> list[str]:
     keys = list(dict.fromkeys(key for rows in keyed for key in rows))
     if not keys:
         return []
-    header = ["Model", "Test", "Depth", "KV K/V", "Threads", *[f"{side.name} (t/s)" for side in sides]]
+    header = [
+        "Model",
+        "Test",
+        "Depth",
+        "KV K/V",
+        "Threads",
+        *[f"{side.name} (t/s)" for side in sides],
+    ]
     if len(sides) == 2:
         header.append("Change")
     rows = []
@@ -455,8 +488,17 @@ def compare_markdown(
     profile: CompareProfile = DEFAULT_PROFILE,
 ) -> str:
     sides = [
-        build_side("before" if after else "run", [load_document(path, profile) for path in before], selection, profile)
+        build_side(
+            "before" if after else "run",
+            [load_document(path, profile) for path in before],
+            selection,
+            profile,
+        )
     ]
     if after:
-        sides.append(build_side("after", [load_document(path, profile) for path in after], selection, profile))
+        sides.append(
+            build_side(
+                "after", [load_document(path, profile) for path in after], selection, profile
+            )
+        )
     return render(sides, profile)

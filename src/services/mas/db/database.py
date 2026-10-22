@@ -46,9 +46,7 @@ else:
             pool_recycle=1800,
             pool_pre_ping=True,
         )
-        log_success(
-            "database", f"Database engine initialized successfully for {DB_NAME}"
-        )
+        log_success("database", f"Database engine initialized successfully for {DB_NAME}")
     except Exception as e:
         log_error(
             "database",
@@ -65,15 +63,11 @@ if os.getenv("TEST_MODE") != "1":
 if os.getenv("TEST_MODE") != "1":
 
     @event.listens_for(engine, "before_cursor_execute")
-    def receive_before_cursor_execute(
-        conn, cursor, statement, parameters, context, executemany
-    ):
+    def receive_before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
         conn.info.setdefault("query_start_time", []).append(time.time())
 
     @event.listens_for(engine, "after_cursor_execute")
-    def receive_after_cursor_execute(
-        conn, cursor, statement, parameters, context, executemany
-    ):
+    def receive_after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
         start_time = conn.info["query_start_time"].pop(-1)
         total = time.time() - start_time
 

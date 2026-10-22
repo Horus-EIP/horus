@@ -54,9 +54,14 @@ class OpenAITarget:
         return self.base_url.rstrip("/") + "/chat/completions"
 
     def messages(self, question: str, files: Sequence[Path] = ()) -> list[dict[str, str]]:
-        context = "\n\n".join(Path(path).read_text(encoding="utf-8") for path in files)[:MAX_CONTEXT_CHARS]
+        context = "\n\n".join(Path(path).read_text(encoding="utf-8") for path in files)[
+            :MAX_CONTEXT_CHARS
+        ]
         user = f"Context:\n{context}\n\nQuestion: {question}" if context else question
-        return [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": user}]
+        return [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": user},
+        ]
 
     def payload(self, question: str, files: Sequence[Path] = ()) -> dict[str, Any]:
         body: dict[str, Any] = {
@@ -83,10 +88,16 @@ class OpenAITarget:
         )
 
     def ask_blocking(self, question: str, files: Sequence[Path] = ()) -> Outcome:
-        outcome: Outcome = {"mode": MODE_CHAT, "status": STATUS_ERROR, "timing_source": TIMING_SOURCE}
+        outcome: Outcome = {
+            "mode": MODE_CHAT,
+            "status": STATUS_ERROR,
+            "timing_source": TIMING_SOURCE,
+        }
         started = time.perf_counter()
         try:
-            with urllib.request.urlopen(self.request(self.payload(question, files)), timeout=self.timeout) as response:
+            with urllib.request.urlopen(
+                self.request(self.payload(question, files)), timeout=self.timeout
+            ) as response:
                 if self.stream:
                     reply = read_stream(response, started)
                 else:
@@ -121,7 +132,9 @@ def timed_out(exc: BaseException) -> bool:
 
 
 def unexpected(what: str, value: Any) -> ServerReplyError:
-    return ServerReplyError(f"unexpected {what}: {json.dumps(value, ensure_ascii=False)[:ERROR_BODY_CHARS]}")
+    return ServerReplyError(
+        f"unexpected {what}: {json.dumps(value, ensure_ascii=False)[:ERROR_BODY_CHARS]}"
+    )
 
 
 def is_object_list(value: Any) -> bool:
@@ -166,8 +179,14 @@ def read_stream(lines: Iterable[bytes], started: float) -> Reply:
         model = chunk.get("model") or model
         usage = chunk.get("usage") or usage
         choices = chunk.get("choices") or []
-        deltas = [choice.get("delta") or {} for choice in choices] if is_object_list(choices) else None
-        if deltas is None or not is_object_list(deltas) or not all(text_or_none(d.get("content")) for d in deltas):
+        deltas = (
+            [choice.get("delta") or {} for choice in choices] if is_object_list(choices) else None
+        )
+        if (
+            deltas is None
+            or not is_object_list(deltas)
+            or not all(text_or_none(d.get("content")) for d in deltas)
+        ):
             raise unexpected("stream chunk", chunk)
         for delta in deltas:
             if ttft is None and (delta.get("content") or delta.get("reasoning_content")):
@@ -175,5 +194,7 @@ def read_stream(lines: Iterable[bytes], started: float) -> Reply:
             if delta.get("content"):
                 parts.append(delta["content"])
     if not streamed:
-        raise ServerReplyError("the reply has no 'data:' lines: the server did not stream it; try --no-stream")
+        raise ServerReplyError(
+            "the reply has no 'data:' lines: the server did not stream it; try --no-stream"
+        )
     return Reply("".join(parts), ttft, usage, model)

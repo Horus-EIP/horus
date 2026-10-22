@@ -196,7 +196,9 @@ def _support_problems(where: str, support: Any, pinned: int | None) -> list[str]
     return problems
 
 
-def _candidate_problems(candidate: Any, pinned: int | None, name_key: str | None = None) -> list[str]:
+def _candidate_problems(
+    candidate: Any, pinned: int | None, name_key: str | None = None
+) -> list[str]:
     if not isinstance(candidate, dict):
         return ["each candidate must be a mapping"]
     where = f"candidate {candidate.get('id') or '?'}"
@@ -213,7 +215,9 @@ def _candidate_problems(candidate: Any, pinned: int | None, name_key: str | None
     if not _REVISION.match(str(candidate["model_revision"])):
         problems.append(f"{where}: model_revision must be a 40-character commit id")
     for name in ("licence_flags", "notes"):
-        if not isinstance(candidate[name], list) or not all(_is_text(text) for text in candidate[name]):
+        if not isinstance(candidate[name], list) or not all(
+            _is_text(text) for text in candidate[name]
+        ):
             problems.append(f"{where}: {name} must be a list of sentences")
     for name in ("parameters", "context_length"):
         if not _is_whole(candidate[name]) or candidate[name] <= 0:
@@ -277,7 +281,9 @@ def catalog_problems(catalog: Any, name_key: str | None = None) -> list[str]:
 
 def all_variants(catalog: dict[str, Any], name_key: str | None = None) -> list[Variant]:
     return [
-        Variant(candidate, gguf, name_key) for candidate in catalog["candidates"] for gguf in candidate["ggufs"]
+        Variant(candidate, gguf, name_key)
+        for candidate in catalog["candidates"]
+        for gguf in candidate["ggufs"]
     ]
 
 
@@ -306,7 +312,9 @@ def select_variants(
     ]
 
 
-def variant_gate(variant: Variant, catalog: dict[str, Any], build_text: str = GATE_BUILD) -> list[str]:
+def variant_gate(
+    variant: Variant, catalog: dict[str, Any], build_text: str = GATE_BUILD
+) -> list[str]:
     problems = []
     licence = variant.candidate["licence"]
     if licence not in catalog["licences_allowed"]:
@@ -329,7 +337,9 @@ def written_report(lines: list[str]) -> str | None:
     return found
 
 
-def bench_speeds(bench_report: dict[str, Any] | None, cache_type: str = "f16") -> list[dict[str, Any]]:
+def bench_speeds(
+    bench_report: dict[str, Any] | None, cache_type: str = "f16"
+) -> list[dict[str, Any]]:
     best: dict[tuple[str, int], dict[str, Any]] = {}
     for row in (bench_report or {}).get("summary") or []:
         if row.get("type_k") != cache_type or row.get("type_v") != cache_type:
@@ -346,10 +356,14 @@ def bench_speeds(bench_report: dict[str, Any] | None, cache_type: str = "f16") -
                 "threads": row.get("n_threads"),
             }
     order = {test: index for index, test in enumerate(BENCH_TESTS)}
-    return sorted(best.values(), key=lambda s: (order.get(s["test"], len(order)), str(s["test"]), s["depth"]))
+    return sorted(
+        best.values(), key=lambda s: (order.get(s["test"], len(order)), str(s["test"]), s["depth"])
+    )
 
 
-def bench_headline(bench_report: dict[str, Any] | None, variant: Variant, cache_type: str) -> dict[str, Any] | None:
+def bench_headline(
+    bench_report: dict[str, Any] | None, variant: Variant, cache_type: str
+) -> dict[str, Any] | None:
     if not bench_report:
         return None
     model = next((m for m in bench_report.get("models") or [] if m.get("file") == variant.file), {})
@@ -402,7 +416,11 @@ def gib_text(value: Any) -> str:
 
 
 def number_text(value: Any, digits: int = 1) -> str:
-    return f"{value:.{digits}f}" if isinstance(value, (int, float)) and not isinstance(value, bool) else MISSING
+    return (
+        f"{value:.{digits}f}"
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+        else MISSING
+    )
 
 
 def median_text(value: Any) -> str:
@@ -429,25 +447,39 @@ def gguf_cell(variant: dict[str, Any]) -> str:
 
 
 def _snapshots(variant: dict[str, Any]) -> list[dict[str, Any]]:
-    return [snapshot for snapshot in (variant.get("memory") or {}).values() if isinstance(snapshot, dict)]
+    return [
+        snapshot
+        for snapshot in (variant.get("memory") or {}).values()
+        if isinstance(snapshot, dict)
+    ]
 
 
 def process_peak(variant: dict[str, Any]) -> Any:
     known = [
         peak
-        for peak in ((snapshot.get("process") or {}).get("vm_hwm_bytes") for snapshot in _snapshots(variant))
+        for peak in (
+            (snapshot.get("process") or {}).get("vm_hwm_bytes") for snapshot in _snapshots(variant)
+        )
         if isinstance(peak, int)
     ]
     return max(known) if known else None
 
 
 def cgroup_peak(variant: dict[str, Any]) -> Any:
-    known = [peak for peak in (s.get("cgroup_peak_bytes") for s in _snapshots(variant)) if isinstance(peak, int)]
+    known = [
+        peak
+        for peak in (s.get("cgroup_peak_bytes") for s in _snapshots(variant))
+        if isinstance(peak, int)
+    ]
     return max(known) if known else None
 
 
 def oom_kills_text(variant: dict[str, Any]) -> str:
-    known = [count for count in (s.get("oom_kills") for s in _snapshots(variant)) if isinstance(count, int)]
+    known = [
+        count
+        for count in (s.get("oom_kills") for s in _snapshots(variant))
+        if isinstance(count, int)
+    ]
     return str(max(known)) if known else MISSING
 
 
@@ -493,7 +525,10 @@ def table_lines(columns: tuple[Column, ...], variants: list[dict[str, Any]]) -> 
     return [
         "| " + " | ".join(column.header for column in columns) + " |",
         "|" + "|".join(column.align for column in columns) + "|",
-        *["| " + " | ".join(column.cell(variant) for column in columns) + " |" for variant in variants],
+        *[
+            "| " + " | ".join(column.cell(variant) for column in columns) + " |"
+            for variant in variants
+        ],
     ]
 
 

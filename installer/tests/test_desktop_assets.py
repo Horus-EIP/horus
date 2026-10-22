@@ -27,11 +27,14 @@ UI = DESKTOP / "ui"
 HAS_DESKTOP = TAURI.is_dir()
 skip_without_desktop = unittest.skipUnless(HAS_DESKTOP, "desktop/ is not present")
 
+
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
+
 def rust_sources() -> str:
     return "\n".join(read(p) for p in sorted((TAURI / "src").glob("*.rs")))
+
 
 @skip_without_desktop
 class Layout(unittest.TestCase):
@@ -67,9 +70,9 @@ class Layout(unittest.TestCase):
         self.assertEqual(
             on_disk - declared,
             set(),
-            "these .rs files are never compiled because main.rs does not "
-            "declare them",
+            "these .rs files are never compiled because main.rs does not declare them",
         )
+
 
 @skip_without_desktop
 class TauriConfig(unittest.TestCase):
@@ -116,6 +119,7 @@ class TauriConfig(unittest.TestCase):
         self.assertEqual(self.config["version"], cargo_version.group(1))
         self.assertEqual(self.config["version"], package["version"])
 
+
 @skip_without_desktop
 class Capabilities(unittest.TestCase):
     def setUp(self) -> None:
@@ -127,22 +131,18 @@ class Capabilities(unittest.TestCase):
     def test_no_remote_urls_are_granted(self):
         self.assertNotIn("remote", self.capability)
 
+
 @skip_without_desktop
 class IpcContract(unittest.TestCase):
-
     def setUp(self) -> None:
         self.app_js = read(UI / "app.js")
         self.rust = rust_sources()
 
     def registered_commands(self) -> set[str]:
-        block = re.search(
-            r"generate_handler!\[(.*?)\]", self.rust, re.DOTALL
-        )
+        block = re.search(r"generate_handler!\[(.*?)\]", self.rust, re.DOTALL)
         self.assertIsNotNone(block, "no generate_handler! in the Rust sources")
         return {
-            name.strip()
-            for name in block.group(1).replace("\n", " ").split(",")
-            if name.strip()
+            name.strip() for name in block.group(1).replace("\n", " ").split(",") if name.strip()
         }
 
     def invoked_commands(self) -> set[str]:
@@ -151,7 +151,8 @@ class IpcContract(unittest.TestCase):
     def test_every_invoked_command_is_registered(self):
         missing = self.invoked_commands() - self.registered_commands()
         self.assertEqual(
-            missing, set(),
+            missing,
+            set(),
             "app.js calls these, and they are not in generate_handler!: "
             "the button does nothing and the error only appears in a console "
             "the tester cannot open",
@@ -180,6 +181,7 @@ class IpcContract(unittest.TestCase):
         self.assertIsNotNone(prefix)
         self.assertEqual(prefix.group(1), common.EVENT_PREFIX)
 
+
 @skip_without_desktop
 class UiWiring(unittest.TestCase):
     def setUp(self) -> None:
@@ -197,23 +199,23 @@ class UiWiring(unittest.TestCase):
         shown = set(re.findall(r'show\("([a-z-]+)"\)', self.app_js))
         shown |= set(re.findall(r'"view":\s*"([a-z-]+)"', rust_sources()))
         self.assertEqual(
-            shown - views, set(),
-            "show() names a view with no matching section, which renders a "
-            "blank window",
+            shown - views,
+            set(),
+            "show() names a view with no matching section, which renders a blank window",
         )
 
     def test_every_view_in_the_html_is_reachable(self):
         views = set(re.findall(r'data-view="([a-z-]+)"', self.html))
-        self.assertEqual(views - self.reachable_views(), set(),
-                         "dead view sections in the HTML")
+        self.assertEqual(views - self.reachable_views(), set(), "dead view sections in the HTML")
 
     def reachable_views(self) -> set:
         reachable = set(re.findall(r'show\("([a-z-]+)"\)', self.app_js))
         for name in ("EXIT_VIEWS", "PHASES"):
             table = re.search(rf"const {name} = \{{(.*?)\}};", self.app_js, re.DOTALL)
             if table:
-                reachable |= set(re.findall(r'"([a-z-]+)"\s*\]?,?\s*$',
-                                            table.group(1), re.MULTILINE))
+                reachable |= set(
+                    re.findall(r'"([a-z-]+)"\s*\]?,?\s*$', table.group(1), re.MULTILINE)
+                )
                 reachable |= set(re.findall(r':\s*"([a-z-]+)"', table.group(1)))
         return reachable
 
@@ -228,9 +230,9 @@ class UiWiring(unittest.TestCase):
         self.assertNotIn("http://", self.html.replace("http://localhost", ""))
         self.assertNotIn("https://fonts.", self.html)
 
+
 @skip_without_desktop
 class ExitCodeMapping(unittest.TestCase):
-
     def setUp(self) -> None:
         self.app_js = read(UI / "app.js")
 
@@ -238,8 +240,7 @@ class ExitCodeMapping(unittest.TestCase):
         block = re.search(r"const EXIT_VIEWS = \{(.*?)\};", self.app_js, re.DOTALL)
         self.assertIsNotNone(block)
         return {
-            int(code): view
-            for code, view in re.findall(r'(\d+):\s*"([a-z-]+)"', block.group(1))
+            int(code): view for code, view in re.findall(r'(\d+):\s*"([a-z-]+)"', block.group(1))
         }
 
     def test_codes_match_the_installer(self):
@@ -252,11 +253,15 @@ class ExitCodeMapping(unittest.TestCase):
         }
         self.assertEqual(self.mapping(), expected)
 
+
 @skip_without_desktop
 class RefusalScreen(unittest.TestCase):
-
-    SMALL_MACHINE = {"os": {"system": "Linux"}, "memory": {"total_bytes": 8 * 1024 ** 3},
-                     "docker": {"mem_total_bytes": 8 * 1024 ** 3}, "gpu": {}}
+    SMALL_MACHINE = {
+        "os": {"system": "Linux"},
+        "memory": {"total_bytes": 8 * 1024**3},
+        "docker": {"mem_total_bytes": 8 * 1024**3},
+        "gpu": {},
+    }
 
     def setUp(self) -> None:
         self.app_js = read(UI / "app.js")
@@ -274,8 +279,14 @@ class RefusalScreen(unittest.TestCase):
         key = re.search(r'fn was_refused\(.*?document\.get\("([a-z_]+)"\)', self.rust, re.DOTALL)
         self.assertIsNotNone(key, "discovery.rs has no was_refused reading a key")
         record = self.tmp / "horus-profile.json"
-        hardware.write_profile_json(record, self.SMALL_MACHINE, profiles.NOT_SUPPORTED, {}, [],
-                                    refusal=unsupported.refusal(self.SMALL_MACHINE).record())
+        hardware.write_profile_json(
+            record,
+            self.SMALL_MACHINE,
+            profiles.NOT_SUPPORTED,
+            {},
+            [],
+            refusal=unsupported.refusal(self.SMALL_MACHINE).record(),
+        )
         document = json.loads(record.read_text(encoding="utf-8"))
         self.assertIsInstance(document.get(key.group(1)), dict)
         self.assertIsNotNone(unsupported.from_record(document))
@@ -283,19 +294,23 @@ class RefusalScreen(unittest.TestCase):
     def test_a_refused_machine_is_sent_to_start_which_explains_the_refusal(self):
         self.assertRegex(self.rust, r'"refused":\s*!installed && layout\.was_refused\(\)')
         self.assertRegex(self.rust, r'(?s)fn start_stack\(.*?&\["--start", "--json-events"\]')
-        self.assertRegex(self.function("bootstrap"),
-                         r'info\.state === "not-installed"\) \{\s*'
-                         r'if \(info\.refused\) \{\s*await startStack\(\);')
+        self.assertRegex(
+            self.function("bootstrap"),
+            r'info\.state === "not-installed"\) \{\s*'
+            r"if \(info\.refused\) \{\s*await startStack\(\);",
+        )
 
     def test_the_unsupported_event_fills_the_refusal_view(self):
-        self.assertRegex(self.function("handleInstallerEvent"),
-                         rf'case "{unsupported.EVENT}":\s*renderUnsupported\(data\);')
+        self.assertRegex(
+            self.function("handleInstallerEvent"),
+            rf'case "{unsupported.EVENT}":\s*renderUnsupported\(data\);',
+        )
         stream = io.StringIO()
         log = common.Log(self.tmp / "log.txt", events=common.Events(True, stream))
         self.addCleanup(log.close, 0)
         with contextlib.redirect_stdout(io.StringIO()):
             unsupported.refusal(self.SMALL_MACHINE).report(log)
-        event = json.loads(stream.getvalue().splitlines()[0][len(common.EVENT_PREFIX):])
+        event = json.loads(stream.getvalue().splitlines()[0][len(common.EVENT_PREFIX) :])
         self.assertEqual(event["event"], unsupported.EVENT)
         shown = set(re.findall(r"data\.([a-z_]+)", self.function("renderUnsupported")))
         self.assertEqual(shown, {"headline", "checked_utc", "have", "need", "alternatives"})
@@ -304,6 +319,7 @@ class RefusalScreen(unittest.TestCase):
     def test_the_refusal_view_can_look_again_after_start_here_ran(self):
         self.assertIn('id="unsupported-retry"', read(UI / "index.html"))
         self.assertRegex(self.app_js, r'on\("unsupported-retry", \(\) => bootstrap\(\)\);')
+
 
 @skip_without_desktop
 class AiModeLine(unittest.TestCase):
@@ -329,16 +345,23 @@ class AiModeLine(unittest.TestCase):
         with contextlib.ExitStack() as stack:
             for name in ("_require_docker", "ensure_installed_model", "wait_for_health"):
                 stack.enter_context(mock.patch.object(horus_install, name))
-            stack.enter_context(mock.patch.object(
-                horus_install, "up_waiting_out_a_dependency_abort", return_value=(["up"], 0)))
+            stack.enter_context(
+                mock.patch.object(
+                    horus_install, "up_waiting_out_a_dependency_abort", return_value=(["up"], 0)
+                )
+            )
             stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
             horus_install.do_start(log, self.infra, timeout=1)
-        events = [json.loads(line[len(common.EVENT_PREFIX):]) for line in stream.getvalue().splitlines()]
+        events = [
+            json.loads(line[len(common.EVENT_PREFIX) :]) for line in stream.getvalue().splitlines()
+        ]
         return next(event for event in events if event["event"] == "ready")
 
     def test_start_tells_the_app_which_ai_answers(self):
         self.assertEqual(self.ready_event(self.MOCK_FILES)["ai"], "mock")
-        self.assertEqual(self.ready_event("docker-compose.yml:docker-compose.cpu.yml")["ai"], "local")
+        self.assertEqual(
+            self.ready_event("docker-compose.yml:docker-compose.cpu.yml")["ai"], "local"
+        )
 
     def test_the_running_view_shows_ai_mock_or_ai_local(self):
         handler = self.function("handleInstallerEvent")
@@ -348,12 +371,14 @@ class AiModeLine(unittest.TestCase):
         self.assertIn('getElementById("ai-mode")', render)
         self.assertRegex(self.app_js, r'mock: "AI: Mock')
         self.assertRegex(self.app_js, r'local: "AI: Local"')
-        running = read(UI / "index.html").split('data-view="running"', 1)[1].split("</section>", 1)[0]
+        running = (
+            read(UI / "index.html").split('data-view="running"', 1)[1].split("</section>", 1)[0]
+        )
         self.assertIn('id="ai-mode" hidden', running)
+
 
 @skip_without_desktop
 class IconMaster(unittest.TestCase):
-
     def test_icon_source_is_reproducible(self):
         tool = DESKTOP / "tools" / "make_icon_source.py"
         committed = DESKTOP / "icon-source.png"
@@ -364,19 +389,22 @@ class IconMaster(unittest.TestCase):
             out = Path(name) / "regenerated.png"
             result = subprocess.run(
                 [sys.executable, str(tool), "--out", str(out)],
-                capture_output=True, text=True, timeout=120,
+                capture_output=True,
+                text=True,
+                timeout=120,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(
-                out.read_bytes(), committed.read_bytes(),
+                out.read_bytes(),
+                committed.read_bytes(),
                 "desktop/icon-source.png is not what make_icon_source.py "
                 "produces from the current logo.png. Re-run the tool and "
                 "regenerate the icon set.",
             )
 
+
 @skip_without_desktop
 class ReleaseWorkflow(unittest.TestCase):
-
     def setUp(self) -> None:
         workflow = REPO / ".github" / "workflows" / "desktop-release.yml"
         if not workflow.is_file():
@@ -394,15 +422,13 @@ class ReleaseWorkflow(unittest.TestCase):
             self.assertIn(os_name, self.text)
 
     def test_no_appimage_is_built(self):
-        commands = [
-            line for line in self.text.splitlines()
-            if not line.lstrip().startswith("#")
-        ]
+        commands = [line for line in self.text.splitlines() if not line.lstrip().startswith("#")]
         offenders = [line for line in commands if "appimage" in line.lower()]
         self.assertEqual(offenders, [], "an AppImage target crept back in")
 
     def test_the_bundler_is_called_with_an_app_dir(self):
         self.assertIn("build_bundle.py --out dist --app-dir app", self.text)
+
 
 if __name__ == "__main__":
     unittest.main()

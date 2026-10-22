@@ -89,9 +89,7 @@ def _eval_direct_items():
 
 
 @pytest.mark.parametrize(("question", "patterns"), _eval_direct_items())
-def test_the_eval_set_direct_questions_get_an_answer_that_passes_their_patterns(
-    question, patterns
-):
+def test_the_eval_set_direct_questions_get_an_answer_that_passes_their_patterns(question, patterns):
     reply = direct_answer(question, AGENTS)
 
     assert reply is not None

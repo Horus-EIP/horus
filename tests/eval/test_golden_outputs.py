@@ -24,7 +24,15 @@ HELP_SCRIPTS = {
 PYTHON = f"py{sys.version_info.major}{sys.version_info.minor}"
 COMPENSATED_FLOAT_SUM = sys.version_info >= (3, 12)
 SUM_ROUNDING = 0.0011
-ITEM_FIELDS = ("id", "category", "difficulty", "question", "expected_answer", "expected_source", "expected_route")
+ITEM_FIELDS = (
+    "id",
+    "category",
+    "difficulty",
+    "question",
+    "expected_answer",
+    "expected_source",
+    "expected_route",
+)
 CANDIDATES_SUMMARY = "model-candidates-2026-10-06"
 COMPARISONS = {
     "compare-cpu-laptop.md": ["cpu-laptop-2026-10-06.json"],
@@ -83,7 +91,9 @@ def assert_same_report(produced, committed):
     if produced == committed or not COMPENSATED_FLOAT_SUM:
         assert produced == committed
         return
-    assert_close(json.loads(produced, object_pairs_hook=list), json.loads(committed, object_pairs_hook=list))
+    assert_close(
+        json.loads(produced, object_pairs_hook=list), json.loads(committed, object_pairs_hook=list)
+    )
 
 
 def load_script(name, path):
@@ -110,7 +120,9 @@ def test_resummarize_gives_the_committed_evaluation_report(path):
 @pytest.mark.parametrize("path", CONTRACT_REPORTS, ids=shown)
 def test_the_contract_summary_gives_the_committed_probe_report(path):
     report = json.loads(lf_text(path))
-    assert_same_report(dumped({**report, "summary": contract_summary(report["replies"])}), lf_text(path))
+    assert_same_report(
+        dumped({**report, "summary": contract_summary(report["replies"])}), lf_text(path)
+    )
 
 
 @pytest.mark.parametrize("path", EVAL_REPORTS, ids=shown)
@@ -149,13 +161,17 @@ def test_resummarize_gives_the_committed_model_candidates_summary(tmp_path, caps
     assert runner.main(["--resummarize", str(summary)]) == 0
     assert capsys.readouterr().out == f"[done] wrote {summary} and {summary.with_suffix('.md')}\n"
     for suffix in (".json", ".md"):
-        assert lf_text(summary.with_suffix(suffix)) == lf_text(BENCHMARKS / f"{CANDIDATES_SUMMARY}{suffix}")
+        assert lf_text(summary.with_suffix(suffix)) == lf_text(
+            BENCHMARKS / f"{CANDIDATES_SUMMARY}{suffix}"
+        )
 
 
 @pytest.mark.parametrize("golden", sorted(COMPARISONS))
 def test_compare_benchmarks_prints_the_golden_markdown(golden, tmp_path, capsys):
     compare_cli = load_script("compare_benchmarks", SCRIPTS / "compare-benchmarks.py")
-    argv = [str(BENCHMARKS / part) if part.endswith(".json") else part for part in COMPARISONS[golden]]
+    argv = [
+        str(BENCHMARKS / part) if part.endswith(".json") else part for part in COMPARISONS[golden]
+    ]
     out = tmp_path / golden
     assert compare_cli.main([*argv, "--out", str(out)]) == 0
     expected = lf_text(GOLDEN / golden)
@@ -167,7 +183,9 @@ def test_compare_benchmarks_prints_the_golden_markdown(golden, tmp_path, capsys)
 def test_the_help_text_is_the_golden_one(name, tmp_path):
     golden = GOLDEN / "help" / f"{name}-{PYTHON}.txt"
     if not golden.is_file():
-        pytest.skip(f"argparse wraps usage lines differently from one Python version to another: no golden for {PYTHON}")
+        pytest.skip(
+            f"argparse wraps usage lines differently from one Python version to another: no golden for {PYTHON}"
+        )
     completed = subprocess.run(
         [sys.executable, str(HELP_SCRIPTS[name]), "--help"],
         cwd=tmp_path,

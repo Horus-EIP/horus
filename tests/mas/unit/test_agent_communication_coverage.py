@@ -281,9 +281,7 @@ class TestHandleDelegation:
 
     async def test_no_available_agent(self):
         comm = AgentCommunicator(rabbitmq_instance=MagicMock())
-        req = DelegationRequest(
-            sender_agent_id="a", to_agent_type="ghost", request="r"
-        )
+        req = DelegationRequest(sender_agent_id="a", to_agent_type="ghost", request="r")
         resp = await comm.handle_delegation(req, lambda t: None)
         assert resp.status == "error"
         assert "No available agent" in resp.error
@@ -303,9 +301,7 @@ class TestHandleDelegation:
     async def test_send_failure_returns_error(self):
         # rabbitmq=None makes send_message return False → delivery failure path.
         comm = AgentCommunicator(rabbitmq_instance=None)
-        req = DelegationRequest(
-            sender_agent_id="a", to_agent_type="analyst", request="r"
-        )
+        req = DelegationRequest(sender_agent_id="a", to_agent_type="analyst", request="r")
         resp = await comm.handle_delegation(req, lambda t: "target")
         assert resp.status == "error"
         assert resp.error == "Failed to deliver delegation message"
@@ -372,10 +368,7 @@ class TestHandleDelegation:
         assert resp.result == "the-answer"
         assert resp.agent_id == "target"
         # Successful delegation is acknowledged in the store.
-        assert (
-            comm.message_store.get(resp.delegation_id).status
-            == MessageStatus.ACKNOWLEDGED.value
-        )
+        assert comm.message_store.get(resp.delegation_id).status == MessageStatus.ACKNOWLEDGED.value
 
     async def test_error_result_branch(self):
         """Event resolves but the result dict carries an 'error' key."""
@@ -403,9 +396,7 @@ class TestHandleDelegation:
     async def test_default_timeout_used_when_none(self, monkeypatch):
         """timeout_seconds falsy → DEFAULT_DELEGATION_TIMEOUT is passed to wait_for."""
         comm = AgentCommunicator(rabbitmq_instance=MagicMock())
-        req = DelegationRequest(
-            sender_agent_id="caller", to_agent_type="analyst", request="r"
-        )
+        req = DelegationRequest(sender_agent_id="caller", to_agent_type="analyst", request="r")
         # Force the request's timeout to 0 (falsy) so the `or DEFAULT` branch runs.
         object.__setattr__(req, "timeout_seconds", 0)
 
@@ -583,14 +574,17 @@ class TestDelegateEndpoint:
             _agent(id="caller-1", name="caller", skills=["writer"], status="active"),
             _agent(id="inactive-1", name="Inactive Writer", skills=[], status="inactive"),
             # Matches by name (contains "writer"), skills not a list -> coerced to [].
-            _agent(id="agent-name", name="Senior Writer", skills=None, status="active",
-                   description=None),
+            _agent(
+                id="agent-name",
+                name="Senior Writer",
+                skills=None,
+                status="active",
+                description=None,
+            ),
         ]
         ctxs = self._patches(agents, fake_comm)
         with ctxs[0], ctxs[1], ctxs[2]:
-            resp = client.post(
-                "/rabbitmq/delegate", json=self._body(sender_agent_id="caller-1")
-            )
+            resp = client.post("/rabbitmq/delegate", json=self._body(sender_agent_id="caller-1"))
 
         assert resp.status_code == 200
         # caller-1 is self (skipped), inactive-1 is inactive (skipped),
@@ -605,14 +599,15 @@ class TestDelegateEndpoint:
             captured["selected"] = select_fn("nonexistent-type")
             from schemas.agent_message import DelegationResponse
 
-            return DelegationResponse(
-                delegation_id="", status="error", error="No available agent"
-            )
+            return DelegationResponse(delegation_id="", status="error", error="No available agent")
 
         fake_comm.handle_delegation.side_effect = fake_handle
 
-        agents = [_agent(id="other", name="bob", skills=["analyst"], status="active",
-                         description="analysis")]
+        agents = [
+            _agent(
+                id="other", name="bob", skills=["analyst"], status="active", description="analysis"
+            )
+        ]
         ctxs = self._patches(agents, fake_comm)
         with ctxs[0], ctxs[1], ctxs[2]:
             resp = client.post("/rabbitmq/delegate", json=self._body())
@@ -626,9 +621,7 @@ class TestDelegationResultEndpoint:
     def test_result_resolved_ok(self, client):
         fake_comm = MagicMock()
         fake_comm.receive_delegation_result.return_value = True
-        with patch(
-            "core.rabbitmq_tool.get_agent_communicator", return_value=fake_comm
-        ):
+        with patch("core.rabbitmq_tool.get_agent_communicator", return_value=fake_comm):
             resp = client.post(
                 "/rabbitmq/delegation-result",
                 json={"delegation_id": "d-9", "result": "done", "agent_id": "a-1"},
@@ -642,9 +635,7 @@ class TestDelegationResultEndpoint:
     def test_result_not_found(self, client):
         fake_comm = MagicMock()
         fake_comm.receive_delegation_result.return_value = False
-        with patch(
-            "core.rabbitmq_tool.get_agent_communicator", return_value=fake_comm
-        ):
+        with patch("core.rabbitmq_tool.get_agent_communicator", return_value=fake_comm):
             resp = client.post(
                 "/rabbitmq/delegation-result",
                 json={"delegation_id": "missing", "result": "x", "agent_id": "a"},
@@ -657,9 +648,7 @@ class TestGetMessagesEndpoint:
     def test_get_messages_for_agent(self, client):
         fake_comm = MagicMock()
         fake_comm.get_messages_for_agent.return_value = [{"id": "m1"}]
-        with patch(
-            "core.rabbitmq_tool.get_agent_communicator", return_value=fake_comm
-        ):
+        with patch("core.rabbitmq_tool.get_agent_communicator", return_value=fake_comm):
             resp = client.get("/rabbitmq/messages/agent-7")
         assert resp.status_code == 200
         assert resp.json() == [{"id": "m1"}]
@@ -719,10 +708,7 @@ class TestResolveWorkQueueForAgentId:
         monkeypatch.setattr(work_queues.settings, "agent_work_queue_prefix", "horus.work")
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = _agent(type="writer")
-        assert (
-            work_queues.resolve_work_queue_for_agent_id(db, "agent-1")
-            == "horus.work.writer"
-        )
+        assert work_queues.resolve_work_queue_for_agent_id(db, "agent-1") == "horus.work.writer"
 
     def test_missing_agent_returns_none(self):
         from core import work_queues

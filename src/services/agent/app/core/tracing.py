@@ -30,16 +30,18 @@ except ImportError:
 def setup_tracing(app, service_name: str = "agent") -> bool:
     """
     Setup OpenTelemetry tracing for the Agent FastAPI application.
-    
+
     Args:
         app: FastAPI application instance
         service_name: Name of the service for traces
-    
+
     Returns:
         True if tracing was configured, False otherwise
     """
     if not OTEL_AVAILABLE:
-        print("OpenTelemetry not available. Install with: pip install opentelemetry-api opentelemetry-sdk opentelemetry-instrumentation-fastapi opentelemetry-exporter-otlp-proto-grpc")
+        print(
+            "OpenTelemetry not available. Install with: pip install opentelemetry-api opentelemetry-sdk opentelemetry-instrumentation-fastapi opentelemetry-exporter-otlp-proto-grpc"
+        )
         return False
 
     # Check if tracing is enabled
@@ -54,11 +56,13 @@ def setup_tracing(app, service_name: str = "agent") -> bool:
 
     try:
         # Create resource with service information
-        resource = Resource.create({
-            "service.name": service_name,
-            "service.version": HORUS_VERSION,
-            "deployment.environment": os.getenv("ENVIRONMENT", "development"),
-        })
+        resource = Resource.create(
+            {
+                "service.name": service_name,
+                "service.version": HORUS_VERSION,
+                "deployment.environment": os.getenv("ENVIRONMENT", "development"),
+            }
+        )
 
         # Create tracer provider
         provider = TracerProvider(resource=resource)

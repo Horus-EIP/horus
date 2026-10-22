@@ -20,14 +20,18 @@ def mock_server(running_mock):
 def real_server():
     url = os.environ.get("HORUS_CONTRACT_LLM_URL", "").strip()
     if not url:
-        pytest.skip("set HORUS_CONTRACT_LLM_URL to the OpenAI-compatible URL of a real model server")
+        pytest.skip(
+            "set HORUS_CONTRACT_LLM_URL to the OpenAI-compatible URL of a real model server"
+        )
     return ModelServer(url, os.environ.get("HORUS_CONTRACT_LLM_MODEL", "").strip() or None)
 
 
-@pytest.fixture(params=[
-    pytest.param("mock"),
-    pytest.param("real", marks=pytest.mark.real_llm),
-])
+@pytest.fixture(
+    params=[
+        pytest.param("mock"),
+        pytest.param("real", marks=pytest.mark.real_llm),
+    ]
+)
 def server(request):
     return request.getfixturevalue(f"{request.param}_server")
 
@@ -42,8 +46,10 @@ def real_embeddings_server(service: str) -> tuple[str, str]:
     setting = f"HORUS_CONTRACT_{service.upper()}_EMBED"
     url = os.environ.get(f"{setting}_URL", "").strip()
     if not url:
-        pytest.skip(f"set {setting}_URL to the OpenAI-compatible URL of a real embeddings server, "
-                    f"as you would set {service.upper()}_EMBED_URL")
+        pytest.skip(
+            f"set {setting}_URL to the OpenAI-compatible URL of a real embeddings server, "
+            f"as you would set {service.upper()}_EMBED_URL"
+        )
     return url, os.environ.get(f"{setting}_MODEL", "").strip() or SERVICE_MODELS[service]
 
 
@@ -57,9 +63,11 @@ def real_embeddings():
     return EmbeddingsServers(real_embeddings_server)
 
 
-@pytest.fixture(params=[
-    pytest.param("mock"),
-    pytest.param("real", marks=pytest.mark.real_embeddings),
-])
+@pytest.fixture(
+    params=[
+        pytest.param("mock"),
+        pytest.param("real", marks=pytest.mark.real_embeddings),
+    ]
+)
 def embeddings(request):
     return request.getfixturevalue(f"{request.param}_embeddings")

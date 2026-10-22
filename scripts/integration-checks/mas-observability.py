@@ -44,9 +44,7 @@ async def test_observability():
     token = await login()
     headers = bearer_headers(token) if token else {}
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=10.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=10.0) as client:
         # 1. Check Metrics Endpoint
         print("\n1️⃣  Checking /metrics endpoint...")
         try:

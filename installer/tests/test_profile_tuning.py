@@ -23,28 +23,48 @@ from common import Log  # noqa: E402
 
 CPU_PROFILES = [name for name in profiles.PROFILE_ORDER if profiles.is_cpu_profile(name)]
 GPU_PROFILES = [name for name in profiles.PROFILE_ORDER if not profiles.is_cpu_profile(name)]
-MEMORY_KEYS = ("MAS_MEM_LIMIT", "AGENT_MEM_LIMIT", "KNOWLEDGE_STORE_MEM_LIMIT",
-               "LLM_SERVER_MEM_LIMIT")
-SWAP_KEYS = ("MAS_MEMSWAP_LIMIT", "AGENT_MEMSWAP_LIMIT", "KNOWLEDGE_STORE_MEMSWAP_LIMIT",
-             "LLM_SERVER_MEMSWAP_LIMIT")
+MEMORY_KEYS = (
+    "MAS_MEM_LIMIT",
+    "AGENT_MEM_LIMIT",
+    "KNOWLEDGE_STORE_MEM_LIMIT",
+    "LLM_SERVER_MEM_LIMIT",
+)
+SWAP_KEYS = (
+    "MAS_MEMSWAP_LIMIT",
+    "AGENT_MEMSWAP_LIMIT",
+    "KNOWLEDGE_STORE_MEMSWAP_LIMIT",
+    "LLM_SERVER_MEMSWAP_LIMIT",
+)
 IN_PROCESS_MODEL_KEYS = ("LLM_MODEL_ID", "MODEL_NAME")
-GIB = 1024 ** 3
+GIB = 1024**3
 KV_BYTES = {"f16": 2.0, "q8_0": 34 / 32}
 
-def cpu_probe(physical: int | None, logical: int | None = None,
-              logical_fallback: bool = False) -> dict:
-    return {"cpu": {"physical_cores": physical, "logical_cores": logical,
-                    "count_is_logical_fallback": logical_fallback}}
+
+def cpu_probe(
+    physical: int | None, logical: int | None = None, logical_fallback: bool = False
+) -> dict:
+    return {
+        "cpu": {
+            "physical_cores": physical,
+            "logical_cores": logical,
+            "count_is_logical_fallback": logical_fallback,
+        }
+    }
+
 
 def thread_env(physical: int | None, **kwargs) -> tuple[int, int, int]:
     env = profiles.env_for("cpu-standard", cpu_probe(physical, **kwargs))
-    return (int(env["LLM_SERVER_THREADS"]),
-            int(env["LLM_TORCH_INTRAOP_THREADS"]),
-            int(env["AGENT_TORCH_INTRAOP_THREADS"]))
+    return (
+        int(env["LLM_SERVER_THREADS"]),
+        int(env["LLM_TORCH_INTRAOP_THREADS"]),
+        int(env["AGENT_TORCH_INTRAOP_THREADS"]),
+    )
+
 
 def gib(value: str) -> int:
     assert value.endswith("g"), value
     return int(value[:-1])
+
 
 class ThreadBudget(unittest.TestCase):
     def test_llama_server_gets_every_physical_core(self):
@@ -75,8 +95,7 @@ class ThreadBudget(unittest.TestCase):
         for name in CPU_PROFILES:
             with self.subTest(name):
                 env = profiles.env_for(name, cpu_probe(6))
-                self.assertEqual(
-                    [env[key] for key in profiles.THREAD_KEYS], ["6", "1", "1"])
+                self.assertEqual([env[key] for key in profiles.THREAD_KEYS], ["6", "1", "1"])
 
     def test_gpu_profiles_leave_the_thread_settings_to_the_code_default(self):
         for name in GPU_PROFILES:
@@ -99,9 +118,11 @@ class ThreadBudget(unittest.TestCase):
             with self.subTest(key):
                 self.assertIn("llama-server", provenance[key]["why"])
 
+
 KNOWLEDGE_STORE = REPO / "src" / "services" / "knowledge-store"
 MAS_EMBEDDER = REPO / "src" / "services" / "mas" / "core" / "embedding_setup.py"
 CUDA_ONNXRUNTIME = "onnxruntime-gpu"
+
 
 def requirement_projects(path: Path) -> set[str]:
     projects = set()
@@ -112,9 +133,13 @@ def requirement_projects(path: Path) -> set[str]:
             projects.add(re.sub(r"[-_.]+", "-", match.group(0)).lower())
     return projects
 
+
 def knowledge_store_images_can_embed_on_cuda() -> bool:
-    return any(CUDA_ONNXRUNTIME in requirement_projects(path)
-               for path in KNOWLEDGE_STORE.glob("requirements*.txt"))
+    return any(
+        CUDA_ONNXRUNTIME in requirement_projects(path)
+        for path in KNOWLEDGE_STORE.glob("requirements*.txt")
+    )
+
 
 class Embedders(unittest.TestCase):
     def test_no_profile_asks_for_a_cuda_embedder_the_knowledge_store_image_cannot_run(self):
@@ -135,8 +160,9 @@ class Embedders(unittest.TestCase):
 
     def test_the_mas_thread_setting_is_explained_as_the_onnx_embedder_budget(self):
         source = MAS_EMBEDDER.read_text(encoding="utf-8")
-        self.assertLess(source.index('"MAS_EMBED_THREADS"'),
-                        source.index('"LLM_TORCH_INTRAOP_THREADS"'))
+        self.assertLess(
+            source.index('"MAS_EMBED_THREADS"'), source.index('"LLM_TORCH_INTRAOP_THREADS"')
+        )
         for name in CPU_PROFILES:
             why = profiles.provenance_for(name)["LLM_TORCH_INTRAOP_THREADS"]["why"]
             with self.subTest(name):
@@ -150,6 +176,7 @@ class Embedders(unittest.TestCase):
             for key in ("MAS_MEM_LIMIT", "AGENT_MEM_LIMIT", "AGENT_TORCH_INTRAOP_THREADS"):
                 with self.subTest(f"{name} {key}"):
                     self.assertIn("no torch", provenance[key]["why"])
+
 
 class CpuModelServer(unittest.TestCase):
     def test_cpu_profiles_point_both_clients_at_llama_server(self):
@@ -190,18 +217,32 @@ class CpuModelServer(unittest.TestCase):
     def test_the_cpu_client_settings_are_derived_until_a_cpu_run(self):
         for name in CPU_PROFILES:
             provenance = profiles.provenance_for(name)
-            for key in ("LLM_BACKEND", "LLM_VLLM_URL", "LLM_VLLM_MODEL",
-                        "LLM_VLLM_MAX_MODEL_LEN", "LLM_VLLM_TIMEOUT"):
+            for key in (
+                "LLM_BACKEND",
+                "LLM_VLLM_URL",
+                "LLM_VLLM_MODEL",
+                "LLM_VLLM_MAX_MODEL_LEN",
+                "LLM_VLLM_TIMEOUT",
+            ):
                 with self.subTest(f"{name} {key}"):
                     self.assertEqual(provenance[key]["provenance"], profiles.DERIVED)
 
     def test_the_model_server_follows_the_compose_files(self):
-        self.assertEqual(profiles.model_server_for_compose_file(
-            f"{profiles.BASE_COMPOSE}:{profiles.CPU_OVERLAY}"), "llm")
-        self.assertEqual(profiles.model_server_for_compose_file(
-            f"{profiles.BASE_COMPOSE};{profiles.CPU_OVERLAY}"), "llm")
+        self.assertEqual(
+            profiles.model_server_for_compose_file(
+                f"{profiles.BASE_COMPOSE}:{profiles.CPU_OVERLAY}"
+            ),
+            "llm",
+        )
+        self.assertEqual(
+            profiles.model_server_for_compose_file(
+                f"{profiles.BASE_COMPOSE};{profiles.CPU_OVERLAY}"
+            ),
+            "llm",
+        )
         self.assertEqual(profiles.model_server_for_compose_file(profiles.BASE_COMPOSE), "vllm")
         self.assertEqual(profiles.model_server_for_compose_file(""), "vllm")
+
 
 class MemoryCeilings(unittest.TestCase):
     def test_every_cpu_profile_caps_each_python_service_and_the_model_server(self):
@@ -243,8 +284,10 @@ class MemoryCeilings(unittest.TestCase):
             with self.subTest(name):
                 env = profiles.env_for(name)
                 context = int(env["LLM_VLLM_MAX_MODEL_LEN"])
-                kv_cache = sum(36 * 8 * 128 * KV_BYTES[env[key]] * context / GIB
-                               for key in ("LLM_SERVER_CACHE_TYPE_K", "LLM_SERVER_CACHE_TYPE_V"))
+                kv_cache = sum(
+                    36 * 8 * 128 * KV_BYTES[env[key]] * context / GIB
+                    for key in ("LLM_SERVER_CACHE_TYPE_K", "LLM_SERVER_CACHE_TYPE_V")
+                )
                 prompt_cache = int(env["LLM_SERVER_CACHE_RAM_MIB"]) / 1024
                 ceiling = gib(env["LLM_SERVER_MEM_LIMIT"])
                 self.assertGreater(ceiling, weights + kv_cache + prompt_cache + 0.5)
@@ -252,8 +295,9 @@ class MemoryCeilings(unittest.TestCase):
     def test_the_lean_model_server_needs_less_than_the_standard_one(self):
         lean, standard = profiles.env_for("cpu-lean"), profiles.env_for("cpu-standard")
         self.assertLess(gib(lean["LLM_SERVER_MEM_LIMIT"]), gib(standard["LLM_SERVER_MEM_LIMIT"]))
-        self.assertLess(int(lean["LLM_SERVER_CACHE_RAM_MIB"]),
-                        int(standard["LLM_SERVER_CACHE_RAM_MIB"]))
+        self.assertLess(
+            int(lean["LLM_SERVER_CACHE_RAM_MIB"]), int(standard["LLM_SERVER_CACHE_RAM_MIB"])
+        )
 
     def test_memory_ceilings_are_derived_and_explained(self):
         for name in CPU_PROFILES:
@@ -275,8 +319,10 @@ class MemoryCeilings(unittest.TestCase):
         for key in MEMORY_KEYS:
             self.assertIn(key, profiles.MANAGED_KEYS)
 
+
 PASSAGE_PROMPT_CHARS = 1060
 AGENT_DEFAULT_CONTEXT_CHARS = 12000
+
 
 class ShorterCpuPrompts(unittest.TestCase):
     def test_cpu_profiles_fetch_five_passages(self):
@@ -322,14 +368,18 @@ class ShorterCpuPrompts(unittest.TestCase):
     def test_the_shorter_prompt_settings_are_derived_until_the_test_set_runs(self):
         for name in CPU_PROFILES:
             provenance = profiles.provenance_for(name)
-            for key in ("KNOWLEDGE_STORE_N_RESULTS", "AGENT_MAX_CONTEXT_CHARS",
-                        "AGENT_STREAM_TOKENS"):
+            for key in (
+                "KNOWLEDGE_STORE_N_RESULTS",
+                "AGENT_MAX_CONTEXT_CHARS",
+                "AGENT_STREAM_TOKENS",
+            ):
                 with self.subTest(f"{name} {key}"):
                     self.assertEqual(provenance[key]["provenance"], profiles.DERIVED)
 
     def test_a_gpu_reinstall_deactivates_the_cpu_prompt_settings(self):
         for key in ("AGENT_MAX_CONTEXT_CHARS", "AGENT_STREAM_TOKENS"):
             self.assertIn(key, profiles.MANAGED_KEYS)
+
 
 class DescribeShowsTheComputedSettings(unittest.TestCase):
     def test_describe_lists_thread_and_memory_settings_with_their_reasons(self):
@@ -342,14 +392,16 @@ class DescribeShowsTheComputedSettings(unittest.TestCase):
         self.assertIn("8 physical cores detected", " ".join(text.split()))
 
     def test_describe_names_the_model_server_of_each_profile(self):
-        self.assertIn("Model server:   llm (llama-server on the CPU)",
-                      profiles.describe("cpu-standard"))
+        self.assertIn(
+            "Model server:   llm (llama-server on the CPU)", profiles.describe("cpu-standard")
+        )
         self.assertIn("Model server:   vllm (GPU inference)", profiles.describe("gpu-8g"))
 
     def test_describe_all_still_renders_every_profile(self):
         text = profiles.describe_all()
         for name in profiles.PROFILE_ORDER:
             self.assertIn(f"Profile: {name}", text)
+
 
 class LinuxPhysicalCores(unittest.TestCase):
     def setUp(self) -> None:
@@ -362,8 +414,7 @@ class LinuxPhysicalCores(unittest.TestCase):
     def write_cpuinfo(self, blocks: list[dict[str, str]]) -> Path:
         path = self.tmp / "cpuinfo"
         text = "\n\n".join(
-            "\n".join(f"{key}\t: {value}" for key, value in block.items())
-            for block in blocks
+            "\n".join(f"{key}\t: {value}" for key, value in block.items()) for block in blocks
         )
         path.write_text(text + "\n", encoding="utf-8")
         return path
@@ -379,8 +430,12 @@ class LinuxPhysicalCores(unittest.TestCase):
 
     def test_hyperthreads_count_once_per_physical_core(self):
         blocks = [
-            {"processor": str(n), "model name": "Test CPU",
-             "physical id": "0", "core id": str(n % 4)}
+            {
+                "processor": str(n),
+                "model name": "Test CPU",
+                "physical id": "0",
+                "core id": str(n % 4),
+            }
             for n in range(8)
         ]
         cpuinfo = self.write_cpuinfo(blocks)
@@ -397,8 +452,7 @@ class LinuxPhysicalCores(unittest.TestCase):
         self.assertEqual(count, 8)
 
     def test_without_topology_in_cpuinfo_sysfs_siblings_are_counted(self):
-        cpuinfo = self.write_cpuinfo([{"processor": str(n), "BogoMIPS": "50.00"}
-                                      for n in range(8)])
+        cpuinfo = self.write_cpuinfo([{"processor": str(n), "BogoMIPS": "50.00"} for n in range(8)])
         sysfs = self.write_sysfs(["0,4", "1,5", "2,6", "3,7", "0,4", "1,5", "2,6", "3,7"])
         _, count, source = hardware._cpu_linux(self.log, cpuinfo, sysfs)
         self.assertEqual(count, 4)
@@ -415,13 +469,16 @@ class LinuxPhysicalCores(unittest.TestCase):
         self.assertIsNone(count)
 
     def test_detect_cpu_falls_back_to_the_logical_count_and_says_so(self):
-        with mock.patch.object(hardware.sys, "platform", "linux"), \
-                mock.patch.object(hardware, "_cpu_linux", return_value=(None, None, "x")), \
-                mock.patch.object(hardware.os, "cpu_count", return_value=12):
+        with (
+            mock.patch.object(hardware.sys, "platform", "linux"),
+            mock.patch.object(hardware, "_cpu_linux", return_value=(None, None, "x")),
+            mock.patch.object(hardware.os, "cpu_count", return_value=12),
+        ):
             info = hardware.detect_cpu(self.log)
         self.assertEqual(info["physical_cores"], 12)
         self.assertTrue(info["count_is_logical_fallback"])
         self.assertEqual(profiles.physical_cores({"cpu": info})[0], 6)
+
 
 class InstallWritesTheTuning(unittest.TestCase):
     def setUp(self) -> None:
@@ -442,8 +499,9 @@ class InstallWritesTheTuning(unittest.TestCase):
         with contextlib.ExitStack() as stack:
             patch = stack.enter_context
             patch(mock.patch.object(horus_install, "find_repo", return_value=self.repo))
-            patch(mock.patch.object(horus_install, "PROFILE_JSON",
-                                    self.repo / "horus-profile.json"))
+            patch(
+                mock.patch.object(horus_install, "PROFILE_JSON", self.repo / "horus-profile.json")
+            )
             patch(mock.patch.object(horus_install, "banner"))
             self.preflight = patch(mock.patch.object(horus_install, "preflight"))
             consent = patch(mock.patch.object(horus_install, "consent"))
@@ -468,8 +526,10 @@ class InstallWritesTheTuning(unittest.TestCase):
         self.assertEqual(env["AGENT_TORCH_INTRAOP_THREADS"], "1")
 
     def test_only_a_cpu_install_checks_the_registry_of_the_llama_server_image(self):
-        for profile, simulation, cpu_profile in (("cpu-standard", "nvidia-16gb", True),
-                                                 ("gpu-8g", "nvidia-8gb", False)):
+        for profile, simulation, cpu_profile in (
+            ("cpu-standard", "nvidia-16gb", True),
+            ("gpu-8g", "nvidia-8gb", False),
+        ):
             with self.subTest(profile):
                 self.install(profile, simulation)
                 checks = self.preflight.run_install_checks.call_args
@@ -523,16 +583,17 @@ class InstallWritesTheTuning(unittest.TestCase):
     def test_the_profile_json_records_the_model_file_it_installs(self):
         _, written = self.install("cpu-standard", "nvidia-16gb")
         expected = model_manager.load_manifest(REPO / "models" / "manifest.json")
-        self.assertEqual(written.args[3]["LLM_GGUF_SHA256"],
-                         expected.default_for("cpu-standard").sha256)
+        self.assertEqual(
+            written.args[3]["LLM_GGUF_SHA256"], expected.default_for("cpu-standard").sha256
+        )
 
     def test_the_profile_json_receives_the_probe_the_threads_came_from(self):
         _, written = self.install("cpu-lean", "linux-cpu-8gb")
         probe, name = written.args[1], written.args[2]
         self.assertEqual(name, "cpu-lean")
         provenance = profiles.provenance_for(name, probe)
-        self.assertIn("4 physical cores detected",
-                      provenance["LLM_SERVER_THREADS"]["why"])
+        self.assertIn("4 physical cores detected", provenance["LLM_SERVER_THREADS"]["why"])
+
 
 class ProfileJsonRecordsTheComputedSettings(unittest.TestCase):
     def test_the_written_provenance_matches_the_probe(self):
@@ -548,6 +609,7 @@ class ProfileJsonRecordsTheComputedSettings(unittest.TestCase):
         self.assertEqual(provenance["AGENT_TORCH_INTRAOP_THREADS"]["value"], "1")
         self.assertIn("LLM_SERVER_THREADS", document["derived_settings"])
         self.assertEqual(document["profile"]["model_server"], "llm")
+
 
 if __name__ == "__main__":
     unittest.main()

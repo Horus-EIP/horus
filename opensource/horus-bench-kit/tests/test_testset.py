@@ -48,7 +48,9 @@ class TestValidators:
         errors = schema_errors(make_testset([make_item(expected_source=None)]))
         assert errors == ["t-01: an in-corpus item needs expected_source"]
 
-    def test_schema_requires_absent_terms_and_null_source_outside_the_corpus(self, make_testset, make_item):
+    def test_schema_requires_absent_terms_and_null_source_outside_the_corpus(
+        self, make_testset, make_item
+    ):
         errors = schema_errors(make_testset([make_item(category="not_in_corpus")]))
         assert errors == [
             "t-01: a not_in_corpus item must have expected_source: null",
@@ -57,7 +59,9 @@ class TestValidators:
 
     def test_schema_limits_evidence_patterns_to_derived_answers(self, make_testset, make_item):
         errors = schema_errors(make_testset([make_item(evidence_patterns=[r"\$12"])]))
-        assert errors == ["t-01: evidence_patterns is only for derived numeric or multi_hop answers"]
+        assert errors == [
+            "t-01: evidence_patterns is only for derived numeric or multi_hop answers"
+        ]
 
     def test_schema_checks_the_optional_context_file_and_non_answers(self, make_testset, make_item):
         testset = make_testset([make_item(context_file=" ")], non_answers=["ok", ""])
@@ -68,7 +72,11 @@ class TestValidators:
         assert schema_errors(make_testset([make_item(context_file="context/t-01.txt")])) == []
 
     def test_duplicates_are_reported(self, make_testset, make_item):
-        errors = duplicate_errors(make_testset([make_item(), make_item(question=" HOW many lanterns hang on the north pier? ")]))
+        errors = duplicate_errors(
+            make_testset(
+                [make_item(), make_item(question=" HOW many lanterns hang on the north pier? ")]
+            )
+        )
         assert errors == [
             "duplicate id: 't-01'",
             "duplicate question: ' HOW many lanterns hang on the north pier? '",
@@ -80,7 +88,11 @@ class TestValidators:
 
     def test_missing_and_changed_documents_are_reported(self, make_testset, corpus):
         testset = make_testset([])
-        testset["corpus"] = {**testset["corpus"], "north-pier.md": "0" * 64, "lighthouse.md": "1" * 64}
+        testset["corpus"] = {
+            **testset["corpus"],
+            "north-pier.md": "0" * 64,
+            "lighthouse.md": "1" * 64,
+        }
         errors = corpus_errors(testset, corpus)
         assert len(errors) == 2
         assert errors[0].startswith("corpus: north-pier.md changed (sha256 ")
@@ -91,13 +103,17 @@ class TestValidators:
         (tmp_path / "crlf.txt").write_bytes(b"one\r\ntwo\r\n")
         assert file_sha256(tmp_path / "lf.txt") == file_sha256(tmp_path / "crlf.txt")
 
-    def test_pattern_not_in_the_source_document_is_reported(self, make_testset, make_item, documents):
+    def test_pattern_not_in_the_source_document_is_reported(
+        self, make_testset, make_item, documents
+    ):
         item = make_item(answer_patterns=[r"\bsixteen\b"])
         assert grounding_errors(make_testset([item]), documents) == [
             "t-01: answer_patterns '\\\\bsixteen\\\\b' does not match north-pier.md"
         ]
 
-    def test_derived_answers_are_grounded_by_evidence_patterns(self, make_testset, make_item, documents):
+    def test_derived_answers_are_grounded_by_evidence_patterns(
+        self, make_testset, make_item, documents
+    ):
         item = make_item(
             category="numeric",
             question="What do two adults pay for the island run and back?",
@@ -110,7 +126,9 @@ class TestValidators:
         assert len(errors) == 1
         assert errors[0].startswith("t-01: evidence_patterns") and "Return" in errors[0]
 
-    def test_items_whose_document_is_missing_are_not_grounded(self, make_testset, make_item, documents):
+    def test_items_whose_document_is_missing_are_not_grounded(
+        self, make_testset, make_item, documents
+    ):
         item = make_item(expected_source="lighthouse.md", answer_patterns=[r"\bnowhere\b"])
         assert grounding_errors(make_testset([item]), documents) == []
 
@@ -121,13 +139,15 @@ class TestValidators:
         ]
 
     def test_absent_terms_match_whole_words_only(self, make_testset, make_item, documents):
-        item = make_item(category="not_in_corpus", expected_source=None, absent_terms=["pie", "harbo"])
+        item = make_item(
+            category="not_in_corpus", expected_source=None, absent_terms=["pie", "harbo"]
+        )
         assert absent_term_errors(make_testset([item]), documents) == []
 
     def test_patterns_that_accept_a_non_answer_are_reported(self, make_testset, make_item):
         item = make_item(answer_patterns=[r"know"], expected_answer="I know.")
         assert self_consistency_errors(make_testset([item])) == [
-            "t-01: answer_patterns accept the non-answer \"I don't know.\""
+            't-01: answer_patterns accept the non-answer "I don\'t know."'
         ]
 
     def test_a_test_set_can_declare_its_own_non_answers(self, make_testset, make_item):
@@ -215,9 +235,13 @@ class TestValidators:
         assert validate_testset(testset, corpus) == [message]
 
     @pytest.mark.parametrize("source", [5, 2.5, True, {"north-pier.md": 1}])
-    def test_an_expected_source_of_the_wrong_type_is_reported(self, make_testset, make_item, corpus, source):
+    def test_an_expected_source_of_the_wrong_type_is_reported(
+        self, make_testset, make_item, corpus, source
+    ):
         expected = ["t-01: expected_source must be null, a file name or a list of file names"]
-        assert validate_testset(make_testset([make_item(expected_source=source)]), corpus) == expected
+        assert (
+            validate_testset(make_testset([make_item(expected_source=source)]), corpus) == expected
+        )
 
     def test_a_category_of_the_wrong_type_is_an_unknown_category(self, make_testset, make_item):
         assert schema_errors(make_testset([make_item(category=["lookup"])])) == [
@@ -226,7 +250,9 @@ class TestValidators:
 
 
 class TestLoadTestset:
-    def test_json_test_sets_need_no_extra_package(self, tmp_path, monkeypatch, make_testset, make_item):
+    def test_json_test_sets_need_no_extra_package(
+        self, tmp_path, monkeypatch, make_testset, make_item
+    ):
         monkeypatch.setitem(sys.modules, "yaml", None)
         path = tmp_path / "harbour.JSON"
         path.write_text(json.dumps(make_testset([make_item()])), encoding="utf-8")
@@ -254,7 +280,10 @@ class TestLoadTestset:
         assert load_testset(path, yaml_only=True) == {"version": "1.0.0", "items": []}
 
     def test_corpus_root_is_relative_to_the_test_set(self, tmp_path):
-        assert corpus_root({"corpus_dir": "../docs"}, tmp_path / "sets" / "t.json") == (tmp_path / "docs").resolve()
+        assert (
+            corpus_root({"corpus_dir": "../docs"}, tmp_path / "sets" / "t.json")
+            == (tmp_path / "docs").resolve()
+        )
 
 
 class TestExamples:
@@ -266,7 +295,9 @@ class TestExamples:
         pytest.importorskip("yaml")
         assert load_testset(examples / "testset.yaml") == load_testset(examples / "testset.json")
 
-    def test_the_example_covers_every_category_and_has_a_context_for_each_document_question(self, examples):
+    def test_the_example_covers_every_category_and_has_a_context_for_each_document_question(
+        self, examples
+    ):
         testset = load_testset(examples / "testset.json")
         assert {item["category"] for item in testset["items"]} == set(CATEGORIES)
         for item in testset["items"]:

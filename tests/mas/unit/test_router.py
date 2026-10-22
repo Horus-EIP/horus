@@ -70,7 +70,9 @@ class VectorEmbedder:
         return np.asarray([self.vectors[text] for text in texts], dtype=np.float32)
 
 
-FINANCE = RosterAgent("agent-finance", "Finance-Analyst", "Finance.", "analyst", ("financial_analysis",))
+FINANCE = RosterAgent(
+    "agent-finance", "Finance-Analyst", "Finance.", "analyst", ("financial_analysis",)
+)
 COMPLIANCE = RosterAgent(
     "agent-compliance", "Compliance-Officer", "Policy.", "analyst", ("it_security_policy",)
 )
@@ -80,7 +82,9 @@ ROSTER = (FINANCE, COMPLIANCE, HR)
 EXAMPLES = RouterExamples(
     version="test",
     groups=(
-        ExampleGroup("Finance-Analyst", ("financial_analysis",), ("revenue quarter", "revenue budget")),
+        ExampleGroup(
+            "Finance-Analyst", ("financial_analysis",), ("revenue quarter", "revenue budget")
+        ),
         ExampleGroup(
             "Compliance-Officer", ("it_security_policy",), ("password policy", "password length")
         ),
@@ -101,15 +105,16 @@ def index(embedder):
 
 
 def counter(method, route):
-    return REGISTRY.get_sample_value(
-        "mas_routing_decisions_total", {"method": method, "route": route}
-    ) or 0.0
+    return (
+        REGISTRY.get_sample_value("mas_routing_decisions_total", {"method": method, "route": route})
+        or 0.0
+    )
 
 
 def latency_count(method):
-    return REGISTRY.get_sample_value(
-        "mas_routing_decision_seconds_count", {"method": method}
-    ) or 0.0
+    return (
+        REGISTRY.get_sample_value("mas_routing_decision_seconds_count", {"method": method}) or 0.0
+    )
 
 
 class TestRules:
@@ -140,9 +145,7 @@ class TestRules:
     def test_f20_a_factual_question_or_a_phone_number_is_never_a_direct_answer(self, question):
         assert rule_decision(question, ROSTER) is None
 
-    @pytest.mark.parametrize(
-        "question", ["what is 50% + 10", "what is 9^100*9^100*9^100*9^100"]
-    )
+    @pytest.mark.parametrize("question", ["what is 50% + 10", "what is 9^100*9^100*9^100*9^100"])
     def test_arithmetic_that_cannot_be_computed_is_left_to_the_next_stage(self, question):
         assert rule_decision(question, ROSTER) is None
 
@@ -167,7 +170,9 @@ class TestRules:
 
 class TestEmbeddings:
     def test_a_confident_match_routes_to_that_live_agent(self, index):
-        decision, scores = embedding_decision("What was revenue last quarter?", ROSTER, index, SETTINGS)
+        decision, scores = embedding_decision(
+            "What was revenue last quarter?", ROSTER, index, SETTINGS
+        )
 
         assert decision.route is Route.SINGLE_AGENT
         assert decision.method is RouteMethod.EMBEDDING
@@ -195,7 +200,9 @@ class TestEmbeddings:
             "b2": [0, 1, 0],
             "question": [0.39, 0.0, (1 - 0.39**2) ** 0.5],
         }
-        examples = RouterExamples("v", (ExampleGroup("A", (), ("a1", "a2")), ExampleGroup("B", (), ("b1", "b2"))))
+        examples = RouterExamples(
+            "v", (ExampleGroup("A", (), ("a1", "a2")), ExampleGroup("B", (), ("b1", "b2")))
+        )
         roster = (RosterAgent("a", "A"), RosterAgent("b", "B"))
         index = ExampleIndex(examples, VectorEmbedder(vectors))
 
@@ -216,7 +223,9 @@ class TestEmbeddings:
             "b2": [0, 1],
             "question": [0.75, 0.66],
         }
-        examples = RouterExamples("v", (ExampleGroup("A", (), ("a1", "a2")), ExampleGroup("B", (), ("b1", "b2"))))
+        examples = RouterExamples(
+            "v", (ExampleGroup("A", (), ("a1", "a2")), ExampleGroup("B", (), ("b1", "b2")))
+        )
         roster = (RosterAgent("a", "A"), RosterAgent("b", "B"))
         index = ExampleIndex(examples, VectorEmbedder(vectors))
 
@@ -496,7 +505,9 @@ class TestAvailableRoster:
         db = MagicMock()
         db.query.return_value.all.return_value = [
             agent_row("m", "Manager", skills=["planning"], agent_type="manager"),
-            agent_row("f", "Finance-Analyst", skills=["financial_analysis"], description="Finance."),
+            agent_row(
+                "f", "Finance-Analyst", skills=["financial_analysis"], description="Finance."
+            ),
             agent_row("w", "Document-Writer", skills=["summarization"], alive=False),
             agent_row("g", "General-Assistant", skills=None, agent_type="general"),
         ]
@@ -590,7 +601,12 @@ class TestRouteTask:
         routed.constrained.side_effect = OSError("llm down")
         before = counter("llm", "UNROUTED")
 
-        assert router.route_task("Who painted the Mona Lisa?", MagicMock()) == (None, None, None, [])
+        assert router.route_task("Who painted the Mona Lisa?", MagicMock()) == (
+            None,
+            None,
+            None,
+            [],
+        )
         assert counter("llm", "UNROUTED") == before + 1
 
     def test_on_the_transformers_backend_an_undecided_question_keeps_the_current_router(
@@ -657,7 +673,12 @@ class TestRouteTask:
     def test_on_the_transformers_backend_a_router_crash_leaves_the_task_unrouted(self, routed):
         routed.full_router.side_effect = RuntimeError("LLM is not loaded")
 
-        assert router.route_task("Who painted the Mona Lisa?", MagicMock()) == (None, None, None, [])
+        assert router.route_task("Who painted the Mona Lisa?", MagicMock()) == (
+            None,
+            None,
+            None,
+            [],
+        )
 
     def test_with_no_agent_online_a_question_is_unrouted_without_an_llm_call(
         self, routed, monkeypatch

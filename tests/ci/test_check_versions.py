@@ -21,15 +21,17 @@ def package_json(version: str) -> str:
 
 
 def package_lock(version: str) -> str:
-    return json.dumps({
-        "name": "app",
-        "version": version,
-        "lockfileVersion": 3,
-        "packages": {
-            "": {"name": "app", "version": version},
-            "node_modules/next": {"version": "16.1.1"},
-        },
-    })
+    return json.dumps(
+        {
+            "name": "app",
+            "version": version,
+            "lockfileVersion": 3,
+            "packages": {
+                "": {"name": "app", "version": version},
+                "node_modules/next": {"version": "16.1.1"},
+            },
+        }
+    )
 
 
 def write_tree(root: Path, version: str = "1.2.3") -> None:
@@ -64,7 +66,7 @@ def replace_nth(text: str, old: str, new: str, index: int) -> str:
     start = -1
     for _ in range(index + 1):
         start = text.index(old, start + 1)
-    return text[:start] + new + text[start + len(old):]
+    return text[:start] + new + text[start + len(old) :]
 
 
 def run(root: Path, *extra: str) -> tuple[int, str]:
@@ -89,16 +91,16 @@ class CheckVersions(unittest.TestCase):
     def test_every_listed_field_is_compared(self):
         for rel, field, _ in check_versions.CHECKS:
             with self.subTest(f"{rel} {field}"):
-                self.assertTrue(self.an_edit_is_reported(rel, field),
-                                f"changing {rel} never reported {field}")
+                self.assertTrue(
+                    self.an_edit_is_reported(rel, field), f"changing {rel} never reported {field}"
+                )
 
     def an_edit_is_reported(self, rel: str, field: str) -> bool:
         path = self.root / rel
         original = path.read_text(encoding="utf-8")
         try:
             for index in range(original.count("1.2.3")):
-                path.write_text(replace_nth(original, "1.2.3", "9.9.9", index),
-                                encoding="utf-8")
+                path.write_text(replace_nth(original, "1.2.3", "9.9.9", index), encoding="utf-8")
                 code, out = run(self.root)
                 if code == 1 and f"{rel}: {field} is '9.9.9'" in out:
                     return True

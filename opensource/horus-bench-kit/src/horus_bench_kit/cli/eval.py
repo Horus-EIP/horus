@@ -61,7 +61,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = commands.add_parser("run", help="ask every selected question and write a report")
     run.add_argument("--target", choices=TARGETS, default=TARGETS[0])
-    run.add_argument("--base-url", help="OpenAI-compatible API root, for example http://127.0.0.1:8080/v1")
+    run.add_argument(
+        "--base-url", help="OpenAI-compatible API root, for example http://127.0.0.1:8080/v1"
+    )
     run.add_argument("--model", help="model name sent in each request")
     run.add_argument("--testset", help="test set file, .json or .yaml")
     run.add_argument("--label", help="run label, used in <out-dir>/<label>-<date>.json")
@@ -70,19 +72,29 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--ids", type=comma_list, help="comma-separated question ids")
     run.add_argument("--category", type=comma_list, help="comma-separated categories")
     run.add_argument("--limit", type=int)
-    run.add_argument("--system-prompt-file", help="plain-text system prompt instead of the default one")
+    run.add_argument(
+        "--system-prompt-file", help="plain-text system prompt instead of the default one"
+    )
     run.add_argument("--max-tokens", type=int, default=512)
     run.add_argument("--temperature", type=float, default=0.0)
     run.add_argument("--timeout", type=float, default=600.0, help=TIMEOUT_HELP)
-    run.add_argument("--api-key-env", default=DEFAULT_API_KEY_ENV, help="variable that holds the API key")
-    run.add_argument("--no-stream", action="store_true", help="wait for whole replies (no time to first token)")
-    run.add_argument("--no-stream-usage", action="store_true", help="do not send stream_options.include_usage")
+    run.add_argument(
+        "--api-key-env", default=DEFAULT_API_KEY_ENV, help="variable that holds the API key"
+    )
+    run.add_argument(
+        "--no-stream", action="store_true", help="wait for whole replies (no time to first token)"
+    )
+    run.add_argument(
+        "--no-stream-usage", action="store_true", help="do not send stream_options.include_usage"
+    )
     run.add_argument("--warmup", metavar="QUESTION", help="ask this first and do not score it")
 
     summarize = commands.add_parser("resummarize", help="rebuild the summary after a manual review")
     summarize.add_argument("report")
 
-    compare = commands.add_parser("compare", help="Markdown summary of one report, or of two side by side")
+    compare = commands.add_parser(
+        "compare", help="Markdown summary of one report, or of two side by side"
+    )
     compare.add_argument("reports", nargs="+", metavar="REPORT")
     compare.add_argument("--out", help="write the Markdown to this file instead of the screen")
     return parser
@@ -90,7 +102,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run_argument_errors(args: argparse.Namespace) -> list[str]:
     errors = []
-    for option, value in (("--testset", args.testset), ("--base-url", args.base_url), ("--model", args.model)):
+    for option, value in (
+        ("--testset", args.testset),
+        ("--base-url", args.base_url),
+        ("--model", args.model),
+    ):
         if not value:
             errors.append(f"{option} is required")
     if not args.label:
@@ -163,7 +179,9 @@ def checked_testset(path: Path | str) -> tuple[dict[str, Any] | None, list[str]]
     problems = schema_errors(testset)
     if problems:
         return testset, problems
-    return testset, validate_testset(testset, corpus_root(testset, path)) + context_errors(testset, path)
+    return testset, validate_testset(testset, corpus_root(testset, path)) + context_errors(
+        testset, path
+    )
 
 
 def endpoint_origin(base_url: str) -> str:
@@ -196,7 +214,9 @@ def run_section(
             "stream": target.stream,
             "stream_usage": target.stream and target.stream_usage,
             "system_prompt": "file" if args.system_prompt_file else "default",
-            "system_prompt_sha256": hashlib.sha256(target.system_prompt.encode("utf-8")).hexdigest(),
+            "system_prompt_sha256": hashlib.sha256(
+                target.system_prompt.encode("utf-8")
+            ).hexdigest(),
             "context_files": context_files,
         },
         "observed_models": [],
@@ -210,7 +230,9 @@ def print_errors(prefix: str, errors: list[str]) -> None:
 
 def print_testset_errors(problems: list[str]) -> None:
     for problem in problems:
-        print(f"[error] {problem if problem.startswith(TESTSET_PREFIX) else TESTSET_PREFIX + problem}")
+        print(
+            f"[error] {problem if problem.startswith(TESTSET_PREFIX) else TESTSET_PREFIX + problem}"
+        )
 
 
 def validate_command(args: argparse.Namespace) -> int:
@@ -260,7 +282,10 @@ def run_command(args: argparse.Namespace) -> int:
 
     def save(records: list[dict[str, Any]]) -> None:
         run["observed_models"] = observed_values(records, "models")
-        write_json(out_path, build_report(label=args.label, run=run, testset=testset_section, records=records))
+        write_json(
+            out_path,
+            build_report(label=args.label, run=run, testset=testset_section, records=records),
+        )
 
     if args.warmup:
         print(f"[info] warmup (not scored): {args.warmup}")
@@ -269,13 +294,17 @@ def run_command(args: argparse.Namespace) -> int:
             print(f"[error] warmup failed: {warmup.get('error')}")
             return 1
     print(f"[info] {len(items)} question(s), writing {out_path}")
-    records = asyncio.run(run_items(target, items, record=question_record, on_record=save, files_for=files_for))
+    records = asyncio.run(
+        run_items(target, items, record=question_record, on_record=save, files_for=files_for)
+    )
     run.update(finished_at=now_utc(), completed=True)
     save(records)
     summary = build_summary(records)
     print(json.dumps({key: summary[key] for key in HEADLINE}, indent=2))
     if not any(record["status"] == STATUS_OK for record in records):
-        print(f"[error] no question got an answer from {run['endpoint']}; the errors are in {out_path}")
+        print(
+            f"[error] no question got an answer from {run['endpoint']}; the errors are in {out_path}"
+        )
         return 1
     print(f"[done] wrote {out_path}")
     return 0

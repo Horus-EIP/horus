@@ -139,15 +139,10 @@ def test_task_result_model_creation(session: Session, task_id: str) -> None:
     print(f"   Created At: {task_result.created_at}")
 
     assert task_result_id
-    assert (
-        session.query(TaskResult).filter(TaskResult.id == task_result_id).first()
-        is not None
-    )
+    assert session.query(TaskResult).filter(TaskResult.id == task_result_id).first() is not None
 
 
-def test_subtask_creation(
-    session: Session, parent_task_id: str, conversation_id: int
-) -> None:
+def test_subtask_creation(session: Session, parent_task_id: str, conversation_id: int) -> None:
     """
     Test Subtask creation with parent_task_id relationship.
 
@@ -224,9 +219,7 @@ def test_task_retrieval(session: Session, task_id: str) -> None:
         print("\n✅ TaskResult found via relationship:")
         print(f"   TaskResult ID: {task.result.id}")
         print(f"   Result Data: {task.result.result_data}")
-        print(
-            f"   History items: {len(task.result.history) if task.result.history else 0}"
-        )
+        print(f"   History items: {len(task.result.history) if task.result.history else 0}")
         print(
             f"   Future actions: {len(task.result.future_actions) if task.result.future_actions else 0}"
         )
@@ -237,7 +230,7 @@ def test_task_retrieval(session: Session, task_id: str) -> None:
     if task.subtasks:
         print("\n✅ Subtasks found via relationship:")
         for i, subtask in enumerate(task.subtasks):
-            print(f"   Subtask {i+1}:")
+            print(f"   Subtask {i + 1}:")
             print(f"     - ID: {subtask.id}")
             print(f"     - Agent ID: {subtask.agent_id}")
             print(f"     - Order: {subtask.order}")
@@ -264,9 +257,7 @@ def test_query_chains(session: Session) -> None:
     conversation_id = "1"
 
     # Query 1: All tasks in conversation
-    all_tasks = (
-        session.query(Task).filter(Task.conversation_id == conversation_id).all()
-    )
+    all_tasks = session.query(Task).filter(Task.conversation_id == conversation_id).all()
 
     print("✅ All tasks in conversation:")
     print(f"   Total tasks: {len(all_tasks)}")
@@ -286,9 +277,7 @@ def test_query_chains(session: Session) -> None:
     # Query 3: Subtasks only (parent_task_id IS NOT NULL)
     subtasks = (
         session.query(Task)
-        .filter(
-            Task.conversation_id == conversation_id, Task.parent_task_id.isnot(None)
-        )
+        .filter(Task.conversation_id == conversation_id, Task.parent_task_id.isnot(None))
         .all()
     )
 
@@ -376,9 +365,7 @@ def run_all_tests() -> None:
         # Create a dummy conversation for testing
         # We need to create a real conversation because of FK constraints
         print("Creating test conversation...")
-        test_conv = Conversations(
-            name="DB Model Test Conversation", owner_username="admin"
-        )
+        test_conv = Conversations(name="DB Model Test Conversation", owner_username="admin")
         session.add(test_conv)
         session.commit()
         session.refresh(test_conv)

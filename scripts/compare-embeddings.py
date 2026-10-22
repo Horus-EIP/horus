@@ -76,8 +76,12 @@ def expected_sources(value: object) -> tuple[str, ...]:
 def eval_questions(testset: Path) -> list[Sample]:
     document = yaml.safe_load(testset.read_text(encoding="utf-8")) or {}
     return [
-        Sample(QUESTION, item["question"], f"eval:{item['id']}",
-               expected_sources(item.get("expected_source")))
+        Sample(
+            QUESTION,
+            item["question"],
+            f"eval:{item['id']}",
+            expected_sources(item.get("expected_source")),
+        )
         for item in document.get("items") or []
     ]
 
@@ -183,9 +187,9 @@ def sentence_transformers_embedder(model_id: str) -> Embed:
     model = SentenceTransformer(model_id, device="cpu")
 
     def embed(texts: list[str]) -> np.ndarray:
-        return np.asarray(model.encode(
-            texts, normalize_embeddings=True, batch_size=32, show_progress_bar=False
-        ))
+        return np.asarray(
+            model.encode(texts, normalize_embeddings=True, batch_size=32, show_progress_bar=False)
+        )
 
     return embed
 
@@ -249,8 +253,11 @@ def compare(embedder: Embedder, samples: Sequence[Sample], old: Embed, new: Embe
         "cosine_passages": similarity_summary(cosines[passage_rows]),
         "cosine_questions": similarity_summary(cosines[question_rows]),
         "lowest": [
-            {"cosine": float(cosines[row]), "origin": ordered[row].origin,
-             "text": ordered[row].text[:120]}
+            {
+                "cosine": float(cosines[row]),
+                "origin": ordered[row].origin,
+                "text": ordered[row].text[:120],
+            }
             for row in lowest
         ],
         "retrieval": retrieval_agreement(
@@ -285,9 +292,14 @@ def _timing_line(label: str, timing: dict) -> str:
 
 
 def format_report(reports: Sequence[dict], sample_count: int) -> str:
-    lines = [f"{sample_count} texts embedded by each setup"
-             + ("" if sample_count >= TARGET_TEXTS else
-                f" (fewer than {TARGET_TEXTS}: the demo corpus and the question sets hold no more)")]
+    lines = [
+        f"{sample_count} texts embedded by each setup"
+        + (
+            ""
+            if sample_count >= TARGET_TEXTS
+            else f" (fewer than {TARGET_TEXTS}: the demo corpus and the question sets hold no more)"
+        )
+    ]
     for report in reports:
         retrieval = report["retrieval"]
         lines += [
@@ -341,7 +353,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--router-examples", type=Path, default=DEFAULT_ROUTER_EXAMPLES)
     parser.add_argument("--limit", type=int, default=TARGET_TEXTS)
     parser.add_argument(
-        "--service", choices=sorted(EMBEDDERS), action="append",
+        "--service",
+        choices=sorted(EMBEDDERS),
+        action="append",
         help="Compare only this service's embedder (default: both).",
     )
     parser.add_argument("--json", type=Path, help="Also write the report as JSON to this file.")
@@ -352,8 +366,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     samples = collect_samples(
         corpus_passages(args.corpus, _chunker_split()),
-        [*eval_questions(args.eval_testset),
-         *router_questions(args.router_testset, args.router_examples)],
+        [
+            *eval_questions(args.eval_testset),
+            *router_questions(args.router_testset, args.router_examples),
+        ],
         args.limit,
     )
     reports = [

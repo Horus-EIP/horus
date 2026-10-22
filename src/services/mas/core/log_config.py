@@ -8,9 +8,7 @@ LOG_LEVELS = {
     "production": logging.WARNING,
 }
 
-DEFAULT_LOG_LEVEL = LOG_LEVELS.get(
-    os.getenv("ENVIRONMENT", "development"), logging.INFO
-)
+DEFAULT_LOG_LEVEL = LOG_LEVELS.get(os.getenv("ENVIRONMENT", "development"), logging.INFO)
 
 MODULE_LOG_LEVELS = {
     "auth": logging.INFO,

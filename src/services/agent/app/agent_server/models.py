@@ -14,7 +14,9 @@ class Task(BaseModel):
     task_id: str = None  # Auto-generated if not provided
     query: str | None = None
     conversation_id: str
-    assigned_agent_id: str | None = None  # Task assignee in DB; result payload must use this when pooled.
+    assigned_agent_id: str | None = (
+        None  # Task assignee in DB; result payload must use this when pooled.
+    )
     operation: str | None = None
     expression: str | None = None
     file_url: str | None = None

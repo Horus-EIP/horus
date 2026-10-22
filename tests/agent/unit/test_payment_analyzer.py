@@ -6,7 +6,6 @@ from ai_agents.payment_analyzer_tool import PaymentAnalyzerTool
 
 
 class TestPaymentAnalyzerTool:
-
     @pytest.fixture
     def tool(self):
         return PaymentAnalyzerTool()
@@ -16,7 +15,7 @@ class TestPaymentAnalyzerTool:
         return [
             {"amount": 100.0, "currency": "EUR", "payee": "Alice", "context": "Services"},
             {"amount": 200.0, "currency": "EUR", "payee": "Bob", "context": "Goods"},
-            {"amount": 50.0, "currency": "USD", "payee": "Alice", "context": "Refund"}
+            {"amount": 50.0, "currency": "USD", "payee": "Alice", "context": "Refund"},
         ]
 
     @pytest.fixture
@@ -36,17 +35,14 @@ class TestPaymentAnalyzerTool:
         data = [
             {"amount": "100.5", "currency": "EUR"},
             {"amount": 50, "currency": "EUR"},
-            {"amount": 10.0, "currency": "EUR"}
+            {"amount": 10.0, "currency": "EUR"},
         ]
         result = tool._calculate_total(data)
         # 160.5
         assert "Total amount EUR: 160.5" in result
 
     def test_calculate_total_invalid_values(self, tool):
-        data = [
-            {"amount": "invalid", "currency": "EUR"},
-            {"amount": 100, "currency": "EUR"}
-        ]
+        data = [{"amount": "invalid", "currency": "EUR"}, {"amount": 100, "currency": "EUR"}]
         result = tool._calculate_total(data)
         assert "Total amount EUR: 100" in result
 
@@ -98,7 +94,7 @@ class TestPaymentAnalyzerTool:
     def test_payee_breakdown_missing_payee(self, tool):
         data = [
             {"amount": 100, "currency": "EUR", "context": "Server Hosting"},
-            {"amount": 50, "currency": "EUR"} # No context, no payee
+            {"amount": 50, "currency": "EUR"},  # No context, no payee
         ]
         result = tool._get_payee_breakdown(data)
         json_res = json.loads(result)
@@ -109,7 +105,7 @@ class TestPaymentAnalyzerTool:
     def test_payee_breakdown_accumulation(self, tool):
         data = [
             {"amount": 10, "currency": "EUR", "payee": "Alice"},
-            {"amount": 20, "currency": "EUR", "payee": "Alice"}
+            {"amount": 20, "currency": "EUR", "payee": "Alice"},
         ]
         result = tool._get_payee_breakdown(data)
         json_res = json.loads(result)
@@ -162,10 +158,6 @@ class TestPaymentAnalyzerTool:
 
     def test_calculate_average_malformed_values(self, tool):
         """Test skipping bad values in average calculation."""
-        data = [
-            {"amount": "not_a_number", "currency": "EUR"},
-            {"amount": 100, "currency": "EUR"}
-        ]
+        data = [{"amount": "not_a_number", "currency": "EUR"}, {"amount": 100, "currency": "EUR"}]
         result = tool._calculate_average(data)
         assert "Average EUR: 100.0" in result
-

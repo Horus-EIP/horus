@@ -22,7 +22,7 @@ import unsupported  # noqa: E402
 from common import EVENT_PREFIX, EXIT_HARDWARE_NOT_SUPPORTED, Events, Log, Result  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
-GIB = 1024 ** 3
+GIB = 1024**3
 ONE_MINUTE = 60.0
 
 
@@ -37,34 +37,52 @@ class SlowStepRan(AssertionError):
 def slow(name: str):
     def refuse(*_args, **_kwargs):
         raise SlowStepRan(f"{name} ran before the hardware decision")
+
     return refuse
 
 
-def probe_of(system: str = "Linux", ram: float | None = 16, docker: float | None = None,
-             vendor: str = "none", gpu: str | None = None, vram: float | None = None,
-             usable: bool | None = None, avx2: bool | None = True) -> dict:
+def probe_of(
+    system: str = "Linux",
+    ram: float | None = 16,
+    docker: float | None = None,
+    vendor: str = "none",
+    gpu: str | None = None,
+    vram: float | None = None,
+    usable: bool | None = None,
+    avx2: bool | None = True,
+) -> dict:
     return {
         "os": {"system": system, "machine": "x86_64", "platform": system.lower()},
         "cpu": {"physical_cores": 4, "avx2": avx2},
         "memory": {"total_bytes": None if ram is None else gib(ram)},
         "docker": {"mem_total_bytes": None if docker is None else gib(docker)},
         "gpu": {"vendor": vendor, "name": gpu, "vram_bytes": None if vram is None else gib(vram)},
-        "docker_gpu_test": {"usable": usable,
-                            "skipped_reason": None if usable is not None else "no GPU"},
+        "docker_gpu_test": {
+            "usable": usable,
+            "skipped_reason": None if usable is not None else "no GPU",
+        },
         "cuda_usable_in_docker": usable is True,
     }
 
 
 def events_in(stream: io.StringIO) -> list[dict]:
-    return [json.loads(line[len(EVENT_PREFIX):]) for line in stream.getvalue().splitlines()
-            if line.startswith(EVENT_PREFIX)]
+    return [
+        json.loads(line[len(EVENT_PREFIX) :])
+        for line in stream.getvalue().splitlines()
+        if line.startswith(EVENT_PREFIX)
+    ]
 
 
 class FakeMachine:
-
-    def __init__(self, system: str = "Linux", ram: float | None = 7.6,
-                 docker: float | None = 7.6, cards: tuple = (), adapters: tuple = (),
-                 avx2: bool | None = True):
+    def __init__(
+        self,
+        system: str = "Linux",
+        ram: float | None = 7.6,
+        docker: float | None = 7.6,
+        cards: tuple = (),
+        adapters: tuple = (),
+        avx2: bool | None = True,
+    ):
         self.system = system
         self.ram = ram
         self.docker = docker
@@ -75,39 +93,99 @@ class FakeMachine:
     def gpu(self) -> dict:
         if self.cards:
             largest = max(self.cards, key=lambda card: card["vram_bytes"])
-            return {"vendor": "nvidia", "name": largest["name"],
-                    "vram_bytes": largest["vram_bytes"], "count": len(self.cards),
-                    "gpus": copy.deepcopy(self.cards), "adapters": [], "source": "fake",
-                    "detail": "", "driver_version": "fake"}
+            return {
+                "vendor": "nvidia",
+                "name": largest["name"],
+                "vram_bytes": largest["vram_bytes"],
+                "count": len(self.cards),
+                "gpus": copy.deepcopy(self.cards),
+                "adapters": [],
+                "source": "fake",
+                "detail": "",
+                "driver_version": "fake",
+            }
         vendor = hardware._vendor_of(self.adapters[0]) if self.adapters else "none"
-        return {"vendor": vendor, "name": self.adapters[0] if self.adapters else None,
-                "vram_bytes": None, "count": len(self.adapters), "gpus": [],
-                "adapters": list(self.adapters), "source": "fake", "detail": "",
-                "driver_version": None}
+        return {
+            "vendor": vendor,
+            "name": self.adapters[0] if self.adapters else None,
+            "vram_bytes": None,
+            "count": len(self.adapters),
+            "gpus": [],
+            "adapters": list(self.adapters),
+            "source": "fake",
+            "detail": "",
+            "driver_version": None,
+        }
 
     def install(self, stack: contextlib.ExitStack) -> None:
         patch = stack.enter_context
-        osinfo = {"platform": self.system.lower(), "system": self.system,
-                  "machine": "x86_64", "release": "fake", "is_wsl": False, "is_64bit": True}
-        memory = {"total_bytes": None if self.ram is None else gib(self.ram), "source": "fake",
-                  "detail": ""}
-        docker = {"mem_total_bytes": None if self.docker is None else gib(self.docker),
-                  "source": "fake", "detail": "fake docker info"}
+        osinfo = {
+            "platform": self.system.lower(),
+            "system": self.system,
+            "machine": "x86_64",
+            "release": "fake",
+            "is_wsl": False,
+            "is_64bit": True,
+        }
+        memory = {
+            "total_bytes": None if self.ram is None else gib(self.ram),
+            "source": "fake",
+            "detail": "",
+        }
+        docker = {
+            "mem_total_bytes": None if self.docker is None else gib(self.docker),
+            "source": "fake",
+            "detail": "fake docker info",
+        }
         patch(mock.patch.object(hardware, "detect_os", side_effect=lambda log: dict(osinfo)))
-        patch(mock.patch.object(hardware, "detect_cpu", side_effect=lambda log: {
-            "model": "Fake CPU", "physical_cores": 4, "logical_cores": 8,
-            "count_is_logical_fallback": False, "source": "fake"}))
-        patch(mock.patch.object(hardware, "detect_avx2", side_effect=lambda log, osi: {
-            "avx2": self.avx2, "avx2_source": "fake"}))
+        patch(
+            mock.patch.object(
+                hardware,
+                "detect_cpu",
+                side_effect=lambda log: {
+                    "model": "Fake CPU",
+                    "physical_cores": 4,
+                    "logical_cores": 8,
+                    "count_is_logical_fallback": False,
+                    "source": "fake",
+                },
+            )
+        )
+        patch(
+            mock.patch.object(
+                hardware,
+                "detect_avx2",
+                side_effect=lambda log, osi: {"avx2": self.avx2, "avx2_source": "fake"},
+            )
+        )
         patch(mock.patch.object(hardware, "detect_memory", side_effect=lambda log: dict(memory)))
-        patch(mock.patch.object(hardware, "detect_disk", side_effect=lambda log: {
-            "path": "fake", "free_bytes": 500 * GIB, "total_bytes": 1000 * GIB, "detail": ""}))
-        patch(mock.patch.object(hardware, "detect_gpu_host",
-                                side_effect=lambda log, osi: self.gpu()))
-        patch(mock.patch.object(hardware, "detect_docker_memory",
-                                side_effect=lambda log: dict(docker)))
-        patch(mock.patch.object(hardware, "_wsl_status", return_value={
-            "present": True, "default_version": 2, "detail": "fake"}))
+        patch(
+            mock.patch.object(
+                hardware,
+                "detect_disk",
+                side_effect=lambda log: {
+                    "path": "fake",
+                    "free_bytes": 500 * GIB,
+                    "total_bytes": 1000 * GIB,
+                    "detail": "",
+                },
+            )
+        )
+        patch(
+            mock.patch.object(hardware, "detect_gpu_host", side_effect=lambda log, osi: self.gpu())
+        )
+        patch(
+            mock.patch.object(
+                hardware, "detect_docker_memory", side_effect=lambda log: dict(docker)
+            )
+        )
+        patch(
+            mock.patch.object(
+                hardware,
+                "_wsl_status",
+                return_value={"present": True, "default_version": 2, "detail": "fake"},
+            )
+        )
         patch(mock.patch.object(hardware, "run", side_effect=slow("a command in the probe")))
 
 
@@ -122,8 +200,9 @@ class TempDir(unittest.TestCase):
         stack = contextlib.ExitStack()
         self.addCleanup(stack.close)
         stack.enter_context(mock.patch.object(horus_install, "PROFILE_JSON", self.record))
-        stack.enter_context(mock.patch.object(horus_install, "LOG_PATH",
-                                              self.tmp / "install-log.txt"))
+        stack.enter_context(
+            mock.patch.object(horus_install, "LOG_PATH", self.tmp / "install-log.txt")
+        )
 
     def log(self, events: io.StringIO | None = None) -> Log:
         log = Log(self.tmp / "test-log.txt", events=Events(events is not None, events))
@@ -132,19 +211,23 @@ class TempDir(unittest.TestCase):
 
 
 class EightGigabyteMachineIsToldFirst(TempDir):
-
-    def run_installer(self, machine: FakeMachine, *argv: str,
-                      install_checks: Exception | None = None) -> tuple[int, str, list[dict]]:
+    def run_installer(
+        self, machine: FakeMachine, *argv: str, install_checks: Exception | None = None
+    ) -> tuple[int, str, list[dict]]:
         out, err = io.StringIO(), io.StringIO()
         with contextlib.ExitStack() as stack:
             patch = stack.enter_context
             machine.install(stack)
             patch(mock.patch.object(horus_install, "find_repo", return_value=self.repo))
             preflight = patch(mock.patch.object(horus_install, "preflight"))
-            preflight.run_install_checks.side_effect = (
-                install_checks or slow("the disk, network and port checks"))
-            patch(mock.patch.object(horus_install, "sign_in_to_registry",
-                                    side_effect=slow("the registry sign-in")))
+            preflight.run_install_checks.side_effect = install_checks or slow(
+                "the disk, network and port checks"
+            )
+            patch(
+                mock.patch.object(
+                    horus_install, "sign_in_to_registry", side_effect=slow("the registry sign-in")
+                )
+            )
             consent = patch(mock.patch.object(horus_install, "consent"))
             consent.choose.side_effect = slow("the file-access questions")
             for name in ("apply_env", "pull_and_build", "download_model", "wait_for_health"):
@@ -183,8 +266,14 @@ class EightGigabyteMachineIsToldFirst(TempDir):
     def test_the_screen_shows_the_same_three_parts(self):
         _, out, _ = self.run_installer(FakeMachine(ram=7.6, docker=7.6))
         self.assertIn(f"INSTALL STOPPED: {unsupported.HEADLINE}", out)
-        for part in ("This machine:", "Horus needs:", "What to do:", "--profile cpu-lean",
-                     profiles.LOW_RAM_ADR, f"Exit code {EXIT_HARDWARE_NOT_SUPPORTED}"):
+        for part in (
+            "This machine:",
+            "Horus needs:",
+            "What to do:",
+            "--profile cpu-lean",
+            profiles.LOW_RAM_ADR,
+            f"Exit code {EXIT_HARDWARE_NOT_SUPPORTED}",
+        ):
             with self.subTest(part):
                 self.assertIn(part, " ".join(out.split()))
 
@@ -193,8 +282,7 @@ class EightGigabyteMachineIsToldFirst(TempDir):
         document = json.loads(self.record.read_text(encoding="utf-8"))
         self.assertEqual(document["profile"]["name"], profiles.NOT_SUPPORTED)
         self.assertEqual(document["refusal"]["headline"], unsupported.HEADLINE)
-        self.assertEqual(document["hardware_fingerprint"]["docker_memory_mib"],
-                         gib(7.6) // 1024 ** 2)
+        self.assertEqual(document["hardware_fingerprint"]["docker_memory_mib"], gib(7.6) // 1024**2)
         self.assertEqual(document["memory_decision"]["basis"], profiles.DOCKER_BASIS)
         self.assertEqual(document["env_written"], {})
         self.assertNotIn("probe_failed", document["hardware"])
@@ -221,8 +309,12 @@ class EightGigabyteMachineIsToldFirst(TempDir):
             consent.choose.side_effect = SlowStepRan("reached the questions")
             patch(contextlib.redirect_stdout(out))
             with self.assertRaises(SlowStepRan):
-                horus_install._dispatch(self.log(), horus_install.build_parser().parse_args(
-                    ["--profile", "cpu-lean", "--non-interactive"]))
+                horus_install._dispatch(
+                    self.log(),
+                    horus_install.build_parser().parse_args(
+                        ["--profile", "cpu-lean", "--non-interactive"]
+                    ),
+                )
         text = " ".join(out.getvalue().split())
         self.assertIn("forces a profile this machine is not supported for", text)
         self.assertNotIn("INSTALL STOPPED", text)
@@ -238,8 +330,9 @@ class EightGigabyteMachineIsToldFirst(TempDir):
             consent.choose.side_effect = SlowStepRan("reached the questions")
             patch(contextlib.redirect_stdout(io.StringIO()))
             with self.assertRaises(SlowStepRan):
-                horus_install._dispatch(self.log(), horus_install.build_parser().parse_args(
-                    ["--non-interactive"]))
+                horus_install._dispatch(
+                    self.log(), horus_install.build_parser().parse_args(["--non-interactive"])
+                )
         document = hardware.read_profile_json(self.record)
         self.assertEqual(document["profile"]["name"], "cpu-standard")
         self.assertNotIn("refusal", document)
@@ -248,10 +341,15 @@ class EightGigabyteMachineIsToldFirst(TempDir):
     def test_a_refusal_is_forgotten_once_the_decision_passes_even_if_a_later_step_fails(self):
         code, _, _ = self.run_installer(FakeMachine("Windows", ram=15.8, docker=7.9))
         self.assertEqual(code, EXIT_HARDWARE_NOT_SUPPORTED)
-        disk_full = common.InstallError(common.EXIT_DISK_SPACE, "Not enough free disk space.",
-                                        "fake disk check", "Free some space.")
-        code, _, events = self.run_installer(FakeMachine("Windows", ram=15.8, docker=15.6),
-                                             install_checks=disk_full)
+        disk_full = common.InstallError(
+            common.EXIT_DISK_SPACE,
+            "Not enough free disk space.",
+            "fake disk check",
+            "Free some space.",
+        )
+        code, _, events = self.run_installer(
+            FakeMachine("Windows", ram=15.8, docker=15.6), install_checks=disk_full
+        )
         self.assertEqual(code, common.EXIT_DISK_SPACE)
         self.assertNotIn(unsupported.EVENT, [event["event"] for event in events])
         document = hardware.read_profile_json(self.record)
@@ -264,22 +362,27 @@ class EightGigabyteMachineIsToldFirst(TempDir):
 
 
 class MemoryDecision(unittest.TestCase):
-
     def chosen(self, **machine) -> str:
         return profiles.select_profile(probe_of(**machine))[0]
 
     def test_the_adr_006_thresholds_apply_to_the_memory_docker_can_use(self):
-        cases = ((16.0, "cpu-standard"), (15.0, "cpu-standard"), (14.99, "cpu-lean"),
-                 (13.5, "cpu-lean"), (13.49, profiles.NOT_SUPPORTED),
-                 (7.6, profiles.NOT_SUPPORTED))
+        cases = (
+            (16.0, "cpu-standard"),
+            (15.0, "cpu-standard"),
+            (14.99, "cpu-lean"),
+            (13.5, "cpu-lean"),
+            (13.49, profiles.NOT_SUPPORTED),
+            (7.6, profiles.NOT_SUPPORTED),
+        )
         for docker, expected in cases:
             with self.subTest(docker=docker):
                 self.assertEqual(self.chosen(ram=64, docker=docker), expected)
 
     def test_docker_memory_wins_over_the_ram_of_the_machine(self):
         self.assertEqual(self.chosen(system="Windows", ram=31.8, docker=15.6), "cpu-standard")
-        self.assertEqual(self.chosen(system="Windows", ram=15.8, docker=7.9),
-                         profiles.NOT_SUPPORTED)
+        self.assertEqual(
+            self.chosen(system="Windows", ram=15.8, docker=7.9), profiles.NOT_SUPPORTED
+        )
 
     def test_without_docker_memory_the_ram_decides_and_says_so(self):
         name, reasons = profiles.select_profile(probe_of(ram=14.0, docker=None))
@@ -296,20 +399,24 @@ class MemoryDecision(unittest.TestCase):
             self.assertEqual(profiles.cpu_floor_gib(), profiles.CPU_STANDARD_MIN_GIB)
 
     def test_a_usable_gpu_is_not_held_to_the_cpu_thresholds(self):
-        name = self.chosen(ram=7.6, docker=7.6, vendor="nvidia", gpu="RTX 4060", vram=8,
-                           usable=True)
+        name = self.chosen(
+            ram=7.6, docker=7.6, vendor="nvidia", gpu="RTX 4060", vram=8, usable=True
+        )
         self.assertEqual(name, "gpu-8g")
 
     def test_a_gpu_too_small_for_the_model_falls_back_to_the_cpu_decision(self):
-        name = self.chosen(ram=7.6, docker=7.6, vendor="nvidia", gpu="MX450", vram=2,
-                           usable=True)
+        name = self.chosen(ram=7.6, docker=7.6, vendor="nvidia", gpu="MX450", vram=2, usable=True)
         self.assertEqual(name, profiles.NOT_SUPPORTED)
 
     def test_the_simulated_machines_land_where_the_adr_says(self):
-        expected = {"linux-cpu-8gb": profiles.NOT_SUPPORTED, "laptop-cpu-14gb": "cpu-lean",
-                    "linux-cpu-16gb": "cpu-standard",
-                    "windows-cpu-16gb": profiles.NOT_SUPPORTED,
-                    "old-cpu-no-avx2": "cpu-standard", "nvidia-8gb": "gpu-8g"}
+        expected = {
+            "linux-cpu-8gb": profiles.NOT_SUPPORTED,
+            "laptop-cpu-14gb": "cpu-lean",
+            "linux-cpu-16gb": "cpu-standard",
+            "windows-cpu-16gb": profiles.NOT_SUPPORTED,
+            "old-cpu-no-avx2": "cpu-standard",
+            "nvidia-8gb": "gpu-8g",
+        }
         for simulation, name in expected.items():
             with self.subTest(simulation):
                 probe = dict(horus_install.SIMULATIONS[simulation])
@@ -328,8 +435,10 @@ class MemoryDecision(unittest.TestCase):
         self.assertIn("benchmarks/cpu-laptop-2026-10-06.json", notes)
         self.assertIn("8.34 GiB on cpu-standard and 6.21 GiB on cpu-lean", notes)
         self.assertIn("10.5 and 8.5 GiB", notes)
-        self.assertIn(f"stay at {profiles.CPU_STANDARD_MIN_GIB:.1f} and "
-                      f"{profiles.CPU_LEAN_MIN_GIB:.1f} GiB", notes)
+        self.assertIn(
+            f"stay at {profiles.CPU_STANDARD_MIN_GIB:.1f} and {profiles.CPU_LEAN_MIN_GIB:.1f} GiB",
+            notes,
+        )
         self.assertNotIn("benchmarked", notes)
         self.assertNotIn("has not been timed", notes)
 
@@ -366,17 +475,16 @@ class ForcedProfiles(unittest.TestCase):
 
     def test_cpu_lean_is_held_to_cpu_standard_once_it_is_turned_off(self):
         with mock.patch.object(profiles, "CPU_LEAN_SUPPORTED", False):
-            self.assertIsNotNone(profiles.forced_profile_warning("cpu-lean",
-                                                                 probe_of(docker=14.0)))
+            self.assertIsNotNone(profiles.forced_profile_warning("cpu-lean", probe_of(docker=14.0)))
 
     def test_gpu_profiles_and_unknown_memory_are_not_warned(self):
         self.assertIsNone(profiles.forced_profile_warning("gpu-8g", probe_of(docker=4)))
-        self.assertIsNone(profiles.forced_profile_warning("cpu-standard",
-                                                          probe_of(ram=None, docker=None)))
+        self.assertIsNone(
+            profiles.forced_profile_warning("cpu-standard", probe_of(ram=None, docker=None))
+        )
 
 
 class RefusalScreen(TempDir):
-
     def refusal(self, **machine) -> unsupported.NotSupported:
         return unsupported.refusal(probe_of(**machine))
 
@@ -400,8 +508,9 @@ class RefusalScreen(TempDir):
         self.assertIn("Docker Desktop > Settings > Resources > Memory limit", advice)
 
     def test_an_nvidia_card_docker_cannot_use_comes_first(self):
-        refused = self.refusal(ram=7.6, docker=7.6, vendor="nvidia", gpu="RTX 3050", vram=4,
-                               usable=False)
+        refused = self.refusal(
+            ram=7.6, docker=7.6, vendor="nvidia", gpu="RTX 3050", vram=4, usable=False
+        )
         self.assertIn("RTX 3050, which Docker could not use.", refused.have)
         self.assertTrue(refused.alternatives[0].startswith("Make the NVIDIA GPU usable"))
 
@@ -423,19 +532,24 @@ class RefusalScreen(TempDir):
             self.refusal(ram=7.6, docker=7.6).report(log)
         events = events_in(stream)
         self.assertEqual(events[0]["event"], unsupported.EVENT)
-        self.assertEqual(set(unsupported.NUMBER_KEYS) | {"headline", "have", "need",
-                                                         "alternatives", "checked_utc"},
-                         set(events[0]) - {"event"})
+        self.assertEqual(
+            set(unsupported.NUMBER_KEYS)
+            | {"headline", "have", "need", "alternatives", "checked_utc"},
+            set(events[0]) - {"event"},
+        )
         self.assertIn("This machine:", out.getvalue())
 
     def test_a_recorded_refusal_reads_back_the_same(self):
         probe = probe_of(system="Windows", ram=15.8, docker=7.9)
         refused = unsupported.refusal(probe)
-        hardware.write_profile_json(self.record, probe, profiles.NOT_SUPPORTED, {}, ["r"],
-                                    refusal=refused.record())
+        hardware.write_profile_json(
+            self.record, probe, profiles.NOT_SUPPORTED, {}, ["r"], refusal=refused.record()
+        )
         again = unsupported.from_record(hardware.read_profile_json(self.record))
-        self.assertEqual((again.have, again.need, again.alternatives),
-                         (refused.have, refused.need, refused.alternatives))
+        self.assertEqual(
+            (again.have, again.need, again.alternatives),
+            (refused.have, refused.need, refused.alternatives),
+        )
         self.assertEqual(again.numbers, refused.numbers)
         self.assertTrue(again.checked_utc)
         self.assertIn("Found when START-HERE last ran", again.detail)
@@ -447,11 +561,16 @@ class RefusalScreen(TempDir):
 
 
 class StartAfterARefusal(TempDir):
-
     def write_refusal(self) -> None:
         probe = probe_of(ram=7.6, docker=7.6)
-        hardware.write_profile_json(self.record, probe, profiles.NOT_SUPPORTED, {}, [],
-                                    refusal=unsupported.refusal(probe).record())
+        hardware.write_profile_json(
+            self.record,
+            probe,
+            profiles.NOT_SUPPORTED,
+            {},
+            [],
+            refusal=unsupported.refusal(probe).record(),
+        )
 
     def test_a_refused_machine_hears_why_instead_of_not_installed(self):
         self.write_refusal()
@@ -467,8 +586,11 @@ class StartAfterARefusal(TempDir):
     def test_the_desktop_start_gets_the_refusal_as_an_event(self):
         self.write_refusal()
         err = io.StringIO()
-        with mock.patch.object(horus_install, "find_repo", return_value=self.repo), \
-                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+        with (
+            mock.patch.object(horus_install, "find_repo", return_value=self.repo),
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(err),
+        ):
             code = horus_install.main(["--start", "--json-events"])
         self.assertEqual(code, EXIT_HARDWARE_NOT_SUPPORTED)
         refusal = next(event for event in events_in(err) if event["event"] == unsupported.EVENT)
@@ -477,17 +599,22 @@ class StartAfterARefusal(TempDir):
 
 
 class Fingerprint(TempDir):
-
     RTX = (("NVIDIA GeForce RTX 4060 Laptop GPU", 8),)
 
-    def probe(self, machine: FakeMachine, previous: dict | None,
-              allow: bool = True) -> tuple[dict, mock.Mock]:
-        passed = {"attempted": True, "usable": True, "detail": "NVIDIA-SMI ok",
-                  "skipped_reason": None}
+    def probe(
+        self, machine: FakeMachine, previous: dict | None, allow: bool = True
+    ) -> tuple[dict, mock.Mock]:
+        passed = {
+            "attempted": True,
+            "usable": True,
+            "detail": "NVIDIA-SMI ok",
+            "skipped_reason": None,
+        }
         with contextlib.ExitStack() as stack:
             machine.install(stack)
-            gpu_test = stack.enter_context(mock.patch.object(
-                hardware, "docker_gpu_test", return_value=dict(passed)))
+            gpu_test = stack.enter_context(
+                mock.patch.object(hardware, "docker_gpu_test", return_value=dict(passed))
+            )
             stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
             probe = hardware.probe(self.log(), allow_docker_gpu_test=allow, previous=previous)
         return probe, gpu_test
@@ -500,9 +627,14 @@ class Fingerprint(TempDir):
 
     def test_the_fingerprint_is_ram_docker_memory_and_the_gpu_list(self):
         probe, _ = self.probe(FakeMachine(ram=31.8, docker=15.6, cards=self.RTX), None)
-        self.assertEqual(probe["hardware_fingerprint"], {
-            "ram_mib": gib(31.8) // 1024 ** 2, "docker_memory_mib": gib(15.6) // 1024 ** 2,
-            "gpus": ["NVIDIA GeForce RTX 4060 Laptop GPU 8192 MiB"]})
+        self.assertEqual(
+            probe["hardware_fingerprint"],
+            {
+                "ram_mib": gib(31.8) // 1024**2,
+                "docker_memory_mib": gib(15.6) // 1024**2,
+                "gpus": ["NVIDIA GeForce RTX 4060 Laptop GPU 8192 MiB"],
+            },
+        )
 
     def test_nothing_changed_so_the_gpu_test_is_not_run_again(self):
         machine = FakeMachine(ram=31.8, docker=15.6, cards=self.RTX)
@@ -521,8 +653,9 @@ class Fingerprint(TempDir):
         changed = {
             "ram": FakeMachine(ram=63.8, docker=15.6, cards=self.RTX),
             "docker memory": FakeMachine(ram=31.8, docker=23.6, cards=self.RTX),
-            "gpu list": FakeMachine(ram=31.8, docker=15.6,
-                                    cards=(("NVIDIA GeForce RTX 4070", 12),)),
+            "gpu list": FakeMachine(
+                ram=31.8, docker=15.6, cards=(("NVIDIA GeForce RTX 4070", 12),)
+            ),
         }
         for what, other in changed.items():
             with self.subTest(what):
@@ -551,21 +684,30 @@ class Fingerprint(TempDir):
 
     def test_the_installer_hands_the_previous_record_to_the_probe(self):
         previous = self.recorded(FakeMachine(ram=31.8, docker=15.6, cards=self.RTX))
-        with mock.patch.object(horus_install.hardware, "probe",
-                               return_value=probe_of(docker=16)) as probe, \
-                contextlib.redirect_stdout(io.StringIO()):
-            horus_install.decide_profile(self.log(), horus_install.build_parser().parse_args(
-                ["--profile", "gpu-16g"]), None)
-        self.assertEqual(probe.call_args.kwargs["previous"]["hardware_fingerprint"],
-                         previous["hardware_fingerprint"])
+        with (
+            mock.patch.object(
+                horus_install.hardware, "probe", return_value=probe_of(docker=16)
+            ) as probe,
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            horus_install.decide_profile(
+                self.log(), horus_install.build_parser().parse_args(["--profile", "gpu-16g"]), None
+            )
+        self.assertEqual(
+            probe.call_args.kwargs["previous"]["hardware_fingerprint"],
+            previous["hardware_fingerprint"],
+        )
 
     def test_a_passed_decision_is_recorded_before_the_slow_steps(self):
         machine = FakeMachine(ram=31.8, docker=15.6, cards=self.RTX)
         probe, _ = self.probe(machine, None)
-        with mock.patch.object(horus_install.hardware, "probe", return_value=probe), \
-                contextlib.redirect_stdout(io.StringIO()):
-            horus_install.decide_profile(self.log(), horus_install.build_parser().parse_args(
-                []), None)
+        with (
+            mock.patch.object(horus_install.hardware, "probe", return_value=probe),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            horus_install.decide_profile(
+                self.log(), horus_install.build_parser().parse_args([]), None
+            )
         _, gpu_test = self.probe(machine, hardware.read_profile_json(self.record))
         gpu_test.assert_not_called()
 
@@ -573,11 +715,15 @@ class Fingerprint(TempDir):
         machine = FakeMachine(ram=31.8, docker=15.6, cards=self.RTX)
         previous = self.recorded(machine)
         reused, _ = self.probe(machine, previous)
-        with mock.patch.object(horus_install.hardware, "probe", return_value=reused), \
-                contextlib.redirect_stdout(io.StringIO()):
+        with (
+            mock.patch.object(horus_install.hardware, "probe", return_value=reused),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
             _, name, _ = horus_install.decide_profile(
-                self.log(), horus_install.build_parser().parse_args(
-                    ["--profile", "cpu-standard"]), None)
+                self.log(),
+                horus_install.build_parser().parse_args(["--profile", "cpu-standard"]),
+                None,
+            )
         self.assertEqual(name, "cpu-standard")
 
     def test_an_unreadable_record_is_no_record(self):
@@ -601,7 +747,6 @@ class FakeKernel32:
 
 
 class Avx2(TempDir):
-
     def cpuinfo(self, flags: str | None) -> Path:
         path = self.tmp / "cpuinfo"
         lines = ["processor\t: 0", "model name\t: Test CPU"]
@@ -615,10 +760,10 @@ class Avx2(TempDir):
             return hardware.detect_avx2(self.log(), {"machine": machine}, **kwargs)
 
     def test_linux_reads_the_cpuinfo_flags(self):
-        self.assertIs(self.detect("linux", cpuinfo=self.cpuinfo("fpu sse4_2 avx avx2 fma"))[
-            "avx2"], True)
-        self.assertIs(self.detect("linux", cpuinfo=self.cpuinfo("fpu sse4_2 avx"))["avx2"],
-                      False)
+        self.assertIs(
+            self.detect("linux", cpuinfo=self.cpuinfo("fpu sse4_2 avx avx2 fma"))["avx2"], True
+        )
+        self.assertIs(self.detect("linux", cpuinfo=self.cpuinfo("fpu sse4_2 avx"))["avx2"], False)
         self.assertIsNone(self.detect("linux", cpuinfo=self.cpuinfo(None))["avx2"])
         self.assertIsNone(self.detect("linux", cpuinfo=self.tmp / "missing")["avx2"])
 
@@ -633,8 +778,9 @@ class Avx2(TempDir):
         for answer, expected in ((1, True), (0, False)):
             with self.subTest(answer=answer):
                 kernel32 = FakeKernel32(answer)
-                self.assertIs(self.detect("win32", machine="AMD64", kernel32=kernel32)["avx2"],
-                              expected)
+                self.assertIs(
+                    self.detect("win32", machine="AMD64", kernel32=kernel32)["avx2"], expected
+                )
                 self.assertEqual(kernel32.asked, [40])
         broken = self.detect("win32", machine="AMD64", kernel32=FakeKernel32(OSError("no")))
         self.assertIsNone(broken["avx2"])
@@ -675,11 +821,17 @@ class Avx2(TempDir):
 
     def warnings_for(self, simulation: str, *argv: str) -> str:
         out = io.StringIO()
-        with mock.patch.object(horus_install.hardware, "probe",
-                               return_value=dict(horus_install.SIMULATIONS[simulation])), \
-                contextlib.redirect_stdout(out):
-            horus_install.decide_profile(self.log(), horus_install.build_parser().parse_args(
-                list(argv)), None)
+        with (
+            mock.patch.object(
+                horus_install.hardware,
+                "probe",
+                return_value=dict(horus_install.SIMULATIONS[simulation]),
+            ),
+            contextlib.redirect_stdout(out),
+        ):
+            horus_install.decide_profile(
+                self.log(), horus_install.build_parser().parse_args(list(argv)), None
+            )
         return " ".join(out.getvalue().split())
 
     def test_a_cpu_install_without_avx2_is_warned(self):
@@ -690,15 +842,17 @@ class Avx2(TempDir):
         probe = dict(horus_install.SIMULATIONS["nvidia-16gb"])
         probe["cpu"] = {**probe["cpu"], "avx2": False}
         out = io.StringIO()
-        with mock.patch.object(horus_install.hardware, "probe", return_value=probe), \
-                contextlib.redirect_stdout(out):
-            horus_install.decide_profile(self.log(), horus_install.build_parser().parse_args(
-                []), None)
+        with (
+            mock.patch.object(horus_install.hardware, "probe", return_value=probe),
+            contextlib.redirect_stdout(out),
+        ):
+            horus_install.decide_profile(
+                self.log(), horus_install.build_parser().parse_args([]), None
+            )
         self.assertNotIn("no AVX2", out.getvalue())
 
 
 class DryRun(TempDir):
-
     def setUp(self) -> None:
         super().setUp()
         (self.repo / "models").mkdir()
@@ -706,10 +860,13 @@ class DryRun(TempDir):
 
     def dry_run(self, *argv: str) -> str:
         out = io.StringIO()
-        with mock.patch.object(horus_install, "find_repo", return_value=self.repo), \
-                contextlib.redirect_stdout(out):
-            code = horus_install._dispatch(self.log(), horus_install.build_parser().parse_args(
-                ["--dry-run", *argv]))
+        with (
+            mock.patch.object(horus_install, "find_repo", return_value=self.repo),
+            contextlib.redirect_stdout(out),
+        ):
+            code = horus_install._dispatch(
+                self.log(), horus_install.build_parser().parse_args(["--dry-run", *argv])
+            )
         self.assertEqual(code, common.EXIT_OK)
         return " ".join(out.getvalue().split())
 

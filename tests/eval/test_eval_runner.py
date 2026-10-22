@@ -87,9 +87,18 @@ def agent_events(retrieval_metadata, content="$250 per night."):
     return [
         {"type": "task_step", "step_type": "retrieval.start", "metadata": {"query": "hotel"}},
         {"type": "task_step", "step_type": "retrieval.results", "metadata": retrieval_metadata},
-        {"type": "task_step", "step_type": "reasoning.start", "metadata": {"model": "qwen3-4b", "device": "cpu"}},
+        {
+            "type": "task_step",
+            "step_type": "reasoning.start",
+            "metadata": {"model": "qwen3-4b", "device": "cpu"},
+        },
         {"type": "task_step", "step_type": "reasoning.delta", "metadata": {"chunk": "$250"}},
-        {"type": "task_complete", "content": content, "agent_name": "Finance-Analyst", "skill_used": "research"},
+        {
+            "type": "task_complete",
+            "content": content,
+            "agent_name": "Finance-Analyst",
+            "skill_used": "research",
+        },
     ]
 
 
@@ -147,10 +156,27 @@ class TestAsk:
         assert outcome["answer"].startswith("No agents")
 
     def test_queued_task_answer_arrives_over_the_websocket(self, runner, mas):
-        mas["new_task"] = {"_status": 202, "task_id": "t-1", "status": "queued", "conversation_id": 7}
+        mas["new_task"] = {
+            "_status": 202,
+            "task_id": "t-1",
+            "status": "queued",
+            "conversation_id": 7,
+        }
         events = [
-            {"type": "task_status", "status": "queued", "task_id": "t-1", "seq": 1, "event": "progress"},
-            {"type": "heartbeat", "elapsed_s": 5.0, "task_id": "t-1", "seq": 2, "event": "heartbeat"},
+            {
+                "type": "task_status",
+                "status": "queued",
+                "task_id": "t-1",
+                "seq": 1,
+                "event": "progress",
+            },
+            {
+                "type": "heartbeat",
+                "elapsed_s": 5.0,
+                "task_id": "t-1",
+                "seq": 2,
+                "event": "heartbeat",
+            },
             *AGENT_EVENTS[:-1],
             {**AGENT_EVENTS[-1], "event": "result", "route": "agent"},
         ]
@@ -163,7 +189,12 @@ class TestAsk:
         assert outcome["timing_source"] == "websocket"
 
     def test_direct_answer_of_a_queued_task_comes_over_the_websocket(self, runner, mas):
-        mas["new_task"] = {"_status": 202, "task_id": "t-1", "status": "queued", "conversation_id": 7}
+        mas["new_task"] = {
+            "_status": 202,
+            "task_id": "t-1",
+            "status": "queued",
+            "conversation_id": 7,
+        }
         events = [{"type": "agent", "content": "4", "event": "result", "route": "direct_answer"}]
         client = make_client(runner, FakeSocket(events), [])
         outcome = asyncio.run(client.ask("What is 2 + 2?", "eval-x"))
@@ -172,7 +203,12 @@ class TestAsk:
         assert outcome["answer"] == "4"
 
     def test_unroutable_queued_task_is_recorded_as_no_route(self, runner, mas):
-        mas["new_task"] = {"_status": 202, "task_id": "t-1", "status": "queued", "conversation_id": 7}
+        mas["new_task"] = {
+            "_status": 202,
+            "task_id": "t-1",
+            "status": "queued",
+            "conversation_id": 7,
+        }
         events = [
             {
                 "type": "agent",
@@ -226,7 +262,9 @@ class TestAsk:
         assert outcome["status"] == "error"
         assert outcome["error"].startswith("new_task failed: RuntimeError: HTTP 500")
 
-    def test_live_agent_events_give_a_correct_answer_with_an_unscored_source(self, runner, mas, items):
+    def test_live_agent_events_give_a_correct_answer_with_an_unscored_source(
+        self, runner, mas, items
+    ):
         item = next(i for i in items if i["id"] == "exp-01")
         client = make_client(runner, FakeSocket(AGENT_EVENTS), [])
         record = question_record(item, asyncio.run(client.ask(item["question"], "eval-x")))
@@ -268,7 +306,9 @@ class TestEnsureCorpus:
 
         def handler(request):
             if request.url.path == "/file":
-                return httpx.Response(200, json={"documents": [{"title": t} for t in state["titles"]]})
+                return httpx.Response(
+                    200, json={"documents": [{"title": t} for t in state["titles"]]}
+                )
             if request.url.path == "/corpus/scan":
                 state["scans"] += 1
                 state["headers"].append(request.headers.get("X-Corpus-Token"))
@@ -290,12 +330,18 @@ class TestEnsureCorpus:
         assert asyncio.run(runner.ensure_corpus("http://ks:8080", testset, "token")) is True
         assert knowledge_store["scans"] == 0
 
-    def test_missing_document_fails_without_a_scan_token(self, runner, knowledge_store, testset, capsys):
+    def test_missing_document_fails_without_a_scan_token(
+        self, runner, knowledge_store, testset, capsys
+    ):
         knowledge_store["titles"] = knowledge_store["titles"][1:]
         assert asyncio.run(runner.ensure_corpus("http://ks:8080", testset, None)) is False
-        assert "1_Q4_2025_Financial_Report.md is not in the knowledge store" in capsys.readouterr().out
+        assert (
+            "1_Q4_2025_Financial_Report.md is not in the knowledge store" in capsys.readouterr().out
+        )
 
-    def test_missing_document_triggers_a_corpus_scan_with_the_token(self, runner, knowledge_store, testset):
+    def test_missing_document_triggers_a_corpus_scan_with_the_token(
+        self, runner, knowledge_store, testset
+    ):
         knowledge_store["titles"] = []
         assert asyncio.run(runner.ensure_corpus("http://ks:8080", testset, "s3cret")) is True
         assert knowledge_store["scans"] == 1
@@ -310,7 +356,9 @@ class TestRetrieve:
     def patch_client(self, monkeypatch, handler):
         transport = httpx.MockTransport(handler)
         real_client = httpx.Client
-        monkeypatch.setattr(httpx, "Client", lambda *a, **kw: real_client(*a, transport=transport, **kw))
+        monkeypatch.setattr(
+            httpx, "Client", lambda *a, **kw: real_client(*a, transport=transport, **kw)
+        )
 
     def test_titles_of_the_top_results_become_the_sources(self, runner, monkeypatch):
         seen = {}
@@ -338,7 +386,9 @@ class TestRetrieve:
             "4_Expense_Policy.md",
         ]
         metadatas = [[{"title": title} for title in ranked]]
-        self.patch_client(monkeypatch, lambda request: httpx.Response(200, json={"metadatas": metadatas}))
+        self.patch_client(
+            monkeypatch, lambda request: httpx.Response(200, json={"metadatas": metadatas})
+        )
         record = question_record(item, runner.retrieve("http://ks:8080", item["question"], 10))
         assert record["source_ranks"] == [5]
         assert record["source_correct_auto"] is False
@@ -354,10 +404,12 @@ class TestRetrieve:
         ]
         body = {
             "ids": [[chunk_id for chunk_id, _doc, _title in passages]],
-            "metadatas": [[
-                {"doc_id": doc_id, "title": title, "chunk_index": int(chunk_id[-1])}
-                for chunk_id, doc_id, title in passages
-            ]],
+            "metadatas": [
+                [
+                    {"doc_id": doc_id, "title": title, "chunk_index": int(chunk_id[-1])}
+                    for chunk_id, doc_id, title in passages
+                ]
+            ],
         }
         self.patch_client(monkeypatch, lambda request: httpx.Response(200, json=body))
         record = question_record(item, runner.retrieve("http://ks:8080", item["question"], 50))
@@ -400,7 +452,15 @@ class TestArguments:
 
     def test_model_hash_and_filters_are_checked(self, runner):
         args = self.parse(
-            runner, "--label", "x", "--model-sha256", "abc", "--category", "lookup,trivia", "--limit", "0"
+            runner,
+            "--label",
+            "x",
+            "--model-sha256",
+            "abc",
+            "--category",
+            "lookup,trivia",
+            "--limit",
+            "0",
         )
         assert runner.argument_errors(args) == [
             "--model-sha256 must be 64 hexadecimal characters",
@@ -433,7 +493,12 @@ class TestWarmup:
 
             async def ask(self, question, conversation_name):
                 questions.append(question)
-                return {"mode": "chat", "status": "ok", "answer": "$250", "timing_source": "websocket"}
+                return {
+                    "mode": "chat",
+                    "status": "ok",
+                    "answer": "$250",
+                    "timing_source": "websocket",
+                }
 
         monkeypatch.setattr(runner, "EvalClient", FakeEvalClient)
         return questions
@@ -466,7 +531,9 @@ class TestResummarizeCommand:
         record["review"][0].update(reviewer="ana", answer_correct=True)
         record["review"][1].update(reviewer="ben", answer_correct=True)
         path = tmp_path / "cpu16-2026-10-05.json"
-        path.write_text(json.dumps(build_report(label="cpu16", run={}, testset={}, records=[record])))
+        path.write_text(
+            json.dumps(build_report(label="cpu16", run={}, testset={}, records=[record]))
+        )
         monkeypatch.setattr(sys, "argv", ["run-eval.py", "--resummarize", str(path)])
         assert runner.main() == 0
         summary = json.loads(path.read_text(encoding="utf-8"))["summary"]["manual_review"]
@@ -506,7 +573,9 @@ class TestTargets:
         asyncio.run(runner.ChatTarget(Client(), "cpu16 / q8").ask("Hi?", item_id="direct-01"))
         assert names == ["eval-cpu16-q8-direct-01"]
 
-    def test_the_retrieval_target_queries_the_knowledge_store_through_retrieve(self, runner, monkeypatch):
+    def test_the_retrieval_target_queries_the_knowledge_store_through_retrieve(
+        self, runner, monkeypatch
+    ):
         asked = []
 
         def retrieve(ks_url, question, top_k):
@@ -514,7 +583,9 @@ class TestTargets:
             return {"mode": "retrieval", "status": "ok"}
 
         monkeypatch.setattr(runner, "retrieve", retrieve)
-        outcome = asyncio.run(runner.RetrievalTarget("http://ks:8080", 50).ask("Hotel limit?", item_id="exp-01"))
+        outcome = asyncio.run(
+            runner.RetrievalTarget("http://ks:8080", 50).ask("Hotel limit?", item_id="exp-01")
+        )
         assert asked == [("http://ks:8080", "Hotel limit?", 50)]
         assert outcome == {"mode": "retrieval", "status": "ok"}
 
@@ -523,12 +594,18 @@ VERIFIED_SHA256 = "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e
 LLM_CONFIG = {
     "Image": "ghcr.io/ggml-org/llama.cpp:server-b11382",
     "Cmd": [
-        "--model", "/models/qwen3-4b-instruct-2507-Q4_K_M.gguf",
-        "--alias", "qwen3-4b",
-        "--port", "8080",
-        "--ctx-size", "4096",
-        "-ctk", "q8_0",
-        "-ctv", "q8_0",
+        "--model",
+        "/models/qwen3-4b-instruct-2507-Q4_K_M.gguf",
+        "--alias",
+        "qwen3-4b",
+        "--port",
+        "8080",
+        "--ctx-size",
+        "4096",
+        "-ctk",
+        "q8_0",
+        "-ctv",
+        "q8_0",
         "--metrics",
     ],
 }
@@ -552,7 +629,9 @@ def fake_docker(responses, calls=None):
 
 
 class TestLlamaServerFacts:
-    def test_facts_come_from_the_container_config_props_and_verified_hash(self, runner, monkeypatch):
+    def test_facts_come_from_the_container_config_props_and_verified_hash(
+        self, runner, monkeypatch
+    ):
         calls = []
         responses = [
             (["inspect"], json.dumps(LLM_CONFIG)),
@@ -571,7 +650,9 @@ class TestLlamaServerFacts:
         assert ["exec", "llm", "curl", "-fsS", "-m", "10", "http://localhost:8080/props"] in calls
 
     def test_build_falls_back_to_the_image_tag_when_props_are_unreadable(self, runner, monkeypatch):
-        monkeypatch.setattr(runner, "docker_text", fake_docker([(["inspect"], json.dumps(LLM_CONFIG))]))
+        monkeypatch.setattr(
+            runner, "docker_text", fake_docker([(["inspect"], json.dumps(LLM_CONFIG))])
+        )
         facts = runner.llama_server_facts("llm")
         assert facts["build"] == "b11382"
         assert facts["model_sha256"] is None
@@ -588,7 +669,11 @@ class TestModelInfo:
         return runner.build_parser().parse_args(["--label", "x", *argv])
 
     def test_the_running_server_fills_the_model_fields(self, runner):
-        server = {"settings": {"alias": "qwen3-4b"}, "model_path": "/models/q4.gguf", "model_sha256": VERIFIED_SHA256}
+        server = {
+            "settings": {"alias": "qwen3-4b"},
+            "model_path": "/models/q4.gguf",
+            "model_sha256": VERIFIED_SHA256,
+        }
         model = runner.model_info(self.parse(runner), server)
         assert model["name"] == "qwen3-4b"
         assert model["file"] == "q4.gguf"
@@ -597,7 +682,9 @@ class TestModelInfo:
 
     def test_given_values_win_over_the_server(self, runner):
         args = self.parse(runner, "--model-file", "own.gguf", "--model-sha256", "AB" * 32)
-        model = runner.model_info(args, {"model_path": "/models/q4.gguf", "model_sha256": VERIFIED_SHA256})
+        model = runner.model_info(
+            args, {"model_path": "/models/q4.gguf", "model_sha256": VERIFIED_SHA256}
+        )
         assert model["file"] == "own.gguf"
         assert model["sha256"] == "ab" * 32
         assert model["sha256_source"] == "given"
@@ -615,13 +702,18 @@ class TestModelInfo:
 class TestTestsetInfo:
     def test_the_shipped_testset_is_recorded_relative_to_the_repo(self, runner, testset):
         args = runner.build_parser().parse_args(["--label", "x"])
-        assert runner.testset_info(args, testset, testset["items"])["path"] == "tests/eval/testset.yaml"
+        assert (
+            runner.testset_info(args, testset, testset["items"])["path"]
+            == "tests/eval/testset.yaml"
+        )
 
     def test_a_testset_outside_the_repo_keeps_no_part_of_its_folder(
         self, runner, monkeypatch, testset, host_folder, host_folder_leaks
     ):
         monkeypatch.setattr(runner, "file_sha256", lambda path: "0" * 64)
-        args = runner.build_parser().parse_args(["--label", "x", "--testset", f"{host_folder}/own-testset.yaml"])
+        args = runner.build_parser().parse_args(
+            ["--label", "x", "--testset", f"{host_folder}/own-testset.yaml"]
+        )
         info = runner.testset_info(args, testset, testset["items"])
         assert info["path"] == "own-testset.yaml"
         assert host_folder_leaks(json.dumps(info)) == []
@@ -630,11 +722,15 @@ class TestTestsetInfo:
 class TestStackResources:
     def test_docker_host_swap_is_read_inside_a_container(self, runner, monkeypatch):
         meminfo = "SwapTotal: 4194304 kB\nSwapFree: 3145728 kB\n"
-        monkeypatch.setattr(runner, "docker_text", fake_docker([(["exec", "mas", "cat", "/proc/meminfo"], meminfo)]))
+        monkeypatch.setattr(
+            runner, "docker_text", fake_docker([(["exec", "mas", "cat", "/proc/meminfo"], meminfo)])
+        )
         assert runner.docker_host_swap_used_bytes("mas") == 1024 * 1024 * 1024
         assert runner.docker_host_swap_used_bytes(None) is None
 
-    def test_cgroup_peaks_oom_kills_and_page_cache_per_container_with_null_when_unread(self, runner, monkeypatch):
+    def test_cgroup_peaks_oom_kills_and_page_cache_per_container_with_null_when_unread(
+        self, runner, monkeypatch
+    ):
         memory_stat = "anon 100\nfile 300\nactive_file 50\ninactive_file 250\nfile_mapped 200\n"
         responses = [
             (["exec", "llm", "cat", "/sys/fs/cgroup/memory.peak"], "5368709120\n"),
@@ -644,11 +740,21 @@ class TestStackResources:
         ]
         monkeypatch.setattr(runner, "docker_text", fake_docker(responses))
         assert runner.container_cgroup_facts(["llm", "agent", "web_client"]) == {
-            "container_lifetime_peak_mem_bytes": {"agent": None, "llm": 5368709120, "web_client": None},
+            "container_lifetime_peak_mem_bytes": {
+                "agent": None,
+                "llm": 5368709120,
+                "web_client": None,
+            },
             "container_oom_kills": {"agent": 1, "llm": 0, "web_client": None},
             "container_memory_stat": {
                 "agent": None,
-                "llm": {"anon": 100, "file": 300, "active_file": 50, "inactive_file": 250, "file_mapped": 200},
+                "llm": {
+                    "anon": 100,
+                    "file": 300,
+                    "active_file": 50,
+                    "inactive_file": 250,
+                    "file_mapped": 200,
+                },
                 "web_client": None,
             },
         }
@@ -670,8 +776,13 @@ class TestStackResources:
 
     def test_llama_server_memory_is_read_from_pid_1_of_the_llm_container(self, runner, monkeypatch):
         status = "Name:\tllama-server\nRssAnon:\t 1835008 kB\nRssFile:\t 2490368 kB\n"
-        monkeypatch.setattr(runner, "docker_text", fake_docker([(["exec", "llm", "cat", "/proc/1/status"], status)]))
-        assert runner.llm_process_memory("llm") == {"name": "llama-server", "rss_file_bytes": 2490368 * 1024}
+        monkeypatch.setattr(
+            runner, "docker_text", fake_docker([(["exec", "llm", "cat", "/proc/1/status"], status)])
+        )
+        assert runner.llm_process_memory("llm") == {
+            "name": "llama-server",
+            "rss_file_bytes": 2490368 * 1024,
+        }
         assert runner.llm_process_memory("vllm") is None
         assert runner.llm_process_memory(None) is None
 
@@ -696,13 +807,17 @@ class TestStackResources:
         assert sampler.peaks.as_dict()["container_peak_mem_bytes"] == {"llm": 300, "mas": 10}
         assert sampler.end_window() is None
 
-    def test_the_start_snapshot_covers_the_containers_seen_before_when_docker_stats_fails(self, runner, monkeypatch):
+    def test_the_start_snapshot_covers_the_containers_seen_before_when_docker_stats_fails(
+        self, runner, monkeypatch
+    ):
         usage = iter([{"mas": 10, "llm": 100}, {}])
         monkeypatch.setattr(runner, "docker_memory_usage", lambda: next(usage))
         monkeypatch.setattr(runner, "swap_used_bytes", lambda: None)
         monkeypatch.setattr(runner, "docker_host_swap_used_bytes", lambda container: None)
         asked = []
-        monkeypatch.setattr(runner, "container_cgroup_facts", lambda names: asked.append(names) or {})
+        monkeypatch.setattr(
+            runner, "container_cgroup_facts", lambda names: asked.append(names) or {}
+        )
         monkeypatch.setattr(runner, "llm_process_memory", lambda container: None)
         monkeypatch.setattr(runner, "llm_mapped_outside_now", lambda container: None)
         sampler = runner.ResourceSampler(60.0, "mas", "llm")
@@ -712,13 +827,23 @@ class TestStackResources:
 
     def test_each_sample_reads_the_llm_pages_only_while_llm_runs(self, runner, monkeypatch):
         gib = 2**30
-        usage = iter([{"llm": 4 * gib, "mas": 5 * gib}, {"llm": 2 * gib, "mas": 5 * gib + gib // 2}, {"mas": 6 * gib}])
+        usage = iter(
+            [
+                {"llm": 4 * gib, "mas": 5 * gib},
+                {"llm": 2 * gib, "mas": 5 * gib + gib // 2},
+                {"mas": 6 * gib},
+            ]
+        )
         monkeypatch.setattr(runner, "docker_memory_usage", lambda: next(usage))
         monkeypatch.setattr(runner, "swap_used_bytes", lambda: None)
         monkeypatch.setattr(runner, "docker_host_swap_used_bytes", lambda container: None)
         outside = iter([0, 2 * gib])
         read = []
-        monkeypatch.setattr(runner, "llm_mapped_outside_now", lambda container: read.append(container) or next(outside))
+        monkeypatch.setattr(
+            runner,
+            "llm_mapped_outside_now",
+            lambda container: read.append(container) or next(outside),
+        )
         sampler = runner.ResourceSampler(60.0, "mas", "llm")
         for _ in range(3):
             sampler.sample()
@@ -731,7 +856,9 @@ class TestStackResources:
 
     def test_the_llm_pages_come_from_pid_1_status_and_the_llm_cgroup(self, runner, monkeypatch):
         status = "Name:\tllama-server\nRssFile:\t 2490368 kB\n"
-        memory_stat = "anon 100\nfile 300\nactive_file 1048576\ninactive_file 250\nfile_mapped 2097152\n"
+        memory_stat = (
+            "anon 100\nfile 300\nactive_file 1048576\ninactive_file 250\nfile_mapped 2097152\n"
+        )
         responses = [
             (["exec", "llm", "cat", "/proc/1/status"], status),
             (["exec", "llm", "cat", "/sys/fs/cgroup/memory.stat"], memory_stat),
@@ -748,9 +875,14 @@ class TestStackResources:
         monkeypatch.setattr(
             runner,
             "container_cgroup_facts",
-            lambda names: {"container_lifetime_peak_mem_bytes": dict.fromkeys(names, 7), "container_oom_kills": {}},
+            lambda names: {
+                "container_lifetime_peak_mem_bytes": dict.fromkeys(names, 7),
+                "container_oom_kills": {},
+            },
         )
-        monkeypatch.setattr(runner, "container_restart_counts", lambda names: dict.fromkeys(names, 0))
+        monkeypatch.setattr(
+            runner, "container_restart_counts", lambda names: dict.fromkeys(names, 0)
+        )
         monkeypatch.setattr(runner, "llm_process_memory", lambda container: None)
         sampler = runner.ResourceSampler(60.0)
         sampler.start()
@@ -764,22 +896,40 @@ class TestStackResources:
         assert resources["at_questions_start"] is None
         assert resources["unsampled_peak_excess_bytes"] is None
 
-    def test_questions_are_checked_against_the_samples_and_p_adds_the_model_pages(self, runner, monkeypatch):
+    def test_questions_are_checked_against_the_samples_and_p_adds_the_model_pages(
+        self, runner, monkeypatch
+    ):
         gib = 2**30
-        monkeypatch.setattr(runner, "docker_memory_usage", lambda: {"knowledge_store": 2 * gib, "llm": 3 * gib})
+        monkeypatch.setattr(
+            runner, "docker_memory_usage", lambda: {"knowledge_store": 2 * gib, "llm": 3 * gib}
+        )
         monkeypatch.setattr(runner, "swap_used_bytes", lambda: None)
         swaps = iter([gib, gib // 4])
-        monkeypatch.setattr(runner, "docker_host_swap_used_bytes", lambda container: next(swaps, gib // 2))
-        llm_stat = {"anon": gib, "file": 4 * gib, "active_file": 2 * gib, "inactive_file": 2 * gib, "file_mapped": 2 * gib}
+        monkeypatch.setattr(
+            runner, "docker_host_swap_used_bytes", lambda container: next(swaps, gib // 2)
+        )
+        llm_stat = {
+            "anon": gib,
+            "file": 4 * gib,
+            "active_file": 2 * gib,
+            "inactive_file": 2 * gib,
+            "file_mapped": 2 * gib,
+        }
         facts = iter(
             [
                 {
-                    "container_lifetime_peak_mem_bytes": {"knowledge_store": 5 * gib, "llm": 3 * gib},
+                    "container_lifetime_peak_mem_bytes": {
+                        "knowledge_store": 5 * gib,
+                        "llm": 3 * gib,
+                    },
                     "container_oom_kills": {"knowledge_store": 0, "llm": 0},
                     "container_memory_stat": {"knowledge_store": None, "llm": llm_stat},
                 },
                 {
-                    "container_lifetime_peak_mem_bytes": {"knowledge_store": 5 * gib, "llm": 6 * gib},
+                    "container_lifetime_peak_mem_bytes": {
+                        "knowledge_store": 5 * gib,
+                        "llm": 6 * gib,
+                    },
                     "container_oom_kills": {"knowledge_store": 0, "llm": 0},
                     "container_memory_stat": {"knowledge_store": None, "llm": llm_stat},
                 },
@@ -798,7 +948,9 @@ class TestStackResources:
             return {"name": "llama-server", "rss_file_bytes": 2 * gib + gib // 8}
 
         monkeypatch.setattr(runner, "container_cgroup_facts", cgroup_facts)
-        monkeypatch.setattr(runner, "container_restart_counts", lambda names: dict.fromkeys(names, 0))
+        monkeypatch.setattr(
+            runner, "container_restart_counts", lambda names: dict.fromkeys(names, 0)
+        )
         monkeypatch.setattr(runner, "llm_process_memory", llm_process)
         outside = iter([2 * gib])
         monkeypatch.setattr(runner, "llm_mapped_outside_now", lambda container: next(outside, 0))
@@ -810,9 +962,13 @@ class TestStackResources:
         resources = sampler.finish()
         assert asked == [["knowledge_store", "llm"], ["knowledge_store", "llm"]]
         assert processes == ["llm", "llm"]
-        assert resources["at_questions_start"]["container_lifetime_peak_mem_bytes"]["llm"] == 3 * gib
+        assert (
+            resources["at_questions_start"]["container_lifetime_peak_mem_bytes"]["llm"] == 3 * gib
+        )
         assert resources["at_questions_start"]["docker_host_swap_used_bytes"] == gib // 4
-        assert resources["at_questions_start"]["llm_process"]["rss_file_bytes"] == 2 * gib + gib // 8
+        assert (
+            resources["at_questions_start"]["llm_process"]["rss_file_bytes"] == 2 * gib + gib // 8
+        )
         assert resources["unsampled_peak_excess_bytes"] == {"llm": gib}
         assert resources["docker_host_swap_peak_used_bytes"] == gib
         assert resources["docker_host_swap_growth_bytes"] == gib // 4
@@ -888,13 +1044,17 @@ class TestQuestionProbes:
         outcome = {}
         asyncio.run(probes.before())
         asyncio.run(probes.after(outcome))
-        assert outcome == {"routing_decision": {"decisions": 1, "methods": {"embedding": 1}, "seconds": 0.012}}
+        assert outcome == {
+            "routing_decision": {"decisions": 1, "methods": {"embedding": 1}, "seconds": 0.012}
+        }
         assert urls == ["http://localhost:8000", "http://localhost:8000"]
 
     def test_router_metrics_are_read_from_the_mas_metrics_endpoint(self, runner, monkeypatch):
         text = 'mas_routing_decision_seconds_count{method="rules"} 2.0\n'
         replies = {
-            "http://mas:8000/metrics": httpx.Response(200, text="# TYPE mas_routing_decision_seconds histogram\n" + text),
+            "http://mas:8000/metrics": httpx.Response(
+                200, text="# TYPE mas_routing_decision_seconds histogram\n" + text
+            ),
             "http://old-mas:8000/metrics": httpx.Response(404),
         }
 
@@ -904,7 +1064,9 @@ class TestQuestionProbes:
             return replies[url]
 
         monkeypatch.setattr(runner.httpx, "get", get)
-        assert runner.read_routing_decisions("http://mas:8000/") == {"rules": {"count": 2.0, "seconds": 0.0}}
+        assert runner.read_routing_decisions("http://mas:8000/") == {
+            "rules": {"count": 2.0, "seconds": 0.0}
+        }
         assert runner.read_routing_decisions("http://old-mas:8000") is None
         assert runner.read_routing_decisions("http://down:8000") is None
 
@@ -917,7 +1079,12 @@ class TestQuestionProbes:
                 return "agent-1"
 
             async def ask(self, question, conversation_name):
-                return {"mode": "chat", "status": "ok", "answer": "$250", "timing_source": "websocket"}
+                return {
+                    "mode": "chat",
+                    "status": "ok",
+                    "answer": "$250",
+                    "timing_source": "websocket",
+                }
 
         class CountingProbes:
             def __init__(self):
@@ -935,11 +1102,22 @@ class TestQuestionProbes:
 
         monkeypatch.setattr(runner, "EvalClient", FakeEvalClient)
         args = runner.build_parser().parse_args(
-            ["--label", "x", "--skip-corpus-check", "--token", "jwt", "--ids", "fin-01,exp-01", "--no-warmup"]
+            [
+                "--label",
+                "x",
+                "--skip-corpus-check",
+                "--token",
+                "jwt",
+                "--ids",
+                "fin-01,exp-01",
+                "--no-warmup",
+            ]
         )
         probes = CountingProbes()
         items = runner.chosen_items(args, testset)
-        records = asyncio.run(runner.run_questions(args, testset, items, lambda _records: None, probes))
+        records = asyncio.run(
+            runner.run_questions(args, testset, items, lambda _records: None, probes)
+        )
         assert probes.calls == ["start", "before", "after", "before", "after"]
         assert [record["llm"] for record in records] == [{"prompt_s": 1.0}, {"prompt_s": 1.0}]
 
@@ -954,7 +1132,9 @@ class TestMachineInfo:
         }
         monkeypatch.setattr(runner.host, "collect_host", lambda path: collected)
         monkeypatch.setattr(runner.pipeline, "gpu_info", lambda: {"error": "nvidia-smi not found"})
-        args = runner.build_parser().parse_args(["--label", "x", "--reference", "cpu16", "--ram-speed", "3200 MT/s"])
+        args = runner.build_parser().parse_args(
+            ["--label", "x", "--reference", "cpu16", "--ram-speed", "3200 MT/s"]
+        )
         machine = runner.machine_info(args, {"mem_total_bytes": 16 * 2**30})
         assert machine["reference"] == "cpu16"
         assert machine["cpu_model"] == "AMD Ryzen 5 5600U"
@@ -1000,15 +1180,23 @@ class TestMainAgainstAStack:
                     "dispatch_s": 0.3,
                 }
 
-        collected = {"cpu_model": ("AMD Ryzen 5 5600U", "/proc/cpuinfo"), "ram_total_bytes": (16 * 2**30, "/proc/meminfo")}
+        collected = {
+            "cpu_model": ("AMD Ryzen 5 5600U", "/proc/cpuinfo"),
+            "ram_total_bytes": (16 * 2**30, "/proc/meminfo"),
+        }
         monkeypatch.setattr(runner, "EvalClient", FakeEvalClient)
-        monkeypatch.setattr(runner, "llama_server_facts", lambda container: facts if container == "llm" else None)
+        monkeypatch.setattr(
+            runner, "llama_server_facts", lambda container: facts if container == "llm" else None
+        )
         routing = iter(
             [
                 {},
                 {"embedding": {"count": 1.0, "seconds": 0.01}},
                 {"embedding": {"count": 1.0, "seconds": 0.01}},
-                {"embedding": {"count": 1.0, "seconds": 0.01}, "llm": {"count": 1.0, "seconds": 2.0}},
+                {
+                    "embedding": {"count": 1.0, "seconds": 0.01},
+                    "llm": {"count": 1.0, "seconds": 2.0},
+                },
             ]
         )
         monkeypatch.setattr(runner, "read_llm_counters", lambda container, port: next(scrapes))
@@ -1034,8 +1222,19 @@ class TestMainAgainstAStack:
 
         monkeypatch.setattr(runner, "ResourceSampler", RecordingSampler)
         argv = [
-            "run-eval.py", "--label", "eval-cpu16", "--reference", "cpu16", "--skip-corpus-check",
-            "--token", "jwt", "--ids", "fin-01,exp-01", "--no-warmup", "--out-dir", str(tmp_path),
+            "run-eval.py",
+            "--label",
+            "eval-cpu16",
+            "--reference",
+            "cpu16",
+            "--skip-corpus-check",
+            "--token",
+            "jwt",
+            "--ids",
+            "fin-01,exp-01",
+            "--no-warmup",
+            "--out-dir",
+            str(tmp_path),
             "--sample-resources",
         ]
         monkeypatch.setattr(sys, "argv", argv)
@@ -1151,7 +1350,9 @@ class TestTokenRenewal:
 
         def task_status(token):
             if token == "Bearer jwt-2":
-                return httpx.Response(200, json={"status": "completed", "result": "$250 per night."})
+                return httpx.Response(
+                    200, json={"status": "completed", "result": "$250 per night."}
+                )
             clock[0] += runner.TOKEN_REFRESH_S / 2
             return httpx.Response(200, json={"status": "running"})
 

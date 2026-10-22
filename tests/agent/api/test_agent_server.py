@@ -15,7 +15,9 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-RELEASE_VERSION = (Path(__file__).resolve().parents[3] / "VERSION").read_text(encoding="utf-8").strip()
+RELEASE_VERSION = (
+    (Path(__file__).resolve().parents[3] / "VERSION").read_text(encoding="utf-8").strip()
+)
 
 
 @pytest.fixture

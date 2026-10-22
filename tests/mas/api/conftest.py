@@ -126,9 +126,7 @@ def mas_client(routing_db):
         app.include_router(router)
         app.dependency_overrides[get_db] = lambda: routing_db
         app.dependency_overrides[get_current_user] = lambda: user
-        return httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://mas"
-        )
+        return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://mas")
 
     return _factory
 

@@ -85,9 +85,7 @@ class TestANewInstall:
 
 
 class TestAnUpgradeFromAnInstallThatStillHasAdmin:
-    def test_the_shipped_password_is_replaced_by_the_one_in_the_environment(
-        self, session, logs
-    ):
+    def test_the_shipped_password_is_replaced_by_the_one_in_the_environment(self, session, logs):
         add_admin(session, "admin")
 
         assert admin_account.ensure_admin_account(session, "admin", GENERATED) == "replaced"
@@ -96,17 +94,13 @@ class TestAnUpgradeFromAnInstallThatStillHasAdmin:
         assert not bcrypt_context.verify("admin", stored_hash(session))
         logs["log_user_action"].assert_called_once()
 
-    def test_a_second_start_finds_the_account_already_on_the_new_password(
-        self, session, logs
-    ):
+    def test_a_second_start_finds_the_account_already_on_the_new_password(self, session, logs):
         add_admin(session, "admin")
         admin_account.ensure_admin_account(session, "admin", GENERATED)
 
         assert admin_account.ensure_admin_account(session, "admin", GENERATED) == "matches"
 
-    def test_an_environment_still_on_admin_keeps_it_and_says_how_to_change_it(
-        self, session, logs
-    ):
+    def test_an_environment_still_on_admin_keeps_it_and_says_how_to_change_it(self, session, logs):
         add_admin(session, "admin")
         before = stored_hash(session)
 
@@ -155,8 +149,10 @@ class TestTheCommandTheInstallerRuns:
         settings = MagicMock(super_user_username="admin", super_user_password=GENERATED)
         session.close = MagicMock()
 
-        with patch.object(admin_account, "SessionLocal", return_value=session), \
-                patch.object(admin_account, "settings", settings):
+        with (
+            patch.object(admin_account, "SessionLocal", return_value=session),
+            patch.object(admin_account, "settings", settings),
+        ):
             assert admin_account.main() == 0
 
         printed = capsys.readouterr().out

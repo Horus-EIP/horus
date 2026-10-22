@@ -41,7 +41,9 @@ EmbeddingsClient = embeddings_client_module().EmbeddingsClient
 class Embeddings:
     def __init__(self, url: str, entries: list[dict], model: str | None = None):
         self.model = model
-        self.client = EmbeddingsClient(url, model or entries[0]["body"]["model"], entries[0]["size"])
+        self.client = EmbeddingsClient(
+            url, model or entries[0]["body"]["model"], entries[0]["size"]
+        )
         refused = self.client.wait_until_ready(time.monotonic() + START_WAIT_SECONDS)
         if refused:
             raise refused
@@ -97,7 +99,7 @@ def streamed_text(raw: str):
     for line in raw.splitlines():
         if not line.startswith("data:"):
             continue
-        data = line[len("data:"):].strip()
+        data = line[len("data:") :].strip()
         if data == "[DONE]":
             return
         chunk = json.loads(data)

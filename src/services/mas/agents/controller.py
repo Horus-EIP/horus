@@ -73,9 +73,7 @@ async def check_agent_heartbeat(test_mode=False):
                         status_updates[agent.id] = expected_status
 
                         if is_active:
-                            log_agent_operation(
-                                agent.id, "HEARTBEAT", "Agent became active"
-                            )
+                            log_agent_operation(agent.id, "HEARTBEAT", "Agent became active")
                         else:
                             log_agent_operation(
                                 agent.id,

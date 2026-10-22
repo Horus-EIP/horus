@@ -24,6 +24,7 @@ from pathlib import Path
 
 REQUIRED_FILES = ("config.json", "tokenizer.json")
 
+
 # Match the model dir name to the trailing path segment of the hub id so a
 # user who flips LLM_MODEL_ID also gets a fresh, predictable directory.
 def _default_model_dir(base: Path, model_id: str) -> Path:

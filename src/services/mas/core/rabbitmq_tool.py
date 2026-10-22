@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Response, status
 from pydantic import BaseModel
 
@@ -19,6 +18,7 @@ def get_agent_communicator():
     global _agent_communicator
     if _agent_communicator is None:
         from core.agent_communication import AgentCommunicator
+
         _agent_communicator = AgentCommunicator(rabbitmq_instance)
     return _agent_communicator
 

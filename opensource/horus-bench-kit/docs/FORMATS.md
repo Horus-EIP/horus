@@ -255,8 +255,14 @@ PROFILE = Profile(
     outcome_fields=("queue_s", *OUTCOME_FIELDS),
     summary_sections=(("queue_s", field_stats("queue_s")),),
 )
-report = build_report(label="run", run=run, testset=testset, records=records,
-                      sections={"machine": machine}, profile=PROFILE)
+report = build_report(
+    label="run",
+    run=run,
+    testset=testset,
+    records=records,
+    sections={"machine": machine},
+    profile=PROFILE,
+)
 ```
 
 `hbk-eval compare` reads any JSON report whose `questions` records hold at least `id` and `category`. It recomputes the core summary from the records and ignores the keys it does not know. It checks `schema_version` only for its own kind. `hbk-eval resummarize` only rewrites `horus-bench-kit-eval` reports; a product calls `resummarize(report, PROFILE)` itself.
@@ -463,7 +469,13 @@ from horus_bench_kit.markdown import MetricRow
 
 PROFILE = CompareProfile(
     rows=(*LLAMA_BENCH_ROWS, MetricRow("queue_median_s", "Queue time, median", "scheduler", "s")),
-    families=(Family("acme-eval", 1, lambda doc: {"queue_median_s": stat_metric(doc["summary"], "queue_s", "median")}),),
+    families=(
+        Family(
+            "acme-eval",
+            1,
+            lambda doc: {"queue_median_s": stat_metric(doc["summary"], "queue_s", "median")},
+        ),
+    ),
     heading="## Acme metrics",
 )
 ```

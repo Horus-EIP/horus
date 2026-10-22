@@ -37,6 +37,7 @@ def write_env(tmp: Path, body: str) -> Path:
     (infra / ".env").write_text(body, encoding="utf-8")
     return infra
 
+
 class ExpectedServices(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -91,8 +92,7 @@ class ExpectedServices(unittest.TestCase):
     def test_deactivated_line_is_not_read(self):
         infra = write_env(
             self.tmp,
-            "#[horus-installer-unset] COMPOSE_FILE=docker-compose.yml:"
-            f"{profiles.CPU_OVERLAY}\n",
+            f"#[horus-installer-unset] COMPOSE_FILE=docker-compose.yml:{profiles.CPU_OVERLAY}\n",
         )
         self.assertIn("vllm", horus_install.expected_services(infra))
 
@@ -100,6 +100,7 @@ class ExpectedServices(unittest.TestCase):
         infra = self.tmp / "src" / "infra"
         infra.mkdir(parents=True)
         self.assertIn("vllm", horus_install.expected_services(infra))
+
 
 class RequireInstalled(unittest.TestCase):
     def setUp(self) -> None:
@@ -125,6 +126,7 @@ class RequireInstalled(unittest.TestCase):
         infra = write_env(self.tmp, "LLM_BACKEND=vllm\n")
         horus_install.require_installed(infra)
 
+
 class EventStream(unittest.TestCase):
     def test_disabled_emits_nothing(self):
         buffer = io.StringIO()
@@ -137,7 +139,7 @@ class EventStream(unittest.TestCase):
         line = buffer.getvalue().rstrip("\n")
         self.assertTrue(line.startswith(EVENT_PREFIX))
         self.assertEqual(
-            json.loads(line[len(EVENT_PREFIX):]),
+            json.loads(line[len(EVENT_PREFIX) :]),
             {"event": "step", "text": "hello"},
         )
 
@@ -163,6 +165,7 @@ class EventStream(unittest.TestCase):
 
         Events(True, Broken()).emit("step", text="hello")
 
+
 class LogMirrorsToEvents(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -178,7 +181,7 @@ class LogMirrorsToEvents(unittest.TestCase):
     def events_from(self, log: Log) -> list[dict]:
         del log
         return [
-            json.loads(line[len(EVENT_PREFIX):])
+            json.loads(line[len(EVENT_PREFIX) :])
             for line in self.buffer.getvalue().splitlines()
             if line.startswith(EVENT_PREFIX)
         ]
@@ -237,8 +240,8 @@ class LogMirrorsToEvents(unittest.TestCase):
         exits = [e for e in self.events_from(log) if e["event"] == "exit"]
         self.assertEqual(len(exits), 1)
 
-class LogRecordsTheRealExitCode(unittest.TestCase):
 
+class LogRecordsTheRealExitCode(unittest.TestCase):
     def test_failed_run_records_its_own_code(self):
         with tempfile.TemporaryDirectory() as name:
             tmp = Path(name)
@@ -247,16 +250,22 @@ class LogRecordsTheRealExitCode(unittest.TestCase):
                 "services: {}\n", encoding="utf-8"
             )
             log_path = tmp / "install-log.txt"
-            with mock.patch.object(horus_install, "LOG_PATH", log_path),                     mock.patch.object(horus_install, "PROFILE_JSON", tmp / "horus-profile.json"),                     contextlib.redirect_stdout(io.StringIO()):
+            with (
+                mock.patch.object(horus_install, "LOG_PATH", log_path),
+                mock.patch.object(horus_install, "PROFILE_JSON", tmp / "horus-profile.json"),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
                 code = horus_install.main(["--start", "--repo", str(tmp)])
 
             self.assertEqual(code, EXIT_NOT_INSTALLED)
             last = [
-                line for line in log_path.read_text(encoding="utf-8").splitlines()
+                line
+                for line in log_path.read_text(encoding="utf-8").splitlines()
                 if " EXIT " in line
             ][-1]
             self.assertIn(str(EXIT_NOT_INSTALLED), last)
             self.assertIn("EXIT_NOT_INSTALLED", last)
+
 
 class CpuProfileDoesNotFailTheInstall(unittest.TestCase):
     """A CPU install must finish and report success.
@@ -266,22 +275,26 @@ class CpuProfileDoesNotFailTheInstall(unittest.TestCase):
     install, so answer quality is a warning there and a hard failure on GPU.
     """
 
-    SPIRAL = ("I couldn't extract a consistent answer from the retrieved "
-              "content for this step.")
+    SPIRAL = "I couldn't extract a consistent answer from the retrieved content for this step."
 
     def make_steps(self):
         import smoke
+
         recorded = []
         steps = smoke.Steps.__new__(smoke.Steps)
         steps.entries = []
         steps._t0 = 0.0
         steps._current = None
-        steps.log = type("Quiet", (), {
-            "say": lambda self, msg="": None,
-            "ok": lambda self, msg: recorded.append(("ok", msg)),
-            "warn": lambda self, msg: recorded.append(("warn", msg)),
-            "fail": lambda self, msg: recorded.append(("fail", msg)),
-        })()
+        steps.log = type(
+            "Quiet",
+            (),
+            {
+                "say": lambda self, msg="": None,
+                "ok": lambda self, msg: recorded.append(("ok", msg)),
+                "warn": lambda self, msg: recorded.append(("warn", msg)),
+                "fail": lambda self, msg: recorded.append(("fail", msg)),
+            },
+        )()
         return steps, recorded
 
     def test_cpu_profiles_are_recognised(self):
@@ -291,6 +304,7 @@ class CpuProfileDoesNotFailTheInstall(unittest.TestCase):
 
     def test_a_bad_answer_stops_a_gpu_install(self):
         import smoke
+
         steps, _ = self.make_steps()
         with self.assertRaises(InstallError) as caught:
             smoke.step_check_answer(steps, self.SPIRAL, True)
@@ -298,6 +312,7 @@ class CpuProfileDoesNotFailTheInstall(unittest.TestCase):
 
     def test_the_same_answer_only_warns_on_cpu(self):
         import smoke
+
         steps, recorded = self.make_steps()
         smoke.step_check_answer(steps, self.SPIRAL, False)
         self.assertEqual([kind for kind, _ in recorded], ["warn"])
@@ -305,6 +320,7 @@ class CpuProfileDoesNotFailTheInstall(unittest.TestCase):
 
     def test_the_cpu_warning_says_it_is_not_a_failure(self):
         import smoke
+
         steps, recorded = self.make_steps()
         smoke.step_check_answer(steps, self.SPIRAL, False)
         message = recorded[0][1]
@@ -314,6 +330,7 @@ class CpuProfileDoesNotFailTheInstall(unittest.TestCase):
 
     def test_a_good_answer_passes_on_either_profile(self):
         import smoke
+
         for require in (True, False):
             steps, recorded = self.make_steps()
             smoke.step_check_answer(steps, "**$4.2M**", require)
@@ -341,12 +358,14 @@ class CpuProfileDoesNotFailTheInstall(unittest.TestCase):
 
     def unanswered_chat(self, model_server):
         import smoke
+
         steps, _ = self.make_steps()
         deadline = smoke.time.monotonic() + 600
-        with mock.patch.object(smoke, "ask", return_value=("", "no answer in 480s")), \
-                self.assertRaises(InstallError) as caught:
-            smoke.step_chat(steps, None, "http://localhost:8000", deadline, "token",
-                            model_server)
+        with (
+            mock.patch.object(smoke, "ask", return_value=("", "no answer in 480s")),
+            self.assertRaises(InstallError) as caught,
+        ):
+            smoke.step_chat(steps, None, "http://localhost:8000", deadline, "token", model_server)
         return caught.exception.fix
 
     def test_an_unanswered_cpu_chat_points_at_the_llm_container(self):
@@ -363,6 +382,7 @@ class CpuProfileDoesNotFailTheInstall(unittest.TestCase):
 
     def test_the_smoke_test_reads_the_model_server_from_the_compose_files(self):
         import smoke
+
         with tempfile.TemporaryDirectory() as name:
             cpu = write_env(Path(name), f"COMPOSE_FILE=docker-compose.yml:{profiles.CPU_OVERLAY}\n")
             self.assertEqual(smoke.model_server_of(cpu), "llm")
@@ -393,14 +413,16 @@ class Parser(unittest.TestCase):
             self.parse(["--not-a-flag"])
         self.assertEqual(caught.exception.code, 2)
 
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 ABORT = "dependency failed to start: container mas is unhealthy"
 
 PULLABLE = {"postgres": {"image": "postgres:latest"}, "redis": {"image": "redis:7"}}
 BUILT = {"mas": {"build": {"context": "../services/mas"}, "image": "infra-mas"}}
-PREBUILT = {"mas": {"build": {"context": "../services/mas"},
-                    "image": "ghcr.io/acme/horus-mas:0.1.2-cpu"}}
+PREBUILT = {
+    "mas": {"build": {"context": "../services/mas"}, "image": "ghcr.io/acme/horus-mas:0.1.2-cpu"}
+}
 UNNAMED = {"mas": {"build": {"context": "../services/mas"}}}
 
 UP = "up -d --no-build"
@@ -411,11 +433,14 @@ NAMED_PROJECT = f"COMPOSE_PROJECT_NAME={PROJECT}\n"
 
 REFUSED = 'Error response from daemon: Head "https://ghcr.io/v2/acme/horus-mas/manifests/0.1.2-cpu": unauthorized'
 
+
 def compose_config(services):
     return {"name": "infra", "services": dict(services)}
 
+
 def ps_row(service, health, state="running"):
     return {"Service": service, "State": state, "Health": health}
+
 
 def watched(line, watch_for, found):
     if found is not None:
@@ -423,11 +448,26 @@ def watched(line, watch_for, found):
             if phrase in line:
                 found.add(phrase)
 
-class FakeDocker:
 
-    def __init__(self, config=None, pulls=(), ups=((0, ""),), ps=((),), local_images=(),
-                 builds=(), vanishing=None, image_ids=None, downs=(), volumes=(),
-                 volume_rm=0, declared=(), containers=(), container_rm=0, sizes=None):
+class FakeDocker:
+    def __init__(
+        self,
+        config=None,
+        pulls=(),
+        ups=((0, ""),),
+        ps=((),),
+        local_images=(),
+        builds=(),
+        vanishing=None,
+        image_ids=None,
+        downs=(),
+        volumes=(),
+        volume_rm=0,
+        declared=(),
+        containers=(),
+        container_rm=0,
+        sizes=None,
+    ):
         self.config = config
         self.sizes = sizes
         self.declared = set(declared)
@@ -479,8 +519,11 @@ class FakeDocker:
             code = self.downs.pop(0) if self.downs else 0
             if code == 0 and "--volumes" in cmd:
                 project = (self.config or {}).get("name")
-                self.volumes = [volume for volume in self.volumes
-                                if not (volume[1] == project and volume[2] in self.declared)]
+                self.volumes = [
+                    volume
+                    for volume in self.volumes
+                    if not (volume[1] == project and volume[2] in self.declared)
+                ]
             return code
         code, line = self.ups.pop(0)
         watched(line, watch_for, found)
@@ -503,9 +546,11 @@ class FakeDocker:
         if cmd[1:3] == ["image", "ls"]:
             repository = cmd[-1]
             self.history.append("ls " + repository)
-            rows = [f"{self.image_ids.get(image, 'id-' + image)} {image}"
-                    for image in sorted(self.local_images)
-                    if image.rpartition(":")[0] == repository]
+            rows = [
+                f"{self.image_ids.get(image, 'id-' + image)} {image}"
+                for image in sorted(self.local_images)
+                if image.rpartition(":")[0] == repository
+            ]
             return Result(0, "\n".join(rows), "")
         if cmd[1:3] == ["volume", "ls"]:
             owner = cmd[cmd.index("--filter") + 1].rpartition("=")[2]
@@ -549,8 +594,8 @@ class FakeDocker:
     def deleted_volumes(self) -> list[str]:
         return [entry for entry in self.history if entry.startswith("volume rm")]
 
-class FakeDockerCase(unittest.TestCase):
 
+class FakeDockerCase(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
@@ -580,8 +625,8 @@ class FakeDockerCase(unittest.TestCase):
                 raised = exc
         return buf.getvalue(), raised
 
-class ImagePulls(FakeDockerCase):
 
+class ImagePulls(FakeDockerCase):
     def test_each_image_is_pulled_on_its_own_one_at_a_time(self):
         docker = FakeDocker(config=compose_config(PULLABLE))
         _out, raised = self.run_it(docker)
@@ -628,8 +673,9 @@ class ImagePulls(FakeDockerCase):
         self.assertEqual(docker.started(), [])
 
     def test_an_image_already_on_this_machine_is_used_when_the_pull_keeps_failing(self):
-        docker = FakeDocker(config=compose_config(PULLABLE), pulls=[1, 1, 1, 0],
-                            local_images={"postgres:latest"})
+        docker = FakeDocker(
+            config=compose_config(PULLABLE), pulls=[1, 1, 1, 0], local_images={"postgres:latest"}
+        )
         out, raised = self.run_it(docker)
         self.assertIsNone(raised)
         self.assertIn("inspect postgres:latest", docker.history)
@@ -656,8 +702,8 @@ class ImagePulls(FakeDockerCase):
         self.assertEqual(docker.pulled(), ["pull --ignore-buildable"] * 2)
         self.assertEqual(docker.started(), [SOURCE_UP])
 
-class PrebuiltImagePulls(FakeDockerCase):
 
+class PrebuiltImagePulls(FakeDockerCase):
     def test_an_install_pulls_our_images_first_and_never_builds(self):
         docker = FakeDocker(config=compose_config({**PULLABLE, **PREBUILT}))
         _out, raised = self.run_it(docker)
@@ -688,29 +734,36 @@ class PrebuiltImagePulls(FakeDockerCase):
         self.assertEqual(docker.started(), [])
 
     def test_a_refused_image_stops_at_once_and_the_fix_names_the_token(self):
-        docker = FakeDocker(config=compose_config({**PULLABLE, **PREBUILT}),
-                            pulls=[(1, REFUSED)])
+        docker = FakeDocker(config=compose_config({**PULLABLE, **PREBUILT}), pulls=[(1, REFUSED)])
         _out, raised = self.run_it(docker)
         self.assertIsNotNone(raised)
         self.assertEqual(raised.code, EXIT_COMPOSE_PULL_FAILED)
         self.assertEqual(docker.pulled(), ["pull mas"])
         self.assertIn("ghcr.io/acme/horus-mas:0.1.2-cpu", raised.detail)
-        for hint in ("registry-token.txt", "HORUS_REGISTRY_TOKEN", "--registry-token-file",
-                     "--build-from-source"):
+        for hint in (
+            "registry-token.txt",
+            "HORUS_REGISTRY_TOKEN",
+            "--registry-token-file",
+            "--build-from-source",
+        ):
             self.assertIn(hint, raised.fix)
         self.assertEqual(docker.started(), [])
 
     def test_a_refusal_behind_a_successful_exit_is_still_a_refusal(self):
-        docker = FakeDocker(config=compose_config(PREBUILT), pulls=[(0, REFUSED)],
-                            vanishing={"mas": 1})
+        docker = FakeDocker(
+            config=compose_config(PREBUILT), pulls=[(0, REFUSED)], vanishing={"mas": 1}
+        )
         _out, raised = self.run_it(docker)
         self.assertIsNotNone(raised)
         self.assertEqual(docker.pulled(), ["pull mas"])
         self.assertIn("registry-token.txt", raised.fix)
 
     def test_a_copy_already_on_this_machine_is_used_when_the_registry_refuses(self):
-        docker = FakeDocker(config=compose_config(PREBUILT), pulls=[(1, REFUSED)],
-                            local_images={"ghcr.io/acme/horus-mas:0.1.2-cpu"})
+        docker = FakeDocker(
+            config=compose_config(PREBUILT),
+            pulls=[(1, REFUSED)],
+            local_images={"ghcr.io/acme/horus-mas:0.1.2-cpu"},
+        )
         out, raised = self.run_it(docker)
         self.assertIsNone(raised)
         self.assertIn("already on this machine", out)
@@ -764,8 +817,9 @@ class PrebuiltImagePulls(FakeDockerCase):
                 self.assertNotIn("prebuilt, signed", text)
 
     def test_images_an_earlier_install_built_are_named_once_the_stack_runs(self):
-        docker = FakeDocker(config=compose_config({**PULLABLE, **PREBUILT}),
-                            local_images={"infra-mas"})
+        docker = FakeDocker(
+            config=compose_config({**PULLABLE, **PREBUILT}), local_images={"infra-mas"}
+        )
         out, raised = self.run_it(docker)
         self.assertIsNone(raised)
         self.assertIn("docker image rm infra-mas", out)
@@ -781,37 +835,45 @@ class PrebuiltImagePulls(FakeDockerCase):
         self.assertNotIn("docker image rm", out)
 
     def test_other_releases_and_flavors_of_our_images_are_named_once_the_stack_runs(self):
-        docker = FakeDocker(config=compose_config(PREBUILT),
-                            local_images={"ghcr.io/acme/horus-mas:0.1.1-cpu",
-                                          "ghcr.io/acme/horus-mas:0.1.2-gpu"})
+        docker = FakeDocker(
+            config=compose_config(PREBUILT),
+            local_images={"ghcr.io/acme/horus-mas:0.1.1-cpu", "ghcr.io/acme/horus-mas:0.1.2-gpu"},
+        )
         out, raised = self.run_it(docker)
         self.assertIsNone(raised)
-        self.assertIn("docker image rm ghcr.io/acme/horus-mas:0.1.1-cpu "
-                      "ghcr.io/acme/horus-mas:0.1.2-gpu\n", out)
+        self.assertIn(
+            "docker image rm ghcr.io/acme/horus-mas:0.1.1-cpu ghcr.io/acme/horus-mas:0.1.2-gpu\n",
+            out,
+        )
         self.assertNotIn("horus-mas:0.1.2-cpu", out.split("docker image rm", 1)[1])
 
     def test_old_source_builds_and_old_releases_are_named_together(self):
-        docker = FakeDocker(config=compose_config(PREBUILT),
-                            local_images={"infra-mas", "ghcr.io/acme/horus-mas:0.1.1-cpu"})
+        docker = FakeDocker(
+            config=compose_config(PREBUILT),
+            local_images={"infra-mas", "ghcr.io/acme/horus-mas:0.1.1-cpu"},
+        )
         out, _raised = self.run_it(docker)
         self.assertIn("docker image rm infra-mas ghcr.io/acme/horus-mas:0.1.1-cpu\n", out)
 
     def test_another_tag_of_the_image_in_use_is_not_called_unused(self):
         commit_tag = "ghcr.io/acme/horus-mas:sha-0123456789ab-cpu"
-        docker = FakeDocker(config=compose_config(PREBUILT), local_images={commit_tag},
-                            image_ids={commit_tag: "same",
-                                       "ghcr.io/acme/horus-mas:0.1.2-cpu": "same"})
+        docker = FakeDocker(
+            config=compose_config(PREBUILT),
+            local_images={commit_tag},
+            image_ids={commit_tag: "same", "ghcr.io/acme/horus-mas:0.1.2-cpu": "same"},
+        )
         out, _raised = self.run_it(docker)
         self.assertNotIn("docker image rm", out)
 
     def test_an_untagged_image_is_not_offered_for_removal_by_name(self):
-        docker = FakeDocker(config=compose_config(PREBUILT),
-                            local_images={"ghcr.io/acme/horus-mas:<none>"})
+        docker = FakeDocker(
+            config=compose_config(PREBUILT), local_images={"ghcr.io/acme/horus-mas:<none>"}
+        )
         out, _raised = self.run_it(docker)
         self.assertNotIn("docker image rm", out)
 
-class RunCanKeepOutputOutOfTheLog(unittest.TestCase):
 
+class RunCanKeepOutputOutOfTheLog(unittest.TestCase):
     SECRET = "JWT_SECRET_KEY=not-for-the-log"
 
     def run_and_read_log(self, **kwargs):
@@ -820,7 +882,9 @@ class RunCanKeepOutputOutOfTheLog(unittest.TestCase):
             log = Log(log_path)
             result = run(
                 [sys.executable, "-c", "import os; print(os.environ['HORUS_TEST_SECRET'])"],
-                log, env={"HORUS_TEST_SECRET": self.SECRET}, **kwargs,
+                log,
+                env={"HORUS_TEST_SECRET": self.SECRET},
+                **kwargs,
             )
             log.close(0)
             return result, log_path.read_text(encoding="utf-8")
@@ -835,8 +899,8 @@ class RunCanKeepOutputOutOfTheLog(unittest.TestCase):
         self.assertNotIn(self.SECRET, text)
         self.assertIn("output not logged", text)
 
-class DependencyAbort(FakeDockerCase):
 
+class DependencyAbort(FakeDockerCase):
     def test_a_dependency_abort_is_retried_once_and_can_succeed(self):
         docker = FakeDocker(config=compose_config({}), ups=[(1, ABORT), (0, "")])
         out, raised = self.run_it(docker)
@@ -850,14 +914,18 @@ class DependencyAbort(FakeDockerCase):
             config=compose_config({}),
             ups=[(1, ABORT), (0, "")],
             ps=[
-                [ps_row("mas", "unhealthy"), ps_row("postgres", "healthy"),
-                 ps_row("agent", "", state="created")],
+                [
+                    ps_row("mas", "unhealthy"),
+                    ps_row("postgres", "healthy"),
+                    ps_row("agent", "", state="created"),
+                ],
                 [ps_row("mas", "starting")],
                 [ps_row("mas", "healthy")],
             ],
         )
-        patcher = mock.patch.object(horus_install, "wait_for_health",
-                                    wraps=horus_install.wait_for_health)
+        patcher = mock.patch.object(
+            horus_install, "wait_for_health", wraps=horus_install.wait_for_health
+        )
         waited = patcher.start()
         self.addCleanup(patcher.stop)
         _out, raised = self.run_it(docker)
@@ -892,8 +960,9 @@ class DependencyAbort(FakeDockerCase):
         self.assertEqual(docker.started(), [SOURCE_UP, SOURCE_UP])
 
     def test_a_service_that_never_becomes_healthy_stops_with_the_health_timeout(self):
-        docker = FakeDocker(config=compose_config({}), ups=[(1, ABORT), (0, "")],
-                            ps=[[ps_row("mas", "unhealthy")]])
+        docker = FakeDocker(
+            config=compose_config({}), ups=[(1, ABORT), (0, "")], ps=[[ps_row("mas", "unhealthy")]]
+        )
         _out, raised = self.run_it(docker, timeout=0)
         self.assertIsNotNone(raised)
         self.assertEqual(raised.code, EXIT_HEALTH_TIMEOUT)
@@ -901,8 +970,7 @@ class DependencyAbort(FakeDockerCase):
         self.assertEqual(len(docker.started()), 1)
 
     def test_the_retry_happens_at_most_once(self):
-        docker = FakeDocker(config=compose_config({}),
-                            ups=[(1, ABORT), (1, ABORT), (1, ABORT)])
+        docker = FakeDocker(config=compose_config({}), ups=[(1, ABORT), (1, ABORT), (1, ABORT)])
         _out, raised = self.run_it(docker)
         self.assertIsNotNone(raised)
         self.assertEqual(raised.code, EXIT_COMPOSE_UP_FAILED)
@@ -922,32 +990,45 @@ class DependencyAbort(FakeDockerCase):
         self.assertIn("--start", raised.fix)
         self.assertIn("retried once", raised.fix)
 
-class ModelBeforeTheFirstStart(FakeDockerCase):
 
+class ModelBeforeTheFirstStart(FakeDockerCase):
     def test_from_source_the_model_downloads_after_the_build_and_before_the_first_start(self):
         docker = FakeDocker(config=compose_config(PULLABLE))
         _out, raised = self.run_it(
-            docker, from_source=True, before_start=lambda: docker.history.append("model"))
+            docker, from_source=True, before_start=lambda: docker.history.append("model")
+        )
         self.assertIsNone(raised)
-        self.assertEqual(docker.history,
-                         ["config", "pull postgres", "pull redis", "build", "model", SOURCE_UP])
+        self.assertEqual(
+            docker.history, ["config", "pull postgres", "pull redis", "build", "model", SOURCE_UP]
+        )
 
     def test_the_model_downloads_after_the_prebuilt_images_and_before_the_first_start(self):
         docker = FakeDocker(config=compose_config({**PULLABLE, **PREBUILT}))
-        _out, raised = self.run_it(
-            docker, before_start=lambda: docker.history.append("model"))
+        _out, raised = self.run_it(docker, before_start=lambda: docker.history.append("model"))
         self.assertIsNone(raised)
         self.assertEqual(
             docker.history,
-            ["config", "pull mas", "inspect ghcr.io/acme/horus-mas:0.1.2-cpu",
-             "pull postgres", "pull redis", "inspect infra-mas", "ls ghcr.io/acme/horus-mas",
-             "model", UP],
+            [
+                "config",
+                "pull mas",
+                "inspect ghcr.io/acme/horus-mas:0.1.2-cpu",
+                "pull postgres",
+                "pull redis",
+                "inspect infra-mas",
+                "ls ghcr.io/acme/horus-mas",
+                "model",
+                UP,
+            ],
         )
 
     def test_without_a_build_the_model_still_comes_before_the_start(self):
         docker = FakeDocker(config=compose_config(PULLABLE))
-        self.run_it(docker, from_source=True, no_build=True,
-                    before_start=lambda: docker.history.append("model"))
+        self.run_it(
+            docker,
+            from_source=True,
+            no_build=True,
+            before_start=lambda: docker.history.append("model"),
+        )
         self.assertEqual(docker.history[-2:], ["model", SOURCE_UP])
 
     def test_a_failed_model_download_starts_nothing(self):
@@ -963,15 +1044,16 @@ class ModelBeforeTheFirstStart(FakeDockerCase):
     def test_a_failed_build_stops_before_the_model_and_the_start(self):
         docker = FakeDocker(config=compose_config(PULLABLE), builds=[1])
         steps = []
-        _out, raised = self.run_it(docker, from_source=True,
-                                   before_start=lambda: steps.append("model"))
+        _out, raised = self.run_it(
+            docker, from_source=True, before_start=lambda: steps.append("model")
+        )
         self.assertEqual(raised.code, EXIT_COMPOSE_UP_FAILED)
         self.assertIn("did not build", raised.headline)
         self.assertEqual(steps, [])
         self.assertEqual(docker.started(), [])
 
-class FullInstallPassesTheTimeoutOn(unittest.TestCase):
 
+class FullInstallPassesTheTimeoutOn(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
@@ -1003,8 +1085,8 @@ class FullInstallPassesTheTimeoutOn(unittest.TestCase):
         self.assertEqual(code, horus_install.EXIT_OK)
         self.assertEqual(pull_and_build.call_args.kwargs["timeout"], 4200)
 
-class StartWaitsOutADependencyAbort(FakeDockerCase):
 
+class StartWaitsOutADependencyAbort(FakeDockerCase):
     def setUp(self) -> None:
         super().setUp()
         self.infra = write_env(self.tmp, "COMPOSE_FILE=docker-compose.yml\n")
@@ -1028,8 +1110,13 @@ class StartWaitsOutADependencyAbort(FakeDockerCase):
     def test_start_waits_for_the_starting_service_then_starts_the_rest(self):
         docker = FakeDocker(
             ups=[(1, ABORT), (0, "")],
-            ps=[[ps_row("mas", "starting"), ps_row("postgres", "healthy"),
-                 ps_row("agent", "", state="created")]],
+            ps=[
+                [
+                    ps_row("mas", "starting"),
+                    ps_row("postgres", "healthy"),
+                    ps_row("agent", "", state="created"),
+                ]
+            ],
         )
         code, out, raised = self.start_it(docker, timeout=2400)
         self.assertIsNone(raised)
@@ -1071,16 +1158,20 @@ class StartWaitsOutADependencyAbort(FakeDockerCase):
         self.assertEqual(docker.started(), [SOURCE_UP])
 
     def test_a_prebuilt_install_never_builds_on_start_not_even_on_the_second_attempt(self):
-        self.infra = write_env(self.tmp, "COMPOSE_FILE=docker-compose.yml\n"
-                                         "HORUS_REGISTRY=ghcr.io/acme\n")
+        self.infra = write_env(
+            self.tmp, "COMPOSE_FILE=docker-compose.yml\nHORUS_REGISTRY=ghcr.io/acme\n"
+        )
         docker = FakeDocker(ups=[(1, ABORT), (0, "")])
         _code, _out, raised = self.start_it(docker)
         self.assertIsNone(raised)
         self.assertEqual(docker.started(), [UP, UP])
 
     def test_a_deactivated_registry_line_means_a_source_install(self):
-        self.infra = write_env(self.tmp, "COMPOSE_FILE=docker-compose.yml\n"
-                                         "#[horus-installer-unset] HORUS_REGISTRY=ghcr.io/acme\n")
+        self.infra = write_env(
+            self.tmp,
+            "COMPOSE_FILE=docker-compose.yml\n"
+            "#[horus-installer-unset] HORUS_REGISTRY=ghcr.io/acme\n",
+        )
         docker = FakeDocker()
         self.start_it(docker)
         self.assertEqual(docker.started(), [SOURCE_UP])
@@ -1093,8 +1184,10 @@ class StartWaitsOutADependencyAbort(FakeDockerCase):
         self.assertEqual(docker.started(), [SOURCE_UP + ORPHANS])
 
     def test_a_prebuilt_start_in_a_named_project_removes_orphans_on_both_attempts(self):
-        self.infra = write_env(self.tmp, "COMPOSE_FILE=docker-compose.yml\n"
-                                         "HORUS_REGISTRY=ghcr.io/acme\n" + NAMED_PROJECT)
+        self.infra = write_env(
+            self.tmp,
+            "COMPOSE_FILE=docker-compose.yml\nHORUS_REGISTRY=ghcr.io/acme\n" + NAMED_PROJECT,
+        )
         docker = FakeDocker(ups=[(1, ABORT), (0, "")])
         _code, _out, raised = self.start_it(docker)
         self.assertIsNone(raised)
@@ -1106,8 +1199,8 @@ class StartWaitsOutADependencyAbort(FakeDockerCase):
         self.start_it(docker, build=True)
         self.assertEqual(docker.started(), ["up -d --build" + ORPHANS, SOURCE_UP + ORPHANS])
 
-class RestartFallsBackWithoutBuilding(FakeDockerCase):
 
+class RestartFallsBackWithoutBuilding(FakeDockerCase):
     def setUp(self) -> None:
         super().setUp()
         for name in ("_require_docker", "wait_for_health", "ensure_installed_model"):
@@ -1136,8 +1229,8 @@ class RestartFallsBackWithoutBuilding(FakeDockerCase):
         history = self.restart("HORUS_REGISTRY=ghcr.io/acme\n" + NAMED_PROJECT)
         self.assertEqual(history, ["restart", UP + ORPHANS])
 
-class OrphansGoOnlyInANamedProject(FakeDockerCase):
 
+class OrphansGoOnlyInANamedProject(FakeDockerCase):
     def name_the_project(self, body: str = NAMED_PROJECT) -> None:
         (self.tmp / ".env").write_text(body, encoding="utf-8")
 
@@ -1196,16 +1289,22 @@ class OrphansGoOnlyInANamedProject(FakeDockerCase):
         os.environ[horus_install.IGNORE_ORPHANS_KEY] = "false"
         self.assertEqual(self.started_by_an_install(), [UP + ORPHANS])
 
-class FirstInstallTime(FakeDockerCase):
 
+class FirstInstallTime(FakeDockerCase):
     DOCUMENTS = (
         "packaging/README-FIRST.txt",
         "packaging/RELEASE-NOTES.md",
         "README.md",
         "docs/getting-started.md",
     )
-    STALE = ("10-30 minutes", "10-15 minutes", "10–15 minutes", "30–60 minutes",
-             "30-60 minutes", "under 30 minutes")
+    STALE = (
+        "10-30 minutes",
+        "10-15 minutes",
+        "10–15 minutes",
+        "30–60 minutes",
+        "30-60 minutes",
+        "under 30 minutes",
+    )
 
     def test_the_figure_is_the_one_the_beta_testers_measured(self):
         self.assertEqual(horus_install.FIRST_INSTALL_TIME, "1.5 to 2 hours")
@@ -1233,7 +1332,6 @@ class FirstInstallTime(FakeDockerCase):
 
 
 class ReclaimBuildCache(unittest.TestCase):
-
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
@@ -1241,8 +1339,9 @@ class ReclaimBuildCache(unittest.TestCase):
         self.log = Log(self.tmp / "install-log.txt")
         self.addCleanup(self.log.close, 0)
         self.addCleanup(setattr, horus_install, "run", horus_install.run)
-        self.addCleanup(setattr, horus_install, "reclaimable_build_cache",
-                        horus_install.reclaimable_build_cache)
+        self.addCleanup(
+            setattr, horus_install, "reclaimable_build_cache", horus_install.reclaimable_build_cache
+        )
         self.commands = []
 
     def stub(self, sizes, answer=None):
@@ -1265,15 +1364,22 @@ class ReclaimBuildCache(unittest.TestCase):
     def call(self, non_interactive=False, built_here=True):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            horus_install.offer_to_reclaim(self.log, non_interactive=non_interactive,
-                                           built_here=built_here)
+            horus_install.offer_to_reclaim(
+                self.log, non_interactive=non_interactive, built_here=built_here
+            )
         return buf.getvalue()
 
     def succeed(self, built_here):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            horus_install._success(self.log, self.tmp, "cpu-standard", {"mode": "demo"},
-                                   non_interactive=True, built_here=built_here)
+            horus_install._success(
+                self.log,
+                self.tmp,
+                "cpu-standard",
+                {"mode": "demo"},
+                non_interactive=True,
+                built_here=built_here,
+            )
         return buf.getvalue()
 
     def test_a_small_cache_is_not_mentioned_at_all(self):
@@ -1325,8 +1431,8 @@ LEFT_VOLUMES = (
 UNNAMED_DOWN = "down --volumes --rmi all"
 DOWN = UNNAMED_DOWN + ORPHANS
 
-class UninstallCase(FakeDockerCase):
 
+class UninstallCase(FakeDockerCase):
     def setUp(self) -> None:
         super().setUp()
         self.infra = write_env(self.tmp, NAMED_PROJECT)
@@ -1337,8 +1443,7 @@ class UninstallCase(FakeDockerCase):
         kwargs.setdefault("declared", {"postgresql_data"})
         return FakeDocker(config={"name": PROJECT, "services": services or {}}, **kwargs)
 
-    def uninstall(self, docker, answers=(), terminal=True, non_interactive=False,
-                  assume_yes=True):
+    def uninstall(self, docker, answers=(), terminal=True, non_interactive=False, assume_yes=True):
         horus_install._stream = docker.stream
         horus_install.run = docker.run
         replies = list(answers)
@@ -1352,28 +1457,34 @@ class UninstallCase(FakeDockerCase):
             return reply
 
         buf = io.StringIO()
-        with mock.patch.object(horus_install, "interactive_terminal", return_value=terminal), \
-                mock.patch("builtins.input", answer), contextlib.redirect_stdout(buf):
-            code = horus_install.do_uninstall(self.log, self.infra, assume_yes,
-                                              non_interactive=non_interactive)
+        with (
+            mock.patch.object(horus_install, "interactive_terminal", return_value=terminal),
+            mock.patch("builtins.input", answer),
+            contextlib.redirect_stdout(buf),
+        ):
+            code = horus_install.do_uninstall(
+                self.log, self.infra, assume_yes, non_interactive=non_interactive
+            )
         return code, buf.getvalue()
 
-class UninstallOffersTheVolumesOlderVersionsLeft(UninstallCase):
 
+class UninstallOffersTheVolumesOlderVersionsLeft(UninstallCase):
     def test_yes_deletes_the_old_redis_volume_once_the_stack_is_down(self):
         docker = self.docker(volumes=LEFT_VOLUMES)
         code, out = self.uninstall(docker, answers=["y"])
         self.assertEqual(code, EXIT_OK)
         self.assertEqual(docker.deleted_volumes(), [f"volume rm {OLD_REDIS_VOLUME}"])
-        self.assertLess(docker.history.index(DOWN),
-                        docker.history.index(f"volume rm {OLD_REDIS_VOLUME}"))
+        self.assertLess(
+            docker.history.index(DOWN), docker.history.index(f"volume rm {OLD_REDIS_VOLUME}")
+        )
         self.assertIn(f"Deleted {OLD_REDIS_VOLUME}", out)
 
     def test_the_question_comes_before_the_stack_comes_down(self):
         docker = self.docker(volumes=LEFT_VOLUMES)
         self.uninstall(docker, answers=["n"])
-        self.assertEqual(self.history_at_each_question,
-                         [["config", f"volume ls {PROJECT}", "system df"]])
+        self.assertEqual(
+            self.history_at_each_question, [["config", f"volume ls {PROJECT}", "system df"]]
+        )
 
     def test_no_keeps_the_volume_and_says_how_to_delete_it_later(self):
         docker = self.docker(volumes=LEFT_VOLUMES)
@@ -1469,8 +1580,10 @@ class UninstallOffersTheVolumesOlderVersionsLeft(UninstallCase):
     def test_the_uninstall_still_removes_orphans_and_the_declared_volumes(self):
         docker = self.docker()
         self.uninstall(docker)
-        self.assertEqual(docker.history, ["config", f"volume ls {PROJECT}", DOWN,
-                                          f"ps {PROJECT}", f"volume ls {PROJECT}"])
+        self.assertEqual(
+            docker.history,
+            ["config", f"volume ls {PROJECT}", DOWN, f"ps {PROJECT}", f"volume ls {PROJECT}"],
+        )
 
     def test_the_volumes_are_looked_for_under_the_name_compose_resolves(self):
         self.infra = write_env(self.tmp, "COMPOSE_PROJECT_NAME=${HORUS_NAME}\n")
@@ -1486,6 +1599,7 @@ class UninstallOffersTheVolumesOlderVersionsLeft(UninstallCase):
         self.assertEqual(self.prompts, [])
         self.assertEqual(docker.history, [])
 
+
 PROJECT_LABEL = "com.docker.compose.project"
 LEFT_CONTAINERS = (
     (f"{PROJECT}-pgadmin-1", {PROJECT_LABEL: PROJECT}),
@@ -1496,20 +1610,26 @@ LEFT_CONTAINERS = (
 REMOVE_LEFT = f"rm --force --volumes {PROJECT}-pgadmin-1 {PROJECT}-vllm-1"
 PGADMIN_VOLUME = (f"{PROJECT}_pgadmin_data", PROJECT, "pgadmin_data")
 
-class UninstallPointsOutTheMonitoringImages(UninstallCase):
 
+class UninstallPointsOutTheMonitoringImages(UninstallCase):
     def lean(self, compose_file: str) -> None:
-        (self.infra / ".env").write_text(f"{NAMED_PROJECT}COMPOSE_FILE={compose_file}\n", encoding="utf-8")
+        (self.infra / ".env").write_text(
+            f"{NAMED_PROJECT}COMPOSE_FILE={compose_file}\n", encoding="utf-8"
+        )
         base = REPO_ROOT / "src" / "infra" / profiles.BASE_COMPOSE
-        (self.infra / profiles.BASE_COMPOSE).write_text(base.read_text(encoding="utf-8"), encoding="utf-8")
+        (self.infra / profiles.BASE_COMPOSE).write_text(
+            base.read_text(encoding="utf-8"), encoding="utf-8"
+        )
 
     def test_a_lean_install_says_how_to_delete_the_monitoring_images(self):
         self.lean(f"docker-compose.yml:{profiles.MONITORING_OVERLAY}")
         code, out = self.uninstall(self.docker())
         self.assertEqual(code, EXIT_OK)
         images = horus_install.monitoring_images(self.infra)
-        self.assertEqual([image.split(":")[0] for image in images],
-                         ["grafana/loki", "grafana/alloy", "grafana/tempo", "prom/prometheus"])
+        self.assertEqual(
+            [image.split(":")[0] for image in images],
+            ["grafana/loki", "grafana/alloy", "grafana/tempo", "prom/prometheus"],
+        )
         self.assertIn("docker image rm " + " ".join(images), out)
 
     def test_an_install_that_ran_monitoring_says_nothing_about_its_images(self):
@@ -1519,21 +1639,31 @@ class UninstallPointsOutTheMonitoringImages(UninstallCase):
 
 
 class UninstallRemovesEveryContainerOfTheProject(UninstallCase):
-
     def test_the_containers_of_turned_off_profiles_go_after_the_down(self):
         docker = self.docker(containers=LEFT_CONTAINERS)
         code, out = self.uninstall(docker)
         self.assertEqual(code, EXIT_OK)
-        self.assertEqual(docker.history, ["config", f"volume ls {PROJECT}", DOWN,
-                                          f"ps {PROJECT}", REMOVE_LEFT, DOWN,
-                                          f"volume ls {PROJECT}"])
+        self.assertEqual(
+            docker.history,
+            [
+                "config",
+                f"volume ls {PROJECT}",
+                DOWN,
+                f"ps {PROJECT}",
+                REMOVE_LEFT,
+                DOWN,
+                f"volume ls {PROJECT}",
+            ],
+        )
         self.assertIn(f"Removed {PROJECT}-pgadmin-1, {PROJECT}-vllm-1", out)
 
     def test_other_projects_and_plain_containers_are_never_touched(self):
         docker = self.docker(containers=LEFT_CONTAINERS)
         self.uninstall(docker)
-        self.assertEqual([name for name, _labels in docker.containers],
-                         ["horus_other-pgadmin-1", "someone-elses-container"])
+        self.assertEqual(
+            [name for name, _labels in docker.containers],
+            ["horus_other-pgadmin-1", "someone-elses-container"],
+        )
 
     def test_nothing_is_removed_when_the_down_left_no_container(self):
         docker = self.docker(containers=LEFT_CONTAINERS[2:])
@@ -1575,17 +1705,27 @@ class UninstallRemovesEveryContainerOfTheProject(UninstallCase):
         self.assertEqual(code, EXIT_UNINSTALL_FAILED)
         self.assertIn("docker compose down -v --rmi all --remove-orphans", out)
 
+
 VLLM_VOLUME = (f"{PROJECT}_vllm_hf_cache", PROJECT, "vllm_hf_cache")
 OTHER_VLLM_VOLUME = ("horus_other_vllm_hf_cache", "horus_other", "vllm_hf_cache")
 TURNED_OFF_VOLUMES = (*LEFT_VOLUMES, PGADMIN_VOLUME, VLLM_VOLUME, OTHER_VLLM_VOLUME)
-SIZES = {OLD_REDIS_VOLUME: "1.709MB", PGADMIN_VOLUME[0]: "45.2MB", VLLM_VOLUME[0]: "3.46GB",
-         OTHER_VLLM_VOLUME[0]: "3.46GB"}
+SIZES = {
+    OLD_REDIS_VOLUME: "1.709MB",
+    PGADMIN_VOLUME[0]: "45.2MB",
+    VLLM_VOLUME[0]: "3.46GB",
+    OTHER_VLLM_VOLUME[0]: "3.46GB",
+}
 OFFERED = f"{OLD_REDIS_VOLUME} {PGADMIN_VOLUME[0]} {VLLM_VOLUME[0]}"
-VLLM_ON = {"vllm": {"volumes": [{"type": "volume", "source": "vllm_hf_cache",
-                                 "target": "/root/.cache/huggingface"}]}}
+VLLM_ON = {
+    "vllm": {
+        "volumes": [
+            {"type": "volume", "source": "vllm_hf_cache", "target": "/root/.cache/huggingface"}
+        ]
+    }
+}
+
 
 class UninstallOffersTheVolumesOfTurnedOffProfiles(UninstallCase):
-
     def offered_line(self, out, volume):
         return next(line for line in out.splitlines() if line.strip().startswith(volume[0]))
 
@@ -1618,12 +1758,17 @@ class UninstallOffersTheVolumesOfTurnedOffProfiles(UninstallCase):
         self.assertIn(VLLM_VOLUME, docker.volumes)
 
     def test_a_cache_a_service_that_is_on_uses_is_left_to_down(self):
-        docker = self.docker(services=VLLM_ON, volumes=TURNED_OFF_VOLUMES, sizes=SIZES,
-                             declared={"postgresql_data", "vllm_hf_cache"})
+        docker = self.docker(
+            services=VLLM_ON,
+            volumes=TURNED_OFF_VOLUMES,
+            sizes=SIZES,
+            declared={"postgresql_data", "vllm_hf_cache"},
+        )
         _code, out = self.uninstall(docker, answers=["y"])
         self.assertNotIn(VLLM_VOLUME[0], out)
-        self.assertEqual(docker.deleted_volumes(),
-                         [f"volume rm {OLD_REDIS_VOLUME} {PGADMIN_VOLUME[0]}"])
+        self.assertEqual(
+            docker.deleted_volumes(), [f"volume rm {OLD_REDIS_VOLUME} {PGADMIN_VOLUME[0]}"]
+        )
         self.assertNotIn(VLLM_VOLUME, docker.volumes)
 
     def test_a_size_docker_cannot_tell_still_asks(self):
@@ -1649,8 +1794,8 @@ class UninstallOffersTheVolumesOfTurnedOffProfiles(UninstallCase):
         self.assertIn(f"docker volume rm {unknown[0]}", out)
         self.assertIn(unknown, docker.volumes)
 
-class UninstallKnowsWhenTheRunIsUnattended(unittest.TestCase):
 
+class UninstallKnowsWhenTheRunIsUnattended(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
@@ -1660,9 +1805,11 @@ class UninstallKnowsWhenTheRunIsUnattended(unittest.TestCase):
 
     def uninstall_called_with(self, argv):
         args = horus_install.build_parser().parse_args(argv)
-        with mock.patch.object(horus_install, "find_repo", return_value=self.repo), \
-                mock.patch.object(horus_install, "banner"), \
-                mock.patch.object(horus_install, "do_uninstall", return_value=EXIT_OK) as uninstall:
+        with (
+            mock.patch.object(horus_install, "find_repo", return_value=self.repo),
+            mock.patch.object(horus_install, "banner"),
+            mock.patch.object(horus_install, "do_uninstall", return_value=EXIT_OK) as uninstall,
+        ):
             horus_install._dispatch(self.log, args)
         return uninstall.call_args
 

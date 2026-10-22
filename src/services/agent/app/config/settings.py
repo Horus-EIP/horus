@@ -3,6 +3,7 @@ settings.py
 ------------
 This module defines configuration settings for the MAS Orchestrator integration.
 """
+
 import os
 
 
@@ -38,7 +39,9 @@ KNOWLEDGE_STORE_URL = os.getenv("KNOWLEDGE_STORE_URL", "http://localhost:8080")
 # Optional URL path prefix if the store is behind a gateway (default: none). Example: /api/knowledge-store
 _ks_prefix = os.getenv("KNOWLEDGE_STORE_API_PREFIX", "").strip().rstrip("/")
 KNOWLEDGE_STORE_API_PREFIX = (
-    _ks_prefix if not _ks_prefix else (_ks_prefix if _ks_prefix.startswith("/") else f"/{_ks_prefix}")
+    _ks_prefix
+    if not _ks_prefix
+    else (_ks_prefix if _ks_prefix.startswith("/") else f"/{_ks_prefix}")
 )
 
 # Knowledge Store Client Configuration

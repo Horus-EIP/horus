@@ -46,22 +46,23 @@ VRAM_HEADROOM_NOTE = (
     "up to the sticker size of the next class."
 )
 
+
 def _vram_trigger(profile_name: str) -> str:
     for low, high, name in VRAM_BANDS:
         if name != profile_name:
             continue
         if high == float("inf"):
             return f"CUDA usable from Docker, {low:.1f} GiB of VRAM or more."
-        return (f"CUDA usable from Docker, at least {low:.1f} GiB and under "
-                f"{high:.1f} GiB of VRAM.")
+        return f"CUDA usable from Docker, at least {low:.1f} GiB and under {high:.1f} GiB of VRAM."
     return "CUDA usable from Docker."
+
 
 @dataclass(frozen=True)
 class Setting:
-
     value: str
     provenance: str
     why: str
+
 
 @dataclass(frozen=True)
 class Profile:
@@ -77,11 +78,13 @@ class Profile:
         provs = {s.provenance for s in self.settings.values()}
         return MEASURED if provs == {MEASURED} else DERIVED
 
+
 _ROUTER_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 _WORKER_MODEL = "Qwen/Qwen3-4B-Instruct-2507"
 
 _N_RESULTS = Setting(
-    "10", MEASURED,
+    "10",
+    MEASURED,
     "Retrieval breadth. Raising 4 -> 10 is what stopped the worker inventing "
     "figures on the demo corpus; it quoted the real number instead. That was "
     "measured with whole documents; results are now passages of at most 1,000 "
@@ -115,6 +118,7 @@ _CPU_MODEL_SERVER_MEMORY = "6g"
 
 _LEAN_MODEL_SERVER_MEMORY = "5g"
 
+
 def _no_swap_why(swap_key: str) -> str:
     return (
         f"Compose gives the swap limit the same value unless {swap_key} is "
@@ -122,21 +126,23 @@ def _no_swap_why(swap_key: str) -> str:
         "restarted instead of pushing the whole host into swap."
     )
 
+
 def _memory_settings() -> dict[str, Setting]:
     return {
         "MAS_MEM_LIMIT": Setting(
-            _CPU_MAS_MEMORY, DERIVED,
+            _CPU_MAS_MEMORY,
+            DERIVED,
             "MAS holds no model on the CPU: routing and aggregation run in "
             "llama-server, and a CPU MAS image has no torch or transformers. "
             "What is left is Python and the 90 MB MiniLM embedder on ONNX "
             "Runtime. 3g is about twice the 1 to 1.5 GB estimated when the "
             "image still had torch, so it is on the generous side now. MAS "
             "logs its peak RSS on every 'Completed task' line; read it before "
-            "going lower. "
-            + _no_swap_why("MAS_MEMSWAP_LIMIT"),
+            "going lower. " + _no_swap_why("MAS_MEMSWAP_LIMIT"),
         ),
         "AGENT_MEM_LIMIT": Setting(
-            _CPU_AGENT_MEMORY, DERIVED,
+            _CPU_AGENT_MEMORY,
+            DERIVED,
             "The agent holds no decision model on the CPU: it calls "
             "llama-server, and a CPU agent image has no torch or transformers. "
             "What is left is Python, LangChain and spaCy en_core_web_sm. 4g was "
@@ -146,7 +152,8 @@ def _memory_settings() -> dict[str, Setting]:
             "on every 'Task processed' line. " + _no_swap_why("AGENT_MEMSWAP_LIMIT"),
         ),
         "KNOWLEDGE_STORE_MEM_LIMIT": Setting(
-            _KNOWLEDGE_STORE_MEMORY, DERIVED,
+            _KNOWLEDGE_STORE_MEMORY,
+            DERIVED,
             "On the CPU the knowledge store holds the BGE base embedder on ONNX "
             "Runtime (about 110 million parameters, 0.44 GB in fp32), spaCy "
             "en_core_web_sm, Chroma and the working set of an ingestion. 6g was "
@@ -156,7 +163,8 @@ def _memory_settings() -> dict[str, Setting]:
             + _no_swap_why("KNOWLEDGE_STORE_MEMSWAP_LIMIT"),
         ),
         "LLM_SERVER_MEM_LIMIT": Setting(
-            _CPU_MODEL_SERVER_MEMORY, DERIVED,
+            _CPU_MODEL_SERVER_MEMORY,
+            DERIVED,
             f"llama-server holds the Q4_K_M weights ({GGUF_BYTES:,} bytes, "
             "2.3 GiB, memory-mapped), the KV cache of 8,192 tokens in f16 (36 "
             "layers x 8 KV heads x 128 x 2 for K and V x 2 bytes x 8,192 = "
@@ -167,13 +175,17 @@ def _memory_settings() -> dict[str, Setting]:
         ),
     }
 
+
 THREAD_KEYS: tuple[str, ...] = (
-    "LLM_SERVER_THREADS", "LLM_TORCH_INTRAOP_THREADS", "AGENT_TORCH_INTRAOP_THREADS",
+    "LLM_SERVER_THREADS",
+    "LLM_TORCH_INTRAOP_THREADS",
+    "AGENT_TORCH_INTRAOP_THREADS",
 )
 
 TORCH_THREADS_WITHOUT_A_MODEL = 1
 
 PHYSICAL_CORES_FALLBACK = 4
+
 
 def physical_cores(probe: dict | None) -> tuple[int, str]:
     cpu = (probe or {}).get("cpu") or {}
@@ -190,11 +202,13 @@ def physical_cores(probe: dict | None) -> tuple[int, str]:
         )
     return count, f"{count} physical cores detected"
 
+
 def _thread_settings(probe: dict | None) -> dict[str, Setting]:
     cores, basis = physical_cores(probe)
     return {
         "LLM_SERVER_THREADS": Setting(
-            str(cores), DERIVED,
+            str(cores),
+            DERIVED,
             f"llama-server's generation threads: all {cores} physical cores "
             f"({basis}). It is the only process that generates on this "
             "machine: MAS and the agent wait on its HTTP answer, and the "
@@ -205,7 +219,8 @@ def _thread_settings(probe: dict | None) -> dict[str, Setting]:
             "core count too. Not benchmarked; B-91 compares thread counts.",
         ),
         "LLM_TORCH_INTRAOP_THREADS": Setting(
-            str(TORCH_THREADS_WITHOUT_A_MODEL), DERIVED,
+            str(TORCH_THREADS_WITHOUT_A_MODEL),
+            DERIVED,
             "MAS loads no model in-process on the CPU, and a CPU MAS image has "
             "no torch. The name is historical: MAS's MiniLM embedder, which "
             "runs on ONNX Runtime for the router and skill matching, takes this "
@@ -214,7 +229,8 @@ def _thread_settings(probe: dict | None) -> dict[str, Setting]:
             "competes with llama-server.",
         ),
         "AGENT_TORCH_INTRAOP_THREADS": Setting(
-            str(TORCH_THREADS_WITHOUT_A_MODEL), DERIVED,
+            str(TORCH_THREADS_WITHOUT_A_MODEL),
+            DERIVED,
             "The agent loads no decision model on the CPU and a CPU agent image "
             "has no torch, so nothing reads this today: every answer comes "
             "from llama-server. One thread, so an agent image that brings "
@@ -222,39 +238,50 @@ def _thread_settings(probe: dict | None) -> dict[str, Setting]:
         ),
     }
 
+
 SERVER_KEYS: tuple[str, ...] = (
-    "LLM_SERVER_CACHE_TYPE_K", "LLM_SERVER_CACHE_TYPE_V", "LLM_SERVER_FLASH_ATTN",
+    "LLM_SERVER_CACHE_TYPE_K",
+    "LLM_SERVER_CACHE_TYPE_V",
+    "LLM_SERVER_FLASH_ATTN",
     "LLM_SERVER_CACHE_RAM_MIB",
 )
+
 
 def _standard_server_settings() -> dict[str, Setting]:
     return {
         "LLM_SERVER_CACHE_TYPE_K": Setting(
-            "f16", DERIVED,
+            "f16",
+            DERIVED,
             "llama-server keeps the keys of its KV cache in f16, its own default "
             "and the plan's first choice: 1.13 GiB for 8,192 tokens. q8_0 would "
             "halve that at a cost in answer quality the test set has not measured.",
         ),
         "LLM_SERVER_CACHE_TYPE_V": Setting(
-            "f16", DERIVED, "The values of the KV cache, in f16 like the keys.",
+            "f16",
+            DERIVED,
+            "The values of the KV cache, in f16 like the keys.",
         ),
         "LLM_SERVER_FLASH_ATTN": Setting(
-            "auto", DERIVED,
+            "auto",
+            DERIVED,
             "llama-server's default: flash attention wherever the CPU backend "
             "supports it. An f16 cache does not need it.",
         ),
         "LLM_SERVER_CACHE_RAM_MIB": Setting(
-            "1024", DERIVED,
+            "1024",
+            DERIVED,
             "Caps llama-server's prompt cache at 1 GiB instead of its 8 GiB "
             "default. The cache lets a request that starts like an earlier one "
             "skip re-reading that start.",
         ),
     }
 
+
 def _lean_server_settings() -> dict[str, Setting]:
     return {
         "LLM_VLLM_MAX_MODEL_LEN": Setting(
-            str(LEAN_CONTEXT_TOKENS), DERIVED,
+            str(LEAN_CONTEXT_TOKENS),
+            DERIVED,
             "Half the cpu-standard context (ADR-006 option B), so the KV cache "
             "halves too. It still holds the 6,000-character retrieval cap, about "
             "2,000 tokens, with room for the answer: both clients size the answer "
@@ -262,7 +289,8 @@ def _lean_server_settings() -> dict[str, Setting]:
             "--ctx-size.",
         ),
         "LLM_SERVER_CACHE_TYPE_K": Setting(
-            "q8_0", DERIVED,
+            "q8_0",
+            DERIVED,
             "q8_0 stores 32 values in 34 bytes instead of 64. With the 4,096 "
             "context the KV cache is 36 layers x 8 KV heads x 128 x 2 x 1.0625 "
             "bytes x 4,096 = 0.30 GiB, against 1.13 GiB for cpu-standard. What "
@@ -270,20 +298,25 @@ def _lean_server_settings() -> dict[str, Setting]:
             "measures on the test set.",
         ),
         "LLM_SERVER_CACHE_TYPE_V": Setting(
-            "q8_0", DERIVED, "The values of the KV cache, in q8_0 like the keys.",
+            "q8_0",
+            DERIVED,
+            "The values of the KV cache, in q8_0 like the keys.",
         ),
         "LLM_SERVER_FLASH_ATTN": Setting(
-            "on", DERIVED,
+            "on",
+            DERIVED,
             "llama-server needs flash attention to quantize the V cache, so it is "
             "asked for explicitly instead of left to 'auto'.",
         ),
         "LLM_SERVER_CACHE_RAM_MIB": Setting(
-            "256", DERIVED,
+            "256",
+            DERIVED,
             "A 256 MiB prompt cache instead of 1 GiB: 0.75 GiB less, at the cost "
             "of re-reading more prompt starts.",
         ),
         "LLM_SERVER_MEM_LIMIT": Setting(
-            _LEAN_MODEL_SERVER_MEMORY, DERIVED,
+            _LEAN_MODEL_SERVER_MEMORY,
+            DERIVED,
             f"llama-server holds the Q4_K_M weights ({GGUF_BYTES:,} bytes, 2.33 "
             "GiB, memory-mapped), the 0.30 GiB q8_0 KV cache, about 0.5 GiB of "
             "compute buffers and up to 0.25 GiB of prompt cache: 3.38 GiB, which "
@@ -292,59 +325,73 @@ def _lean_server_settings() -> dict[str, Setting]:
         ),
     }
 
+
 def _vllm_common() -> dict[str, Setting]:
     return {
         "LLM_BACKEND": Setting(
-            "vllm", MEASURED,
+            "vllm",
+            MEASURED,
             "Generation goes to the vllm container's OpenAI API. There is no "
             "fallback: if vllm is down, chat returns HTTP 500.",
         ),
         "LLM_VLLM_URL": Setting(
-            "http://vllm:8000/v1", MEASURED,
+            "http://vllm:8000/v1",
+            MEASURED,
             "In-network address of the vllm service. The code default points at "
             "the host instead, which is wrong inside Compose.",
         ),
         "LLM_VLLM_MODEL": Setting(
-            _SERVED_NAME, MEASURED,
-            "Must equal VLLM_SERVED_MODEL_NAME or MAS requests a model the "
-            "server does not host.",
+            _SERVED_NAME,
+            MEASURED,
+            "Must equal VLLM_SERVED_MODEL_NAME or MAS requests a model the server does not host.",
         ),
         "VLLM_SERVED_MODEL_NAME": Setting(
-            _SERVED_NAME, MEASURED,
+            _SERVED_NAME,
+            MEASURED,
             "The --served-model-name the vllm container advertises.",
         ),
         "LLM_FORCE_CPU": Setting(
-            "0", MEASURED, "Let the MAS router use CUDA when the container sees a card.",
+            "0",
+            MEASURED,
+            "Let the MAS router use CUDA when the container sees a card.",
         ),
         "MODEL_DEVICE": Setting(
-            "auto", MEASURED, "Agent picks CUDA inside the container when it is visible.",
+            "auto",
+            MEASURED,
+            "Agent picks CUDA inside the container when it is visible.",
         ),
         "LLM_MODEL_ID": Setting(
-            _ROUTER_MODEL, MEASURED,
+            _ROUTER_MODEL,
+            MEASURED,
             "MAS only routes and decomposes, so it keeps the 1.5B model.",
         ),
         "MODEL_NAME": Setting(
-            _WORKER_MODEL, MEASURED,
+            _WORKER_MODEL,
+            MEASURED,
             "Agent worker model. With LLM_BACKEND=vllm this is the in-process "
             "fallback identity; generation itself happens in vllm.",
         ),
         "TASK_TIMEOUT": Setting(
-            "1800", MEASURED,
+            "1800",
+            MEASURED,
             "Wall-clock cap on a RUNNING task in MAS. Generous; the binding "
             "limit on a single answer is REACT_TIMEOUT_SECONDS below.",
         ),
         "REACT_TIMEOUT_SECONDS": Setting(
-            "120", MEASURED,
+            "120",
+            MEASURED,
             "What actually bounds one chat answer. 120s is the code's GPU "
             "default and the value the shipping stack runs with.",
         ),
         "KNOWLEDGE_STORE_N_RESULTS": _N_RESULTS,
     }
 
+
 def _cpu_common() -> dict[str, Setting]:
     return {
         "LLM_BACKEND": Setting(
-            "vllm", DERIVED,
+            "vllm",
+            DERIVED,
             "The OpenAI-compatible client mode of MAS and the agent; 'vllm' is "
             "its historical name. On the CPU the server behind it is "
             "llama-server in the llm container, one process for the router "
@@ -352,25 +399,29 @@ def _cpu_common() -> dict[str, Setting]:
             "of its own. There is no fallback: if llm is down, chat fails.",
         ),
         "LLM_VLLM_URL": Setting(
-            CPU_MODEL_SERVER_URL, DERIVED,
+            CPU_MODEL_SERVER_URL,
+            DERIVED,
             "In-network address of the llm service. Its port is not published "
             "to the host: only the containers on horus-net reach it, which is "
             "why it runs without an API key.",
         ),
         "LLM_VLLM_MODEL": Setting(
-            _SERVED_NAME, DERIVED,
+            _SERVED_NAME,
+            DERIVED,
             "The name llama-server answers to. Compose passes this same value "
             "to its --alias, so the two cannot drift apart.",
         ),
         "LLM_VLLM_MAX_MODEL_LEN": Setting(
-            str(CPU_CONTEXT_TOKENS), DERIVED,
+            str(CPU_CONTEXT_TOKENS),
+            DERIVED,
             "The context both clients fit their prompt and answer into. "
             "Compose passes the same value to llama-server's --ctx-size, which "
             "otherwise takes the model's own 262,144 tokens and a KV cache far "
             "larger than this machine's RAM.",
         ),
         "LLM_VLLM_TIMEOUT": Setting(
-            "900", DERIVED,
+            "900",
+            DERIVED,
             "Seconds MAS and the agent wait on one call to llama-server. It "
             "answers one request at a time and queues the others, so a call "
             "can wait behind a whole answer before its own prompt is read. The "
@@ -378,23 +429,28 @@ def _cpu_common() -> dict[str, Setting]:
             "CPU-only host.",
         ),
         "LLM_FORCE_CPU": Setting(
-            "1", MEASURED,
+            "1",
+            MEASURED,
             "No CUDA to find; say so instead of letting an image with torch "
             "probe for it and fail. A CPU MAS image has no torch at all.",
         ),
         "MODEL_DEVICE": Setting("cpu", MEASURED, "Same, for the agent worker."),
         "KNOWLEDGE_STORE_EMBED_DEVICE": Setting(
-            "cpu", MEASURED, "There is no GPU for the BGE embedder either.",
+            "cpu",
+            MEASURED,
+            "There is no GPU for the BGE embedder either.",
         ),
         "TASK_TIMEOUT": Setting(
-            "3600", DERIVED,
+            "3600",
+            DERIVED,
             "CPU generation is roughly an order of magnitude slower. At the GPU "
             "default MAS cancels the task mid-answer and chat hangs on 'loading'. "
             "The doubling of the 1800s GPU value is reasoning, not fitted to a "
             "measured CPU run.",
         ),
         "REACT_TIMEOUT_SECONDS": Setting(
-            "1800", DERIVED,
+            "1800",
+            DERIVED,
             "The real per-answer limit. On expiry the user gets 'The model took "
             "too long to respond.' as a COMPLETED task, so a low value looks "
             "like a bad answer rather than a timeout. 1800s is a guess with a "
@@ -402,7 +458,8 @@ def _cpu_common() -> dict[str, Setting]:
             "neither number has been timed on a CPU-only host.",
         ),
         "KNOWLEDGE_STORE_N_RESULTS": Setting(
-            "5", DERIVED,
+            "5",
+            DERIVED,
             "Each result is a passage of at most 1,000 characters, shown with a "
             "source line of its document title: about 1,060 characters each. "
             "Five is the most that fit whole under AGENT_MAX_CONTEXT_CHARS=6000 "
@@ -413,7 +470,8 @@ def _cpu_common() -> dict[str, Setting]:
             "this value.",
         ),
         "AGENT_MAX_CONTEXT_CHARS": Setting(
-            "6000", DERIVED,
+            "6000",
+            DERIVED,
             "Half the 12,000-character default: about 1,500 to 2,000 tokens of "
             "retrieved text instead of 3,000 to 4,000. On a CPU the whole "
             "prompt is read before the first word of the answer, so this "
@@ -422,7 +480,8 @@ def _cpu_common() -> dict[str, Setting]:
             "make their source lines longer. Not measured yet.",
         ),
         "AGENT_STREAM_TOKENS": Setting(
-            "1", DERIVED,
+            "1",
+            DERIVED,
             "Shows the answer in the chat while it is written, so a CPU answer "
             "that takes minutes shows text long before it ends. The first 500 "
             "characters are held back and checked for a self-correction "
@@ -433,10 +492,13 @@ def _cpu_common() -> dict[str, Setting]:
         **_standard_server_settings(),
     }
 
+
 PROFILES: dict[str, Profile] = {}
+
 
 def _add(p: Profile) -> None:
     PROFILES[p.name] = p
+
 
 def _cpu_memory_note(llm_ceiling: str, llm_use: str) -> str:
     return (
@@ -449,195 +511,223 @@ def _cpu_memory_note(llm_ceiling: str, llm_use: str) -> str:
         "which the CPU images no longer install."
     )
 
+
 def cpu_floor_gib() -> float:
     return CPU_LEAN_MIN_GIB if CPU_LEAN_SUPPORTED else CPU_STANDARD_MIN_GIB
 
+
 def _lean_trigger() -> str:
     if not CPU_LEAN_SUPPORTED:
-        return (f"Never chosen by the installer: CPU_LEAN_SUPPORTED is off, so a "
-                f"machine under {CPU_STANDARD_MIN_GIB:.1f} GiB of memory for Docker "
-                "is not supported. --profile cpu-lean still forces it.")
-    return (f"No CUDA usable from Docker, at least {CPU_LEAN_MIN_GIB:.1f} and under "
-            f"{CPU_STANDARD_MIN_GIB:.1f} GiB of memory for Docker.")
+        return (
+            f"Never chosen by the installer: CPU_LEAN_SUPPORTED is off, so a "
+            f"machine under {CPU_STANDARD_MIN_GIB:.1f} GiB of memory for Docker "
+            "is not supported. --profile cpu-lean still forces it."
+        )
+    return (
+        f"No CUDA usable from Docker, at least {CPU_LEAN_MIN_GIB:.1f} and under "
+        f"{CPU_STANDARD_MIN_GIB:.1f} GiB of memory for Docker."
+    )
 
-_add(Profile(
-    name="cpu-lean",
-    trigger=_lean_trigger(),
-    runs_vllm=False,
-    summary="The cpu-standard model with a 4,096-token context and a q8_0 KV "
-            "cache, for less memory. Measured once, on a development laptop: see the notes.",
-    settings={**_cpu_common(), **_lean_server_settings()},
-    notes=(
-        "ADR-006 option B: the same llama-server and Qwen3-4B-Instruct-2507 "
-        "Q4_K_M as cpu-standard, with --ctx-size 4096, a q8_0 KV cache, flash "
-        "attention on and a 256 MiB prompt cache. llm needs about 3.4 GiB "
-        "instead of about 5, and answers come from the same model.",
-        f"The thresholds are {THRESHOLDS_BASIS}: the containers other than llm "
-        "come to about 8 GiB by estimate, plus 2 GiB of headroom. The B-91 "
-        "measurements confirm or move them, and CPU_LEAN_SUPPORTED in "
-        "installer/profiles.py turns this profile off if the q8_0 cache costs "
-        "too much quality.",
-        f"Under {cpu_floor_gib():.1f} GiB of memory for Docker the installer "
-        "stops before any large download and says why: no profile fits.",
-        "A first run of the CPU profiles is recorded in "
-        f"benchmarks/cpu-laptop-2026-10-06.json and {LOW_RAM_ADR}: a "
-        "development laptop with 64 GB of RAM, on its CPU. The whole stack "
-        "peaked at 8.34 GiB on cpu-standard and 6.21 GiB on cpu-lean, which "
-        "the ADR's decision rule turns into 10.5 and 8.5 GiB. On the first 30 "
-        "questions of that run cpu-lean answered in a median of 33.2 s, 1.87 times "
-        "cpu-standard, and failed the ADR's timing condition, so the ADR would "
-        "turn it off (CPU_LEAN_SUPPORTED = False) if the reference machine "
-        "confirms it. The thresholds "
-        f"stay at {CPU_STANDARD_MIN_GIB:.1f} and {CPU_LEAN_MIN_GIB:.1f} GiB until "
-        "the run on the 16 GB reference machine. The timeouts and thread counts "
-        "are still reasoned, not measured - if this profile behaves oddly, "
-        "suspect those numbers before you suspect a bug.",
-        _cpu_memory_note(_LEAN_MODEL_SERVER_MEMORY, "3.4 GiB"),
-    ),
-))
 
-_add(Profile(
-    name="cpu-standard",
-    trigger=f"No CUDA usable from Docker, {CPU_STANDARD_MIN_GIB:.1f} GiB of memory "
-            "for Docker or more.",
-    runs_vllm=False,
-    summary="Qwen3-4B Q4_K_M on llama-server: one model for MAS and every agent.",
-    settings=_cpu_common(),
-    notes=(
-        "One llama-server process (the llm service) serves "
-        "Qwen3-4B-Instruct-2507 Q4_K_M to MAS and every agent. MAS and the "
-        "agent load no model in-process and download none.",
-        "Before llama-server, this profile ran a 1.5B router in MAS and the 4B "
-        "worker in bf16 in the agent, both with Transformers. MEASURED "
-        "2026-09-01 that way, on a 12-core laptop CPU with 64 GB of RAM: one "
-        "grounded question took 14m 14s end to end and the answer was WRONG - "
-        "the anti-spiral guard fired instead of an answer. Retrieval was fine "
-        "and everything else passed. The same machine answers in about 4 "
-        "seconds on its GPU.",
-        "llama-server was first timed on the CPU of a development laptop on "
-        f"2026-10-06 ({LOW_RAM_ADR}): a median of 18.2 s per answer over "
-        "the 100-question test set, 93 of 100 answers correct. The run on the "
-        "16 GB reference machine is still to do.",
-        "The timeouts are still DERIVED, not fitted - but the 1800s ReAct "
-        "budget was at least shown to be generous rather than tight: the slow "
-        "run finished well inside it and was not truncated.",
-        _cpu_memory_note(_CPU_MODEL_SERVER_MEMORY, "4 GiB"),
-    ),
-))
+_add(
+    Profile(
+        name="cpu-lean",
+        trigger=_lean_trigger(),
+        runs_vllm=False,
+        summary="The cpu-standard model with a 4,096-token context and a q8_0 KV "
+        "cache, for less memory. Measured once, on a development laptop: see the notes.",
+        settings={**_cpu_common(), **_lean_server_settings()},
+        notes=(
+            "ADR-006 option B: the same llama-server and Qwen3-4B-Instruct-2507 "
+            "Q4_K_M as cpu-standard, with --ctx-size 4096, a q8_0 KV cache, flash "
+            "attention on and a 256 MiB prompt cache. llm needs about 3.4 GiB "
+            "instead of about 5, and answers come from the same model.",
+            f"The thresholds are {THRESHOLDS_BASIS}: the containers other than llm "
+            "come to about 8 GiB by estimate, plus 2 GiB of headroom. The B-91 "
+            "measurements confirm or move them, and CPU_LEAN_SUPPORTED in "
+            "installer/profiles.py turns this profile off if the q8_0 cache costs "
+            "too much quality.",
+            f"Under {cpu_floor_gib():.1f} GiB of memory for Docker the installer "
+            "stops before any large download and says why: no profile fits.",
+            "A first run of the CPU profiles is recorded in "
+            f"benchmarks/cpu-laptop-2026-10-06.json and {LOW_RAM_ADR}: a "
+            "development laptop with 64 GB of RAM, on its CPU. The whole stack "
+            "peaked at 8.34 GiB on cpu-standard and 6.21 GiB on cpu-lean, which "
+            "the ADR's decision rule turns into 10.5 and 8.5 GiB. On the first 30 "
+            "questions of that run cpu-lean answered in a median of 33.2 s, 1.87 times "
+            "cpu-standard, and failed the ADR's timing condition, so the ADR would "
+            "turn it off (CPU_LEAN_SUPPORTED = False) if the reference machine "
+            "confirms it. The thresholds "
+            f"stay at {CPU_STANDARD_MIN_GIB:.1f} and {CPU_LEAN_MIN_GIB:.1f} GiB until "
+            "the run on the 16 GB reference machine. The timeouts and thread counts "
+            "are still reasoned, not measured - if this profile behaves oddly, "
+            "suspect those numbers before you suspect a bug.",
+            _cpu_memory_note(_LEAN_MODEL_SERVER_MEMORY, "3.4 GiB"),
+        ),
+    )
+)
 
-_add(Profile(
-    name="gpu-8g",
-    trigger=_vram_trigger("gpu-8g"),
-    runs_vllm=True,
-    summary="The tuned 8 GB laptop configuration. The one that has actually been run.",
-    settings={
-        **_vllm_common(),
-        "VLLM_MAX_MODEL_LEN": Setting(
-            "8192", MEASURED,
-            "Longest context that leaves room for a KV cache on an 8 GB card.",
+_add(
+    Profile(
+        name="cpu-standard",
+        trigger=f"No CUDA usable from Docker, {CPU_STANDARD_MIN_GIB:.1f} GiB of memory "
+        "for Docker or more.",
+        runs_vllm=False,
+        summary="Qwen3-4B Q4_K_M on llama-server: one model for MAS and every agent.",
+        settings=_cpu_common(),
+        notes=(
+            "One llama-server process (the llm service) serves "
+            "Qwen3-4B-Instruct-2507 Q4_K_M to MAS and every agent. MAS and the "
+            "agent load no model in-process and download none.",
+            "Before llama-server, this profile ran a 1.5B router in MAS and the 4B "
+            "worker in bf16 in the agent, both with Transformers. MEASURED "
+            "2026-09-01 that way, on a 12-core laptop CPU with 64 GB of RAM: one "
+            "grounded question took 14m 14s end to end and the answer was WRONG - "
+            "the anti-spiral guard fired instead of an answer. Retrieval was fine "
+            "and everything else passed. The same machine answers in about 4 "
+            "seconds on its GPU.",
+            "llama-server was first timed on the CPU of a development laptop on "
+            f"2026-10-06 ({LOW_RAM_ADR}): a median of 18.2 s per answer over "
+            "the 100-question test set, 93 of 100 answers correct. The run on the "
+            "16 GB reference machine is still to do.",
+            "The timeouts are still DERIVED, not fitted - but the 1800s ReAct "
+            "budget was at least shown to be generous rather than tight: the slow "
+            "run finished well inside it and was not truncated.",
+            _cpu_memory_note(_CPU_MODEL_SERVER_MEMORY, "4 GiB"),
         ),
-        "VLLM_GPU_MEMORY_UTILIZATION": Setting(
-            "0.70", MEASURED,
-            "0.70, not higher: the other three services also request the card, "
-            "and vLLM reserving more triggers OOM at load time.",
-        ),
-        "KNOWLEDGE_STORE_EMBED_DEVICE": Setting(
-            "cpu", MEASURED,
-            "Keeps the BGE embedder OFF the shared card. When it ran on torch "
-            "on the GPU, its ingestion bursts paged out the 4B model and "
-            "generation stalled afterwards - this was measured, not assumed. "
-            "It now runs on FastEmbed, whose onnxruntime in the knowledge-store "
-            "image has no CUDA provider, so it embeds on the CPU anyway; cpu "
-            "keeps it there if a CUDA onnxruntime is ever installed.",
-        ),
-    },
-    notes=(
-        "Every number here reproduces the configuration the project ships and "
-        "runs today. Nothing in this profile is a guess.",
-        VRAM_HEADROOM_NOTE,
-    ),
-))
+    )
+)
 
-_add(Profile(
-    name="gpu-16g",
-    trigger=_vram_trigger("gpu-16g"),
-    runs_vllm=True,
-    summary="Longer context.",
-    settings={
-        **_vllm_common(),
-        "VLLM_MAX_MODEL_LEN": Setting(
-            "16384", DERIVED,
-            "Doubled from the 8 GB value because roughly twice the VRAM is free "
-            "for the KV cache. Not benchmarked.",
+_add(
+    Profile(
+        name="gpu-8g",
+        trigger=_vram_trigger("gpu-8g"),
+        runs_vllm=True,
+        summary="The tuned 8 GB laptop configuration. The one that has actually been run.",
+        settings={
+            **_vllm_common(),
+            "VLLM_MAX_MODEL_LEN": Setting(
+                "8192",
+                MEASURED,
+                "Longest context that leaves room for a KV cache on an 8 GB card.",
+            ),
+            "VLLM_GPU_MEMORY_UTILIZATION": Setting(
+                "0.70",
+                MEASURED,
+                "0.70, not higher: the other three services also request the card, "
+                "and vLLM reserving more triggers OOM at load time.",
+            ),
+            "KNOWLEDGE_STORE_EMBED_DEVICE": Setting(
+                "cpu",
+                MEASURED,
+                "Keeps the BGE embedder OFF the shared card. When it ran on torch "
+                "on the GPU, its ingestion bursts paged out the 4B model and "
+                "generation stalled afterwards - this was measured, not assumed. "
+                "It now runs on FastEmbed, whose onnxruntime in the knowledge-store "
+                "image has no CUDA provider, so it embeds on the CPU anyway; cpu "
+                "keeps it there if a CUDA onnxruntime is ever installed.",
+            ),
+        },
+        notes=(
+            "Every number here reproduces the configuration the project ships and "
+            "runs today. Nothing in this profile is a guess.",
+            VRAM_HEADROOM_NOTE,
         ),
-        "VLLM_GPU_MEMORY_UTILIZATION": Setting(
-            "0.80", DERIVED,
-            "The card has headroom the 8 GB one does not, so vLLM can claim more "
-            "and still leave room for the other three services that request "
-            "the card. Not benchmarked.",
-        ),
-    },
-    notes=(
-        "Scaled from the 8 GB configuration, not benchmarked. If it misbehaves, "
-        "the fastest test is to re-run with --profile gpu-8g.",
-        VRAM_HEADROOM_NOTE,
-    ),
-))
+    )
+)
 
-_add(Profile(
-    name="gpu-24g",
-    trigger=_vram_trigger("gpu-24g"),
-    runs_vllm=True,
-    summary="Full 32k context.",
-    settings={
-        **_vllm_common(),
-        "VLLM_MAX_MODEL_LEN": Setting(
-            "32768", DERIVED,
-            "The model's full trained context. Room for it exists at this VRAM "
-            "size on paper. Not benchmarked.",
+_add(
+    Profile(
+        name="gpu-16g",
+        trigger=_vram_trigger("gpu-16g"),
+        runs_vllm=True,
+        summary="Longer context.",
+        settings={
+            **_vllm_common(),
+            "VLLM_MAX_MODEL_LEN": Setting(
+                "16384",
+                DERIVED,
+                "Doubled from the 8 GB value because roughly twice the VRAM is free "
+                "for the KV cache. Not benchmarked.",
+            ),
+            "VLLM_GPU_MEMORY_UTILIZATION": Setting(
+                "0.80",
+                DERIVED,
+                "The card has headroom the 8 GB one does not, so vLLM can claim more "
+                "and still leave room for the other three services that request "
+                "the card. Not benchmarked.",
+            ),
+        },
+        notes=(
+            "Scaled from the 8 GB configuration, not benchmarked. If it misbehaves, "
+            "the fastest test is to re-run with --profile gpu-8g.",
+            VRAM_HEADROOM_NOTE,
         ),
-        "VLLM_GPU_MEMORY_UTILIZATION": Setting(
-            "0.85", DERIVED,
-            "Higher still, leaving ~15% for the other three GPU services. "
-            "Not benchmarked.",
-        ),
-    },
-    notes=(
-        "Scaled from the 8 GB configuration, not benchmarked.",
-        "A 32k context does not make answers better on its own - it mostly "
-        "raises the ceiling for long documents.",
-        VRAM_HEADROOM_NOTE,
-    ),
-))
+    )
+)
 
-_add(Profile(
-    name="gpu-large",
-    trigger=_vram_trigger("gpu-large"),
-    runs_vllm=True,
-    summary="Same as gpu-24g. The card is bigger than anything we have tuned for.",
-    settings={
-        **_vllm_common(),
-        "VLLM_MAX_MODEL_LEN": Setting(
-            "32768", DERIVED, "Full trained context of the 4B model; more is not useful.",
+_add(
+    Profile(
+        name="gpu-24g",
+        trigger=_vram_trigger("gpu-24g"),
+        runs_vllm=True,
+        summary="Full 32k context.",
+        settings={
+            **_vllm_common(),
+            "VLLM_MAX_MODEL_LEN": Setting(
+                "32768",
+                DERIVED,
+                "The model's full trained context. Room for it exists at this VRAM "
+                "size on paper. Not benchmarked.",
+            ),
+            "VLLM_GPU_MEMORY_UTILIZATION": Setting(
+                "0.85",
+                DERIVED,
+                "Higher still, leaving ~15% for the other three GPU services. Not benchmarked.",
+            ),
+        },
+        notes=(
+            "Scaled from the 8 GB configuration, not benchmarked.",
+            "A 32k context does not make answers better on its own - it mostly "
+            "raises the ceiling for long documents.",
+            VRAM_HEADROOM_NOTE,
         ),
-        "VLLM_GPU_MEMORY_UTILIZATION": Setting(
-            "0.85", DERIVED,
-            "Deliberately NOT raised further: on a large card 0.85 already "
-            "reserves far more than the 4B model needs.",
+    )
+)
+
+_add(
+    Profile(
+        name="gpu-large",
+        trigger=_vram_trigger("gpu-large"),
+        runs_vllm=True,
+        summary="Same as gpu-24g. The card is bigger than anything we have tuned for.",
+        settings={
+            **_vllm_common(),
+            "VLLM_MAX_MODEL_LEN": Setting(
+                "32768",
+                DERIVED,
+                "Full trained context of the 4B model; more is not useful.",
+            ),
+            "VLLM_GPU_MEMORY_UTILIZATION": Setting(
+                "0.85",
+                DERIVED,
+                "Deliberately NOT raised further: on a large card 0.85 already "
+                "reserves far more than the 4B model needs.",
+            ),
+        },
+        notes=(
+            "This card is under-used. The bottleneck is the model, not the GPU: "
+            "the stack serves a 4B AWQ model that fits in 8 GB.",
+            "To use the card properly, serve something bigger by hand in "
+            "src/infra/.env - for example VLLM_MODEL=Qwen/Qwen3-14B-Instruct or a "
+            "larger AWQ build. THREE values must change together or chat 404s:",
+            "    VLLM_MODEL, VLLM_SERVED_MODEL_NAME, LLM_VLLM_MODEL",
+            "The installer does not do this for you because we have not run it, and "
+            "a beta that half-works is worse than one that is merely modest.",
+            VRAM_HEADROOM_NOTE,
         ),
-    },
-    notes=(
-        "This card is under-used. The bottleneck is the model, not the GPU: "
-        "the stack serves a 4B AWQ model that fits in 8 GB.",
-        "To use the card properly, serve something bigger by hand in "
-        "src/infra/.env - for example VLLM_MODEL=Qwen/Qwen3-14B-Instruct or a "
-        "larger AWQ build. THREE values must change together or chat 404s:",
-        "    VLLM_MODEL, VLLM_SERVED_MODEL_NAME, LLM_VLLM_MODEL",
-        "The installer does not do this for you because we have not run it, and "
-        "a beta that half-works is worse than one that is merely modest.",
-        VRAM_HEADROOM_NOTE,
-    ),
-))
+    )
+)
 
 MOCK_PROFILE = "mock"
 MOCK_OVERLAY = "docker-compose.mock.yml"
@@ -676,99 +766,123 @@ MOCK_TOO_SMALL = (
     f"{MOCK_MIN_GIB:.1f} GiB of memory for Docker ({MOCK_MEASURED})."
 )
 
+
 def _mock_settings() -> dict[str, Setting]:
     return {
         **_cpu_common(),
         "HORUS_AI_MODE": Setting(
-            "mock", DERIVED,
+            "mock",
+            DERIVED,
             "Says that this install runs without a language model. The installer "
             "keeps it in step with COMPOSE_FILE: --ai local sets it back to local "
             "and --ai status warns when the two disagree. The services do not "
             "read it from here; docker-compose.mock.yml tells them.",
         ),
         "LLM_BACKEND": Setting(
-            "vllm", DERIVED,
+            "vllm",
+            DERIVED,
             "The OpenAI-compatible client mode of MAS and the agent, as on the "
             "CPU profiles: they send their model calls over HTTP and load no "
             "model of their own. In mock mode those calls go to llm-mock.",
         ),
         "LLM_VLLM_URL": Setting(
-            CPU_MODEL_SERVER_URL, DERIVED,
+            CPU_MODEL_SERVER_URL,
+            DERIVED,
             "The llm address of the CPU profiles, kept so that --ai local needs "
             "no change here. docker-compose.mock.yml overrides it for MAS and the "
             f"agent with http://{MOCK_MODEL_SERVER}:8080/v1; that port is not "
             "published to the host.",
         ),
         "LLM_VLLM_MODEL": Setting(
-            _SERVED_NAME, DERIVED,
+            _SERVED_NAME,
+            DERIVED,
             "The CPU profiles' model name, kept for --ai local. In mock mode the "
             f"overlay sets {MOCK_MODEL_NAME} instead, so the agent's answer cache, "
             "whose key includes the model, never serves a simulated answer to a "
             "real model or the reverse.",
         ),
         "LLM_VLLM_TIMEOUT": Setting(
-            "120", DERIVED,
+            "120",
+            DERIVED,
             "llm-mock answers in HORUS_MOCK_LATENCY_MS (300 ms by default), and in "
             "40 s at most with HORUS_MOCK_SCENARIO=slow, so the code default is "
             "plenty.",
         ),
     }
 
-_add(Profile(
-    name=MOCK_PROFILE,
-    trigger=(f"Offered when no CPU profile fits ({cpu_floor_gib():.1f} GiB of memory "
-             f"for Docker and no usable NVIDIA GPU) and Docker can use {MOCK_MIN_GIB:.1f} GiB "
-             "or more; forced with --profile mock."),
-    runs_vllm=False,
-    summary="No language model: llm-mock answers from your documents. The answers are simulated.",
-    settings=_mock_settings(),
-    notes=(
-        SIMULATED_ANSWERS,
-        "It runs the CPU images with docker-compose.mock.yml on top of the CPU "
-        "overlay: llm-mock replaces llm and llm-model, and no model is downloaded. "
-        "No model runs: MAS and the knowledge store take their embeddings from "
-        "llm-mock (word matching, so a synonym finds nothing), the knowledge store and "
-        "the agent extract with regular expressions instead of spaCy, and switching "
-        "modes re-embeds the stored documents.",
-        "The web client shows a banner on every page and a Simulated badge on "
-        "each answer, and the desktop app shows AI: Mock.",
-        "Switch an install with --ai local or --ai mock; --ai status says which "
-        "mode is on.",
-        f"It needs {MOCK_MIN_GIB:.1f} GiB of memory for Docker ({MOCK_MEASURED}), "
-        f"{MOCK_FREE_GIB:.0f} GiB of free disk with the prebuilt images and "
-        f"{MOCK_SOURCE_FREE_GIB:.0f} GiB with --build-from-source.",
-    ),
-))
 
-MANAGED_KEYS: tuple[str, ...] = tuple(sorted(
-    {"COMPOSE_FILE", *THREAD_KEYS, *SERVER_KEYS, *MODEL_ENV_KEYS, *IMAGE_ENV_KEYS}
-    | {k for p in PROFILES.values() for k in p.settings}
-))
+_add(
+    Profile(
+        name=MOCK_PROFILE,
+        trigger=(
+            f"Offered when no CPU profile fits ({cpu_floor_gib():.1f} GiB of memory "
+            f"for Docker and no usable NVIDIA GPU) and Docker can use {MOCK_MIN_GIB:.1f} GiB "
+            "or more; forced with --profile mock."
+        ),
+        runs_vllm=False,
+        summary="No language model: llm-mock answers from your documents. The answers are simulated.",
+        settings=_mock_settings(),
+        notes=(
+            SIMULATED_ANSWERS,
+            "It runs the CPU images with docker-compose.mock.yml on top of the CPU "
+            "overlay: llm-mock replaces llm and llm-model, and no model is downloaded. "
+            "No model runs: MAS and the knowledge store take their embeddings from "
+            "llm-mock (word matching, so a synonym finds nothing), the knowledge store and "
+            "the agent extract with regular expressions instead of spaCy, and switching "
+            "modes re-embeds the stored documents.",
+            "The web client shows a banner on every page and a Simulated badge on "
+            "each answer, and the desktop app shows AI: Mock.",
+            "Switch an install with --ai local or --ai mock; --ai status says which mode is on.",
+            f"It needs {MOCK_MIN_GIB:.1f} GiB of memory for Docker ({MOCK_MEASURED}), "
+            f"{MOCK_FREE_GIB:.0f} GiB of free disk with the prebuilt images and "
+            f"{MOCK_SOURCE_FREE_GIB:.0f} GiB with --build-from-source.",
+        ),
+    )
+)
+
+MANAGED_KEYS: tuple[str, ...] = tuple(
+    sorted(
+        {"COMPOSE_FILE", *THREAD_KEYS, *SERVER_KEYS, *MODEL_ENV_KEYS, *IMAGE_ENV_KEYS}
+        | {k for p in PROFILES.values() for k in p.settings}
+    )
+)
 
 PROFILE_ORDER: tuple[str, ...] = (
-    "cpu-lean", "cpu-standard", "gpu-8g", "gpu-16g", "gpu-24g", "gpu-large",
+    "cpu-lean",
+    "cpu-standard",
+    "gpu-8g",
+    "gpu-16g",
+    "gpu-24g",
+    "gpu-large",
 )
+
 
 def is_cpu_profile(name: str) -> bool:
     return str(name).startswith("cpu")
 
+
 def is_mock_profile(name: str) -> bool:
     return name == MOCK_PROFILE
+
 
 def model_server(name: str) -> str:
     if is_mock_profile(get(name).name):
         return MOCK_MODEL_SERVER
     return GPU_MODEL_SERVER if get(name).runs_vllm else CPU_MODEL_SERVER
 
+
 def image_flavor(name: str) -> str:
     profile = get(name).name
     return flavor_for(is_cpu_profile(profile) or is_mock_profile(profile))
 
+
 def compose_file_runs_mock(compose_file: str) -> bool:
     return MOCK_OVERLAY in compose_file
 
+
 def compose_file_runs_monitoring(compose_file: str) -> bool:
     return MONITORING_OVERLAY not in compose_file
+
 
 def monitoring_choice(setting: str | None) -> bool | None:
     value = (setting or "").split("#", 1)[0].strip().lower()
@@ -778,9 +892,11 @@ def monitoring_choice(setting: str | None) -> bool | None:
         return False
     return None
 
+
 def monitoring_wanted(setting: str | None, mock: bool) -> bool:
     choice = monitoring_choice(setting)
     return not mock if choice is None else choice
+
 
 def model_server_for_compose_file(compose_file: str) -> str:
     if compose_file_runs_mock(compose_file):
@@ -791,6 +907,7 @@ def model_server_for_compose_file(compose_file: str) -> str:
 CPU_OVERLAY = "docker-compose.cpu.yml"
 BASE_COMPOSE = "docker-compose.yml"
 
+
 def get(profile_name: str) -> Profile:
     try:
         return PROFILES[profile_name]
@@ -798,17 +915,18 @@ def get(profile_name: str) -> Profile:
         raise InstallError(
             EXIT_PROFILE_UNKNOWN,
             f"Unknown hardware profile: {profile_name!r}",
-            "Valid profiles are:\n  " + "\n  ".join(
-                f"{n:<13} {PROFILES[n].trigger}" for n in (*PROFILE_ORDER, MOCK_PROFILE)
-            ),
+            "Valid profiles are:\n  "
+            + "\n  ".join(f"{n:<13} {PROFILES[n].trigger}" for n in (*PROFILE_ORDER, MOCK_PROFILE)),
             "Drop --profile to let the installer detect your hardware, or pass\n"
             "one of the names above exactly as written.",
         ) from None
 
+
 def _gib(n: int | float | None) -> float | None:
     if isinstance(n, bool) or not isinstance(n, (int, float)) or n <= 0:
         return None
-    return float(n) / (1024.0 ** 3)
+    return float(n) / (1024.0**3)
+
 
 def memory_for_docker(probe: dict | None) -> tuple[float | None, str]:
     docker = _gib(((probe or {}).get("docker") or {}).get("mem_total_bytes"))
@@ -819,10 +937,12 @@ def memory_for_docker(probe: dict | None) -> tuple[float | None, str]:
         return ram, RAM_BASIS
     return None, UNKNOWN_BASIS
 
+
 def describe_memory(gib: float, basis: str) -> str:
     if basis == DOCKER_BASIS:
         return f"Docker can use {gib:.1f} GiB of memory"
     return f"This machine has {gib:.1f} GiB of RAM"
+
 
 def memory_decision(probe: dict | None) -> dict:
     gib, basis = memory_for_docker(probe)
@@ -836,6 +956,7 @@ def memory_decision(probe: dict | None) -> dict:
         "thresholds": THRESHOLDS_BASIS,
     }
 
+
 def supported_floor_gib(profile_name: str) -> float | None:
     if profile_name == "cpu-standard":
         return CPU_STANDARD_MIN_GIB
@@ -845,17 +966,21 @@ def supported_floor_gib(profile_name: str) -> float | None:
         return MOCK_MIN_GIB
     return None
 
+
 def floor_basis(profile_name: str) -> str:
     return MOCK_MEASURED if is_mock_profile(profile_name) else THRESHOLDS_BASIS
+
 
 def mock_fits(probe: dict | None) -> bool:
     gib, _ = memory_for_docker(probe)
     return gib is None or gib >= MOCK_MIN_GIB
 
+
 def free_disk_gib(profile_name: str, from_source: bool) -> float | None:
     if not is_mock_profile(profile_name):
         return None
     return MOCK_SOURCE_FREE_GIB if from_source else MOCK_FREE_GIB
+
 
 def _cpu_profile_for_memory(probe: dict) -> tuple[str, list[str]]:
     gib, basis = memory_for_docker(probe)
@@ -896,24 +1021,31 @@ def _cpu_profile_for_memory(probe: dict) -> tuple[str, list[str]]:
     reasons.append(MOCK_OFFER if mock_fits(probe) else MOCK_TOO_SMALL)
     return NOT_SUPPORTED, reasons
 
+
 def forced_profile_warning(profile_name: str, probe: dict | None) -> str | None:
     floor = supported_floor_gib(profile_name)
     gib, basis = memory_for_docker(probe)
     if floor is None or gib is None or gib >= floor:
         return None
     slower = "" if is_mock_profile(profile_name) else ", or answers that take far longer"
-    return (f"--profile {profile_name} forces a profile this machine is not supported "
-            f"for. {describe_memory(gib, basis)}; {profile_name} needs "
-            f"{floor:.1f} GiB ({floor_basis(profile_name)}). Expect containers stopped for "
-            f"lack of memory{slower}.")
+    return (
+        f"--profile {profile_name} forces a profile this machine is not supported "
+        f"for. {describe_memory(gib, basis)}; {profile_name} needs "
+        f"{floor:.1f} GiB ({floor_basis(profile_name)}). Expect containers stopped for "
+        f"lack of memory{slower}."
+    )
+
 
 def avx2_warning(probe: dict | None) -> str | None:
     if ((probe or {}).get("cpu") or {}).get("avx2") is not False:
         return None
-    return ("This processor has no AVX2. llama-server still runs: the official "
-            "llama.cpp build picks the code this processor supports when it starts. "
-            "Answers will be much slower than on a processor with AVX2; how much "
-            "slower has not been measured.")
+    return (
+        "This processor has no AVX2. llama-server still runs: the official "
+        "llama.cpp build picks the code this processor supports when it starts. "
+        "Answers will be much slower than on a processor with AVX2; how much "
+        "slower has not been measured."
+    )
+
 
 def select_profile(probe: dict) -> tuple[str, list[str]]:
     reasons: list[str] = []
@@ -1017,12 +1149,14 @@ def select_profile(probe: dict) -> tuple[str, list[str]]:
     )
     return "gpu-8g", reasons
 
+
 def compose_file_separator(probe: dict | None) -> str:
     platform = ""
     if probe:
         platform = str((probe.get("os") or {}).get("platform") or "")
     platform = platform or sys.platform
     return ";" if platform.startswith("win") else ":"
+
 
 def _compose_file_value(runs_vllm: bool, probe: dict | None, mock: bool = False) -> str:
     sep = compose_file_separator(probe)
@@ -1032,6 +1166,7 @@ def _compose_file_value(runs_vllm: bool, probe: dict | None, mock: bool = False)
         return BASE_COMPOSE
     return sep.join((BASE_COMPOSE, CPU_OVERLAY))
 
+
 def with_mock_overlay(compose_file: str, sep: str) -> str:
     files = [name for name in compose_file.replace(";", ":").split(":") if name]
     files = [name for name in files if name != MOCK_OVERLAY] or [BASE_COMPOSE]
@@ -1040,6 +1175,7 @@ def with_mock_overlay(compose_file: str, sep: str) -> str:
     files.insert(files.index(CPU_OVERLAY) + 1, MOCK_OVERLAY)
     return sep.join(files)
 
+
 def with_monitoring(compose_file: str, sep: str, on: bool) -> str:
     files = [name for name in compose_file.split(sep) if name]
     if files and (MONITORING_OVERLAY not in files) == on:
@@ -1047,10 +1183,13 @@ def with_monitoring(compose_file: str, sep: str, on: bool) -> str:
     kept = [name for name in files if name != MONITORING_OVERLAY] or [BASE_COMPOSE]
     return sep.join(kept if on else [*kept, MONITORING_OVERLAY])
 
+
 def without_mock_overlay(compose_file: str, sep: str) -> str:
-    files = [name for name in compose_file.replace(";", ":").split(":")
-             if name and name != MOCK_OVERLAY]
+    files = [
+        name for name in compose_file.replace(";", ":").split(":") if name and name != MOCK_OVERLAY
+    ]
     return sep.join(files or [BASE_COMPOSE])
+
 
 def settings_for(profile_name: str, probe: dict | None = None) -> dict[str, Setting]:
     profile = get(profile_name)
@@ -1059,15 +1198,17 @@ def settings_for(profile_name: str, probe: dict | None = None) -> dict[str, Sett
         settings.update(_thread_settings(probe))
     return settings
 
+
 def env_for(profile_name: str, probe: dict | None = None) -> dict[str, str]:
     profile = get(profile_name)
     env = {k: s.value for k, s in settings_for(profile_name, probe).items()}
-    env["COMPOSE_FILE"] = _compose_file_value(profile.runs_vllm, probe,
-                                              is_mock_profile(profile.name))
+    env["COMPOSE_FILE"] = _compose_file_value(
+        profile.runs_vllm, probe, is_mock_profile(profile.name)
+    )
     return env
 
-def provenance_for(profile_name: str,
-                   probe: dict | None = None) -> dict[str, dict[str, str]]:
+
+def provenance_for(profile_name: str, probe: dict | None = None) -> dict[str, dict[str, str]]:
     profile = get(profile_name)
     out: dict[str, dict[str, str]] = {
         key: {"value": s.value, "provenance": s.provenance, "why": s.why}
@@ -1082,17 +1223,19 @@ def provenance_for(profile_name: str,
             "off llm and llm-model, and points MAS and the agent at llm-mock. Then "
             f"{MONITORING_OVERLAY}: Prometheus, Loki, Tempo and Alloy do not run "
             f"unless {MONITORING_KEY}=on is in src/infra/.env."
-            if mock else
-            "Selects the CPU overlay. `gpus: []` and `gpus: null` do not work - "
+            if mock
+            else "Selects the CPU overlay. `gpus: []` and `gpus: null` do not work - "
             "Compose appends sequences - so the overlay uses `!reset`."
         ),
     }
     return out
 
+
 def _model_server_line(p: Profile) -> str:
     if is_mock_profile(p.name):
         return f"{MOCK_MODEL_SERVER} (simulated answers, no language model)"
     return "vllm (GPU inference)" if p.runs_vllm else "llm (llama-server on the CPU)"
+
 
 def describe(profile_name: str, probe: dict | None = None) -> str:
     p = get(profile_name)
@@ -1120,9 +1263,14 @@ def describe(profile_name: str, probe: dict | None = None) -> str:
     lines.append("  Why those numbers:")
     for key in env:
         setting = settings.get(key)
-        why = setting.why if setting else (
-            provenance_for(profile_name)["COMPOSE_FILE"]["why"] if is_mock_profile(p.name)
-            else "Activates the CPU Compose overlay (or clears it on a GPU machine)."
+        why = (
+            setting.why
+            if setting
+            else (
+                provenance_for(profile_name)["COMPOSE_FILE"]["why"]
+                if is_mock_profile(p.name)
+                else "Activates the CPU Compose overlay (or clears it on a GPU machine)."
+            )
         )
         lines.append(f"    {key}:")
         for chunk in _wrap(why, 66):
@@ -1138,6 +1286,7 @@ def describe(profile_name: str, probe: dict | None = None) -> str:
 
     return "\n".join(lines)
 
+
 def _wrap(text: str, width: int) -> list[str]:
     if text.startswith("    "):
         return [text]
@@ -1151,6 +1300,7 @@ def _wrap(text: str, width: int) -> list[str]:
     if line:
         out.append(line)
     return out or [""]
+
 
 def describe_all() -> str:
     return "\n\n".join(describe(n) for n in PROFILE_ORDER)

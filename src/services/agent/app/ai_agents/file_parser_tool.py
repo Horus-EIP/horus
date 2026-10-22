@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from pypdf import PdfReader  # type: ignore
+
     _PDF_AVAILABLE = True
 except Exception:
     PdfReader = None  # type: ignore
@@ -33,10 +34,10 @@ class FileParserTool:
     def run(self, payload: dict[str, Any]) -> str:
         """
         Extract text from a file (url or content).
-        
+
         Args:
             payload: Dict with 'file_url', 'file_content', 'file_type', 'filename'.
-            
+
         Returns:
             Extracted string content.
         """
@@ -126,5 +127,3 @@ class FileParserTool:
             page_text = page.extract_text() or ""
             parts.append(page_text)
         return "\n".join(parts)
-
-

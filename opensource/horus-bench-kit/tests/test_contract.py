@@ -26,7 +26,11 @@ def verdict_schema(evidence_ids=("E1", "E2")):
         "properties": {
             "verdict": {"type": "string", "enum": ["supported", "refuted", "unknown"]},
             "reason": {"type": "string", "description": "one short sentence"},
-            "evidence": {"type": "array", "maxItems": 3, "items": {"type": "string", "enum": list(evidence_ids)}},
+            "evidence": {
+                "type": "array",
+                "maxItems": 3,
+                "items": {"type": "string", "enum": list(evidence_ids)},
+            },
         },
         "required": ["verdict", "reason", "evidence"],
         "additionalProperties": False,
@@ -68,11 +72,15 @@ class TestSchemaViolations:
         assert schema_violations(value, verdict_schema(["E1"])) == ["$: missing 'evidence'"]
 
     def test_an_extra_key_is_rejected_when_additional_properties_is_false(self):
-        assert schema_violations({**GOOD, "score": 3}, verdict_schema()) == ["$: 'score' is not allowed"]
+        assert schema_violations({**GOOD, "score": 3}, verdict_schema()) == [
+            "$: 'score' is not allowed"
+        ]
 
     def test_additional_properties_can_be_a_schema(self):
         schema = {"type": "object", "additionalProperties": {"type": "integer"}}
-        assert schema_violations({"a": 1, "b": "2"}, schema) == ["$.b: expected integer, found string"]
+        assert schema_violations({"a": 1, "b": "2"}, schema) == [
+            "$.b: expected integer, found string"
+        ]
 
     def test_a_value_outside_the_enum_is_reported(self):
         assert schema_violations({**GOOD, "verdict": "maybe"}, verdict_schema()) == [
@@ -85,11 +93,21 @@ class TestSchemaViolations:
         ]
 
     def test_without_evidence_ids_an_evidence_field_is_not_allowed(self):
-        assert schema_violations(GOOD, verdict_schema([])) == ["$.evidence[0]: 'E1' is not one of []"]
-        assert schema_violations({"verdict": "unknown", "reason": "No.", "evidence": []}, verdict_schema([])) == []
+        assert schema_violations(GOOD, verdict_schema([])) == [
+            "$.evidence[0]: 'E1' is not one of []"
+        ]
+        assert (
+            schema_violations(
+                {"verdict": "unknown", "reason": "No.", "evidence": []}, verdict_schema([])
+            )
+            == []
+        )
 
     def test_types_are_json_types(self):
-        schema = {"type": "object", "properties": {"n": {"type": "integer"}, "f": {"type": "number"}}}
+        schema = {
+            "type": "object",
+            "properties": {"n": {"type": "integer"}, "f": {"type": "number"}},
+        }
         assert schema_violations({"n": 3, "f": 2}, schema) == []
         assert schema_violations({"n": True, "f": "2"}, schema) == [
             "$.n: expected integer, found boolean",
@@ -104,7 +122,12 @@ class TestSchemaViolations:
         assert schema_violations(1, {"enum": [1.0]}) == []
 
     def test_lengths_and_const_are_checked(self):
-        schema = {"type": "array", "minItems": 1, "maxItems": 2, "items": {"type": "string", "maxLength": 2}}
+        schema = {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "items": {"type": "string", "maxLength": 2},
+        }
         assert schema_violations([], schema) == ["$: 0 items, at least 1 expected"]
         assert schema_violations(["a", "bcd", "e"], schema) == [
             "$: 3 items, at most 2 expected",
@@ -119,12 +142,20 @@ class TestSchemaViolations:
         ]
 
     def test_annotations_are_ignored(self):
-        assert schema_violations("x", {"type": "string", "title": "Reason", "description": "d"}) == []
+        assert (
+            schema_violations("x", {"type": "string", "title": "Reason", "description": "d"}) == []
+        )
 
     def test_boolean_subschemas_allow_anything_or_nothing(self):
-        schema = {"type": "object", "properties": {"note": True, "secret": False}, "additionalProperties": False}
+        schema = {
+            "type": "object",
+            "properties": {"note": True, "secret": False},
+            "additionalProperties": False,
+        }
         assert schema_violations({"note": [1, "x"]}, schema) == []
-        assert schema_violations({"secret": 1}, schema) == ["$.secret: the schema allows no value here"]
+        assert schema_violations({"secret": 1}, schema) == [
+            "$.secret: the schema allows no value here"
+        ]
         assert schema_violations([1], {"items": False}) == ["$[0]: the schema allows no value here"]
         assert schema_violations([1], {"items": True}) == []
 
@@ -138,7 +169,10 @@ class TestSchemaViolations:
             ({"enum": "ab"}, "$: the checker does not support enum 'ab'"),
             ({"required": "verdict"}, "$: the checker does not support required 'verdict'"),
             ({"properties": ["verdict"]}, "$: the checker does not support properties ['verdict']"),
-            ({"items": [{"type": "string"}]}, "$: the checker does not support items [{'type': 'string'}]"),
+            (
+                {"items": [{"type": "string"}]},
+                "$: the checker does not support items [{'type': 'string'}]",
+            ),
         ],
     )
     def test_a_malformed_keyword_makes_the_reply_invalid_rather_than_crash(self, schema, message):
@@ -146,7 +180,9 @@ class TestSchemaViolations:
 
     def test_a_subschema_that_is_not_an_object_or_a_boolean_is_not_supported(self):
         schema = {"type": "object", "properties": {"verdict": "string"}}
-        assert schema_violations({"verdict": "x"}, schema) == ["$.verdict: the checker does not support a string schema"]
+        assert schema_violations({"verdict": "x"}, schema) == [
+            "$.verdict: the checker does not support a string schema"
+        ]
 
     def test_json_type_names(self):
         assert [json_type(v) for v in (True, 1, 1.5, "s", [], {}, None)] == [
@@ -169,7 +205,13 @@ class TestCheckReply:
             ({"content": ""}, FAILURE_EMPTY),
             ({"content": "  \n"}, FAILURE_EMPTY),
             ({"content": "", "finish_reason": "length"}, FAILURE_TRUNCATED),
-            ({"content": '{"verdict": "supported", "reason": "The time', "finish_reason": "length"}, FAILURE_TRUNCATED),
+            (
+                {
+                    "content": '{"verdict": "supported", "reason": "The time',
+                    "finish_reason": "length",
+                },
+                FAILURE_TRUNCATED,
+            ),
             ({"content": "<think>ferry</think>\n" + json.dumps(GOOD)}, FAILURE_NOT_JSON),
             ({"content": "```json\n" + json.dumps(GOOD) + "\n```"}, FAILURE_NOT_JSON),
             ({"content": json.dumps([GOOD])}, FAILURE_NOT_OBJECT),
@@ -184,10 +226,14 @@ class TestCheckReply:
         assert check_reply(reply("\n " + json.dumps(GOOD) + "\n")) == (GOOD, None, [])
 
     def test_a_schema_failure_returns_the_data_and_the_violations(self):
-        data, failure, violations = check_reply(reply({"verdict": "maybe", "reason": "x", "evidence": []}))
+        data, failure, violations = check_reply(
+            reply({"verdict": "maybe", "reason": "x", "evidence": []})
+        )
         assert data["verdict"] == "maybe"
         assert failure == FAILURE_SCHEMA
-        assert violations == ["$.verdict: 'maybe' is not one of ['supported', 'refuted', 'unknown']"]
+        assert violations == [
+            "$.verdict: 'maybe' is not one of ['supported', 'refuted', 'unknown']"
+        ]
 
 
 class TestReplyFacts:

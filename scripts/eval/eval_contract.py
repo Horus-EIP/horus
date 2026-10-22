@@ -64,5 +64,10 @@ def build_contract_report(
     records: list[dict[str, Any]],
 ) -> dict[str, Any]:
     return probe.build_contract_report(
-        label=label, run=run, model=model, llama_server=llama_server, records=records, profile=CONTRACT_PROFILE
+        label=label,
+        run=run,
+        model=model,
+        llama_server=llama_server,
+        records=records,
+        profile=CONTRACT_PROFILE,
     )

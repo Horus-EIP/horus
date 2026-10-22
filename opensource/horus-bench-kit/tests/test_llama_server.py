@@ -61,17 +61,28 @@ Threads:\t8
 """
 
 SERVER_COMMAND = [
-    "--model", "/models/alpha-1b-Q4_K_M.gguf",
-    "--alias", "alpha",
-    "--host", "0.0.0.0",
-    "--port", "8080",
-    "--ctx-size", "16384",
-    "--parallel", "2",
-    "--cache-type-k", "q8_0",
-    "--cache-type-v", "q8_0",
-    "--load-mode", "mmap",
-    "--cache-ram", "2048",
-    "--threads", "12",
+    "--model",
+    "/models/alpha-1b-Q4_K_M.gguf",
+    "--alias",
+    "alpha",
+    "--host",
+    "0.0.0.0",
+    "--port",
+    "8080",
+    "--ctx-size",
+    "16384",
+    "--parallel",
+    "2",
+    "--cache-type-k",
+    "q8_0",
+    "--cache-type-v",
+    "q8_0",
+    "--load-mode",
+    "mmap",
+    "--cache-ram",
+    "2048",
+    "--threads",
+    "12",
     "--metrics",
 ]
 
@@ -84,7 +95,9 @@ class TestPrometheus:
         assert "# HELP" not in "".join(values)
 
     def test_labelled_and_malformed_lines_are_skipped(self):
-        values = parse_prometheus('llamacpp:x{slot="0"} 4\nnot a metric line here\nllamacpp:y NaN\nllamacpp:z abc\n')
+        values = parse_prometheus(
+            'llamacpp:x{slot="0"} 4\nnot a metric line here\nllamacpp:y NaN\nllamacpp:z abc\n'
+        )
         assert "llamacpp:x" not in values
         assert "llamacpp:z" not in values
         assert values["llamacpp:y"] != values["llamacpp:y"]
@@ -106,7 +119,9 @@ class TestLlmUsage:
         }
 
     def test_counters_going_down_mean_the_server_restarted(self):
-        assert llm_usage(parse_prometheus(METRICS_AFTER), parse_prometheus(METRICS_BEFORE)) == {"restarted": True}
+        assert llm_usage(parse_prometheus(METRICS_AFTER), parse_prometheus(METRICS_BEFORE)) == {
+            "restarted": True
+        }
 
     def test_missing_scrape_gives_no_usage(self):
         assert llm_usage(None, parse_prometheus(METRICS_AFTER)) is None
@@ -137,7 +152,9 @@ class TestServerSettings:
         }
 
     def test_short_flags_and_equals_form_set_the_kv_cache(self):
-        settings = parse_server_args(["-c", "4096", "-ctk", "q8_0", "--cache-type-v=q8_0", "-fa", "on"])
+        settings = parse_server_args(
+            ["-c", "4096", "-ctk", "q8_0", "--cache-type-v=q8_0", "-fa", "on"]
+        )
         assert settings["ctx_size"] == 4096
         assert (settings["cache_type_k"], settings["cache_type_v"]) == ("q8_0", "q8_0")
         assert settings["flash_attn"] == "on"
@@ -197,8 +214,13 @@ class TestCgroupAndProc:
         assert parse_memory_stat("total_cache 100\n") is None
 
     def test_process_status_and_memory(self):
-        assert parse_process_status(SERVER_STATUS) == {"name": "llama-server", "rss_file_bytes": 3 * 2**30}
-        assert parse_process_status("Name:\tllama-server\nVmRSS:\t 100 kB\n")["rss_file_bytes"] is None
+        assert parse_process_status(SERVER_STATUS) == {
+            "name": "llama-server",
+            "rss_file_bytes": 3 * 2**30,
+        }
+        assert (
+            parse_process_status("Name:\tllama-server\nVmRSS:\t 100 kB\n")["rss_file_bytes"] is None
+        )
         assert parse_process_status("") is None
         assert parse_process_memory(SERVER_STATUS) == {
             "name": "llama-server",
@@ -233,15 +255,28 @@ class TestServerCommand:
         assert args[-2:] == ["--reasoning", "off"]
 
     def test_short_and_equals_forms_and_an_earlier_reasoning_flag_are_replaced(self):
-        args = server_args(["-m", "/models/a.gguf", "--port=8080", "--reasoning=on", "-rea", "auto"], "b.gguf", "auto")
+        args = server_args(
+            ["-m", "/models/a.gguf", "--port=8080", "--reasoning=on", "-rea", "auto"],
+            "b.gguf",
+            "auto",
+        )
         assert args == ["--model", "/models/b.gguf", "--port=8080", "--reasoning", "auto"]
         assert server_args(["--model=/models/a.gguf", "--metrics"], "b.gguf", "on") == [
-            "--model", "/models/b.gguf", "--metrics", "--reasoning", "on",
+            "--model",
+            "/models/b.gguf",
+            "--metrics",
+            "--reasoning",
+            "on",
         ]
 
     def test_without_a_model_flag_one_is_added(self):
         assert server_args(["--port", "8080"], "b.gguf", "off") == [
-            "--model", "/models/b.gguf", "--port", "8080", "--reasoning", "off",
+            "--model",
+            "/models/b.gguf",
+            "--port",
+            "8080",
+            "--reasoning",
+            "off",
         ]
 
     def test_a_standalone_candidate_publishes_a_port(self):
@@ -253,8 +288,18 @@ class TestServerCommand:
             publish="127.0.0.1:18080:8080",
         )
         assert command == [
-            "docker", "run", "-d", "--name", CANDIDATE_CONTAINER, "-p", "127.0.0.1:18080:8080",
-            "-v", "/srv/models:/models:ro", "ghcr.io/ggml-org/llama.cpp:server-b11382", "--model", "/models/x.gguf",
+            "docker",
+            "run",
+            "-d",
+            "--name",
+            CANDIDATE_CONTAINER,
+            "-p",
+            "127.0.0.1:18080:8080",
+            "-v",
+            "/srv/models:/models:ro",
+            "ghcr.io/ggml-org/llama.cpp:server-b11382",
+            "--model",
+            "/models/x.gguf",
         ]
 
     def test_a_candidate_can_join_a_network_under_an_alias(self):
@@ -268,10 +313,22 @@ class TestServerCommand:
             alias="model-server",
         )
         assert command == [
-            "docker", "run", "-d", "--name", "bench-candidate",
-            "--network", "lab_bench-net", "--network-alias", "model-server",
-            "--memory", str(6 * 2**30), "--memory-swap", str(6 * 2**30),
-            "-v", "/srv/models:/models:ro", "server-image",
+            "docker",
+            "run",
+            "-d",
+            "--name",
+            "bench-candidate",
+            "--network",
+            "lab_bench-net",
+            "--network-alias",
+            "model-server",
+            "--memory",
+            str(6 * 2**30),
+            "--memory-swap",
+            str(6 * 2**30),
+            "-v",
+            "/srv/models:/models:ro",
+            "server-image",
         ]
 
     def test_the_network_can_prefer_a_suffix(self):
@@ -288,7 +345,10 @@ def test_parse_container_inspect_reads_what_a_runner_reuses():
                 "Name": "/model-server",
                 "RestartCount": 0,
                 "State": {"Running": True, "OOMKilled": False},
-                "Config": {"Image": "ghcr.io/ggml-org/llama.cpp:server-b11382", "Cmd": SERVER_COMMAND},
+                "Config": {
+                    "Image": "ghcr.io/ggml-org/llama.cpp:server-b11382",
+                    "Cmd": SERVER_COMMAND,
+                },
                 "HostConfig": {"Memory": 6442450944},
                 "NetworkSettings": {"Networks": {"lab_bench-net": {}}},
                 "Mounts": [{"Source": "/home/u/models", "Destination": "/models"}],
@@ -308,15 +368,44 @@ def test_parse_container_inspect_reads_what_a_runner_reuses():
     }
     assert parse_container_inspect("[]") is None
     assert parse_container_inspect(None) is None
-    assert parse_container_inspect(json.dumps([{"HostConfig": {"Memory": 0}}]))["memory_bytes"] is None
+    assert (
+        parse_container_inspect(json.dumps([{"HostConfig": {"Memory": 0}}]))["memory_bytes"] is None
+    )
     assert parse_container_inspect(json.dumps([{"Mounts": []}]))["models_source"] is None
-    volume = {"Type": "volume", "Name": "bench_models", "Source": "/var/lib/docker/volumes/bench_models/_data", "Destination": "/models"}
-    assert parse_container_inspect(json.dumps([{"Mounts": [volume]}]))["models_source"] == "bench_models"
+    volume = {
+        "Type": "volume",
+        "Name": "bench_models",
+        "Source": "/var/lib/docker/volumes/bench_models/_data",
+        "Destination": "/models",
+    }
+    assert (
+        parse_container_inspect(json.dumps([{"Mounts": [volume]}]))["models_source"]
+        == "bench_models"
+    )
 
 
 def test_parse_container_env_reads_the_variables_the_container_was_given():
-    text = json.dumps([{"Config": {"Env": ["PATH=/usr/bin", "CACHE=1", "EMPTY=", "URL=http://x:8080/v1?a=b", "BARE"]}}])
-    assert parse_container_env(text) == {"PATH": "/usr/bin", "CACHE": "1", "EMPTY": "", "URL": "http://x:8080/v1?a=b"}
+    text = json.dumps(
+        [
+            {
+                "Config": {
+                    "Env": [
+                        "PATH=/usr/bin",
+                        "CACHE=1",
+                        "EMPTY=",
+                        "URL=http://x:8080/v1?a=b",
+                        "BARE",
+                    ]
+                }
+            }
+        ]
+    )
+    assert parse_container_env(text) == {
+        "PATH": "/usr/bin",
+        "CACHE": "1",
+        "EMPTY": "",
+        "URL": "http://x:8080/v1?a=b",
+    }
     assert parse_container_env(json.dumps([{"Config": {"Env": None}}])) == {}
     assert parse_container_env("[]") is None
     assert parse_container_env(None) is None

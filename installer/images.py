@@ -39,32 +39,40 @@ REFUSALS: tuple[str, ...] = (
 
 LOGIN_TIMEOUT_SECONDS = 120
 
+
 @dataclass(frozen=True)
 class Credentials:
     username: str
     token: str
     source: str
 
+
 def build_from_source_requested(flag: bool, environ: Mapping[str, str] | None = None) -> bool:
     environ = os.environ if environ is None else environ
     return bool(flag) or environ.get(BUILD_FROM_SOURCE_KEY, "").strip().lower() in TRUE_WORDS
 
-def registry_to_use(requested: str | None, environ: Mapping[str, str],
-                    configured: str | None) -> str:
+
+def registry_to_use(
+    requested: str | None, environ: Mapping[str, str], configured: str | None
+) -> str:
     for candidate in (requested, environ.get(REGISTRY_KEY), configured):
         cleaned = (candidate or "").strip().rstrip("/").lower()
         if cleaned:
             return cleaned
     return DEFAULT_REGISTRY
 
+
 def registry_host(registry: str) -> str:
     return registry.split("/", 1)[0]
+
 
 def image_repository(service: str) -> str:
     return "horus-" + service.replace("_", "-")
 
+
 def image_name(registry: str, service: str, version: str, flavor: str) -> str:
     return f"{registry}/{image_repository(service)}:{version}-{flavor}"
+
 
 def split_tag(image: str) -> tuple[str, str]:
     repository, colon, tag = image.rpartition(":")
@@ -72,8 +80,10 @@ def split_tag(image: str) -> tuple[str, str]:
         return image, ""
     return repository, tag
 
+
 def flavor_for(cpu_profile: bool) -> str:
     return CPU_FLAVOR if cpu_profile else GPU_FLAVOR
+
 
 def _parse_token_text(text: str, source: str) -> tuple[str | None, str]:
     line = next((raw.strip() for raw in text.splitlines() if raw.strip()), "")
@@ -91,6 +101,7 @@ def _parse_token_text(text: str, source: str) -> tuple[str | None, str]:
         return username.strip() or None, token.strip()
     return None, line
 
+
 def _read_token_file(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8-sig")
@@ -102,8 +113,10 @@ def _read_token_file(path: Path) -> str:
             "Check the path given to --registry-token-file, then run the installer again.",
         ) from exc
 
-def read_credentials(token_file: str | None, username: str | None,
-                     environ: Mapping[str, str], default_file: Path) -> Credentials | None:
+
+def read_credentials(
+    token_file: str | None, username: str | None, environ: Mapping[str, str], default_file: Path
+) -> Credentials | None:
     if token_file:
         path = Path(token_file).expanduser()
         file_user, token = _parse_token_text(_read_token_file(path), path.name)
@@ -134,22 +147,27 @@ def read_credentials(token_file: str | None, username: str | None,
         )
     return Credentials(username=name, token=token, source=source)
 
+
 def _without(secret: str, text: str) -> str:
     return text.replace(secret, "***") if secret else text
 
+
 def sign_in(log: Log, registry: str, credentials: Credentials) -> None:
     host = registry_host(registry)
-    log.say(f"  Signing in to {host} as {credentials.username} "
-            f"(token from {credentials.source})")
+    log.say(f"  Signing in to {host} as {credentials.username} (token from {credentials.source})")
     res = run(
         ["docker", "login", host, "--username", credentials.username, "--password-stdin"],
-        log, timeout=LOGIN_TIMEOUT_SECONDS, log_output=False, stdin_text=credentials.token,
+        log,
+        timeout=LOGIN_TIMEOUT_SECONDS,
+        log_output=False,
+        stdin_text=credentials.token,
     )
     if res.ok:
         log.ok(f"Signed in to {host}")
         return
-    reason = _without(credentials.token, res.err.strip() or res.out.strip() or
-                      f"docker login exited {res.code}")
+    reason = _without(
+        credentials.token, res.err.strip() or res.out.strip() or f"docker login exited {res.code}"
+    )
     raise InstallError(
         EXIT_REGISTRY_LOGIN_FAILED,
         f"{host} did not accept the registry token.",

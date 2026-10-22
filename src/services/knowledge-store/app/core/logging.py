@@ -57,11 +57,28 @@ class JSONFormatter(logging.Formatter):
         # Add extra fields
         for key, value in record.__dict__.items():
             if key not in {
-                "name", "msg", "args", "created", "filename", "funcName",
-                "levelname", "levelno", "lineno", "module", "msecs",
-                "pathname", "process", "processName", "relativeCreated",
-                "stack_info", "exc_info", "exc_text", "thread", "threadName",
-                "message", "asctime"
+                "name",
+                "msg",
+                "args",
+                "created",
+                "filename",
+                "funcName",
+                "levelname",
+                "levelno",
+                "lineno",
+                "module",
+                "msecs",
+                "pathname",
+                "process",
+                "processName",
+                "relativeCreated",
+                "stack_info",
+                "exc_info",
+                "exc_text",
+                "thread",
+                "threadName",
+                "message",
+                "asctime",
             }:
                 try:
                     json.dumps(value)
@@ -115,9 +132,7 @@ class KnowledgeStoreLogger:
         root_logger.addHandler(console_handler)
 
         if os.getenv("TEST_MODE") != "1":
-            json_log_file = (
-                log_dir / f"knowledge_store_{datetime.now().strftime('%Y%m%d')}.json"
-            )
+            json_log_file = log_dir / f"knowledge_store_{datetime.now().strftime('%Y%m%d')}.json"
             json_handler = logging.FileHandler(json_log_file, encoding="utf-8")
             json_handler.setLevel(logging.DEBUG)
             json_handler.setFormatter(JSONFormatter())
@@ -146,8 +161,8 @@ def log_document_operation(operation: str, doc_id: str = None, **extra):
             "type": "document_operation",
             "operation": operation,
             "document_id": doc_id,
-            **extra
-        }
+            **extra,
+        },
     )
 
 
@@ -161,6 +176,6 @@ def log_query_operation(query: str, results_count: int, duration_ms: float, **ex
             "query_preview": query[:100] if query else None,
             "results_count": results_count,
             "duration_ms": round(duration_ms, 2),
-            **extra
-        }
+            **extra,
+        },
     )

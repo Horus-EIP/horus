@@ -31,7 +31,9 @@ from fastapi.testclient import TestClient
 import core.app as app_module
 from core.structured_logging import get_correlation_id
 
-RELEASE_VERSION = (Path(__file__).resolve().parents[3] / "VERSION").read_text(encoding="utf-8").strip()
+RELEASE_VERSION = (
+    (Path(__file__).resolve().parents[3] / "VERSION").read_text(encoding="utf-8").strip()
+)
 
 # --------------------------------------------------------------------------- #
 # Shared helpers
@@ -89,9 +91,7 @@ def patched_lifespan_side_effects():
         patch.object(app_module, "rabbitmq_instance") as rabbitmq_instance,
         patch.object(app_module, "start_llm_preload_background_thread") as llm_preload,
         patch.object(app_module, "start_probe_background_thread") as ai_mode_probe,
-        patch.object(
-            app_module, "start_embedding_preload_background_thread"
-        ) as emb_preload,
+        patch.object(app_module, "start_embedding_preload_background_thread") as emb_preload,
         patch.object(app_module, "engine") as engine,
     ):
         yield {
@@ -147,9 +147,7 @@ class TestCreateAppEnvironment:
         app_module.create_app_environment()
         assert app_module.instrumentator is not None
 
-    def test_metrics_endpoint_served_through_full_lifespan(
-        self, patched_lifespan_side_effects
-    ):
+    def test_metrics_endpoint_served_through_full_lifespan(self, patched_lifespan_side_effects):
         """Driving the app through TestClient exercises startup + a real request."""
         app = app_module.create_app_environment()
 
@@ -197,9 +195,7 @@ class TestCreateAppEnvironment:
 
 
 class TestLifespan:
-    def test_startup_and_shutdown_invoke_all_side_effects(
-        self, patched_lifespan_side_effects
-    ):
+    def test_startup_and_shutdown_invoke_all_side_effects(self, patched_lifespan_side_effects):
         """Happy path: every boot hook runs on enter, teardown hooks on exit."""
         mocks = patched_lifespan_side_effects
         app = app_module.create_app_environment()
@@ -219,9 +215,7 @@ class TestLifespan:
         mocks["rabbitmq_instance"].close.assert_called_once()
         mocks["engine"].dispose.assert_called_once()
 
-    def test_startup_propagates_db_init_failure(
-        self, patched_lifespan_side_effects
-    ):
+    def test_startup_propagates_db_init_failure(self, patched_lifespan_side_effects):
         """A failing ``init_db`` is logged and re-raised out of the lifespan."""
         mocks = patched_lifespan_side_effects
         mocks["init_db"].side_effect = RuntimeError("db boom")
@@ -234,9 +228,7 @@ class TestLifespan:
         # We failed before reaching the RabbitMQ connect line.
         mocks["rabbitmq_instance"].connect.assert_not_called()
 
-    def test_startup_propagates_rabbitmq_failure(
-        self, patched_lifespan_side_effects
-    ):
+    def test_startup_propagates_rabbitmq_failure(self, patched_lifespan_side_effects):
         """A failing broker connect is logged and re-raised out of the lifespan."""
         mocks = patched_lifespan_side_effects
         mocks["rabbitmq_instance"].connect.side_effect = ConnectionError("no broker")
@@ -258,9 +250,7 @@ class TestLifespan:
         assert isinstance(app, FastAPI)
         it.assert_called_once_with(app)
 
-    def test_shutdown_awaits_and_swallows_cancelled_heartbeat(
-        self, patched_lifespan_side_effects
-    ):
+    def test_shutdown_awaits_and_swallows_cancelled_heartbeat(self, patched_lifespan_side_effects):
         """A long-lived heartbeat task is cancelled and its CancelledError swallowed."""
         import asyncio
 
@@ -277,9 +267,7 @@ class TestLifespan:
         # Clean shutdown still disposed the engine after swallowing the cancel.
         patched_lifespan_side_effects["engine"].dispose.assert_called_once()
 
-    def test_shutdown_skips_close_when_no_rabbitmq_instance(
-        self, patched_lifespan_side_effects
-    ):
+    def test_shutdown_skips_close_when_no_rabbitmq_instance(self, patched_lifespan_side_effects):
         """A falsy broker handle skips ``close()`` at shutdown (defensive branch)."""
         rmq = patched_lifespan_side_effects["rabbitmq_instance"]
         # Truthy enough to call .connect() at startup, falsy at the shutdown
@@ -406,17 +394,23 @@ def metrics_middleware_module():
     }
     with (
         patch.object(
-            cm, "increment_request_count", record_calls["increment_request_count"],
+            cm,
+            "increment_request_count",
+            record_calls["increment_request_count"],
             create=True,
         ),
         patch.object(
-            cm, "observe_request_latency", record_calls["observe_request_latency"],
+            cm,
+            "observe_request_latency",
+            record_calls["observe_request_latency"],
             create=True,
         ),
         patch.object(cm, "record_error", record_calls["record_error"], create=True),
         patch.object(
-            cm, "track_request_in_progress",
-            record_calls["track_request_in_progress"], create=True,
+            cm,
+            "track_request_in_progress",
+            record_calls["track_request_in_progress"],
+            create=True,
         ),
     ):
         module = importlib.import_module("core.metrics_middleware")
@@ -463,7 +457,9 @@ class TestMetricsMiddleware:
 
         # In-progress gauge goes up then down (increment True then False).
         assert calls["track_request_in_progress"].call_count == 2
-        increments = [c.kwargs.get("increment") for c in calls["track_request_in_progress"].call_args_list]
+        increments = [
+            c.kwargs.get("increment") for c in calls["track_request_in_progress"].call_args_list
+        ]
         assert increments == [True, False]
         calls["record_error"].assert_not_called()
 
@@ -481,21 +477,15 @@ class TestMetricsMiddleware:
         calls["track_request_in_progress"].assert_not_called()
         calls["record_error"].assert_not_called()
 
-    def test_exception_records_error_and_uses_default_status(
-        self, metrics_middleware_module
-    ):
+    def test_exception_records_error_and_uses_default_status(self, metrics_middleware_module):
         """A raised handler records an error and reports the default 500 status."""
         mw_module, calls = metrics_middleware_module
-        client = TestClient(
-            _build_metrics_app(mw_module), raise_server_exceptions=False
-        )
+        client = TestClient(_build_metrics_app(mw_module), raise_server_exceptions=False)
 
         response = client.get("/boom")
         assert response.status_code == 500
 
-        calls["record_error"].assert_called_once_with(
-            error_type="ValueError", component="http"
-        )
+        calls["record_error"].assert_called_once_with(error_type="ValueError", component="http")
         # finally-block still records the request with the default status 500.
         calls["increment_request_count"].assert_called_once_with("GET", "/boom", 500)
         assert calls["track_request_in_progress"].call_count == 2
@@ -699,9 +689,7 @@ class TestBootstrapLLM:
         monkeypatch.setenv("LLM_MODEL_DIR", str(tmp_path / "dl"))
         monkeypatch.setenv("HF_HUB_OFFLINE", "0")
         # Ensure no cached module so the import statement actually executes.
-        monkeypatch.delitem(
-            __import__("sys").modules, "huggingface_hub", raising=False
-        )
+        monkeypatch.delitem(__import__("sys").modules, "huggingface_hub", raising=False)
 
         real_import = builtins.__import__
 

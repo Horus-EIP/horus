@@ -58,17 +58,12 @@ def build_action_list(actions_dict, agents_available, db: Session = None):
         agent_id = ""
         question = ""
         for key, value in dict.items():
-
             if key == "agent":
                 if value == "":
-                    raise ValueError(
-                        "Agent name to attribute agent tasks must not be empty"
-                    )
+                    raise ValueError("Agent name to attribute agent tasks must not be empty")
                 agent_id = get_agent_id(value, db)
                 if agent_id is None:
-                    raise ValueError(
-                        f"Agent mentionned by orchestrator doesn't exists: {value}"
-                    )
+                    raise ValueError(f"Agent mentionned by orchestrator doesn't exists: {value}")
 
             elif key == "input":
                 if value == "":
@@ -127,12 +122,8 @@ def build_subtask_list(subtask_entity, agents_available, db: Session = None):
         agent_id = get_agent_by_type(element.agent_type, db)
 
         if agent_id is None:
-            logger.error(
-                "Agent type yielded None from registry", agent_type=element.agent_type
-            )
-            raise ValueError(
-                f"Agent type '{element.agent_type}' not found or no agents available."
-            )
+            logger.error("Agent type yielded None from registry", agent_type=element.agent_type)
+            raise ValueError(f"Agent type '{element.agent_type}' not found or no agents available.")
 
         if element.description == "":
             raise ValueError("Input for the agents task must not be empty")
@@ -208,9 +199,7 @@ def _heuristic_decompose(user_input: str, db: Session) -> tuple:
                 {
                     "agent_id": agent_id,
                     "agent_name": agent_row.name,
-                    "agent_type": (
-                        agent_row.type.value if agent_row.type else "general"
-                    ),
+                    "agent_type": (agent_row.type.value if agent_row.type else "general"),
                     "skill": r.get("skill", ""),
                     "score": r.get("score", 0.0),
                 }
@@ -313,14 +302,17 @@ def decompose_task(user_input: str, db: Session = None):
         # it or types it wrong. Default to "pending" so an otherwise-valid plan
         # isn't thrown away over a missing key.
         for st in json_output["sub_tasks"]:
-            if isinstance(st, dict) and "status" not in st or isinstance(st, dict) and st.get("status") != "pending":
+            if (
+                isinstance(st, dict)
+                and "status" not in st
+                or isinstance(st, dict)
+                and st.get("status") != "pending"
+            ):
                 st["status"] = "pending"
             if isinstance(st, dict) and "depends_on" not in st:
                 st["depends_on"] = []
         for st in json_output["sub_tasks"]:
-            pretty_log(
-                f"  [{st['id']}] {st['agent_type'].upper()}: {st['description']}", "🔹"
-            )
+            pretty_log(f"  [{st['id']}] {st['agent_type'].upper()}: {st['description']}", "🔹")
 
         entity = CollaborativeTask(**json_output)
 
@@ -353,11 +345,7 @@ def get_manager_agent(db: Session):
     """
     from db.models import Agents
 
-    return (
-        db.query(Agents)
-        .filter(Agents.name == "Manager")
-        .first()
-    )
+    return db.query(Agents).filter(Agents.name == "Manager").first()
 
 
 def _planned_steps_from_actions(action_list: list, db: Session) -> list[dict]:
@@ -380,9 +368,7 @@ def _planned_steps_from_actions(action_list: list, db: Session) -> list[dict]:
         row = by_id.get(agent_id)
         out.append(
             {
-                "agent_type": (
-                    row.type.value if (row and row.type) else "general"
-                ),
+                "agent_type": (row.type.value if (row and row.type) else "general"),
                 "agent_name": row.name if row else "?",
                 "description": demand,
             }
@@ -391,9 +377,7 @@ def _planned_steps_from_actions(action_list: list, db: Session) -> list[dict]:
 
 
 @tracer.start_as_current_span("announce_plan")
-def manager_announce_plan(
-    user_demand: str, action_list: list, db: Session
-) -> str:
+def manager_announce_plan(user_demand: str, action_list: list, db: Session) -> str:
     """Ask the Manager LLM to draft the chat message that announces a plan.
 
     Returns plain text (no JSON, no code fences) — the message is fanned out
@@ -414,7 +398,7 @@ def manager_announce_plan(
         # being told plain text.
         for fence in ("```text", "```markdown", "```"):
             if text.startswith(fence):
-                text = text[len(fence):].lstrip()
+                text = text[len(fence) :].lstrip()
             if text.endswith("```"):
                 text = text[:-3].rstrip()
         if not text:
@@ -423,12 +407,8 @@ def manager_announce_plan(
     except Exception as exc:
         logger.warning("Manager announcement LLM call failed: %s", exc)
         # Deterministic fallback that still demonstrates orchestration.
-        listing = "; ".join(
-            f"{s['agent_name']} ({s['description'][:80]})" for s in steps[:4]
-        )
-        return (
-            f"I'll handle this in {len(steps)} step(s). Dispatching: {listing}."
-        )
+        listing = "; ".join(f"{s['agent_name']} ({s['description'][:80]})" for s in steps[:4])
+        return f"I'll handle this in {len(steps)} step(s). Dispatching: {listing}."
 
 
 @tracer.start_as_current_span("review_step")
@@ -535,9 +515,7 @@ def choose_route_with_llm(user_input: str, db: Session) -> tuple[str | None, tup
     pretty_log(f"ANALYZING USER INPUT: '{user_input}'", "🔍")
 
     available_agents = get_available_agents(db)
-    logger.debug(
-        "Available agents count: %d", len(available_agents) if available_agents else 0
-    )
+    logger.debug("Available agents count: %d", len(available_agents) if available_agents else 0)
 
     if not available_agents:
         pretty_log("NO AGENTS AVAILABLE", "❌")
@@ -560,9 +538,7 @@ def choose_route_with_llm(user_input: str, db: Session) -> tuple[str | None, tup
         json_output = json.loads(output)
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse JSON from LLM: {e}. Output was: '{output}'")
-        pretty_log(
-            "SELECTOR FAILED TO PARSE JSON - FALLING BACK TO DECOMPOSITION", "⚠️"
-        )
+        pretty_log("SELECTOR FAILED TO PARSE JSON - FALLING BACK TO DECOMPOSITION", "⚠️")
         return None, _unrouted()
 
     classification = json_output.get("classification", "UNKNOWN")
@@ -601,9 +577,7 @@ def choose_route_with_llm(user_input: str, db: Session) -> tuple[str | None, tup
         pretty_log(f"SELECTED SINGLE AGENT: {agent_name}", "✅")
         return classification, (agent_id, rewritten_input, None, [])
 
-    logger.warning(
-        f"Unknown classification '{classification}'. Falling back to decomposition."
-    )
+    logger.warning(f"Unknown classification '{classification}'. Falling back to decomposition.")
     return classification, _unrouted()
 
 

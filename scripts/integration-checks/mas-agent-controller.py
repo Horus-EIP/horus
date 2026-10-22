@@ -84,9 +84,7 @@ async def test_heartbeat_sets_active_and_inactive(monkeypatch):
         "agents.controller._get_all_agents_internal", return_value=agents
     ) as mock_get_agents:
         # Mock _batch_update_agent_status_internal to track updates
-        with patch(
-            "agents.controller._batch_update_agent_status_internal"
-        ) as mock_update:
+        with patch("agents.controller._batch_update_agent_status_internal") as mock_update:
             try:
                 await controller.check_agent_heartbeat(test_mode=True)
             except asyncio.CancelledError:
@@ -123,9 +121,7 @@ async def test_heartbeat_handles_empty_registry(monkeypatch):
     monkeypatch.setattr(asyncio, "sleep", fake_sleep)
 
     # Mock _get_all_agents_internal to return empty list
-    with patch(
-        "agents.controller._get_all_agents_internal", return_value=[]
-    ) as mock_get_agents:
+    with patch("agents.controller._get_all_agents_internal", return_value=[]) as mock_get_agents:
         try:
             await controller.check_agent_heartbeat(test_mode=True)
         except asyncio.CancelledError:

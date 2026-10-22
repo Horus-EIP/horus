@@ -3,25 +3,56 @@ import datetime
 from prometheus_client import Counter, Gauge, Histogram
 
 LONG_RUNNING_BUCKETS = (
-    0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0, 900.0, 1200.0, 1800.0
+    0.1,
+    0.5,
+    1.0,
+    2.0,
+    5.0,
+    10.0,
+    30.0,
+    60.0,
+    120.0,
+    300.0,
+    600.0,
+    900.0,
+    1200.0,
+    1800.0,
 )
 
 ROUTING_BUCKETS = (
-    0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.2, 0.5, *LONG_RUNNING_BUCKETS[2:]
+    0.001,
+    0.0025,
+    0.005,
+    0.01,
+    0.025,
+    0.05,
+    0.1,
+    0.2,
+    0.5,
+    *LONG_RUNNING_BUCKETS[2:],
 )
 
 PROMPT_TOKEN_BUCKETS = (
-    64, 128, 256, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 16384, 32768
+    64,
+    128,
+    256,
+    512,
+    768,
+    1024,
+    1536,
+    2048,
+    3072,
+    4096,
+    6144,
+    8192,
+    16384,
+    32768,
 )
 
 # Business Metrics
-AGENT_COUNT = Gauge(
-    "mas_agent_count", "Number of currently registered agents", ["status"]
-)
+AGENT_COUNT = Gauge("mas_agent_count", "Number of currently registered agents", ["status"])
 
-TASK_QUEUE_DEPTH = Gauge(
-    "mas_task_queue_depth", "Current number of tasks waiting in queue"
-)
+TASK_QUEUE_DEPTH = Gauge("mas_task_queue_depth", "Current number of tasks waiting in queue")
 
 TASK_ERRORS = Counter(
     "mas_task_errors_total",

@@ -121,7 +121,7 @@ def answer_prompt(user: str) -> tuple[str, str]:
         at = text.rfind(REQUEST_MARKER)
     if at < 0:
         return "", focus(text)
-    return text[:at], focus(text[at + len(REQUEST_MARKER):])
+    return text[:at], focus(text[at + len(REQUEST_MARKER) :])
 
 
 def focus(request: str) -> str:
@@ -141,8 +141,11 @@ def observations_in(text: str) -> list[str]:
         return []
     trace = re.split(r"\n\nStep \d+: ", reasoning[1])[0]
     entries = TRACE_ENTRY.split(trace)[1:]
-    return [body.strip() for kind, body in zip(entries[::2], entries[1::2], strict=True)
-            if kind == "OBSERVATION" and body.strip()]
+    return [
+        body.strip()
+        for kind, body in zip(entries[::2], entries[1::2], strict=True)
+        if kind == "OBSERVATION" and body.strip()
+    ]
 
 
 def passages(context: str) -> list[Passage]:
@@ -230,7 +233,7 @@ def best_sentences(question: str, found: list[Passage], min_score: float) -> lis
             continue
         if figures and FIGURE.search(sentence.text):
             overlap = min(1.0, overlap + FIGURE_BONUS)
-        scored.append((overlap * covered ** 2, sentence))
+        scored.append((overlap * covered**2, sentence))
     best = max((score for score, _ in scored), default=0.0)
     if best < min_score or best == 0:
         return []

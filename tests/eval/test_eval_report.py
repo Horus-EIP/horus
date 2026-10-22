@@ -123,11 +123,20 @@ class TestQuestionRecord:
     def test_the_record_keeps_the_horus_eval_keys_in_order(self, lookup_item):
         assert list(question_record(lookup_item, chat_outcome())) == RECORD_KEYS
 
-    def test_record_keeps_dispatch_time_routing_server_metrics_and_question_resources(self, lookup_item):
-        llm = {"prompt_s": 41.5, "prompt_tokens": 2100, "generation_s": 30.2, "generated_tokens": 160}
+    def test_record_keeps_dispatch_time_routing_server_metrics_and_question_resources(
+        self, lookup_item
+    ):
+        llm = {
+            "prompt_s": 41.5,
+            "prompt_tokens": 2100,
+            "generation_s": 30.2,
+            "generated_tokens": 160,
+        }
         decision = {"decisions": 1, "methods": {"embedding": 1}, "seconds": 0.012}
         resources = {"samples": 4, "containers_sum_peak_mem_bytes": 9 * 2**30}
-        outcome = chat_outcome(dispatch_s=0.8, routing_decision=decision, llm=llm, resources=resources)
+        outcome = chat_outcome(
+            dispatch_s=0.8, routing_decision=decision, llm=llm, resources=resources
+        )
         record = question_record(lookup_item, outcome)
         assert record["dispatch_s"] == 0.8
         assert record["routing_decision"] == decision
@@ -150,7 +159,9 @@ class TestQuestionRecord:
         assert record["answer_correct_auto"] is False
 
     def test_spiral_fallback_is_flagged_and_wrong(self, lookup_item):
-        outcome = chat_outcome(answer="I couldn't extract a consistent answer from the retrieved content. 250")
+        outcome = chat_outcome(
+            answer="I couldn't extract a consistent answer from the retrieved content. 250"
+        )
         record = question_record(lookup_item, outcome)
         assert record["fallback"] == "spiral"
         assert record["answer_correct_auto"] is False
@@ -280,7 +291,11 @@ class TestQuestionsPeakChecks:
 
     def test_only_a_peak_reached_during_the_questions_counts_against_the_samples(self):
         at_start = {
-            "container_lifetime_peak_mem_bytes": {"knowledge_store": 5 * GIB, "llm": 3 * GIB, "mas": GIB},
+            "container_lifetime_peak_mem_bytes": {
+                "knowledge_store": 5 * GIB,
+                "llm": 3 * GIB,
+                "mas": GIB,
+            },
             "docker_host_swap_used_bytes": GIB // 4,
         }
         resources = self.resources(
@@ -298,13 +313,17 @@ class TestQuestionsPeakChecks:
         assert checks["at_questions_start"] is at_start
 
     def test_inactive_page_cache_that_stays_put_is_no_excess(self):
-        at_start = {"container_lifetime_peak_mem_bytes": {"knowledge_store": 5 * GIB, "llm": 3 * GIB}}
+        at_start = {
+            "container_lifetime_peak_mem_bytes": {"knowledge_store": 5 * GIB, "llm": 3 * GIB}
+        }
         resources = self.resources(
             lifetime={"knowledge_store": 5 * GIB + 2**20, "llm": 5 * GIB + 3 * GIB // 10},
             sampled={"knowledge_store": 2 * GIB, "llm": 3 * GIB},
             memory_stats={
                 "knowledge_store": memory_stat(inactive_file=3 * GIB + GIB // 10),
-                "llm": memory_stat(inactive_file=2 * GIB + 3 * GIB // 10, file_mapped=2 * GIB + 3 * GIB // 10),
+                "llm": memory_stat(
+                    inactive_file=2 * GIB + 3 * GIB // 10, file_mapped=2 * GIB + 3 * GIB // 10
+                ),
             },
         )
         assert questions_peak_checks(resources, at_start, None)["unsampled_peak_excess_bytes"] == {}
@@ -314,17 +333,27 @@ class TestQuestionsPeakChecks:
         resources = self.resources(
             lifetime={"llm": 4 * GIB}, sampled={"llm": 3 * GIB}, memory_stats={"llm": None}
         )
-        assert questions_peak_checks(resources, at_start, None)["unsampled_peak_excess_bytes"] == {"llm": None}
+        assert questions_peak_checks(resources, at_start, None)["unsampled_peak_excess_bytes"] == {
+            "llm": None
+        }
 
     def test_an_unread_memory_peak_at_the_start_or_the_end_leaves_the_check_open(self):
         at_start = {"container_lifetime_peak_mem_bytes": {"llm": None, "agent": GIB}}
         resources = self.resources(
             lifetime={"llm": 2 * GIB, "agent": None, "web_client": GIB},
             sampled={"llm": GIB, "agent": 5, "web_client": 10},
-            memory_stats={"llm": memory_stat(), "agent": memory_stat(), "web_client": memory_stat()},
+            memory_stats={
+                "llm": memory_stat(),
+                "agent": memory_stat(),
+                "web_client": memory_stat(),
+            },
         )
         checks = questions_peak_checks(resources, at_start, None)
-        assert checks["unsampled_peak_excess_bytes"] == {"agent": None, "llm": None, "web_client": None}
+        assert checks["unsampled_peak_excess_bytes"] == {
+            "agent": None,
+            "llm": None,
+            "web_client": None,
+        }
 
     def test_a_container_docker_stats_never_sampled_is_not_judged(self):
         at_start = {"container_lifetime_peak_mem_bytes": {"llm": GIB}}
@@ -334,9 +363,15 @@ class TestQuestionsPeakChecks:
         assert checks["docker_host_swap_growth_bytes"] is None
 
     def test_swap_growth_counts_only_from_the_first_question(self):
-        at_start = {"container_lifetime_peak_mem_bytes": {}, "docker_host_swap_used_bytes": GIB // 4}
+        at_start = {
+            "container_lifetime_peak_mem_bytes": {},
+            "docker_host_swap_used_bytes": GIB // 4,
+        }
         resources = self.resources({}, {}, swap_peak=GIB)
-        assert questions_peak_checks(resources, at_start, GIB // 2)["docker_host_swap_growth_bytes"] == GIB // 4
+        assert (
+            questions_peak_checks(resources, at_start, GIB // 2)["docker_host_swap_growth_bytes"]
+            == GIB // 4
+        )
 
     def test_swap_that_shrank_is_no_growth(self):
         at_start = {"container_lifetime_peak_mem_bytes": {}, "docker_host_swap_used_bytes": GIB}
@@ -355,12 +390,22 @@ class TestLlmPagesOutsideDockerStats:
     LLAMA_SERVER = {"name": "llama-server", "rss_file_bytes": 2 * GIB + 4 * GIB // 10}
 
     def test_model_pages_on_the_inactive_list_are_left_out_of_docker_stats(self):
-        llm_stat = memory_stat(inactive_file=2 * GIB + 4 * GIB // 10, active_file=GIB // 20, file_mapped=2 * GIB + 4 * GIB // 10)
-        assert llm_mapped_outside_docker_stats(self.LLAMA_SERVER, llm_stat) == 2 * GIB + 4 * GIB // 10 - GIB // 20
+        llm_stat = memory_stat(
+            inactive_file=2 * GIB + 4 * GIB // 10,
+            active_file=GIB // 20,
+            file_mapped=2 * GIB + 4 * GIB // 10,
+        )
+        assert (
+            llm_mapped_outside_docker_stats(self.LLAMA_SERVER, llm_stat)
+            == 2 * GIB + 4 * GIB // 10 - GIB // 20
+        )
 
     def test_model_pages_charged_to_the_container_that_downloaded_them_are_left_out(self):
         llm_stat = memory_stat(active_file=GIB // 5, file_mapped=GIB // 50)
-        assert llm_mapped_outside_docker_stats(self.LLAMA_SERVER, llm_stat) == 2 * GIB + 4 * GIB // 10 - GIB // 50
+        assert (
+            llm_mapped_outside_docker_stats(self.LLAMA_SERVER, llm_stat)
+            == 2 * GIB + 4 * GIB // 10 - GIB // 50
+        )
 
     def test_model_pages_on_the_active_list_are_already_in_docker_stats(self):
         llm_stat = memory_stat(active_file=2 * GIB + GIB // 2, file_mapped=2 * GIB + GIB // 2)
@@ -382,9 +427,19 @@ class TestLlmPagesOutsideDockerStats:
 class TestStackPeak:
     def test_p_is_the_largest_total_of_one_sample_with_the_model_pages_of_that_sample(self):
         peaks = ResourcePeaks()
-        peaks.add({"llm": 4 * GIB, "knowledge_store": 5 * GIB}, llm_container="llm", llm_mapped_outside=0)
-        peaks.add({"llm": 2 * GIB, "knowledge_store": 4 * GIB + GIB // 2}, llm_container="llm", llm_mapped_outside=2 * GIB)
-        peaks.add({"llm": 2 * GIB, "knowledge_store": 4 * GIB}, llm_container="llm", llm_mapped_outside=2 * GIB)
+        peaks.add(
+            {"llm": 4 * GIB, "knowledge_store": 5 * GIB}, llm_container="llm", llm_mapped_outside=0
+        )
+        peaks.add(
+            {"llm": 2 * GIB, "knowledge_store": 4 * GIB + GIB // 2},
+            llm_container="llm",
+            llm_mapped_outside=2 * GIB,
+        )
+        peaks.add(
+            {"llm": 2 * GIB, "knowledge_store": 4 * GIB},
+            llm_container="llm",
+            llm_mapped_outside=2 * GIB,
+        )
         resources = peaks.as_dict()
         assert resources["containers_sum_peak_mem_bytes"] == 9 * GIB
         assert resources["stack_peak_mem_bytes"] == 9 * GIB
@@ -393,8 +448,14 @@ class TestStackPeak:
 
     def test_model_pages_left_out_in_the_peak_sample_are_added_to_p(self):
         peaks = ResourcePeaks()
-        peaks.add({"llm": 2 * GIB, "knowledge_store": 7 * GIB}, llm_container="llm", llm_mapped_outside=2 * GIB)
-        peaks.add({"llm": 4 * GIB, "knowledge_store": 4 * GIB}, llm_container="llm", llm_mapped_outside=0)
+        peaks.add(
+            {"llm": 2 * GIB, "knowledge_store": 7 * GIB},
+            llm_container="llm",
+            llm_mapped_outside=2 * GIB,
+        )
+        peaks.add(
+            {"llm": 4 * GIB, "knowledge_store": 4 * GIB}, llm_container="llm", llm_mapped_outside=0
+        )
         resources = peaks.as_dict()
         assert resources["stack_peak_mem_bytes"] == 11 * GIB
         assert resources["llm_mapped_outside_docker_stats_bytes"] == 2 * GIB
@@ -412,7 +473,9 @@ class TestStackPeak:
     @pytest.mark.parametrize("llm_container", ["llm", None])
     def test_without_the_llm_figures_in_any_sample_p_is_unknown(self, llm_container):
         peaks = ResourcePeaks()
-        peaks.add({"llm": 4 * GIB, "mas": GIB}, llm_container=llm_container, llm_mapped_outside=None)
+        peaks.add(
+            {"llm": 4 * GIB, "mas": GIB}, llm_container=llm_container, llm_mapped_outside=None
+        )
         resources = peaks.as_dict()
         assert resources["stack_peak_mem_bytes"] is None
         assert resources["llm_mapped_outside_docker_stats_bytes"] is None
@@ -426,8 +489,22 @@ class TestServerSideSummary:
 
     def test_totals_give_the_throughput_over_all_questions(self):
         records = [
-            self.record({"prompt_s": 10.0, "prompt_tokens": 1000, "generation_s": 20.0, "generated_tokens": 200}),
-            self.record({"prompt_s": 30.0, "prompt_tokens": 2000, "generation_s": 20.0, "generated_tokens": 200}),
+            self.record(
+                {
+                    "prompt_s": 10.0,
+                    "prompt_tokens": 1000,
+                    "generation_s": 20.0,
+                    "generated_tokens": 200,
+                }
+            ),
+            self.record(
+                {
+                    "prompt_s": 30.0,
+                    "prompt_tokens": 2000,
+                    "generation_s": 20.0,
+                    "generated_tokens": 200,
+                }
+            ),
         ]
         summary = llm_summary(records)
         assert summary["questions"] == 2
@@ -439,7 +516,9 @@ class TestServerSideSummary:
 
     def test_a_restarted_server_is_counted_and_left_out_of_the_rates(self):
         records = [
-            self.record({"prompt_s": 4.0, "prompt_tokens": 400, "generation_s": 2.0, "generated_tokens": 20}),
+            self.record(
+                {"prompt_s": 4.0, "prompt_tokens": 400, "generation_s": 2.0, "generated_tokens": 20}
+            ),
             self.record({"restarted": True}),
         ]
         summary = llm_summary(records)
@@ -453,7 +532,10 @@ class TestServerSideSummary:
     def test_summary_has_dispatch_time_routing_and_llm_blocks(self, lookup_item):
         decision = {"decisions": 1, "methods": {"rules": 1}, "seconds": 0.002}
         records = [
-            question_record(lookup_item, chat_outcome(dispatch_s=0.2, llm={"prompt_s": 1.0, "prompt_tokens": 50})),
+            question_record(
+                lookup_item,
+                chat_outcome(dispatch_s=0.2, llm={"prompt_s": 1.0, "prompt_tokens": 50}),
+            ),
             question_record(lookup_item, chat_outcome(dispatch_s=0.4, routing_decision=decision)),
         ]
         summary = build_summary(records)
@@ -510,7 +592,13 @@ class TestQueryResultTitles:
     def test_titles_come_from_chroma_metadatas_in_rank_order(self):
         raw = {
             "ids": [["a", "b", "c"]],
-            "metadatas": [[{"title": "4_Expense_Policy.md"}, {"title": "2_Employee_Handbook.md"}, {"title": "4_Expense_Policy.md"}]],
+            "metadatas": [
+                [
+                    {"title": "4_Expense_Policy.md"},
+                    {"title": "2_Employee_Handbook.md"},
+                    {"title": "4_Expense_Policy.md"},
+                ]
+            ],
         }
         assert titles_from_query_result(raw) == ["4_Expense_Policy.md", "2_Employee_Handbook.md"]
 

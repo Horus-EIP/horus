@@ -35,14 +35,22 @@ class LicenceKind(unittest.TestCase):
                 self.assertEqual(self.kind(licence), check_licences.FREE)
 
     def test_gpl_agpl_and_sspl_are_strong(self):
-        for licence in ("GPL-3.0-only", "AGPL-3.0-or-later", "SSPL-1.0", "GPLv2",
-                        "GNU General Public License v2 (GPLv2)"):
+        for licence in (
+            "GPL-3.0-only",
+            "AGPL-3.0-or-later",
+            "SSPL-1.0",
+            "GPLv2",
+            "GNU General Public License v2 (GPLv2)",
+        ):
             with self.subTest(licence):
                 self.assertEqual(self.kind(licence), check_licences.STRONG)
 
     def test_lgpl_is_weak(self):
-        for licence in ("LGPL-3.0-or-later", "LGPL with exceptions",
-                        "GNU Lesser General Public License v3 (LGPLv3)"):
+        for licence in (
+            "LGPL-3.0-or-later",
+            "LGPL with exceptions",
+            "GNU Lesser General Public License v3 (LGPLv3)",
+        ):
             with self.subTest(licence):
                 self.assertEqual(self.kind(licence), check_licences.WEAK)
 
@@ -71,9 +79,13 @@ class Allowlist(unittest.TestCase):
 
     def test_a_pattern_matches_package_names(self):
         allowed = {("web", "@img/sharp-*"): "reviewed"}
-        self.assertEqual(check_licences.allowed_by(allowed, "web", "@img/sharp-libvips-linux-x64"),
-                         ("web", "@img/sharp-*"))
-        self.assertIsNone(check_licences.allowed_by(allowed, "rust", "@img/sharp-libvips-linux-x64"))
+        self.assertEqual(
+            check_licences.allowed_by(allowed, "web", "@img/sharp-libvips-linux-x64"),
+            ("web", "@img/sharp-*"),
+        )
+        self.assertIsNone(
+            check_licences.allowed_by(allowed, "rust", "@img/sharp-libvips-linux-x64")
+        )
 
     def test_the_repository_passes(self):
         out = io.StringIO()

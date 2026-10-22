@@ -8,8 +8,8 @@ from agent_server.server import app
 
 client = TestClient(app)
 
-class TestCorrelationMiddleware:
 
+class TestCorrelationMiddleware:
     def test_x_request_id_header(self):
         """Test that providing X-Request-ID sets the correlation ID correctly"""
         correlation_id = "test-req-id-123"
@@ -39,11 +39,14 @@ class TestCorrelationMiddleware:
         # Should look like a valid UUID (basic check)
         assert len(generated_id) > 10
 
-    @pytest.mark.skip(reason="CorrelationMiddleware no longer calls set_correlation_id via the agent_server.server import path. Re-derive call site from current middleware before re-enabling.")
+    @pytest.mark.skip(
+        reason="CorrelationMiddleware no longer calls set_correlation_id via the agent_server.server import path. Re-derive call site from current middleware before re-enabling."
+    )
     def test_explicit_mock_verification(self):
         cid = "explicit-verification-id"
-        with patch("agent_server.server.set_correlation_id") as mock_set, \
-             patch("agent_server.server.get_correlation_id", return_value=cid):
+        with (
+            patch("agent_server.server.set_correlation_id") as mock_set,
+            patch("agent_server.server.get_correlation_id", return_value=cid),
+        ):
             client.get("/metrics", headers={"X-Request-ID": cid})
             mock_set.assert_called_with(cid)
-

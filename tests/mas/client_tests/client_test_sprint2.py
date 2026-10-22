@@ -100,16 +100,10 @@ async def run_scenario():
     token = await login()
     headers = {"Authorization": f"Bearer {token}"}
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=TIMEOUT
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=TIMEOUT) as client:
         # 1. Register specialized agents
-        researcher = await register_agent(
-            client, "Sprint2Researcher", ["research"], "researcher"
-        )
-        analyst = await register_agent(
-            client, "Sprint2Analyst", ["analysis"], "analyst"
-        )
+        researcher = await register_agent(client, "Sprint2Researcher", ["research"], "researcher")
+        analyst = await register_agent(client, "Sprint2Analyst", ["analysis"], "analyst")
         writer = await register_agent(client, "Sprint2Writer", ["writing"], "writer")
 
         agents_map = {"researcher": researcher, "analyst": analyst, "writer": writer}
@@ -159,9 +153,7 @@ async def run_scenario():
             resp = await client.get("/tasks/list")
 
             if resp.status_code != 200:
-                log(
-                    f"Failed to list tasks: {resp.status_code} {resp.text}", Colors.FAIL
-                )
+                log(f"Failed to list tasks: {resp.status_code} {resp.text}", Colors.FAIL)
                 await asyncio.sleep(2)
                 continue
 
@@ -270,10 +262,7 @@ async def run_scenario():
             log(f"Final Message Role: {last_msg['role']}", Colors.OKBLUE)
             log(f"Final Message Content: {last_msg['content']}", Colors.OKGREEN)
 
-            if (
-                "Success!" in last_msg["content"]
-                or "Article de synthèse" in last_msg["content"]
-            ):
+            if "Success!" in last_msg["content"] or "Article de synthèse" in last_msg["content"]:
                 log("\n🎉 SPRINT 2 SCENARIO COMPLETED SUCCESSFULLY! 🎉", Colors.BOLD)
             else:
                 log(

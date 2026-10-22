@@ -303,9 +303,7 @@ def _consume_messages_session() -> bool:
         return True
 
     types = unique_agent_types() or ["general"]
-    queue_to_type: dict[str, str] = {
-        server.work_queue_name_for_type(t): t for t in types
-    }
+    queue_to_type: dict[str, str] = {server.work_queue_name_for_type(t): t for t in types}
 
     try:
         connection = _open_connection()
@@ -481,9 +479,7 @@ def _task_dict(task_id: str, demand: str, payload: dict, resolved_files: list[di
         "task_id": task_id,
         "query": effective_demand or payload.get("query", ""),
         "demand": demand,
-        "attached_context": (
-            _attached_files_block(resolved_files) if any_file_readable else None
-        ),
+        "attached_context": (_attached_files_block(resolved_files) if any_file_readable else None),
         "retrieval_query": payload.get("retrieval_query"),
         "operation": payload.get("operation"),
         "expression": payload.get("expression"),
@@ -510,8 +506,7 @@ async def _answer(payload: dict, queue_type: str, task_id: str, demand: str) -> 
     pipeline = server.get_pipeline_for_type(queue_type)
     if queue_type in ("researcher", "analyst", "writer") and not op:
         logger.info(
-            "Specialist task without 'operation' → general RAG fallback "
-            "(queue_type=%s task_id=%s)",
+            "Specialist task without 'operation' → general RAG fallback (queue_type=%s task_id=%s)",
             queue_type,
             task_id,
         )
@@ -550,7 +545,9 @@ def _report_failure(
         logger.debug("Failure step could not be emitted", exc_info=True)
 
 
-def _send_failed_result(text: str, conversation_id, task_id: str, payload: dict, reason: str) -> None:
+def _send_failed_result(
+    text: str, conversation_id, task_id: str, payload: dict, reason: str
+) -> None:
     from agent_server import server
 
     try:
@@ -736,8 +733,7 @@ def _consume_agent_messages_session() -> bool:
             sender = payload.get("sender_agent_id", "")
 
             logger.info(
-                f"Received agent message: id={message_id}, type={message_type}, "
-                f"from={sender}"
+                f"Received agent message: id={message_id}, type={message_type}, from={sender}"
             )
 
             if message_type == "delegation":

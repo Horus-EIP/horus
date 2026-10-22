@@ -7,6 +7,7 @@ import httpx
 
 BASE_URL = "http://localhost:8080"
 
+
 async def test_knowledge_base_flow():
     print("--- Testing Knowledge Base Flow ---")
 
@@ -15,7 +16,7 @@ async def test_knowledge_base_flow():
         "title": "Client Test Doc",
         "content": f"This is a unique content for client test {doc_id}",
         "id": doc_id,
-        "size": 100
+        "size": 100,
     }
 
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=60.0) as client:
@@ -37,7 +38,7 @@ async def test_knowledge_base_flow():
             if resp.status_code == 200:
                 data = resp.json()
                 docs = data.get("documents", [[]])[0]
-                if docs and doc_data['content'] in docs:
+                if docs and doc_data["content"] in docs:
                     print("Document found in query results.")
                     found = True
                     break
@@ -53,6 +54,7 @@ async def test_knowledge_base_flow():
             print("Document deleted.")
         else:
             print(f"Failed to delete document: {resp.text}")
+
 
 async def test_file_flow():
     print("\n--- Testing File Flow ---")
@@ -84,7 +86,7 @@ async def test_file_flow():
             if resp.status_code == 200:
                 data = resp.json()
                 docs = data.get("documents", [])
-                found = any(d['title'] == filename for d in docs)
+                found = any(d["title"] == filename for d in docs)
                 if found:
                     print(f"File {filename} found in list.")
                 else:
@@ -123,9 +125,11 @@ async def test_file_flow():
         if os.path.exists(filename):
             os.remove(filename)
 
+
 async def main():
     await test_knowledge_base_flow()
     await test_file_flow()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -65,7 +65,9 @@ def knowledge_store(monkeypatch):
     transport = httpx.MockTransport(store.handle)
     real_client = httpx.AsyncClient
     monkeypatch.setattr(
-        httpx, "AsyncClient", lambda *args, **kwargs: real_client(*args, transport=transport, **kwargs)
+        httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: real_client(*args, transport=transport, **kwargs),
     )
     return store
 
@@ -178,9 +180,7 @@ class TestCorpusVersion:
 
         assert knowledge_store.version_reads == 1
 
-    async def test_the_version_is_reused_within_its_ttl(
-        self, redis, knowledge_store, monkeypatch
-    ):
+    async def test_the_version_is_reused_within_its_ttl(self, redis, knowledge_store, monkeypatch):
         monkeypatch.setenv("AGENT_RESPONSE_CACHE_VERSION_TTL", "60")
         pipeline, _ = _pipeline("Revenue was $4.2M.")
 
@@ -200,9 +200,7 @@ class TestCorpusVersion:
         ],
         ids=["unavailable", "no-version-field", "not-json", "unreachable", "timeout"],
     )
-    async def test_a_version_read_failure_bypasses_the_cache(
-        self, redis, knowledge_store, failure
-    ):
+    async def test_a_version_read_failure_bypasses_the_cache(self, redis, knowledge_store, failure):
         knowledge_store.failure = failure
         pipeline, decision = _pipeline("Revenue was $4.2M.", "Revenue was $4.2M.")
 
@@ -212,9 +210,7 @@ class TestCorpusVersion:
         assert decision.complete.call_count == 2
         assert redis.entries == {}
 
-    async def test_a_disabled_cache_never_asks_for_the_version(
-        self, knowledge_store, monkeypatch
-    ):
+    async def test_a_disabled_cache_never_asks_for_the_version(self, knowledge_store, monkeypatch):
         monkeypatch.setenv("AGENT_RESPONSE_CACHE", "0")
         pipeline, decision = _pipeline("Revenue was $4.2M.")
 
@@ -382,14 +378,18 @@ class TestOnlyValidatedAnswersAreCached:
         second = await pipeline.generate_response(QUESTION)
 
         assert decision.complete.call_count == 1
-        assert second.sources == first.sources == [
-            {
-                "doc_id": "doc-q4",
-                "chunk_id": "doc-q4:2",
-                "title": "1_Q4_2025_Financial_Report.md",
-                "page": None,
-            }
-        ]
+        assert (
+            second.sources
+            == first.sources
+            == [
+                {
+                    "doc_id": "doc-q4",
+                    "chunk_id": "doc-q4:2",
+                    "title": "1_Q4_2025_Financial_Report.md",
+                    "page": None,
+                }
+            ]
+        )
 
 
 class TestWithTheDecisionAgent:

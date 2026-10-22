@@ -9,8 +9,7 @@ from db.models import Conversations, Task
 ROLES_THAT_READ_EVERY_TASK = frozenset({Role.ADMIN.value, Role.MANAGER.value})
 
 TASK_READ_REFUSED = (
-    "Only the task's owner, the owner of its conversation, a manager or an admin can read "
-    "this task"
+    "Only the task's owner, the owner of its conversation, a manager or an admin can read this task"
 )
 TASK_EVENTS_REFUSED = (
     "Only the task's owner, the owner of its conversation, a manager or an admin can read "

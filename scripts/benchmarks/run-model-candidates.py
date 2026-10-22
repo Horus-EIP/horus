@@ -142,18 +142,24 @@ class StackCandidateRun(CandidateRun):
         self.installer: SimpleNamespace | None = None
 
     def probe_items(self) -> list[dict[str, Any]]:
-        return select_items(probe_items(self.testset["items"]), self.args.ids, self.args.category, self.args.limit)
+        return select_items(
+            probe_items(self.testset["items"]), self.args.ids, self.args.category, self.args.limit
+        )
 
     def prepare_fetch(self) -> None:
         self.installer = installer_modules()
         if self.installer is None:
-            print("[warn] the installer's model downloader is not importable: fetching with fetch-model.sh in Docker")
+            print(
+                "[warn] the installer's model downloader is not importable: fetching with fetch-model.sh in Docker"
+            )
 
     def fetch_variant(self, variant: Variant) -> dict[str, Any]:
         if self.installer is None:
             return super().fetch_variant(variant)
         log_path = self.models_dir / DOWNLOAD_LOG
-        return fetch_with_installer(self.installer, variant, self.models_dir, log_path, str(self.catalog["version"]))
+        return fetch_with_installer(
+            self.installer, variant, self.models_dir, log_path, str(self.catalog["version"])
+        )
 
     def bench_tool(self) -> list[str]:
         return [sys.executable, str(RUN_LLAMA_BENCH)]
@@ -167,7 +173,9 @@ class StackCandidateRun(CandidateRun):
         if "eval" not in self.args.steps:
             return None
         agent = self.args.agent_container
-        finding = response_cache_finding(parse_container_env(self.shell.docker_text(["inspect", agent])), agent)
+        finding = response_cache_finding(
+            parse_container_env(self.shell.docker_text(["inspect", agent])), agent
+        )
         if finding is None:
             return None
         if self.args.allow_response_cache:
@@ -183,7 +191,9 @@ class StackCandidateRun(CandidateRun):
 
     def announce_serving(self) -> None:
         network = candidate_network(self.stack["networks"])
-        print(f"[info] stopping {self.args.stack_llm_container}; each candidate answers as 'llm' on {network}")
+        print(
+            f"[info] stopping {self.args.stack_llm_container}; each candidate answers as 'llm' on {network}"
+        )
 
     def take_over(self) -> str | None:
         name = self.args.stack_llm_container
@@ -200,7 +210,9 @@ class StackCandidateRun(CandidateRun):
         name = self.args.stack_llm_container
         print(f"[info] starting {name} again")
         if self.shell.docker_text(["start", name], timeout=DOCKER_STOP_TIMEOUT_S) is None:
-            print(f"[error] could not start {name!r} again: the stack has no llama-server until `docker start {name}`")
+            print(
+                f"[error] could not start {name!r} again: the stack has no llama-server until `docker start {name}`"
+            )
 
     def server_command(self, variant: Variant) -> list[str]:
         return candidate_run_command(
@@ -223,7 +235,9 @@ class StackCandidateRun(CandidateRun):
             return
         command = ["docker", "exec", "-i", "-w", AGENT_WORKDIR, agent, "python", PROBE_TARGET]
         started = datetime.now(timezone.utc)
-        returncode, lines = self.shell.run_and_echo(command, json.dumps(probe_job(items, WARMUP_QUESTION)))
+        returncode, lines = self.shell.run_and_echo(
+            command, json.dumps(probe_job(items, WARMUP_QUESTION))
+        )
         records = probe_records(items, read_reply_lines(lines), self.profile.contract)
         if returncode != 0 or len(records) < len(items):
             self.problem(
@@ -253,14 +267,21 @@ class StackCandidateRun(CandidateRun):
         return [
             sys.executable,
             str(RUN_EVAL),
-            "--label", f"{variant.id}-eval",
-            "--out-dir", str(self.run_dir),
-            "--testset", str(self.args.testset),
-            "--llm-container", CANDIDATE_CONTAINER,
-            "--model-name", variant.id,
-            "--model-file", variant.file,
+            "--label",
+            f"{variant.id}-eval",
+            "--out-dir",
+            str(self.run_dir),
+            "--testset",
+            str(self.args.testset),
+            "--llm-container",
+            CANDIDATE_CONTAINER,
+            "--model-name",
+            variant.id,
+            "--model-file",
+            variant.file,
             "--sample-resources",
-            "--reference", self.args.reference,
+            "--reference",
+            self.args.reference,
             *item_filters(self.args),
             *machine_overrides(self.args),
             *self.args.eval_arg,

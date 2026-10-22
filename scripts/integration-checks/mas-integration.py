@@ -129,9 +129,7 @@ async def test_agent_registration_and_task_flow(authenticated_client):
     # Agent needs to authenticate with its API Key
     # Format expected by verify_agent_api_key is "agent_id:api_key"
     agent_headers = {"X-API-Key": f"{agent1_id}:{agent1_key}"}
-    resp = await client.post(
-        "/tasks/task-result/", json=result_payload_1, headers=agent_headers
-    )
+    resp = await client.post("/tasks/task-result/", json=result_payload_1, headers=agent_headers)
     assert resp.status_code == 200
 
     # 5. Submit Task Result (Agent 2)
@@ -153,9 +151,7 @@ async def test_websocket_connection(authenticated_client):
     client, token = authenticated_client
 
     # Create a conversation for the socket
-    resp = await client.post(
-        "/conversations/create-conversation/", json={"name": "WS Test"}
-    )
+    resp = await client.post("/conversations/create-conversation/", json={"name": "WS Test"})
     conv_id = str(resp.json()["conversation_id"])
 
     ws_uri = f"{WS_BASE_URL}/chat/{conv_id}/?token={token}&agent_id=test_ws_agent"

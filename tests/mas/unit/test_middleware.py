@@ -9,7 +9,6 @@ from core.middleware import LoggingMiddleware
 
 
 class TestLoggingMiddleware:
-
     @pytest.mark.asyncio
     async def test_dispatch_success(self):
         app = MagicMock()
@@ -23,14 +22,12 @@ class TestLoggingMiddleware:
         async def call_next(req):
             return Response(status_code=200)
 
-        with patch("core.middleware.get_logger") as mock_get_logger, patch(
-            "core.middleware.structlog.contextvars"
-        ) as mock_contextvars, patch(
-            "core.middleware.log_api_request"
-        ) as mock_log_api, patch(
-            "core.middleware.log_system_performance"
-        ) as mock_log_perf:
-
+        with (
+            patch("core.middleware.get_logger") as mock_get_logger,
+            patch("core.middleware.structlog.contextvars") as mock_contextvars,
+            patch("core.middleware.log_api_request") as mock_log_api,
+            patch("core.middleware.log_system_performance") as mock_log_perf,
+        ):
             mock_logger = MagicMock()
             mock_get_logger.return_value = mock_logger
 
@@ -91,10 +88,10 @@ class TestLoggingMiddleware:
         async def call_next(req):
             raise ValueError("Test error")
 
-        with patch("core.middleware.get_logger") as mock_get_logger, patch(
-            "core.middleware.structlog.contextvars"
-        ) as mock_contextvars:
-
+        with (
+            patch("core.middleware.get_logger") as mock_get_logger,
+            patch("core.middleware.structlog.contextvars") as mock_contextvars,
+        ):
             mock_logger = MagicMock()
             mock_get_logger.return_value = mock_logger
 

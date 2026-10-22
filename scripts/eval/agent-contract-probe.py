@@ -132,7 +132,11 @@ async def probe_item(
     try:
         data = await contract.retrieve(item["question"])
     except Exception as exc:  # noqa: BLE001
-        return {**record, "error_stage": ERROR_STAGE_RETRIEVAL, "error": f"{type(exc).__name__}: {exc}"}
+        return {
+            **record,
+            "error_stage": ERROR_STAGE_RETRIEVAL,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
     error = contract.retrieval_error(data)
     if error:
         return {**record, "error_stage": ERROR_STAGE_RETRIEVAL, "error": error}
@@ -172,7 +176,9 @@ async def run_probe(
     for index, item in enumerate(items, 1):
         record = await probe_item(item, contract, post)
         emit(record)
-        progress(f"[{index:3}/{len(items)}] {item['id']} {record.get('error') or record.get('finish_reason')}")
+        progress(
+            f"[{index:3}/{len(items)}] {item['id']} {record.get('error') or record.get('finish_reason')}"
+        )
     return len(items)
 
 

@@ -19,8 +19,14 @@ def _status(state: str, **totals) -> dict:
         "job_id": "job-1",
         "state": state,
         "embed_model": "sentence-transformers:BAAI/bge-base-en-v1.5",
-        "totals": {"pending": 2, "migrated": 0, "reembedded": 0, "unchanged": 0, "failed": 0,
-                   **totals},
+        "totals": {
+            "pending": 2,
+            "migrated": 0,
+            "reembedded": 0,
+            "unchanged": 0,
+            "failed": 0,
+            **totals,
+        },
         "failures": [],
     }
 
@@ -48,7 +54,8 @@ def knowledge_store(monkeypatch):
     def install(fake: FakeKnowledgeStore) -> FakeKnowledgeStore:
         real_client = httpx.Client
         monkeypatch.setattr(
-            reindex_script.httpx, "Client",
+            reindex_script.httpx,
+            "Client",
             lambda *a, **kw: real_client(*a, transport=httpx.MockTransport(fake), **kw),
         )
         monkeypatch.setattr(reindex_script.time, "sleep", lambda _seconds: None)
@@ -58,9 +65,14 @@ def knowledge_store(monkeypatch):
 
 
 def test_it_starts_the_re_index_with_the_token_and_waits_for_it(knowledge_store, capsys):
-    fake = knowledge_store(FakeKnowledgeStore(states=[
-        _status("running", migrated=1), _status("completed", migrated=2),
-    ]))
+    fake = knowledge_store(
+        FakeKnowledgeStore(
+            states=[
+                _status("running", migrated=1),
+                _status("completed", migrated=2),
+            ]
+        )
+    )
 
     code = reindex_script.main(["--ks-url", KS, "--token", "s3cret"])
 
@@ -71,9 +83,15 @@ def test_it_starts_the_re_index_with_the_token_and_waits_for_it(knowledge_store,
 
 
 def test_a_re_index_already_running_is_followed_instead_of_failing(knowledge_store):
-    fake = knowledge_store(FakeKnowledgeStore(post_status=409, states=[
-        _status("running"), _status("completed", unchanged=2),
-    ]))
+    fake = knowledge_store(
+        FakeKnowledgeStore(
+            post_status=409,
+            states=[
+                _status("running"),
+                _status("completed", unchanged=2),
+            ],
+        )
+    )
 
     assert reindex_script.main(["--ks-url", KS, "--token", "s3cret"]) == 0
     assert [method for method, _p, _t in fake.requests].count("POST") == 1
@@ -106,6 +124,4 @@ def test_without_a_token_nothing_is_sent(knowledge_store, monkeypatch):
 def test_a_re_index_that_outlives_the_timeout_is_reported(knowledge_store):
     knowledge_store(FakeKnowledgeStore(states=[_status("running")]))
 
-    assert reindex_script.main(
-        ["--ks-url", KS, "--token", "s3cret", "--timeout", "0"]
-    ) == 1
+    assert reindex_script.main(["--ks-url", KS, "--token", "s3cret", "--timeout", "0"]) == 1

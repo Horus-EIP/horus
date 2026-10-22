@@ -13,7 +13,6 @@ Three prompts live here:
 returns JSON that needs the same markdown-fence strip.
 """
 
-
 SYNTHESIS_SYSTEM_PROMPT = (
     "You are an expert synthesizer. Your goal is to provide a final, comprehensive answer "
     "to the user's original request, based on the results from the executed sub-tasks.\n\n"
@@ -152,9 +151,7 @@ REVIEW_SYSTEM_PROMPT = (
 
 
 def _prompt_agents(suitable_agents):
-    return sorted(
-        suitable_agents, key=lambda agent: (str(agent[1]), str(agent[2]), str(agent[3]))
-    )
+    return sorted(suitable_agents, key=lambda agent: (str(agent[1]), str(agent[2]), str(agent[3])))
 
 
 def _agent_type_label(agent_type) -> str:
@@ -253,8 +250,7 @@ def get_manager_review_prompt(
     types_block = ", ".join(available_agent_types) if available_agent_types else "general"
     remaining_block = (
         "\n".join(
-            f"  - {s.get('agent_type', '?')}: {s.get('description', '')}"
-            for s in remaining_steps
+            f"  - {s.get('agent_type', '?')}: {s.get('description', '')}" for s in remaining_steps
         )
         if remaining_steps
         else "  (none — this was the last planned step)"

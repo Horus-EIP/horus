@@ -49,9 +49,7 @@ def db_utils():
     created_agents = []
     try:
         for ag_data in required_agents:
-            existing = (
-                session.query(Agents).filter(Agents.name == ag_data["name"]).first()
-            )
+            existing = session.query(Agents).filter(Agents.name == ag_data["name"]).first()
             if not existing:
                 new_agent = Agents(
                     id=str(uuid4()),
@@ -143,9 +141,7 @@ def test_01_dependency_sorting(db_utils):
     collab_task = CollaborativeTask(sub_tasks=[subtask3, subtask2, subtask1])
 
     # Get all agents to pass to function (mocked or real from DB)
-    agents_available = (
-        []
-    )  # build_subtask_list re-queries by type anyway or uses passed list just for validation?
+    agents_available = []  # build_subtask_list re-queries by type anyway or uses passed list just for validation?
     # Actually build_subtask_list calls get_agent_by_type(element.agent_type, db) inside.
     # The 'agents_available' arg is unused in the current implementation of build_subtask_list shown in context,
     # but let's pass an empty list just to satisfy signature.
@@ -172,21 +168,25 @@ async def test_02_decompose_task_real_llm(db_utils, llm_check):
     Requires GPU and LLM loaded.
     """
     # Configure the mock to return valid JSON for decomposition
-    mock_json_response = json.dumps({
-        "sub_tasks": [
-            {
-                "id": "1",
-                "agent_type": "researcher",
-                "description": "Find financial reports 2023",
-                "depends_on": [],
-                "status": "pending"
-            }
-        ]
-    })
+    mock_json_response = json.dumps(
+        {
+            "sub_tasks": [
+                {
+                    "id": "1",
+                    "agent_type": "researcher",
+                    "description": "Find financial reports 2023",
+                    "depends_on": [],
+                    "status": "pending",
+                }
+            ]
+        }
+    )
     llm_check.tokenizer.decode.return_value = mock_json_response
 
     session = db_utils
-    user_input = "Trouve les rapports financiers de 2023, analyse la croissance, puis ecris un résumé."
+    user_input = (
+        "Trouve les rapports financiers de 2023, analyse la croissance, puis ecris un résumé."
+    )
 
     # Call decompose
     result = decompose_task(user_input, db=session)

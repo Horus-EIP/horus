@@ -54,8 +54,11 @@ SERVICES = {
     "knowledge-store": REPO / "src" / "services" / "knowledge-store",
 }
 TEST_REQUIREMENTS = "requirements-test.txt"
-IMAGE_SOURCES = {**SERVICES, "web-client": REPO / "src" / "services" / "web-client",
-                 "llm-mock": REPO / "src" / "services" / "llm-mock"}
+IMAGE_SOURCES = {
+    **SERVICES,
+    "web-client": REPO / "src" / "services" / "web-client",
+    "llm-mock": REPO / "src" / "services" / "llm-mock",
+}
 OFFER_LIBRARIES = ("psycopg2-binary", "@img/sharp-libvips-")
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 IMAGE_PYTHON = "3.11"
@@ -131,13 +134,18 @@ def licence_from_metadata(expression: str, licence: str, classifiers: Iterable[s
     if expression.strip():
         return expression.strip()
     text = licence.strip()
-    if text and "\n" not in text and len(text) <= LONG_LICENCE and text.upper() not in {"UNKNOWN", "NONE"}:
+    if (
+        text
+        and "\n" not in text
+        and len(text) <= LONG_LICENCE
+        and text.upper() not in {"UNKNOWN", "NONE"}
+    ):
         return text
     named = []
     for classifier in classifiers:
-        value = classifier[len(CLASSIFIER_PREFIX):]
+        value = classifier[len(CLASSIFIER_PREFIX) :]
         if value.startswith(OSI_PREFIX):
-            value = value[len(OSI_PREFIX):]
+            value = value[len(OSI_PREFIX) :]
         named.append(value)
     return " OR ".join(sorted(set(named)))
 
@@ -147,7 +155,15 @@ def project_url(home: str, urls: Iterable[str], name: str) -> str:
     for item in urls:
         label, _, value = item.partition(",")
         labelled[label.strip().lower()] = value.strip()
-    for key in ("homepage", "home", "source", "source code", "repository", "github", "documentation"):
+    for key in (
+        "homepage",
+        "home",
+        "source",
+        "source code",
+        "repository",
+        "github",
+        "documentation",
+    ):
         if labelled.get(key):
             return labelled[key]
     if home.strip() and home.strip().upper() != "UNKNOWN":
@@ -158,7 +174,9 @@ def project_url(home: str, urls: Iterable[str], name: str) -> str:
 
 
 def requirement_files(service_dir: Path) -> list[Path]:
-    return sorted(path for path in service_dir.glob("requirements*.txt") if path.name != TEST_REQUIREMENTS)
+    return sorted(
+        path for path in service_dir.glob("requirements*.txt") if path.name != TEST_REQUIREMENTS
+    )
 
 
 def lock_file(requirements: Path) -> Path:
@@ -192,10 +210,23 @@ def resolve(requirements: Path) -> dict[str, str]:
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "resolved.txt"
         subprocess.run(
-            [uv, "pip", "compile", str(requirements), "--python-version", IMAGE_PYTHON,
-             "--python-platform", IMAGE_PLATFORM, "--no-header", "--no-annotate", "--quiet",
-             "-o", str(out)],
-            check=True, cwd=requirements.parent,
+            [
+                uv,
+                "pip",
+                "compile",
+                str(requirements),
+                "--python-version",
+                IMAGE_PYTHON,
+                "--python-platform",
+                IMAGE_PLATFORM,
+                "--no-header",
+                "--no-annotate",
+                "--quiet",
+                "-o",
+                str(out),
+            ],
+            check=True,
+            cwd=requirements.parent,
         )
         return parse_locked(out.read_text(encoding="utf-8"))
 
@@ -204,7 +235,11 @@ def installed_metadata(pythons: Iterable[str]) -> dict[tuple[str, str], dict]:
     found: dict[tuple[str, str], dict] = {}
     for python in pythons:
         result = subprocess.run(
-            [python, "-c", DUMP_DISTRIBUTIONS], capture_output=True, text=True, encoding="utf-8", check=True,
+            [python, "-c", DUMP_DISTRIBUTIONS],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
         )
         for row in json.loads(result.stdout):
             key = (normalise(row["name"]), row["version"])
@@ -253,7 +288,9 @@ def python_entry(name: str, version: str, installed: dict, overrides: dict) -> d
 
 
 def refresh_python(pythons: list[str]) -> None:
-    overrides = {normalise(k): v for k, v in (read_components().get("python_overrides") or {}).items()}
+    overrides = {
+        normalise(k): v for k, v in (read_components().get("python_overrides") or {}).items()
+    }
     installed = installed_metadata(pythons)
     services: dict[str, dict[str, list[dict]]] = {}
     for service, folder in SERVICES.items():
@@ -261,7 +298,8 @@ def refresh_python(pythons: list[str]) -> None:
         for requirements in requirement_files(folder):
             pinned = resolve(requirements)
             services[service][requirements.name] = [
-                python_entry(name, version, installed, overrides) for name, version in sorted(pinned.items())
+                python_entry(name, version, installed, overrides)
+                for name, version in sorted(pinned.items())
             ]
     data = {
         "how": (
@@ -278,8 +316,19 @@ def refresh_python(pythons: list[str]) -> None:
 
 def refresh_rust(cargo: str) -> None:
     result = subprocess.run(
-        [cargo, "metadata", "--format-version", "1", "--locked", "--manifest-path", str(CARGO_MANIFEST)],
-        capture_output=True, text=True, encoding="utf-8", check=True,
+        [
+            cargo,
+            "metadata",
+            "--format-version",
+            "1",
+            "--locked",
+            "--manifest-path",
+            str(CARGO_MANIFEST),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
     )
     meta = json.loads(result.stdout)
     members = set(meta["workspace_members"])
@@ -288,13 +337,18 @@ def refresh_rust(cargo: str) -> None:
             "name": package["name"],
             "version": package["version"],
             "licence": package.get("license") or "",
-            "url": package.get("repository") or package.get("homepage") or f"https://crates.io/crates/{package['name']}",
+            "url": package.get("repository")
+            or package.get("homepage")
+            or f"https://crates.io/crates/{package['name']}",
         }
         for package in meta["packages"]
         if package["id"] not in members
     ]
     crates.sort(key=lambda crate: (crate["name"], crate["version"]))
-    data = {"how": "cargo metadata --locked on desktop/src-tauri; licences from each crate's Cargo.toml.", "crates": crates}
+    data = {
+        "how": "cargo metadata --locked on desktop/src-tauri; licences from each crate's Cargo.toml.",
+        "crates": crates,
+    }
     RUST_DATA.write_text(json.dumps(data, indent=1, sort_keys=True) + "\n", encoding="utf-8")
 
 
@@ -315,9 +369,18 @@ def python_entries(report: Report) -> dict[str, list[Entry]]:
                 expected = parse_locked(locked.read_text(encoding="utf-8"))
                 recorded = {row["name"]: row["version"] for row in packages}
                 if expected != recorded:
-                    report.add(f"{service}/{file_name}: python-packages.json does not match {locked.name}; run --refresh")
+                    report.add(
+                        f"{service}/{file_name}: python-packages.json does not match {locked.name}; run --refresh"
+                    )
         grouped[service] = [
-            Entry(row["name"], row["version"], row["licence"], row["url"], row["source"], ", ".join(flavours[key]))
+            Entry(
+                row["name"],
+                row["version"],
+                row["licence"],
+                row["url"],
+                row["source"],
+                ", ".join(flavours[key]),
+            )
             for key, row in sorted(rows.items())
         ]
     return grouped
@@ -336,12 +399,19 @@ def lock_path(packages: dict, start: str, name: str) -> str | None:
 
 
 def runs_in_web_image(info: dict, path: str = "", packages: dict | None = None) -> bool:
-    if not all(not info.get(field) or wanted in info[field] for field, wanted in WEB_IMAGE_PLATFORM.items()):
+    if not all(
+        not info.get(field) or wanted in info[field] for field, wanted in WEB_IMAGE_PLATFORM.items()
+    ):
         return False
-    musl = (path.replace("-linux-", "-linuxmusl-").replace("-gnu", "-musl"),
-            path.replace("-gnu", "-musl"))
-    return not (info.get("os") == ["linux"] and "musl" not in path
-                and any(other != path and other in (packages or {}) for other in musl))
+    musl = (
+        path.replace("-linux-", "-linuxmusl-").replace("-gnu", "-musl"),
+        path.replace("-gnu", "-musl"),
+    )
+    return not (
+        info.get("os") == ["linux"]
+        and "musl" not in path
+        and any(other != path and other in (packages or {}) for other in musl)
+    )
 
 
 def web_runtime_paths(packages: dict) -> set[str]:
@@ -354,11 +424,17 @@ def web_runtime_paths(packages: dict) -> set[str]:
             continue
         seen.add(path)
         info = packages[path]
-        optional_peers = {name for name, meta in (info.get("peerDependenciesMeta") or {}).items()
-                          if meta.get("optional")}
+        optional_peers = {
+            name
+            for name, meta in (info.get("peerDependenciesMeta") or {}).items()
+            if meta.get("optional")
+        }
         for kind in ("dependencies", "optionalDependencies", "peerDependencies"):
-            pending.extend(lock_path(packages, path, name) for name in info.get(kind, {})
-                           if not (kind == "peerDependencies" and name in optional_peers))
+            pending.extend(
+                lock_path(packages, path, name)
+                for name in info.get(kind, {})
+                if not (kind == "peerDependencies" and name in optional_peers)
+            )
     return seen
 
 
@@ -368,16 +444,25 @@ def web_entries() -> list[Entry]:
     for path in web_runtime_paths(lock["packages"]):
         package = lock["packages"][path]
         name = path.split("node_modules/")[-1]
-        entries.append(Entry(
-            name, package.get("version", ""), package.get("license") or "UNKNOWN",
-            f"https://www.npmjs.com/package/{name}", "package.json, through package-lock.json",
-        ))
+        entries.append(
+            Entry(
+                name,
+                package.get("version", ""),
+                package.get("license") or "UNKNOWN",
+                f"https://www.npmjs.com/package/{name}",
+                "package.json, through package-lock.json",
+            )
+        )
     return sorted(set(entries), key=lambda entry: (entry.name, entry.version))
 
 
 def cargo_lock_crates() -> set[tuple[str, str]]:
     lock = tomllib.loads(CARGO_LOCK.read_text(encoding="utf-8"))
-    return {(package["name"], package["version"]) for package in lock.get("package", []) if "source" in package}
+    return {
+        (package["name"], package["version"])
+        for package in lock.get("package", [])
+        if "source" in package
+    }
 
 
 def rust_entries(report: Report) -> list[Entry]:
@@ -387,7 +472,13 @@ def rust_entries(report: Report) -> list[Entry]:
     if recorded != cargo_lock_crates():
         report.add("rust-crates.json does not match desktop/src-tauri/Cargo.lock; run --refresh")
     return [
-        Entry(crate["name"], crate["version"], crate["licence"] or "UNKNOWN", crate["url"], "Cargo.toml, through cargo metadata")
+        Entry(
+            crate["name"],
+            crate["version"],
+            crate["licence"] or "UNKNOWN",
+            crate["url"],
+            "Cargo.toml, through cargo metadata",
+        )
         for crate in crates
     ]
 
@@ -407,7 +498,9 @@ def used_images() -> dict[str, set[str]]:
             if match:
                 image = resolve_image(match.group(1))
                 if image:
-                    images.setdefault(image, set()).add(str(compose.relative_to(REPO)).replace("\\", "/"))
+                    images.setdefault(image, set()).add(
+                        str(compose.relative_to(REPO)).replace("\\", "/")
+                    )
     stages: set[str] = set()
     for dockerfile in sorted((REPO / "src" / "services").glob("*/Dockerfile")):
         for line in dockerfile.read_text(encoding="utf-8").splitlines():
@@ -418,7 +511,9 @@ def used_images() -> dict[str, set[str]]:
                 stages.add(match.group(2).lower())
             if match.group(1).lower() in stages:
                 continue
-            images.setdefault(match.group(1), set()).add(str(dockerfile.relative_to(REPO)).replace("\\", "/"))
+            images.setdefault(match.group(1), set()).add(
+                str(dockerfile.relative_to(REPO)).replace("\\", "/")
+            )
     return images
 
 
@@ -441,14 +536,23 @@ def image_entries(components: dict, report: Report) -> list[Entry]:
         repository = repository_of(image)
         info = known.get(repository)
         if info is None:
-            report.add(f"{image} ({', '.join(sorted(where))}) has no entry in components.yaml images")
+            report.add(
+                f"{image} ({', '.join(sorted(where))}) has no entry in components.yaml images"
+            )
             continue
         note = info.get("note", "")
         note = f"{note}; " if note else ""
-        entries.append(Entry(
-            repository, tag_of(image), info["licence"], info["url"], info["source"],
-            f"{note}used by {', '.join(sorted(where))}", info.get("spdx", ""),
-        ))
+        entries.append(
+            Entry(
+                repository,
+                tag_of(image),
+                info["licence"],
+                info["url"],
+                info["source"],
+                f"{note}used by {', '.join(sorted(where))}",
+                info.get("spdx", ""),
+            )
+        )
     return entries
 
 
@@ -458,18 +562,34 @@ def model_entries(components: dict, report: Report) -> list[Entry]:
     for item in manifest.get("models", []):
         source = item["source"].split("@", 1)[0]
         if source not in models:
-            report.add(f"models/manifest.json model {source} has no entry in components.yaml models")
+            report.add(
+                f"models/manifest.json model {source} has no entry in components.yaml models"
+            )
     return [
-        Entry(model_id, model.get("revision", ""), model["licence"], model["url"], model["source"],
-              model.get("note", ""), model.get("spdx", ""))
+        Entry(
+            model_id,
+            model.get("revision", ""),
+            model["licence"],
+            model["url"],
+            model["source"],
+            model.get("note", ""),
+            model.get("spdx", ""),
+        )
         for model_id, model in sorted(models.items())
     ]
 
 
 def component_entries(components: dict) -> list[Entry]:
     return [
-        Entry(name, info.get("version", ""), info["licence"], info["url"], info["source"],
-              info.get("note", ""), info.get("spdx", ""))
+        Entry(
+            name,
+            info.get("version", ""),
+            info["licence"],
+            info["url"],
+            info["source"],
+            info.get("note", ""),
+            info.get("spdx", ""),
+        )
         for name, info in sorted((components.get("components") or {}).items())
     ]
 
@@ -496,8 +616,11 @@ def python_components() -> dict[str, dict]:
         for rows in files.values():
             for row in rows:
                 found[key_of(row["name"], row["version"])] = {
-                    "name": row["name"], "version": row["version"], "licence": row["licence"],
-                    "url": urls.get(normalise(row["name"])), "repository": row["url"],
+                    "name": row["name"],
+                    "version": row["version"],
+                    "licence": row["licence"],
+                    "url": urls.get(normalise(row["name"])),
+                    "repository": row["url"],
                 }
     return found
 
@@ -509,8 +632,12 @@ def web_components() -> dict[str, dict]:
         info = packages[path]
         name = path.split("node_modules/")[-1]
         found[key_of(name, info.get("version", ""))] = {
-            "name": name, "version": info.get("version", ""), "licence": info.get("license") or "",
-            "path": path, "info": info, "repository": npm_repository(path),
+            "name": name,
+            "version": info.get("version", ""),
+            "licence": info.get("license") or "",
+            "path": path,
+            "info": info,
+            "repository": npm_repository(path),
         }
     return found
 
@@ -532,8 +659,11 @@ def npm_repository(path: str) -> str:
 def rust_components() -> dict[str, dict]:
     return {
         key_of(crate["name"], crate["version"]): {
-            "name": crate["name"], "version": crate["version"], "licence": crate["licence"],
-            "repository": crate["url"]}
+            "name": crate["name"],
+            "version": crate["version"],
+            "licence": crate["licence"],
+            "repository": crate["url"],
+        }
         for crate in read_json(RUST_DATA)["crates"]
     }
 
@@ -546,7 +676,9 @@ def component_files(ecosystem: str, item: dict) -> tuple[str, dict, dict]:
     return licence_files.crate_files(item["name"], item["version"], CARGO_REGISTRY)
 
 
-def resolve_spdx(raw: str, override: dict, aliases: dict, texts: list[str], ids: tuple[set, set]) -> str:
+def resolve_spdx(
+    raw: str, override: dict, aliases: dict, texts: list[str], ids: tuple[set, set]
+) -> str:
     if override.get("spdx"):
         return override["spdx"]
     if raw in aliases:
@@ -569,7 +701,9 @@ def write_files(folder: Path, stem: str, files: dict[str, bytes]) -> list[str]:
 
 
 def overrides_for(components: dict, ecosystem: str) -> dict[str, dict]:
-    key = {"python": "python_overrides", "web": "web_overrides", "rust": "rust_overrides"}[ecosystem]
+    key = {"python": "python_overrides", "web": "web_overrides", "rust": "rust_overrides"}[
+        ecosystem
+    ]
     return {normalise(name): value for name, value in (components.get(key) or {}).items()}
 
 
@@ -598,53 +732,79 @@ def refresh_files(report: Report) -> None:
         records[ecosystem] = {}
         for key, item in sorted(sources[ecosystem].items()):
             try:
-                record, licences = component_record(ecosystem, item, override_for(overrides, item["name"]),
-                                                    aliases, ids, report)
+                record, licences = component_record(
+                    ecosystem, item, override_for(overrides, item["name"]), aliases, ids, report
+                )
             except (OSError, ValueError, zipfile.BadZipFile, tarfile.TarError) as error:
                 report.add(f"{ecosystem}: {key}: cannot read its files: {error}")
                 continue
             shipped[f"{ecosystem} {key}"] = licences
             records[ecosystem][key] = record
     write_licence_texts(components, records, shipped, report)
-    FILES_DATA.write_text(json.dumps({
-        "how": ("Licence and NOTICE files read from each component's own distribution: the wheel on PyPI "
-                "(only the needed members, by HTTP range requests) or its sdist when the wheel has none, "
-                "node_modules or the npm tarball named in package-lock.json for the web client, the cargo "
-                "registry for the desktop app. When a component whose licence carries a copyright line "
-                "ships no licence file, the licence file of its repository is used, and the file says so. "
-                f"Licence texts from the SPDX licence list {licence_files.SPDX_LIST_VERSION}."),
-        "spdx_list": licence_files.SPDX_LIST_VERSION,
-        **records,
-    }, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    FILES_DATA.write_text(
+        json.dumps(
+            {
+                "how": (
+                    "Licence and NOTICE files read from each component's own distribution: the wheel on PyPI "
+                    "(only the needed members, by HTTP range requests) or its sdist when the wheel has none, "
+                    "node_modules or the npm tarball named in package-lock.json for the web client, the cargo "
+                    "registry for the desktop app. When a component whose licence carries a copyright line "
+                    "ships no licence file, the licence file of its repository is used, and the file says so. "
+                    f"Licence texts from the SPDX licence list {licence_files.SPDX_LIST_VERSION}."
+                ),
+                "spdx_list": licence_files.SPDX_LIST_VERSION,
+                **records,
+            },
+            indent=1,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
-def component_record(ecosystem: str, item: dict, override: dict, aliases: dict, ids: tuple[set, set],
-                     report: Report) -> tuple[dict, dict[str, bytes]]:
+def component_record(
+    ecosystem: str, item: dict, override: dict, aliases: dict, ids: tuple[set, set], report: Report
+) -> tuple[dict, dict[str, bytes]]:
     key = key_of(item["name"], item["version"])
     label, licences, notices = component_files(ecosystem, item)
     record = {"spdx": "", "from": label, "copies": [], "notices": []}
     spdx = resolve_spdx(item["licence"], override, aliases, primary_texts(licences), ids)
-    if not licences and (override.get("licence_url") or not spdx or licence_files.needs_own_copy(spdx)):
+    if not licences and (
+        override.get("licence_url") or not spdx or licence_files.needs_own_copy(spdx)
+    ):
         found = repository_licence(item, override)
         if found:
             source, data = found
             name = f"{item['name']} {item['version']}"
-            header = (f"No licence file ships with {name}. This is the licence file of its "
-                      f"repository: {source}\n\n").encode("utf-8")
+            header = (
+                f"No licence file ships with {name}. This is the licence file of its "
+                f"repository: {source}\n\n"
+            ).encode("utf-8")
             licences = {source.rsplit("/", 1)[-1]: header + data}
             record["licence_from"] = source
-            spdx = spdx or resolve_spdx(item["licence"], override, aliases, [data.decode("utf-8", "replace")], ids)
+            spdx = spdx or resolve_spdx(
+                item["licence"], override, aliases, [data.decode("utf-8", "replace")], ids
+            )
     record["spdx"] = spdx
     if not spdx:
-        report.add(f"{ecosystem}: {key} licence {item['licence']!r} has no SPDX id; add it to "
-                   "spdx_aliases or an override in components.yaml")
+        report.add(
+            f"{ecosystem}: {key} licence {item['licence']!r} has no SPDX id; add it to "
+            "spdx_aliases or an override in components.yaml"
+        )
     stem = f"{licence_files.safe_name(item['name'])}-{item['version']}"
-    kept = {source: data for source, data in licences.items() if not licence_files.generic_licence(data)}
+    kept = {
+        source: data for source, data in licences.items() if not licence_files.generic_licence(data)
+    }
     if kept and (licence_files.needs_own_copy(spdx) or override.get("own_copy")):
         record["copies"] = write_files(COMPONENT_LICENCES / ecosystem, stem, kept)
     if override.get("notice_url"):
         url = override["notice_url"].format(version=item["version"])
-        header = f"The third-party notices of {item['name']} {item['version']}, from {url}\n\n".encode("utf-8")
+        header = (
+            f"The third-party notices of {item['name']} {item['version']}, from {url}\n\n".encode(
+                "utf-8"
+            )
+        )
         notices = {**notices, url.rsplit("/", 1)[-1]: header + licence_files.fetch(url, timeout=60)}
         record["notice_from"] = url
     if notices:
@@ -658,7 +818,11 @@ def primary_texts(licences: dict[str, bytes]) -> list[str]:
     if not licences:
         return []
     depth = min(source.count("/") for source in licences)
-    return [data.decode("utf-8", "replace") for source, data in licences.items() if source.count("/") == depth]
+    return [
+        data.decode("utf-8", "replace")
+        for source, data in licences.items()
+        if source.count("/") == depth
+    ]
 
 
 def repository_licence(item: dict, override: dict) -> tuple[str, bytes] | None:
@@ -671,12 +835,18 @@ def repository_licence(item: dict, override: dict) -> tuple[str, bytes] | None:
 def expressions_in_use(components: dict, records: dict) -> set[str]:
     found = set()
     for ecosystem in ECOSYSTEMS:
-        found.update(record["spdx"] for record in records.get(ecosystem, {}).values() if record["spdx"])
+        found.update(
+            record["spdx"] for record in records.get(ecosystem, {}).values() if record["spdx"]
+        )
     for section in ("images", "components"):
         found.update(info.get("spdx", "") for info in (components.get(section) or {}).values())
     found.update(model.get("spdx", "") for model in components.get("models") or [])
-    found.update(text for image in system_data().get("images", {}).values()
-                 for row in image["packages"] for text in row["texts"])
+    found.update(
+        text
+        for image in system_data().get("images", {}).values()
+        for row in image["packages"]
+        for text in row["texts"]
+    )
     return {expression for expression in found if expression}
 
 
@@ -706,7 +876,11 @@ def licence_ref_text(identifier: str, ref: dict | None, shipped: dict) -> str | 
         return None
     today = datetime.date.today().isoformat()
     if "component" in ref:
-        matches = sorted(key for key, files in shipped.items() if key.startswith(f"{ref['component']} ") and files)
+        matches = sorted(
+            key
+            for key, files in shipped.items()
+            if key.startswith(f"{ref['component']} ") and files
+        )
         if not matches:
             return None
         source, data = sorted(shipped[matches[0]].items())[0]
@@ -715,24 +889,39 @@ def licence_ref_text(identifier: str, ref: dict | None, shipped: dict) -> str | 
     if "image" in ref:
         text = subprocess.run(
             ["docker", "run", "--rm", "--entrypoint", "cat", ref["image"], ref["path"]],
-            capture_output=True, text=True, encoding="utf-8", check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
         ).stdout
         return f"{identifier}: the text shipped in {ref['image']} at {ref['path']}, read on {today}.\n\n{text}"
-    text = licence_files.text_of(licence_files.fetch(ref["url"], timeout=60)).decode("utf-8", "replace")
+    text = licence_files.text_of(licence_files.fetch(ref["url"], timeout=60)).decode(
+        "utf-8", "replace"
+    )
     return f"{identifier}: text of {ref['url']}, retrieved on {today}.\n\n{text}"
 
 
-def attach_files(ecosystem: str, entries: list[Entry], records: dict, report: Report) -> list[Entry]:
+def attach_files(
+    ecosystem: str, entries: list[Entry], records: dict, report: Report
+) -> list[Entry]:
     attached = []
     for entry in entries:
         record = records.get(ecosystem, {}).get(key_of(entry.name, entry.version))
         if record is None:
-            report.add(f"{ecosystem}: {entry.name} {entry.version} has no licence files recorded; "
-                       "run --refresh files")
+            report.add(
+                f"{ecosystem}: {entry.name} {entry.version} has no licence files recorded; "
+                "run --refresh files"
+            )
             attached.append(entry)
             continue
-        attached.append(replace(entry, spdx=record["spdx"], copies=tuple(record["copies"]),
-                                notices=tuple(record["notices"])))
+        attached.append(
+            replace(
+                entry,
+                spdx=record["spdx"],
+                copies=tuple(record["copies"]),
+                notices=tuple(record["notices"]),
+            )
+        )
     return attached
 
 
@@ -748,7 +937,9 @@ def check_licence_files(components: dict, records: dict, report: Report) -> None
         licences, exceptions = licence_files.split_expression(expression)
         for identifier in licences + exceptions:
             if not (LICENSES_DIR / f"{identifier}.txt").is_file():
-                report.add(f"licence {identifier} is in use but LICENSES/{identifier}.txt is missing")
+                report.add(
+                    f"licence {identifier} is in use but LICENSES/{identifier}.txt is missing"
+                )
     for folder in (COMPONENT_LICENCES, NOTICES_DIR):
         for path in sorted(folder.rglob("*")) if folder.exists() else []:
             relative = path.relative_to(REPO).as_posix()
@@ -794,7 +985,9 @@ def refresh_system(images: list[str], report: Report) -> None:
     refs = dict(item.split("=", 1) for item in images if "=" in item)
     missing = sorted(set(IMAGE_SOURCES) - set(refs))
     if missing:
-        report.add(f"--refresh system reads built images: add --image NAME=IMAGE for {', '.join(missing)}")
+        report.add(
+            f"--refresh system reads built images: add --image NAME=IMAGE for {', '.join(missing)}"
+        )
         return
     overrides = read_components().get("system_overrides") or {}
     found = {}
@@ -806,19 +999,35 @@ def refresh_system(images: list[str], report: Report) -> None:
             continue
         for problem in problems:
             report.add(problem)
-        found[name] = {"os": info["os"], "kind": info["kind"], "packages": info["packages"],
-                       "recipe": system_packages.recipe(folder / "Dockerfile")}
+        found[name] = {
+            "os": info["os"],
+            "kind": info["kind"],
+            "packages": info["packages"],
+            "recipe": system_packages.recipe(folder / "Dockerfile"),
+        }
     if report.stale:
         return
-    SYSTEM_DATA.write_text(json.dumps({
-        "how": ("GPL and LGPL operating-system packages of each image, read with dpkg-query and the copyright "
-                "files in /usr/share/doc (Debian) or from /lib/apk/db/installed (Alpine). recipe is the base "
-                "image and the system packages of the Dockerfile's final stage when the images were read."),
-        "read_on": datetime.date.today().isoformat(),
-        "images": found,
-    }, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    SYSTEM_DATA.write_text(
+        json.dumps(
+            {
+                "how": (
+                    "GPL and LGPL operating-system packages of each image, read with dpkg-query and the copyright "
+                    "files in /usr/share/doc (Debian) or from /lib/apk/db/installed (Alpine). recipe is the base "
+                    "image and the system packages of the Dockerfile's final stage when the images were read."
+                ),
+                "read_on": datetime.date.today().isoformat(),
+                "images": found,
+            },
+            indent=1,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     known = licence_files.spdx_ids()[0]
-    for identifier in sorted({text for image in found.values() for row in image["packages"] for text in row["texts"]}):
+    for identifier in sorted(
+        {text for image in found.values() for row in image["packages"] for text in row["texts"]}
+    ):
         target = LICENSES_DIR / f"{identifier}.txt"
         if identifier not in known:
             report.add(f"system packages: {identifier} is not an SPDX licence id")
@@ -830,11 +1039,15 @@ def check_system(data: dict, report: Report) -> None:
     images = data.get("images", {})
     for name, folder in IMAGE_SOURCES.items():
         if name not in images:
-            report.add(f"scripts/licences/system-packages.json has no {name} image; build the images and run "
-                       "--refresh system")
+            report.add(
+                f"scripts/licences/system-packages.json has no {name} image; build the images and run "
+                "--refresh system"
+            )
         elif images[name]["recipe"] != system_packages.recipe(folder / "Dockerfile"):
-            report.add(f"{name}: the final stage of its Dockerfile changed since its system packages were read; "
-                       "build the images and run --refresh system")
+            report.add(
+                f"{name}: the final stage of its Dockerfile changed since its system packages were read; "
+                "build the images and run --refresh system"
+            )
 
 
 def offer_addresses(report: Report) -> list[str]:
@@ -851,8 +1064,14 @@ def paragraph(text: str) -> list[str]:
 
 
 def indented(text: str) -> list[str]:
-    return textwrap.wrap(text, 79, initial_indent="  ", subsequent_indent="  ", break_on_hyphens=False,
-                         break_long_words=False)
+    return textwrap.wrap(
+        text,
+        79,
+        initial_indent="  ",
+        subsequent_indent="  ",
+        break_on_hyphens=False,
+        break_long_words=False,
+    )
 
 
 def listed_with(names: list[str]) -> str:
@@ -886,7 +1105,9 @@ def library_lines(python: dict[str, list[Entry]], web: list[Entry]) -> list[str]
     for service, entries in python.items():
         for entry in entries:
             if entry.name == OFFER_LIBRARIES[0]:
-                found.setdefault((entry.name, entry.version), (entry, []))[1].append(f"Python, {service}")
+                found.setdefault((entry.name, entry.version), (entry, []))[1].append(
+                    f"Python, {service}"
+                )
     for entry in web:
         if entry.name.startswith(OFFER_LIBRARIES[1]):
             found.setdefault((entry.name, entry.version), (entry, []))[1].append("web client")
@@ -895,26 +1116,35 @@ def library_lines(python: dict[str, list[Entry]], web: list[Entry]) -> list[str]
         if name == OFFER_LIBRARIES[0]:
             source = f"https://pypi.org/project/{name}/{version}/#files"
         else:
-            source = (f"https://www.npmjs.com/package/{name}/v/{version}, whose versions.json names the libvips "
-                      "release; its source is at https://github.com/libvips/libvips/releases")
+            source = (
+                f"https://www.npmjs.com/package/{name}/v/{version}, whose versions.json names the libvips "
+                "release; its source is at https://github.com/libvips/libvips/releases"
+            )
         lines.append(f"- {name} {version} ({'; '.join(used_by)})")
         lines += indented(f"Licence: {entry.spdx or entry.licence}. Source: {source}")
     return lines
 
 
-def offer_section(data: dict, python: dict[str, list[Entry]], web: list[Entry], report: Report) -> list[str]:
+def offer_section(
+    data: dict, python: dict[str, list[Entry]], web: list[Entry], report: Report
+) -> list[str]:
     images = data.get("images", {})
-    texts = sorted({text for image in images.values() for row in image["packages"] for text in row["texts"]})
+    texts = sorted(
+        {text for image in images.values() for row in image["packages"] for text in row["texts"]}
+    )
     addresses = offer_addresses(report)
-    systems = {kind: sorted({image["os"] for image in images.values() if image["kind"] == kind})
-               for kind in ("debian", "alpine")}
+    systems = {
+        kind: sorted({image["os"] for image in images.values() if image["kind"] == kind})
+        for kind in ("debian", "alpine")
+    }
     out = ["", "", "7. Source code of GPL and LGPL components", ""]
     out += paragraph(
         "Our images, horus-mas, horus-agent, horus-knowledge-store, horus-web-client and horus-llm-mock, "
         "contain operating-system packages from Debian and Alpine Linux licensed under the GNU GPL or the GNU LGPL "
         "(7.1 and 7.2). They run as separate programs, or are system libraries that the Python and Node.js "
         "runtimes load; Horus's own code does not link them. Two libraries among our dependencies are under "
-        "the LGPL too (7.3): psycopg2-binary, and the prebuilt libvips that sharp loads.")
+        "the LGPL too (7.3): psycopg2-binary, and the prebuilt libvips that sharp loads."
+    )
     out += ["Where the source is:", ""]
     for item in (
         "Debian packages: the source package of each version listed below (.dsc, original and Debian "
@@ -935,7 +1165,8 @@ def offer_section(data: dict, python: dict[str, list[Entry]], web: list[Entry], 
         "components of that version, for no more than our cost of sending it. Write to one of the "
         f"maintainers, at the addresses of section 16 of LICENSE: {listed_with(addresses or ['?'])}. Name "
         "the version of Horus and the image. scripts/licences/fetch-gpl-sources.py gathers the exact sources "
-        "of the system packages of any of our images into one archive (docs/operations.md).")
+        "of the system packages of any of our images into one archive (docs/operations.md)."
+    )
     out += paragraph(
         f"The versions below were read with dpkg-query, and from the apk database, in CPU images built on "
         f"{data.get('read_on', '?')} from this repository; the GPU images install the same system packages. "
@@ -943,7 +1174,8 @@ def offer_section(data: dict, python: dict[str, list[Entry]], web: list[Entry], 
         "reads the exact list from the image it is given. The licence names are those of each package's "
         "copyright file (Debian) or package database (Alpine). The full texts are in LICENSES/ "
         f"({', '.join(texts)}), and the Debian images also keep each package's copyright file in "
-        "/usr/share/doc/<package>/.")
+        "/usr/share/doc/<package>/."
+    )
     out += [f"7.1 Debian packages ({', '.join(systems['debian'])})", ""]
     out += system_lines(images, "debian")
     out += ["", "", f"7.2 Alpine packages ({', '.join(systems['alpine'])})", ""]
@@ -959,8 +1191,10 @@ def render(report: Report) -> str:
     records = read_json(FILES_DATA) if FILES_DATA.is_file() else {}
     if not records:
         report.add("scripts/licences/licence-files.json is missing; run --refresh files")
-    python = {service: attach_files("python", entries, records, report)
-              for service, entries in python_entries(report).items()}
+    python = {
+        service: attach_files("python", entries, records, report)
+        for service, entries in python_entries(report).items()
+    }
     web = attach_files("web", web_entries(), records, report)
     rust = attach_files("rust", rust_entries(report), records, report)
     images = entries_with_spdx(image_entries(components, report), "images", report)
@@ -997,11 +1231,17 @@ def render(report: Report) -> str:
         read_json(PYTHON_DATA)["how"],
     ]
     for service, entries in python.items():
-        out += ["", f"1.{list(python).index(service) + 1} {service} (src/services/{service})", "",
-                "The last line of each entry names the requirements files that install it.", ""]
+        out += [
+            "",
+            f"1.{list(python).index(service) + 1} {service} (src/services/{service})",
+            "",
+            "The last line of each entry names the requirements files that install it.",
+            "",
+        ]
         out += lines_for(entries)
     out += [
-        "", "",
+        "",
+        "",
         "2. Web client: production dependencies (src/services/web-client/package-lock.json)",
         "",
         "Licences as each package's package.json declares them, copied by npm into",
@@ -1010,7 +1250,8 @@ def render(report: Report) -> str:
     ]
     out += lines_for(web)
     out += [
-        "", "",
+        "",
+        "",
         "3. Desktop app: Rust crates (desktop/src-tauri/Cargo.lock)",
         "",
         read_json(RUST_DATA)["how"],
@@ -1018,7 +1259,8 @@ def render(report: Report) -> str:
     ]
     out += lines_for(rust)
     out += [
-        "", "",
+        "",
+        "",
         "4. Container images the stacks run as separate processes",
         "",
         "Pulled unmodified and run as their own containers next to Horus's services.",
@@ -1027,7 +1269,8 @@ def render(report: Report) -> str:
     ]
     out += lines_for(images)
     out += [
-        "", "",
+        "",
+        "",
         "5. Models",
         "",
         "Downloaded at install or build time, or by the services on first use.",
@@ -1035,7 +1278,8 @@ def render(report: Report) -> str:
     ]
     out += lines_for(models)
     out += [
-        "", "",
+        "",
+        "",
         "6. Other components",
         "",
     ]
@@ -1045,20 +1289,44 @@ def render(report: Report) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Generate THIRD_PARTY_NOTICES at the repository root.")
-    parser.add_argument("--check", action="store_true", help="exit 1 if THIRD_PARTY_NOTICES or its data is out of date")
-    parser.add_argument("--refresh", nargs="?", const="all", choices=("all", "python", "rust", "files", "system"),
-                        help="re-read the Python and/or Rust licence data, fetch the licence texts and "
-                             "NOTICE files (files), or list the GPL and LGPL system packages of the built "
-                             "images (system, not part of all), before writing (default: all)")
-    parser.add_argument("--python-env", action="append", default=[], metavar="PYTHON",
-                        help="with --refresh: a Python interpreter whose installed packages give licence metadata "
-                             "(repeat for each service environment; default: this interpreter)")
-    parser.add_argument("--cargo", default=shutil.which("cargo") or "cargo",
-                        help="with --refresh: the cargo executable (default: cargo on PATH)")
-    parser.add_argument("--image", action="append", default=[], metavar="NAME=IMAGE",
-                        help="with --refresh system: the built image of mas, agent, knowledge-store and "
-                             "web-client (repeat for each)")
+    parser = argparse.ArgumentParser(
+        description="Generate THIRD_PARTY_NOTICES at the repository root."
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="exit 1 if THIRD_PARTY_NOTICES or its data is out of date",
+    )
+    parser.add_argument(
+        "--refresh",
+        nargs="?",
+        const="all",
+        choices=("all", "python", "rust", "files", "system"),
+        help="re-read the Python and/or Rust licence data, fetch the licence texts and "
+        "NOTICE files (files), or list the GPL and LGPL system packages of the built "
+        "images (system, not part of all), before writing (default: all)",
+    )
+    parser.add_argument(
+        "--python-env",
+        action="append",
+        default=[],
+        metavar="PYTHON",
+        help="with --refresh: a Python interpreter whose installed packages give licence metadata "
+        "(repeat for each service environment; default: this interpreter)",
+    )
+    parser.add_argument(
+        "--cargo",
+        default=shutil.which("cargo") or "cargo",
+        help="with --refresh: the cargo executable (default: cargo on PATH)",
+    )
+    parser.add_argument(
+        "--image",
+        action="append",
+        default=[],
+        metavar="NAME=IMAGE",
+        help="with --refresh system: the built image of mas, agent, knowledge-store and "
+        "web-client (repeat for each)",
+    )
     args = parser.parse_args(argv)
 
     if args.refresh in ("all", "python"):
@@ -1075,7 +1343,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.check:
         current = NOTICES.read_text(encoding="utf-8") if NOTICES.is_file() else ""
         if current != text:
-            report.add("THIRD_PARTY_NOTICES is out of date; run scripts/licences/third_party_notices.py")
+            report.add(
+                "THIRD_PARTY_NOTICES is out of date; run scripts/licences/third_party_notices.py"
+            )
         for problem in report.stale:
             print(f"error: {problem}")
         return 1 if report.stale else 0

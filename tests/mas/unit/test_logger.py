@@ -34,11 +34,11 @@ class TestMASLogger:
         assert logger1 is logger2
 
     def test_initialization(self):
-        with patch("core.logger.Path") as mock_path, patch(
-            "core.logger.structlog.configure"
-        ) as mock_configure, patch(
-            "core.logger.logging.FileHandler"
-        ) as mock_file_handler:
+        with (
+            patch("core.logger.Path") as mock_path,
+            patch("core.logger.structlog.configure") as mock_configure,
+            patch("core.logger.logging.FileHandler") as mock_file_handler,
+        ):
             logger = MASLogger()
             assert logger._initialized is True
             mock_path.return_value.mkdir.assert_called_with(exist_ok=True)
@@ -267,9 +267,7 @@ class TestMASLogger:
         from core.logger import ColoredFormatter
 
         formatter = ColoredFormatter()
-        record = logging.LogRecord(
-            "name", logging.INFO, "pathname", 1, "msg", None, None
-        )
+        record = logging.LogRecord("name", logging.INFO, "pathname", 1, "msg", None, None)
         formatted = formatter.format(record)
         assert "INFO" in formatted
         assert "msg" in formatted

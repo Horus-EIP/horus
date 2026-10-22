@@ -27,7 +27,9 @@ def ask(target, question="How many lanterns hang on the north pier?", files=()):
 def target(fake_openai, monkeypatch):
     monkeypatch.delenv(KEY_VARIABLE, raising=False)
     fake_openai.answer = lambda body: f"Fourteen lanterns ({question_of(body)})"
-    return OpenAITarget(base_url=fake_openai.base_url + "/", model="harbour-7b", api_key_env=KEY_VARIABLE)
+    return OpenAITarget(
+        base_url=fake_openai.base_url + "/", model="harbour-7b", api_key_env=KEY_VARIABLE
+    )
 
 
 class TestRequest:
@@ -162,7 +164,12 @@ class TestReadStream:
 
     @pytest.mark.parametrize(
         "chunk",
-        [[1, 2], {"choices": ["x"]}, {"choices": [{"delta": "x"}]}, {"choices": [{"delta": {"content": 5}}]}],
+        [
+            [1, 2],
+            {"choices": ["x"]},
+            {"choices": [{"delta": "x"}]},
+            {"choices": [{"delta": {"content": 5}}]},
+        ],
     )
     def test_a_chunk_of_the_wrong_shape_is_a_reply_error(self, chunk):
         with pytest.raises(ServerReplyError, match="unexpected stream chunk"):
@@ -171,9 +178,18 @@ class TestReadStream:
 
 class TestReadBody:
     def test_a_whole_reply_gives_its_answer_usage_and_model(self):
-        body = {"model": "m", "choices": [{"message": {"content": "14"}}], "usage": {"prompt_tokens": 3}}
+        body = {
+            "model": "m",
+            "choices": [{"message": {"content": "14"}}],
+            "usage": {"prompt_tokens": 3},
+        }
         reply = read_body(body)
-        assert (reply.answer, reply.ttft_s, reply.usage, reply.model) == ("14", None, {"prompt_tokens": 3}, "m")
+        assert (reply.answer, reply.ttft_s, reply.usage, reply.model) == (
+            "14",
+            None,
+            {"prompt_tokens": 3},
+            "m",
+        )
         assert read_body({"choices": []}).answer == ""
 
     @pytest.mark.parametrize(

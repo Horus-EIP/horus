@@ -21,9 +21,7 @@ class StructuredFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """Format log record as JSON."""
         log_data: dict[str, Any] = {
-            "timestamp": datetime.now(UTC)
-            .isoformat()
-            .replace("+00:00", "Z"),
+            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -130,4 +128,3 @@ log_level = os.getenv("AGENT_LOG_LEVEL", "INFO")
 log_file = os.getenv("AGENT_LOG_FILE")
 
 AgentLogger.configure(level=log_level, json_output=json_logging, log_file=log_file)
-

@@ -33,8 +33,11 @@ def test_normal_waits_the_configured_latency(mock_server):
 
 def test_slow_waits_5_to_40_seconds_the_same_for_the_same_request(mock_server):
     running = mock_server(scenario="slow", latency_ms=0)
-    questions = [f"What was our Q{quarter} {year} revenue?" for quarter in (1, 2, 3, 4)
-                 for year in (2024, 2025)]
+    questions = [
+        f"What was our Q{quarter} {year} revenue?"
+        for quarter in (1, 2, 3, 4)
+        for year in (2024, 2025)
+    ]
     for question in questions + questions[:2]:
         running.content(route_body(question))
     assert all(5 <= seconds <= 40 for seconds in running.slept)
@@ -55,7 +58,8 @@ def test_invalid_json_leaves_text_replies_alone(mock_server):
     steps = [{"agent_type": "analyst", "description": "From the Finance-Analyst documents: q"}]
     body = text_body(PROMPTS.get_manager_announcement_prompt("q", steps))
     assert mock_server(scenario="invalid_json").content(body, "announce") == (
-        "I'm asking Finance-Analyst to work on this.")
+        "I'm asking Finance-Analyst to work on this."
+    )
 
 
 def test_normal_replies_to_the_same_calls_are_valid_json(server):
@@ -65,7 +69,9 @@ def test_normal_replies_to_the_same_calls_are_valid_json(server):
 
 @pytest.mark.parametrize("labels", [("S1",), ()])
 def test_refuse_answers_every_question_with_the_refusal(mock_server, labels):
-    body = answer_body(PASSAGES if labels else "", "What was our Q4 2025 revenue?", labels, stream=False)
+    body = answer_body(
+        PASSAGES if labels else "", "What was our Q4 2025 revenue?", labels, stream=False
+    )
     reply = json.loads(mock_server(scenario="refuse").content(body, "answer"))
     jsonschema.validate(reply, body["response_format"]["json_schema"]["schema"])
     assert reply["status"] == "not_found"
@@ -84,7 +90,9 @@ def test_error_fails_every_model_call(mock_server, stream):
     status, headers, raw = running.request("POST", "/v1/chat/completions", body)
     assert status == 500
     assert headers["Content-Type"] == "application/json"
-    assert json.loads(raw) == {"error": {"message": ERROR_TEXT, "type": "server_error", "code": 500}}
+    assert json.loads(raw) == {
+        "error": {"message": ERROR_TEXT, "type": "server_error", "code": 500}
+    }
 
 
 def test_error_keeps_the_health_check_and_the_model_list_up(mock_server):
@@ -96,7 +104,11 @@ def test_error_keeps_the_health_check_and_the_model_list_up(mock_server):
 def test_the_stream_of_a_refusal_adds_up_to_the_refusal(mock_server):
     running = mock_server(scenario="refuse")
     body = answer_body(PASSAGES, "What was our Q4 2025 revenue?")
-    chunks = [json.loads(event) for event in sse_events(
-        running.request("POST", "/v1/chat/completions", body)[2])[:-1]]
-    text = "".join(chunk["choices"][0]["delta"].get("content", "") for chunk in chunks if chunk["choices"])
+    chunks = [
+        json.loads(event)
+        for event in sse_events(running.request("POST", "/v1/chat/completions", body)[2])[:-1]
+    ]
+    text = "".join(
+        chunk["choices"][0]["delta"].get("content", "") for chunk in chunks if chunk["choices"]
+    )
     assert json.loads(text)["answer"] == REFUSAL

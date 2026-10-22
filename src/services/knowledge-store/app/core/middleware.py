@@ -27,9 +27,9 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
 
         # Extract or generate correlation ID
         correlation_id = (
-            request.headers.get("X-Request-ID") or
-            request.headers.get("X-Correlation-ID") or
-            str(uuid.uuid4())
+            request.headers.get("X-Request-ID")
+            or request.headers.get("X-Correlation-ID")
+            or str(uuid.uuid4())
         )
 
         set_correlation_id(correlation_id)
@@ -53,7 +53,7 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
                     "path": request.url.path,
                     "status_code": response.status_code,
                     "duration_ms": round(duration * 1000, 2),
-                }
+                },
             )
 
             return response
@@ -67,7 +67,7 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
                     "path": request.url.path,
                     "error": str(e),
                 },
-                exc_info=True
+                exc_info=True,
             )
             raise
         finally:

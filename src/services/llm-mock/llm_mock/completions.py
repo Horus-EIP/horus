@@ -46,16 +46,22 @@ def completion(call: Call, model: str, content: str) -> dict:
 
 def pieces(content: str) -> list[str]:
     words = PIECE.findall(content)
-    chunks = ["".join(words[at:at + WORDS_PER_CHUNK]) for at in range(0, len(words), WORDS_PER_CHUNK)]
-    rest = content[sum(len(word) for word in words):]
+    chunks = [
+        "".join(words[at : at + WORDS_PER_CHUNK]) for at in range(0, len(words), WORDS_PER_CHUNK)
+    ]
+    rest = content[sum(len(word) for word in words) :]
     if rest:
         chunks.append(rest)
     return chunks
 
 
 def stream_events(call: Call, model: str, content: str) -> list[bytes]:
-    base = {"id": completion_id(call), "object": "chat.completion.chunk", "created": 0,
-            "model": model}
+    base = {
+        "id": completion_id(call),
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": model,
+    }
     events = [_chunk(base, {"role": "assistant", "content": ""}, None)]
     events += [_chunk(base, {"content": piece}, None) for piece in pieces(content)]
     events.append(_chunk(base, {}, "stop"))

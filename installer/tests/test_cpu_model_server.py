@@ -40,6 +40,7 @@ INNERMOST_DEFAULT = re.compile(r"\$\{(\w+):-([^${}]*)\}")
 
 LLAMA_SERVER_TAG = re.compile(r"^ghcr\.io/ggml-org/llama\.cpp:server-b(\d+)$")
 
+
 def interpolate(value, env: dict[str, str]) -> str:
     value = str(value)
     while True:
@@ -48,13 +49,16 @@ def interpolate(value, env: dict[str, str]) -> str:
             return resolved
         value = resolved
 
+
 def load_compose(name: str) -> dict:
     loader = type("ComposeOverlayLoader", (yaml.SafeLoader,), {})
     loader.add_constructor("!reset", lambda _loader, _node: None)
     return yaml.load((INFRA / name).read_text(encoding="utf-8"), Loader=loader)
 
+
 def environment(spec: dict) -> dict[str, str]:
     return dict(entry.split("=", 1) for entry in spec.get("environment", []))
+
 
 def flag_values(command: list, env: dict[str, str]) -> dict[str, str | None]:
     resolved = [interpolate(item, env) for item in command]
@@ -66,8 +70,10 @@ def flag_values(command: list, env: dict[str, str]) -> dict[str, str | None]:
         values[item] = None if following is None or following.startswith("--") else following
     return values
 
+
 def depends(spec: dict) -> dict[str, dict]:
     return spec.get("depends_on") or {}
+
 
 @needs_yaml
 class CpuOverlayRunsLlamaServer(unittest.TestCase):
@@ -131,11 +137,13 @@ class CpuOverlayRunsLlamaServer(unittest.TestCase):
 
     def test_without_the_installer_the_server_runs_like_cpu_standard(self):
         defaults = self.flags({})
-        for key, flag in (("LLM_SERVER_CACHE_TYPE_K", "--cache-type-k"),
-                          ("LLM_SERVER_CACHE_TYPE_V", "--cache-type-v"),
-                          ("LLM_SERVER_FLASH_ATTN", "--flash-attn"),
-                          ("LLM_SERVER_CACHE_RAM_MIB", "--cache-ram"),
-                          ("LLM_VLLM_MAX_MODEL_LEN", "--ctx-size")):
+        for key, flag in (
+            ("LLM_SERVER_CACHE_TYPE_K", "--cache-type-k"),
+            ("LLM_SERVER_CACHE_TYPE_V", "--cache-type-v"),
+            ("LLM_SERVER_FLASH_ATTN", "--flash-attn"),
+            ("LLM_SERVER_CACHE_RAM_MIB", "--cache-ram"),
+            ("LLM_VLLM_MAX_MODEL_LEN", "--ctx-size"),
+        ):
             with self.subTest(key):
                 self.assertEqual(defaults[flag], self.cpu_env[key])
 
@@ -173,8 +181,9 @@ class CpuOverlayRunsLlamaServer(unittest.TestCase):
                 self.assertNotIn("llm", depends(self.base["services"][name]))
 
     def test_the_gpu_stack_keeps_the_agent_waiting_for_vllm(self):
-        self.assertEqual(depends(self.base["services"]["agent"])["vllm"]["condition"],
-                         "service_healthy")
+        self.assertEqual(
+            depends(self.base["services"]["agent"])["vllm"]["condition"], "service_healthy"
+        )
 
     def models_mount(self, spec: dict, env: dict[str, str]) -> tuple[str, str]:
         mounts = [interpolate(m, env) for m in spec["volumes"] if "/models" in m]
@@ -188,8 +197,9 @@ class CpuOverlayRunsLlamaServer(unittest.TestCase):
         self.assertNotIn("volumes", self.overlay)
 
     def test_the_fallback_fetches_into_the_same_folder_before_the_server_starts(self):
-        self.assertEqual(depends(self.llm)["llm-model"]["condition"],
-                         "service_completed_successfully")
+        self.assertEqual(
+            depends(self.llm)["llm-model"]["condition"], "service_completed_successfully"
+        )
         for env in ({}, {"HORUS_MODELS_DIR": "D:/horus-models"}):
             with self.subTest(env=env):
                 source, target = self.models_mount(self.fetch, env)
@@ -201,8 +211,9 @@ class CpuOverlayRunsLlamaServer(unittest.TestCase):
         for env in ({}, {"LLM_GGUF_FILE": "own.gguf"}):
             with self.subTest(env=env):
                 fetched = interpolate(environment(self.fetch)["LLM_GGUF_FILE"], env)
-                self.assertEqual(self.flags({**self.cpu_env, **env})["--model"],
-                                 f"/models/{fetched}")
+                self.assertEqual(
+                    self.flags({**self.cpu_env, **env})["--model"], f"/models/{fetched}"
+                )
 
     def test_the_fallback_defaults_are_the_manifest_cpu_model(self):
         manifest = model_manager.load_manifest(MANIFEST)
@@ -217,8 +228,9 @@ class CpuOverlayRunsLlamaServer(unittest.TestCase):
     def test_the_installer_values_reach_the_fallback_and_the_server(self):
         plan = model_manager.plan_for_profile(REPO, "cpu-standard")
         written = plan.env(REPO)
-        fetch_env = {key: interpolate(value, written)
-                     for key, value in environment(self.fetch).items()}
+        fetch_env = {
+            key: interpolate(value, written) for key, value in environment(self.fetch).items()
+        }
         for key in ("LLM_GGUF_FILE", "LLM_GGUF_URL", "LLM_GGUF_SHA256", "LLM_GGUF_SIZE"):
             self.assertEqual(fetch_env[key], written[key])
         self.assertEqual(self.models_mount(self.llm, written)[0], written["HORUS_MODELS_DIR"])
@@ -258,8 +270,10 @@ class CpuOverlayRunsLlamaServer(unittest.TestCase):
         for name, key in (("mas", "MAS_MEM_LIMIT"), ("agent", "AGENT_MEM_LIMIT")):
             with self.subTest(name):
                 spec = self.overlay["services"][name]
-                limits = (interpolate(spec["mem_limit"], {}),
-                          interpolate(spec["memswap_limit"], {}))
+                limits = (
+                    interpolate(spec["mem_limit"], {}),
+                    interpolate(spec["memswap_limit"], {}),
+                )
                 self.assertEqual(limits, (self.cpu_env[key], self.cpu_env[key]))
 
     def test_every_ceiling_a_cpu_profile_writes_is_read_by_the_cpu_stack(self):
@@ -272,8 +286,10 @@ class CpuOverlayRunsLlamaServer(unittest.TestCase):
         self.assertEqual(len(written), 4)
         self.assertLessEqual(written, read)
 
+
 def glob_matches(pattern: str, path: str) -> bool:
-    return fnmatch.fnmatchcase(path, pattern) and "/" not in path[pattern.rfind("/") + 1:]
+    return fnmatch.fnmatchcase(path, pattern) and "/" not in path[pattern.rfind("/") + 1 :]
+
 
 @needs_yaml
 class PrometheusScrapesLlamaServerOnCpuOnly(unittest.TestCase):
@@ -308,12 +324,18 @@ class PrometheusScrapesLlamaServerOnCpuOnly(unittest.TestCase):
         base_mounts = self.base["services"]["prometheus"]["volumes"]
         _, target = self.cpu_mount()
         self.assertFalse(any(target in mount for mount in base_mounts), base_mounts)
-        targets = [target for job in self.config["scrape_configs"]
-                   for config in job.get("static_configs", []) for target in config["targets"]]
+        targets = [
+            target
+            for job in self.config["scrape_configs"]
+            for config in job.get("static_configs", [])
+            for target in config["targets"]
+        ]
         self.assertFalse([t for t in targets if t.startswith(f"{profiles.CPU_MODEL_SERVER}:")])
 
-def run_fetch(models: Path, url: str, sha256: str, size: int,
-              attempts: int = 2) -> subprocess.CompletedProcess:
+
+def run_fetch(
+    models: Path, url: str, sha256: str, size: int, attempts: int = 2
+) -> subprocess.CompletedProcess:
     env = {
         **os.environ,
         "LLM_MODELS_DIR": models.as_posix(),
@@ -325,8 +347,10 @@ def run_fetch(models: Path, url: str, sha256: str, size: int,
         "LLM_GGUF_RETRY_SECONDS": "0",
         "HF_TOKEN": "",
     }
-    return subprocess.run(["sh", str(FETCH_SCRIPT)], env=env, capture_output=True,
-                          text=True, timeout=120)
+    return subprocess.run(
+        ["sh", str(FETCH_SCRIPT)], env=env, capture_output=True, text=True, timeout=120
+    )
+
 
 @needs_shell
 class FetchScript(unittest.TestCase):
@@ -343,10 +367,10 @@ class FetchScript(unittest.TestCase):
         self.sha = hashlib.sha256(self.payload).hexdigest()
         self.target = self.models / "model.gguf"
 
-    def fetch(self, url: str | None = None, sha: str | None = None,
-              attempts: int = 2) -> subprocess.CompletedProcess:
-        return run_fetch(self.models, url or self.url, sha or self.sha, len(self.payload),
-                         attempts)
+    def fetch(
+        self, url: str | None = None, sha: str | None = None, attempts: int = 2
+    ) -> subprocess.CompletedProcess:
+        return run_fetch(self.models, url or self.url, sha or self.sha, len(self.payload), attempts)
 
     def test_a_fresh_download_is_verified_then_put_in_place(self):
         result = self.fetch()
@@ -391,8 +415,15 @@ class FetchScript(unittest.TestCase):
 
     def test_a_file_the_installer_verified_is_used_without_a_download(self):
         entry = model_manager.ModelEntry(
-            id="m", version="1", file="model.gguf", size_bytes=len(self.payload),
-            sha256=self.sha, min_ram_gb=0, profiles=(), mirrors=())
+            id="m",
+            version="1",
+            file="model.gguf",
+            size_bytes=len(self.payload),
+            sha256=self.sha,
+            min_ram_gb=0,
+            profiles=(),
+            mirrors=(),
+        )
         self.target.write_bytes(self.payload)
         with tempfile.TemporaryDirectory() as name:
             log = Log(Path(name) / "install-log.txt")
@@ -410,6 +441,7 @@ class FetchScript(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("failed 2 times", result.stdout)
         self.assertFalse(self.target.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

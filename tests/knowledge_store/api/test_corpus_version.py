@@ -149,7 +149,9 @@ class TestCorpusVersionBumps:
         self, client, corpus_root, fake_collection, monkeypatch
     ):
         _scan(client)
-        (corpus_root / "reports" / "q4.md").write_text("Q4 2025 revenue was 4.3M.", encoding="utf-8")
+        (corpus_root / "reports" / "q4.md").write_text(
+            "Q4 2025 revenue was 4.3M.", encoding="utf-8"
+        )
         versions_seen_when_storing = []
         store = fake_collection.add
 

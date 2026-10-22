@@ -28,7 +28,8 @@ async def _store(text: str = LONG_TEXT, doc_id: str = "doc-1", **kwargs) -> int:
 
 def _chunks(collection, doc_id: str = "doc-1") -> list[tuple[str, str, dict]]:
     rows = [
-        (entry_id, text, metadata) for entry_id, (text, metadata) in collection.rows.items()
+        (entry_id, text, metadata)
+        for entry_id, (text, metadata) in collection.rows.items()
         if metadata.get("doc_id") == doc_id
     ]
     return sorted(rows, key=lambda row: row[2]["chunk_index"])
@@ -44,7 +45,7 @@ class TestStoreChunks:
             f"doc-1:{n}" for n in range(count)
         ]
         assert all(
-            LONG_TEXT[meta["char_start"]:meta["char_end"]] == text for _id, text, meta in chunks
+            LONG_TEXT[meta["char_start"] : meta["char_end"]] == text for _id, text, meta in chunks
         )
 
     async def test_the_head_chunk_is_written_last(self, fake_collection, embedded, monkeypatch):
@@ -119,9 +120,13 @@ class TestStoreChunks:
         assert pages[max(pages)] == 2
 
     async def test_source_and_stored_paths_go_on_every_chunk(self, fake_collection, embedded):
-        await _store(extra_metadata={
-            "source_path": "reports/plan.txt", "content_sha256": "abc", "source": "corpus",
-        })
+        await _store(
+            extra_metadata={
+                "source_path": "reports/plan.txt",
+                "content_sha256": "abc",
+                "source": "corpus",
+            }
+        )
 
         chunks = _chunks(fake_collection)
         assert all(meta["source_path"] == "reports/plan.txt" for _id, _text, meta in chunks)
@@ -130,7 +135,9 @@ class TestStoreChunks:
 
 
 class TestDocumentTexts:
-    async def test_the_full_text_is_rebuilt_from_overlapping_chunks(self, fake_collection, embedded):
+    async def test_the_full_text_is_rebuilt_from_overlapping_chunks(
+        self, fake_collection, embedded
+    ):
         await _store()
 
         rebuilt = file_service.document_texts(["doc-1"])["doc-1"]

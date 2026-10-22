@@ -61,8 +61,12 @@ _query_result = {
     "documents": [["test content"]],
     "metadatas": [[{"title": "test", "size": 100, "date": "2023-01-01"}]],
 }
-_chromadb.PersistentClient.return_value.get_collection.return_value.query.return_value = _query_result
-_chromadb.PersistentClient.return_value.create_collection.return_value.query.return_value = _query_result
+_chromadb.PersistentClient.return_value.get_collection.return_value.query.return_value = (
+    _query_result
+)
+_chromadb.PersistentClient.return_value.create_collection.return_value.query.return_value = (
+    _query_result
+)
 sys.modules["chromadb"] = _chromadb
 
 _chromadb_config = types.ModuleType("chromadb.config")
@@ -122,7 +126,9 @@ def _metadata_matches(metadata: dict, where: dict | None) -> bool:
             return False
         if operator == "$in" and value not in expected:
             return False
-        if operator in _COMPARISONS and (value is None or not _COMPARISONS[operator](value, expected)):
+        if operator in _COMPARISONS and (
+            value is None or not _COMPARISONS[operator](value, expected)
+        ):
             return False
     return True
 
@@ -194,12 +200,13 @@ class FakeChromaCollection:
 
     def _select(self, ids=None, where=None) -> list[str]:
         return [
-            entry_id for entry_id, (_document, metadata) in self.rows.items()
+            entry_id
+            for entry_id, (_document, metadata) in self.rows.items()
             if (ids is None or entry_id in ids) and _metadata_matches(metadata, where)
         ]
 
     def get(self, ids=None, where=None, include=None, limit=None, offset=None):
-        selected = self._select(ids, where)[offset or 0:]
+        selected = self._select(ids, where)[offset or 0 :]
         if limit is not None:
             selected = selected[:limit]
         return {

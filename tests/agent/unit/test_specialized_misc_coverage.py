@@ -140,9 +140,7 @@ class TestAnalystAgent:
 
     async def test_process_request_extract_uses_explicit_type(self):
         agent = self._make_agent()
-        res = await agent.process_request(
-            "extract", "doc text", {"extraction_type": "tables"}
-        )
+        res = await agent.process_request("extract", "doc text", {"extraction_type": "tables"})
         assert res == "EXTRACTED"
         agent.data_extractor._run.assert_called_once_with("doc text", "tables")
 
@@ -368,16 +366,28 @@ class TestProfilesHelpers:
     def patched_profiles(self, monkeypatch):
         sample = [
             AgentProfile(
-                name="A", type="general", skills=["s1"], description="",
-                agent_id="id-a", api_key="key-a",
+                name="A",
+                type="general",
+                skills=["s1"],
+                description="",
+                agent_id="id-a",
+                api_key="key-a",
             ),
             AgentProfile(
-                name="B", type="analyst", skills=["s2"], description="",
-                agent_id="id-b", api_key="key-b",
+                name="B",
+                type="analyst",
+                skills=["s2"],
+                description="",
+                agent_id="id-b",
+                api_key="key-b",
             ),
             AgentProfile(
-                name="C", type="general", skills=["s3"], description="",
-                agent_id="id-c", api_key="key-c",
+                name="C",
+                type="general",
+                skills=["s3"],
+                description="",
+                agent_id="id-c",
+                api_key="key-c",
             ),
         ]
         monkeypatch.setattr(profiles_mod, "PROFILES", sample)
@@ -810,9 +820,7 @@ class TestDataExtractorUncovered:
 
     def test_key_values_none_found_returns_message(self, tool):
         # A colon-less body produces no matches -> the no-pairs return (line 517).
-        assert tool._extract_key_values("just words no colon") == (
-            "No key-value pairs found"
-        )
+        assert tool._extract_key_values("just words no colon") == ("No key-value pairs found")
 
     def test_key_values_blank_line_continue(self, tool):
         # Embedded blank line exercises the ``if not line: continue`` guard (504).
@@ -865,11 +873,12 @@ class TestDataExtractorUncovered:
             with patch.object(DataExtractorTool, "extract_entities_spacy") as mock_spacy:
                 mock_regex.return_value = {"amounts": ["$1,234.50"], "dates": []}
                 mock_spacy.return_value = {
-                    "people": [], "companies": [], "amounts": [], "dates": [],
+                    "people": [],
+                    "companies": [],
+                    "amounts": [],
+                    "dates": [],
                 }
-                data = json.loads(
-                    tool._extract_payments("$1,234.50 total", MagicMock())
-                )
+                data = json.loads(tool._extract_payments("$1,234.50 total", MagicMock()))
         assert data[0]["amount"] == 1234.50
 
     def test_amount_loop_eu_format_dot_and_comma(self, tool):
@@ -878,11 +887,12 @@ class TestDataExtractorUncovered:
             with patch.object(DataExtractorTool, "extract_entities_spacy") as mock_spacy:
                 mock_regex.return_value = {"amounts": ["€1.234,50"], "dates": []}
                 mock_spacy.return_value = {
-                    "people": [], "companies": [], "amounts": [], "dates": [],
+                    "people": [],
+                    "companies": [],
+                    "amounts": [],
+                    "dates": [],
                 }
-                data = json.loads(
-                    tool._extract_payments("€1.234,50 total", MagicMock())
-                )
+                data = json.loads(tool._extract_payments("€1.234,50 total", MagicMock()))
         assert data[0]["amount"] == 1234.50
 
     def test_amount_loop_comma_decimal(self, tool):
@@ -891,7 +901,10 @@ class TestDataExtractorUncovered:
             with patch.object(DataExtractorTool, "extract_entities_spacy") as mock_spacy:
                 mock_regex.return_value = {"amounts": ["€10,50"], "dates": []}
                 mock_spacy.return_value = {
-                    "people": [], "companies": [], "amounts": [], "dates": [],
+                    "people": [],
+                    "companies": [],
+                    "amounts": [],
+                    "dates": [],
                 }
                 data = json.loads(tool._extract_payments("€10,50 total", MagicMock()))
         assert data[0]["amount"] == 10.50

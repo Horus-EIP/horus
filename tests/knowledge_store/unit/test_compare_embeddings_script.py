@@ -56,9 +56,9 @@ agents:
 
 def keyword_embedder(keywords: tuple[str, ...]):
     def embed(texts: list[str]) -> np.ndarray:
-        return np.array([
-            [1.0 + text.lower().count(keyword) for keyword in keywords] for text in texts
-        ])
+        return np.array(
+            [[1.0 + text.lower().count(keyword) for keyword in keywords] for text in texts]
+        )
 
     return embed
 
@@ -116,10 +116,14 @@ class TestSamples:
         questions = compare_embeddings.eval_questions(question_files[0])
 
         assert [sample.expected_sources for sample in questions] == [
-            ("q4.md",), ("handbook.md", "expenses.md"), (),
+            ("q4.md",),
+            ("handbook.md", "expenses.md"),
+            (),
         ]
         assert [sample.origin for sample in questions] == [
-            "eval:fin-01", "eval:multi-01", "eval:none-01",
+            "eval:fin-01",
+            "eval:multi-01",
+            "eval:none-01",
         ]
 
     def test_router_questions_come_from_the_test_set_and_the_examples(self, question_files):
@@ -136,9 +140,10 @@ class TestSamples:
         passages = [Sample(PASSAGE, "a", "x.md"), Sample(PASSAGE, "a", "y.md")]
         questions = [Sample(QUESTION, "a", "q1"), Sample(QUESTION, "b", "q2")]
 
-        assert [sample.origin for sample in compare_embeddings.collect_samples(
-            passages, questions, limit=10
-        )] == ["x.md", "q1", "q2"]
+        assert [
+            sample.origin
+            for sample in compare_embeddings.collect_samples(passages, questions, limit=10)
+        ] == ["x.md", "q1", "q2"]
         assert len(compare_embeddings.collect_samples(passages, questions, limit=2)) == 2
 
     def test_only_questions_get_the_query_prefix(self):
@@ -150,9 +155,10 @@ class TestSamples:
         assert embedder.model_input(Sample(PASSAGE, "Revenue was 4.2M.", "q4.md")) == (
             "Revenue was 4.2M."
         )
-        assert compare_embeddings.EMBEDDERS["mas"].model_input(
-            Sample(QUESTION, "revenue?", "q")
-        ) == "revenue?"
+        assert (
+            compare_embeddings.EMBEDDERS["mas"].model_input(Sample(QUESTION, "revenue?", "q"))
+            == "revenue?"
+        )
 
 
 class TestSimilarity:
@@ -160,9 +166,7 @@ class TestSimilarity:
         old = np.array([[1.0, 0.0], [0.0, 2.0], [3.0, 4.0]])
         new = np.array([[2.0, 0.0], [1.0, 0.0], [3.0, 4.0]])
 
-        np.testing.assert_allclose(
-            compare_embeddings.rowwise_cosine(old, new), [1.0, 0.0, 1.0]
-        )
+        np.testing.assert_allclose(compare_embeddings.rowwise_cosine(old, new), [1.0, 0.0, 1.0])
 
     def test_vectors_of_another_size_are_refused(self):
         with pytest.raises(ValueError, match="shape"):
@@ -258,13 +262,20 @@ class TestMain:
         monkeypatch.setattr(compare_embeddings, "fastembed_embedder", lambda _: embed)
         written = tmp_path / "report.json"
 
-        code = compare_embeddings.main([
-            "--corpus", str(corpus),
-            "--eval-testset", str(eval_testset),
-            "--router-testset", str(router_testset),
-            "--router-examples", str(router_examples),
-            "--json", str(written),
-        ])
+        code = compare_embeddings.main(
+            [
+                "--corpus",
+                str(corpus),
+                "--eval-testset",
+                str(eval_testset),
+                "--router-testset",
+                str(router_testset),
+                "--router-examples",
+                str(router_examples),
+                "--json",
+                str(written),
+            ]
+        )
 
         out = capsys.readouterr().out
         assert code == 0

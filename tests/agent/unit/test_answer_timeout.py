@@ -147,9 +147,11 @@ class TestOpenAICompatibleBackend:
         post = MagicMock()
         post.return_value.__enter__.return_value = response
 
-        with patch("requests.post", post), patch(
-            "ai_agents.step_emitter.emit_step", MagicMock()
-        ), pytest.raises(GenerationStopped):
+        with (
+            patch("requests.post", post),
+            patch("ai_agents.step_emitter.emit_step", MagicMock()),
+            pytest.raises(GenerationStopped),
+        ):
             _remote_agent()._generate_vllm("What was Q4 revenue?", "Answer briefly.")
 
         assert len(read) == 2
@@ -171,16 +173,18 @@ class TestOpenAICompatibleBackend:
         assert post.call_args.kwargs["json"]["stream"] is True
         emit.assert_not_called()
 
-    def test_a_stopped_generation_is_not_reported_as_a_failed_reasoning(
-        self, llama_server_env
-    ):
+    def test_a_stopped_generation_is_not_reported_as_a_failed_reasoning(self, llama_server_env):
         agent = _remote_agent()
         emit = MagicMock()
-        with patch.object(
-            DecisionMakingAgent,
-            "_generate_vllm",
-            side_effect=GenerationStopped("Generation stopped by its caller"),
-        ), patch("ai_agents.step_emitter.emit_step", emit), pytest.raises(GenerationStopped):
+        with (
+            patch.object(
+                DecisionMakingAgent,
+                "_generate_vllm",
+                side_effect=GenerationStopped("Generation stopped by its caller"),
+            ),
+            patch("ai_agents.step_emitter.emit_step", emit),
+            pytest.raises(GenerationStopped),
+        ):
             agent.decide("What was Q4 revenue?", context="Q4 2025 revenue was $4.2M.")
 
         step_types = [call.args[0] for call in emit.call_args_list]

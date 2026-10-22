@@ -77,8 +77,10 @@ class EndToEndJob(unittest.TestCase):
 
     def test_it_builds_and_starts_the_whole_stack_and_needs_no_artifact(self):
         build = " ".join(self.step("Build every image of the stack")["run"].split())
-        start = " ".join(self.step("Start the whole stack with no model and monitoring off")["run"].split())
-        self.assertIn('docker compose --progress plain build echo', build)
+        start = " ".join(
+            self.step("Start the whole stack with no model and monitoring off")["run"].split()
+        )
+        self.assertIn("docker compose --progress plain build echo", build)
         self.assertIn("up -d --wait --wait-timeout 900 echo", start)
         uses = [step.get("uses", "") for step in self.job["steps"]]
         self.assertFalse([use for use in uses if "artifact" in use])
@@ -86,10 +88,17 @@ class EndToEndJob(unittest.TestCase):
 
     def test_it_runs_the_cpu_stack_with_the_mock_and_monitoring_off_overlays(self):
         self.assertIn(f'echo "COMPOSE_FILE={NO_MODEL_FILES}"', self.runs)
-        for setting in ("OTEL_SDK_DISABLED", "KNOWLEDGE_STORE_REINDEX_ON_STARTUP", "EMBED_URL", "HORUS_SPACY"):
+        for setting in (
+            "OTEL_SDK_DISABLED",
+            "KNOWLEDGE_STORE_REINDEX_ON_STARTUP",
+            "EMBED_URL",
+            "HORUS_SPACY",
+        ):
             with self.subTest(setting):
                 self.assertNotIn(setting, self.runs)
-        write = next(s for s in self.job["steps"] if s.get("name") == "Write src/infra/.env for mock mode")
+        write = next(
+            s for s in self.job["steps"] if s.get("name") == "Write src/infra/.env for mock mode"
+        )
         appended = write["run"].split("{", 1)[1].splitlines()
         self.assertEqual(appended[1].strip(), "echo", ".env.example has no final newline")
         self.assertIn("HORUS_AI_MODE=mock", self.runs)
@@ -108,7 +117,9 @@ class EndToEndJob(unittest.TestCase):
         self.assertIn("http://127.0.0.1:8000/system/ai", self.runs)
 
     def test_mas_must_report_no_model_at_all(self):
-        check = self.step("MAS reports mock mode, mock embeddings, spaCy off and monitoring off at /system/ai")
+        check = self.step(
+            "MAS reports mock mode, mock embeddings, spaCy off and monitoring off at /system/ai"
+        )
         self.assertIn('("mock", True, "mock", "off", "off")', check["run"])
         self.assertIn('mode["embeddings"], mode["spacy"], mode["monitoring"]', check["run"])
 
@@ -121,10 +132,13 @@ class EndToEndJob(unittest.TestCase):
         self.assertLess(names.index("Smoke test"), names.index("No service loaded a model"))
 
     def test_it_checks_the_compose_files_with_and_without_the_overlay(self):
-        for files in ("docker-compose.yml docker-compose.yml:docker-compose.cpu.yml", MOCK_FILES,
-                      f"docker-compose.yml:{MONITORING_OFF}",
-                      f"docker-compose.yml:docker-compose.cpu.yml:{MONITORING_OFF}",
-                      f"{MOCK_FILES}:{MONITORING_OFF}"):
+        for files in (
+            "docker-compose.yml docker-compose.yml:docker-compose.cpu.yml",
+            MOCK_FILES,
+            f"docker-compose.yml:{MONITORING_OFF}",
+            f"docker-compose.yml:docker-compose.cpu.yml:{MONITORING_OFF}",
+            f"{MOCK_FILES}:{MONITORING_OFF}",
+        ):
             self.assertIn(files, self.runs)
         self.assertIn("config -q", self.runs)
 

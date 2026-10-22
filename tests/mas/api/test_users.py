@@ -72,7 +72,9 @@ class TestUserUpdateRole:
         mock_db.query.assert_not_called()
 
     @pytest.mark.parametrize("bad_role", ["root", "", "ADMIN", "xx"])
-    def test_update_role_rejects_invalid_role_string(self, make_client, mock_db, as_admin, bad_role):
+    def test_update_role_rejects_invalid_role_string(
+        self, make_client, mock_db, as_admin, bad_role
+    ):
         client = make_client(router, current_user=as_admin)
         r = client.post(
             "/users/update_role",

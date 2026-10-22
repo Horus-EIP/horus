@@ -131,9 +131,7 @@ LLM_CONTAINER = "llm"
 ROUTER = "MAS /metrics, B-92 router"
 UNSAMPLED_PEAK_LIMIT_BYTES = GIB // 2
 CONTAINER_COUNTS = (("container_oom_kills", "OOM kills"), ("container_restarts", "restart count"))
-COMPARE_DESCRIPTION = (
-    "Print the dev plan's section 10 metrics table for one benchmark run, or the difference between two."
-)
+COMPARE_DESCRIPTION = "Print the dev plan's section 10 metrics table for one benchmark run, or the difference between two."
 SECTION_10_ROWS = (
     *LLAMA_BENCH_ROWS,
     MetricRow("questions", "Questions", "test set items run", "count"),
@@ -142,13 +140,21 @@ SECTION_10_ROWS = (
     MetricRow("total_median_s", "Total time, median", "submit to final answer", "s"),
     MetricRow("total_p90_s", "Total time, p90", "submit to final answer", "s"),
     MetricRow("total_sum_s", "Total time, whole run", "sum over the questions", "s", is_total=True),
-    MetricRow("llm_prompt_median_s", "Prompt reading per question, median", "llama-server /metrics", "s"),
-    MetricRow("llm_generation_tps", "Generation speed in the stack", "llama-server /metrics", "t/s"),
+    MetricRow(
+        "llm_prompt_median_s", "Prompt reading per question, median", "llama-server /metrics", "s"
+    ),
+    MetricRow(
+        "llm_generation_tps", "Generation speed in the stack", "llama-server /metrics", "t/s"
+    ),
     MetricRow("routing_decision_median_ms", "Routing decision, median", ROUTER, "ms"),
-    MetricRow("routing_decision_without_llm_p90_ms", "Routing decision without the LLM, p90", ROUTER, "ms"),
+    MetricRow(
+        "routing_decision_without_llm_p90_ms", "Routing decision without the LLM, p90", ROUTER, "ms"
+    ),
     MetricRow("routing_llm_pct", "Routed by the LLM fallback", ROUTER, "%"),
     MetricRow("routing_methods", "Routing methods", ROUTER, "text"),
-    MetricRow("dispatch_median_ms", "Submit to dispatch, median", "task events, queue wait included", "ms"),
+    MetricRow(
+        "dispatch_median_ms", "Submit to dispatch, median", "task events, queue wait included", "ms"
+    ),
     MetricRow(
         "stack_peak_gib",
         "Peak RAM of the stack (ADR-006 P)",
@@ -163,12 +169,18 @@ SECTION_10_ROWS = (
         "GiB",
     ),
     MetricRow("peak_ram_llm_gib", "Peak RAM, llm container", "docker stats", "GiB"),
-    MetricRow("lifetime_peak_llm_gib", "Peak RAM, llm, since it started", "cgroup memory.peak", "GiB"),
+    MetricRow(
+        "lifetime_peak_llm_gib", "Peak RAM, llm, since it started", "cgroup memory.peak", "GiB"
+    ),
     MetricRow("oom_kills", "Out-of-memory kills", "cgroup memory.events", "count"),
     MetricRow("restarts", "Container restarts", "docker inspect", "count"),
     MetricRow("swap_peak_gib", "Peak swap used", "Docker host /proc/meminfo", "GiB"),
-    MetricRow("swap_growth_gib", "Swap growth during the questions", "Docker host /proc/meminfo", "GiB"),
-    MetricRow("install_min", "Install time without the model", "clean VM (not in these files)", "min"),
+    MetricRow(
+        "swap_growth_gib", "Swap growth during the questions", "Docker host /proc/meminfo", "GiB"
+    ),
+    MetricRow(
+        "install_min", "Install time without the model", "clean VM (not in these files)", "min"
+    ),
     MetricRow("peak_disk_gb", "Peak disk during install", "clean VM (not in these files)", "GB"),
     MetricRow("answer_correct_reviewed_pct", "Answer correct, two reviewers", "manual review", "%"),
     MetricRow("answer_correct_auto_pct", "Answer correct, automatic", "answer patterns", "%"),
@@ -193,13 +205,17 @@ def eval_metrics(report: dict[str, Any]) -> dict[str, Metric]:
         "llm_prompt_median_s": stat_metric(llm, "prompt_s", "median"),
         "llm_generation_tps": Metric(llm.get("generation_tps"), llm.get("questions")),
         "routing_decision_median_ms": stat_metric(routing, "decision_s", "median", 1000.0),
-        "routing_decision_without_llm_p90_ms": stat_metric(routing, "decision_s_without_llm", "p90", 1000.0),
+        "routing_decision_without_llm_p90_ms": stat_metric(
+            routing, "decision_s_without_llm", "p90", 1000.0
+        ),
         "routing_llm_pct": Metric(routing.get("llm_pct"), routing.get("decided_once")),
         "routing_methods": Metric(methods_text(routing.get("methods"))),
         "dispatch_median_ms": stat_metric(summary, "dispatch_s", "median", 1000.0),
         "stack_peak_gib": Metric(gib(resources.get("stack_peak_mem_bytes"))),
         "peak_ram_gib": Metric(gib(resources.get("containers_sum_peak_mem_bytes"))),
-        "llm_mapped_outside_gib": Metric(gib(resources.get("llm_mapped_outside_docker_stats_bytes"))),
+        "llm_mapped_outside_gib": Metric(
+            gib(resources.get("llm_mapped_outside_docker_stats_bytes"))
+        ),
         "peak_ram_llm_gib": Metric(gib(peaks.get(LLM_CONTAINER))),
         "lifetime_peak_llm_gib": Metric(gib(lifetime.get(LLM_CONTAINER))),
         "oom_kills": Metric(container_total(resources.get("container_oom_kills"))),
@@ -209,7 +225,9 @@ def eval_metrics(report: dict[str, Any]) -> dict[str, Metric]:
     }
     settings = ((report.get("llama_cpp") or {}).get("server") or {}).get("settings") or {}
     if settings:
-        metrics["kv_cache"] = Metric(f"{settings.get('cache_type_k')}/{settings.get('cache_type_v')}")
+        metrics["kv_cache"] = Metric(
+            f"{settings.get('cache_type_k')}/{settings.get('cache_type_v')}"
+        )
     return metrics
 
 
@@ -246,7 +264,9 @@ def stack_peak_warnings(doc: dict[str, Any]) -> list[str]:
     missing = resources.get("samples_without_llm_pages") if isinstance(resources, dict) else None
     if not missing:
         return []
-    unread = f"{doc.get('label')}: llama-server's RssFile or the llm memory.stat could not be read in"
+    unread = (
+        f"{doc.get('label')}: llama-server's RssFile or the llm memory.stat could not be read in"
+    )
     if resources.get("stack_peak_mem_bytes") is None:
         return [
             f"{unread} any of the {missing} samples taken while llm ran, so ADR-006's P is unknown: "
@@ -265,7 +285,9 @@ def unread_count_warnings(doc: dict[str, Any]) -> list[str]:
         unread = sorted(name for name, value in values.items() if value is None)
         if unread or not values:
             names = ", ".join(unread) or "every container"
-            warnings.append(f"{doc.get('label')}: the {what} of {names} could not be read, so its row stays empty.")
+            warnings.append(
+                f"{doc.get('label')}: the {what} of {names} could not be read, so its row stays empty."
+            )
     return warnings
 
 
@@ -352,7 +374,9 @@ def response_cache_finding(env: dict[str, str] | None, container: str) -> str | 
     )
 
 
-def eval_headline(eval_report: dict[str, Any] | None, container: str = CANDIDATE_CONTAINER) -> dict[str, Any] | None:
+def eval_headline(
+    eval_report: dict[str, Any] | None, container: str = CANDIDATE_CONTAINER
+) -> dict[str, Any] | None:
     headline = kit_eval_headline(eval_report)
     if headline is None:
         return None
@@ -411,7 +435,10 @@ CANDIDATES_TEXTS = MarkdownTexts(
         Column("Chat first token", median_cell("eval", "ttft_s")),
         Column("llm VmHWM", lambda variant: gib_text(process_peak(variant))),
         Column("llm cgroup peak", lambda variant: gib_text(cgroup_peak(variant))),
-        Column("Stack peak", lambda variant: gib_text(section(variant, "eval").get("stack_peak_mem_bytes"))),
+        Column(
+            "Stack peak",
+            lambda variant: gib_text(section(variant, "eval").get("stack_peak_mem_bytes")),
+        ),
         Column("OOM kills", oom_kills_text),
     ),
 )

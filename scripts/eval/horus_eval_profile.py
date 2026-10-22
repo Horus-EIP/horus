@@ -56,7 +56,12 @@ OUTCOME_FIELDS = (
 CONTRACT_KIND = "horus-contract-probe"
 CONTRACT_SCHEMA_VERSION = 1
 PROBED_CATEGORIES = ("lookup", "numeric", "multi_hop", "not_in_corpus")
-CONTRACT_RATE_FIELDS = ("json_valid", "status_correct", "answer_correct_auto", "source_correct_auto")
+CONTRACT_RATE_FIELDS = (
+    "json_valid",
+    "status_correct",
+    "answer_correct_auto",
+    "source_correct_auto",
+)
 STATUS_OK = "ok"
 STATUS_NOT_FOUND = "not_found"
 ERROR_STAGE_RETRIEVAL = "retrieval"
@@ -85,7 +90,9 @@ def llm_summary(records: list[dict[str, Any]]) -> dict[str, Any] | None:
     usages = [
         r["llm"] for r in records if isinstance(r.get("llm"), dict) and "prompt_s" in r["llm"]
     ]
-    restarts = sum(1 for r in records if isinstance(r.get("llm"), dict) and r["llm"].get("restarted"))
+    restarts = sum(
+        1 for r in records if isinstance(r.get("llm"), dict) and r["llm"].get("restarted")
+    )
     if not usages and not restarts:
         return None
 
@@ -112,7 +119,9 @@ def routing_summary(records: list[dict[str, Any]]) -> dict[str, Any] | None:
         return None
     single = [probe for probe in observed if probe["decisions"] == 1]
     methods = Counter(method for probe in single for method in probe.get("methods") or {})
-    without_llm = [probe for probe in single if LLM_ROUTING_METHOD not in (probe.get("methods") or {})]
+    without_llm = [
+        probe for probe in single if LLM_ROUTING_METHOD not in (probe.get("methods") or {})
+    ]
     return {
         "questions": len(observed),
         "mas_restarts": restarts,
@@ -191,7 +200,9 @@ def contract_scores(item: dict[str, Any], reply: dict[str, Any]) -> dict[str, An
         "blank_answer": valid and not str(answer or "").strip(),
         "answer_correct_auto": answer_correct(item, answer) if valid else False,
         "cited_sources": titles,
-        "source_correct_auto": scoring.source_check(item, cited_sources=titles)["source_correct_auto"]
+        "source_correct_auto": scoring.source_check(item, cited_sources=titles)[
+            "source_correct_auto"
+        ]
         if in_corpus
         else None,
     }

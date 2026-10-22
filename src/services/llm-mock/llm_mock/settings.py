@@ -37,7 +37,9 @@ def _scenario(raw: str) -> str:
     if value in SCENARIOS:
         return value
     logger.warning(
-        "HORUS_MOCK_SCENARIO=%r is not one of %s; using %s", raw, ", ".join(SCENARIOS),
+        "HORUS_MOCK_SCENARIO=%r is not one of %s; using %s",
+        raw,
+        ", ".join(SCENARIOS),
         DEFAULT_SCENARIO,
     )
     return DEFAULT_SCENARIO

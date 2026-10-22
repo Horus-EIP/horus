@@ -40,7 +40,10 @@ def reply(item, setup):
         "max_tokens": MAX_TOKENS,
         "temperature": 0.0,
         "stream": False,
-        "response_format": {"type": "json_schema", "json_schema": {"name": "reply", "strict": True, "schema": setup["schema"]}},
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {"name": "reply", "strict": True, "schema": setup["schema"]},
+        },
     }
     record = {"id": item["id"], "schema": setup["schema"], "max_tokens": MAX_TOKENS}
     started = time.perf_counter()
@@ -63,7 +66,12 @@ def reply(item, setup):
             "timings": body.get("timings"),
             "wall_s": round(time.perf_counter() - started, 3),
         }
-    return {**record, "error_stage": "llm", "error": error, "wall_s": round(time.perf_counter() - started, 3)}
+    return {
+        **record,
+        "error_stage": "llm",
+        "error": error,
+        "wall_s": round(time.perf_counter() - started, 3),
+    }
 
 
 def main():
@@ -87,7 +95,11 @@ def main():
         record = reply(item, setup)
         sys.stdout.write(json.dumps(record, ensure_ascii=False) + "\n")
         sys.stdout.flush()
-        print(f"[{index:3}/{len(items)}] {item['id']} {record.get('error') or record.get('finish_reason')}", file=sys.stderr, flush=True)
+        print(
+            f"[{index:3}/{len(items)}] {item['id']} {record.get('error') or record.get('finish_reason')}",
+            file=sys.stderr,
+            flush=True,
+        )
     return 0
 
 

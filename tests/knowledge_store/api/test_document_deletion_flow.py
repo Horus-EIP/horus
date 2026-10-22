@@ -46,9 +46,7 @@ def _listed_ids(client: TestClient) -> list[str]:
 
 
 class TestDeleteFromTheKnowledgeStorePage:
-    def test_an_uploaded_document_is_gone_from_the_list_and_the_disk(
-        self, client, tmp_path
-    ):
+    def test_an_uploaded_document_is_gone_from_the_list_and_the_disk(self, client, tmp_path):
         uploaded = client.post(
             "/file", files=[("files", ("notes.txt", b"Q4 planning notes", "text/plain"))]
         ).json()[0]

@@ -13,9 +13,7 @@ class TestDeletedSources:
         assert not deleted_sources_file.exists()
         assert not deleted_sources.was_deleted("reports/q4.md", "aaa")
 
-    def test_a_remembered_path_counts_as_deleted_whatever_its_content(
-        self, deleted_sources_file
-    ):
+    def test_a_remembered_path_counts_as_deleted_whatever_its_content(self, deleted_sources_file):
         deleted_sources.remember_deleted([Q4])
 
         assert deleted_sources.was_deleted("reports/q4.md", "edited")
@@ -54,11 +52,17 @@ class TestDeletedSources:
         assert len(saved["deleted"]) == 1
 
     def test_forget_drops_entries_matching_the_path_or_the_content(self, deleted_sources_file):
-        deleted_sources.remember_deleted([
-            Q4,
-            {"doc_id": "corpus-aaa", "source_path": "archive/q4-copy.md", "content_sha256": "aaa"},
-            {"doc_id": "corpus-ccc", "source_path": "reports/q3.md", "content_sha256": "ccc"},
-        ])
+        deleted_sources.remember_deleted(
+            [
+                Q4,
+                {
+                    "doc_id": "corpus-aaa",
+                    "source_path": "archive/q4-copy.md",
+                    "content_sha256": "aaa",
+                },
+                {"doc_id": "corpus-ccc", "source_path": "reports/q3.md", "content_sha256": "ccc"},
+            ]
+        )
 
         assert deleted_sources.forget_deleted("reports/q4.md", "aaa") == 2
 

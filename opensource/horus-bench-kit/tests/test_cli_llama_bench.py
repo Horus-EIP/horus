@@ -38,7 +38,9 @@ def bench_rows(model=SMALL):
 
 
 class FakeDocker(RecordingShell):
-    def __init__(self, listing, temp=None, bench_output=None, bench_code=0, running="db\nmodel-server\n"):
+    def __init__(
+        self, listing, temp=None, bench_output=None, bench_code=0, running="db\nmodel-server\n"
+    ):
         super().__init__(temp)
         self.listings = listing if isinstance(listing, list) else [listing]
         self.bench_output = bench_output
@@ -49,7 +51,11 @@ class FakeDocker(RecordingShell):
         if "find" in argv:
             return self.listings.pop(0) if len(self.listings) > 1 else self.listings[0]
         if "sha256sum" in argv:
-            return "".join(f"{SUMS[path.rsplit('/', 1)[-1]]}  {path}\n" for path in argv if path.startswith("/models/"))
+            return "".join(
+                f"{SUMS[path.rsplit('/', 1)[-1]]}  {path}\n"
+                for path in argv
+                if path.startswith("/models/")
+            )
         if argv[:2] == ["docker", "image"]:
             return "ghcr.io/ggml-org/llama.cpp@sha256:" + "b" * 64 + "\n"
         if argv[:2] == ["docker", "ps"]:
@@ -58,12 +64,17 @@ class FakeDocker(RecordingShell):
 
     def run_captured(self, argv):
         self.calls.append(list(argv))
-        return self.bench_code, self.bench_output if self.bench_output is not None else json.dumps(bench_rows(SMALL) + bench_rows(LARGE))
+        return self.bench_code, self.bench_output if self.bench_output is not None else json.dumps(
+            bench_rows(SMALL) + bench_rows(LARGE)
+        )
 
 
 def known_file(tmp_path):
     path = tmp_path / "known.json"
-    models = [{"file": m.file, "url": m.url, "size_bytes": m.size_bytes, "sha256": m.sha256} for m in KNOWN.values()]
+    models = [
+        {"file": m.file, "url": m.url, "size_bytes": m.size_bytes, "sha256": m.sha256}
+        for m in KNOWN.values()
+    ]
     path.write_text(json.dumps({"models": models}), encoding="utf-8")
     return str(path)
 
@@ -80,7 +91,12 @@ class TestArguments:
         assert args.image == "ghcr.io/ggml-org/llama.cpp:full-b11382"
         assert args.fetch_image == "ghcr.io/ggml-org/llama.cpp:server-b11382"
         assert (args.prompts, args.generations, args.depths) == ("512,2048", "128", "0,4096")
-        assert (args.cache_types_k, args.cache_types_v, args.threads, args.repetitions) == ("f16,q8_0", "f16,q8_0", "4,8", 5)
+        assert (args.cache_types_k, args.cache_types_v, args.threads, args.repetitions) == (
+            "f16,q8_0",
+            "f16,q8_0",
+            "4,8",
+            5,
+        )
         assert args.out_dir == "."
         assert argument_errors(args) == []
 
@@ -94,7 +110,9 @@ class TestArguments:
         assert argument_errors(parse(["--models-dir", "m"]), known=KNOWN) == []
 
     def test_fetch_needs_a_location_and_repetitions_must_be_positive(self):
-        args = build_parser().parse_args(["--from-json", "raw.json", "--fetch", "--repetitions", "0", "--label", "!!"])
+        args = build_parser().parse_args(
+            ["--from-json", "raw.json", "--fetch", "--repetitions", "0", "--label", "!!"]
+        )
         assert argument_errors(args) == [
             "--fetch needs --models-dir or --models-volume",
             "--repetitions must be at least 1",
@@ -124,7 +142,10 @@ class TestArguments:
         bad.write_text(json.dumps({"models": [{"file": "x.gguf"}]}), encoding="utf-8")
         shell = RecordingShell()
         assert main(["--models-dir", str(tmp_path), "--known-models", str(bad)], shell=shell) == 2
-        assert "[error] --known-models bad.json: models[0] (x.gguf): missing url" in capsys.readouterr().out
+        assert (
+            "[error] --known-models bad.json: models[0] (x.gguf): missing url"
+            in capsys.readouterr().out
+        )
         assert shell.calls == []
 
 
@@ -132,7 +153,15 @@ class TestDryRun:
     def test_prints_the_commands_without_running_docker(self, tmp_path, capsys):
         shell = RecordingShell()
         status = main(
-            ["--models-dir", str(tmp_path), "--known-models", known_file(tmp_path), "--fetch", "--dry-run"], shell=shell
+            [
+                "--models-dir",
+                str(tmp_path),
+                "--known-models",
+                known_file(tmp_path),
+                "--fetch",
+                "--dry-run",
+            ],
+            shell=shell,
         )
         assert status == 0
         assert shell.calls == []
@@ -153,15 +182,27 @@ class TestRun:
         models = tmp_path / "models"
         status = main(
             [
-                "--models-dir", str(models), "--known-models", known_file(tmp_path), "--out-dir", str(out_dir),
-                "--reference", "bench-01", "--ram-speed", "3200 MT/s",
+                "--models-dir",
+                str(models),
+                "--known-models",
+                known_file(tmp_path),
+                "--out-dir",
+                str(out_dir),
+                "--reference",
+                "bench-01",
+                "--ram-speed",
+                "3200 MT/s",
             ],
             shell=shell,
         )
         assert status == 0
         saved, report = only_report(out_dir)
         assert saved.name.startswith("bench-01-") and saved.suffix == ".json"
-        assert (report["kind"], report["schema_version"], report["label"]) == ("horus-llama-bench", 1, "bench-01")
+        assert (report["kind"], report["schema_version"], report["label"]) == (
+            "horus-llama-bench",
+            1,
+            "bench-01",
+        )
         assert report["llama_cpp"]["build"] == "b11382"
         assert report["llama_cpp"]["image_digest"].endswith("b" * 64)
         assert [model["sha256"] for model in report["models"]] == [SUMS[SMALL], SUMS[LARGE]]
@@ -191,7 +232,14 @@ class TestRun:
             reference="lab-01",
         )
         shell = FakeDocker(f"812000000 {SMALL}\n951000000 {LARGE}\n")
-        assert main(["--models-dir", str(tmp_path), "--out-dir", str(tmp_path / "out")], profile=profile, shell=shell) == 0
+        assert (
+            main(
+                ["--models-dir", str(tmp_path), "--out-dir", str(tmp_path / "out")],
+                profile=profile,
+                shell=shell,
+            )
+            == 0
+        )
         assert "[warn] stack containers are running (model-server)" in capsys.readouterr().out
         _saved, report = only_report(tmp_path / "out")
         assert report["label"] == "lab-01"
@@ -199,7 +247,19 @@ class TestRun:
 
     def test_missing_model_stops_before_the_benchmark(self, tmp_path, capsys):
         shell = FakeDocker(f"812000000 {SMALL}\n")
-        status = main(["--models-dir", str(tmp_path), "--model", SMALL, "--model", LARGE, "--out-dir", str(tmp_path / "out")], shell=shell)
+        status = main(
+            [
+                "--models-dir",
+                str(tmp_path),
+                "--model",
+                SMALL,
+                "--model",
+                LARGE,
+                "--out-dir",
+                str(tmp_path / "out"),
+            ],
+            shell=shell,
+        )
         assert status == 1
         output = capsys.readouterr().out
         assert f"{LARGE}: not found in" in output
@@ -211,25 +271,63 @@ class TestRun:
         shell = FakeDocker([f"812000000 {SMALL}\n", f"812000000 {SMALL}\n951000000 {LARGE}\n"])
         models = tmp_path / "new-models"
         status = main(
-            ["--models-dir", str(models), "--known-models", known_file(tmp_path), "--fetch", "--out-dir", str(tmp_path / "out")],
+            [
+                "--models-dir",
+                str(models),
+                "--known-models",
+                known_file(tmp_path),
+                "--fetch",
+                "--out-dir",
+                str(tmp_path / "out"),
+            ],
             shell=shell,
         )
         assert status == 0
         assert models.is_dir()
         fetches = [call for call in shell.calls if "LLM_GGUF_FILE=" + LARGE in call]
         assert len(fetches) == 1
-        assert any(part.endswith("fetch-model.sh:/opt/hbk/fetch-model.sh:ro") for part in fetches[0])
-        assert shell.calls.index(fetches[0]) < next(i for i, call in enumerate(shell.calls) if "--bench" in call)
+        assert any(
+            part.endswith("fetch-model.sh:/opt/hbk/fetch-model.sh:ro") for part in fetches[0]
+        )
+        assert shell.calls.index(fetches[0]) < next(
+            i for i, call in enumerate(shell.calls) if "--bench" in call
+        )
 
     def test_an_unknown_missing_model_cannot_be_fetched(self, tmp_path, capsys):
         shell = FakeDocker("")
-        status = main(["--models-dir", str(tmp_path), "--model", "own.gguf", "--fetch", "--out-dir", str(tmp_path / "out")], shell=shell)
+        status = main(
+            [
+                "--models-dir",
+                str(tmp_path),
+                "--model",
+                "own.gguf",
+                "--fetch",
+                "--out-dir",
+                str(tmp_path / "out"),
+            ],
+            shell=shell,
+        )
         assert status == 1
-        assert "own.gguf: not a known model, copy it into the models folder yourself" in capsys.readouterr().out
+        assert (
+            "own.gguf: not a known model, copy it into the models folder yourself"
+            in capsys.readouterr().out
+        )
 
     def test_unreadable_output_is_kept_for_diagnosis(self, tmp_path, capsys):
         shell = FakeDocker(f"1 {SMALL}\n", temp=tmp_path, bench_output="oops", bench_code=1)
-        status = main(["--models-dir", str(tmp_path), "--model", SMALL, "--out-dir", str(tmp_path / "out"), "--label", "lab"], shell=shell)
+        status = main(
+            [
+                "--models-dir",
+                str(tmp_path),
+                "--model",
+                SMALL,
+                "--out-dir",
+                str(tmp_path / "out"),
+                "--label",
+                "lab",
+            ],
+            shell=shell,
+        )
         assert status == 1
         assert "llama-bench exited with 1" in capsys.readouterr().out
         assert [path.read_text() for path in tmp_path.glob("llama-bench-lab-*.txt")] == ["oops"]
@@ -237,10 +335,17 @@ class TestRun:
     def test_a_different_file_than_the_known_one_is_flagged(self, tmp_path, capsys):
         known = {SMALL: KnownModel(SMALL, "https://models.example/x", 1, "f" * 64)}
         shell = FakeDocker(f"812000000 {SMALL}\n", bench_output=json.dumps(bench_rows(SMALL)))
-        status = main(["--models-dir", str(tmp_path), "--out-dir", str(tmp_path / "out")], profile=LlamaBenchProfile(known_models=known), shell=shell)
+        status = main(
+            ["--models-dir", str(tmp_path), "--out-dir", str(tmp_path / "out")],
+            profile=LlamaBenchProfile(known_models=known),
+            shell=shell,
+        )
         assert status == 0
         output = capsys.readouterr().out
-        assert f"[warn] {SMALL} does not match the SHA-256 of the known model; record its SHA-256 with the result" in output
+        assert (
+            f"[warn] {SMALL} does not match the SHA-256 of the known model; record its SHA-256 with the result"
+            in output
+        )
 
 
 class TestFromJson:
@@ -249,7 +354,16 @@ class TestFromJson:
         raw.write_text(json.dumps(bench_rows(SMALL)), encoding="utf-8")
         shell = FakeDocker(f"812000000 {SMALL}\n")
         status = main(
-            ["--from-json", str(raw), "--models-volume", "bench_models", "--label", "lab q4 only", "--out-dir", str(tmp_path / "out")],
+            [
+                "--from-json",
+                str(raw),
+                "--models-volume",
+                "bench_models",
+                "--label",
+                "lab q4 only",
+                "--out-dir",
+                str(tmp_path / "out"),
+            ],
             shell=shell,
         )
         assert status == 0
@@ -265,7 +379,12 @@ class TestFromJson:
     def test_without_a_models_location_the_hashes_stay_empty(self, tmp_path, capsys):
         raw = tmp_path / "raw.json"
         raw.write_text(json.dumps(bench_rows(SMALL)), encoding="utf-8")
-        assert main(["--from-json", str(raw), "--out-dir", str(tmp_path / "out")], shell=FakeDocker("")) == 0
+        assert (
+            main(
+                ["--from-json", str(raw), "--out-dir", str(tmp_path / "out")], shell=FakeDocker("")
+            )
+            == 0
+        )
         _saved, report = only_report(tmp_path / "out")
         assert report["label"] == "llama-bench"
         assert report["models"][0]["sha256"] is None
@@ -274,8 +393,16 @@ class TestFromJson:
     def test_an_unreadable_saved_run_is_an_input_error(self, tmp_path, capsys):
         raw = tmp_path / "raw.json"
         raw.write_text("no results here", encoding="utf-8")
-        assert main(["--from-json", str(raw), "--out-dir", str(tmp_path / "out")], shell=FakeDocker("")) == 2
-        assert "[error] --from-json: the llama-bench output holds no JSON array" in capsys.readouterr().out
+        assert (
+            main(
+                ["--from-json", str(raw), "--out-dir", str(tmp_path / "out")], shell=FakeDocker("")
+            )
+            == 2
+        )
+        assert (
+            "[error] --from-json: the llama-bench output holds no JSON array"
+            in capsys.readouterr().out
+        )
 
     def test_a_product_can_let_input_errors_raise(self, tmp_path):
         argv = ["--from-json", str(tmp_path / "missing.json"), "--dry-run"]
@@ -284,9 +411,14 @@ class TestFromJson:
 
 
 class TestRecordedPaths:
-    def test_the_report_keeps_no_part_of_the_host_models_folder(self, tmp_path, host_folder, host_folder_leaks):
+    def test_the_report_keeps_no_part_of_the_host_models_folder(
+        self, tmp_path, host_folder, host_folder_leaks
+    ):
         shell = FakeDocker(f"812000000 {SMALL}\n", bench_output=json.dumps(bench_rows(SMALL)))
-        status = main(["--models-dir", host_folder, "--model", SMALL, "--out-dir", str(tmp_path / "out")], shell=shell)
+        status = main(
+            ["--models-dir", host_folder, "--model", SMALL, "--out-dir", str(tmp_path / "out")],
+            shell=shell,
+        )
         assert status == 0
         launched = next(call for call in shell.calls if "--bench" in call)
         assert host_folder_leaks(" ".join(launched)) != []
@@ -298,7 +430,12 @@ class TestRecordedPaths:
     def test_a_saved_raw_run_is_recorded_by_its_file_name(self, tmp_path):
         raw = tmp_path / "raw.json"
         raw.write_text(json.dumps(bench_rows(SMALL)), encoding="utf-8")
-        assert main(["--from-json", str(raw), "--out-dir", str(tmp_path / "out")], shell=FakeDocker("")) == 0
+        assert (
+            main(
+                ["--from-json", str(raw), "--out-dir", str(tmp_path / "out")], shell=FakeDocker("")
+            )
+            == 0
+        )
         saved, report = only_report(tmp_path / "out")
         assert report["run"]["from_json"] == "raw.json"
         assert tmp_path.name not in saved.read_text(encoding="utf-8")

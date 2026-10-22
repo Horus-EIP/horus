@@ -30,6 +30,7 @@ GENERATED = re.compile(r"[0-9a-f]{64}")
 
 needs_yaml = unittest.skipUnless(yaml is not None, "needs PyYAML to read the compose file")
 
+
 class InfraCase(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -57,6 +58,7 @@ class InfraCase(unittest.TestCase):
     def assertGenerated(self, value: str) -> None:
         self.assertIsNotNone(GENERATED.fullmatch(value), f"not a generated password: {value!r}")
 
+
 class ValkeyPassword(InfraCase):
     def password(self) -> str:
         return horus_install.valkey_password(self.log, self.infra)
@@ -83,8 +85,12 @@ class ValkeyPassword(InfraCase):
                 self.assertEqual(self.password(), raw)
 
     def test_the_shipped_default_and_an_empty_password_are_replaced(self):
-        for line in (f"REDIS_PASSWORD={OLD_DEFAULT}", f'REDIS_PASSWORD="{OLD_DEFAULT}"',
-                     "REDIS_PASSWORD=", "REDIS_PASSWORD=   "):
+        for line in (
+            f"REDIS_PASSWORD={OLD_DEFAULT}",
+            f'REDIS_PASSWORD="{OLD_DEFAULT}"',
+            "REDIS_PASSWORD=",
+            "REDIS_PASSWORD=   ",
+        ):
             with self.subTest(line):
                 self.write_env(line + "\n")
                 self.assertGenerated(self.password())
@@ -100,27 +106,36 @@ class ValkeyPassword(InfraCase):
         self.assertNotIn(password, self.log_text())
         self.assertNotIn(password, self.out.getvalue())
 
+
 class AnUpgradeReplacesTheShippedDefault(InfraCase):
     def test_the_old_default_is_rewritten_in_place(self):
         self.write_env(f"REDIS_HOST=redis\nREDIS_PASSWORD={OLD_DEFAULT}\nPOSTGRES_DB=mas_db\n")
         password = horus_install.valkey_password(self.log, self.infra)
         horus_install.apply_env(self.log, self.infra, {"REDIS_PASSWORD": password}, reset=False)
         text = (self.infra / ".env").read_text(encoding="utf-8")
-        self.assertEqual(re.findall(r"(?m)^REDIS_PASSWORD=.*$", text),
-                         [f"REDIS_PASSWORD={password}"])
+        self.assertEqual(
+            re.findall(r"(?m)^REDIS_PASSWORD=.*$", text), [f"REDIS_PASSWORD={password}"]
+        )
         self.assertNotIn(OLD_DEFAULT, text)
 
     def test_the_profile_json_never_holds_the_password(self):
         password = horus_install.valkey_password(self.log, self.infra)
         path = self.repo / "horus-profile.json"
-        hardware.write_profile_json(path, dict(horus_install.SIMULATIONS["nvidia-8gb"]),
-                                    "gpu-8g", {"REDIS_PASSWORD": password}, ["test"])
+        hardware.write_profile_json(
+            path,
+            dict(horus_install.SIMULATIONS["nvidia-8gb"]),
+            "gpu-8g",
+            {"REDIS_PASSWORD": password},
+            ["test"],
+        )
         self.assertNotIn(password, path.read_text(encoding="utf-8"))
+
 
 class InstallWritesTheValkeyPassword(InfraCase):
     def install(self) -> mock.Mock:
         args = horus_install.build_parser().parse_args(
-            ["--profile", "gpu-8g", "--non-interactive", "--skip-smoke"])
+            ["--profile", "gpu-8g", "--non-interactive", "--skip-smoke"]
+        )
         order = mock.Mock()
         with contextlib.ExitStack() as stack:
             patch = stack.enter_context
@@ -133,8 +148,9 @@ class InstallWritesTheValkeyPassword(InfraCase):
             machine = patch(mock.patch.object(horus_install, "hardware"))
             machine.probe.return_value = dict(horus_install.SIMULATIONS["nvidia-8gb"])
             order.attach_mock(patch(mock.patch.object(horus_install, "apply_env")), "apply_env")
-            order.attach_mock(patch(mock.patch.object(horus_install, "pull_and_build")),
-                              "pull_and_build")
+            order.attach_mock(
+                patch(mock.patch.object(horus_install, "pull_and_build")), "pull_and_build"
+            )
             patch(mock.patch.object(horus_install, "wait_for_health"))
             patch(mock.patch.object(horus_install, "_success"))
             code = horus_install._dispatch(self.log, args)
@@ -161,10 +177,10 @@ class InstallWritesTheValkeyPassword(InfraCase):
         self.assertEqual(names, ["apply_env", "pull_and_build"])
 
     def test_a_dry_run_never_shows_a_password(self):
-        args = horus_install.build_parser().parse_args(
-            ["--dry-run", "--simulate", "nvidia-8gb"])
+        args = horus_install.build_parser().parse_args(["--dry-run", "--simulate", "nvidia-8gb"])
         self.assertEqual(horus_install.do_dry_run(self.log, args, self.repo), EXIT_OK)
         self.assertNotIn("REDIS_PASSWORD", self.out.getvalue())
+
 
 class TheTemplateShipsNoPassword(InfraCase):
     def test_the_env_example_leaves_the_password_empty(self):
@@ -185,12 +201,18 @@ class TheTemplateShipsNoPassword(InfraCase):
     def test_init_env_generates_it(self):
         for name in (".env.example", "init-env.sh"):
             shutil.copy(INFRA / name, self.infra / name)
-        result = subprocess.run([shutil.which("bash"), "init-env.sh", "--quiet"],
-                                cwd=self.infra, capture_output=True, text=True, timeout=60)
+        result = subprocess.run(
+            [shutil.which("bash"), "init-env.sh", "--quiet"],
+            cwd=self.infra,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertGenerated(self.env_value("REDIS_PASSWORD"))
         self.assertGenerated(self.env_value("JWT_SECRET_KEY"))
         self.assertNotEqual(self.env_value("REDIS_PASSWORD"), self.env_value("JWT_SECRET_KEY"))
+
 
 @needs_yaml
 class ComposePassesThePassword(unittest.TestCase):
@@ -205,14 +227,16 @@ class ComposePassesThePassword(unittest.TestCase):
     def test_mas_and_the_agent_send_that_same_password(self):
         for name in ("mas", "agent"):
             with self.subTest(name):
-                self.assertIn("REDIS_PASSWORD=${REDIS_PASSWORD}",
-                              self.services[name]["environment"])
+                self.assertIn(
+                    "REDIS_PASSWORD=${REDIS_PASSWORD}", self.services[name]["environment"]
+                )
 
     def test_an_empty_password_fails_the_valkey_healthcheck(self):
         test = self.services["redis"]["healthcheck"]["test"]
         self.assertEqual(test[0], "CMD")
         self.assertEqual(test[-1], "${REDIS_PASSWORD}")
         self.assertIn('test -n "$$1" && ', test[3])
+
 
 if __name__ == "__main__":
     unittest.main()

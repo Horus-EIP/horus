@@ -32,8 +32,10 @@ FEATURE_MARKERS = {
     "${VAR:+...} interpolation": re.compile(r"\$\{[A-Z_][A-Z0-9_]*:\+"),
 }
 
+
 def compose_text() -> str:
     return BASE_COMPOSE.read_text(encoding="utf-8") + CPU_OVERLAY.read_text(encoding="utf-8")
+
 
 class LogCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -58,6 +60,7 @@ class LogCase(unittest.TestCase):
         with mock.patch.object(preflight, "run", return_value=answer):
             return preflight.check_compose(self.log)
 
+
 class ComposeVersion(LogCase):
     def test_the_minimum_is_the_newest_feature_the_compose_files_use(self):
         self.assertEqual(preflight.MIN_COMPOSE_VERSION, (2, 33, 0))
@@ -81,9 +84,11 @@ class ComposeVersion(LogCase):
                 self.assertEqual(preflight.compose_version(output), expected)
 
     def test_a_compose_older_than_the_minimum_is_refused_with_the_reason(self):
-        for output in ("Docker Compose version v2.32.4\n",
-                       "Docker Compose version v2.20.2\n",
-                       "Docker Compose version v2.29.1-desktop.1\n"):
+        for output in (
+            "Docker Compose version v2.32.4\n",
+            "Docker Compose version v2.20.2\n",
+            "Docker Compose version v2.29.1-desktop.1\n",
+        ):
             with self.subTest(output), self.assertRaises(InstallError) as caught:
                 self.check_compose_reporting(output)
             error = caught.exception
@@ -94,53 +99,76 @@ class ComposeVersion(LogCase):
             self.assertIn("docker compose version", error.fix)
 
     def test_the_minimum_and_newer_versions_pass(self):
-        for output in ("Docker Compose version v2.33.0",
-                       "Docker Compose version v2.40.3-desktop.1",
-                       "Docker Compose version v5.1.0"):
+        for output in (
+            "Docker Compose version v2.33.0",
+            "Docker Compose version v2.40.3-desktop.1",
+            "Docker Compose version v5.1.0",
+        ):
             with self.subTest(output):
                 self.assertEqual(self.check_compose_reporting(output + "\n"), output)
 
     def test_an_unreadable_version_warns_and_goes_on(self):
-        self.assertEqual(self.check_compose_reporting("Docker Compose version 1f7a9b2\n"),
-                         "Docker Compose version 1f7a9b2")
+        self.assertEqual(
+            self.check_compose_reporting("Docker Compose version 1f7a9b2\n"),
+            "Docker Compose version 1f7a9b2",
+        )
         self.log.close(0)
         self.assertIn("Could not read a version number", self.log_text())
         self.assertIn("2.33.0", self.log_text())
 
     def test_a_missing_compose_is_still_reported_as_missing(self):
-        with mock.patch.object(preflight, "run", return_value=Result(1, "", "unknown command")), \
-                self.assertRaises(InstallError) as caught:
+        with (
+            mock.patch.object(preflight, "run", return_value=Result(1, "", "unknown command")),
+            self.assertRaises(InstallError) as caught,
+        ):
             preflight.check_compose(self.log)
         self.assertEqual(caught.exception.code, EXIT_COMPOSE_MISSING)
         self.assertIn("not available", caught.exception.headline)
 
     def test_start_and_restart_refuse_an_old_compose_too(self):
         old = Result(0, "Docker Compose version v2.24.6\n", "")
-        with mock.patch.object(preflight, "check_docker"), \
-                mock.patch.object(preflight, "run", return_value=old), \
-                self.assertRaises(InstallError) as caught:
+        with (
+            mock.patch.object(preflight, "check_docker"),
+            mock.patch.object(preflight, "run", return_value=old),
+            self.assertRaises(InstallError) as caught,
+        ):
             horus_install._require_docker(self.log)
         self.assertEqual(caught.exception.code, EXIT_COMPOSE_MISSING)
+
 
 class PortsHeldByThisInstall(LogCase):
     def ports(self, busy: set[int], compose_ps: str, holder: str = "") -> dict:
         (self.tmp / ".env").write_text("COMPOSE_PROJECT_NAME=horus_verify\n", encoding="utf-8")
         with contextlib.ExitStack() as stack:
-            stack.enter_context(mock.patch.object(
-                preflight, "_port_free", side_effect=lambda port: port not in busy))
+            stack.enter_context(
+                mock.patch.object(
+                    preflight, "_port_free", side_effect=lambda port: port not in busy
+                )
+            )
             stack.enter_context(mock.patch.object(preflight, "_holder", return_value=holder))
-            stack.enter_context(mock.patch.object(
-                preflight, "run", return_value=Result(0, compose_ps, "")))
+            stack.enter_context(
+                mock.patch.object(preflight, "run", return_value=Result(0, compose_ps, ""))
+            )
             return preflight.check_ports(self.log, self.tmp)
 
     def published(self, *ports: int) -> str:
-        return json.dumps({
-            "Name": "horus_verify-mas-1",
-            "Publishers": [
-                {"URL": "0.0.0.0", "TargetPort": port, "PublishedPort": port, "Protocol": "tcp"}
-                for port in ports
-            ],
-        }) + "\n"
+        return (
+            json.dumps(
+                {
+                    "Name": "horus_verify-mas-1",
+                    "Publishers": [
+                        {
+                            "URL": "0.0.0.0",
+                            "TargetPort": port,
+                            "PublishedPort": port,
+                            "Protocol": "tcp",
+                        }
+                        for port in ports
+                    ],
+                }
+            )
+            + "\n"
+        )
 
     def test_a_port_held_by_this_installs_own_container_does_not_stop_a_new_run(self):
         report = self.ports({8000, 3000}, self.published(8000, 3000), "com.docker.backend.exe")
@@ -177,13 +205,15 @@ class ModelServerRegistry(LogCase):
             for name in ("check_disk", "check_ports"):
                 stack.enter_context(mock.patch.object(preflight, name))
             network = stack.enter_context(mock.patch.object(preflight, "check_network"))
-            preflight.run_install_checks(self.log, self.tmp, image_registry=image_registry,
-                                         cpu_profile=cpu_profile)
+            preflight.run_install_checks(
+                self.log, self.tmp, image_registry=image_registry, cpu_profile=cpu_profile
+            )
         return network.call_args.args[1]
 
     def test_the_default_image_is_the_one_the_cpu_overlay_runs(self):
-        images = re.findall(r"\$\{LLM_SERVER_IMAGE:-([^}]+)\}",
-                            CPU_OVERLAY.read_text(encoding="utf-8"))
+        images = re.findall(
+            r"\$\{LLM_SERVER_IMAGE:-([^}]+)\}", CPU_OVERLAY.read_text(encoding="utf-8")
+        )
         self.assertTrue(images)
         for image in images:
             with self.subTest(image):
@@ -207,41 +237,53 @@ class ModelServerRegistry(LogCase):
         self.assertEqual(len(urls), len(set(urls)))
         labels = {url: label for label, url in hosts}
         self.assertEqual(labels[GHCR], "Horus images and llama.cpp server image")
-        self.assertEqual(labels[GHCR_LAYERS],
-                         "Horus image layers and llama.cpp server image layers")
+        self.assertEqual(
+            labels[GHCR_LAYERS], "Horus image layers and llama.cpp server image layers"
+        )
 
     def test_a_gpu_profile_does_not_need_the_llama_server_image(self):
-        urls = [url for _label, url in self.install_checks("registry.example.com/team",
-                                                           cpu_profile=False)]
+        urls = [
+            url
+            for _label, url in self.install_checks("registry.example.com/team", cpu_profile=False)
+        ]
         self.assertNotIn(GHCR, urls)
         self.assertNotIn(GHCR_LAYERS, urls)
 
     def test_an_image_override_in_env_moves_the_check_to_its_registry(self):
         (self.tmp / ".env").write_text(
-            "LLM_SERVER_IMAGE=mirror.example.com:5000/llama.cpp:server-b11382\n",
-            encoding="utf-8")
-        urls = [url for _label, url in self.install_checks("registry.example.com/team",
-                                                           cpu_profile=True)]
+            "LLM_SERVER_IMAGE=mirror.example.com:5000/llama.cpp:server-b11382\n", encoding="utf-8"
+        )
+        urls = [
+            url
+            for _label, url in self.install_checks("registry.example.com/team", cpu_profile=True)
+        ]
         self.assertIn("https://mirror.example.com:5000/v2/", urls)
         self.assertNotIn(GHCR, urls)
 
     def test_a_quoted_override_in_env_is_read_without_its_quotes(self):
-        (self.tmp / ".env").write_text('LLM_SERVER_IMAGE="mirror.example.com/llama.cpp:x"\n',
-                                       encoding="utf-8")
+        (self.tmp / ".env").write_text(
+            'LLM_SERVER_IMAGE="mirror.example.com/llama.cpp:x"\n', encoding="utf-8"
+        )
         self.assertEqual(preflight.model_server_image(self.tmp), "mirror.example.com/llama.cpp:x")
 
     def test_the_shell_variable_wins_over_env_like_compose(self):
-        (self.tmp / ".env").write_text("LLM_SERVER_IMAGE=mirror.example.com/llama.cpp:x\n",
-                                       encoding="utf-8")
+        (self.tmp / ".env").write_text(
+            "LLM_SERVER_IMAGE=mirror.example.com/llama.cpp:x\n", encoding="utf-8"
+        )
         os.environ[preflight.MODEL_SERVER_IMAGE_KEY] = "other.example.com/llama.cpp:y"
         self.assertEqual(preflight.model_server_image(self.tmp), "other.example.com/llama.cpp:y")
 
     def test_an_image_on_docker_hub_adds_no_host_to_the_docker_registry_check(self):
-        for image in ("ggml/llama.cpp:server", "llama.cpp:server", "docker.io/ggml/llama.cpp",
-                      "index.docker.io/ggml/llama.cpp"):
+        for image in (
+            "ggml/llama.cpp:server",
+            "llama.cpp:server",
+            "docker.io/ggml/llama.cpp",
+            "index.docker.io/ggml/llama.cpp",
+        ):
             with self.subTest(image):
                 self.assertEqual(preflight.model_server_hosts(image), [])
         self.assertIn("Docker registry", dict(preflight.RUNTIME_HOSTS))
+
 
 if __name__ == "__main__":
     unittest.main()

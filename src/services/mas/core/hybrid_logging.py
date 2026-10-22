@@ -90,9 +90,7 @@ class HybridLogger:
                 db.commit()
 
                 # logger.info(f"Critical log stored in DB: {category.value}/{operation}")
-                logger.info(
-                    "critical_log_stored", category=category.value, operation=operation
-                )
+                logger.info("critical_log_stored", category=category.value, operation=operation)
 
             except Exception as e:
                 # logger.error(f"Failed to store critical log: {str(e)}")
@@ -105,13 +103,9 @@ class HybridLogger:
             finally:
                 db.close()
 
-        log_db_operation(
-            operation=operation.upper(), table=component, details=details or ""
-        )
+        log_db_operation(operation=operation.upper(), table=component, details=details or "")
 
-    def log_system(
-        self, level: LogLevel, component: str, operation: str, details: str = None
-    ):
+    def log_system(self, level: LogLevel, component: str, operation: str, details: str = None):
         """
         Log a system event to the standard logger.
 

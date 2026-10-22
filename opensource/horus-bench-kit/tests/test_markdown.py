@@ -41,7 +41,10 @@ class TestChanges:
 
     def test_totals_over_different_counts_do_not_compare(self):
         row = MetricRow("total", "Total", "sum", "s", is_total=True)
-        assert row_change(row, Metric(10.0, n=3), Metric(12.0, n=4)) == "not comparable: different question counts"
+        assert (
+            row_change(row, Metric(10.0, n=3), Metric(12.0, n=4))
+            == "not comparable: different question counts"
+        )
         assert row_change(row, Metric(10.0, n=3), Metric(12.0, n=3)) == "+2.00 s (+20%)"
 
 

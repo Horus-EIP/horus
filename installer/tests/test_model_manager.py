@@ -47,19 +47,22 @@ RANGE_REQUEST = re.compile(r"^bytes=(\d+)-$")
 SERVE = "serve"
 BUILD_OPENER = urllib.request.build_opener
 
+
 def payload_of(size: int) -> bytes:
     blocks = (hashlib.sha256(index.to_bytes(4, "big")).digest() for index in range(size // 32 + 1))
     return b"".join(blocks)[:size]
 
+
 def damaged(data: bytes) -> bytes:
     middle = len(data) // 2
-    return data[:middle] + bytes([data[middle] ^ 0xFF]) + data[middle + 1:]
+    return data[:middle] + bytes([data[middle] ^ 0xFF]) + data[middle + 1 :]
+
 
 def cut_at(offset: int) -> tuple[str, int]:
     return ("cut", offset)
 
-class MirrorScript:
 
+class MirrorScript:
     def __init__(self, body: bytes):
         self.body = body
         self.plan: list = []
@@ -76,8 +79,8 @@ class MirrorScript:
     def next_step(self):
         return self.plan.pop(0) if self.plan else self.afterwards
 
-class ScriptedHandler(BaseHTTPRequestHandler):
 
+class ScriptedHandler(BaseHTTPRequestHandler):
     def log_message(self, *args) -> None:
         pass
 
@@ -113,7 +116,7 @@ class ScriptedHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body) - start))
         self.end_headers()
         end = step[1] if isinstance(step, tuple) else len(body)
-        sent = body[start:max(start, end)]
+        sent = body[start : max(start, end)]
         try:
             self.wfile.write(sent)
             self.wfile.flush()
@@ -121,14 +124,15 @@ class ScriptedHandler(BaseHTTPRequestHandler):
             return
         script.served += len(sent)
 
-class LocalMirrors:
 
+class LocalMirrors:
     def __init__(self) -> None:
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), ScriptedHandler)
         self.server.daemon_threads = True
         self.server.scripts = {}
-        self.thread = threading.Thread(target=self.server.serve_forever,
-                                       kwargs={"poll_interval": 0.05}, daemon=True)
+        self.thread = threading.Thread(
+            target=self.server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True
+        )
         self.thread.start()
 
     def url(self, name: str) -> str:
@@ -144,30 +148,39 @@ class LocalMirrors:
         self.server.server_close()
         self.thread.join(timeout=5)
 
+
 def direct_opener() -> urllib.request.OpenerDirector:
     return BUILD_OPENER(urllib.request.ProxyHandler({}))
 
+
 def entry_for(payload: bytes, *mirrors: str, min_ram_gb: float = 16) -> model_manager.ModelEntry:
     return model_manager.ModelEntry(
-        id="test-model", version="1.0.0", file="model.gguf", size_bytes=len(payload),
-        sha256=hashlib.sha256(payload).hexdigest(), min_ram_gb=min_ram_gb,
-        profiles=("cpu-standard",), mirrors=tuple(mirrors),
+        id="test-model",
+        version="1.0.0",
+        file="model.gguf",
+        size_bytes=len(payload),
+        sha256=hashlib.sha256(payload).hexdigest(),
+        min_ram_gb=min_ram_gb,
+        profiles=("cpu-standard",),
+        mirrors=tuple(mirrors),
     )
+
 
 def read_events(stream: io.StringIO, name: str = "download") -> list[dict]:
     events = []
     for line in stream.getvalue().splitlines():
         if line.startswith(EVENT_PREFIX):
-            data = json.loads(line[len(EVENT_PREFIX):])
+            data = json.loads(line[len(EVENT_PREFIX) :])
             if data.get("event") == name:
                 events.append(data)
     return events
 
+
 def shipped_manifest() -> dict:
     return json.loads(MANIFEST.read_text(encoding="utf-8"))
 
-class DownloadCase(unittest.TestCase):
 
+class DownloadCase(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
@@ -197,8 +210,9 @@ class DownloadCase(unittest.TestCase):
     def marker(self) -> Path:
         return self.models / "model.gguf.sha256"
 
-    def download(self, entry: model_manager.ModelEntry, clock=None,
-                 token: str | None = None) -> tuple[str, InstallError | None]:
+    def download(
+        self, entry: model_manager.ModelEntry, clock=None, token: str | None = None
+    ) -> tuple[str, InstallError | None]:
         options = {"opener": direct_opener(), "sleep": self.pauses.append, "token": token}
         if clock is not None:
             options["clock"] = clock
@@ -214,12 +228,14 @@ class DownloadCase(unittest.TestCase):
 
     def assert_in_place(self) -> None:
         self.assertEqual(self.target.read_bytes(), self.payload)
-        self.assertEqual(self.marker.read_bytes(),
-                         (hashlib.sha256(self.payload).hexdigest() + "\n").encode("ascii"))
+        self.assertEqual(
+            self.marker.read_bytes(),
+            (hashlib.sha256(self.payload).hexdigest() + "\n").encode("ascii"),
+        )
         self.assertFalse(self.part.exists())
 
-class Downloads(DownloadCase):
 
+class Downloads(DownloadCase):
     def test_a_fresh_download_is_verified_then_renamed_in_one_step(self):
         script, url = self.mirrors.add("a", self.payload)
         _out, raised = self.download(entry_for(self.payload, url))
@@ -304,8 +320,9 @@ class Downloads(DownloadCase):
         self.assert_in_place()
         self.assertEqual(down.requests, model_manager.FAILURES_BEFORE_NEXT_MIRROR)
         self.assertEqual(good.requests, 1)
-        self.assertEqual(self.pauses, [model_manager.BACKOFF_SECONDS,
-                                       2 * model_manager.BACKOFF_SECONDS])
+        self.assertEqual(
+            self.pauses, [model_manager.BACKOFF_SECONDS, 2 * model_manager.BACKOFF_SECONDS]
+        )
         self.assertIn("next mirror", out)
 
     def test_the_last_mirror_rides_out_a_short_network_drop_before_the_install_gives_up(self):
@@ -317,8 +334,7 @@ class Downloads(DownloadCase):
         budget = model_manager.FAILURES_ON_THE_LAST_MIRROR
         self.assertGreater(budget, model_manager.FAILURES_BEFORE_NEXT_MIRROR)
         self.assertEqual(script.requests, budget)
-        self.assertEqual(self.pauses,
-                         [model_manager.BACKOFF_SECONDS * n for n in range(1, budget)])
+        self.assertEqual(self.pauses, [model_manager.BACKOFF_SECONDS * n for n in range(1, budget)])
         self.assertGreaterEqual(sum(self.pauses), 120)
         self.assertNotIn("Trying the next mirror", out)
         self.assertIn("No other mirror is listed", out)
@@ -332,8 +348,9 @@ class Downloads(DownloadCase):
         self.assertEqual(raised.code, EXIT_MODEL_DOWNLOAD_FAILED)
         self.assertIn("from 2 mirror(s)", raised.detail)
         self.assertIn("1 attempt: HTTP 404", raised.detail)
-        self.assertIn(f"{model_manager.FAILURES_ON_THE_LAST_MIRROR} attempts: HTTP 503",
-                      raised.detail)
+        self.assertIn(
+            f"{model_manager.FAILURES_ON_THE_LAST_MIRROR} attempts: HTTP 503", raised.detail
+        )
         self.assertNotIn("times each", raised.detail)
 
     def test_the_next_mirror_resumes_what_the_first_one_delivered(self):
@@ -438,8 +455,8 @@ class Downloads(DownloadCase):
         self.assertIsNone(raised)
         self.assertEqual(script.authorizations, [None])
 
-class ProgressEvents(DownloadCase):
 
+class ProgressEvents(DownloadCase):
     def download_with_a_steady_clock(self, entry):
         ticks = itertools.count(0.0, 0.25)
         return self.download(entry, clock=lambda: next(ticks))
@@ -461,8 +478,7 @@ class ProgressEvents(DownloadCase):
         middle = next(event for event in downloading if 0 < event["done_bytes"] < PAYLOAD_SIZE)
         speed = TEST_CHUNK / 0.25
         self.assertEqual(middle["bytes_per_second"], int(speed))
-        self.assertEqual(middle["seconds_left"],
-                         int((PAYLOAD_SIZE - middle["done_bytes"]) / speed))
+        self.assertEqual(middle["seconds_left"], int((PAYLOAD_SIZE - middle["done_bytes"]) / speed))
         self.assertIn("of 3.0 MB", middle["text"])
         self.assertIn("/s", middle["text"])
         self.assertIn("left", middle["text"])
@@ -471,8 +487,9 @@ class ProgressEvents(DownloadCase):
     def test_events_are_spaced_out_but_the_end_is_always_reported(self):
         _script, url = self.mirrors.add("a", self.payload)
         self.download_with_a_steady_clock(entry_for(self.payload, url))
-        downloading = [event for event in read_events(self.events)
-                       if event["phase"] == "downloading"]
+        downloading = [
+            event for event in read_events(self.events) if event["phase"] == "downloading"
+        ]
         chunks = -(-PAYLOAD_SIZE // TEST_CHUNK)
         self.assertLess(len(downloading), chunks)
         self.assertEqual(downloading[-1]["done_bytes"], PAYLOAD_SIZE)
@@ -481,8 +498,11 @@ class ProgressEvents(DownloadCase):
         script, url = self.mirrors.add("a", self.payload)
         script.plan = [cut_at(self.half)]
         self.download_with_a_steady_clock(entry_for(self.payload, url))
-        resumed = [event for event in read_events(self.events)
-                   if event["phase"] == "downloading" and event["resumed_from_bytes"]]
+        resumed = [
+            event
+            for event in read_events(self.events)
+            if event["phase"] == "downloading" and event["resumed_from_bytes"]
+        ]
         self.assertTrue(resumed)
         self.assertEqual(resumed[0]["resumed_from_bytes"], self.half)
         self.assertEqual(resumed[0]["done_bytes"], self.half)
@@ -502,8 +522,8 @@ class ProgressEvents(DownloadCase):
             self.skipTest("desktop/ is not present")
         source = app_js.read_text(encoding="utf-8")
         self.assertIn('case "download":', source)
-        body = source[source.index("function renderDownload"):]
-        body = body[:body.index("\n}\n")]
+        body = source[source.index("function renderDownload") :]
+        body = body[: body.index("\n}\n")]
         _script, url = self.mirrors.add("a", self.payload)
         self.download_with_a_steady_clock(entry_for(self.payload, url))
         fields = set(re.findall(r"data\.(\w+)", body))
@@ -514,8 +534,8 @@ class ProgressEvents(DownloadCase):
         for phase in ("downloading", "verified", "failed"):
             self.assertIn(f'"{phase}"', body)
 
-class SpeedAndTimeLeft(unittest.TestCase):
 
+class SpeedAndTimeLeft(unittest.TestCase):
     def progress(self, clock) -> model_manager.Progress:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -544,8 +564,8 @@ class SpeedAndTimeLeft(unittest.TestCase):
         self.assertIsNone(progress.seconds_left(0))
         self.assertIn("measuring the speed", progress.describe(0))
 
-class ShippedManifest(unittest.TestCase):
 
+class ShippedManifest(unittest.TestCase):
     def setUp(self) -> None:
         self.manifest = model_manager.load_manifest(MANIFEST)
 
@@ -588,8 +608,9 @@ class ShippedManifest(unittest.TestCase):
         document["mirror_bases"] = ["https://models.example.org/horus/"]
         manifest = model_manager.parse_manifest(document, MANIFEST)
         entry = manifest.default_for("cpu-standard")
-        self.assertEqual(manifest.mirrors_for(entry)[-1],
-                         f"https://models.example.org/horus/{entry.file}")
+        self.assertEqual(
+            manifest.mirrors_for(entry)[-1], f"https://models.example.org/horus/{entry.file}"
+        )
         self.assertEqual(manifest.mirrors_for(entry)[0], entry.mirrors[0])
 
     def test_the_models_readme_points_at_the_manifest(self):
@@ -602,8 +623,8 @@ class ShippedManifest(unittest.TestCase):
         self.assertEqual(ignore[0], "*")
         self.assertIn("!manifest.json", ignore)
 
-class ManifestValidation(unittest.TestCase):
 
+class ManifestValidation(unittest.TestCase):
     def assert_rejected(self, change, needle: str) -> None:
         document = copy.deepcopy(shipped_manifest())
         change(document)
@@ -628,8 +649,7 @@ class ManifestValidation(unittest.TestCase):
         self.assert_rejected(lambda d: d["defaults"].update({"cpu-standard": "nope"}), "nope")
 
     def test_a_default_must_be_a_model_meant_for_that_profile(self):
-        self.assert_rejected(lambda d: d["defaults"].update({"gpu-8g": "qwen3-4b-q4km"}),
-                             "gpu-8g")
+        self.assert_rejected(lambda d: d["defaults"].update({"gpu-8g": "qwen3-4b-q4km"}), "gpu-8g")
 
     def test_a_model_needs_somewhere_to_download_it_from(self):
         self.assert_rejected(lambda d: d["models"][0].update(mirrors=[]), "no mirror")
@@ -649,8 +669,8 @@ class ManifestValidation(unittest.TestCase):
         self.assertEqual(caught.exception.code, EXIT_MODEL_MANIFEST_INVALID)
         self.assertIn("not valid JSON", caught.exception.detail)
 
-class Plans(unittest.TestCase):
 
+class Plans(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
@@ -670,8 +690,9 @@ class Plans(unittest.TestCase):
         self.assertEqual(env["LLM_GGUF_SIZE"], str(UNSLOTH_SIZE))
         self.assertEqual(env["LLM_GGUF_URL"], plan.mirrors[0])
         self.assertEqual(set(env), set(model_manager.MODEL_ENV_KEYS))
-        self.assertEqual((self.infra / env["HORUS_MODELS_DIR"]).resolve(),
-                         plan.models_dir.resolve())
+        self.assertEqual(
+            (self.infra / env["HORUS_MODELS_DIR"]).resolve(), plan.models_dir.resolve()
+        )
 
     def test_another_models_folder_is_written_as_an_absolute_path(self):
         elsewhere = self.repo / "elsewhere"
@@ -698,9 +719,13 @@ class Plans(unittest.TestCase):
 
     def test_a_file_the_manifest_does_not_know_uses_the_env_url_only(self):
         elsewhere = (self.repo / "elsewhere").resolve()
-        values = {"LLM_GGUF_FILE": "own.gguf", "LLM_GGUF_SHA256": "a" * 64,
-                  "LLM_GGUF_SIZE": "42", "LLM_GGUF_URL": "https://models.example.org/own.gguf",
-                  "HORUS_MODELS_DIR": elsewhere.as_posix()}
+        values = {
+            "LLM_GGUF_FILE": "own.gguf",
+            "LLM_GGUF_SHA256": "a" * 64,
+            "LLM_GGUF_SIZE": "42",
+            "LLM_GGUF_URL": "https://models.example.org/own.gguf",
+            "HORUS_MODELS_DIR": elsewhere.as_posix(),
+        }
         plan = model_manager.plan_from_env(values, self.infra, None)
         self.assertEqual(plan.entry.file, "own.gguf")
         self.assertEqual(plan.mirrors, ("https://models.example.org/own.gguf",))
@@ -708,8 +733,7 @@ class Plans(unittest.TestCase):
 
     def test_an_env_without_a_usable_model_names_none(self):
         self.assertIsNone(model_manager.plan_from_env({}, self.infra, None))
-        values = {"LLM_GGUF_FILE": "../x.gguf", "LLM_GGUF_SHA256": "a" * 64,
-                  "LLM_GGUF_SIZE": "42"}
+        values = {"LLM_GGUF_FILE": "../x.gguf", "LLM_GGUF_SHA256": "a" * 64, "LLM_GGUF_SIZE": "42"}
         self.assertIsNone(model_manager.plan_from_env(values, self.infra, None))
 
     def dry_run(self, *argv: str) -> str:
@@ -717,8 +741,10 @@ class Plans(unittest.TestCase):
         log = Log(self.repo / "install-log.txt")
         self.addCleanup(log.close, 0)
         out = io.StringIO()
-        with mock.patch.object(horus_install, "find_repo", return_value=self.repo), \
-                contextlib.redirect_stdout(out):
+        with (
+            mock.patch.object(horus_install, "find_repo", return_value=self.repo),
+            contextlib.redirect_stdout(out),
+        ):
             self.assertEqual(horus_install._dispatch(log, args), horus_install.EXIT_OK)
         return out.getvalue()
 
@@ -741,8 +767,9 @@ class Plans(unittest.TestCase):
 
     def test_the_dry_run_keeps_the_models_folder_an_earlier_install_chose(self):
         elsewhere = (self.repo / "elsewhere").resolve()
-        (self.infra / ".env").write_text(f"HORUS_MODELS_DIR={elsewhere.as_posix()}\n",
-                                         encoding="utf-8")
+        (self.infra / ".env").write_text(
+            f"HORUS_MODELS_DIR={elsewhere.as_posix()}\n", encoding="utf-8"
+        )
         out = self.dry_run("--simulate", "linux-cpu-16gb")
         self.assertIn(f"Keeping the models folder chosen before: {elsewhere}", out)
         self.assertIn(f"HORUS_MODELS_DIR={elsewhere.as_posix()}", out)
@@ -752,7 +779,8 @@ class Plans(unittest.TestCase):
         elsewhere = (self.repo / "elsewhere").resolve()
         (self.infra / ".env").write_text(
             f"{horus_install.UNSET_MARKER}HORUS_MODELS_DIR={elsewhere.as_posix()}\n",
-            encoding="utf-8")
+            encoding="utf-8",
+        )
         out = self.dry_run("--simulate", "linux-cpu-16gb")
         self.assertIn("HORUS_MODELS_DIR=../../models", out)
         self.assertNotIn("Keeping the models folder", out)
@@ -766,15 +794,18 @@ class Plans(unittest.TestCase):
         manifest = model_manager.load_manifest(MANIFEST)
         self.assertEqual(manifest.default_for("cpu-lean"), manifest.default_for("cpu-standard"))
 
-class InstalledStackChecksItsModel(DownloadCase):
 
+class InstalledStackChecksItsModel(DownloadCase):
     def setUp(self) -> None:
         super().setUp()
         self.repo = self.tmp / "repo"
         self.infra = self.repo / "src" / "infra"
         self.infra.mkdir(parents=True)
-        opener = mock.patch.object(model_manager.urllib.request, "build_opener",
-                                   side_effect=lambda *handlers: direct_opener())
+        opener = mock.patch.object(
+            model_manager.urllib.request,
+            "build_opener",
+            side_effect=lambda *handlers: direct_opener(),
+        )
         opener.start()
         self.addCleanup(opener.stop)
 
@@ -828,10 +859,20 @@ class InstalledStackChecksItsModel(DownloadCase):
             patch = stack.enter_context
             patch(mock.patch.object(horus_install, "_require_docker"))
             patch(mock.patch.object(horus_install, "wait_for_health"))
-            patch(mock.patch.object(horus_install, "ensure_installed_model",
-                                    side_effect=lambda *a: order.append("model")))
-            patch(mock.patch.object(horus_install, "_stream",
-                                    side_effect=lambda cmd, *a, **k: order.append(cmd[2]) or 0))
+            patch(
+                mock.patch.object(
+                    horus_install,
+                    "ensure_installed_model",
+                    side_effect=lambda *a: order.append("model"),
+                )
+            )
+            patch(
+                mock.patch.object(
+                    horus_install,
+                    "_stream",
+                    side_effect=lambda cmd, *a, **k: order.append(cmd[2]) or 0,
+                )
+            )
             patch(contextlib.redirect_stdout(io.StringIO()))
             code = horus_install.do_start(self.log, self.infra, timeout=60)
         self.assertEqual(code, horus_install.EXIT_OK)
@@ -873,10 +914,12 @@ class InstalledStackChecksItsModel(DownloadCase):
     def serve_the_manifest_model(self, url: str) -> str:
         (self.repo / "models").mkdir(exist_ok=True)
         document = shipped_manifest()
-        document["models"][0].update(size_bytes=len(self.payload), mirrors=[url],
-                                     sha256=hashlib.sha256(self.payload).hexdigest())
-        (self.repo / "models" / "manifest.json").write_text(json.dumps(document),
-                                                            encoding="utf-8")
+        document["models"][0].update(
+            size_bytes=len(self.payload),
+            mirrors=[url],
+            sha256=hashlib.sha256(self.payload).hexdigest(),
+        )
+        (self.repo / "models" / "manifest.json").write_text(json.dumps(document), encoding="utf-8")
         return document["models"][0]["file"]
 
     def run_installer(self, *argv: str) -> str:
@@ -890,15 +933,20 @@ class InstalledStackChecksItsModel(DownloadCase):
             consent.choose.return_value = {"corpus_dir": "../../demo_assets"}
             hardware = patch(mock.patch.object(horus_install, "hardware"))
             hardware.probe.return_value = dict(horus_install.SIMULATIONS["nvidia-16gb"])
-            patch(mock.patch.object(
-                horus_install, "pull_and_build",
-                side_effect=lambda *args, before_start=None, **kwargs: before_start()))
+            patch(
+                mock.patch.object(
+                    horus_install,
+                    "pull_and_build",
+                    side_effect=lambda *args, before_start=None, **kwargs: before_start(),
+                )
+            )
             patch(mock.patch.object(horus_install, "wait_for_health"))
             patch(mock.patch.object(horus_install, "wait_for_reindex"))
             patch(mock.patch.object(horus_install, "_success"))
             patch(contextlib.redirect_stdout(out))
-            code = horus_install._dispatch(self.log, horus_install.build_parser().parse_args(
-                list(argv)))
+            code = horus_install._dispatch(
+                self.log, horus_install.build_parser().parse_args(list(argv))
+            )
         self.assertEqual(code, horus_install.EXIT_OK)
         return out.getvalue()
 
@@ -921,14 +969,16 @@ class InstalledStackChecksItsModel(DownloadCase):
         self.assertEqual(self.installed_env()["HORUS_MODELS_DIR"], chosen)
         self.assertIn("verified before", out)
         self.assertEqual(script.requests, 1)
-        self.assertEqual(sorted(path.name for path in (self.repo / "models").iterdir()),
-                         ["manifest.json"])
+        self.assertEqual(
+            sorted(path.name for path in (self.repo / "models").iterdir()), ["manifest.json"]
+        )
 
     def test_the_command_line_fetches_the_model_into_the_folder_the_stack_mounts(self):
         _script, url = self.mirrors.add("a", self.payload)
         file = self.serve_the_manifest_model(url)
-        (self.infra / ".env").write_text(f"HORUS_MODELS_DIR={self.models.as_posix()}\n",
-                                         encoding="utf-8")
+        (self.infra / ".env").write_text(
+            f"HORUS_MODELS_DIR={self.models.as_posix()}\n", encoding="utf-8"
+        )
         self.run_installer("--download-model")
         self.assertEqual((self.models / file).read_bytes(), self.payload)
         self.assertFalse((self.repo / "models" / file).exists())
@@ -937,13 +987,17 @@ class InstalledStackChecksItsModel(DownloadCase):
         _script, url = self.mirrors.add("a", self.payload)
         file = self.serve_the_manifest_model(url)
         args = horus_install.build_parser().parse_args(
-            ["--download-model", "--models-dir", str(self.models)])
-        with mock.patch.object(horus_install, "find_repo", return_value=self.repo), \
-                contextlib.redirect_stdout(io.StringIO()):
+            ["--download-model", "--models-dir", str(self.models)]
+        )
+        with (
+            mock.patch.object(horus_install, "find_repo", return_value=self.repo),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
             code = horus_install._dispatch(self.log, args)
         self.assertEqual(code, horus_install.EXIT_OK)
         downloaded = self.models / file
         self.assertEqual(downloaded.read_bytes(), self.payload)
+
 
 if __name__ == "__main__":
     unittest.main()

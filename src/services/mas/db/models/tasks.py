@@ -36,9 +36,7 @@ class Task(Base):
     claimed_by = Column(String, nullable=True, index=True)
     claim_run = Column(String, nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -47,9 +45,7 @@ class Task(Base):
     )
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
-    conversation = relationship(
-        "Conversations", back_populates="tasks", passive_deletes=True
-    )
+    conversation = relationship("Conversations", back_populates="tasks", passive_deletes=True)
     parent_task = relationship("Task", remote_side=[id], backref="subtasks")
     result = relationship(
         "TaskResult", back_populates="task", uselist=False, cascade="all, delete-orphan"
@@ -68,9 +64,7 @@ class TaskResult(Base):
     future_actions = Column(JSON, nullable=True)
     sources = Column(JSON, nullable=True)
     ai_provider = Column(String, nullable=True)
-    created_at = Column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     task = relationship("Task", back_populates="result")
 
@@ -100,22 +94,16 @@ def log_task_update(mapper, connection, target):
 @event.listens_for(Task, "after_delete")
 def log_task_delete(mapper, connection, target):
     """Log task deletion events for task tracking."""
-    log_db_operation(
-        "DELETE", "tasks", f"id: {target.id}, conversation: {target.conversation_id}"
-    )
+    log_db_operation("DELETE", "tasks", f"id: {target.id}, conversation: {target.conversation_id}")
 
 
 @event.listens_for(TaskResult, "after_insert")
 def log_task_result_insert(mapper, connection, target):
     """Log task result creation events."""
-    log_db_operation(
-        "CREATE", "task_results", f"id: {target.id}, task: {target.task_id}"
-    )
+    log_db_operation("CREATE", "task_results", f"id: {target.id}, task: {target.task_id}")
 
 
 @event.listens_for(TaskResult, "after_update")
 def log_task_result_update(mapper, connection, target):
     """Log task result modification events."""
-    log_db_operation(
-        "UPDATE", "task_results", f"id: {target.id}, task: {target.task_id}"
-    )
+    log_db_operation("UPDATE", "task_results", f"id: {target.id}, task: {target.task_id}")

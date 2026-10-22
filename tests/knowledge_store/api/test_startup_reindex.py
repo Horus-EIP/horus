@@ -18,10 +18,13 @@ HEADERS = {corpus.CORPUS_TOKEN_HEADER: TOKEN}
 OLD_MODEL = "sentence-transformers:BAAI/bge-base-en-v1.5"
 KEYWORDS = ("parking", "lunch", "meeting", "laptop")
 
-POLICY = "\n".join(
-    f"Rule {n}. Staff keep the shared spaces tidy and report broken equipment."
-    for n in range(1, 40)
-) + "\nParking. Visitors get a parking pass from reception."
+POLICY = (
+    "\n".join(
+        f"Rule {n}. Staff keep the shared spaces tidy and report broken equipment."
+        for n in range(1, 40)
+    )
+    + "\nParking. Visitors get a parking pass from reception."
+)
 MEMO = "Lunch after the meeting. Parking is limited. Bring a laptop."
 
 
@@ -86,11 +89,18 @@ def store_passage(collection, doc_id: str, text: str, embed_model: str) -> None:
     collection.add(
         ids=[f"{doc_id}:0"],
         documents=[text],
-        metadatas=[{
-            "doc_id": doc_id, "title": f"{doc_id}.md", "chunk_index": 0, "chunk_count": 1,
-            "char_start": 0, "char_end": len(text), "category": "general",
-            "embed_model": embed_model,
-        }],
+        metadatas=[
+            {
+                "doc_id": doc_id,
+                "title": f"{doc_id}.md",
+                "chunk_index": 0,
+                "chunk_count": 1,
+                "char_start": 0,
+                "char_end": len(text),
+                "category": "general",
+                "embed_model": embed_model,
+            }
+        ],
         embeddings=[keyword_vector(text)],
     )
 

@@ -258,7 +258,9 @@ def parse_windows_disk(text: str | None) -> dict[str, Any]:
     row = rows[0]
     model = (row.get("FriendlyName") or "").strip() or None
     return {
-        "disk_type": disk_label(transport=str(row.get("BusType") or ""), media=str(row.get("MediaType") or "")),
+        "disk_type": disk_label(
+            transport=str(row.get("BusType") or ""), media=str(row.get("MediaType") or "")
+        ),
         "disk_model": model,
     }
 
@@ -324,7 +326,9 @@ def _read(path: str) -> str | None:
 def _linux_host(disk_path: Path) -> dict[str, tuple[Any, str]]:
     found = _sourced(parse_cpuinfo(_read("/proc/cpuinfo")), "/proc/cpuinfo")
     found["ram_total_bytes"] = (parse_meminfo_total(_read("/proc/meminfo")), "/proc/meminfo")
-    found.update(_sourced(parse_dmidecode_memory(run_text(["dmidecode", "-t", "memory"])), "dmidecode"))
+    found.update(
+        _sourced(parse_dmidecode_memory(run_text(["dmidecode", "-t", "memory"])), "dmidecode")
+    )
     source = run_text(["findmnt", "-n", "-o", "SOURCE", "--target", str(disk_path)])
     if source:
         device = source.strip().split("[")[0]
@@ -354,7 +358,9 @@ def _windows_host(disk_path: Path) -> dict[str, tuple[Any, str]]:
     found["avx2"] = (_windows_avx2(), "IsProcessorFeaturePresent")
     total = (powershell(WINDOWS_TOTAL_MEMORY_QUERY) or "").strip()
     found["ram_total_bytes"] = (int(total) if total.isdigit() else None, "Win32_ComputerSystem")
-    found.update(_sourced(parse_windows_memory(powershell(WINDOWS_MEMORY_QUERY)), "Win32_PhysicalMemory"))
+    found.update(
+        _sourced(parse_windows_memory(powershell(WINDOWS_MEMORY_QUERY)), "Win32_PhysicalMemory")
+    )
     letter = drive_letter(disk_path)
     disk = parse_windows_disk(powershell(WINDOWS_DISK_QUERY.format(letter=letter)))
     found.update(_sourced(disk, f"Get-PhysicalDisk ({letter}:)"))
@@ -371,7 +377,11 @@ def _macos_host() -> dict[str, tuple[Any, str]]:
     found["physical_cores"] = (int(cores) if cores.isdigit() else None, "sysctl")
     found["ram_total_bytes"] = (int(total) if total.isdigit() else None, "sysctl")
     found["avx2"] = ("AVX2" in features if features else None, "sysctl")
-    found.update(_sourced(parse_macos_memory(run_text(["system_profiler", "SPMemoryDataType"])), "system_profiler"))
+    found.update(
+        _sourced(
+            parse_macos_memory(run_text(["system_profiler", "SPMemoryDataType"])), "system_profiler"
+        )
+    )
     found.update(_sourced(parse_diskutil(run_text(["diskutil", "info", "/"])), "diskutil"))
     return found
 

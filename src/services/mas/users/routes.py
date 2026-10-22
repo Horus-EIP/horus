@@ -83,9 +83,7 @@ async def update_roles(
                 detail=f"User already has role {user_info.new_role.value}",
             )
 
-        target_user = (
-            db.query(Users).filter(Users.username == user_info.user_id).first()
-        )
+        target_user = db.query(Users).filter(Users.username == user_info.user_id).first()
         if not target_user:
             raise HTTPException(status_code=404, detail="User not found")
 
@@ -227,9 +225,7 @@ def obtain_new_password(
         logger.info(f"Password changed for user: {user.get('username')}")
         return {"message": "Password successfully changed"}
     else:
-        logger.warning(
-            f"Failed password change attempt for user: {user.get('username')}"
-        )
+        logger.warning(f"Failed password change attempt for user: {user.get('username')}")
         raise HTTPException(
             status_code=400,
             detail="Failed to change password. Please check your old password.",
@@ -244,9 +240,7 @@ def obtain_new_password(
     tags=["Users"],
     responses=CHANGE_USERNAME_RESPONSES,
 )
-def obtain_new_username(
-    new_username: str, user: user_dependency, db: Session = Depends(get_db)
-):
+def obtain_new_username(new_username: str, user: user_dependency, db: Session = Depends(get_db)):
     """Change the caller's username. 400 if ``new_username`` is taken/invalid."""
     current_username = user.get("username")
     if modify_user_username(user.get("id"), new_username, db):

@@ -28,14 +28,26 @@ def fetch_command(
     container_script: str = CONTAINER_FETCH_SCRIPT,
 ) -> list[str]:
     return [
-        "docker", "run", "--rm", *models_mount(source, writable=True),
-        "-v", f"{script}:{container_script}:ro",
-        "-e", f"LLM_GGUF_FILE={model.file}",
-        "-e", f"LLM_GGUF_URL={model.url}",
-        "-e", f"LLM_GGUF_SHA256={model.sha256}",
-        "-e", f"LLM_GGUF_SIZE={model.size_bytes}",
-        "-e", "HF_TOKEN",
-        "--entrypoint", "/bin/sh", image, container_script,
+        "docker",
+        "run",
+        "--rm",
+        *models_mount(source, writable=True),
+        "-v",
+        f"{script}:{container_script}:ro",
+        "-e",
+        f"LLM_GGUF_FILE={model.file}",
+        "-e",
+        f"LLM_GGUF_URL={model.url}",
+        "-e",
+        f"LLM_GGUF_SHA256={model.sha256}",
+        "-e",
+        f"LLM_GGUF_SIZE={model.size_bytes}",
+        "-e",
+        "HF_TOKEN",
+        "--entrypoint",
+        "/bin/sh",
+        image,
+        container_script,
     ]
 
 
@@ -67,7 +79,11 @@ def known_models_from(data: Any) -> dict[str, KnownModel]:
     entries = data.get("models") if isinstance(data, dict) else None
     if not isinstance(entries, list):
         raise ValueError("a known-models file holds a models list, or is a model catalog")
-    problems = [problem for index, entry in enumerate(entries) for problem in known_model_problems(entry, index)]
+    problems = [
+        problem
+        for index, entry in enumerate(entries)
+        for problem in known_model_problems(entry, index)
+    ]
     files = [entry["file"] for entry in entries if isinstance(entry, dict) and "file" in entry]
     repeated = sorted({file for file in files if files.count(file) > 1})
     if repeated:

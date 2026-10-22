@@ -2,15 +2,9 @@ from prometheus_client import Gauge
 from sqlalchemy import event
 
 DB_POOL_SIZE = Gauge("db_pool_size", "Taille totale du pool de connexions")
-DB_POOL_CHECKEDIN = Gauge(
-    "db_pool_checkedin", "Nombre de connexions disponibles (au repos)"
-)
-DB_POOL_CHECKEDOUT = Gauge(
-    "db_pool_checkedout", "Nombre de connexions actives (utilisées)"
-)
-DB_POOL_OVERFLOW = Gauge(
-    "db_pool_overflow", "Nombre de connexions supplémentaires (overflow)"
-)
+DB_POOL_CHECKEDIN = Gauge("db_pool_checkedin", "Nombre de connexions disponibles (au repos)")
+DB_POOL_CHECKEDOUT = Gauge("db_pool_checkedout", "Nombre de connexions actives (utilisées)")
+DB_POOL_OVERFLOW = Gauge("db_pool_overflow", "Nombre de connexions supplémentaires (overflow)")
 
 
 def attach_pool_monitor(engine):

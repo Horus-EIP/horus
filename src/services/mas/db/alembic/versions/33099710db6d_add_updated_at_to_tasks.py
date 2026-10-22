@@ -61,9 +61,7 @@ def downgrade() -> None:
         postgresql_nulls_not_distinct=False,
     )
     op.create_index(op.f("ix_tasks_status"), "tasks", ["status"], unique=False)
-    op.create_index(
-        op.f("ix_tasks_parent_task_id"), "tasks", ["parent_task_id"], unique=False
-    )
+    op.create_index(op.f("ix_tasks_parent_task_id"), "tasks", ["parent_task_id"], unique=False)
     op.create_index(op.f("ix_tasks_agent_id"), "tasks", ["agent_id"], unique=False)
     op.alter_column(
         "tasks",
@@ -76,9 +74,7 @@ def downgrade() -> None:
         existing_server_default=sa.text("'pending'::character varying"),
     )
     op.drop_column("tasks", "updated_at")
-    op.create_index(
-        op.f("ix_task_results_task_id"), "task_results", ["task_id"], unique=True
-    )
+    op.create_index(op.f("ix_task_results_task_id"), "task_results", ["task_id"], unique=True)
     op.drop_index("idx_messages_conversation_created", table_name="messages")
     op.create_index(op.f("ix_conversations_id"), "conversations", ["id"], unique=False)
     op.create_index(op.f("ix_agents_status"), "agents", ["status"], unique=False)

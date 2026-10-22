@@ -80,7 +80,11 @@ def own_words(body: str) -> list[str]:
 
 
 def starts_with_command(lines: list[str], commands: tuple[str, ...]) -> bool:
-    return any(re.match(rf"{re.escape(command)}(?![\w-])(?!\s*@)", line) for line in lines for command in commands)
+    return any(
+        re.match(rf"{re.escape(command)}(?![\w-])(?!\s*@)", line)
+        for line in lines
+        for command in commands
+    )
 
 
 def has_phrase(text: str, phrase: str) -> bool:
@@ -90,7 +94,9 @@ def has_phrase(text: str, phrase: str) -> bool:
 def is_claim(body: str, phrases: Phrases) -> bool:
     lines = own_words(body)
     text = " ".join(lines)
-    return starts_with_command(lines, phrases.commands) or any(has_phrase(text, phrase) for phrase in phrases.phrases)
+    return starts_with_command(lines, phrases.commands) or any(
+        has_phrase(text, phrase) for phrase in phrases.phrases
+    )
 
 
 def is_release(body: str, phrases: Phrases) -> bool:
@@ -105,8 +111,14 @@ def is_bot(user: dict) -> bool:
     return user.get("type") == "Bot" or str(user.get("login", "")).endswith("[bot]")
 
 
-def decide(body: str, commenter: str, issue: Issue, open_claims: int, phrases: Phrases,
-           commenter_is_bot: bool = False) -> str:
+def decide(
+    body: str,
+    commenter: str,
+    issue: Issue,
+    open_claims: int,
+    phrases: Phrases,
+    commenter_is_bot: bool = False,
+) -> str:
     if commenter_is_bot or issue.is_pull_request:
         return IGNORE
     holds_it = any(same_login(commenter, assignee) for assignee in issue.assignees)
@@ -125,7 +137,9 @@ def decide(body: str, commenter: str, issue: Issue, open_claims: int, phrases: P
     return ASSIGN
 
 
-def stale_action(now: datetime, since: datetime, reminded: bool, has_open_pull_request: bool) -> str:
+def stale_action(
+    now: datetime, since: datetime, reminded: bool, has_open_pull_request: bool
+) -> str:
     if has_open_pull_request:
         return NOTHING
     idle = now - since
@@ -138,7 +152,12 @@ def stale_action(now: datetime, since: datetime, reminded: bool, has_open_pull_r
 
 def reply(name: str, **values: object) -> str:
     text = (REPLIES / f"{name}.md").read_text(encoding="utf-8")
-    values = {"limit": CLAIM_LIMIT, "reminder_days": REMINDER_DAYS, "release_days": RELEASE_DAYS, **values}
+    values = {
+        "limit": CLAIM_LIMIT,
+        "reminder_days": REMINDER_DAYS,
+        "release_days": RELEASE_DAYS,
+        **values,
+    }
     for key, value in values.items():
         text = text.replace("{" + key + "}", str(value))
     return text
@@ -216,29 +235,43 @@ class GitHub:
         except urllib.error.HTTPError as error:
             if error.code != 404:
                 raise
-            self.request("POST", self.repo("/labels"),
-                         {"name": CLAIMED, "color": CLAIMED_COLOR, "description": CLAIMED_DESCRIPTION})
+            self.request(
+                "POST",
+                self.repo("/labels"),
+                {"name": CLAIMED, "color": CLAIMED_COLOR, "description": CLAIMED_DESCRIPTION},
+            )
 
     def release(self, number: int, login: str, others_remain: bool) -> None:
         self.request("DELETE", self.repo(f"/issues/{number}/assignees"), {"assignees": [login]})
         if others_remain:
             return
         try:
-            self.request("DELETE", self.repo(f"/issues/{number}/labels/{urllib.parse.quote(CLAIMED)}"))
+            self.request(
+                "DELETE", self.repo(f"/issues/{number}/labels/{urllib.parse.quote(CLAIMED)}")
+            )
         except urllib.error.HTTPError as error:
             if error.code != 404:
                 raise
 
 
 def open_claims(github: GitHub, login: str) -> int:
-    return sum(1 for item in github.open_items(assignee=login, labels=CLAIMED) if "pull_request" not in item)
+    return sum(
+        1
+        for item in github.open_items(assignee=login, labels=CLAIMED)
+        if "pull_request" not in item
+    )
 
 
 def suggestions(github: GitHub, current: int) -> str:
-    free = [item for item in github.open_items(labels=SUGGESTED_LABEL, assignee="none")
-            if "pull_request" not in item and int(item["number"]) != current][:SUGGESTIONS]
+    free = [
+        item
+        for item in github.open_items(labels=SUGGESTED_LABEL, assignee="none")
+        if "pull_request" not in item and int(item["number"]) != current
+    ][:SUGGESTIONS]
     if not free:
-        return "There is no other free good first issue right now: watch the repository for new ones."
+        return (
+            "There is no other free good first issue right now: watch the repository for new ones."
+        )
     return "\n".join(f"- #{item['number']} {item['title']}" for item in free)
 
 
@@ -256,12 +289,16 @@ def handle_comment(event: dict, github: GitHub, phrases: Phrases) -> str:
     claims = open_claims(github, login) if is_claim(body, phrases) and not issue.assignees else 0
     action = decide(body, login, issue, claims, phrases, commenter_is_bot=is_bot(user))
     if action == ASSIGN:
-        github.request("POST", github.repo(f"/issues/{issue.number}/assignees"), {"assignees": [login]})
+        github.request(
+            "POST", github.repo(f"/issues/{issue.number}/assignees"), {"assignees": [login]}
+        )
         github.ensure_claimed_label()
         github.request("POST", github.repo(f"/issues/{issue.number}/labels"), {"labels": [CLAIMED]})
         github.comment(issue.number, reply("assigned", user=login, issue=issue.number))
     elif action == TAKEN:
-        github.comment(issue.number, reply("taken", user=login, suggestions=suggestions(github, issue.number)))
+        github.comment(
+            issue.number, reply("taken", user=login, suggestions=suggestions(github, issue.number))
+        )
     elif action == LIMIT:
         github.comment(issue.number, reply("limit", user=login))
     elif action == UNASSIGN:
@@ -271,11 +308,20 @@ def handle_comment(event: dict, github: GitHub, phrases: Phrases) -> str:
     return action
 
 
-def last_activity(login: str, events: list[dict], comments: list[dict], fallback: datetime) -> datetime:
-    times = [timestamp(event["created_at"]) for event in events
-             if event.get("event") == "assigned" and same_login(str((event.get("assignee") or {}).get("login", "")), login)]
-    times += [timestamp(comment["created_at"]) for comment in comments
-              if same_login(str(comment["user"]["login"]), login)]
+def last_activity(
+    login: str, events: list[dict], comments: list[dict], fallback: datetime
+) -> datetime:
+    times = [
+        timestamp(event["created_at"])
+        for event in events
+        if event.get("event") == "assigned"
+        and same_login(str((event.get("assignee") or {}).get("login", "")), login)
+    ]
+    times += [
+        timestamp(comment["created_at"])
+        for comment in comments
+        if same_login(str(comment["user"]["login"]), login)
+    ]
     return max(times, default=fallback)
 
 
@@ -292,19 +338,32 @@ def handle_stale(github: GitHub, now: datetime) -> list[tuple[int, str, str]]:
         released = []
         for login in issue.assignees:
             since = last_activity(login, events, comments, timestamp(data["created_at"]))
-            reminded = any(is_bot(comment["user"]) and reminder_mark(login) in str(comment.get("body") or "").lower()
-                           and timestamp(comment["created_at"]) > since for comment in comments)
-            has_pull_request = any(same_login(str(pull["user"]["login"]), login)
-                                   and mentions(pull, issue.number, github.repository) for pull in pull_requests)
+            reminded = any(
+                is_bot(comment["user"])
+                and reminder_mark(login) in str(comment.get("body") or "").lower()
+                and timestamp(comment["created_at"]) > since
+                for comment in comments
+            )
+            has_pull_request = any(
+                same_login(str(pull["user"]["login"]), login)
+                and mentions(pull, issue.number, github.repository)
+                for pull in pull_requests
+            )
             action = stale_action(now, since, reminded, has_pull_request)
             if action == REMIND:
-                github.comment(issue.number, reply("stale-reminder", user=login, issue=issue.number,
-                                                   mark=reminder_mark(login)))
+                github.comment(
+                    issue.number,
+                    reply(
+                        "stale-reminder", user=login, issue=issue.number, mark=reminder_mark(login)
+                    ),
+                )
             elif action == RELEASE:
                 released.append(login)
                 remaining = [name for name in issue.assignees if name not in released]
                 github.release(issue.number, login, bool(remaining))
-                github.comment(issue.number, reply("stale-released", user=login, issue=issue.number))
+                github.comment(
+                    issue.number, reply("stale-released", user=login, issue=issue.number)
+                )
             done.append((issue.number, login, action))
     return done
 

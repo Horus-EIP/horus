@@ -100,7 +100,9 @@ class KnowledgeRetrievalAgent:
             else:
                 data = result
 
-            logger.info(f"KnowledgeRetrievalAgent result keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+            logger.info(
+                f"KnowledgeRetrievalAgent result keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}"
+            )
 
             chunk_count, doc_titles, preview = _summarize_retrieved(data)
             title_str = ", ".join(doc_titles[:3]) if doc_titles else "no source labels"

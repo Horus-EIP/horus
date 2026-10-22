@@ -13,6 +13,7 @@ from ai_agents.tool_registry import Tool, ToolRegistry
 
 # --- CalculatorTool Tests ---
 
+
 class TestCalculatorTool:
     @pytest.fixture
     def tool(self):
@@ -52,16 +53,16 @@ class TestCalculatorTool:
         with pytest.raises(ValueError, match="Only numeric constants"):
             tool._eval_node(node)
 
-        node = ast.Name(id='INVALID_VAR', ctx=ast.Load())
+        node = ast.Name(id="INVALID_VAR", ctx=ast.Load())
         with pytest.raises(ValueError, match="is not allowed"):
             tool._eval_node(node)
 
     def test_manual_ast_call_keywords(self, tool):
         # Construct a call with keywords: sin(0, k=1)
         node = ast.Call(
-            func=ast.Name(id='sin', ctx=ast.Load()),
+            func=ast.Name(id="sin", ctx=ast.Load()),
             args=[ast.Constant(value=0)],
-            keywords=[ast.keyword(arg='k', value=ast.Constant(value=1))]
+            keywords=[ast.keyword(arg="k", value=ast.Constant(value=1))],
         )
         with pytest.raises(ValueError, match="Keyword arguments"):
             tool._eval_node(node)
@@ -83,7 +84,9 @@ class TestCalculatorTool:
         with pytest.raises(ValueError, match="Invalid function reference"):
             tool._resolve_name(node)
 
+
 # --- ToolRegistry Tests ---
+
 
 class TestToolRegistry:
     @pytest.fixture
@@ -92,6 +95,7 @@ class TestToolRegistry:
 
     class DummyTool:
         name = "dummy"
+
         def run(self, payload):
             return f"Processed: {payload.get('data')}"
 
@@ -133,7 +137,9 @@ class TestToolRegistry:
         # Test missing
         assert registry.get("missing") is None
 
+
 # --- SummarizerTool Tests ---
+
 
 class TestSummarizerTool:
     def test_run_empty(self):
@@ -165,7 +171,7 @@ class TestSummarizerTool:
             tool = SummarizerTool()
             payload = {
                 "text": "This is sentence one. This is sentence two with keyword. This is three.",
-                "protect_keywords": "keyword"
+                "protect_keywords": "keyword",
             }
             # Should NOT use pipeline
             res = tool.run(payload)
@@ -174,13 +180,13 @@ class TestSummarizerTool:
 
             # Ensure pipeline was not called
             if tool._pipe:
-                 tool._pipe.assert_not_called()
+                tool._pipe.assert_not_called()
 
     def test_return_indices_json(self):
         tool = SummarizerTool()
         payload = {"text": "A. B. C.", "return_indices": True}
         # Force a deterministic fallback path
-        with patch.object(SummarizerTool, '_extractive_summary', return_value=("A.", [0])):
+        with patch.object(SummarizerTool, "_extractive_summary", return_value=("A.", [0])):
             res = tool.run(payload)
             # Should be valid JSON
             data = json.loads(res)
@@ -191,19 +197,19 @@ class TestSummarizerTool:
         tool = SummarizerTool()
         payload = {"text": "A. B. C.", "return_indices": True}
 
-        with patch.object(SummarizerTool, '_extractive_summary', return_value=("A.", [0])):
-             # Mock json.dumps to fail
-             with patch("json.dumps", side_effect=Exception("JSON Error")):
-                 res = tool.run(payload)
-                 assert "JSON Error" not in res
-                 assert "[kept_sentence_indices: [0]]" in res
+        with patch.object(SummarizerTool, "_extractive_summary", return_value=("A.", [0])):
+            # Mock json.dumps to fail
+            with patch("json.dumps", side_effect=Exception("JSON Error")):
+                res = tool.run(payload)
+                assert "JSON Error" not in res
+                assert "[kept_sentence_indices: [0]]" in res
 
     def test_extractive_summary_logic(self):
         tool = SummarizerTool()
         text = "This is sentence one. This is sentence two. This is sentence three."
         # Use keywords to force sentence 2 to definitely be picked
         summary, indices = tool._extractive_summary(text, max_sentences=2, protect_keywords=["two"])
-        assert 1 in indices # Sentence index 1 (zero-based) has "two"
+        assert 1 in indices  # Sentence index 1 (zero-based) has "two"
         assert "This is sentence two." in summary
 
         # Test short sentence skipping in word freq
@@ -218,7 +224,9 @@ class TestSummarizerTool:
             tool = SummarizerTool()
             assert tool._pipe is None
 
+
 # --- FileParserTool Tests ---
+
 
 class TestFileParserTool:
     @pytest.fixture
@@ -259,7 +267,7 @@ class TestFileParserTool:
 
     def test_parse_pdf_success_mock(self, tool):
         with patch("ai_agents.file_parser_tool.PdfReader") as mock_pdf_reader:
-             # Setup mock page
+            # Setup mock page
             mock_page = MagicMock()
             mock_page.extract_text.return_value = "PDF Page Content"
 
@@ -279,5 +287,3 @@ class TestFileParserTool:
         # Should return [Binary File] or empty string depending on implementation
         # Implementation returns "bin" type, then _extract_text fallback returns ""
         assert text == ""
-
-

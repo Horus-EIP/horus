@@ -572,8 +572,7 @@ class TestDecomposeTask:
     def test_status_and_depends_on_defaulted_when_missing(self, monkeypatch):
         # Planner omits status + depends_on; code should backfill and still
         # build a valid plan rather than discard it.
-        plan = {"sub_tasks": [{"id": "1", "agent_type": "researcher",
-                               "description": "do it"}]}
+        plan = {"sub_tasks": [{"id": "1", "agent_type": "researcher", "description": "do it"}]}
         monkeypatch.setattr(
             D, "get_available_agents", lambda db: [("a1", "R", "d", _Type.RESEARCHER)]
         )
@@ -690,10 +689,8 @@ class TestHeuristicDecompose:
         monkeypatch.setattr(m, "Agents", _FakeAgentsModel)
         db = FakeDB(
             [
-                FakeAgent(id="a1", name="Researcher", type=_Type.RESEARCHER,
-                          status="inactive"),
-                FakeAgent(id="a2", name="Writer", type=_Type.WRITER,
-                          status="inactive"),
+                FakeAgent(id="a1", name="Researcher", type=_Type.RESEARCHER, status="inactive"),
+                FakeAgent(id="a2", name="Writer", type=_Type.WRITER, status="inactive"),
             ]
         )
         first, rest = D._heuristic_decompose("help me", db)
@@ -730,8 +727,7 @@ class TestHeuristicDecompose:
         )
         monkeypatch.setattr(m, "Agents", _FakeAgentsModel)
         rows = [
-            FakeAgent(id="a1", name="Researcher", type=_Type.RESEARCHER,
-                      skills=["research"]),
+            FakeAgent(id="a1", name="Researcher", type=_Type.RESEARCHER, skills=["research"]),
             FakeAgent(id="a2", name="Writer", type=_Type.WRITER, skills=[]),
         ]
         db = FakeDB(rows)
@@ -748,15 +744,11 @@ class TestHeuristicDecompose:
         import db.models as m
 
         ranked = [{"agent_id": "ghost", "skill": "x", "score": 0.99}] + [
-            {"agent_id": f"a{i}", "skill": f"s{i}", "score": 0.9}
-            for i in range(1, 6)
+            {"agent_id": f"a{i}", "skill": f"s{i}", "score": 0.9} for i in range(1, 6)
         ]
         monkeypatch.setattr(sc, "rank_skills", lambda *a, **k: ranked)
         monkeypatch.setattr(m, "Agents", _FakeAgentsModel)
-        rows = [
-            FakeAgent(id=f"a{i}", name=f"Agent{i}", type=_Type.RESEARCHER)
-            for i in range(1, 6)
-        ]
+        rows = [FakeAgent(id=f"a{i}", name=f"Agent{i}", type=_Type.RESEARCHER) for i in range(1, 6)]
         db = FakeDB(rows)
         first, rest = D._heuristic_decompose("demand", db)
         # ghost dropped; exactly 4 chosen (first + 3 remaining).
@@ -830,8 +822,7 @@ class TestManagerHelpers:
         db = FakeDB([row])
         out = D._planned_steps_from_actions([("a1", "do x")], db)
         assert out == [
-            {"agent_type": "researcher", "agent_name": "Researcher",
-             "description": "do x"}
+            {"agent_type": "researcher", "agent_name": "Researcher", "description": "do x"}
         ]
 
     def test_planned_steps_unknown_agent_defaults(self, monkeypatch):
@@ -840,9 +831,7 @@ class TestManagerHelpers:
         monkeypatch.setattr(m, "Agents", _FakeAgentsModel)
         # No rows -> by_id empty -> '?' name and 'general' type.
         out = D._planned_steps_from_actions([("ghost", "demand")], FakeDB([]))
-        assert out == [
-            {"agent_type": "general", "agent_name": "?", "description": "demand"}
-        ]
+        assert out == [{"agent_type": "general", "agent_name": "?", "description": "demand"}]
 
 
 # ======================= manager_announce_plan ============================ #
@@ -861,8 +850,7 @@ class TestManagerAnnouncePlan:
 
     def test_empty_llm_response_uses_fallback(self, monkeypatch):
         steps = [
-            {"agent_type": "researcher", "agent_name": "Researcher",
-             "description": "gather data"},
+            {"agent_type": "researcher", "agent_name": "Researcher", "description": "gather data"},
         ]
         monkeypatch.setattr(D, "_planned_steps_from_actions", lambda a, db: steps)
         _patch_llm(monkeypatch, "   ")  # strips to empty -> raises -> fallback
@@ -1003,9 +991,7 @@ class TestSelectAgentForTask:
 
     def test_single_agent_missing_name(self, monkeypatch):
         self._agents(monkeypatch)
-        _patch_llm(
-            monkeypatch, json.dumps({"classification": "SINGLE_AGENT"})
-        )
+        _patch_llm(monkeypatch, json.dumps({"classification": "SINGLE_AGENT"}))
         assert D.select_agent_for_task("q", FakeDB()) == (None, None, None, [])
 
     def test_single_agent_unknown_agent(self, monkeypatch):
@@ -1061,10 +1047,14 @@ class TestDirectAnswerPostCheck:
     }
 
     def _agents(self, monkeypatch, agents=None):
-        roster = agents if agents is not None else [
-            ("a1", "Researcher", "finds facts", _Type.RESEARCHER),
-            ("g1", "General-Assistant", "general RAG assistant", _Type.GENERAL),
-        ]
+        roster = (
+            agents
+            if agents is not None
+            else [
+                ("a1", "Researcher", "finds facts", _Type.RESEARCHER),
+                ("g1", "General-Assistant", "general RAG assistant", _Type.GENERAL),
+            ]
+        )
         monkeypatch.setattr(D, "get_available_agents", lambda db: roster)
 
     def _router_says_direct_answer(self, monkeypatch, final_answer, **extra):
@@ -1184,16 +1174,14 @@ class TestSelectAgentByMode:
     def test_any_with_skill_live_match_preferred(self, monkeypatch):
         monkeypatch.setattr(D, "_is_agent_recently_alive", lambda a: True)
         a = FakeAgent(id="live", skills=["research"])
-        out = D.select_agent_by_mode("demand", ["research"], "any_with_skill", None,
-                                     FakeDB([a]))
+        out = D.select_agent_by_mode("demand", ["research"], "any_with_skill", None, FakeDB([a]))
         assert out == ("live", "demand", None, [])
 
     def test_any_with_skill_seeded_fallback(self, monkeypatch):
         # Not recently alive -> recorded as seeded_match, returned when no live.
         monkeypatch.setattr(D, "_is_agent_recently_alive", lambda a: False)
         a = FakeAgent(id="seeded", skills=["research"])
-        out = D.select_agent_by_mode("demand", ["research"], "any_with_skill", None,
-                                     FakeDB([a]))
+        out = D.select_agent_by_mode("demand", ["research"], "any_with_skill", None, FakeDB([a]))
         assert out == ("seeded", "demand", None, [])
 
     def test_any_with_skill_first_seeded_match_kept(self, monkeypatch):
@@ -1202,17 +1190,16 @@ class TestSelectAgentByMode:
         monkeypatch.setattr(D, "_is_agent_recently_alive", lambda a: False)
         a1 = FakeAgent(id="seed1", skills=["research"])
         a2 = FakeAgent(id="seed2", skills=["research"])
-        out = D.select_agent_by_mode("demand", ["research"], "any_with_skill", None,
-                                     FakeDB([a1, a2]))
+        out = D.select_agent_by_mode(
+            "demand", ["research"], "any_with_skill", None, FakeDB([a1, a2])
+        )
         assert out == ("seed1", "demand", None, [])
 
     def test_auto_mode_falls_back(self):
-        assert D.select_agent_by_mode("d", [], "auto", None, FakeDB()) == (
-            None, None, None, [])
+        assert D.select_agent_by_mode("d", [], "auto", None, FakeDB()) == (None, None, None, [])
 
     def test_none_mode_falls_back(self):
-        assert D.select_agent_by_mode("d", [], None, None, FakeDB()) == (
-            None, None, None, [])
+        assert D.select_agent_by_mode("d", [], None, None, FakeDB()) == (None, None, None, [])
 
 
 # ============================ aggregate_results =========================== #

@@ -65,9 +65,7 @@ class _FakePika:
         self.connection.channel.return_value = self.channel
         self.PlainCredentials = MagicMock(name="PlainCredentials")
         self.ConnectionParameters = MagicMock(name="ConnectionParameters")
-        self.BlockingConnection = MagicMock(
-            name="BlockingConnection", return_value=self.connection
-        )
+        self.BlockingConnection = MagicMock(name="BlockingConnection", return_value=self.connection)
 
     def _record_consume(self, *, queue, on_message_callback):
         self.consumed.append((queue, on_message_callback))
@@ -168,9 +166,7 @@ class TestResolveAttachedFiles:
         ):
             out = await consumers._resolve_attached_files(files)
         client.resolve_by_filename.assert_awaited_once_with("report.pdf")
-        assert out == [
-            {"filename": "report.pdf", "source": "knowledge_store", "text": "KS body"}
-        ]
+        assert out == [{"filename": "report.pdf", "source": "knowledge_store", "text": "KS body"}]
 
     async def test_knowledge_store_text_survives_the_real_client(self, monkeypatch):
         import ai_agents.knowledge_store_client as ksc
@@ -200,9 +196,7 @@ class TestResolveAttachedFiles:
         When: found in ATP v7 (18/09/2026), fixed in 0b93375; resolved by doc_id
         since 8670bec (B-97), which renamed this test.
         """
-        files = [
-            {"source": "knowledge_store", "filename": "report.pdf", "doc_id": "abc123"}
-        ]
+        files = [{"source": "knowledge_store", "filename": "report.pdf", "doc_id": "abc123"}]
         client = MagicMock()
         client.resolve_by_doc_id = AsyncMock(
             return_value={"query": "__doc__:abc123", "data": "the second report.pdf"}
@@ -215,17 +209,17 @@ class TestResolveAttachedFiles:
             out = await consumers._resolve_attached_files(files)
         client.resolve_by_doc_id.assert_awaited_once_with("abc123")
         client.resolve_by_filename.assert_not_called()
-        assert out == [{
-            "filename": "report.pdf",
-            "source": "knowledge_store",
-            "text": "the second report.pdf",
-            "doc_id": "abc123",
-        }]
+        assert out == [
+            {
+                "filename": "report.pdf",
+                "source": "knowledge_store",
+                "text": "the second report.pdf",
+                "doc_id": "abc123",
+            }
+        ]
 
     async def test_a_doc_id_the_store_does_not_know_falls_back_to_the_filename(self):
-        files = [
-            {"source": "knowledge_store", "filename": "report.pdf", "doc_id": "gone"}
-        ]
+        files = [{"source": "knowledge_store", "filename": "report.pdf", "doc_id": "gone"}]
         client = MagicMock()
         client.resolve_by_doc_id = AsyncMock(return_value={"query": "__doc__:gone", "data": ""})
         client.resolve_by_filename = AsyncMock(
@@ -241,9 +235,7 @@ class TestResolveAttachedFiles:
         assert out[0]["doc_id"] == "gone"
 
     async def test_a_failing_doc_id_lookup_falls_back_to_the_filename(self):
-        files = [
-            {"source": "knowledge_store", "filename": "report.pdf", "doc_id": "abc123"}
-        ]
+        files = [{"source": "knowledge_store", "filename": "report.pdf", "doc_id": "abc123"}]
         client = MagicMock()
         client.resolve_by_doc_id = AsyncMock(side_effect=RuntimeError("ks down"))
         client.resolve_by_filename = AsyncMock(
@@ -265,9 +257,7 @@ class TestResolveAttachedFiles:
             return_value=client,
         ):
             out = await consumers._resolve_attached_files(files)
-        assert out == [
-            {"filename": "missing.pdf", "source": "knowledge_store", "text": ""}
-        ]
+        assert out == [{"filename": "missing.pdf", "source": "knowledge_store", "text": ""}]
 
     async def test_knowledge_store_exception_swallowed(self):
         files = [{"source": "knowledge_store", "filename": "boom.pdf"}]
@@ -363,8 +353,9 @@ class TestConsumeMessagesSetup:
     def test_returns_early_when_agent_id_missing(self):
         srv = MagicMock()
         srv.AGENT_ID = None
-        with patch("agent_server.server", srv, create=True), patch(
-            "agent_server.profiles.unique_agent_types", return_value=["general"]
+        with (
+            patch("agent_server.server", srv, create=True),
+            patch("agent_server.profiles.unique_agent_types", return_value=["general"]),
         ):
             # No pika usage expected: bail out before connecting.
             with patch.object(consumers, "pika") as pk:
@@ -375,9 +366,12 @@ class TestConsumeMessagesSetup:
         srv = MagicMock()
         srv.AGENT_ID = "agent-1"
         srv.work_queue_name_for_type.side_effect = lambda t: f"work_{t}"
-        with patch("agent_server.server", srv, create=True), patch(
-            "agent_server.profiles.unique_agent_types",
-            return_value=["general", "analyst"],
+        with (
+            patch("agent_server.server", srv, create=True),
+            patch(
+                "agent_server.profiles.unique_agent_types",
+                return_value=["general", "analyst"],
+            ),
         ):
             assert consumers._consume_messages_session() is True
 
@@ -393,15 +387,14 @@ class TestConsumeMessagesSetup:
         srv = MagicMock()
         srv.AGENT_ID = "agent-1"
         srv.work_queue_name_for_type.side_effect = lambda t: f"work_{t}"
-        with patch("agent_server.server", srv, create=True), patch(
-            "agent_server.profiles.unique_agent_types", return_value=[]
+        with (
+            patch("agent_server.server", srv, create=True),
+            patch("agent_server.profiles.unique_agent_types", return_value=[]),
         ):
             consumers._consume_messages_session()
         assert set(fake_pika.pulled) == {"work_general"}
 
-    def test_a_missing_queue_is_declared_with_the_length_limit(
-        self, fake_pika, monkeypatch
-    ):
+    def test_a_missing_queue_is_declared_with_the_length_limit(self, fake_pika, monkeypatch):
         monkeypatch.setenv("WORK_QUEUE_MAX_LENGTH", "25")
         fake_pika.channel.queue_declare.side_effect = [
             ChannelClosedByBroker(404, "NOT_FOUND - no queue 'work_general'"),
@@ -431,9 +424,7 @@ class TestConsumeMessagesSetup:
         assert last == {"queue": "work_general", "passive": True}
 
     def test_any_other_broker_refusal_ends_the_session(self, fake_pika):
-        fake_pika.channel.queue_declare.side_effect = ChannelClosedByBroker(
-            403, "ACCESS_REFUSED"
-        )
+        fake_pika.channel.queue_declare.side_effect = ChannelClosedByBroker(403, "ACCESS_REFUSED")
         with pytest.raises(ChannelClosedByBroker):
             consumers._declare_work_queue(fake_pika.connection, fake_pika.channel, "work_x")
 
@@ -442,9 +433,11 @@ class TestConsumeMessagesSetup:
         srv.AGENT_ID = "agent-1"
         srv.work_queue_name_for_type.side_effect = lambda t: f"work_{t}"
         fake_pika.BlockingConnection.side_effect = RuntimeError("broker unreachable")
-        with patch("agent_server.server", srv, create=True), patch(
-            "agent_server.profiles.unique_agent_types", return_value=["general"]
-        ), patch.object(consumers, "agent_errors_total") as errs:
+        with (
+            patch("agent_server.server", srv, create=True),
+            patch("agent_server.profiles.unique_agent_types", return_value=["general"]),
+            patch.object(consumers, "agent_errors_total") as errs,
+        ):
             # Must not raise — the loop logs and increments the error counter.
             consumers._consume_messages_session()
             errs.labels.assert_called_with(error_type="rabbitmq")
@@ -548,13 +541,16 @@ class TestConsumeMessagesCallback:
         srv.get_pipeline_for_type.return_value = pipeline
         body = json.dumps({"demand": "q", "task_id": "task-42"}).encode("utf-8")
 
-        with self._patch_profiles(), patch.object(
-            consumers, "peak_rss_mb", return_value="4321"
-        ), patch.object(consumers, "logger") as log:
+        with (
+            self._patch_profiles(),
+            patch.object(consumers, "peak_rss_mb", return_value="4321"),
+            patch.object(consumers, "logger") as log,
+        ):
             cb(MagicMock(), _make_method(11), _make_props(), body)
 
         completion = [
-            call.args for call in log.info.call_args_list
+            call.args
+            for call in log.info.call_args_list
             if call.args and str(call.args[0]).startswith("Task processed")
         ]
         assert completion == [
@@ -574,9 +570,11 @@ class TestConsumeMessagesCallback:
         srv.get_pipeline_for_type.return_value = pipeline
         body = json.dumps({"demand": "q", "task_id": "task-43"}).encode("utf-8")
 
-        with self._patch_profiles(), patch.object(
-            consumers, "peak_rss_mb", return_value="4321"
-        ), patch.object(consumers, "logger") as log:
+        with (
+            self._patch_profiles(),
+            patch.object(consumers, "peak_rss_mb", return_value="4321"),
+            patch.object(consumers, "logger") as log,
+        ):
             cb(MagicMock(), _make_method(12), _make_props(), body)
 
         log.error.assert_any_call(
@@ -640,9 +638,7 @@ class TestConsumeMessagesCallback:
         body = json.dumps({"demand": "hi", "task_id": "t1"}).encode("utf-8")
         props = _make_props(headers={"X-Request-ID": "corr-123"})
 
-        with self._patch_profiles(), patch.object(
-            consumers, "set_correlation_id"
-        ) as set_corr:
+        with self._patch_profiles(), patch.object(consumers, "set_correlation_id") as set_corr:
             cb(ch, _make_method(9), props, body)
             set_corr.assert_called_once_with("corr-123")
 
@@ -679,9 +675,7 @@ class TestConsumeMessagesCallback:
             assert up_kwargs["api_key"] == "ext-key"
             assert up_kwargs["skills"] == ["s1"]
 
-    def test_specialist_without_operation_falls_back_to_general_pipeline(
-        self, fake_pika
-    ):
+    def test_specialist_without_operation_falls_back_to_general_pipeline(self, fake_pika):
         # Consumer subscribed to the analyst queue; a task with no "operation"
         # must reroute to the general RAG pipeline (effective_type=general).
         srv, cb = _start_consumer_and_get_callback(fake_pika, types=["analyst"])
@@ -731,22 +725,18 @@ class TestConsumeMessagesCallback:
         assert srv.send_result.call_args.args[0] == "SPECIALIST OUT"
         ch.basic_ack.assert_called_once_with(delivery_tag=6)
 
-    def test_pipeline_exception_emits_error_step_and_posts_error_result(
-        self, fake_pika
-    ):
+    def test_pipeline_exception_emits_error_step_and_posts_error_result(self, fake_pika):
         srv, cb = _start_consumer_and_get_callback(fake_pika)
         pipeline = MagicMock()
         pipeline.process_task = AsyncMock(side_effect=RuntimeError("pipeline boom"))
         srv.get_pipeline_for_type.return_value = pipeline
 
         ch = MagicMock()
-        body = json.dumps(
-            {"demand": "x", "task_id": "terr", "conversation_id": "cerr"}
-        ).encode("utf-8")
+        body = json.dumps({"demand": "x", "task_id": "terr", "conversation_id": "cerr"}).encode(
+            "utf-8"
+        )
 
-        with self._patch_profiles(), patch.object(
-            consumers, "agent_errors_total"
-        ) as errs:
+        with self._patch_profiles(), patch.object(consumers, "agent_errors_total") as errs:
             cb(ch, _make_method(13), _make_props(), body)
             errs.labels.assert_any_call(error_type="task_processing")
 
@@ -788,9 +778,7 @@ class TestConsumeMessagesCallback:
         srv.get_pipeline_for_type.return_value = pipeline
 
         ch = MagicMock()
-        body = json.dumps({"demand": "x", "task_id": "t", "conversation_id": "c"}).encode(
-            "utf-8"
-        )
+        body = json.dumps({"demand": "x", "task_id": "t", "conversation_id": "c"}).encode("utf-8")
 
         class _InlineThread:
             def __init__(self, target=None, daemon=None):
@@ -799,9 +787,7 @@ class TestConsumeMessagesCallback:
             def start(self):
                 self._target()
 
-        with self._patch_profiles(), patch.object(
-            consumers.threading, "Thread", _InlineThread
-        ):
+        with self._patch_profiles(), patch.object(consumers.threading, "Thread", _InlineThread):
             cb(ch, _make_method(15), _make_props(), body)
 
         # send_step was invoked synchronously through the inline thread with
@@ -828,9 +814,7 @@ class TestConsumeMessagesCallback:
             def start(self):
                 self._target()  # error inside is caught by _post's try/except
 
-        with self._patch_profiles(), patch.object(
-            consumers.threading, "Thread", _InlineThread
-        ):
+        with self._patch_profiles(), patch.object(consumers.threading, "Thread", _InlineThread):
             cb(ch, _make_method(16), _make_props(), body)  # must not raise
 
         ch.basic_ack.assert_called_once_with(delivery_tag=16)
@@ -924,9 +908,9 @@ class TestConsumeMessagesCallback:
             system_prompt="BE A PIRATE", name="Pirate", tools=("search_knowledge", "calc")
         )
         ch = MagicMock()
-        body = json.dumps(
-            {"demand": "x", "task_id": "t", "assigned_agent_id": "a1"}
-        ).encode("utf-8")
+        body = json.dumps({"demand": "x", "task_id": "t", "assigned_agent_id": "a1"}).encode(
+            "utf-8"
+        )
 
         with self._patch_profiles(active_profile=active):
             cb(ch, _make_method(17), _make_props(), body)
@@ -950,9 +934,7 @@ class TestConsumeMessagesCallback:
         srv.get_pipeline_for_type.return_value = pipeline
 
         ch = MagicMock()
-        body = json.dumps(
-            {"demand": "x", "task_id": "tw", "operation": "do"}
-        ).encode("utf-8")
+        body = json.dumps({"demand": "x", "task_id": "tw", "operation": "do"}).encode("utf-8")
 
         with self._patch_profiles():
             cb(ch, _make_method(30), _make_props(), body)
@@ -975,8 +957,9 @@ class TestConsumeMessagesCallback:
         ch = MagicMock()
         body = json.dumps({"demand": "x", "task_id": "te"}).encode("utf-8")
 
-        with self._patch_profiles(), patch.object(
-            consumers.threading, "Thread", side_effect=RuntimeError("no threads")
+        with (
+            self._patch_profiles(),
+            patch.object(consumers.threading, "Thread", side_effect=RuntimeError("no threads")),
         ):
             cb(ch, _make_method(31), _make_props(), body)  # must not raise
 
@@ -1003,9 +986,7 @@ class TestConsumeMessagesCallback:
         ch = MagicMock()
         body = json.dumps({"demand": "x", "task_id": "tc"}).encode("utf-8")
 
-        with self._patch_profiles(), patch.object(
-            profiles, "current_step_emitter", bad_var
-        ):
+        with self._patch_profiles(), patch.object(profiles, "current_step_emitter", bad_var):
             cb(ch, _make_method(32), _make_props(), body)  # must not raise
 
         bad_var.reset.assert_called_once_with("tok")
@@ -1062,9 +1043,12 @@ class TestConsumeMessagesCallback:
             }
         ).encode("utf-8")
 
-        with self._patch_profiles(), patch(
-            "ai_agents.knowledge_store_client.KnowledgeStoreClient",
-            return_value=client,
+        with (
+            self._patch_profiles(),
+            patch(
+                "ai_agents.knowledge_store_client.KnowledgeStoreClient",
+                return_value=client,
+            ),
         ):
             cb(MagicMock(), _make_method(19), _make_props(), body)
 
@@ -1091,9 +1075,12 @@ class TestConsumeMessagesCallback:
             }
         ).encode("utf-8")
 
-        with self._patch_profiles(), patch(
-            "ai_agents.knowledge_store_client.KnowledgeStoreClient",
-            return_value=client,
+        with (
+            self._patch_profiles(),
+            patch(
+                "ai_agents.knowledge_store_client.KnowledgeStoreClient",
+                return_value=client,
+            ),
         ):
             cb(MagicMock(), _make_method(20), _make_props(), body)
 
@@ -1308,8 +1295,8 @@ class TestPullLoop:
         fake_pika.deliveries.append((queue, (_make_method(tag), _make_props(), body)))
 
     def test_nothing_is_pulled_while_every_worker_is_busy(self, fake_pika):
-        fake_pika.connection.process_data_events.side_effect = (
-            lambda **_kwargs: consumers._stop_pulling.set()
+        fake_pika.connection.process_data_events.side_effect = lambda **_kwargs: (
+            consumers._stop_pulling.set()
         )
 
         consumers._pull_tasks(
@@ -1405,9 +1392,10 @@ class TestTaskWorkerPool:
 def _start_agent_consumer(fake_pika, agent_id="agent-77"):
     srv = MagicMock()
     srv.AGENT_ID = agent_id
-    with patch("agent_server.server", srv, create=True), patch(
-        "agent_server.delegation_bridge._process_delegation_message"
-    ) as proc:
+    with (
+        patch("agent_server.server", srv, create=True),
+        patch("agent_server.delegation_bridge._process_delegation_message") as proc,
+    ):
         consumers._consume_agent_messages_session()
     return srv, proc, fake_pika.callback_for(f"agent_comm_{agent_id}")
 
@@ -1416,25 +1404,21 @@ class TestConsumeAgentMessages:
     def test_returns_early_when_agent_id_missing(self):
         srv = MagicMock()
         srv.AGENT_ID = None
-        with patch("agent_server.server", srv, create=True), patch.object(
-            consumers, "pika"
-        ) as pk:
+        with patch("agent_server.server", srv, create=True), patch.object(consumers, "pika") as pk:
             consumers._consume_agent_messages_session()
             pk.BlockingConnection.assert_not_called()
 
     def test_declares_queue_and_starts_consuming(self, fake_pika):
         srv = MagicMock()
         srv.AGENT_ID = "agent-77"
-        with patch("agent_server.server", srv, create=True), patch(
-            "agent_server.delegation_bridge._process_delegation_message"
+        with (
+            patch("agent_server.server", srv, create=True),
+            patch("agent_server.delegation_bridge._process_delegation_message"),
         ):
             consumers._consume_agent_messages_session()
 
         fake_pika.channel.queue_declare.assert_called_once()
-        assert (
-            fake_pika.channel.queue_declare.call_args.kwargs["queue"]
-            == "agent_comm_agent-77"
-        )
+        assert fake_pika.channel.queue_declare.call_args.kwargs["queue"] == "agent_comm_agent-77"
         fake_pika.channel.basic_qos.assert_called_once_with(prefetch_count=1)
         fake_pika.channel.start_consuming.assert_called_once()
 
@@ -1442,8 +1426,9 @@ class TestConsumeAgentMessages:
         srv = MagicMock()
         srv.AGENT_ID = "agent-77"
         fake_pika.BlockingConnection.side_effect = RuntimeError("down")
-        with patch("agent_server.server", srv, create=True), patch(
-            "agent_server.delegation_bridge._process_delegation_message"
+        with (
+            patch("agent_server.server", srv, create=True),
+            patch("agent_server.delegation_bridge._process_delegation_message"),
         ):
             consumers._consume_agent_messages_session()  # must not raise
 

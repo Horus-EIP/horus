@@ -59,14 +59,22 @@ def _pattern_problems(label: str, patterns: Any) -> list[str]:
         return [f"{label}: patterns must map field names to lists of regular expressions"]
     problems = []
     for name, values in patterns.items():
-        if not isinstance(values, list) or not values or not all(isinstance(v, str) and v for v in values):
-            problems.append(f"{label}: patterns.{name} must be a non-empty list of regular expressions")
+        if (
+            not isinstance(values, list)
+            or not values
+            or not all(isinstance(v, str) and v for v in values)
+        ):
+            problems.append(
+                f"{label}: patterns.{name} must be a non-empty list of regular expressions"
+            )
             continue
         for value in values:
             try:
                 compile_pattern(value)
             except re.error as exc:
-                problems.append(f"{label}: patterns.{name} {value!r} is not a valid regular expression: {exc}")
+                problems.append(
+                    f"{label}: patterns.{name} {value!r} is not a valid regular expression: {exc}"
+                )
     return problems
 
 
@@ -87,7 +95,9 @@ def item_problems(items: Any, *, prepared: bool = False) -> list[str]:
         else:
             seen.add(item["id"])
         if prepared:
-            if not isinstance(item.get("payload"), dict) or not isinstance(item["payload"].get("messages"), list):
+            if not isinstance(item.get("payload"), dict) or not isinstance(
+                item["payload"].get("messages"), list
+            ):
                 problems.append(f"{label}: payload must be a chat completion request with messages")
         elif not isinstance(item.get("question"), str) or not item["question"].strip():
             problems.append(f"{label}: question must be a non-empty string")
@@ -169,7 +179,9 @@ class Template:
 
     def payload(self, model: str, question: str, context: str = "") -> dict[str, Any]:
         user = render_user(self.user, question, context)
-        return completion_payload(model, self.system, user, self.max_tokens, self.response_format, self.temperature)
+        return completion_payload(
+            model, self.system, user, self.max_tokens, self.response_format, self.temperature
+        )
 
 
 def load_template(
@@ -234,7 +246,9 @@ def api_headers(api_key_env: str | None) -> dict[str, str]:
     return {"Authorization": f"Bearer {key}"} if key else {}
 
 
-def post_json(url: str, payload: dict[str, Any], timeout: float, headers: dict[str, str] | None = None) -> dict[str, Any]:
+def post_json(
+    url: str, payload: dict[str, Any], timeout: float, headers: dict[str, str] | None = None
+) -> dict[str, Any]:
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
@@ -313,11 +327,15 @@ def run_template_probe(
 ) -> dict[str, dict[str, Any]]:
     if warmup:
         progress(f"[info] warmup (not scored): {warmup}")
-        http_reply("warmup", url, template.payload(model, warmup), timeout, headers=headers, post=post)
+        http_reply(
+            "warmup", url, template.payload(model, warmup), timeout, headers=headers, post=post
+        )
     replies = {}
     for index, item in enumerate(items, 1):
         payload = template.payload(model, item["question"], item_context(item, base, context_dir))
-        replies[item["id"]] = http_reply(item["id"], url, payload, timeout, headers=headers, post=post)
+        replies[item["id"]] = http_reply(
+            item["id"], url, payload, timeout, headers=headers, post=post
+        )
         progress(reply_line(index, len(items), replies[item["id"]]))
     return replies
 
@@ -325,7 +343,11 @@ def run_template_probe(
 def prepared_question(request: dict[str, Any]) -> str:
     if isinstance(request.get("question"), str):
         return request["question"]
-    users = [m.get("content") for m in request["payload"]["messages"] if isinstance(m, dict) and m.get("role") == "user"]
+    users = [
+        m.get("content")
+        for m in request["payload"]["messages"]
+        if isinstance(m, dict) and m.get("role") == "user"
+    ]
     return users[-1] if users and isinstance(users[-1], str) else ""
 
 
@@ -348,7 +370,9 @@ def run_prepared_probe(
         payload = {**request["payload"], **({"model": model} if model else {})}
         meta = request.get("meta") if isinstance(request.get("meta"), dict) else {}
         kept = {name: meta[name] for name in META_FIELDS if name in meta}
-        replies[request["id"]] = http_reply(request["id"], url, payload, timeout, headers=headers, meta=kept, post=post)
+        replies[request["id"]] = http_reply(
+            request["id"], url, payload, timeout, headers=headers, meta=kept, post=post
+        )
         progress(reply_line(index, len(requests), replies[request["id"]]))
     return replies
 
@@ -376,7 +400,11 @@ def split_command(text: str) -> list[str]:
     stripped = text.strip()
     if stripped.startswith("["):
         command = json.loads(stripped)
-        if not isinstance(command, list) or not command or not all(isinstance(part, str) for part in command):
+        if (
+            not isinstance(command, list)
+            or not command
+            or not all(isinstance(part, str) for part in command)
+        ):
             raise ValueError("a command given as JSON must be a non-empty list of strings")
         return command
     command = shlex.split(stripped)
@@ -395,7 +423,9 @@ def field_text(value: Any) -> str | None:
     return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
 
 
-def missing_field_patterns(patterns: dict[str, list[str]], data: dict[str, Any]) -> dict[str, list[str]]:
+def missing_field_patterns(
+    patterns: dict[str, list[str]], data: dict[str, Any]
+) -> dict[str, list[str]]:
     missing = {}
     for name, field_patterns in patterns.items():
         text = field_text(data.get(name))
@@ -484,7 +514,9 @@ def probe_records(
     replies: dict[str, dict[str, Any]],
     profile: ContractProfile = DEFAULT_PROFILE,
 ) -> list[dict[str, Any]]:
-    return [reply_record(item, replies[item["id"]], profile) for item in items if item["id"] in replies]
+    return [
+        reply_record(item, replies[item["id"]], profile) for item in items if item["id"] in replies
+    ]
 
 
 def _rates(records: list[dict[str, Any]], profile: ContractProfile) -> dict[str, Any]:
@@ -496,11 +528,17 @@ def _rates(records: list[dict[str, Any]], profile: ContractProfile) -> dict[str,
 
 def summary_categories(records: list[dict[str, Any]], profile: ContractProfile) -> list[str]:
     if profile.categories is not None:
-        return [category for category in profile.categories if any(r["category"] == category for r in records)]
+        return [
+            category
+            for category in profile.categories
+            if any(r["category"] == category for r in records)
+        ]
     return list(dict.fromkeys(r["category"] for r in records if isinstance(r.get("category"), str)))
 
 
-def contract_summary(records: list[dict[str, Any]], profile: ContractProfile = DEFAULT_PROFILE) -> dict[str, Any]:
+def contract_summary(
+    records: list[dict[str, Any]], profile: ContractProfile = DEFAULT_PROFILE
+) -> dict[str, Any]:
     return {
         **_rates(records, profile),
         "failures": dict(Counter(r["failure"] for r in records if r["failure"])),

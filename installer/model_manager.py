@@ -33,11 +33,22 @@ MODELS_RELATIVE_DIR = Path("models")
 COMPOSE_DEFAULT_MODELS_DIR = "../../models"
 
 MODEL_ENV_KEYS: tuple[str, ...] = (
-    "HORUS_MODELS_DIR", "LLM_GGUF_FILE", "LLM_GGUF_URL", "LLM_GGUF_SHA256", "LLM_GGUF_SIZE",
+    "HORUS_MODELS_DIR",
+    "LLM_GGUF_FILE",
+    "LLM_GGUF_URL",
+    "LLM_GGUF_SHA256",
+    "LLM_GGUF_SIZE",
 )
 
 REQUIRED_FIELDS = (
-    "id", "version", "file", "size_bytes", "sha256", "min_ram_gb", "profiles", "mirrors",
+    "id",
+    "version",
+    "file",
+    "size_bytes",
+    "sha256",
+    "min_ram_gb",
+    "profiles",
+    "mirrors",
 )
 
 PARTIAL_SUFFIX = ".part"
@@ -51,12 +62,13 @@ READ_TIMEOUT_SECONDS = 60
 EVENT_EVERY_SECONDS = 0.5
 LINE_EVERY_SECONDS = 15.0
 SPEED_WINDOW_SECONDS = 10.0
-DISK_HEADROOM_BYTES = 1024 ** 3
+DISK_HEADROOM_BYTES = 1024**3
 TOKEN_HOSTS = ("huggingface.co",)
 RETRYABLE_CLIENT_ERRORS = frozenset({408, 425, 429})
 
 SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 CONTENT_RANGE = re.compile(r"^bytes (\d+)-(\d+)/(\d+|\*)$")
+
 
 @dataclass(frozen=True)
 class ModelEntry:
@@ -70,6 +82,7 @@ class ModelEntry:
     mirrors: tuple[str, ...]
     licence: str = ""
     source: str = ""
+
 
 @dataclass(frozen=True)
 class Manifest:
@@ -92,6 +105,7 @@ class Manifest:
         from_bases = [base.rstrip("/") + "/" + entry.file for base in self.mirror_bases]
         return tuple(dict.fromkeys([*entry.mirrors, *from_bases]))
 
+
 def _invalid(path: Path, problem: str) -> InstallError:
     return InstallError(
         EXIT_MODEL_MANIFEST_INVALID,
@@ -101,18 +115,28 @@ def _invalid(path: Path, problem: str) -> InstallError:
         "it again from the ZIP; otherwise fix the entry named above.",
     )
 
+
 def _is_url(value: object) -> bool:
     if not isinstance(value, str):
         return False
     parts = urllib.parse.urlparse(value)
     return parts.scheme in ("http", "https") and bool(parts.netloc)
 
+
 def _is_number(value: object) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
+
 def _is_bare_file_name(value: object) -> bool:
-    return (isinstance(value, str) and bool(value) and value not in (".", "..")
-            and not value.startswith(".") and "/" not in value and "\\" not in value)
+    return (
+        isinstance(value, str)
+        and bool(value)
+        and value not in (".", "..")
+        and not value.startswith(".")
+        and "/" not in value
+        and "\\" not in value
+    )
+
 
 def _entry(item: object, index: int, path: Path) -> ModelEntry:
     if not isinstance(item, dict):
@@ -140,11 +164,18 @@ def _entry(item: object, index: int, path: Path) -> ModelEntry:
     if not isinstance(mirrors, list) or not all(_is_url(url) for url in mirrors):
         raise _invalid(path, f"{where}: mirrors must be a list of http(s) URLs")
     return ModelEntry(
-        id=item["id"], version=item["version"], file=item["file"], size_bytes=size,
-        sha256=item["sha256"], min_ram_gb=item["min_ram_gb"], profiles=tuple(profiles),
-        mirrors=tuple(mirrors), licence=str(item.get("licence", "")),
+        id=item["id"],
+        version=item["version"],
+        file=item["file"],
+        size_bytes=size,
+        sha256=item["sha256"],
+        min_ram_gb=item["min_ram_gb"],
+        profiles=tuple(profiles),
+        mirrors=tuple(mirrors),
+        licence=str(item.get("licence", "")),
         source=str(item.get("source", "")),
     )
+
 
 def parse_manifest(document: object, path: Path) -> Manifest:
     if not isinstance(document, dict):
@@ -165,19 +196,23 @@ def parse_manifest(document: object, path: Path) -> Manifest:
     defaults = document.get("defaults", {})
     if not isinstance(defaults, dict):
         raise _invalid(path, "defaults must map a profile name to a model id")
-    manifest = Manifest(path=path, models=models, defaults=dict(defaults),
-                        mirror_bases=tuple(bases))
+    manifest = Manifest(
+        path=path, models=models, defaults=dict(defaults), mirror_bases=tuple(bases)
+    )
     for profile, model_id in defaults.items():
         entry = manifest.by_id(model_id) if isinstance(model_id, str) else None
         if entry is None:
             raise _invalid(path, f"defaults: {profile} names {model_id!r}, which is not in models")
         if profile not in entry.profiles:
-            raise _invalid(path, f"defaults: {profile} names {model_id}, whose profiles "
-                                 f"do not include {profile}")
+            raise _invalid(
+                path,
+                f"defaults: {profile} names {model_id}, whose profiles do not include {profile}",
+            )
     for entry in models:
         if not manifest.mirrors_for(entry):
             raise _invalid(path, f"{entry.id} has no mirror to download it from")
     return manifest
+
 
 def load_manifest(path: Path) -> Manifest:
     try:
@@ -188,32 +223,40 @@ def load_manifest(path: Path) -> Manifest:
         raise _invalid(path, f"it is not valid JSON: {exc}") from exc
     return parse_manifest(document, path)
 
+
 def manifest_path(repo: Path) -> Path:
     return repo / MANIFEST_RELATIVE_PATH
 
+
 def default_models_dir(repo: Path) -> Path:
     return repo / MODELS_RELATIVE_DIR
+
 
 def compose_models_dir(models_dir: Path, repo: Path) -> str:
     if models_dir.resolve() == default_models_dir(repo).resolve():
         return COMPOSE_DEFAULT_MODELS_DIR
     return str(models_dir.resolve()).replace("\\", "/")
 
+
 def models_dir_from_env(value: str | None, infra: Path) -> Path:
     path = Path(value or COMPOSE_DEFAULT_MODELS_DIR)
     return path if path.is_absolute() else (infra / path).resolve()
 
+
 def verified_marker(target: Path) -> Path:
     return target.with_name(target.name + VERIFIED_SUFFIX)
 
+
 def partial_file(target: Path) -> Path:
     return target.with_name(target.name + PARTIAL_SUFFIX)
+
 
 def _size(path: Path) -> int:
     try:
         return path.stat().st_size
     except OSError:
         return 0
+
 
 def is_verified(entry: ModelEntry, target: Path) -> bool:
     try:
@@ -222,6 +265,7 @@ def is_verified(entry: ModelEntry, target: Path) -> bool:
         return False
     return recorded == entry.sha256 and target.is_file() and _size(target) == entry.size_bytes
 
+
 def sha256_of(path: Path) -> str:
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
@@ -229,14 +273,17 @@ def sha256_of(path: Path) -> str:
             digest.update(block)
     return digest.hexdigest()
 
+
 def _write_marker(entry: ModelEntry, target: Path) -> None:
     marker = verified_marker(target)
     staging = marker.with_name(marker.name + ".tmp")
     staging.write_bytes((entry.sha256 + "\n").encode("ascii"))
     os.replace(staging, marker)
 
+
 def _host(url: str) -> str:
     return urllib.parse.urlparse(url).hostname or url
+
 
 def build_request(url: str, have: int, token: str | None) -> urllib.request.Request:
     request = urllib.request.Request(url, headers={"User-Agent": f"horus-installer/{VERSION}"})
@@ -246,6 +293,7 @@ def build_request(url: str, have: int, token: str | None) -> urllib.request.Requ
         request.add_unredirected_header("Authorization", f"Bearer {token}")
     return request
 
+
 def _reason(exc: BaseException) -> str:
     if isinstance(exc, TimeoutError):
         return f"no data for {READ_TIMEOUT_SECONDS}s"
@@ -253,13 +301,13 @@ def _reason(exc: BaseException) -> str:
         return f"cannot reach it ({exc.reason})"
     return str(exc) or type(exc).__name__
 
+
 def _tried(host: str, reason: str, attempts: int) -> str:
     return f"{host}, {attempts} attempt{'' if attempts == 1 else 's'}: {reason}"
 
-class Progress:
 
-    def __init__(self, log: Log, entry: ModelEntry,
-                 clock: Callable[[], float] = time.monotonic):
+class Progress:
+    def __init__(self, log: Log, entry: ModelEntry, clock: Callable[[], float] = time.monotonic):
         self.log = log
         self.entry = entry
         self.clock = clock
@@ -319,41 +367,63 @@ class Progress:
         total = self.entry.size_bytes
         reached = total if done is None else done
         self.log.events.emit(
-            "download", model=self.entry.id, file=self.entry.file, phase=phase,
-            done_bytes=reached, total_bytes=total, percent=round(100 * reached / total, 1),
-            bytes_per_second=0, seconds_left=None, mirror=self.mirror,
-            resumed_from_bytes=self.resumed_from, text=text,
+            "download",
+            model=self.entry.id,
+            file=self.entry.file,
+            phase=phase,
+            done_bytes=reached,
+            total_bytes=total,
+            percent=round(100 * reached / total, 1),
+            bytes_per_second=0,
+            seconds_left=None,
+            mirror=self.mirror,
+            resumed_from_bytes=self.resumed_from,
+            text=text,
         )
 
     def _emit(self, done: int, now: float) -> None:
         self.last_event = now
         left = self.seconds_left(done)
         self.log.events.emit(
-            "download", model=self.entry.id, file=self.entry.file, phase="downloading",
-            done_bytes=done, total_bytes=self.entry.size_bytes,
+            "download",
+            model=self.entry.id,
+            file=self.entry.file,
+            phase="downloading",
+            done_bytes=done,
+            total_bytes=self.entry.size_bytes,
             percent=round(100 * done / self.entry.size_bytes, 1),
             bytes_per_second=int(self.bytes_per_second()),
             seconds_left=None if left is None else int(left),
-            mirror=self.mirror, resumed_from_bytes=self.resumed_from,
+            mirror=self.mirror,
+            resumed_from_bytes=self.resumed_from,
             text=self.describe(done),
         )
 
-class _TryAgain(Exception):
 
+class _TryAgain(Exception):
     def __init__(self, reason: str, received: int = 0):
         super().__init__(reason)
         self.reason = reason
         self.received = received
 
+
 class _NextMirror(Exception):
     pass
 
-class ModelDownload:
 
-    def __init__(self, log: Log, entry: ModelEntry, models_dir: Path, mirrors, *,
-                 token: str | None = None, opener=None,
-                 clock: Callable[[], float] = time.monotonic,
-                 sleep: Callable[[float], None] = time.sleep):
+class ModelDownload:
+    def __init__(
+        self,
+        log: Log,
+        entry: ModelEntry,
+        models_dir: Path,
+        mirrors,
+        *,
+        token: str | None = None,
+        opener=None,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ):
         self.log = log
         self.entry = entry
         self.target = Path(models_dir) / entry.file
@@ -407,12 +477,15 @@ class ModelDownload:
             except _TryAgain as exc:
                 failures = 1 if exc.received else failures + 1
                 if failures >= allowed:
-                    self.log.warn(f"{host}: {exc.reason}. That is {failures} failures in a "
-                                  f"row. {moving_on}")
+                    self.log.warn(
+                        f"{host}: {exc.reason}. That is {failures} failures in a row. {moving_on}"
+                    )
                     return _tried(host, exc.reason, attempts), False
                 pause = BACKOFF_SECONDS * failures
-                self.log.warn(f"{host}: {exc.reason}. Trying again in {pause}s, from "
-                              f"{human_bytes(_size(self.part))}.")
+                self.log.warn(
+                    f"{host}: {exc.reason}. Trying again in {pause}s, from "
+                    f"{human_bytes(_size(self.part))}."
+                )
                 self.sleep(pause)
                 continue
             resumed = self.resumed
@@ -420,11 +493,14 @@ class ModelDownload:
                 return None
             if resumed and not restarted_after_mismatch:
                 restarted_after_mismatch = True
-                self.log.say("   It was put together from more than one download, so it "
-                             "is downloaded once more from the start.")
+                self.log.say(
+                    "   It was put together from more than one download, so it "
+                    "is downloaded once more from the start."
+                )
                 continue
-            return _tried(host, "the file it serves does not have the expected SHA-256",
-                          attempts), True
+            return _tried(
+                host, "the file it serves does not have the expected SHA-256", attempts
+            ), True
 
     def _fetch(self, url: str) -> None:
         size = self.entry.size_bytes
@@ -436,14 +512,16 @@ class ModelDownload:
             self.resumed = True
             return
         try:
-            response = self.opener.open(build_request(url, have, self.token),
-                                        timeout=READ_TIMEOUT_SECONDS)
+            response = self.opener.open(
+                build_request(url, have, self.token), timeout=READ_TIMEOUT_SECONDS
+            )
         except urllib.error.HTTPError as exc:
             exc.close()
             if exc.code == 416:
                 self._discard_partial()
-                raise _TryAgain("it would not resume this file (HTTP 416), so the "
-                                "download starts again") from exc
+                raise _TryAgain(
+                    "it would not resume this file (HTTP 416), so the download starts again"
+                ) from exc
             if 400 <= exc.code < 500 and exc.code not in RETRYABLE_CLIENT_ERRORS:
                 raise _NextMirror(f"HTTP {exc.code} {exc.reason}") from exc
             raise _TryAgain(f"HTTP {exc.code} {exc.reason}") from exc
@@ -465,22 +543,27 @@ class ModelDownload:
                 raise _TryAgain("it answered a resume without a Content-Range")
             start, total = int(match.group(1)), match.group(3)
             if total != "*" and int(total) != size:
-                raise _NextMirror(f"it serves a file of {int(total):,} bytes, the manifest "
-                                  f"expects {size:,}")
+                raise _NextMirror(
+                    f"it serves a file of {int(total):,} bytes, the manifest expects {size:,}"
+                )
             if start != have:
                 self._discard_partial()
-                raise _TryAgain(f"it resumed at byte {start:,} instead of {have:,}, so the "
-                                "download starts again")
+                raise _TryAgain(
+                    f"it resumed at byte {start:,} instead of {have:,}, so the "
+                    "download starts again"
+                )
             self.resumed = True
             return have
         if status == 200:
             length = (response.headers.get("Content-Length") or "").strip()
             if length.isdigit() and int(length) != size:
-                raise _NextMirror(f"it serves a file of {int(length):,} bytes, the manifest "
-                                  f"expects {size:,}")
+                raise _NextMirror(
+                    f"it serves a file of {int(length):,} bytes, the manifest expects {size:,}"
+                )
             if have:
-                self.log.warn(f"{host} cannot resume a download, so it starts again from "
-                              "the beginning")
+                self.log.warn(
+                    f"{host} cannot resume a download, so it starts again from the beginning"
+                )
             self._discard_partial()
             return 0
         raise _TryAgain(f"unexpected HTTP {status}")
@@ -507,8 +590,9 @@ class ModelDownload:
                 done += len(block)
                 self.progress.advance(done)
         if done < size:
-            raise _TryAgain(f"the connection closed at {human_bytes(done)} of "
-                            f"{human_bytes(size)}", done - start)
+            raise _TryAgain(
+                f"the connection closed at {human_bytes(done)} of {human_bytes(size)}", done - start
+            )
 
     def _verify(self) -> bool:
         entry = self.entry
@@ -526,10 +610,13 @@ class ModelDownload:
             return True
         self._discard_partial()
         self.mismatch = actual
-        self.log.warn(f"The downloaded {entry.file} is damaged: its SHA-256 is {actual}, "
-                      f"expected {entry.sha256}. The file was deleted.")
-        self.progress.phase("failed", f"The downloaded {entry.file} was damaged and was deleted",
-                            done=0)
+        self.log.warn(
+            f"The downloaded {entry.file} is damaged: its SHA-256 is {actual}, "
+            f"expected {entry.sha256}. The file was deleted."
+        )
+        self.progress.phase(
+            "failed", f"The downloaded {entry.file} was damaged and was deleted", done=0
+        )
         return False
 
     def _adopt_existing(self) -> bool:
@@ -542,8 +629,10 @@ class ModelDownload:
                 self.log.ok(f"{entry.file} was already here and has the expected SHA-256")
                 self.progress.phase("verified", f"{entry.file} is in place")
                 return True
-            self.log.warn(f"The {entry.file} already in {self.target.parent} is not the "
-                          "expected file. It is deleted and downloaded again.")
+            self.log.warn(
+                f"The {entry.file} already in {self.target.parent} is not the "
+                "expected file. It is deleted and downloaded again."
+            )
             self.target.unlink()
             verified_marker(self.target).unlink(missing_ok=True)
         except OSError as exc:
@@ -604,9 +693,12 @@ class ModelDownload:
                 "Horus expects: send us install-log.txt.",
             )
         have = _size(self.part)
-        kept = (f"What arrived is kept in {self.part} ({human_bytes(have)} of "
-                f"{human_bytes(entry.size_bytes)}), and the next run resumes from it."
-                if have else "Nothing arrived.")
+        kept = (
+            f"What arrived is kept in {self.part} ({human_bytes(have)} of "
+            f"{human_bytes(entry.size_bytes)}), and the next run resumes from it."
+            if have
+            else "Nothing arrived."
+        )
         return InstallError(
             EXIT_MODEL_DOWNLOAD_FAILED,
             "The language model could not be downloaded.",
@@ -616,6 +708,7 @@ class ModelDownload:
             "proxy or VPN if you use one (set HTTPS_PROXY before running), then\n"
             "run your START-HERE file again: the download resumes where it stopped.",
         )
+
 
 @dataclass(frozen=True)
 class ModelPlan:
@@ -639,8 +732,10 @@ class ModelPlan:
     def ensure(self, log: Log, **options) -> Path:
         return ModelDownload(log, self.entry, self.models_dir, self.mirrors, **options).run()
 
-def plan_for_profile(repo: Path, profile: str, models_dir: str | Path | None = None,
-                     manifest: Manifest | None = None) -> ModelPlan | None:
+
+def plan_for_profile(
+    repo: Path, profile: str, models_dir: str | Path | None = None, manifest: Manifest | None = None
+) -> ModelPlan | None:
     manifest = manifest or load_manifest(manifest_path(repo))
     entry = manifest.default_for(profile)
     if entry is None:
@@ -648,8 +743,10 @@ def plan_for_profile(repo: Path, profile: str, models_dir: str | Path | None = N
     folder = Path(models_dir).expanduser().resolve() if models_dir else default_models_dir(repo)
     return ModelPlan(entry, folder, manifest.mirrors_for(entry))
 
-def plan_from_env(values: dict[str, str], infra: Path,
-                  manifest: Manifest | None) -> ModelPlan | None:
+
+def plan_from_env(
+    values: dict[str, str], infra: Path, manifest: Manifest | None
+) -> ModelPlan | None:
     file = values.get("LLM_GGUF_FILE", "")
     digest = values.get("LLM_GGUF_SHA256", "").lower()
     size = values.get("LLM_GGUF_SIZE", "")
@@ -661,8 +758,16 @@ def plan_from_env(values: dict[str, str], infra: Path,
     if known is not None and known.file == file and known.size_bytes == int(size):
         entry, mirrors = known, (*from_env, *manifest.mirrors_for(known))
     else:
-        entry = ModelEntry(id=file, version="", file=file, size_bytes=int(size), sha256=digest,
-                           min_ram_gb=0, profiles=(), mirrors=tuple(from_env))
+        entry = ModelEntry(
+            id=file,
+            version="",
+            file=file,
+            size_bytes=int(size),
+            sha256=digest,
+            min_ram_gb=0,
+            profiles=(),
+            mirrors=tuple(from_env),
+        )
         mirrors = entry.mirrors
     folder = models_dir_from_env(values.get("HORUS_MODELS_DIR"), infra)
     return ModelPlan(entry, folder, tuple(dict.fromkeys(mirrors)))

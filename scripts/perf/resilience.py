@@ -28,6 +28,7 @@ import httpx
 @dataclass
 class TestResult:
     """Result of a resilience test."""
+
     name: str
     passed: bool
     duration: float
@@ -47,9 +48,9 @@ class ResilienceTests:
 
     async def run_all_tests(self):
         """Run all resilience tests."""
-        print("\n" + "="*70)
+        print("\n" + "=" * 70)
         print("🔧 HORUS RESILIENCE TEST SUITE")
-        print("="*70 + "\n")
+        print("=" * 70 + "\n")
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             # Authenticate first
@@ -91,7 +92,7 @@ class ResilienceTests:
         try:
             response = await client.post(
                 f"{self.mas_url}/auth/token",
-                data={"username": self.admin_user, "password": self.admin_pass}
+                data={"username": self.admin_user, "password": self.admin_pass},
             )
             if response.status_code == 200:
                 self.token = response.json().get("access_token")
@@ -110,7 +111,7 @@ class ResilienceTests:
         response = await client.post(
             f"{self.mas_url}/conversations/create",
             headers=self._headers(),
-            json={"name": unique_name}
+            json={"name": unique_name},
         )
 
         if response.status_code not in [200, 201]:
@@ -119,10 +120,7 @@ class ResilienceTests:
         conv_id = response.json().get("id")
 
         # Verify it exists
-        response = await client.get(
-            f"{self.mas_url}/conversations/all",
-            headers=self._headers()
-        )
+        response = await client.get(f"{self.mas_url}/conversations/all", headers=self._headers())
 
         if response.status_code != 200:
             return False, "Failed to list conversations"
@@ -138,10 +136,7 @@ class ResilienceTests:
     async def test_conversation_recovery(self, client: httpx.AsyncClient):
         """Test conversation data survives and is retrievable."""
         # Get existing conversations
-        response = await client.get(
-            f"{self.mas_url}/conversations/all",
-            headers=self._headers()
-        )
+        response = await client.get(f"{self.mas_url}/conversations/all", headers=self._headers())
 
         if response.status_code != 200:
             return False, "Failed to retrieve conversations"
@@ -153,10 +148,7 @@ class ResilienceTests:
 
     async def test_agent_reregistration(self, client: httpx.AsyncClient):
         """Test that agents can be listed and are tracked."""
-        response = await client.get(
-            f"{self.mas_url}/agents/",
-            headers=self._headers()
-        )
+        response = await client.get(f"{self.mas_url}/agents/", headers=self._headers())
 
         if response.status_code != 200:
             return False, "Failed to list agents"
@@ -184,8 +176,7 @@ class ResilienceTests:
         # Try a query
         try:
             response = await client.post(
-                f"{self.ks_url}/store/query",
-                json={"query": "test query", "k": 3}
+                f"{self.ks_url}/store/query", json={"query": "test query", "k": 3}
             )
             if response.status_code not in [200, 404]:
                 return False, f"Query failed with status {response.status_code}"
@@ -197,18 +188,14 @@ class ResilienceTests:
     async def test_graceful_degradation(self, client: httpx.AsyncClient):
         """Test system handles errors gracefully."""
         # Test invalid endpoint returns proper error
-        response = await client.get(
-            f"{self.mas_url}/nonexistent/endpoint",
-            headers=self._headers()
-        )
+        response = await client.get(f"{self.mas_url}/nonexistent/endpoint", headers=self._headers())
 
         if response.status_code != 404:
             return False, f"Expected 404, got {response.status_code}"
 
         # Test invalid auth returns 401
         response = await client.get(
-            f"{self.mas_url}/conversations/all",
-            headers={"Authorization": "Bearer invalid_token"}
+            f"{self.mas_url}/conversations/all", headers={"Authorization": "Bearer invalid_token"}
         )
 
         if response.status_code != 401:
@@ -218,19 +205,16 @@ class ResilienceTests:
 
     async def test_concurrent_requests(self, client: httpx.AsyncClient):
         """Test system handles concurrent requests."""
+
         async def make_request():
-            return await client.get(
-                f"{self.mas_url}/agents/",
-                headers=self._headers()
-            )
+            return await client.get(f"{self.mas_url}/agents/", headers=self._headers())
 
         # Make 10 concurrent requests
         tasks = [make_request() for _ in range(10)]
         responses = await asyncio.gather(*tasks, return_exceptions=True)
 
         successes = sum(
-            1 for r in responses
-            if not isinstance(r, Exception) and r.status_code == 200
+            1 for r in responses if not isinstance(r, Exception) and r.status_code == 200
         )
 
         if successes < 8:  # Allow some failures
@@ -240,9 +224,9 @@ class ResilienceTests:
 
     def _print_summary(self):
         """Print test summary."""
-        print("="*70)
+        print("=" * 70)
         print("📊 TEST SUMMARY")
-        print("="*70)
+        print("=" * 70)
 
         passed = sum(1 for r in self.results if r.passed)
         total = len(self.results)
@@ -251,7 +235,7 @@ class ResilienceTests:
             status = "✅" if result.passed else "❌"
             print(f"  {status} {result.name}: {result.details}")
 
-        print("-"*70)
+        print("-" * 70)
         print(f"  Total: {passed}/{total} tests passed")
 
         if passed == total:
@@ -259,7 +243,7 @@ class ResilienceTests:
         else:
             print(f"\n⚠️  {total - passed} TESTS FAILED")
 
-        print("="*70 + "\n")
+        print("=" * 70 + "\n")
 
 
 async def main():

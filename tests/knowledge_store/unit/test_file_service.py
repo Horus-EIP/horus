@@ -21,9 +21,7 @@ class TestStoreFile:
             file_service.knowledge_collection, "add", lambda **kw: captured.update(kw)
         )
 
-        await file_service.store_file(
-            DocumentModel(id="1", title="t.txt", content="hello", size=5)
-        )
+        await file_service.store_file(DocumentModel(id="1", title="t.txt", content="hello", size=5))
 
         assert captured["ids"] == ["1:0"]
         assert captured["documents"] == ["hello"]
@@ -95,18 +93,14 @@ class TestStoreFile:
 class TestQueriesAndDelete:
     async def test_query_knowledge_forwards_n_results(self, monkeypatch):
         monkeypatch.setattr(file_service, "get_embedding", lambda *a, **k: [0.0])
-        monkeypatch.setattr(
-            file_service.knowledge_collection, "query", lambda **kw: {"_kw": kw}
-        )
+        monkeypatch.setattr(file_service.knowledge_collection, "query", lambda **kw: {"_kw": kw})
         out = await file_service.query_knowledge("q", 3)
         assert out["_kw"]["n_results"] == 3
         assert out["_kw"]["query_embeddings"] == [[0.0]]
 
     async def test_query_with_filters_passes_where_clause(self, monkeypatch):
         monkeypatch.setattr(file_service, "get_embedding", lambda *a, **k: [0.0])
-        monkeypatch.setattr(
-            file_service.knowledge_collection, "query", lambda **kw: {"_kw": kw}
-        )
+        monkeypatch.setattr(file_service.knowledge_collection, "query", lambda **kw: {"_kw": kw})
         where = {"auto_category": {"$eq": "finance"}}
         out = await file_service.query_with_filters("q", where, 2)
         assert out["_kw"]["where"] == where
@@ -184,8 +178,12 @@ class TestDeleteDocument:
     ):
         unrelated = _stored_file(documents_root, "md/q4.md")
         _upload(
-            fake_collection, "corpus-aaa", "q4.md",
-            source_path="reports/q4.md", content_sha256="aaa", source="corpus",
+            fake_collection,
+            "corpus-aaa",
+            "q4.md",
+            source_path="reports/q4.md",
+            content_sha256="aaa",
+            source="corpus",
         )
 
         out = await file_service.delete_document("corpus-aaa")
@@ -197,8 +195,12 @@ class TestDeleteDocument:
         self, fake_collection, deleted_sources_file
     ):
         _upload(
-            fake_collection, "corpus-aaa", "q4.md",
-            source_path="reports/q4.md", content_sha256="aaa", source="corpus",
+            fake_collection,
+            "corpus-aaa",
+            "q4.md",
+            source_path="reports/q4.md",
+            content_sha256="aaa",
+            source="corpus",
         )
 
         await file_service.delete_document("corpus-aaa")

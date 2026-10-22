@@ -32,7 +32,10 @@ from horus_bench_kit.llama_server import SERVER_PROCESS_NAME as LLM_PROCESS_NAME
 
 LLM_CONTAINER = "llm"
 ROUTING_HISTOGRAM = "mas_routing_decision_seconds"
-ROUTING_HISTOGRAM_FIELDS = {f"{ROUTING_HISTOGRAM}_count": "count", f"{ROUTING_HISTOGRAM}_sum": "seconds"}
+ROUTING_HISTOGRAM_FIELDS = {
+    f"{ROUTING_HISTOGRAM}_count": "count",
+    f"{ROUTING_HISTOGRAM}_sum": "seconds",
+}
 LLM_ROUTING_METHOD = "llm"
 
 _PROMETHEUS_LABEL = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)="((?:[^"\\]|\\.)*)"')
@@ -45,7 +48,9 @@ def parse_routing_decisions(text: str | None) -> dict[str, dict[str, float]] | N
     for line in text.splitlines():
         match = PROMETHEUS_LINE.match(line.strip())
         field = ROUTING_HISTOGRAM_FIELDS.get(match.group(1)) if match else None
-        method = dict(_PROMETHEUS_LABEL.findall(match.group(2) or "")).get("method") if field else None
+        method = (
+            dict(_PROMETHEUS_LABEL.findall(match.group(2) or "")).get("method") if field else None
+        )
         if method is None:
             continue
         try:
@@ -74,4 +79,8 @@ def routing_decision(
         if count:
             methods[method] = int(round(count))
             seconds += later.get("seconds", 0.0) - earlier.get("seconds", 0.0)
-    return {"decisions": sum(methods.values()), "methods": methods, "seconds": round(max(seconds, 0.0), 4)}
+    return {
+        "decisions": sum(methods.values()),
+        "methods": methods,
+        "seconds": round(max(seconds, 0.0), 4),
+    }

@@ -215,12 +215,16 @@ class TestLenientParsing:
         assert answer.sources == [Q4_SOURCE]
 
     def test_a_missing_sources_field_is_an_answer_without_sources(self):
-        answer = parse_answer('{"status": "ok", "answer": "Yes."}', _catalog(Q4_PASSAGE), strict=False)
+        answer = parse_answer(
+            '{"status": "ok", "answer": "Yes."}', _catalog(Q4_PASSAGE), strict=False
+        )
 
         assert (answer.status, answer.sources) == (AnswerStatus.OK, [])
 
     def test_a_raw_newline_inside_the_answer_is_accepted(self):
-        answer = parse_answer('{"status": "ok", "answer": "Line one\nLine two"}', _catalog(), strict=False)
+        answer = parse_answer(
+            '{"status": "ok", "answer": "Line one\nLine two"}', _catalog(), strict=False
+        )
 
         assert answer.answer == "Line one\nLine two"
 
@@ -262,7 +266,9 @@ class TestSchemaAndPrompt:
         assert user == "Passages:\n[S1] Q4.md\nRevenue $4.2M.\n\nRequest: What was Q4 revenue?"
 
     def test_the_request_is_written_once(self):
-        _, user = answer_prompt("Summarise the travel policy", "[S1] Travel.md\nFly economy.", ["S1"])
+        _, user = answer_prompt(
+            "Summarise the travel policy", "[S1] Travel.md\nFly economy.", ["S1"]
+        )
 
         assert user.count("Summarise the travel policy") == 1
 
@@ -334,7 +340,15 @@ class TestAnswerFieldStream:
         return [view.feed(piece) for piece in pieces]
 
     def test_only_the_answer_text_is_shown(self):
-        shown = self._stream(['{"status": "ok", "ans', 'wer": "Q4 ', 'revenue', ' was $4.2M."', ', "sources": ["S1"]}'])
+        shown = self._stream(
+            [
+                '{"status": "ok", "ans',
+                'wer": "Q4 ',
+                "revenue",
+                ' was $4.2M."',
+                ', "sources": ["S1"]}',
+            ]
+        )
 
         assert "".join(shown) == "Q4 revenue was $4.2M."
         assert shown[0] == ""
@@ -342,7 +356,14 @@ class TestAnswerFieldStream:
 
     def test_escapes_split_across_pieces_are_decoded(self):
         shown = self._stream(
-            ['{"status": "ok", "answer": "## Q4\\', 'n\\n**Revenue** \\"net\\', '" \\u00', 'e9t\\u00e9 ', '\\ud83d', '\\ude00"}']
+            [
+                '{"status": "ok", "answer": "## Q4\\',
+                'n\\n**Revenue** \\"net\\',
+                '" \\u00',
+                "e9t\\u00e9 ",
+                "\\ud83d",
+                '\\ude00"}',
+            ]
         )
 
         assert "".join(shown) == '## Q4\n\n**Revenue** "net" été 😀'
@@ -370,7 +391,9 @@ class TestAnswerOf:
 def _sse(*events) -> list[bytes]:
     lines = []
     for event in events:
-        lines.append(event.encode() if isinstance(event, str) else ("data: " + json.dumps(event)).encode())
+        lines.append(
+            event.encode() if isinstance(event, str) else ("data: " + json.dumps(event)).encode()
+        )
         lines.append(b"")
     return lines
 
@@ -466,7 +489,12 @@ class TestPipelineOnTheLlamaServer:
     async def test_a_failed_search_is_a_failed_answer_without_asking_the_model(self, llama_server):
         decision = MagicMock()
         pipeline = RAGPipeline(
-            _retrieval({"data": "Error: Failed to query knowledge store after 3 attempts", "error": "Failed to query knowledge store after 3 attempts"}),
+            _retrieval(
+                {
+                    "data": "Error: Failed to query knowledge store after 3 attempts",
+                    "error": "Failed to query knowledge store after 3 attempts",
+                }
+            ),
             decision,
             tool_registry=MagicMock(),
         )
@@ -482,14 +510,24 @@ class TestPipelineOnTheLlamaServer:
         post = _streaming_post(_contract(sources=["S1"]))
         resolved = {
             "data": "[Indexed file(s) matching 'q4.md': q4.md | ids: doc-q4]\n\nbody",
-            "passages": [{"chunk_id": None, "doc_id": "doc-q4", "title": "q4.md", "page": None, "text": "body"}],
+            "passages": [
+                {
+                    "chunk_id": None,
+                    "doc_id": "doc-q4",
+                    "title": "q4.md",
+                    "page": None,
+                    "text": "body",
+                }
+            ],
         }
         pipeline = RAGPipeline(_retrieval(resolved), _remote_agent(), tool_registry=MagicMock())
 
         with patch("requests.post", post):
             answer = await pipeline.generate_response("Summarise q4.md")
 
-        assert answer.sources == [{"doc_id": "doc-q4", "chunk_id": None, "title": "q4.md", "page": None}]
+        assert answer.sources == [
+            {"doc_id": "doc-q4", "chunk_id": None, "title": "q4.md", "page": None}
+        ]
 
 
 class TestPipelineInProcess:
@@ -503,7 +541,9 @@ class TestPipelineInProcess:
 
         agent = DecisionMakingAgent(decision_model=model, device="cpu")
         pipeline = RAGPipeline(
-            _retrieval({"data": "ignored", "passages": [Q4_PASSAGE]}), agent, tool_registry=MagicMock()
+            _retrieval({"data": "ignored", "passages": [Q4_PASSAGE]}),
+            agent,
+            tool_registry=MagicMock(),
         )
 
         answer = await pipeline.generate_response("What was Q4 2025 revenue?")
@@ -514,7 +554,9 @@ class TestPipelineInProcess:
 
     async def test_an_unreadable_in_process_answer_is_failed(self, monkeypatch):
         monkeypatch.setenv("AGENT_RESPONSE_CACHE", "0")
-        agent = DecisionMakingAgent(decision_model=MagicMock(return_value="Revenue was $4.2M."), device="cpu")
+        agent = DecisionMakingAgent(
+            decision_model=MagicMock(return_value="Revenue was $4.2M."), device="cpu"
+        )
         pipeline = RAGPipeline(_retrieval({"data": "ctx"}), agent, tool_registry=MagicMock())
 
         answer = await pipeline.generate_response("What was Q4 2025 revenue?")

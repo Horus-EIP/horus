@@ -51,7 +51,9 @@ def corpus_problems(expected_names: list[str], stored_titles: list[str]) -> list
     counts: dict[str, int] = {}
     for title in stored_titles:
         counts[title] = counts.get(title, 0) + 1
-    problems = [f"{name} is not in the knowledge store" for name in expected_names if name not in counts]
+    problems = [
+        f"{name} is not in the knowledge store" for name in expected_names if name not in counts
+    ]
     problems += [
         f"{name} is stored {counts[name]} times; delete the duplicates so retrieval is not skewed"
         for name in expected_names

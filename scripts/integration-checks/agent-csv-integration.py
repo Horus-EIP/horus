@@ -1,4 +1,3 @@
-
 import json
 
 from ai_agents.data_extractor_tool import DataExtractorTool
@@ -7,7 +6,7 @@ from ai_agents.file_parser_tool import FileParserTool
 
 class TestReviewIntegration:
     """
-    Integration tests focusing on the combined usage of tools 
+    Integration tests focusing on the combined usage of tools
     for the semester review demonstration.
     """
 
@@ -27,10 +26,7 @@ class TestReviewIntegration:
 
         # 2. File Parser Step
         file_parser = FileParserTool()
-        parsed_text = file_parser.run({
-            "file_content": csv_content,
-            "filename": "expenses.csv"
-        })
+        parsed_text = file_parser.run({"file_content": csv_content, "filename": "expenses.csv"})
 
         assert "1500.00" in parsed_text
         assert "Acme Corp" in parsed_text

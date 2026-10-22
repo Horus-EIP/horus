@@ -83,7 +83,9 @@ class TestAgentNonAnswers:
     def test_patterns_that_accept_an_agent_non_answer_are_reported(self, make_testset, make_item):
         item = make_item(answer_patterns=[r"information"], expected_answer="information")
         errors = self_consistency_errors(make_testset([item]))
-        assert errors == [f"x-01: answer_patterns accept the non-answer {text!r}" for text in CANNED_NON_ANSWERS]
+        assert errors == [
+            f"x-01: answer_patterns accept the non-answer {text!r}" for text in CANNED_NON_ANSWERS
+        ]
 
 
 class TestCorpusProblems:

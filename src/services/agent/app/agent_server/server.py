@@ -115,14 +115,13 @@ pipelines: dict[str, object] = {
 # Legacy single-pipeline aliases — kept so older callers that imported
 # ``active_agent`` keep working. Points at whatever the primary profile is.
 active_agent = pipelines.get(get_primary_profile().type, pipelines["general"])
-rag_pipeline: RAGPipeline | None = (
-    active_agent if isinstance(active_agent, RAGPipeline) else None
-)
+rag_pipeline: RAGPipeline | None = active_agent if isinstance(active_agent, RAGPipeline) else None
 
 
 def get_pipeline_for_type(agent_type: str):
     """Return the pipeline instance to run for a given type (general by default)."""
     return pipelines.get((agent_type or "general").lower(), pipelines["general"])
+
 
 # Shared RabbitMQ work-queue prefix (aligned with MAS ``agent_work_queue_prefix``).
 # The consumer subscribes to ``{prefix}.{type}`` for every unique type across
@@ -176,7 +175,9 @@ def _get_orchestrator_token():
             if response.status_code == 200:
                 _AUTH_TOKEN = response.json().get("access_token")
                 return _AUTH_TOKEN
-            logger.warning(f"Failed to obtain MAS auth token: {response.status_code} - {response.text}")
+            logger.warning(
+                f"Failed to obtain MAS auth token: {response.status_code} - {response.text}"
+            )
         except Exception as exc:  # network/login errors shouldn't crash the agent
             logger.warning(f"Error fetching MAS auth token: {exc}")
     return None
@@ -222,9 +223,7 @@ def _register_one_profile(profile) -> RegistrationStatus:
             "description": profile.description,
             "type": profile.type,
         }
-        response = requests.post(
-            url, json=payload, headers=_build_headers(), timeout=5
-        )
+        response = requests.post(url, json=payload, headers=_build_headers(), timeout=5)
         if response.status_code == 200:
             data = response.json()
             profile.agent_id = data.get("agent_id")
@@ -250,15 +249,11 @@ def _register_one_profile(profile) -> RegistrationStatus:
         agent_errors_total.labels(error_type="registration").inc()
         return "Pending"
     except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
-        logger.warning(
-            "MAS not reachable yet for %s, will retry: %s", profile.name, exc
-        )
+        logger.warning("MAS not reachable yet for %s, will retry: %s", profile.name, exc)
         agent_errors_total.labels(error_type="registration").inc()
         return "Pending"
     except Exception as exc:
-        logger.error(
-            "Error registering %s (will retry): %s", profile.name, exc, exc_info=True
-        )
+        logger.error("Error registering %s (will retry): %s", profile.name, exc, exc_info=True)
         agent_errors_total.labels(error_type="registration").inc()
         return "Pending"
 
@@ -293,9 +288,7 @@ def register_profiles():
             AGENT_API_KEY = primary.api_key
 
         unresolved = [
-            profile
-            for profile in PROFILES
-            if not profile.agent_id and profile.status != "Refused"
+            profile for profile in PROFILES if not profile.agent_id and profile.status != "Refused"
         ]
         if not unresolved:
             if not primary.agent_id:
@@ -346,9 +339,7 @@ def _heartbeat_for_profile(profile) -> None:
             agent_heartbeat_total.labels(status="success").inc()
     except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
         # MAS briefly unreachable (e.g. a restart); the loop retries next cycle.
-        logger.warning(
-            "Heartbeat for %s deferred (MAS unreachable): %s", profile.name, exc
-        )
+        logger.warning("Heartbeat for %s deferred (MAS unreachable): %s", profile.name, exc)
         agent_heartbeat_total.labels(status="error").inc()
     except Exception as exc:
         logger.error("Heartbeat error for %s: %s", profile.name, exc, exc_info=True)
@@ -413,9 +404,7 @@ def claim_task(task_id: str, assigned_agent_id: str | None) -> TaskClaim:
     if response.status_code == 200:
         return TaskClaim.CLAIMED
     if response.status_code == 404 and _detail(response) == "Not Found":
-        logger.warning(
-            "MAS has no claim endpoint (older release); task %s runs unclaimed", task_id
-        )
+        logger.warning("MAS has no claim endpoint (older release); task %s runs unclaimed", task_id)
         return TaskClaim.CLAIMED
     if response.status_code in (404, 409):
         logger.info(
@@ -594,8 +583,10 @@ def mock_ai_mode() -> bool:
 
 
 def mock_ai_warning() -> str:
-    message = ("Mock AI mode: llm-mock answers this agent's model calls, so its answers "
-               "are simulated from the documents, not written by a language model")
+    message = (
+        "Mock AI mode: llm-mock answers this agent's model calls, so its answers "
+        "are simulated from the documents, not written by a language model"
+    )
     if spacy_is_off():
         message += "; spaCy is off, so payments are extracted with regular expressions"
     if os.getenv("OTEL_SDK_DISABLED", "").strip().lower() in ("1", "true", "yes"):
@@ -670,8 +661,8 @@ def get_capabilities():
     tags=["Agent Tasks"],
     responses={
         200: {"description": "Task processed successfully"},
-        500: {"description": "Internal server error during task processing"}
-    }
+        500: {"description": "Internal server error during task processing"},
+    },
 )
 async def receive_task(task: Task, request: Request):
     """Process a task via HTTP, POST the result back to MAS, and return it."""
@@ -692,6 +683,7 @@ async def receive_task(task: Task, request: Request):
     # path always runs the primary profile's pipeline; the RabbitMQ consumer
     # path is multi-queue-aware and dispatches per task type.
     import time as time_module
+
     start_time = time_module.time()
     try:
         task_dict = task.model_dump()
@@ -733,10 +725,7 @@ async def receive_task(task: Task, request: Request):
         )
 
         # Return the result in the format expected by the response_model
-        return Result(
-            agent_id=AGENT_ID if AGENT_ID else "unknown",
-            result=answer.answer
-        )
+        return Result(agent_id=AGENT_ID if AGENT_ID else "unknown", result=answer.answer)
     except Exception as e:
         processing_duration = time_module.time() - start_time
         task_processing_duration.observe(processing_duration)
@@ -745,6 +734,6 @@ async def receive_task(task: Task, request: Request):
         logger.error(
             f"Task processing failed via HTTP: task_id={task.task_id}, error={str(e)}, "
             f"correlation_id={get_correlation_id()}",
-            exc_info=True
+            exc_info=True,
         )
         raise

@@ -20,9 +20,7 @@ def bearer_headers(token: str) -> dict:
 
 async def register_user(username: str, password: str):
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=120.0) as client:
-        r = await client.post(
-            "/auth/register", json={"username": username, "password": password}
-        )
+        r = await client.post("/auth/register", json={"username": username, "password": password})
         if r.status_code == 201:
             print(f"✅ REGISTERED {username}")
             return r.json()
@@ -50,9 +48,7 @@ async def login(username: str, password: str) -> str:
 
 
 async def get_me(headers: dict):
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=120.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=120.0) as client:
         r = await client.get("/users/me")
         if r.status_code == 200:
             print(f"✅ GET /users/me successful: {r.json()}")
@@ -63,9 +59,7 @@ async def get_me(headers: dict):
 
 
 async def get_users_list(headers: dict):
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=120.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=120.0) as client:
         r = await client.get("/users/users_list")
         if r.status_code == 200:
             users = r.json()
@@ -77,24 +71,18 @@ async def get_users_list(headers: dict):
 
 
 async def get_user_details(user_id: int, headers: dict):
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=120.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=120.0) as client:
         r = await client.get(f"/users/user_details/{user_id}")
         if r.status_code == 200:
             print(f"✅ GET /users/user_details/{user_id} successful: {r.json()}")
             return r.json()
         else:
-            print(
-                f"❌ GET /users/user_details/{user_id} failed: {r.status_code} {r.text}"
-            )
+            print(f"❌ GET /users/user_details/{user_id} failed: {r.status_code} {r.text}")
             return None
 
 
 async def delete_user(user_id: int, headers: dict):
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=120.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=120.0) as client:
         r = await client.delete(f"/users/{user_id}")
         if r.status_code == 200:
             print(f"✅ DELETE /users/{user_id} successful: {r.json()}")
@@ -117,9 +105,7 @@ async def main():
         print("\n[Step 1] Admin Login")
         admin_token = await login(USERNAME_ADMIN, PASSWORD_ADMIN)
         if not admin_token:
-            print(
-                "⚠️  Cannot proceed without admin access. Ensure 'admin' user exists."
-            )
+            print("⚠️  Cannot proceed without admin access. Ensure 'admin' user exists.")
             return
         admin_headers = bearer_headers(admin_token)
 

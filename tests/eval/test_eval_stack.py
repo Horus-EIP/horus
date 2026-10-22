@@ -48,11 +48,17 @@ class TestRoutingDecisions:
 
     def test_a_question_the_router_did_not_see(self):
         before = parse_routing_decisions(MAS_METRICS_BEFORE)
-        assert routing_decision(before, dict(before)) == {"decisions": 0, "methods": {}, "seconds": 0.0}
+        assert routing_decision(before, dict(before)) == {
+            "decisions": 0,
+            "methods": {},
+            "seconds": 0.0,
+        }
 
     def test_counters_going_down_or_disappearing_mean_mas_restarted(self):
         before = parse_routing_decisions(MAS_METRICS_BEFORE)
-        assert routing_decision(before, {"embedding": {"count": 1.0, "seconds": 0.01}}) == {"restarted": True}
+        assert routing_decision(before, {"embedding": {"count": 1.0, "seconds": 0.01}}) == {
+            "restarted": True
+        }
         assert routing_decision(before, {}) == {"restarted": True}
 
     def test_missing_scrape_gives_no_decision(self):

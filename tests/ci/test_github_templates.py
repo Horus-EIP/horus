@@ -44,23 +44,38 @@ def form_problems(path: Path) -> list[str]:
             problems.append(f"{where}: type {kind!r}")
             continue
         if kind == "markdown":
-            if not isinstance(attributes.get("value"), str) or "id" in element or "validations" in element:
-                problems.append(f"{where}: a markdown element has a value, and no id or validations")
+            if (
+                not isinstance(attributes.get("value"), str)
+                or "id" in element
+                or "validations" in element
+            ):
+                problems.append(
+                    f"{where}: a markdown element has a value, and no id or validations"
+                )
             continue
         if not isinstance(attributes.get("label"), str) or not attributes["label"].strip():
             problems.append(f"{where}: no label")
         ids.append(element.get("id"))
-        if not isinstance(element.get("id"), str) or not element["id"].replace("-", "").replace("_", "").isalnum():
+        if (
+            not isinstance(element.get("id"), str)
+            or not element["id"].replace("-", "").replace("_", "").isalnum()
+        ):
             problems.append(f"{where}: the id must be letters, digits, - or _")
         required = (element.get("validations") or {}).get("required", False)
         if not isinstance(required, bool):
             problems.append(f"{where}: validations.required must be true or false")
         options = attributes.get("options")
-        if kind == "dropdown" and (not isinstance(options, list) or not options
-                                   or not all(isinstance(option, str) for option in options)):
+        if kind == "dropdown" and (
+            not isinstance(options, list)
+            or not options
+            or not all(isinstance(option, str) for option in options)
+        ):
             problems.append(f"{where}: a dropdown needs a list of options")
-        if kind == "checkboxes" and (not isinstance(options, list) or not options
-                                     or not all(isinstance(option, dict) and option.get("label") for option in options)):
+        if kind == "checkboxes" and (
+            not isinstance(options, list)
+            or not options
+            or not all(isinstance(option, dict) and option.get("label") for option in options)
+        ):
             problems.append(f"{where}: checkboxes need options with a label each")
     if len(ids) != len(set(ids)):
         problems.append(f"{path.name}: ids repeat")
@@ -73,7 +88,9 @@ def config_problems(path: Path) -> list[str]:
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
     problems = []
     if set(config) - {"blank_issues_enabled", "contact_links"}:
-        problems.append(f"{path.name}: unknown keys {set(config) - {'blank_issues_enabled', 'contact_links'}}")
+        problems.append(
+            f"{path.name}: unknown keys {set(config) - {'blank_issues_enabled', 'contact_links'}}"
+        )
     if not isinstance(config.get("blank_issues_enabled"), bool):
         problems.append(f"{path.name}: blank_issues_enabled must be true or false")
     for link in config.get("contact_links", []):
@@ -98,32 +115,52 @@ class IssueForms(unittest.TestCase):
         self.assertEqual(config_problems(path), [])
         config = yaml.safe_load(path.read_text(encoding="utf-8"))
         self.assertIs(config["blank_issues_enabled"], False)
-        self.assertIn("https://github.com/Horus-EIP/horus-bench-kit", [link["url"] for link in config["contact_links"]])
+        self.assertIn(
+            "https://github.com/Horus-EIP/horus-bench-kit",
+            [link["url"] for link in config["contact_links"]],
+        )
 
     def test_the_validator_catches_a_broken_form(self):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         broken = Path(folder.name) / "broken.yml"
-        broken.write_text("name: Bug\nbody:\n  - type: textarea\n    id: a\n  - type: dropdown\n    id: a\n"
-                          "    attributes:\n      label: Pick\n", encoding="utf-8")
+        broken.write_text(
+            "name: Bug\nbody:\n  - type: textarea\n    id: a\n  - type: dropdown\n    id: a\n"
+            "    attributes:\n      label: Pick\n",
+            encoding="utf-8",
+        )
         problems = " | ".join(form_problems(broken))
-        for expected in ("description must be", "name must be more than 3", "body 1: no label",
-                         "a dropdown needs", "ids repeat"):
+        for expected in (
+            "description must be",
+            "name must be more than 3",
+            "body 1: no label",
+            "a dropdown needs",
+            "ids repeat",
+        ):
             with self.subTest(expected):
                 self.assertIn(expected, problems)
 
 
 class OwnersAndPullRequests(unittest.TestCase):
     def test_the_maintainers_team_owns_every_file(self):
-        lines = [line.strip() for line in (GITHUB / "CODEOWNERS").read_text(encoding="utf-8").splitlines()
-                 if line.strip() and not line.startswith("#")]
+        lines = [
+            line.strip()
+            for line in (GITHUB / "CODEOWNERS").read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
         self.assertEqual(lines, ["* @Horus-EIP/maintainers"])
 
     def test_the_pull_request_template_has_the_checklist(self):
         text = (GITHUB / "pull_request_template.md").read_text(encoding="utf-8")
         self.assertTrue(text.startswith("Fixes #"))
         checklist = [line for line in text.splitlines() if line.startswith("- [ ] ")]
-        for expected in ("Fixes #N", "commit norm", "tests", "CHANGELOG.md", "Contributor Agreement"):
+        for expected in (
+            "Fixes #N",
+            "commit norm",
+            "tests",
+            "CHANGELOG.md",
+            "Contributor Agreement",
+        ):
             with self.subTest(expected):
                 self.assertTrue(any(expected in line for line in checklist), checklist)
 

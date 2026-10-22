@@ -5,7 +5,6 @@ See ``docs/architecture.md`` for the wire protocol, error codes,
 and client examples.
 """
 
-
 from fastapi import APIRouter, Depends, Query, WebSocket, status
 from sqlalchemy.orm import Session
 
@@ -63,9 +62,7 @@ async def chat_websocket(
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
-        conversation = (
-            db.query(Conversations).filter(Conversations.id == conv_id_int).first()
-        )
+        conversation = db.query(Conversations).filter(Conversations.id == conv_id_int).first()
 
         if not conversation:
             logger.warning(f"Conversation not found: {conversation_id}")

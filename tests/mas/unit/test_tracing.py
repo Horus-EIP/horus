@@ -107,9 +107,7 @@ class TestInitTracing:
         instrumentor.instrument_app.assert_called_once_with(app, tracer_provider=provider)
 
     def test_leaves_the_app_to_opentelemetry_instrument_when_it_is_active(self):
-        enabled, provider, instrumentor, _ = run_init_tracing(
-            FastAPI(), {}, auto_instrumented=True
-        )
+        enabled, provider, instrumentor, _ = run_init_tracing(FastAPI(), {}, auto_instrumented=True)
 
         assert enabled is True
         assert provider is not None
@@ -184,9 +182,7 @@ class TestPipelineSpans:
 
         assert span_names(exported_spans) == ["announce_plan", "review_step"]
 
-    def test_publishing_runs_inside_a_producer_span_that_the_agent_continues(
-        self, exported_spans
-    ):
+    def test_publishing_runs_inside_a_producer_span_that_the_agent_continues(self, exported_spans):
         channel = MagicMock()
         connection = MagicMock()
         connection.channel.return_value = channel

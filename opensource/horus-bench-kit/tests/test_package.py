@@ -29,18 +29,30 @@ def imported_packages(path):
             yield node.module.split(".")[0]
 
 
-@pytest.mark.parametrize("path", python_files("src", "tests", "scripts", "examples"), ids=lambda path: path.name)
+@pytest.mark.parametrize(
+    "path", python_files("src", "tests", "scripts", "examples"), ids=lambda path: path.name
+)
 def test_every_python_file_starts_with_the_spdx_line(path):
     assert path.read_text(encoding="utf-8").splitlines()[0] == SPDX_LINE
 
 
-@pytest.mark.parametrize("path", sorted(path for folder in ("src", "scripts", "examples") for path in (KIT_ROOT / folder).rglob("*.sh")), ids=lambda path: path.name)
+@pytest.mark.parametrize(
+    "path",
+    sorted(
+        path
+        for folder in ("src", "scripts", "examples")
+        for path in (KIT_ROOT / folder).rglob("*.sh")
+    ),
+    ids=lambda path: path.name,
+)
 def test_every_shell_script_has_the_spdx_line_after_its_shebang(path):
     lines = path.read_text(encoding="utf-8").splitlines()
     assert lines[0].startswith("#!") and lines[1] == SPDX_LINE
 
 
-@pytest.mark.parametrize("path", python_files("src", "scripts", "examples"), ids=lambda path: path.name)
+@pytest.mark.parametrize(
+    "path", python_files("src", "scripts", "examples"), ids=lambda path: path.name
+)
 def test_the_package_imports_only_the_standard_library_itself_and_optional_pyyaml(path):
     allowed = set(sys.stdlib_module_names) | {"horus_bench_kit"} | OPTIONAL_PACKAGES
     assert set(imported_packages(path)) <= allowed
@@ -96,10 +108,20 @@ def test_an_installed_copy_ships_the_fetch_script_and_the_tools():
         distribution = metadata.distribution("horus-bench-kit")
     except metadata.PackageNotFoundError:
         pytest.skip("horus-bench-kit is not installed")
-    if Path(distribution.locate_file("")).resolve() == (KIT_ROOT / "src").resolve() or editable(distribution):
+    if Path(distribution.locate_file("")).resolve() == (KIT_ROOT / "src").resolve() or editable(
+        distribution
+    ):
         pytest.skip("the metadata found is this source tree's, not an installed copy's")
     if not distribution.files:
         pytest.skip("horus-bench-kit is installed without a file list")
     assert "horus_bench_kit/data/fetch-model.sh" in {file.as_posix() for file in distribution.files}
-    scripts = {entry.name for entry in distribution.entry_points if entry.group == "console_scripts"}
-    assert {"hbk-eval", "hbk-llama-bench", "hbk-compare", "hbk-model-candidates", "hbk-contract-probe"} <= scripts
+    scripts = {
+        entry.name for entry in distribution.entry_points if entry.group == "console_scripts"
+    }
+    assert {
+        "hbk-eval",
+        "hbk-llama-bench",
+        "hbk-compare",
+        "hbk-model-candidates",
+        "hbk-contract-probe",
+    } <= scripts

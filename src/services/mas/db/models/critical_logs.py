@@ -14,9 +14,7 @@ class CriticalLogs(Base):
     __tablename__ = "critical_logs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     level = Column(String(20), nullable=False)
     category = Column(String(20), nullable=False)
     component = Column(String(50), nullable=False)

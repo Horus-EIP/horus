@@ -214,9 +214,7 @@ class GpuSampler(threading.Thread):
     @staticmethod
     def _probe() -> bool:
         try:
-            subprocess.run(
-                ["nvidia-smi"], capture_output=True, timeout=10, check=True
-            )
+            subprocess.run(["nvidia-smi"], capture_output=True, timeout=10, check=True)
             return True
         except Exception:  # noqa: BLE001
             return False
@@ -285,13 +283,16 @@ def gpu_info() -> dict:
 
 def git_commit() -> str | None:
     try:
-        return subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            cwd=str(HERE),
-        ).stdout.strip() or None
+        return (
+            subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=str(HERE),
+            ).stdout.strip()
+            or None
+        )
     except Exception:  # noqa: BLE001
         return None
 
@@ -308,16 +309,18 @@ class TaskMetrics:
     submit_http_ms: float | None = None
     first_step_s: float | None = None
     ttft_proxy_s: float | None = None
-    decode_s: float | None = None        # reported model inference time
-    decode_wall_s: float | None = None   # reasoning.done - reasoning.start (cross-check)
+    decode_s: float | None = None  # reported model inference time
+    decode_wall_s: float | None = None  # reasoning.done - reasoning.start (cross-check)
     e2e_s: float | None = None
     output_chars: int | None = None
-    output_tokens: int | None = None       # tokens in the VISIBLE answer (post-guard)
-    generated_tokens: int | None = None    # tokens the model ACTUALLY produced (pre-guard) — exact, spiral-proof
+    output_tokens: int | None = None  # tokens in the VISIBLE answer (post-guard)
+    generated_tokens: int | None = (
+        None  # tokens the model ACTUALLY produced (pre-guard) — exact, spiral-proof
+    )
     prompt_tokens: int | None = None
     decode_tok_s: float | None = None
     decode_tok_s_basis: str | None = None  # "generated" (exact) or "output" (approx fallback)
-    suspected_spiral: bool = False         # anti-loop guard fired / produced far more than it kept
+    suspected_spiral: bool = False  # anti-loop guard fired / produced far more than it kept
     model: str | None = None
     device: str | None = None
     steps: list = field(default_factory=list)
@@ -394,8 +397,9 @@ class PipelineBench:
                 if candidates:
                     _active, aid, skills, name = candidates[0]
                     skill = skills[0] if skills else "research"
-                    print(f"[info] using agent '{name}' id={aid} skill='{skill}' "
-                          f"(active={_active})")
+                    print(
+                        f"[info] using agent '{name}' id={aid} skill='{skill}' (active={_active})"
+                    )
                     return aid, skill
                 last = f"{len(agents or [])} agents, none usable yet"
             else:
@@ -409,7 +413,11 @@ class PipelineBench:
         if not corpus_path.exists():
             print(f"[warn] corpus file missing: {corpus_path}; skipping ingest")
             return 0
-        docs = [json.loads(line) for line in corpus_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        docs = [
+            json.loads(line)
+            for line in corpus_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
         n = 0
         async with httpx.AsyncClient() as c:
             for d in docs:
@@ -510,7 +518,9 @@ class PipelineBench:
                     et = ev.get("type")
                     now = round(time.perf_counter() - t0, 4)
                     if verbose:
-                        print(f"    [{now:7.3f}s] {et:14} {ev.get('step_type') or ev.get('skill_used') or ''}")
+                        print(
+                            f"    [{now:7.3f}s] {et:14} {ev.get('step_type') or ev.get('skill_used') or ''}"
+                        )
                     if et == "task_step":
                         st = ev.get("step_type")
                         m.steps.append({"step_type": st, "offset_s": now})
@@ -712,7 +722,9 @@ async def scenario_concurrency(bench: PipelineBench, prompts, agent_id, skill, l
     return out
 
 
-async def scenario_contention(bench, prompts, agent_id, skill, gen_count, ks_workers, corpus_docs) -> dict:
+async def scenario_contention(
+    bench, prompts, agent_id, skill, gen_count, ks_workers, corpus_docs
+) -> dict:
     print(f"\n=== contention — {gen_count} gens idle vs. {ks_workers}-worker KS ingestion load ===")
 
     # Use ONE fixed, stable prompt for every generation so the idle-vs-loaded
@@ -923,7 +935,9 @@ async def main() -> int:
     )
     parser.add_argument("--gen-count", type=int, default=4, help="Generations per contention phase")
     parser.add_argument("--ks-workers", type=int, default=3, help="KS ingestion load workers")
-    parser.add_argument("--event-timeout", type=float, default=240.0, help="Per-task event timeout (s)")
+    parser.add_argument(
+        "--event-timeout", type=float, default=240.0, help="Per-task event timeout (s)"
+    )
     parser.add_argument("--no-ingest", action="store_true", help="Skip corpus ingestion")
     parser.add_argument("--no-warmup", action="store_true", help="Skip the warmup task")
     parser.add_argument("--hf-tokenizer", default=None, help="HF model id for exact token counts")
@@ -982,7 +996,9 @@ async def main() -> int:
     if want in ("all", "idle"):
         scenarios["idle"] = await scenario_idle(bench, prompts, agent_id, skill, args.repeats)
     if want in ("all", "concurrency"):
-        scenarios["concurrency"] = await scenario_concurrency(bench, prompts, agent_id, skill, levels)
+        scenarios["concurrency"] = await scenario_concurrency(
+            bench, prompts, agent_id, skill, levels
+        )
     if want in ("all", "contention"):
         scenarios["contention"] = await scenario_contention(
             bench, prompts, agent_id, skill, args.gen_count, args.ks_workers, corpus_docs
@@ -1024,8 +1040,12 @@ async def main() -> int:
             "skill": skill,
             "observed_model": observed_model,
             "observed_device": observed_device,
-            "agent_max_new_tokens": _server_param("AGENT_MAX_NEW_TOKENS", "256 (agent code default)"),
-            "knowledge_store_n_results": _server_param("KNOWLEDGE_STORE_N_RESULTS", "8 (agent settings default)"),
+            "agent_max_new_tokens": _server_param(
+                "AGENT_MAX_NEW_TOKENS", "256 (agent code default)"
+            ),
+            "knowledge_store_n_results": _server_param(
+                "KNOWLEDGE_STORE_N_RESULTS", "8 (agent settings default)"
+            ),
         },
         "scenarios": scenarios,
     }

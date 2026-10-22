@@ -9,7 +9,7 @@ This middleware collects Prometheus metrics for all HTTP requests:
 Usage:
     from fastapi import FastAPI
     from core.metrics_middleware import MetricsMiddleware
-    
+
     app = FastAPI()
     app.add_middleware(MetricsMiddleware)
 """
@@ -76,23 +76,23 @@ class MetricsMiddleware(BaseHTTPMiddleware):
     def _normalize_endpoint(self, path: str) -> str:
         """
         Normalize endpoint path to avoid high cardinality metrics.
-        
+
         Replaces dynamic path segments (IDs, UUIDs) with placeholders.
         """
         import re
 
         # Replace UUIDs
         path = re.sub(
-            r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
-            '{id}',
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            "{id}",
             path,
-            flags=re.IGNORECASE
+            flags=re.IGNORECASE,
         )
 
         # Replace numeric IDs
-        path = re.sub(r'/\d+', '/{id}', path)
+        path = re.sub(r"/\d+", "/{id}", path)
 
         # Remove trailing slashes for consistency
-        path = path.rstrip('/')
+        path = path.rstrip("/")
 
-        return path or '/'
+        return path or "/"

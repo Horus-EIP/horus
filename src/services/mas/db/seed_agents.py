@@ -90,9 +90,7 @@ def seed_default_agents(db: Session) -> int:
     """
     log_db_operation("SEED", "agents", "Seeding default agent directory...")
 
-    existing_names = {
-        name for (name,) in db.query(Agents.name).all() if name
-    }
+    existing_names = {name for (name,) in db.query(Agents.name).all() if name}
     inserted = 0
     # Stagger heartbeat in the past so the UI's "stale" indicator visibly fires
     # — these are placeholders until a real worker registers and overrides them.
@@ -123,9 +121,7 @@ def seed_default_agents(db: Session) -> int:
             inserted += 1
         except Exception as exc:
             db.rollback()
-            logger.error(
-                f"Failed to seed agent '{entry['name']}': {exc}", exc_info=True
-            )
+            logger.error(f"Failed to seed agent '{entry['name']}': {exc}", exc_info=True)
             continue
 
     if inserted:
@@ -134,9 +130,7 @@ def seed_default_agents(db: Session) -> int:
             log_success(
                 "seed_agents",
                 f"Seeded {inserted} default agent(s): "
-                + ", ".join(
-                    e["name"] for e in DEFAULT_AGENTS if e["name"] not in existing_names
-                ),
+                + ", ".join(e["name"] for e in DEFAULT_AGENTS if e["name"] not in existing_names),
             )
         except Exception as exc:
             db.rollback()
@@ -159,9 +153,7 @@ def seed_manager_agent(db: Session) -> int:
     (the recurring "Manager agent not found in directory" warning). Idempotent —
     matched by name.
     """
-    manager_entry = next(
-        (e for e in DEFAULT_AGENTS if e["type"] == AgentTypes.MANAGER), None
-    )
+    manager_entry = next((e for e in DEFAULT_AGENTS if e["type"] == AgentTypes.MANAGER), None)
     if manager_entry is None:
         return 0
     if db.query(Agents.id).filter(Agents.name == manager_entry["name"]).first():

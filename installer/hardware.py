@@ -23,8 +23,10 @@ VENDOR_HINTS = (
     ("apple", ("apple m1", "apple m2", "apple m3", "apple m4", "apple silicon")),
 )
 
+
 def _now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+
 
 def _vendor_of(name: str) -> str:
     low = (name or "").lower()
@@ -33,6 +35,7 @@ def _vendor_of(name: str) -> str:
             return vendor
     return "unknown"
 
+
 def _is_wsl() -> bool:
     if sys.platform != "linux":
         return False
@@ -40,6 +43,7 @@ def _is_wsl() -> bool:
         return "microsoft" in Path("/proc/version").read_text(errors="replace").lower()
     except OSError:
         return False
+
 
 def detect_os(log: Log) -> dict:
     info = {
@@ -60,6 +64,7 @@ def detect_os(log: Log) -> dict:
     )
     return info
 
+
 def _cpu_windows(log: Log) -> tuple[str | None, int | None, str]:
     if shutil.which("wmic"):
         name = run(["wmic", "cpu", "get", "Name", "/value"], log, timeout=30)
@@ -71,11 +76,17 @@ def _cpu_windows(log: Log) -> tuple[str | None, int | None, str]:
         log.debug("wmic returned nothing usable for CPU; falling back to CIM")
 
     ps = run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-Command",
-         "$c = Get-CimInstance Win32_Processor; "
-         "($c | Select-Object -First 1 -ExpandProperty Name); "
-         "(($c | Measure-Object -Property NumberOfCores -Sum).Sum)"],
-        log, timeout=60,
+        [
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$c = Get-CimInstance Win32_Processor; "
+            "($c | Select-Object -First 1 -ExpandProperty Name); "
+            "(($c | Measure-Object -Property NumberOfCores -Sum).Sum)",
+        ],
+        log,
+        timeout=60,
     )
     if ps.ok:
         lines = [ln.strip() for ln in ps.out.splitlines() if ln.strip()]
@@ -88,12 +99,14 @@ def _cpu_windows(log: Log) -> tuple[str | None, int | None, str]:
         return model, count, "powershell-cim"
     return None, None, "unavailable"
 
+
 def _kv_value(text: str, key: str) -> str | None:
     for line in (text or "").splitlines():
         if line.strip().startswith(key + "="):
             val = line.split("=", 1)[1].strip()
             return val or None
     return None
+
 
 def _sum_kv_ints(text: str, key: str) -> int | None:
     total = 0
@@ -106,9 +119,11 @@ def _sum_kv_ints(text: str, key: str) -> int | None:
                 found = True
     return total if found else None
 
+
 LINUX_CPUINFO = Path("/proc/cpuinfo")
 
 LINUX_CPU_SYSFS = Path("/sys/devices/system/cpu")
+
 
 def _cores_from_sysfs(root: Path) -> int | None:
     siblings: set[str] = set()
@@ -120,8 +135,10 @@ def _cores_from_sysfs(root: Path) -> int | None:
     siblings.discard("")
     return len(siblings) or None
 
-def _cpu_linux(log: Log, cpuinfo: Path = LINUX_CPUINFO,
-               sysfs: Path = LINUX_CPU_SYSFS) -> tuple[str | None, int | None, str]:
+
+def _cpu_linux(
+    log: Log, cpuinfo: Path = LINUX_CPUINFO, sysfs: Path = LINUX_CPU_SYSFS
+) -> tuple[str | None, int | None, str]:
     model, count, source = _cpu_from_cpuinfo(log, cpuinfo)
     if count is not None:
         return model, count, source
@@ -129,6 +146,7 @@ def _cpu_linux(log: Log, cpuinfo: Path = LINUX_CPUINFO,
     if from_sysfs is not None:
         return model, from_sysfs, f"{sysfs.as_posix()} thread siblings"
     return model, None, source
+
 
 def _cpu_from_cpuinfo(log: Log, cpuinfo: Path) -> tuple[str | None, int | None, str]:
     try:
@@ -162,6 +180,7 @@ def _cpu_from_cpuinfo(log: Log, cpuinfo: Path) -> tuple[str | None, int | None, 
     log.debug("/proc/cpuinfo has no physical id/core id pairs")
     return model, None, "/proc/cpuinfo (no topology)"
 
+
 def _cpu_macos(log: Log) -> tuple[str | None, int | None, str]:
     model = run(["sysctl", "-n", "machdep.cpu.brand_string"], log, timeout=20)
     cores = run(["sysctl", "-n", "hw.physicalcpu"], log, timeout=20)
@@ -169,11 +188,13 @@ def _cpu_macos(log: Log) -> tuple[str | None, int | None, str]:
     count = int(cores.out.strip()) if cores.ok and cores.out.strip().isdigit() else None
     return name, count, "sysctl"
 
+
 PF_AVX2_INSTRUCTIONS_AVAILABLE = 40
 
 X86_MACHINES = frozenset({"x86_64", "amd64", "x64", "i386", "i686", "x86"})
 
 APPLE_SILICON = "Apple Silicon: an ARM processor, which has no AVX2 and does not need it"
+
 
 def _avx2_in_cpuinfo(cpuinfo: Path) -> tuple[bool | None, str]:
     try:
@@ -186,16 +207,19 @@ def _avx2_in_cpuinfo(cpuinfo: Path) -> tuple[bool | None, str]:
             return "avx2" in value.split(), f"{cpuinfo.as_posix()} flags"
     return None, f"{cpuinfo.as_posix()} lists no flags"
 
+
 def _avx2_windows(kernel32=None) -> tuple[bool | None, str]:
     source = f"IsProcessorFeaturePresent({PF_AVX2_INSTRUCTIONS_AVAILABLE})"
     try:
         if kernel32 is None:
             import ctypes
+
             kernel32 = ctypes.windll.kernel32
         present = kernel32.IsProcessorFeaturePresent(PF_AVX2_INSTRUCTIONS_AVAILABLE)
     except (AttributeError, ImportError, OSError) as exc:
         return None, f"{source} failed: {exc}"
     return bool(present), source
+
 
 def _avx2_macos(log: Log) -> tuple[bool | None, str]:
     arm = run(["sysctl", "-n", "hw.optional.arm64"], log, timeout=20)
@@ -207,8 +231,8 @@ def _avx2_macos(log: Log) -> tuple[bool | None, str]:
         return value == "1", "sysctl hw.optional.avx2_0"
     return None, "sysctl hw.optional.avx2_0 gave no answer"
 
-def detect_avx2(log: Log, osinfo: dict, cpuinfo: Path = LINUX_CPUINFO,
-                kernel32=None) -> dict:
+
+def detect_avx2(log: Log, osinfo: dict, cpuinfo: Path = LINUX_CPUINFO, kernel32=None) -> dict:
     machine = str(osinfo.get("machine") or "").lower()
     if machine and machine not in X86_MACHINES:
         found, source = None, f"{machine} processor: AVX2 is an x86 feature it does not need"
@@ -221,6 +245,7 @@ def detect_avx2(log: Log, osinfo: dict, cpuinfo: Path = LINUX_CPUINFO,
     label = {True: "yes", False: "NO", None: "not checked"}[found]
     log.info(f"avx2: {label} ({source})")
     return {"avx2": found, "avx2_source": source}
+
 
 def detect_cpu(log: Log) -> dict:
     if sys.platform == "win32":
@@ -251,6 +276,7 @@ def detect_cpu(log: Log) -> dict:
         log.info(f"cpu: {label}  {physical} physical / {logical} logical cores")
     return info
 
+
 def detect_memory(log: Log) -> dict:
     total: int | None = None
     source = "unavailable"
@@ -258,9 +284,15 @@ def detect_memory(log: Log) -> dict:
 
     if sys.platform == "win32":
         ps = run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command",
-             "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory"],
-            log, timeout=60,
+            [
+                "powershell",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
+            ],
+            log,
+            timeout=60,
         )
         raw = ps.out.strip() if ps.ok else ""
         if raw.isdigit():
@@ -287,8 +319,10 @@ def detect_memory(log: Log) -> dict:
             detail = str(exc)
 
     if total is None:
-        log.warn(f"Could not read total RAM ({detail or 'no method succeeded'}). "
-                 "Assuming the smaller-model profile.")
+        log.warn(
+            f"Could not read total RAM ({detail or 'no method succeeded'}). "
+            "Assuming the smaller-model profile."
+        )
     else:
         log.info(f"ram: {human_bytes(total)} ({source})")
 
@@ -299,18 +333,28 @@ def detect_memory(log: Log) -> dict:
         "detail": detail,
     }
 
+
 def detect_docker_memory(log: Log) -> dict:
     res = run(["docker", "info", "--format", "{{.MemTotal}}"], log, timeout=45)
     raw = res.out.strip() if res.ok else ""
     if raw.isdigit() and int(raw) > 0:
         total = int(raw)
         log.info(f"docker memory: {human_bytes(total)} (docker info MemTotal)")
-        return {"mem_total_bytes": total, "mem_total_gib": round(total / 1024**3, 2),
-                "source": "docker info MemTotal", "detail": ""}
+        return {
+            "mem_total_bytes": total,
+            "mem_total_gib": round(total / 1024**3, 2),
+            "source": "docker info MemTotal",
+            "detail": "",
+        }
     detail = res.first_line() or "docker info returned nothing"
     log.info(f"docker memory: unknown ({detail})")
-    return {"mem_total_bytes": None, "mem_total_gib": None, "source": "unavailable",
-            "detail": detail}
+    return {
+        "mem_total_bytes": None,
+        "mem_total_gib": None,
+        "source": "unavailable",
+        "detail": detail,
+    }
+
 
 def detect_disk(log: Log, path: Path | None = None) -> dict:
     target = path
@@ -320,11 +364,15 @@ def detect_disk(log: Log, path: Path | None = None) -> dict:
         usage = shutil.disk_usage(str(target))
     except (OSError, RuntimeError) as exc:
         log.debug(f"disk_usage({target if target is not None else 'home'}) failed: {exc}")
-        return {"path": str(target) if target is not None else None,
-                "free_bytes": None, "total_bytes": None, "detail": str(exc)}
+        return {
+            "path": str(target) if target is not None else None,
+            "free_bytes": None,
+            "total_bytes": None,
+            "detail": str(exc),
+        }
     log.info(f"disk: {human_bytes(usage.free)} free of {human_bytes(usage.total)} at {target}")
-    return {"path": str(target), "free_bytes": usage.free, "total_bytes": usage.total,
-            "detail": ""}
+    return {"path": str(target), "free_bytes": usage.free, "total_bytes": usage.total, "detail": ""}
+
 
 def _parse_nvidia_smi(out: str) -> list[dict]:
     gpus = []
@@ -345,16 +393,23 @@ def _parse_nvidia_smi(out: str) -> list[dict]:
         gpus.append({"name": name, "vram_bytes": vram, "vram_label": mem})
     return gpus
 
+
 def _video_adapters_windows(log: Log) -> list[str]:
     ps = run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-Command",
-         "Get-CimInstance Win32_VideoController | "
-         "ForEach-Object { $_.Name }"],
-        log, timeout=60,
+        [
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Get-CimInstance Win32_VideoController | ForEach-Object { $_.Name }",
+        ],
+        log,
+        timeout=60,
     )
     if not ps.ok:
         return []
     return [ln.strip() for ln in ps.out.splitlines() if ln.strip()]
+
 
 def _video_adapters_linux(log: Log) -> list[str]:
     if not shutil.which("lspci"):
@@ -368,6 +423,7 @@ def _video_adapters_linux(log: Log) -> list[str]:
         if "vga compatible controller" in low or "3d controller" in low:
             names.append(line.split(":", 2)[-1].strip())
     return names
+
 
 def detect_gpu_host(log: Log, osinfo: dict) -> dict:
     info: dict = {
@@ -383,46 +439,58 @@ def detect_gpu_host(log: Log, osinfo: dict) -> dict:
     }
 
     if osinfo.get("system") == "Darwin":
-        info.update({
-            "vendor": "apple",
-            "name": f"Apple {osinfo.get('machine', '')} integrated GPU".strip(),
-            "source": "platform (macOS)",
-            "detail": "Not probed: no GPU on macOS can run this stack (see notes).",
-        })
+        info.update(
+            {
+                "vendor": "apple",
+                "name": f"Apple {osinfo.get('machine', '')} integrated GPU".strip(),
+                "source": "platform (macOS)",
+                "detail": "Not probed: no GPU on macOS can run this stack (see notes).",
+            }
+        )
         return info
 
     if shutil.which("nvidia-smi"):
         res = run(
-            ["nvidia-smi", "--query-gpu=name,memory.total",
-             "--format=csv,noheader"],
-            log, timeout=60,
+            ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
+            log,
+            timeout=60,
         )
         if res.ok and res.out.strip():
             gpus = _parse_nvidia_smi(res.out)
             if gpus:
                 largest = max(gpus, key=lambda g: g["vram_bytes"] or 0)
-                info.update({
-                    "vendor": "nvidia",
-                    "name": largest["name"],
-                    "vram_bytes": largest["vram_bytes"],
-                    "count": len(gpus),
-                    "gpus": gpus,
-                    "source": "nvidia-smi",
-                })
-                drv = run(["nvidia-smi", "--query-gpu=driver_version",
-                           "--format=csv,noheader"], log, timeout=30)
+                info.update(
+                    {
+                        "vendor": "nvidia",
+                        "name": largest["name"],
+                        "vram_bytes": largest["vram_bytes"],
+                        "count": len(gpus),
+                        "gpus": gpus,
+                        "source": "nvidia-smi",
+                    }
+                )
+                drv = run(
+                    ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+                    log,
+                    timeout=30,
+                )
                 if drv.ok and drv.out.strip():
                     info["driver_version"] = drv.out.strip().splitlines()[0].strip()
-                vram = human_bytes(largest["vram_bytes"]) if largest["vram_bytes"] else "unknown VRAM"
-                log.info(f"gpu (host): {largest['name']}  {vram}"
-                         + (f"  driver {info['driver_version']}" if info["driver_version"] else "")
-                         + (f"  ({len(gpus)} devices)" if len(gpus) > 1 else ""))
+                vram = (
+                    human_bytes(largest["vram_bytes"]) if largest["vram_bytes"] else "unknown VRAM"
+                )
+                log.info(
+                    f"gpu (host): {largest['name']}  {vram}"
+                    + (f"  driver {info['driver_version']}" if info["driver_version"] else "")
+                    + (f"  ({len(gpus)} devices)" if len(gpus) > 1 else "")
+                )
                 return info
         info["detail"] = res.first_line() or "nvidia-smi produced no output"
         log.debug(f"nvidia-smi present but unusable: {info['detail']}")
 
-    adapters = (_video_adapters_windows(log) if sys.platform == "win32"
-                else _video_adapters_linux(log))
+    adapters = (
+        _video_adapters_windows(log) if sys.platform == "win32" else _video_adapters_linux(log)
+    )
     info["adapters"] = adapters
     if adapters:
         chosen = adapters[0]
@@ -430,17 +498,20 @@ def detect_gpu_host(log: Log, osinfo: dict) -> dict:
             if _vendor_of(adapter) in ("nvidia", "amd"):
                 chosen = adapter
                 break
-        info.update({
-            "vendor": _vendor_of(chosen),
-            "name": chosen,
-            "count": len(adapters),
-            "source": "Win32_VideoController" if sys.platform == "win32" else "lspci",
-        })
+        info.update(
+            {
+                "vendor": _vendor_of(chosen),
+                "name": chosen,
+                "count": len(adapters),
+                "source": "Win32_VideoController" if sys.platform == "win32" else "lspci",
+            }
+        )
         log.info(f"gpu (host): {chosen}  [vendor={info['vendor']}, no NVIDIA driver found]")
     else:
         info["detail"] = info["detail"] or "no video adapters enumerated"
         log.info("gpu (host): none detected")
     return info
+
 
 def _wsl_status(log: Log) -> dict:
     status = {"present": False, "default_version": None, "detail": ""}
@@ -456,10 +527,9 @@ def _wsl_status(log: Log) -> dict:
         status["default_version"] = 2
     elif "default version: 1" in low:
         status["default_version"] = 1
-    status["detail"] = " / ".join(
-        ln.strip() for ln in blob.splitlines() if ln.strip()
-    )[:400]
+    status["detail"] = " / ".join(ln.strip() for ln in blob.splitlines() if ln.strip())[:400]
     return status
+
 
 def _skip_reason(osinfo: dict, gpu: dict, allow: bool) -> str | None:
     if not allow:
@@ -480,6 +550,7 @@ def _skip_reason(osinfo: dict, gpu: dict, allow: bool) -> str | None:
     if vendor == "none" and not gpu.get("adapters"):
         return "no GPU of any kind was detected on the host"
     return None
+
 
 def docker_gpu_test(log: Log, osinfo: dict, gpu: dict, allow: bool = True) -> dict:
     outcome: dict = {
@@ -542,9 +613,13 @@ def docker_gpu_test(log: Log, osinfo: dict, gpu: dict, allow: bool = True) -> di
         log.say("    " + line)
     return outcome
 
+
 def _gpu_failure_advice(osinfo: dict, gpu: dict, outcome: dict) -> list[str]:
-    lines = [f"Reason: {outcome['detail'].splitlines()[0][:160]}" if outcome["detail"]
-             else "Reason: the container could not open a CUDA device."]
+    lines = [
+        f"Reason: {outcome['detail'].splitlines()[0][:160]}"
+        if outcome["detail"]
+        else "Reason: the container could not open a CUDA device."
+    ]
 
     if osinfo.get("system") == "Windows":
         wsl = outcome.get("wsl") or {}
@@ -587,26 +662,46 @@ def _gpu_failure_advice(osinfo: dict, gpu: dict, outcome: dict) -> list[str]:
     lines.append("You can continue on the CPU now and re-run the installer later.")
     return lines
 
+
 def _partial_probe(reason: str) -> dict:
     return {
         "installer_version": VERSION,
         "timestamp_utc": _now(),
         "os": {"platform": sys.platform, "system": platform.system()},
         "cpu": {},
-        "memory": {"total_bytes": None, "total_gib": None,
-                   "source": "unavailable", "detail": reason},
-        "docker": {"mem_total_bytes": None, "mem_total_gib": None,
-                   "source": "unavailable", "detail": reason},
-        "disk": {"path": None, "free_bytes": None, "total_bytes": None,
-                 "detail": reason},
-        "gpu": {"vendor": "unknown", "name": None, "vram_bytes": None,
-                "count": 0, "gpus": [], "adapters": [], "source": "none",
-                "detail": reason, "driver_version": None},
-        "docker_gpu_test": {"attempted": False, "usable": None,
-                            "image": GPU_TEST_IMAGE, "command": None,
-                            "skipped_reason": "the hardware probe failed before "
-                                              "the test could run",
-                            "detail": reason, "wsl": None},
+        "memory": {
+            "total_bytes": None,
+            "total_gib": None,
+            "source": "unavailable",
+            "detail": reason,
+        },
+        "docker": {
+            "mem_total_bytes": None,
+            "mem_total_gib": None,
+            "source": "unavailable",
+            "detail": reason,
+        },
+        "disk": {"path": None, "free_bytes": None, "total_bytes": None, "detail": reason},
+        "gpu": {
+            "vendor": "unknown",
+            "name": None,
+            "vram_bytes": None,
+            "count": 0,
+            "gpus": [],
+            "adapters": [],
+            "source": "none",
+            "detail": reason,
+            "driver_version": None,
+        },
+        "docker_gpu_test": {
+            "attempted": False,
+            "usable": None,
+            "image": GPU_TEST_IMAGE,
+            "command": None,
+            "skipped_reason": "the hardware probe failed before the test could run",
+            "detail": reason,
+            "wsl": None,
+        },
         "cuda_usable_in_docker": False,
         "gpu_test_ran": False,
         "probe_failed": True,
@@ -618,22 +713,28 @@ def _partial_probe(reason: str) -> dict:
         ],
     }
 
+
 def _mib(value: object) -> int | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
         return None
     return int(value) // 1024**2
 
+
 def fingerprint(probe_data: dict) -> dict:
     memory = probe_data.get("memory") or {}
     docker = probe_data.get("docker") or {}
     gpu = probe_data.get("gpu") or {}
-    cards = [f"{card.get('name')} {_mib(card.get('vram_bytes'))} MiB"
-             for card in gpu.get("gpus") or [] if isinstance(card, dict)]
+    cards = [
+        f"{card.get('name')} {_mib(card.get('vram_bytes'))} MiB"
+        for card in gpu.get("gpus") or []
+        if isinstance(card, dict)
+    ]
     return {
         "ram_mib": _mib(memory.get("total_bytes")),
         "docker_memory_mib": _mib(docker.get("mem_total_bytes")),
         "gpus": sorted(str(name) for name in [*cards, *(gpu.get("adapters") or [])]),
     }
+
 
 def reusable_gpu_test(previous: dict | None, current: dict) -> dict | None:
     if not isinstance(previous, dict) or previous.get("hardware_fingerprint") != current:
@@ -644,15 +745,19 @@ def reusable_gpu_test(previous: dict | None, current: dict) -> dict | None:
         return None
     return {**test, "reused_from": str(previous.get("generated_utc") or "an earlier run")}
 
+
 def probe(log: Log, allow_docker_gpu_test: bool = True, previous: dict | None = None) -> dict:
     try:
         return _probe_machine(log, allow_docker_gpu_test, previous)
     except Exception as exc:  # noqa: BLE001 - the promise is the point
         reason = f"{type(exc).__name__}: {exc}"
         log.debug(f"hardware probe raised: {reason}")
-        log.warn(f"The hardware probe failed ({reason}). Continuing with "
-                 "unknown hardware and the cautious CPU profile.")
+        log.warn(
+            f"The hardware probe failed ({reason}). Continuing with "
+            "unknown hardware and the cautious CPU profile."
+        )
         return _partial_probe(reason)
+
 
 def _probe_machine(log: Log, allow_docker_gpu_test: bool, previous: dict | None) -> dict:
     log.step("Hardware")
@@ -668,8 +773,10 @@ def _probe_machine(log: Log, allow_docker_gpu_test: bool, previous: dict | None)
     reused = reusable_gpu_test(previous, current) if allow_docker_gpu_test else None
     if reused is not None:
         gpu_test = reused
-        log.ok(f"Same RAM, Docker memory and GPUs as on {reused['reused_from']}, when "
-               "Docker could use the GPU: the GPU test is not run again.")
+        log.ok(
+            f"Same RAM, Docker memory and GPUs as on {reused['reused_from']}, when "
+            "Docker could use the GPU: the GPU test is not run again."
+        )
     else:
         gpu_test = docker_gpu_test(log, osinfo, gpu, allow=allow_docker_gpu_test)
 
@@ -696,19 +803,27 @@ def _probe_machine(log: Log, allow_docker_gpu_test: bool, previous: dict | None)
     if memory.get("total_bytes") is None:
         notes.append("Total RAM could not be measured; the cautious profile was chosen.")
     if docker.get("mem_total_bytes") is None:
-        notes.append(f"The memory Docker can use was not read ({docker.get('detail')}). "
-                     "The RAM of the machine stood in for it, which overstates it on "
-                     "Windows and macOS, where Docker runs in a virtual machine.")
+        notes.append(
+            f"The memory Docker can use was not read ({docker.get('detail')}). "
+            "The RAM of the machine stood in for it, which overstates it on "
+            "Windows and macOS, where Docker runs in a virtual machine."
+        )
     if cpu.get("avx2") is False:
-        notes.append("The processor has no AVX2. llama-server still runs, because the "
-                     "official llama.cpp build picks the code the processor supports when "
-                     "it starts, but generation on the CPU is much slower.")
+        notes.append(
+            "The processor has no AVX2. llama-server still runs, because the "
+            "official llama.cpp build picks the code the processor supports when "
+            "it starts, but generation on the CPU is much slower."
+        )
     if gpu_test.get("reused_from"):
-        notes.append(f"The Docker GPU test was not run again: RAM, Docker memory and GPUs "
-                     f"are the same as on {gpu_test['reused_from']}, when it passed.")
+        notes.append(
+            f"The Docker GPU test was not run again: RAM, Docker memory and GPUs "
+            f"are the same as on {gpu_test['reused_from']}, when it passed."
+        )
     if gpu_test.get("usable") is False:
-        notes.append("A GPU exists on the host but Docker could not use it. "
-                     "See docker_gpu_test.advice in this file.")
+        notes.append(
+            "A GPU exists on the host but Docker could not use it. "
+            "See docker_gpu_test.advice in this file."
+        )
     if gpu_test.get("usable") is None and gpu_test.get("skipped_reason"):
         notes.append(f"The Docker GPU test did not run: {gpu_test['skipped_reason']}")
 
@@ -733,7 +848,9 @@ def _probe_machine(log: Log, allow_docker_gpu_test: bool, previous: dict | None)
     log.info(f"cuda usable in docker: {result['cuda_usable_in_docker']}")
     return result
 
+
 _SECRET_HINTS = ("PASSWORD", "SECRET", "TOKEN", "KEY", "CREDENTIAL")
+
 
 def _redact(env: dict) -> dict:
     out = {}
@@ -744,6 +861,7 @@ def _redact(env: dict) -> dict:
             out[key] = value
     return out
 
+
 def read_profile_json(path: Path) -> dict | None:
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
@@ -751,16 +869,23 @@ def read_profile_json(path: Path) -> dict | None:
         return None
     return document if isinstance(document, dict) else None
 
+
 def _profile_facts(profile_name: str, probe_data: dict) -> tuple:
     import profiles
 
     try:
         prof = profiles.get(profile_name)
-        return (profiles.provenance_for(profile_name, probe_data), prof.runs_vllm,
-                profiles.model_server(profile_name), prof.confidence, prof.trigger,
-                list(prof.notes))
+        return (
+            profiles.provenance_for(profile_name, probe_data),
+            prof.runs_vllm,
+            profiles.model_server(profile_name),
+            prof.confidence,
+            prof.trigger,
+            list(prof.notes),
+        )
     except Exception as exc:  # noqa: BLE001 - a bad name must not lose the probe
         return {}, None, None, "unknown", "", [f"profile lookup failed: {exc}"]
+
 
 def write_profile_json(
     path: Path,
@@ -775,13 +900,13 @@ def write_profile_json(
 
     if refusal is None:
         provenance, runs_vllm, model_server, confidence, trigger, notes = _profile_facts(
-            profile_name, probe_data)
+            profile_name, probe_data
+        )
     else:
         provenance, runs_vllm, model_server, confidence = {}, None, None, "unknown"
         trigger, notes = "", []
 
-    derived = sorted(k for k, v in provenance.items()
-                     if v.get("provenance") == profiles.DERIVED)
+    derived = sorted(k for k, v in provenance.items() if v.get("provenance") == profiles.DERIVED)
 
     document = {
         "schema": "horus-profile/1",
@@ -818,8 +943,7 @@ def write_profile_json(
             "hardware_fingerprint is the RAM, the Docker memory and the GPU list. "
             "The next run compares it: when nothing changed and Docker could use "
             "the GPU, the Docker GPU test is not run again.",
-            "Send this file with any performance report; it is the first thing "
-            "we ask for.",
+            "Send this file with any performance report; it is the first thing we ask for.",
         ],
     }
     if refusal is not None:
@@ -836,8 +960,10 @@ def write_profile_json(
             raise
         log.warn(f"Could not write {path}: {exc}")
         if refusal is None:
-            log.warn("The install continues, but please quote install-log.txt "
-                     "instead of horus-profile.json if you report a problem.")
+            log.warn(
+                "The install continues, but please quote install-log.txt "
+                "instead of horus-profile.json if you report a problem."
+            )
         return
     if log:
         log.ok(f"Hardware profile written to {path}")

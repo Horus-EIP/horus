@@ -27,6 +27,7 @@ import httpx
 @dataclass
 class RAGBenchmarkResult:
     """Results from a RAG benchmark run."""
+
     name: str
     iterations: int
     mean_time_ms: float
@@ -47,9 +48,7 @@ class RAGBenchmark:
         self.results: list[RAGBenchmarkResult] = []
 
     async def benchmark_query(
-        self,
-        iterations: int = 50,
-        queries: list[str] = None
+        self, iterations: int = 50, queries: list[str] = None
     ) -> RAGBenchmarkResult:
         """Benchmark knowledge store queries."""
         if queries is None:
@@ -96,17 +95,10 @@ class RAGBenchmark:
                     print(f"  Query error: {e}")
 
         return self._create_result(
-            "Knowledge Store Query",
-            iterations,
-            times,
-            successes,
-            results_counts
+            "Knowledge Store Query", iterations, times, successes, results_counts
         )
 
-    async def benchmark_document_add(
-        self,
-        iterations: int = 20
-    ) -> RAGBenchmarkResult:
+    async def benchmark_document_add(self, iterations: int = 20) -> RAGBenchmarkResult:
         """Benchmark document addition."""
         times = []
         successes = 0
@@ -114,7 +106,8 @@ class RAGBenchmark:
         async with httpx.AsyncClient() as client:
             for i in range(iterations):
                 content = (
-                    f"This is benchmark document {i} with some sample content for testing purposes. " * 10
+                    f"This is benchmark document {i} with some sample content for testing purposes. "
+                    * 10
                 )
                 doc = {
                     "id": f"benchmark_doc_{i}_{time.time()}",
@@ -136,13 +129,7 @@ class RAGBenchmark:
                     print(f"  Add error: {e}")
                 times.append(time.perf_counter() - start)
 
-        return self._create_result(
-            "Document Add",
-            iterations,
-            times,
-            successes,
-            [1] * iterations
-        )
+        return self._create_result("Document Add", iterations, times, successes, [1] * iterations)
 
     async def benchmark_health_check(self, iterations: int = 100) -> RAGBenchmarkResult:
         """Benchmark health check (baseline latency)."""
@@ -153,23 +140,14 @@ class RAGBenchmark:
             for _ in range(iterations):
                 start = time.perf_counter()
                 try:
-                    response = await client.get(
-                        f"{self.ks_url}/health",
-                        timeout=5.0
-                    )
+                    response = await client.get(f"{self.ks_url}/health", timeout=5.0)
                     if response.status_code == 200:
                         successes += 1
                 except Exception:
                     pass
                 times.append(time.perf_counter() - start)
 
-        return self._create_result(
-            "Health Check",
-            iterations,
-            times,
-            successes,
-            [0] * iterations
-        )
+        return self._create_result("Health Check", iterations, times, successes, [0] * iterations)
 
     def _create_result(
         self,
@@ -177,7 +155,7 @@ class RAGBenchmark:
         iterations: int,
         times: list[float],
         successes: int,
-        results_counts: list[int]
+        results_counts: list[int],
     ) -> RAGBenchmarkResult:
         """Create a benchmark result."""
         if not times:
@@ -199,17 +177,17 @@ class RAGBenchmark:
             min_time_ms=min(times_ms),
             max_time_ms=max(times_ms),
             success_rate=(successes / iterations) * 100,
-            avg_results_count=statistics.mean(results_counts) if results_counts else 0
+            avg_results_count=statistics.mean(results_counts) if results_counts else 0,
         )
 
     async def run_all_benchmarks(self, iterations: int = 50) -> list[RAGBenchmarkResult]:
         """Run all RAG benchmarks."""
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("RAG Pipeline Performance Benchmark")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"Knowledge Store URL: {self.ks_url}")
         print(f"Iterations: {iterations}")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
         results = []
 
@@ -233,11 +211,13 @@ class RAGBenchmark:
 
     def print_results(self):
         """Print benchmark results."""
-        print(f"\n{'='*90}")
+        print(f"\n{'=' * 90}")
         print("RAG BENCHMARK RESULTS")
-        print(f"{'='*90}")
-        print(f"{'Benchmark':<25} {'Mean':<10} {'Median':<10} {'P95':<10} {'P99':<10} {'Success':<10}")
-        print(f"{'-'*90}")
+        print(f"{'=' * 90}")
+        print(
+            f"{'Benchmark':<25} {'Mean':<10} {'Median':<10} {'P95':<10} {'P99':<10} {'Success':<10}"
+        )
+        print(f"{'-' * 90}")
 
         for r in self.results:
             print(
@@ -249,7 +229,7 @@ class RAGBenchmark:
                 f"{r.success_rate:>7.1f}%"
             )
 
-        print(f"{'-'*90}")
+        print(f"{'-' * 90}")
 
         # Query-specific stats
         for r in self.results:
@@ -275,7 +255,7 @@ class RAGBenchmark:
                     "avg_results": r.avg_results_count,
                 }
                 for r in self.results
-            ]
+            ],
         }
 
         with open(filename, "w") as f:

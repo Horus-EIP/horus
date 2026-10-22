@@ -69,9 +69,7 @@ class TestFormatDelegationContext:
         assert db._format_delegation_context([]) == ""
 
     def test_single_entry_without_data_has_no_data_line(self):
-        out = db._format_delegation_context(
-            [{"agent_id": "alpha", "request": "do X"}]
-        )
+        out = db._format_delegation_context([{"agent_id": "alpha", "request": "do X"}])
         assert out.startswith("Prior delegation context:\n")
         assert "[Agent 1 — alpha]" in out
         assert "Request: do X" in out
@@ -115,9 +113,7 @@ class TestSendDelegationResult:
     def test_success_posts_expected_payload_and_headers(self):
         srv = _make_server(agent_id="agent-42", headers={"X-Api-Key": "secret"})
         resp = SimpleNamespace(status_code=200, text="ok")
-        with _patch_server(srv), patch.object(
-            db.requests, "post", return_value=resp
-        ) as post:
+        with _patch_server(srv), patch.object(db.requests, "post", return_value=resp) as post:
             db._send_delegation_result("deleg-1", "the result")
 
         post.assert_called_once()
@@ -138,9 +134,11 @@ class TestSendDelegationResult:
     def test_non_200_status_logs_warning_but_does_not_raise(self):
         srv = _make_server()
         resp = SimpleNamespace(status_code=503, text="unavailable")
-        with _patch_server(srv), patch.object(
-            db.requests, "post", return_value=resp
-        ), patch.object(db.logger, "warning") as warn:
+        with (
+            _patch_server(srv),
+            patch.object(db.requests, "post", return_value=resp),
+            patch.object(db.logger, "warning") as warn,
+        ):
             db._send_delegation_result("deleg-2", "r")
         warn.assert_called_once()
         # The warning carries the failing status code.
@@ -148,9 +146,11 @@ class TestSendDelegationResult:
 
     def test_request_exception_is_swallowed_and_logged(self):
         srv = _make_server()
-        with _patch_server(srv), patch.object(
-            db.requests, "post", side_effect=RuntimeError("connection refused")
-        ), patch.object(db.logger, "error") as err:
+        with (
+            _patch_server(srv),
+            patch.object(db.requests, "post", side_effect=RuntimeError("connection refused")),
+            patch.object(db.logger, "error") as err,
+        ):
             # Must not propagate.
             db._send_delegation_result("deleg-3", "r")
         err.assert_called_once()
@@ -166,9 +166,7 @@ class TestProcessDelegationMessage:
     def test_no_rag_pipeline_sends_unsupported_message_and_returns(self):
         srv = _make_server(rag_pipeline=None)
         payload = {"id": "m1", "content": {"request": "hi"}}
-        with _patch_server(srv), patch.object(
-            db, "_send_delegation_result"
-        ) as send:
+        with _patch_server(srv), patch.object(db, "_send_delegation_result") as send:
             db._process_delegation_message(payload)
 
         # Early-return path: the fixed "only supported for general" notice is
@@ -185,9 +183,7 @@ class TestProcessDelegationMessage:
             "sender_agent_id": "boss",
             "content": {"request": "summarise"},
         }
-        with _patch_server(srv), patch.object(
-            db, "_send_delegation_result"
-        ) as send:
+        with _patch_server(srv), patch.object(db, "_send_delegation_result") as send:
             db._process_delegation_message(payload)
 
         # The task dict is built in react mode with a delegation-prefixed id.
@@ -275,15 +271,15 @@ class TestProcessDelegationMessage:
 
     def test_pipeline_exception_sends_failure_message_and_clears_context(self):
         react_agent = SimpleNamespace(_incoming_delegation_context=None)
-        pipeline = _make_pipeline(
-            react_agent=react_agent, raises=RuntimeError("model exploded")
-        )
+        pipeline = _make_pipeline(react_agent=react_agent, raises=RuntimeError("model exploded"))
         srv = _make_server(rag_pipeline=pipeline)
         payload = {"id": "m6", "content": {"request": "boom"}}
 
-        with _patch_server(srv), patch.object(
-            db, "_send_delegation_result"
-        ) as send, patch.object(db.logger, "error") as err:
+        with (
+            _patch_server(srv),
+            patch.object(db, "_send_delegation_result") as send,
+            patch.object(db.logger, "error") as err,
+        ):
             db._process_delegation_message(payload)
 
         # The exception is caught and surfaced as the delegation result text.
@@ -311,9 +307,7 @@ class TestProcessDelegationMessage:
             "delegation_context": [{"agent_id": "z", "request": "r"}],
         }
 
-        with _patch_server(srv), patch.object(
-            db, "_send_delegation_result"
-        ) as send:
+        with _patch_server(srv), patch.object(db, "_send_delegation_result") as send:
             db._process_delegation_message(payload)
 
         send.assert_called_once_with("m7", "noreact")
@@ -330,9 +324,7 @@ class TestProcessDelegationMessage:
             "content": {"request": "q"},
             "delegation_context": [{"agent_id": "z", "request": "r"}],
         }
-        with _patch_server(srv), patch.object(
-            db, "_send_delegation_result"
-        ) as send:
+        with _patch_server(srv), patch.object(db, "_send_delegation_result") as send:
             db._process_delegation_message(payload)
         # Pipeline still ran; result forwarded; react_agent stayed None untouched.
         send.assert_called_once_with("m8", "FALSY OK")
@@ -348,9 +340,7 @@ class TestProcessDelegationMessage:
         pipeline.process_task = _process_task
         srv = _make_server(rag_pipeline=pipeline)
         payload = {"id": "m9", "content": {"request": "q"}}
-        with _patch_server(srv), patch.object(
-            db, "_send_delegation_result"
-        ) as send:
+        with _patch_server(srv), patch.object(db, "_send_delegation_result") as send:
             db._process_delegation_message(payload)
         send.assert_called_once_with("m9", "")
 
@@ -359,9 +349,7 @@ class TestProcessDelegationMessage:
         # ``.get(..., default)`` branch and still reaches the pipeline.
         pipeline = _make_pipeline(response="EMPTY OK")
         srv = _make_server(rag_pipeline=pipeline)
-        with _patch_server(srv), patch.object(
-            db, "_send_delegation_result"
-        ) as send:
+        with _patch_server(srv), patch.object(db, "_send_delegation_result") as send:
             db._process_delegation_message({})
 
         assert pipeline.last_task["task_id"] == "delegation_"
@@ -381,9 +369,11 @@ class TestProcessDelegationMessage:
         payload = {"id": "mloop", "content": {"request": "q"}}
 
         async def _driver():
-            with _patch_server(srv), patch.object(
-                db, "_send_delegation_result"
-            ) as send, patch.object(db.asyncio, "new_event_loop") as new_loop:
+            with (
+                _patch_server(srv),
+                patch.object(db, "_send_delegation_result") as send,
+                patch.object(db.asyncio, "new_event_loop") as new_loop,
+            ):
                 db._process_delegation_message(payload)
                 # A loop was already running -> no fresh loop is created.
                 new_loop.assert_not_called()

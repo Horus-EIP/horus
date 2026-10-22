@@ -127,12 +127,23 @@ class MyTarget:
 
     async def ask(self, question, *, item_id, files=()):
         answer = ...  # call your system here
-        return {"mode": "chat", "status": "ok", "answer": answer, "timing_source": "http", "total_s": 1.2}
+        return {
+            "mode": "chat",
+            "status": "ok",
+            "answer": answer,
+            "timing_source": "http",
+            "total_s": 1.2,
+        }
 
 
 testset = load_testset("examples/testset.json")
 records = asyncio.run(run_items(MyTarget(), testset["items"], record=question_record))
-report = build_report(label="my-run", run={"target": "my-system"}, testset={"version": testset["version"]}, records=records)
+report = build_report(
+    label="my-run",
+    run={"target": "my-system"},
+    testset={"version": testset["version"]},
+    records=records,
+)
 ```
 
 An outcome that also lists the documents your system retrieved (`retrieved_sources`) or cited (`cited_sources`) gets its sources scored. A product that records more per question, such as its own timings, extends the report through a `Profile`: its own report kind, extra outcome fields, extra summary sections and fallback texts that never count as an answer. See [Extending the evaluation report](docs/FORMATS.md#extending-the-evaluation-report).

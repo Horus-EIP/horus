@@ -25,14 +25,14 @@ spec.loader.exec_module(no_model_loads)
 
 CLEAN = {
     "mas": "[bootstrap_llm] LLM_BACKEND=vllm -> no local model needed; skipping download.\n"
-           "[info     ] Background thread: preloading orchestrator LLM...\n"
-           "[info     ] Background thread: orchestrator LLM preload finished.\n"
-           "[info     ] Background thread: preloading sentence-embedding model...\n"
-           "mas  | INFO Embeddings come from http://llm-mock:8080/v1 with the model horus-mock, 384 values "
-           "per vector: no embedding model is loaded in MAS\n",
-    "knowledge_store": "knowledge_store  | {\"message\": \"Embeddings come from http://llm-mock:8080/v1: "
-                       "no embedding model is loaded in this service\"}\n"
-                       "knowledge_store  | {\"message\": \"spaCy is off (HORUS_SPACY=off): entities\"}\n",
+    "[info     ] Background thread: preloading orchestrator LLM...\n"
+    "[info     ] Background thread: orchestrator LLM preload finished.\n"
+    "[info     ] Background thread: preloading sentence-embedding model...\n"
+    "mas  | INFO Embeddings come from http://llm-mock:8080/v1 with the model horus-mock, 384 values "
+    "per vector: no embedding model is loaded in MAS\n",
+    "knowledge_store": 'knowledge_store  | {"message": "Embeddings come from http://llm-mock:8080/v1: '
+    'no embedding model is loaded in this service"}\n'
+    'knowledge_store  | {"message": "spaCy is off (HORUS_SPACY=off): entities"}\n',
     "agent": "agent  | INFO spaCy is off (HORUS_SPACY=off): payments are extracted with regular expressions\n",
     "llm-mock": "llm-mock  | INFO embeddings: inputs=1 dimensions=384 status=200\n",
 }
@@ -87,7 +87,10 @@ class NoModelLoads(unittest.TestCase):
             self.assertEqual(no_model_loads.main([]), 2)
 
     def test_every_line_it_watches_is_still_written_by_its_service(self):
-        lines = [*no_model_loads.LOADS, *(line for found in no_model_loads.NO_MODEL.values() for line in found)]
+        lines = [
+            *no_model_loads.LOADS,
+            *(line for found in no_model_loads.NO_MODEL.values() for line in found),
+        ]
         for line in lines:
             if not line.source:
                 continue
@@ -101,12 +104,22 @@ class RealSearchStillRunsInCi(unittest.TestCase):
     def test_the_knowledge_store_job_downloads_bge_and_requires_the_real_search_test(self):
         job = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))["jobs"]["test-knowledge-store"]
         names = [step.get("name") for step in job["steps"]]
-        tests = next(step for step in job["steps"] if step.get("name") == "Run Knowledge Store unit tests with coverage")
-        download = next(step for step in job["steps"] if step.get("name") == "Download the BGE model for the real-search test")
+        tests = next(
+            step
+            for step in job["steps"]
+            if step.get("name") == "Run Knowledge Store unit tests with coverage"
+        )
+        download = next(
+            step
+            for step in job["steps"]
+            if step.get("name") == "Download the BGE model for the real-search test"
+        )
         self.assertLess(names.index(download["name"]), names.index(tests["name"]))
         self.assertIn("TextEmbedding('BAAI/bge-base-en-v1.5')", download["run"])
         self.assertEqual(tests["env"]["HORUS_REQUIRE_MODEL_TESTS"], "1")
-        self.assertEqual(tests["env"]["FASTEMBED_CACHE_PATH"], download["env"]["FASTEMBED_CACHE_PATH"])
+        self.assertEqual(
+            tests["env"]["FASTEMBED_CACHE_PATH"], download["env"]["FASTEMBED_CACHE_PATH"]
+        )
         self.assertIn("tests/knowledge_store", tests["run"])
         self.assertTrue((REPO / REAL_SEARCH_TEST).is_file())
 

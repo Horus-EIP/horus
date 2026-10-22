@@ -31,7 +31,7 @@ from common import (  # noqa: E402
     Log,
 )
 
-GIB = 1024 ** 3
+GIB = 1024**3
 LINUX = {"os": {"platform": "linux"}}
 WINDOWS = {"os": {"platform": "win32"}}
 CPU_FILES = "docker-compose.yml:docker-compose.cpu.yml"
@@ -75,8 +75,9 @@ class MockProfile(unittest.TestCase):
 
     def test_it_runs_the_cpu_images_under_the_mock_overlay(self):
         self.assertEqual(profiles.env_for("mock", LINUX)["COMPOSE_FILE"], LEAN_MOCK_FILES)
-        self.assertEqual(profiles.env_for("mock", WINDOWS)["COMPOSE_FILE"],
-                         LEAN_MOCK_FILES.replace(":", ";"))
+        self.assertEqual(
+            profiles.env_for("mock", WINDOWS)["COMPOSE_FILE"], LEAN_MOCK_FILES.replace(":", ";")
+        )
         self.assertEqual(profiles.image_flavor("mock"), "cpu")
         self.assertEqual(profiles.model_server("mock"), profiles.MOCK_MODEL_SERVER)
 
@@ -89,8 +90,9 @@ class MockProfile(unittest.TestCase):
         self.assertIn("llm-mock", profiles.provenance_for("mock")["COMPOSE_FILE"]["why"])
         for key in ("LLM_VLLM_URL", "LLM_VLLM_MODEL"):
             with self.subTest(key):
-                self.assertRegex(profiles.settings_for("mock")[key].why,
-                                 "overlay|docker-compose.mock.yml")
+                self.assertRegex(
+                    profiles.settings_for("mock")[key].why, "overlay|docker-compose.mock.yml"
+                )
 
     def test_the_description_says_the_answers_are_simulated(self):
         text = profiles.describe("mock")
@@ -106,7 +108,9 @@ class MockProfile(unittest.TestCase):
 
     def test_the_mock_model_server_is_named_from_the_compose_file(self):
         self.assertEqual(profiles.model_server_for_compose_file(MOCK_FILES), "llm-mock")
-        self.assertEqual(profiles.model_server_for_compose_file(MOCK_FILES.replace(":", ";")), "llm-mock")
+        self.assertEqual(
+            profiles.model_server_for_compose_file(MOCK_FILES.replace(":", ";")), "llm-mock"
+        )
         self.assertEqual(profiles.model_server_for_compose_file(CPU_FILES), "llm")
 
     def test_the_overlay_goes_right_after_the_cpu_overlay(self):
@@ -121,9 +125,12 @@ class MockProfile(unittest.TestCase):
         for (current, sep), expected in cases.items():
             with self.subTest(current):
                 self.assertEqual(profiles.with_mock_overlay(current, sep), expected)
-        self.assertEqual(profiles.without_mock_overlay(f"{MOCK_FILES}:extra.yml", ":"),
-                         f"{CPU_FILES}:extra.yml")
-        self.assertEqual(profiles.without_mock_overlay(profiles.MOCK_OVERLAY, ":"), "docker-compose.yml")
+        self.assertEqual(
+            profiles.without_mock_overlay(f"{MOCK_FILES}:extra.yml", ":"), f"{CPU_FILES}:extra.yml"
+        )
+        self.assertEqual(
+            profiles.without_mock_overlay(profiles.MOCK_OVERLAY, ":"), "docker-compose.yml"
+        )
 
     def test_no_model_is_planned_or_checked(self):
         log = mock.MagicMock()
@@ -141,7 +148,9 @@ class Offer(unittest.TestCase):
         stack = contextlib.ExitStack()
         self.addCleanup(stack.close)
         stack.enter_context(mock.patch.object(horus_install, "PROFILE_JSON", self.record))
-        stack.enter_context(mock.patch.object(hardware, "probe", side_effect=lambda *a, **k: small_machine()))
+        stack.enter_context(
+            mock.patch.object(hardware, "probe", side_effect=lambda *a, **k: small_machine())
+        )
         stack.enter_context(contextlib.redirect_stdout(self.out))
         self.log = Log(self.tmp / "log.txt", events=Events(True, self.events))
         self.addCleanup(self.log.close, 0)
@@ -150,8 +159,10 @@ class Offer(unittest.TestCase):
         return horus_install.build_parser().parse_args(list(argv))
 
     def decide(self, *argv: str, answer: str | None = None, terminal: bool = True):
-        with mock.patch.object(horus_install, "interactive_terminal", return_value=terminal), \
-                mock.patch("builtins.input", return_value=answer) as asked:
+        with (
+            mock.patch.object(horus_install, "interactive_terminal", return_value=terminal),
+            mock.patch("builtins.input", return_value=answer) as asked,
+        ):
             try:
                 return horus_install.decide_profile(self.log, self.args(*argv), None), asked
             except InstallError as refused:
@@ -176,7 +187,9 @@ class Offer(unittest.TestCase):
         self.assertEqual(name, profiles.MOCK_PROFILE)
         asked.assert_called_once()
         self.assertIn("simulated", asked.call_args[0][0])
-        self.assertEqual(json.loads(self.record.read_text(encoding="utf-8"))["profile"]["name"], "mock")
+        self.assertEqual(
+            json.loads(self.record.read_text(encoding="utf-8"))["profile"]["name"], "mock"
+        )
         self.assertIn("MOCK AI MODE", self.out.getvalue())
 
     def test_an_interactive_no_still_stops_the_install(self):
@@ -201,7 +214,9 @@ class Offer(unittest.TestCase):
         self.assertFalse(profiles.mock_fits(machine_with(profiles.MOCK_MIN_GIB - 0.01)))
         self.assertTrue(profiles.mock_fits({}))
         self.assertEqual(profiles.supported_floor_gib("mock"), profiles.MOCK_MIN_GIB)
-        self.assertEqual(profiles.memory_decision(small_machine())["mock_min_gib"], profiles.MOCK_MIN_GIB)
+        self.assertEqual(
+            profiles.memory_decision(small_machine())["mock_min_gib"], profiles.MOCK_MIN_GIB
+        )
 
     def test_below_the_mock_minimum_the_reasons_say_mock_mode_does_not_fit_either(self):
         name, reasons = profiles.select_profile(machine_with(2.5))
@@ -219,20 +234,30 @@ class Offer(unittest.TestCase):
     def test_the_refusal_below_the_mock_minimum_says_how_much_mock_mode_needs(self):
         record = unsupported.refusal(machine_with(2.5)).record()
         self.assertIn(profiles.MOCK_TOO_SMALL, record["need"])
-        self.assertIn("give Docker at least 4 GB of memory, then run START-HERE again with "
-                      "--profile mock", record["alternatives"][-2])
-        self.assertNotIn("Test Horus without a language model: run START-HERE again",
-                         " ".join(record["alternatives"]))
+        self.assertIn(
+            "give Docker at least 4 GB of memory, then run START-HERE again with --profile mock",
+            record["alternatives"][-2],
+        )
+        self.assertNotIn(
+            "Test Horus without a language model: run START-HERE again",
+            " ".join(record["alternatives"]),
+        )
 
     def test_forcing_mock_below_its_minimum_warns_with_the_measured_figure(self):
         warning = profiles.forced_profile_warning("mock", machine_with(2.5))
-        self.assertIn(f"mock needs {profiles.MOCK_MIN_GIB:.1f} GiB ({profiles.MOCK_MEASURED})", warning)
+        self.assertIn(
+            f"mock needs {profiles.MOCK_MIN_GIB:.1f} GiB ({profiles.MOCK_MEASURED})", warning
+        )
         self.assertNotIn("answers that take far longer", warning)
-        self.assertIsNone(profiles.forced_profile_warning("mock", machine_with(profiles.MOCK_MIN_GIB)))
+        self.assertIsNone(
+            profiles.forced_profile_warning("mock", machine_with(profiles.MOCK_MIN_GIB))
+        )
 
     def test_only_mock_has_its_own_disk_need(self):
         self.assertEqual(profiles.free_disk_gib("mock", from_source=False), profiles.MOCK_FREE_GIB)
-        self.assertEqual(profiles.free_disk_gib("mock", from_source=True), profiles.MOCK_SOURCE_FREE_GIB)
+        self.assertEqual(
+            profiles.free_disk_gib("mock", from_source=True), profiles.MOCK_SOURCE_FREE_GIB
+        )
         self.assertIsNone(profiles.free_disk_gib("cpu-standard", from_source=False))
         self.assertLess(profiles.MOCK_FREE_GIB, profiles.MOCK_SOURCE_FREE_GIB)
 
@@ -240,8 +265,10 @@ class Offer(unittest.TestCase):
         class ReachedTheQuestions(Exception):
             pass
 
-        for argv, need in ((("--registry", "ghcr.io/acme"), profiles.MOCK_FREE_GIB),
-                           (("--build-from-source",), profiles.MOCK_SOURCE_FREE_GIB)):
+        for argv, need in (
+            (("--registry", "ghcr.io/acme"), profiles.MOCK_FREE_GIB),
+            (("--build-from-source",), profiles.MOCK_SOURCE_FREE_GIB),
+        ):
             with self.subTest(argv=argv), contextlib.ExitStack() as stack:
                 patch = stack.enter_context
                 patch(mock.patch.object(horus_install, "find_repo", return_value=self.tmp))
@@ -250,8 +277,12 @@ class Offer(unittest.TestCase):
                 consent = patch(mock.patch.object(horus_install, "consent"))
                 consent.choose.side_effect = ReachedTheQuestions
                 with self.assertRaises(ReachedTheQuestions):
-                    horus_install._dispatch(self.log, self.args("--profile", "mock", "--non-interactive", *argv))
-                self.assertEqual(preflight.run_install_checks.call_args.kwargs["mock_free_gib"], need)
+                    horus_install._dispatch(
+                        self.log, self.args("--profile", "mock", "--non-interactive", *argv)
+                    )
+                self.assertEqual(
+                    preflight.run_install_checks.call_args.kwargs["mock_free_gib"], need
+                )
 
     def test_the_images_named_include_llm_mock(self):
         self.assertIn("llm-mock", horus_install.describe_images("ghcr.io/acme", "mock"))
@@ -268,22 +299,29 @@ class MockDisk(unittest.TestCase):
 
     def check(self, free_gib: float, required_gib: float, mock_install: bool):
         usage = mock.Mock(free=int(free_gib * GIB), total=int(500 * GIB))
-        with mock.patch.object(preflight, "_docker_root", return_value=str(self.tmp)), \
-                mock.patch.object(preflight.shutil, "disk_usage", return_value=usage), \
-                contextlib.redirect_stdout(io.StringIO()):
+        with (
+            mock.patch.object(preflight, "_docker_root", return_value=str(self.tmp)),
+            mock.patch.object(preflight.shutil, "disk_usage", return_value=usage),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
             return preflight.check_disk(self.log, int(required_gib * GIB), mock=mock_install)
 
     def test_a_mock_install_with_less_free_disk_than_it_needs_stops_with_its_own_figure(self):
         with self.assertRaises(InstallError) as caught:
             self.check(10.0, profiles.MOCK_FREE_GIB, mock_install=True)
         self.assertEqual(caught.exception.code, preflight.EXIT_DISK_SPACE)
-        self.assertTrue(caught.exception.headline.startswith(
-            f"Mock AI mode needs {profiles.MOCK_FREE_GIB:.1f} GB free. Found 10.0 GB at"))
+        self.assertTrue(
+            caught.exception.headline.startswith(
+                f"Mock AI mode needs {profiles.MOCK_FREE_GIB:.1f} GB free. Found 10.0 GB at"
+            )
+        )
         self.assertIn("docs/mock-ai.md", caught.exception.detail)
         self.assertNotIn("GPU", caught.exception.headline + caught.exception.fix)
 
     def test_a_mock_install_with_enough_free_disk_goes_on(self):
-        self.assertTrue(self.check(profiles.MOCK_FREE_GIB, profiles.MOCK_FREE_GIB, mock_install=True)["checked"])
+        self.assertTrue(
+            self.check(profiles.MOCK_FREE_GIB, profiles.MOCK_FREE_GIB, mock_install=True)["checked"]
+        )
 
     def test_the_other_profiles_keep_their_message(self):
         with self.assertRaises(InstallError) as caught:
@@ -291,13 +329,18 @@ class MockDisk(unittest.TestCase):
         self.assertIn("for a CPU install", caught.exception.headline)
 
     def test_the_install_checks_pass_the_mock_need_on_to_the_disk_check(self):
-        with mock.patch.object(preflight, "check_disk") as disk, \
-                mock.patch.object(preflight, "check_network"), \
-                mock.patch.object(preflight, "check_ports"), \
-                contextlib.redirect_stdout(io.StringIO()):
+        with (
+            mock.patch.object(preflight, "check_disk") as disk,
+            mock.patch.object(preflight, "check_network"),
+            mock.patch.object(preflight, "check_ports"),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
             preflight.run_install_checks(self.log, self.tmp, mock_free_gib=profiles.MOCK_FREE_GIB)
             preflight.run_install_checks(self.log, self.tmp)
-        self.assertEqual(disk.call_args_list[0], mock.call(self.log, int(profiles.MOCK_FREE_GIB * GIB), mock=True))
+        self.assertEqual(
+            disk.call_args_list[0],
+            mock.call(self.log, int(profiles.MOCK_FREE_GIB * GIB), mock=True),
+        )
         self.assertEqual(disk.call_args_list[1], mock.call(self.log))
 
 
@@ -319,12 +362,19 @@ class InstalledStack(unittest.TestCase):
         stack.enter_context(mock.patch.object(horus_install, "_require_docker"))
         stack.enter_context(contextlib.redirect_stdout(self.out))
         self.stopped: list[tuple[list[str], str]] = []
-        stack.enter_context(mock.patch.object(
-            horus_install, "stop_services",
-            side_effect=lambda log, infra, names: self.stopped.append((names, self.compose_file()))))
+        stack.enter_context(
+            mock.patch.object(
+                horus_install,
+                "stop_services",
+                side_effect=lambda log, infra, names: self.stopped.append(
+                    (names, self.compose_file())
+                ),
+            )
+        )
         self.corpus: reindex.Corpus | None = reindex.Corpus(0, 0)
-        stack.enter_context(mock.patch.object(reindex, "stored_corpus",
-                                              side_effect=lambda ks: self.corpus))
+        stack.enter_context(
+            mock.patch.object(reindex, "stored_corpus", side_effect=lambda ks: self.corpus)
+        )
         self.followed = stack.enter_context(mock.patch.object(reindex, "follow"))
         self.log = Log(self.tmp / "log.txt", events=Events(True, self.events))
         self.addCleanup(self.log.close, 0)
@@ -339,8 +389,11 @@ class InstalledStack(unittest.TestCase):
         return horus_install.env_line_value(self.infra, "COMPOSE_FILE") or ""
 
     def emitted(self) -> list[dict]:
-        return [json.loads(line[len(EVENT_PREFIX):]) for line in self.events.getvalue().splitlines()
-                if line.startswith(EVENT_PREFIX)]
+        return [
+            json.loads(line[len(EVENT_PREFIX) :])
+            for line in self.events.getvalue().splitlines()
+            if line.startswith(EVENT_PREFIX)
+        ]
 
     def ai(self, *argv: str) -> int:
         args = horus_install.build_parser().parse_args(["--ai", *argv])
@@ -364,7 +417,9 @@ class AiStatus(InstalledStack):
         with mock.patch.dict("os.environ", {"COMPOSE_FILE": "docker-compose.yml"}):
             self.ai("status")
         text = " ".join(self.out.getvalue().split())
-        self.assertIn("HORUS_AI_MODE=mock, but COMPOSE_FILE does not load docker-compose.mock.yml", text)
+        self.assertIn(
+            "HORUS_AI_MODE=mock, but COMPOSE_FILE does not load docker-compose.mock.yml", text
+        )
         self.assertIn("COMPOSE_FILE is set in this shell", text)
 
     def test_the_parser_knows_the_three_words_only(self):
@@ -382,10 +437,14 @@ class AiStatus(InstalledStack):
         plan.assert_not_called()
 
     def test_the_mode_is_written_once_and_the_rest_is_kept(self):
-        self.write(f"A=1\nCOMPOSE_FILE=docker-compose.yml\n# note\nCOMPOSE_FILE={CPU_FILES}\n"
-                   f"{horus_install.UNSET_MARKER}HORUS_AI_MODE=mock\nB=2\n")
+        self.write(
+            f"A=1\nCOMPOSE_FILE=docker-compose.yml\n# note\nCOMPOSE_FILE={CPU_FILES}\n"
+            f"{horus_install.UNSET_MARKER}HORUS_AI_MODE=mock\nB=2\n"
+        )
         horus_install.write_ai_mode(self.infra, MOCK_FILES, "mock")
-        self.assertEqual(self.env(), f"A=1\nCOMPOSE_FILE={MOCK_FILES}\n# note\nB=2\nHORUS_AI_MODE=mock\n")
+        self.assertEqual(
+            self.env(), f"A=1\nCOMPOSE_FILE={MOCK_FILES}\n# note\nB=2\nHORUS_AI_MODE=mock\n"
+        )
 
 
 class SwitchToMock(InstalledStack):
@@ -411,18 +470,22 @@ class SwitchToMock(InstalledStack):
         with mock.patch.object(horus_install, "start_and_check", return_value=EXPECT_MOCK) as start:
             self.ai("mock")
         self.assertEqual(self.stopped, [(["vllm", *MONITORING], "docker-compose.yml")])
-        self.assertEqual(self.compose_file(),
-                         LEAN_MOCK_FILES.replace(":", profiles.compose_file_separator(None)))
+        self.assertEqual(
+            self.compose_file(), LEAN_MOCK_FILES.replace(":", profiles.compose_file_separator(None))
+        )
         self.assertTrue(start.call_args.args[4])
 
     def test_a_failed_check_rolls_back_to_the_previous_mode(self):
         self.write(self.ORIGINAL)
         failure = InstallError(EXIT_SMOKE_FAILED, "The smoke test did not pass.", "d", "f")
-        with mock.patch.object(horus_install, "start_and_check", side_effect=failure), \
-                mock.patch.object(horus_install, "up_waiting_out_a_dependency_abort",
-                                  return_value=(["up", "-d"], 0)) as up, \
-                mock.patch.object(horus_install, "wait_for_health") as health, \
-                self.assertRaises(InstallError) as caught:
+        with (
+            mock.patch.object(horus_install, "start_and_check", side_effect=failure),
+            mock.patch.object(
+                horus_install, "up_waiting_out_a_dependency_abort", return_value=(["up", "-d"], 0)
+            ) as up,
+            mock.patch.object(horus_install, "wait_for_health") as health,
+            self.assertRaises(InstallError) as caught,
+        ):
             self.ai("mock")
         self.assertEqual(caught.exception.code, EXIT_SMOKE_FAILED)
         self.assertIn("rolled back", caught.exception.headline)
@@ -433,9 +496,11 @@ class SwitchToMock(InstalledStack):
 
     def test_an_interrupted_switch_puts_the_previous_env_back_without_restarting(self):
         self.write(self.ORIGINAL)
-        with mock.patch.object(horus_install, "start_and_check", side_effect=KeyboardInterrupt), \
-                mock.patch.object(horus_install, "up_waiting_out_a_dependency_abort") as up, \
-                self.assertRaises(KeyboardInterrupt):
+        with (
+            mock.patch.object(horus_install, "start_and_check", side_effect=KeyboardInterrupt),
+            mock.patch.object(horus_install, "up_waiting_out_a_dependency_abort") as up,
+            self.assertRaises(KeyboardInterrupt),
+        ):
             self.ai("mock")
         self.assertEqual(self.env(), self.ORIGINAL)
         self.assertEqual(self.stopped[-1], (["llm-mock"], LEAN_MOCK_FILES))
@@ -444,11 +509,16 @@ class SwitchToMock(InstalledStack):
 
     def test_a_failure_writing_env_is_rolled_back_too(self):
         self.write(self.ORIGINAL)
-        with mock.patch.object(horus_install, "write_ai_mode", side_effect=PermissionError("locked")), \
-                mock.patch.object(horus_install, "up_waiting_out_a_dependency_abort",
-                                  return_value=(["up", "-d"], 0)) as up, \
-                mock.patch.object(horus_install, "wait_for_health"), \
-                self.assertRaises(InstallError) as caught:
+        with (
+            mock.patch.object(
+                horus_install, "write_ai_mode", side_effect=PermissionError("locked")
+            ),
+            mock.patch.object(
+                horus_install, "up_waiting_out_a_dependency_abort", return_value=(["up", "-d"], 0)
+            ) as up,
+            mock.patch.object(horus_install, "wait_for_health"),
+            self.assertRaises(InstallError) as caught,
+        ):
             self.ai("mock")
         self.assertEqual(caught.exception.code, EXIT_ENV_WRITE_FAILED)
         self.assertIn("rolled back", caught.exception.headline)
@@ -458,11 +528,14 @@ class SwitchToMock(InstalledStack):
     def test_a_rollback_rebuilds_what_the_failed_switch_rebuilt(self):
         self.write("COMPOSE_FILE=docker-compose.yml\n")
         failure = InstallError(EXIT_SMOKE_FAILED, "The smoke test did not pass.")
-        with mock.patch.object(horus_install, "start_and_check", side_effect=failure), \
-                mock.patch.object(horus_install, "up_waiting_out_a_dependency_abort",
-                                  return_value=(["up", "-d"], 0)) as up, \
-                mock.patch.object(horus_install, "wait_for_health"), \
-                self.assertRaises(InstallError):
+        with (
+            mock.patch.object(horus_install, "start_and_check", side_effect=failure),
+            mock.patch.object(
+                horus_install, "up_waiting_out_a_dependency_abort", return_value=(["up", "-d"], 0)
+            ) as up,
+            mock.patch.object(horus_install, "wait_for_health"),
+            self.assertRaises(InstallError),
+        ):
             self.ai("mock")
         self.assertIn("--build", up.call_args[0][2])
         self.assertEqual(self.env(), "COMPOSE_FILE=docker-compose.yml\n")
@@ -482,9 +555,11 @@ class ReembedOnASwitch(InstalledStack):
 
     def mock_switch(self, *argv: str, answer: str | None = None, tty: bool = True):
         self.write(self.ORIGINAL)
-        with mock.patch.object(horus_install, "start_and_check", return_value=EXPECT_MOCK) as start, \
-                mock.patch.object(horus_install, "interactive_terminal", return_value=tty), \
-                mock.patch("builtins.input", return_value=answer) as asked:
+        with (
+            mock.patch.object(horus_install, "start_and_check", return_value=EXPECT_MOCK) as start,
+            mock.patch.object(horus_install, "interactive_terminal", return_value=tty),
+            mock.patch("builtins.input", return_value=answer) as asked,
+        ):
             code = self.ai("mock", *argv)
         return code, start, asked
 
@@ -543,13 +618,17 @@ class ReembedOnASwitch(InstalledStack):
     def test_local_asks_before_it_downloads_the_model(self):
         self.corpus = self.LARGE
         self.write(f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_AI_MODE=mock\n")
-        with mock.patch.object(horus_install.hardware, "probe", side_effect=lambda *a, **k: big_machine()), \
-                mock.patch.object(horus_install.preflight, "run_install_checks"), \
-                mock.patch.object(horus_install, "plan_model", return_value=FakePlan()) as plan, \
-                mock.patch.object(horus_install, "download_model") as download, \
-                mock.patch.object(horus_install, "start_and_check") as start, \
-                mock.patch.object(horus_install, "interactive_terminal", return_value=True), \
-                mock.patch("builtins.input", return_value=""):
+        with (
+            mock.patch.object(
+                horus_install.hardware, "probe", side_effect=lambda *a, **k: big_machine()
+            ),
+            mock.patch.object(horus_install.preflight, "run_install_checks"),
+            mock.patch.object(horus_install, "plan_model", return_value=FakePlan()) as plan,
+            mock.patch.object(horus_install, "download_model") as download,
+            mock.patch.object(horus_install, "start_and_check") as start,
+            mock.patch.object(horus_install, "interactive_terminal", return_value=True),
+            mock.patch("builtins.input", return_value=""),
+        ):
             self.assertEqual(self.ai("local"), EXIT_OK)
         plan.assert_not_called()
         download.assert_not_called()
@@ -564,12 +643,21 @@ class WaitingForTheReindex(InstalledStack):
         order: list[str] = []
         args = horus_install.build_parser().parse_args(["--ai", "mock", *argv])
         self.followed.side_effect = lambda *a, **k: order.append("reindex")
-        with mock.patch.object(horus_install, "up_waiting_out_a_dependency_abort",
-                               side_effect=lambda *a: order.append("up") or (["up", "-d"], 0)), \
-                mock.patch.object(horus_install, "wait_for_health",
-                                  side_effect=lambda *a, **k: order.append("health")), \
-                mock.patch.object(horus_install.smoke, "run",
-                                  side_effect=lambda *a, **k: order.append("smoke") or {"passed": True}):
+        with (
+            mock.patch.object(
+                horus_install,
+                "up_waiting_out_a_dependency_abort",
+                side_effect=lambda *a: order.append("up") or (["up", "-d"], 0),
+            ),
+            mock.patch.object(
+                horus_install, "wait_for_health", side_effect=lambda *a, **k: order.append("health")
+            ),
+            mock.patch.object(
+                horus_install.smoke,
+                "run",
+                side_effect=lambda *a, **k: order.append("smoke") or {"passed": True},
+            ),
+        ):
             horus_install.start_and_check(self.log, args, self.repo, self.infra, False, True)
         return order
 
@@ -579,21 +667,27 @@ class WaitingForTheReindex(InstalledStack):
         self.assertEqual(order, ["up", "health", "reindex", "smoke"])
         call = self.followed.call_args
         self.assertEqual(call.args[1:], (smoke.DEFAULT_BASE_URLS["ks"], "tok"))
-        self.assertEqual({key: call.kwargs[key] for key in ("start_now", "may_start", "startup")},
-                         {"start_now": False, "may_start": True, "startup": True})
+        self.assertEqual(
+            {key: call.kwargs[key] for key in ("start_now", "may_start", "startup")},
+            {"start_now": False, "may_start": True, "startup": True},
+        )
         self.assertEqual(call.kwargs["wait_seconds"], reindex.patience(self.corpus))
 
     def test_with_the_startup_reindex_off_the_installer_runs_it(self):
-        self.start(f"COMPOSE_FILE={MOCK_FILES}\nCORPUS_SCAN_TOKEN=tok\n"
-                   "KNOWLEDGE_STORE_REINDEX_ON_STARTUP=0\n")
+        self.start(
+            f"COMPOSE_FILE={MOCK_FILES}\nCORPUS_SCAN_TOKEN=tok\n"
+            "KNOWLEDGE_STORE_REINDEX_ON_STARTUP=0\n"
+        )
         self.assertIs(self.followed.call_args.kwargs["start_now"], True)
         self.assertIs(self.followed.call_args.kwargs["startup"], False)
 
     def test_an_install_only_watches_and_skips_it_when_the_startup_reindex_is_off(self):
         self.write("CORPUS_SCAN_TOKEN=tok\n")
         horus_install.wait_for_reindex(self.log, self.infra, may_start=False)
-        self.assertEqual({key: self.followed.call_args.kwargs[key] for key in ("start_now", "may_start")},
-                         {"start_now": False, "may_start": False})
+        self.assertEqual(
+            {key: self.followed.call_args.kwargs[key] for key in ("start_now", "may_start")},
+            {"start_now": False, "may_start": False},
+        )
         self.followed.reset_mock()
         self.write("CORPUS_SCAN_TOKEN=tok\nKNOWLEDGE_STORE_REINDEX_ON_STARTUP=0\n")
         horus_install.wait_for_reindex(self.log, self.infra, may_start=False)
@@ -606,16 +700,21 @@ class WaitingForTheReindex(InstalledStack):
     def test_without_the_token_it_says_so_and_goes_on(self):
         order = self.start(f"COMPOSE_FILE={MOCK_FILES}\n")
         self.assertEqual(order, ["up", "health", "smoke"])
-        self.assertIn("CORPUS_SCAN_TOKEN is not in src/infra/.env", " ".join(self.out.getvalue().split()))
+        self.assertIn(
+            "CORPUS_SCAN_TOKEN is not in src/infra/.env", " ".join(self.out.getvalue().split())
+        )
 
     def test_a_rollback_waits_for_the_reindex_back(self):
         self.write(f"COMPOSE_FILE={CPU_FILES}\nCORPUS_SCAN_TOKEN=tok\n")
         failure = InstallError(EXIT_SMOKE_FAILED, "The smoke test did not pass.")
-        with mock.patch.object(horus_install, "start_and_check", side_effect=failure), \
-                mock.patch.object(horus_install, "up_waiting_out_a_dependency_abort",
-                                  return_value=(["up", "-d"], 0)), \
-                mock.patch.object(horus_install, "wait_for_health"), \
-                self.assertRaises(InstallError):
+        with (
+            mock.patch.object(horus_install, "start_and_check", side_effect=failure),
+            mock.patch.object(
+                horus_install, "up_waiting_out_a_dependency_abort", return_value=(["up", "-d"], 0)
+            ),
+            mock.patch.object(horus_install, "wait_for_health"),
+            self.assertRaises(InstallError),
+        ):
             self.ai("mock")
         self.followed.assert_called_once()
         self.assertEqual(self.compose_file(), CPU_FILES)
@@ -629,26 +728,41 @@ class WaitingForTheReindex(InstalledStack):
 
 class FakePlan:
     def env(self, repo: Path) -> dict[str, str]:
-        return {"HORUS_MODELS_DIR": "../../models", "LLM_GGUF_FILE": "model.gguf",
-                "LLM_GGUF_URL": "https://example.invalid/model.gguf", "LLM_GGUF_SHA256": "0" * 64,
-                "LLM_GGUF_SIZE": "1"}
+        return {
+            "HORUS_MODELS_DIR": "../../models",
+            "LLM_GGUF_FILE": "model.gguf",
+            "LLM_GGUF_URL": "https://example.invalid/model.gguf",
+            "LLM_GGUF_SHA256": "0" * 64,
+            "LLM_GGUF_SIZE": "1",
+        }
 
 
 class SwitchToLocal(InstalledStack):
-    MOCK_ENV = (f"COMPOSE_FILE={MOCK_FILES}\nHORUS_AI_MODE=mock\nLLM_VLLM_URL=http://llm:8080/v1\n"
-                "HORUS_REGISTRY=ghcr.io/acme\nREDIS_PASSWORD=keep\n")
+    MOCK_ENV = (
+        f"COMPOSE_FILE={MOCK_FILES}\nHORUS_AI_MODE=mock\nLLM_VLLM_URL=http://llm:8080/v1\n"
+        "HORUS_REGISTRY=ghcr.io/acme\nREDIS_PASSWORD=keep\n"
+    )
 
     def switch(self, start=None):
         self.write(self.MOCK_ENV)
-        with mock.patch.object(horus_install.hardware, "probe", side_effect=lambda *a, **k: big_machine()), \
-                mock.patch.object(horus_install.preflight, "run_install_checks") as checks, \
-                mock.patch.object(horus_install, "plan_model", return_value=FakePlan()), \
-                mock.patch.object(horus_install, "download_model") as download, \
-                mock.patch.object(horus_install, "start_and_check",
-                                  side_effect=start, return_value=[*horus_install.CORE_SERVICES, "llm"]), \
-                mock.patch.object(horus_install, "up_waiting_out_a_dependency_abort",
-                                  return_value=(["up", "-d"], 0)), \
-                mock.patch.object(horus_install, "wait_for_health"):
+        with (
+            mock.patch.object(
+                horus_install.hardware, "probe", side_effect=lambda *a, **k: big_machine()
+            ),
+            mock.patch.object(horus_install.preflight, "run_install_checks") as checks,
+            mock.patch.object(horus_install, "plan_model", return_value=FakePlan()),
+            mock.patch.object(horus_install, "download_model") as download,
+            mock.patch.object(
+                horus_install,
+                "start_and_check",
+                side_effect=start,
+                return_value=[*horus_install.CORE_SERVICES, "llm"],
+            ),
+            mock.patch.object(
+                horus_install, "up_waiting_out_a_dependency_abort", return_value=(["up", "-d"], 0)
+            ),
+            mock.patch.object(horus_install, "wait_for_health"),
+        ):
             code = self.ai("local")
         return code, checks, download
 
@@ -659,7 +773,9 @@ class SwitchToLocal(InstalledStack):
         self.assertEqual(checks.call_args.kwargs["image_registry"], "ghcr.io/acme")
         download.assert_called_once()
         self.assertEqual(self.stopped[0], (["llm-mock"], MOCK_FILES))
-        self.assertEqual(self.compose_file(), profiles.env_for("cpu-standard", big_machine())["COMPOSE_FILE"])
+        self.assertEqual(
+            self.compose_file(), profiles.env_for("cpu-standard", big_machine())["COMPOSE_FILE"]
+        )
         self.assertIsNone(horus_install.env_line_value(self.infra, "HORUS_AI_MODE"))
         self.assertIn(f"{horus_install.UNSET_MARKER}HORUS_AI_MODE=mock", self.env())
         self.assertEqual(horus_install.env_line_value(self.infra, "LLM_GGUF_FILE"), "model.gguf")
@@ -674,14 +790,18 @@ class SwitchToLocal(InstalledStack):
             self.switch(start=failure)
         self.assertIn("Mock AI mode is back", caught.exception.headline)
         self.assertEqual(self.env(), self.MOCK_ENV)
-        self.assertEqual(json.loads(self.record.read_text(encoding="utf-8")),
-                         {"profile": {"name": "cpu-standard"}})
+        self.assertEqual(
+            json.loads(self.record.read_text(encoding="utf-8")),
+            {"profile": {"name": "cpu-standard"}},
+        )
         self.assertEqual(self.stopped[-1][0], ["llm", "llm-model"])
 
     def test_a_failure_writing_the_profile_settings_brings_mock_mode_back(self):
         failure = InstallError(EXIT_ENV_WRITE_FAILED, "Could not write src/infra/.env.")
-        with mock.patch.object(horus_install, "apply_env", side_effect=failure), \
-                self.assertRaises(InstallError) as caught:
+        with (
+            mock.patch.object(horus_install, "apply_env", side_effect=failure),
+            self.assertRaises(InstallError) as caught,
+        ):
             self.switch()
         self.assertEqual(caught.exception.code, EXIT_ENV_WRITE_FAILED)
         self.assertIn("Mock AI mode is back", caught.exception.headline)
@@ -692,8 +812,10 @@ class SwitchToLocal(InstalledStack):
         with self.assertRaises(KeyboardInterrupt):
             self.switch(start=KeyboardInterrupt)
         self.assertEqual(self.env(), self.MOCK_ENV)
-        self.assertEqual(json.loads(self.record.read_text(encoding="utf-8")),
-                         {"profile": {"name": "cpu-standard"}})
+        self.assertEqual(
+            json.loads(self.record.read_text(encoding="utf-8")),
+            {"profile": {"name": "cpu-standard"}},
+        )
 
     def test_local_refuses_the_mock_profile_and_a_machine_too_small(self):
         self.write(self.MOCK_ENV)
@@ -701,12 +823,18 @@ class SwitchToLocal(InstalledStack):
         with self.assertRaises(InstallError) as caught:
             horus_install.do_ai(self.log, args, self.repo)
         self.assertEqual(caught.exception.code, EXIT_PROFILE_UNKNOWN)
-        with mock.patch.object(horus_install.hardware, "probe", side_effect=lambda *a, **k: small_machine()), \
-                self.assertRaises(unsupported.NotSupported):
+        with (
+            mock.patch.object(
+                horus_install.hardware, "probe", side_effect=lambda *a, **k: small_machine()
+            ),
+            self.assertRaises(unsupported.NotSupported),
+        ):
             self.ai("local")
         self.assertEqual(self.env(), self.MOCK_ENV)
-        self.assertEqual(json.loads(self.record.read_text(encoding="utf-8")),
-                         {"profile": {"name": "cpu-standard"}})
+        self.assertEqual(
+            json.loads(self.record.read_text(encoding="utf-8")),
+            {"profile": {"name": "cpu-standard"}},
+        )
 
 
 class MonitoringSetting(unittest.TestCase):
@@ -731,8 +859,11 @@ class MonitoringSetting(unittest.TestCase):
             (LEAN_MOCK_FILES, ":", False): LEAN_MOCK_FILES,
             (LEAN_MOCK_FILES, ":", True): MOCK_FILES,
             (MOCK_FILES, ":", True): MOCK_FILES,
-            (CPU_FILES.replace(":", ";"), ";", False):
-                f"{CPU_FILES};docker-compose.monitoring-off.yml".replace(":", ";"),
+            (
+                CPU_FILES.replace(":", ";"),
+                ";",
+                False,
+            ): f"{CPU_FILES};docker-compose.monitoring-off.yml".replace(":", ";"),
             ("", ":", False): "docker-compose.yml:docker-compose.monitoring-off.yml",
             ("", ":", True): "docker-compose.yml",
         }
@@ -745,8 +876,12 @@ class MonitoringSetting(unittest.TestCase):
     def test_only_the_mock_profile_turns_monitoring_off(self):
         for name in profiles.PROFILE_ORDER:
             with self.subTest(name):
-                self.assertTrue(profiles.compose_file_runs_monitoring(profiles.env_for(name)["COMPOSE_FILE"]))
-        self.assertIn(profiles.MONITORING_OVERLAY, profiles.provenance_for("mock")["COMPOSE_FILE"]["why"])
+                self.assertTrue(
+                    profiles.compose_file_runs_monitoring(profiles.env_for(name)["COMPOSE_FILE"])
+                )
+        self.assertIn(
+            profiles.MONITORING_OVERLAY, profiles.provenance_for("mock")["COMPOSE_FILE"]["why"]
+        )
 
     def test_the_uninstall_offers_the_monitoring_volumes_a_lean_install_left(self):
         for volume in ("loki_data", "tempo_data", "prometheus_data", "alloy_data"):
@@ -767,53 +902,77 @@ class MonitoringOnASwitch(InstalledStack):
         self.write(f"COMPOSE_FILE={CPU_FILES}\n")
         with mock.patch.object(horus_install, "start_and_check", return_value=EXPECT_MOCK):
             self.ai("mock")
-        self.assertIn("Monitoring: off (HORUS_MONITORING=unset, off in mock mode)", self.out.getvalue())
+        self.assertIn(
+            "Monitoring: off (HORUS_MONITORING=unset, off in mock mode)", self.out.getvalue()
+        )
 
     def switch_to_local(self, env: str) -> None:
         self.write(env)
-        with mock.patch.object(horus_install.hardware, "probe", side_effect=lambda *a, **k: big_machine()), \
-                mock.patch.object(horus_install.preflight, "run_install_checks"), \
-                mock.patch.object(horus_install, "plan_model", return_value=FakePlan()), \
-                mock.patch.object(horus_install, "download_model"), \
-                mock.patch.object(horus_install, "start_and_check",
-                                  return_value=[*horus_install.CORE_SERVICES, "llm"]):
+        with (
+            mock.patch.object(
+                horus_install.hardware, "probe", side_effect=lambda *a, **k: big_machine()
+            ),
+            mock.patch.object(horus_install.preflight, "run_install_checks"),
+            mock.patch.object(horus_install, "plan_model", return_value=FakePlan()),
+            mock.patch.object(horus_install, "download_model"),
+            mock.patch.object(
+                horus_install, "start_and_check", return_value=[*horus_install.CORE_SERVICES, "llm"]
+            ),
+        ):
             self.assertEqual(self.ai("local"), EXIT_OK)
 
     def failed_switch(self, env: str, target: str, failure):
         self.write(env)
-        with mock.patch.object(horus_install.hardware, "probe", side_effect=lambda *a, **k: big_machine()), \
-                mock.patch.object(horus_install.preflight, "run_install_checks"), \
-                mock.patch.object(horus_install, "plan_model", return_value=FakePlan()), \
-                mock.patch.object(horus_install, "download_model"), \
-                mock.patch.object(horus_install, "start_and_check", side_effect=failure), \
-                mock.patch.object(horus_install, "up_waiting_out_a_dependency_abort",
-                                  return_value=(["up", "-d"], 0)), \
-                mock.patch.object(horus_install, "wait_for_health"), \
-                self.assertRaises((InstallError, KeyboardInterrupt)):
+        with (
+            mock.patch.object(
+                horus_install.hardware, "probe", side_effect=lambda *a, **k: big_machine()
+            ),
+            mock.patch.object(horus_install.preflight, "run_install_checks"),
+            mock.patch.object(horus_install, "plan_model", return_value=FakePlan()),
+            mock.patch.object(horus_install, "download_model"),
+            mock.patch.object(horus_install, "start_and_check", side_effect=failure),
+            mock.patch.object(
+                horus_install, "up_waiting_out_a_dependency_abort", return_value=(["up", "-d"], 0)
+            ),
+            mock.patch.object(horus_install, "wait_for_health"),
+            self.assertRaises((InstallError, KeyboardInterrupt)),
+        ):
             self.ai(target)
 
     def test_a_failed_switch_that_turned_monitoring_on_stops_it_again(self):
         failure = InstallError(EXIT_SMOKE_FAILED, "The smoke test did not pass.")
-        self.failed_switch(f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_AI_MODE=mock\n", "local", failure)
+        self.failed_switch(
+            f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_AI_MODE=mock\n", "local", failure
+        )
         self.assertEqual(self.stopped[-1][0], ["llm", "llm-model", *MONITORING])
         self.assertEqual(self.compose_file(), LEAN_MOCK_FILES)
 
     def test_an_interrupted_switch_that_turned_monitoring_on_stops_it_again(self):
-        self.failed_switch(f"COMPOSE_FILE={CPU_FILES}\nHORUS_MONITORING=on\n", "mock", KeyboardInterrupt)
+        self.failed_switch(
+            f"COMPOSE_FILE={CPU_FILES}\nHORUS_MONITORING=on\n", "mock", KeyboardInterrupt
+        )
         self.assertEqual(self.stopped[-1][0], ["llm-mock"])
-        self.failed_switch(f"COMPOSE_FILE={CPU_FILES}\nHORUS_MONITORING=off\n", "mock", KeyboardInterrupt)
+        self.failed_switch(
+            f"COMPOSE_FILE={CPU_FILES}\nHORUS_MONITORING=off\n", "mock", KeyboardInterrupt
+        )
         self.assertEqual(self.stopped[-1][0], ["llm-mock"])
 
     def test_local_mode_turns_monitoring_back_on(self):
         self.switch_to_local(f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_AI_MODE=mock\n")
-        self.assertEqual(self.compose_file(), profiles.env_for("cpu-standard", big_machine())["COMPOSE_FILE"])
+        self.assertEqual(
+            self.compose_file(), profiles.env_for("cpu-standard", big_machine())["COMPOSE_FILE"]
+        )
         self.assertEqual(self.stopped, [(["llm-mock"], LEAN_MOCK_FILES)])
 
     def test_local_mode_keeps_monitoring_off_when_the_setting_asks(self):
-        self.switch_to_local(f"COMPOSE_FILE={MOCK_FILES}\nHORUS_AI_MODE=mock\nHORUS_MONITORING=off\n")
+        self.switch_to_local(
+            f"COMPOSE_FILE={MOCK_FILES}\nHORUS_AI_MODE=mock\nHORUS_MONITORING=off\n"
+        )
         local = profiles.env_for("cpu-standard", big_machine())["COMPOSE_FILE"]
-        self.assertEqual(self.compose_file(),
-                         profiles.with_monitoring(local, horus_install.separator_of(local), False))
+        self.assertEqual(
+            self.compose_file(),
+            profiles.with_monitoring(local, horus_install.separator_of(local), False),
+        )
         self.assertEqual(self.stopped, [(["llm-mock", *MONITORING], MOCK_FILES)])
 
     def test_status_shows_monitoring_and_warns_when_the_setting_is_not_applied(self):
@@ -821,8 +980,11 @@ class MonitoringOnASwitch(InstalledStack):
         self.assertEqual(self.ai("status"), EXIT_OK)
         text = " ".join(self.out.getvalue().split())
         self.assertIn("Monitoring: Off", text)
-        self.assertIn("HORUS_MONITORING=on, so monitoring should be on, but COMPOSE_FILE keeps it off. "
-                      "Run --restart to apply it.", text)
+        self.assertIn(
+            "HORUS_MONITORING=on, so monitoring should be on, but COMPOSE_FILE keeps it off. "
+            "Run --restart to apply it.",
+            text,
+        )
         self.assertEqual([e for e in self.emitted() if e["event"] == "ai"][-1]["monitoring"], "off")
 
 
@@ -831,13 +993,20 @@ class MonitoringOnAStart(InstalledStack):
         self.write(env)
         streamed: list[list[str]] = []
         self.ups: list[list[str]] = []
-        with mock.patch.object(horus_install, "ensure_installed_model"), \
-                mock.patch.object(horus_install, "up_waiting_out_a_dependency_abort",
-                                  side_effect=lambda log, infra, up, timeout:
-                                  self.ups.append(up) or (up, 0)), \
-                mock.patch.object(horus_install, "_stream",
-                                  side_effect=lambda cmd, *rest, **kw: streamed.append(cmd) or 0), \
-                mock.patch.object(horus_install, "wait_for_health"):
+        with (
+            mock.patch.object(horus_install, "ensure_installed_model"),
+            mock.patch.object(
+                horus_install,
+                "up_waiting_out_a_dependency_abort",
+                side_effect=lambda log, infra, up, timeout: self.ups.append(up) or (up, 0),
+            ),
+            mock.patch.object(
+                horus_install,
+                "_stream",
+                side_effect=lambda cmd, *rest, **kw: streamed.append(cmd) or 0,
+            ),
+            mock.patch.object(horus_install, "wait_for_health"),
+        ):
             self.assertEqual(action(self.log, self.infra, 60), EXIT_OK)
         return streamed
 
@@ -857,8 +1026,9 @@ class MonitoringOnAStart(InstalledStack):
         self.assertEqual(self.stopped, [])
 
     def test_a_restart_that_changes_monitoring_restarts_then_recreates_the_stack(self):
-        streamed = self.start(f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_MONITORING=on\n",
-                              horus_install.do_restart)
+        streamed = self.start(
+            f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_MONITORING=on\n", horus_install.do_restart
+        )
         self.assertEqual([cmd[-1] for cmd in streamed], ["restart"])
         self.assertEqual(self.ups, [["up", "-d"]])
         self.assertEqual(self.compose_file(), MOCK_FILES)
@@ -878,15 +1048,21 @@ class MonitoringOnAStart(InstalledStack):
     def test_a_quoted_or_commented_setting_is_understood(self):
         for value in ('"on"', "'on'", "on # keep it"):
             with self.subTest(value=value):
-                self.start(f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_MONITORING={value}\n",
-                           horus_install.do_start)
+                self.start(
+                    f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_MONITORING={value}\n",
+                    horus_install.do_start,
+                )
                 self.assertEqual(self.compose_file(), MOCK_FILES)
 
     def test_a_setting_that_is_neither_on_nor_off_says_so(self):
-        self.start(f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_MONITORING=enabled\n", horus_install.do_start)
+        self.start(
+            f"COMPOSE_FILE={LEAN_MOCK_FILES}\nHORUS_MONITORING=enabled\n", horus_install.do_start
+        )
         self.assertEqual(self.compose_file(), LEAN_MOCK_FILES)
-        self.assertIn("HORUS_MONITORING=enabled in src/infra/.env is neither on nor off",
-                      " ".join(self.out.getvalue().split()))
+        self.assertIn(
+            "HORUS_MONITORING=enabled in src/infra/.env is neither on nor off",
+            " ".join(self.out.getvalue().split()),
+        )
 
     def test_ai_mock_on_a_mock_install_applies_the_monitoring_default(self):
         self.write(f"COMPOSE_FILE={MOCK_FILES}\n")
@@ -912,15 +1088,19 @@ class InstallOverAnotherMode(InstalledStack):
         for (current, target), stopped in cases.items():
             with self.subTest(current=current, target=target):
                 self.write(f"COMPOSE_FILE={current}\n")
-                self.assertEqual(horus_install.model_servers_left_behind(self.infra, target), stopped)
+                self.assertEqual(
+                    horus_install.model_servers_left_behind(self.infra, target), stopped
+                )
         (self.infra / ".env").unlink()
         self.assertEqual(horus_install.model_servers_left_behind(self.infra, MOCK_FILES), [])
 
     def test_an_install_keeps_the_setting_a_reset_env_would_drop(self):
         source = inspect.getsource(horus_install._dispatch)
         self.assertIn("env[profiles.MONITORING_KEY] = monitoring_setting(infra)", source)
-        self.assertLess(source.index("env[profiles.MONITORING_KEY] = monitoring_setting(infra)"),
-                        source.index("apply_env(log, infra, env, reset=args.reset_env)"))
+        self.assertLess(
+            source.index("env[profiles.MONITORING_KEY] = monitoring_setting(infra)"),
+            source.index("apply_env(log, infra, env, reset=args.reset_env)"),
+        )
 
     def test_the_monitoring_the_new_files_turn_off_is_stopped_too(self):
         cases = {
@@ -934,17 +1114,23 @@ class InstallOverAnotherMode(InstalledStack):
                 self.write(f"COMPOSE_FILE={current}\n")
                 self.assertEqual(horus_install.monitoring_left_behind(self.infra, target), stopped)
         self.write("COMPOSE_PROJECT_NAME=old\n")
-        self.assertEqual(horus_install.monitoring_left_behind(self.infra, LEAN_MOCK_FILES), MONITORING)
+        self.assertEqual(
+            horus_install.monitoring_left_behind(self.infra, LEAN_MOCK_FILES), MONITORING
+        )
         (self.infra / ".env").unlink()
         self.assertEqual(horus_install.monitoring_left_behind(self.infra, LEAN_MOCK_FILES), [])
 
     def test_the_install_stops_it_under_the_old_files_before_writing_the_new_ones(self):
         source = inspect.getsource(horus_install._dispatch)
         stop = source.index("stop_services(log, infra, left_behind)")
-        self.assertLess(source.index("model_servers_left_behind(infra, env[COMPOSE_FILE_KEY])"), stop)
+        self.assertLess(
+            source.index("model_servers_left_behind(infra, env[COMPOSE_FILE_KEY])"), stop
+        )
         self.assertLess(source.index("monitoring_left_behind(infra, env[COMPOSE_FILE_KEY])"), stop)
-        self.assertLess(source.index("with_wanted_monitoring(log, infra, env[COMPOSE_FILE_KEY]"),
-                        source.index("monitoring_left_behind(infra, env[COMPOSE_FILE_KEY])"))
+        self.assertLess(
+            source.index("with_wanted_monitoring(log, infra, env[COMPOSE_FILE_KEY]"),
+            source.index("monitoring_left_behind(infra, env[COMPOSE_FILE_KEY])"),
+        )
         self.assertLess(stop, source.index("apply_env(log, infra, env, reset=args.reset_env)"))
 
 

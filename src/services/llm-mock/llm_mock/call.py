@@ -67,7 +67,8 @@ def content_text(content: object) -> str:
         return content
     if isinstance(content, list):
         return "".join(
-            str(part.get("text", "")) for part in content
+            str(part.get("text", ""))
+            for part in content
             if isinstance(part, dict) and part.get("type") == "text"
         )
     return ""

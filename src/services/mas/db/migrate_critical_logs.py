@@ -35,12 +35,9 @@ def create_critical_logs_table():
     ]
 
     try:
-        log_db_operation(
-            "INIT", "critical_logs", "Creating critical_logs table and indexes"
-        )
+        log_db_operation("INIT", "critical_logs", "Creating critical_logs table and indexes")
 
         with engine.connect() as conn:
-
             conn.execute(text(create_table_sql))
 
             for index_sql in create_indexes_sql:

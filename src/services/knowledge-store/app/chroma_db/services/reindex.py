@@ -42,8 +42,9 @@ def record_embedder_in_collection() -> bool:
     if all(stored.get(key) == value for key, value in COLLECTION_METADATA.items()):
         return False
     collection.modify(metadata={**stored, **COLLECTION_METADATA})
-    logger.info("re-index: the collection now records the embedder %s",
-                COLLECTION_METADATA["embed_model"])
+    logger.info(
+        "re-index: the collection now records the embedder %s", COLLECTION_METADATA["embed_model"]
+    )
     return True
 
 
@@ -77,7 +78,8 @@ def _split_metadata(
     if metadata.get("stored_path"):
         per_chunk["stored_path"] = metadata["stored_path"]
     document_level = {
-        key: value for key, value in metadata.items()
+        key: value
+        for key, value in metadata.items()
         if key not in per_chunk and key not in CHUNK_POSITION_KEYS and key not in RETIRED_KEYS
     }
     return per_chunk, document_level
@@ -95,8 +97,7 @@ def _migrate(
     replacement = chunk_entries(doc_id, original.text, per_chunk, document_level)
     original_survives_the_write = original.id not in {entry.id for entry in replacement}
     cleared_first = [
-        entry.id for entry in entries
-        if entry.id != original.id or not original_survives_the_write
+        entry.id for entry in entries if entry.id != original.id or not original_survives_the_write
     ]
     if cleared_first:
         file_service.knowledge_collection.delete(ids=cleared_first)
@@ -105,11 +106,9 @@ def _migrate(
         file_service.knowledge_collection.delete(ids=[original.id])
 
 
-def _reembed(
-    stale: list[StoredEntry], embed_passages: EmbedPassages, embed_model: str
-) -> None:
+def _reembed(stale: list[StoredEntry], embed_passages: EmbedPassages, embed_model: str) -> None:
     for start in range(0, len(stale), UPDATE_BATCH_SIZE):
-        batch = stale[start:start + UPDATE_BATCH_SIZE]
+        batch = stale[start : start + UPDATE_BATCH_SIZE]
         file_service.knowledge_collection.update(
             ids=[entry.id for entry in batch],
             embeddings=embed_passages([entry.text for entry in batch]),

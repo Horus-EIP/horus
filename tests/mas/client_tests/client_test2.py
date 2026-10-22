@@ -88,9 +88,7 @@ async def test_agent_details(token: str):
             # Let's find it.
             r_list = await client.get("/agents/details/", headers=headers)
             agents = r_list.json()
-            agent_id = next(
-                (a["id"] for a in agents if a["name"] == agent_payload["name"]), None
-            )
+            agent_id = next((a["id"] for a in agents if a["name"] == agent_payload["name"]), None)
         else:
             if r.status_code != 200:
                 print(f"❌ Failed to register temp agent: {r.status_code} {r.text}")
@@ -108,9 +106,7 @@ async def test_agent_details(token: str):
             if details["name"] == agent_payload["name"]:
                 print(f"✅ GET /agents/details/{agent_id} successful")
             else:
-                print(
-                    f"❌ GET /agents/details/{agent_id} returned wrong data: {details}"
-                )
+                print(f"❌ GET /agents/details/{agent_id} returned wrong data: {details}")
         else:
             print(f"❌ GET /agents/details/{agent_id} failed: {r.status_code} {r.text}")
 
@@ -146,18 +142,12 @@ async def test_conversation_history_and_delete(token: str):
                     f"✅ GET /conversations/get_history/{chat_id} successful (Items: {len(history)})"
                 )
             else:
-                print(
-                    f"❌ GET /conversations/get_history/{chat_id} returned invalid format"
-                )
+                print(f"❌ GET /conversations/get_history/{chat_id} returned invalid format")
         else:
-            print(
-                f"❌ GET /conversations/get_history/{chat_id} failed: {r.status_code} {r.text}"
-            )
+            print(f"❌ GET /conversations/get_history/{chat_id} failed: {r.status_code} {r.text}")
 
         # 3. Delete Conversation
-        r = await client.delete(
-            f"/conversations/delete-conversation/{chat_id}", headers=headers
-        )
+        r = await client.delete(f"/conversations/delete-conversation/{chat_id}", headers=headers)
         if r.status_code == 200:
             print(f"✅ DELETE /conversations/delete-conversation/{chat_id} successful")
         else:

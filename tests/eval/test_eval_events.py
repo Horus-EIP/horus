@@ -62,7 +62,10 @@ class TestFoldEvents:
     def test_manager_messages_are_not_the_final_answer(self):
         observation = fold_events(
             [
-                (1.0, answer("Plan: two specialists.", skill_used="planning", agent_name="Manager")),
+                (
+                    1.0,
+                    answer("Plan: two specialists.", skill_used="planning", agent_name="Manager"),
+                ),
                 (30.0, answer("Step 1 complete.", skill_used="orchestration")),
                 (31.0, answer("Wrapping up.", skill_used="review")),
                 (32.0, answer("Final answer.", skill_used="research")),
@@ -188,7 +191,10 @@ class TestDispatchTime:
         observation = fold_events(
             [
                 (0.2, {"type": "task_status", "status": "routing", "stage": "routing"}),
-                (0.9, {"type": "agent", "content": "Hello!", "event": "result", "stage": "routing"}),
+                (
+                    0.9,
+                    {"type": "agent", "content": "Hello!", "event": "result", "stage": "routing"},
+                ),
             ]
         )
         assert observation.dispatch_s == 0.9
@@ -206,9 +212,19 @@ class TestEventHelpers:
 
     def test_apply_event_ignores_malformed_metadata(self):
         observation = Observation()
-        apply_event(observation, {"type": "task_step", "step_type": "retrieval.results", "metadata": {"chunks": "oops"}}, 1.0)
-        apply_event(observation, {"type": "task_step", "step_type": "reasoning.start", "metadata": None}, 2.0)
-        apply_event(observation, {"type": "task_step", "step_type": "reasoning.start", "metadata": "x"}, 3.0)
+        apply_event(
+            observation,
+            {"type": "task_step", "step_type": "retrieval.results", "metadata": {"chunks": "oops"}},
+            1.0,
+        )
+        apply_event(
+            observation,
+            {"type": "task_step", "step_type": "reasoning.start", "metadata": None},
+            2.0,
+        )
+        apply_event(
+            observation, {"type": "task_step", "step_type": "reasoning.start", "metadata": "x"}, 3.0
+        )
         assert observation.retrieval_steps == 1
         assert observation.retrieved_sources is None
         assert observation.models == []

@@ -48,7 +48,8 @@ def check(packages: dict[str, tuple[str, str]], pin: str | None, source: str) ->
         problems.extend(
             f"{packages[key][0]}=={packages[key][1]} is in a CPU image, but {source} "
             "pins no torch: nothing on the CPU path may need it"
-            for key in TORCH_STACK if key in packages
+            for key in TORCH_STACK
+            if key in packages
         )
         return problems
     torch = packages.get("torch", ("", ""))[1]
@@ -64,8 +65,8 @@ def check(packages: dict[str, tuple[str, str]], pin: str | None, source: str) ->
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Fail when a CPU image ships CUDA packages, or any torch when its "
-                    "requirements pin none, or a torch other than the pinned CPU build "
-                    "when they pin one."
+        "requirements pin none, or a torch other than the pinned CPU build "
+        "when they pin one."
     )
     parser.add_argument(
         "packages",
@@ -76,8 +77,8 @@ def main(argv: list[str] | None = None) -> int:
         "--requirements",
         type=Path,
         help="The requirements file the image or environment was installed from. Without "
-             "a torch==X pin in it (or without this option), torch must be absent; with "
-             "one, that pin must be what is installed, as the CPU build.",
+        "a torch==X pin in it (or without this option), torch must be absent; with "
+        "one, that pin must be what is installed, as the CPU build.",
     )
     args = parser.parse_args(argv)
 
@@ -94,8 +95,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\n{len(problems)} problem(s): this is not a CPU-only image.")
         return 1
     torch = packages.get("torch", ("", ""))[1]
-    print(f"{len(packages)} packages, none from CUDA; "
-          + (f"torch {torch}." if torch else "no torch."))
+    print(
+        f"{len(packages)} packages, none from CUDA; "
+        + (f"torch {torch}." if torch else "no torch.")
+    )
     return 0
 
 

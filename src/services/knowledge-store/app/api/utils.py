@@ -29,9 +29,10 @@ async def docx_to_text(filepath: str) -> str:
     for table in doc.tables:
         for row in table.rows:
             row_text = [cell.text for cell in row.cells]
-            text.append('\t'.join(row_text))
+            text.append("\t".join(row_text))
 
-    return '\n'.join(text)
+    return "\n".join(text)
+
 
 async def image_pdf_to_text(filepath: str) -> str:
     """
@@ -44,9 +45,10 @@ async def image_pdf_to_text(filepath: str) -> str:
         str: The extracted text from OCR.
     """
     images = convert_from_path(filepath)
-    text = '\n'.join([pytesseract.image_to_string(img) for img in images])
+    text = "\n".join([pytesseract.image_to_string(img) for img in images])
 
     return text
+
 
 async def pdf_to_text(filepath: str) -> str:
     """
@@ -60,25 +62,31 @@ async def pdf_to_text(filepath: str) -> str:
     """
     return await asyncio.to_thread(_read_pdf_text, filepath)
 
+
 def _read_pdf_text(filepath: str) -> str:
-    text = ''
+    text = ""
     with pdfplumber.open(filepath) as pdf:
         for page in pdf.pages:
-            text += page.extract_text() + '\n'
+            text += page.extract_text() + "\n"
     return text
+
 
 async def pdf_pages(filepath: str) -> list[str]:
     return await asyncio.to_thread(_read_pdf_pages, filepath)
 
+
 def _read_pdf_pages(filepath: str) -> list[str]:
     with pdfplumber.open(filepath) as pdf:
-        return [page.extract_text() or '' for page in pdf.pages]
+        return [page.extract_text() or "" for page in pdf.pages]
+
 
 async def image_pdf_pages(filepath: str) -> list[str]:
     return await asyncio.to_thread(_read_scanned_pages, filepath)
 
+
 def _read_scanned_pages(filepath: str) -> list[str]:
     return [pytesseract.image_to_string(img) for img in convert_from_path(filepath)]
+
 
 async def save_file(file: UploadFile, dir_name: str) -> str:
     """
@@ -91,8 +99,8 @@ async def save_file(file: UploadFile, dir_name: str) -> str:
     Returns:
         str: The full path to the saved file.
     """
-    path = os.path.join('documents/', dir_name, file.filename)
+    path = os.path.join("documents/", dir_name, file.filename)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'wb') as buffer:
+    with open(path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     return path

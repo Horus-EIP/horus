@@ -6,16 +6,18 @@ from langchain.tools import BaseTool
 
 logger = logging.getLogger(__name__)
 
+
 class PaymentAnalyzerTool(BaseTool):
     """
     Tool for performing financial analysis on structured payment data.
-    
+
     Capabilities:
     - total: Calculate sum of payments by currency.
     - average: Calculate average payment amount by currency.
     - by_payee: Group payments by payee and sum amounts.
     - forecast: Simple projection for next month (+10%).
     """
+
     name: str = "payment_analytics_tool"
     description: str = (
         "Use this tool to perform financial analysis on a list of payment data. "
@@ -63,7 +65,9 @@ class PaymentAnalyzerTool(BaseTool):
 
         else:
             logger.warning(f"Unknown analysis type requested: {analysis_type}")
-            raise ValueError(f"Invalid analysis type: {analysis_type}. Supported: total, average, by_payee, forecast")
+            raise ValueError(
+                f"Invalid analysis type: {analysis_type}. Supported: total, average, by_payee, forecast"
+            )
 
     def _arun(self, payments_data: str, analysis_type: str) -> str:
         raise NotImplementedError("Async analysis not implemented.")

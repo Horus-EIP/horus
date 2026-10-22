@@ -120,8 +120,7 @@ class TestDecisionHelpers:
     def test_is_degenerate_output_spiral(self):
         # >= 5 markers in a >=200 char body -> flagged as a self-correction loop.
         spiral = (
-            "padding " * 30
-            + "wait — no — actually, but actually we conclude we surrender "
+            "padding " * 30 + "wait — no — actually, but actually we conclude we surrender "
             "impossible absurd"
         )
         assert len(spiral) >= 200
@@ -218,18 +217,14 @@ class TestDecisionHelpers:
     def test_configure_torch_threads_explicit(self, monkeypatch):
         monkeypatch.setenv("AGENT_TORCH_INTRAOP_THREADS", "3")
         fake_torch = MagicMock()
-        with patch.object(dma, "torch", fake_torch), patch.object(
-            dma, "_TORCH_AVAILABLE", True
-        ):
+        with patch.object(dma, "torch", fake_torch), patch.object(dma, "_TORCH_AVAILABLE", True):
             dma._configure_agent_torch_threads()
         fake_torch.set_num_threads.assert_called_once_with(3)
 
     def test_configure_torch_threads_invalid_value(self, monkeypatch):
         monkeypatch.setenv("AGENT_TORCH_INTRAOP_THREADS", "garbage")
         fake_torch = MagicMock()
-        with patch.object(dma, "torch", fake_torch), patch.object(
-            dma, "_TORCH_AVAILABLE", True
-        ):
+        with patch.object(dma, "torch", fake_torch), patch.object(dma, "_TORCH_AVAILABLE", True):
             dma._configure_agent_torch_threads()
         # Falls back to min(8, cpu_count) -> a positive int, never the bad string.
         (called_with,), _ = fake_torch.set_num_threads.call_args
@@ -247,8 +242,9 @@ class TestDecisionHelpers:
         fake_torch.bfloat16 = "BF16"
         fake_torch.float16 = "F16"
         fake_bnb = MagicMock()
-        with patch.object(dma, "torch", fake_torch), patch.object(
-            dma, "BitsAndBytesConfig", fake_bnb
+        with (
+            patch.object(dma, "torch", fake_torch),
+            patch.object(dma, "BitsAndBytesConfig", fake_bnb),
         ):
             dma._bnb4bit()
         # bf16-capable GPU -> compute dtype is bfloat16.
@@ -261,8 +257,9 @@ class TestDecisionHelpers:
         fake_torch.bfloat16 = "BF16"
         fake_torch.float16 = "F16"
         fake_bnb = MagicMock()
-        with patch.object(dma, "torch", fake_torch), patch.object(
-            dma, "BitsAndBytesConfig", fake_bnb
+        with (
+            patch.object(dma, "torch", fake_torch),
+            patch.object(dma, "BitsAndBytesConfig", fake_bnb),
         ):
             dma._bnb4bit()
         # No bf16 support -> falls back to float16.
@@ -275,17 +272,13 @@ class TestDetectDevice:
         fake_torch.cuda.is_available.return_value = True
         fake_torch.cuda.get_device_name.return_value = "Tesla"
         fake_torch.version.cuda = "12.1"
-        with patch.object(dma, "torch", fake_torch), patch.object(
-            dma, "_TORCH_AVAILABLE", True
-        ):
+        with patch.object(dma, "torch", fake_torch), patch.object(dma, "_TORCH_AVAILABLE", True):
             assert dma.detect_device("auto") == "cuda"
 
     def test_auto_selects_cpu_when_no_cuda(self):
         fake_torch = MagicMock()
         fake_torch.cuda.is_available.return_value = False
-        with patch.object(dma, "torch", fake_torch), patch.object(
-            dma, "_TORCH_AVAILABLE", True
-        ):
+        with patch.object(dma, "torch", fake_torch), patch.object(dma, "_TORCH_AVAILABLE", True):
             assert dma.detect_device("auto") == "cpu"
 
     def test_auto_cpu_when_torch_unavailable(self):
@@ -295,17 +288,13 @@ class TestDetectDevice:
     def test_cuda_request_falls_back_to_cpu(self):
         fake_torch = MagicMock()
         fake_torch.cuda.is_available.return_value = False
-        with patch.object(dma, "torch", fake_torch), patch.object(
-            dma, "_TORCH_AVAILABLE", True
-        ):
+        with patch.object(dma, "torch", fake_torch), patch.object(dma, "_TORCH_AVAILABLE", True):
             assert dma.detect_device("cuda:0") == "cpu"
 
     def test_cuda_request_passthrough_when_available(self):
         fake_torch = MagicMock()
         fake_torch.cuda.is_available.return_value = True
-        with patch.object(dma, "torch", fake_torch), patch.object(
-            dma, "_TORCH_AVAILABLE", True
-        ):
+        with patch.object(dma, "torch", fake_torch), patch.object(dma, "_TORCH_AVAILABLE", True):
             assert dma.detect_device("cuda:0") == "cuda:0"
 
     def test_explicit_cpu_passthrough(self):
@@ -366,9 +355,7 @@ class TestDecisionAgentInit:
         assert agent._causal_tokenizer is None
 
     def test_init_custom_model_name(self):
-        agent = DecisionMakingAgent(
-            decision_model=MagicMock(), model_name="my/model", device="cpu"
-        )
+        agent = DecisionMakingAgent(decision_model=MagicMock(), model_name="my/model", device="cpu")
         assert agent.model_name == "my/model"
 
     def test_init_default_model_name(self):
@@ -382,9 +369,7 @@ class TestDecisionAgentInit:
 
     def test_init_lazy_defers_model_load(self, monkeypatch):
         monkeypatch.setenv("AGENT_LAZY_DECISION_MODEL", "1")
-        with patch.object(
-            DecisionMakingAgent, "_load_causal_model"
-        ) as load:
+        with patch.object(DecisionMakingAgent, "_load_causal_model") as load:
             agent = DecisionMakingAgent(device="cpu")
         # Lazy mode: model load is NOT called during construction.
         load.assert_not_called()
@@ -392,9 +377,7 @@ class TestDecisionAgentInit:
 
     def test_init_eager_loads_model(self, monkeypatch):
         monkeypatch.setenv("AGENT_LAZY_DECISION_MODEL", "0")
-        with patch.object(
-            DecisionMakingAgent, "_load_causal_model"
-        ) as load:
+        with patch.object(DecisionMakingAgent, "_load_causal_model") as load:
             agent = DecisionMakingAgent(device="cpu")
         load.assert_called_once()
         assert agent._lazy is False
@@ -408,8 +391,9 @@ class TestDecisionAgentInit:
 class TestModelPathAndGpu:
     def test_resolve_model_path_local_ready(self):
         agent = DecisionMakingAgent(decision_model=MagicMock(), device="cpu")
-        with patch.object(dma, "_local_model_ready", return_value=True), patch.object(
-            dma, "LOCAL_MODEL_DIR", "/some/local/dir"
+        with (
+            patch.object(dma, "_local_model_ready", return_value=True),
+            patch.object(dma, "LOCAL_MODEL_DIR", "/some/local/dir"),
         ):
             assert agent._resolve_model_path() == "/some/local/dir"
 
@@ -435,8 +419,9 @@ class TestModelPathAndGpu:
         agent.device = "cuda:0"
         fake_torch = MagicMock()
         fake_torch.cuda.is_available.return_value = True
-        with patch.object(dma, "_agent_force_cpu", return_value=False), patch.object(
-            dma, "torch", fake_torch
+        with (
+            patch.object(dma, "_agent_force_cpu", return_value=False),
+            patch.object(dma, "torch", fake_torch),
         ):
             assert agent._use_gpu_for_load() is True
 
@@ -458,14 +443,14 @@ class TestLoadCausalModel:
         agent = self._bare_agent()
         tok = MagicMock()
         model = MagicMock()
-        with patch.object(agent, "_resolve_model_path", return_value="p"), patch.object(
-            agent, "_use_gpu_for_load", return_value=False
-        ), patch.object(
-            dma.AutoTokenizer, "from_pretrained", return_value=tok
-        ), patch.object(
-            dma.AutoModelForCausalLM, "from_pretrained", return_value=model
-        ) as load_model, patch.object(
-            dma, "_model_device", return_value="cpu"
+        with (
+            patch.object(agent, "_resolve_model_path", return_value="p"),
+            patch.object(agent, "_use_gpu_for_load", return_value=False),
+            patch.object(dma.AutoTokenizer, "from_pretrained", return_value=tok),
+            patch.object(
+                dma.AutoModelForCausalLM, "from_pretrained", return_value=model
+            ) as load_model,
+            patch.object(dma, "_model_device", return_value="cpu"),
         ):
             agent._load_causal_model()
         assert agent._causal_tokenizer is tok
@@ -479,9 +464,7 @@ class TestLoadCausalModel:
         agent = self._bare_agent()
         agent._causal_tokenizer = MagicMock()
         agent._causal_model = MagicMock()
-        with patch.object(
-            dma.AutoModelForCausalLM, "from_pretrained"
-        ) as load_model:
+        with patch.object(dma.AutoModelForCausalLM, "from_pretrained") as load_model:
             agent._load_causal_model()
         load_model.assert_not_called()
 
@@ -490,16 +473,16 @@ class TestLoadCausalModel:
         agent.device = "cuda:0"
         tok = MagicMock()
         model = MagicMock()
-        with patch.object(agent, "_resolve_model_path", return_value="p"), patch.object(
-            agent, "_use_gpu_for_load", return_value=True
-        ), patch.object(
-            dma, "_agent_accelerate_max_memory", return_value=None
-        ), patch.object(dma, "_bnb4bit", return_value="bnb-cfg"), patch.object(
-            dma.AutoTokenizer, "from_pretrained", return_value=tok
-        ), patch.object(
-            dma.AutoModelForCausalLM, "from_pretrained", return_value=model
-        ) as load_model, patch.object(
-            dma, "_model_device", return_value="cuda:0"
+        with (
+            patch.object(agent, "_resolve_model_path", return_value="p"),
+            patch.object(agent, "_use_gpu_for_load", return_value=True),
+            patch.object(dma, "_agent_accelerate_max_memory", return_value=None),
+            patch.object(dma, "_bnb4bit", return_value="bnb-cfg"),
+            patch.object(dma.AutoTokenizer, "from_pretrained", return_value=tok),
+            patch.object(
+                dma.AutoModelForCausalLM, "from_pretrained", return_value=model
+            ) as load_model,
+            patch.object(dma, "_model_device", return_value="cuda:0"),
         ):
             agent._load_causal_model()
         assert agent._causal_model is model
@@ -510,16 +493,16 @@ class TestLoadCausalModel:
     def test_load_gpu_path_with_max_memory(self):
         agent = self._bare_agent()
         agent.device = "cuda:0"
-        with patch.object(agent, "_resolve_model_path", return_value="p"), patch.object(
-            agent, "_use_gpu_for_load", return_value=True
-        ), patch.object(
-            dma, "_agent_accelerate_max_memory", return_value={0: "10GiB"}
-        ), patch.object(dma, "_bnb4bit", return_value="bnb-cfg"), patch.object(
-            dma.AutoTokenizer, "from_pretrained", return_value=MagicMock()
-        ), patch.object(
-            dma.AutoModelForCausalLM, "from_pretrained", return_value=MagicMock()
-        ) as load_model, patch.object(
-            dma, "_model_device", return_value="cuda:0"
+        with (
+            patch.object(agent, "_resolve_model_path", return_value="p"),
+            patch.object(agent, "_use_gpu_for_load", return_value=True),
+            patch.object(dma, "_agent_accelerate_max_memory", return_value={0: "10GiB"}),
+            patch.object(dma, "_bnb4bit", return_value="bnb-cfg"),
+            patch.object(dma.AutoTokenizer, "from_pretrained", return_value=MagicMock()),
+            patch.object(
+                dma.AutoModelForCausalLM, "from_pretrained", return_value=MagicMock()
+            ) as load_model,
+            patch.object(dma, "_model_device", return_value="cuda:0"),
         ):
             agent._load_causal_model()
         _, kwargs = load_model.call_args
@@ -537,15 +520,15 @@ class TestLoadCausalModel:
                 raise RuntimeError("CUDA OOM")
             return cpu_model
 
-        with patch.object(agent, "_resolve_model_path", return_value="p"), patch.object(
-            agent, "_use_gpu_for_load", return_value=True
-        ), patch.object(
-            dma, "_agent_accelerate_max_memory", return_value=None
-        ), patch.object(dma, "_bnb4bit", return_value="bnb-cfg"), patch.object(
-            dma.AutoTokenizer, "from_pretrained", return_value=MagicMock()
-        ), patch.object(
-            dma.AutoModelForCausalLM, "from_pretrained", side_effect=from_pretrained
-        ), patch.object(dma, "_model_device", return_value="cpu"):
+        with (
+            patch.object(agent, "_resolve_model_path", return_value="p"),
+            patch.object(agent, "_use_gpu_for_load", return_value=True),
+            patch.object(dma, "_agent_accelerate_max_memory", return_value=None),
+            patch.object(dma, "_bnb4bit", return_value="bnb-cfg"),
+            patch.object(dma.AutoTokenizer, "from_pretrained", return_value=MagicMock()),
+            patch.object(dma.AutoModelForCausalLM, "from_pretrained", side_effect=from_pretrained),
+            patch.object(dma, "_model_device", return_value="cpu"),
+        ):
             agent._load_causal_model()
         # After GPU failure the agent retries on CPU and flips its device.
         assert agent._causal_model is cpu_model
@@ -553,14 +536,15 @@ class TestLoadCausalModel:
 
     def test_load_cpu_failure_raises_runtime_error(self):
         agent = self._bare_agent()
-        with patch.object(agent, "_resolve_model_path", return_value="p"), patch.object(
-            agent, "_use_gpu_for_load", return_value=False
-        ), patch.object(
-            dma.AutoTokenizer, "from_pretrained", return_value=MagicMock()
-        ), patch.object(
-            dma.AutoModelForCausalLM,
-            "from_pretrained",
-            side_effect=OSError("no disk"),
+        with (
+            patch.object(agent, "_resolve_model_path", return_value="p"),
+            patch.object(agent, "_use_gpu_for_load", return_value=False),
+            patch.object(dma.AutoTokenizer, "from_pretrained", return_value=MagicMock()),
+            patch.object(
+                dma.AutoModelForCausalLM,
+                "from_pretrained",
+                side_effect=OSError("no disk"),
+            ),
         ):
             with pytest.raises(RuntimeError, match="Could not load the Hugging Face"):
                 agent._load_causal_model()
@@ -597,9 +581,7 @@ class TestEnsureCausalLoaded:
 
 class TestCoerceCallableOutput:
     def test_generated_text_list_shape(self):
-        out = DecisionMakingAgent._coerce_callable_output(
-            [{"generated_text": "  hello  "}]
-        )
+        out = DecisionMakingAgent._coerce_callable_output([{"generated_text": "  hello  "}])
         assert out == "hello"
 
     def test_plain_string(self):
@@ -672,8 +654,9 @@ class TestGenerateCausal:
 
         fake_torch = MagicMock()
         fake_torch.cuda.is_available.return_value = False
-        with patch.object(dma, "torch", fake_torch), patch.object(
-            dma, "_model_device", return_value="cpu"
+        with (
+            patch.object(dma, "torch", fake_torch),
+            patch.object(dma, "_model_device", return_value="cpu"),
         ):
             out = agent._generate_causal("u", "s")
         assert out == "no-cuda answer"
@@ -701,12 +684,11 @@ class TestStreamingNormalization:
     def _stream_causal(self, pieces: list[str]) -> list[str]:
         agent = _causal_agent()
         chunks, fake_emit = _capture_delta_chunks()
-        with patch.object(
-            dma, "TextIteratorStreamer", MagicMock(return_value=pieces)
-        ), patch("ai_agents.step_emitter.emit_step", fake_emit):
-            out = agent._generate_streaming(
-                agent._causal_model, agent._causal_tokenizer, {}
-            )
+        with (
+            patch.object(dma, "TextIteratorStreamer", MagicMock(return_value=pieces)),
+            patch("ai_agents.step_emitter.emit_step", fake_emit),
+        ):
+            out = agent._generate_streaming(agent._causal_model, agent._causal_tokenizer, {})
         assert out is agent._causal_model.generate.return_value
         return chunks
 
@@ -725,20 +707,14 @@ class TestStreamingNormalization:
         resp.iter_lines.return_value = [
             _sse_line({"choices": [{"delta": {"content": "Ｑ４ ２０２５ "}}]}),
             _sse_line({"choices": [{"delta": {"content": "$4。2M"}}]}),
-            _sse_line(
-                {"choices": [], "usage": {"completion_tokens": 5, "prompt_tokens": 9}}
-            ),
+            _sse_line({"choices": [], "usage": {"completion_tokens": 5, "prompt_tokens": 9}}),
             b"data: [DONE]",
         ]
         post = MagicMock()
         post.return_value.__enter__.return_value = resp
         chunks, fake_emit = _capture_delta_chunks()
-        with patch("requests.post", post), patch(
-            "ai_agents.step_emitter.emit_step", fake_emit
-        ):
-            out = agent._generate_vllm_streaming(
-                [{"role": "user", "content": "Q?"}], 64
-            )
+        with patch("requests.post", post), patch("ai_agents.step_emitter.emit_step", fake_emit):
+            out = agent._generate_vllm_streaming([{"role": "user", "content": "Q?"}], 64)
         assert out == "Q4 2025 $4.2M"
         assert chunks == ["Q4 2025 $4.2M"]
         assert agent._last_gen_tokens == 5
@@ -798,8 +774,9 @@ class TestDecide:
 
     def test_decide_causal_path_no_injected_model(self):
         agent = _causal_agent(decoded="causal output")
-        with patch.object(dma, "_model_device", return_value="cpu"), patch.object(
-            agent, "_ensure_causal_loaded"
+        with (
+            patch.object(dma, "_model_device", return_value="cpu"),
+            patch.object(agent, "_ensure_causal_loaded"),
         ):
             out = agent.decide("Q?", context="some context")
         assert out == "causal output"
@@ -826,8 +803,7 @@ class TestDecide:
 
     def test_decide_degenerate_output_replaced(self):
         spiral = (
-            "padding " * 30
-            + "wait — no — actually, but actually we conclude we surrender "
+            "padding " * 30 + "wait — no — actually, but actually we conclude we surrender "
             "impossible absurd"
         )
         model = MagicMock(return_value=spiral)
@@ -857,8 +833,9 @@ class TestDecide:
         # marker must appear in the user_content handed to the tokenizer.
         agent = _causal_agent(decoded="ok")
         long_ctx = "A" * 20000
-        with patch.object(dma, "_model_device", return_value="cpu"), patch.object(
-            agent, "_ensure_causal_loaded"
+        with (
+            patch.object(dma, "_model_device", return_value="cpu"),
+            patch.object(agent, "_ensure_causal_loaded"),
         ):
             agent.decide("Q?", context=long_ctx)
         messages = agent._causal_tokenizer.apply_chat_template.call_args[0][0]
@@ -867,15 +844,14 @@ class TestDecide:
 
     def _vllm_user_content(self, context: str) -> str:
         agent = _causal_agent()
-        with patch.object(dma, "_llm_backend", return_value="vllm"), patch.object(
-            agent, "_generate_vllm", return_value="ok"
-        ) as generate:
+        with (
+            patch.object(dma, "_llm_backend", return_value="vllm"),
+            patch.object(agent, "_generate_vllm", return_value="ok") as generate,
+        ):
             agent.decide("Q?", context=context)
         return generate.call_args.args[0]
 
-    def test_decide_caps_context_at_twelve_thousand_characters_by_default(
-        self, monkeypatch
-    ):
+    def test_decide_caps_context_at_twelve_thousand_characters_by_default(self, monkeypatch):
         monkeypatch.delenv("AGENT_MAX_CONTEXT_CHARS", raising=False)
         user_content = self._vllm_user_content("A" * 20000)
         assert "A" * 12000 + "\n…[retrieved content truncated]" in user_content
@@ -1125,12 +1101,15 @@ class TestKnowledgeRetrievalAgent:
 
         agent = KnowledgeRetrievalAgent(store)
         details = []
-        with patch(
-            "ai_agents.knowledge_retrieval_agent._summarize_retrieved",
-            return_value=(0, [], "a short preview of context"),
-        ), patch(
-            "ai_agents.knowledge_retrieval_agent.emit_step",
-            lambda step_type, title, detail="", **k: details.append(detail),
+        with (
+            patch(
+                "ai_agents.knowledge_retrieval_agent._summarize_retrieved",
+                return_value=(0, [], "a short preview of context"),
+            ),
+            patch(
+                "ai_agents.knowledge_retrieval_agent.emit_step",
+                lambda step_type, title, detail="", **k: details.append(detail),
+            ),
         ):
             await agent.fetch("query")
         assert any("context preview" in d for d in details)
@@ -1182,9 +1161,7 @@ def _pipeline(use_react: bool = False, tool_registry=None):
     retrieval = MagicMock()
     decision = MagicMock()
     return (
-        RAGPipeline(
-            retrieval, decision, tool_registry=tool_registry, use_react=use_react
-        ),
+        RAGPipeline(retrieval, decision, tool_registry=tool_registry, use_react=use_react),
         retrieval,
         decision,
     )
@@ -1229,9 +1206,7 @@ class TestReactAgentProperty:
         reg = MagicMock()
         pipe, retrieval, decision = _pipeline(tool_registry=reg)
         sentinel = object()
-        with patch(
-            "ai_agents.react_agent.ReactAgent", return_value=sentinel
-        ) as ReactAgent:
+        with patch("ai_agents.react_agent.ReactAgent", return_value=sentinel) as ReactAgent:
             first = pipe.react_agent
             second = pipe.react_agent
         assert first is sentinel
@@ -1272,9 +1247,7 @@ class TestGenerateResponse:
                 coro.close()
             raise TimeoutError()
 
-        with patch("asyncio.wait_for", fake_wait_for), pytest.raises(
-            GenerationTimedOut
-        ) as raised:
+        with patch("asyncio.wait_for", fake_wait_for), pytest.raises(GenerationTimedOut) as raised:
             await pipe.generate_response("a question")
         assert "REACT_TIMEOUT_SECONDS" in str(raised.value)
 
@@ -1300,9 +1273,7 @@ class TestProcessTask:
         reg.has.return_value = True
         reg.run.return_value = "tool result text"
         pipe, _, _ = _pipeline(tool_registry=reg)
-        result = await pipe.process_task(
-            {"task_id": "T1", "operation": "Calc", "query": "ignored"}
-        )
+        result = await pipe.process_task({"task_id": "T1", "operation": "Calc", "query": "ignored"})
         assert result == {
             "task_id": "T1",
             "response": "tool result text",
@@ -1342,9 +1313,7 @@ class TestProcessTask:
                 "history": [{"step": 1}],
             }
         )
-        result = await pipe.process_task(
-            {"task_id": "T3", "query": "complex q", "mode": "ReAct"}
-        )
+        result = await pipe.process_task({"task_id": "T3", "query": "complex q", "mode": "ReAct"})
         assert result["response"] == "react answer"
         assert result["sources"] == ["doc1"]
         assert result["reasoning_history"] == [{"step": 1}]
@@ -1368,9 +1337,7 @@ class TestProcessTask:
         retrieval.fetch = AsyncMock(return_value={"data": "ctx"})
         _answers(decision, "answer")
         # Empty operation string -> registry lookup is skipped entirely.
-        result = await pipe.process_task(
-            {"task_id": "T5", "operation": "", "query": "q"}
-        )
+        result = await pipe.process_task({"task_id": "T5", "operation": "", "query": "q"})
         assert result["response"] == "answer"
         reg.run.assert_not_called()
 
@@ -1380,13 +1347,15 @@ class TestProcessTask:
         reg = MagicMock()
         reg.has.return_value = False
         pipe, retrieval, decision = _pipeline(tool_registry=reg)
-        retrieval.fetch = AsyncMock(return_value={
-            "data": "ignored",
-            "passages": [
-                {"doc_id": "doc-q4", "title": "q4.md", "text": "Q4 REVENUE 4.2M"},
-                {"doc_id": "doc-budget", "title": "budget.md", "text": "2026 BUDGET 5M"},
-            ],
-        })
+        retrieval.fetch = AsyncMock(
+            return_value={
+                "data": "ignored",
+                "passages": [
+                    {"doc_id": "doc-q4", "title": "q4.md", "text": "Q4 REVENUE 4.2M"},
+                    {"doc_id": "doc-budget", "title": "budget.md", "text": "2026 BUDGET 5M"},
+                ],
+            }
+        )
         _answers(decision, "4.2M")
         block = "[S1] [file: q4.md (source=knowledge_store)]\nQ4 REVENUE 4.2M"
         result = await pipe.process_task(
@@ -1402,8 +1371,7 @@ class TestProcessTask:
         retrieval.fetch.assert_awaited_once_with("what was the revenue?")
         assert _request(decision) == "what was the revenue?"
         assert _passages(decision) == (
-            f"{block}\n--- Other Knowledge Store Passages ---\n"
-            "[S2] budget.md\n2026 BUDGET 5M"
+            f"{block}\n--- Other Knowledge Store Passages ---\n[S2] budget.md\n2026 BUDGET 5M"
         )
         assert _passages(decision).count("Q4 REVENUE 4.2M") == 1
 
@@ -1411,9 +1379,11 @@ class TestProcessTask:
         reg = MagicMock()
         reg.has.return_value = False
         pipe, retrieval, decision = _pipeline(tool_registry=reg)
-        retrieval.fetch = AsyncMock(return_value={
-            "passages": [{"doc_id": "doc-q4", "title": "q4.md", "text": "Q4 REVENUE 4.2M"}],
-        })
+        retrieval.fetch = AsyncMock(
+            return_value={
+                "passages": [{"doc_id": "doc-q4", "title": "q4.md", "text": "Q4 REVENUE 4.2M"}],
+            }
+        )
         _answers(decision, "4.2M")
         block = "[file: q4.md (source=inline)]\nQ4 REVENUE 4.2M"
         await pipe.process_task(
@@ -1483,8 +1453,9 @@ class TestProcessTask:
         retrieval = MagicMock()
         retrieval.fetch = AsyncMock(return_value={"data": body})
         pipe = RAGPipeline(retrieval, _causal_agent())
-        with patch.dict("os.environ", {"LLM_BACKEND": "vllm"}), patch.object(
-            DecisionMakingAgent, "_generate_vllm", served
+        with (
+            patch.dict("os.environ", {"LLM_BACKEND": "vllm"}),
+            patch.object(DecisionMakingAgent, "_generate_vllm", served),
         ):
             result = await pipe.process_task(
                 {

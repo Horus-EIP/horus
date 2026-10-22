@@ -67,8 +67,10 @@ MIN_COMPOSE_VERSION = max(version for _feature, version in COMPOSE_FEATURES)
 
 VERSION_NUMBER = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
+
 def dotted(version: tuple[int, ...]) -> str:
     return ".".join(str(part) for part in version)
+
 
 def compose_version(text: str) -> tuple[int, int, int] | None:
     match = VERSION_NUMBER.search(text or "")
@@ -77,7 +79,9 @@ def compose_version(text: str) -> tuple[int, int, int] | None:
     major, minor, patch = (int(part) for part in match.groups())
     return major, minor, patch
 
+
 DOCKER_HUB_NAMES = {"docker.io", "index.docker.io", "registry-1.docker.io"}
+
 
 def registry_host(image: str) -> str | None:
     first, separator, _rest = image.strip().partition("/")
@@ -85,6 +89,7 @@ def registry_host(image: str) -> str | None:
     if separator and names_a_registry and first not in DOCKER_HUB_NAMES:
         return first
     return None
+
 
 def model_server_hosts(image: str) -> list[tuple[str, str]]:
     host = registry_host(image)
@@ -95,6 +100,7 @@ def model_server_hosts(image: str) -> list[tuple[str, str]]:
         hosts.append(("llama.cpp server image layers", LAYER_HOSTS[host]))
     return hosts
 
+
 def _labelled_once(hosts: list[tuple[str, str]]) -> list[tuple[str, str]]:
     labels: dict[str, list[str]] = {}
     for label, url in hosts:
@@ -103,8 +109,10 @@ def _labelled_once(hosts: list[tuple[str, str]]) -> list[tuple[str, str]]:
             names.append(label)
     return [(" and ".join(names), url) for url, names in labels.items()]
 
-def network_hosts(image_registry: str | None,
-                  model_server_image: str | None = None) -> list[tuple[str, str]]:
+
+def network_hosts(
+    image_registry: str | None, model_server_image: str | None = None
+) -> list[tuple[str, str]]:
     if not image_registry:
         hosts = list(REGISTRIES)
     else:
@@ -115,6 +123,7 @@ def network_hosts(image_registry: str | None,
     if model_server_image:
         hosts.extend(model_server_hosts(model_server_image))
     return _labelled_once(hosts)
+
 
 PORTS = [
     (3000, "web-client", None),
@@ -130,6 +139,7 @@ PORTS = [
     (4318, "tempo (OTLP HTTP)", None),
 ]
 
+
 def check_python(log: Log) -> None:
     log.step("1/6  Python")
     got = sys.version_info[:3]
@@ -143,6 +153,7 @@ def check_python(log: Log) -> None:
             "Then run the START-HERE launcher again.",
         )
     log.ok(f"Python {'.'.join(map(str, got))}")
+
 
 def _docker_missing_error() -> InstallError:
     url = DOCKER_DOWNLOAD.get(sys.platform, DOCKER_DOWNLOAD["linux"])
@@ -182,6 +193,7 @@ def _docker_missing_error() -> InstallError:
         extra,
     )
 
+
 def check_docker(log: Log) -> str:
     log.step("2/6  Docker Engine")
     if shutil.which("docker") is None:
@@ -216,10 +228,14 @@ def check_docker(log: Log) -> str:
     raise InstallError(
         EXIT_DOCKER_DAEMON_DOWN,
         "Docker is installed but not running.",
-        (f"`docker version` reported:\n  {hint[:500]}" if hint else
-         "`docker version` could not reach the daemon."),
+        (
+            f"`docker version` reported:\n  {hint[:500]}"
+            if hint
+            else "`docker version` could not reach the daemon."
+        ),
         fix,
     )
+
 
 def _compose_too_old(found: tuple[int, int, int]) -> InstallError:
     width = max(len(feature) for feature, _version in COMPOSE_FEATURES)
@@ -229,8 +245,10 @@ def _compose_too_old(found: tuple[int, int, int]) -> InstallError:
         f"{dotted(MIN_COMPOSE_VERSION)} or newer.",
         "The Horus compose files use these features, and an older Compose\n"
         "rejects or misreads them before any container starts:\n\n  "
-        + "\n  ".join(f"{feature:<{width}}  since Compose {dotted(version)}"
-                      for feature, version in COMPOSE_FEATURES),
+        + "\n  ".join(
+            f"{feature:<{width}}  since Compose {dotted(version)}"
+            for feature, version in COMPOSE_FEATURES
+        ),
         "Update Docker Desktop: it ships Compose.\n"
         "On Linux update the plugin from Docker's own package repository:\n"
         "  sudo apt-get update && sudo apt-get install docker-compose-plugin\n"
@@ -238,6 +256,7 @@ def _compose_too_old(found: tuple[int, int, int]) -> InstallError:
         f"Then check that  docker compose version  says {dotted(MIN_COMPOSE_VERSION)} "
         "or newer,\nand run this again.",
     )
+
 
 def check_compose(log: Log) -> str:
     log.step("3/6  Docker Compose")
@@ -256,9 +275,11 @@ def check_compose(log: Log) -> str:
     version = res.first_line() or "unknown"
     found = compose_version(version)
     if found is None:
-        log.warn(f"Could not read a version number in {version!r}. Horus needs "
-                 f"Compose {dotted(MIN_COMPOSE_VERSION)} or newer; if the stack does "
-                 "not start, update Docker.")
+        log.warn(
+            f"Could not read a version number in {version!r}. Horus needs "
+            f"Compose {dotted(MIN_COMPOSE_VERSION)} or newer; if the stack does "
+            "not start, update Docker."
+        )
         return version
     if found < MIN_COMPOSE_VERSION:
         log.fail(f"{version}  (Horus needs {dotted(MIN_COMPOSE_VERSION)} or newer)")
@@ -266,9 +287,11 @@ def check_compose(log: Log) -> str:
     log.ok(version)
     return version
 
+
 def _docker_root(log: Log) -> str | None:
     res = run(["docker", "info", "--format", "{{.DockerRootDir}}"], log, timeout=45)
     return res.out.strip() if res.ok and res.out.strip() else None
+
 
 def _desktop_vm_dir() -> Path | None:
     if sys.platform == "win32":
@@ -284,6 +307,7 @@ def _desktop_vm_dir() -> Path | None:
         cand = Path.home() / "Library/Containers/com.docker.docker/Data"
         return cand if cand.exists() else Path.home()
     return None
+
 
 def check_disk(log: Log, required: int = REQUIRED_FREE_BYTES, mock: bool = False) -> dict:
     log.step("4/6  Disk space")
@@ -310,13 +334,13 @@ def check_disk(log: Log, required: int = REQUIRED_FREE_BYTES, mock: bool = False
         usage = shutil.disk_usage(str(measured))
     except OSError as exc:
         log.warn(f"Could not measure free space at {measured}: {exc}")
-        log.warn("Skipping the disk check. If the install fails part-way, "
-                 "free up space and retry.")
+        log.warn("Skipping the disk check. If the install fails part-way, free up space and retry.")
         return {"checked": False, "path": str(measured), "free_bytes": None}
 
     free = usage.free
-    log.info(f"disk: {note} = {measured}  free={human_bytes(free)} "
-             f"total={human_bytes(usage.total)}")
+    log.info(
+        f"disk: {note} = {measured}  free={human_bytes(free)} total={human_bytes(usage.total)}"
+    )
     if free < required and mock:
         raise InstallError(
             EXIT_DISK_SPACE,
@@ -356,6 +380,7 @@ def check_disk(log: Log, required: int = REQUIRED_FREE_BYTES, mock: bool = False
     log.ok(f"{human_bytes(free)} free at {measured}")
     return {"checked": True, "path": str(measured), "free_bytes": free}
 
+
 def _reachable(url: str, timeout: float = 8.0) -> tuple[bool, str]:
     req = urllib.request.Request(url, method="HEAD")
     req.add_header("User-Agent", "horus-installer")
@@ -371,12 +396,15 @@ def _reachable(url: str, timeout: float = 8.0) -> tuple[bool, str]:
     except Exception as exc:  # noqa: BLE001 - report anything else verbatim
         return False, str(exc)
 
+
 def check_network(log: Log, hosts: list[tuple[str, str]] | None = None) -> dict:
     log.step("5/6  Network")
     hosts = list(REGISTRIES) if hosts is None else hosts
-    downloads = ("container images, Python and npm packages,\nand model weights"
-                 if any(entry in hosts for entry in SOURCE_BUILD_HOSTS)
-                 else "container images and model\nweights")
+    downloads = (
+        "container images, Python and npm packages,\nand model weights"
+        if any(entry in hosts for entry in SOURCE_BUILD_HOSTS)
+        else "container images and model\nweights"
+    )
     results, failed = {}, []
     for label, url in hosts:
         ok, detail = _reachable(url)
@@ -402,6 +430,7 @@ def check_network(log: Log, hosts: list[tuple[str, str]] | None = None) -> dict:
         )
     return results
 
+
 def _read_env_values(env_path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     if not env_path.is_file():
@@ -421,14 +450,20 @@ def _read_env_values(env_path: Path) -> dict[str, str]:
         values[key.strip()] = val
     return values
 
+
 def _read_env_ports(env_path: Path) -> dict[str, str]:
-    return {key: value for key, value in _read_env_values(env_path).items()
-            if key.endswith("_PORT")}
+    return {
+        key: value for key, value in _read_env_values(env_path).items() if key.endswith("_PORT")
+    }
+
 
 def model_server_image(infra: Path) -> str:
-    return (os.environ.get(MODEL_SERVER_IMAGE_KEY, "").strip()
-            or _read_env_values(infra / ".env").get(MODEL_SERVER_IMAGE_KEY, "")
-            or DEFAULT_MODEL_SERVER_IMAGE)
+    return (
+        os.environ.get(MODEL_SERVER_IMAGE_KEY, "").strip()
+        or _read_env_values(infra / ".env").get(MODEL_SERVER_IMAGE_KEY, "")
+        or DEFAULT_MODEL_SERVER_IMAGE
+    )
+
 
 def _port_free(port: int) -> bool:
     for family, addr in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
@@ -441,12 +476,15 @@ def _port_free(port: int) -> bool:
             continue
     return True
 
+
 def _holder(port: int) -> str:
     try:
         if sys.platform == "win32":
             out = subprocess.run(
                 ["netstat", "-ano", "-p", "TCP"],
-                capture_output=True, text=True, timeout=20,
+                capture_output=True,
+                text=True,
+                timeout=20,
                 errors="replace",
             ).stdout
             pid = None
@@ -460,7 +498,10 @@ def _holder(port: int) -> str:
                 return ""
             tl = subprocess.run(
                 ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
-                capture_output=True, text=True, timeout=20, errors="replace",
+                capture_output=True,
+                text=True,
+                timeout=20,
+                errors="replace",
             ).stdout.strip()
             name = tl.split(",")[0].strip('"') if tl and "," in tl else ""
             return f"{name} (PID {pid})" if name else f"PID {pid}"
@@ -468,7 +509,10 @@ def _holder(port: int) -> str:
         if shutil.which("lsof"):
             out = subprocess.run(
                 ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-Fcn"],
-                capture_output=True, text=True, timeout=20, errors="replace",
+                capture_output=True,
+                text=True,
+                timeout=20,
+                errors="replace",
             ).stdout
             names = [ln[1:] for ln in out.splitlines() if ln.startswith("c")]
             if names:
@@ -476,7 +520,10 @@ def _holder(port: int) -> str:
         if shutil.which("ss"):
             out = subprocess.run(
                 ["ss", "-lptnH", f"sport = :{port}"],
-                capture_output=True, text=True, timeout=20, errors="replace",
+                capture_output=True,
+                text=True,
+                timeout=20,
+                errors="replace",
             ).stdout
             m = re.search(r'users:\(\("([^"]+)",pid=(\d+)', out)
             if m:
@@ -485,14 +532,18 @@ def _holder(port: int) -> str:
         pass
     return ""
 
+
 def _compose_rows(text: str) -> list[dict]:
     text = text.strip()
     if not text:
         return []
     try:
         parsed = json.loads(text)
-        return [row for row in (parsed if isinstance(parsed, list) else [parsed])
-                if isinstance(row, dict)]
+        return [
+            row
+            for row in (parsed if isinstance(parsed, list) else [parsed])
+            if isinstance(row, dict)
+        ]
     except json.JSONDecodeError:
         pass
     rows = []
@@ -505,11 +556,17 @@ def _compose_rows(text: str) -> list[dict]:
             rows.append(row)
     return rows
 
+
 def ports_of_this_install(log: Log, infra: Path) -> set[int]:
     if not (infra / ".env").is_file():
         return set()
-    res = run(["docker", "compose", "ps", "--format", "json"], log, timeout=60, cwd=infra,
-              log_output=False)
+    res = run(
+        ["docker", "compose", "ps", "--format", "json"],
+        log,
+        timeout=60,
+        cwd=infra,
+        log_output=False,
+    )
     if not res.ok:
         return set()
     published = set()
@@ -519,6 +576,7 @@ def ports_of_this_install(log: Log, infra: Path) -> set[int]:
             if isinstance(port, int) and port > 0:
                 published.add(port)
     return published
+
 
 def check_ports(log: Log, infra: Path) -> dict:
     log.step("6/6  Ports")
@@ -539,8 +597,10 @@ def check_ports(log: Log, infra: Path) -> dict:
             continue
         if port in ours:
             report[str(port)]["held_by_this_install"] = True
-            log.ok(f"port {port} ({service}) is this Horus install's own; "
-                   "its container is replaced on start")
+            log.ok(
+                f"port {port} ({service}) is this Horus install's own; "
+                "its container is replaced on start"
+            )
             continue
         who = _holder(port)
         report[str(port)]["holder"] = who
@@ -551,8 +611,9 @@ def check_ports(log: Log, infra: Path) -> dict:
     if busy:
         lines = []
         for port, service, who in busy:
-            lines.append(f"{port}  needed by {service}"
-                         + (f", currently held by {who}" if who else ""))
+            lines.append(
+                f"{port}  needed by {service}" + (f", currently held by {who}" if who else "")
+            )
         raise InstallError(
             EXIT_PORTS_BUSY,
             f"{len(busy)} port(s) already in use.",
@@ -571,22 +632,28 @@ def check_ports(log: Log, infra: Path) -> dict:
         log.ok(f"all {required} required ports free")
     return report
 
+
 def run_engine_checks(log: Log) -> dict:
     check_python(log)
     return {"docker_version": check_docker(log), "compose_version": check_compose(log)}
 
-def run_install_checks(log: Log, infra: Path,
-                       skip_disk_check: bool = False,
-                       image_registry: str | None = None,
-                       cpu_profile: bool = False,
-                       mock_free_gib: float | None = None) -> dict:
+
+def run_install_checks(
+    log: Log,
+    infra: Path,
+    skip_disk_check: bool = False,
+    image_registry: str | None = None,
+    cpu_profile: bool = False,
+    mock_free_gib: float | None = None,
+) -> dict:
     summary: dict = {}
     if skip_disk_check:
         log.step("4/6  Disk space")
-        log.warn("Skipped with --skip-disk-check. If the build runs out of "
-                 "space it will fail part-way through.")
-        summary["disk"] = {"checked": False, "path": None,
-                           "free_bytes": None, "skipped": True}
+        log.warn(
+            "Skipped with --skip-disk-check. If the build runs out of "
+            "space it will fail part-way through."
+        )
+        summary["disk"] = {"checked": False, "path": None, "free_bytes": None, "skipped": True}
     elif mock_free_gib is None:
         summary["disk"] = check_disk(log)
     else:

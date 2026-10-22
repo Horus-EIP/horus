@@ -66,7 +66,11 @@ def _record_retrieval(observation: Observation, metadata: dict[str, Any]) -> Non
 
 
 def _record_dispatch(observation: Observation, stage: Any, offset_s: float) -> None:
-    if observation.dispatch_s is None and isinstance(stage, str) and stage not in PRE_DISPATCH_STAGES:
+    if (
+        observation.dispatch_s is None
+        and isinstance(stage, str)
+        and stage not in PRE_DISPATCH_STAGES
+    ):
         observation.dispatch_s = offset_s
 
 

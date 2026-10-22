@@ -29,16 +29,47 @@ def tasks(routing_db):
     routing_db.add(Conversations(id=9, owner_username="manager", name="Team review"))
     routing_db.add_all(
         [
-            Task(id="mine", agent_id="manager", status="running", query="Q4 revenue?",
-                 conversation_id=7, owner_username="user"),
-            Task(id="via-conversation", agent_id="manager", status="completed",
-                 query="Hotel limit?", conversation_id=7, owner_username=None),
-            Task(id="theirs", agent_id="manager", status="running", query="Travel policy?",
-                 conversation_id=8, owner_username="other"),
-            Task(id="standalone", agent_id="manager", status="running",
-                 query="Sent from /tasks/new", conversation_id=None, owner_username="user"),
-            Task(id="my-step", agent_id="agent-finance", status="running", query="Step 1",
-                 conversation_id=None, owner_username=None, parent_task_id="standalone"),
+            Task(
+                id="mine",
+                agent_id="manager",
+                status="running",
+                query="Q4 revenue?",
+                conversation_id=7,
+                owner_username="user",
+            ),
+            Task(
+                id="via-conversation",
+                agent_id="manager",
+                status="completed",
+                query="Hotel limit?",
+                conversation_id=7,
+                owner_username=None,
+            ),
+            Task(
+                id="theirs",
+                agent_id="manager",
+                status="running",
+                query="Travel policy?",
+                conversation_id=8,
+                owner_username="other",
+            ),
+            Task(
+                id="standalone",
+                agent_id="manager",
+                status="running",
+                query="Sent from /tasks/new",
+                conversation_id=None,
+                owner_username="user",
+            ),
+            Task(
+                id="my-step",
+                agent_id="agent-finance",
+                status="running",
+                query="Step 1",
+                conversation_id=None,
+                owner_username=None,
+                parent_task_id="standalone",
+            ),
         ]
     )
     routing_db.commit()
@@ -83,9 +114,7 @@ class TestReadingOneTask:
         assert (await _get(mas_client, OWNER, "/tasks/via-conversation")).status_code == 200
         assert (await _get(mas_client, OTHER, "/tasks/via-conversation")).status_code == 403
 
-    async def test_the_owner_reads_a_subtask_that_has_no_owner_of_its_own(
-        self, tasks, mas_client
-    ):
+    async def test_the_owner_reads_a_subtask_that_has_no_owner_of_its_own(self, tasks, mas_client):
         mine = await _get(mas_client, OWNER, "/tasks/my-step")
         theirs = await _get(mas_client, OTHER, "/tasks/my-step")
         root = await _get(mas_client, OWNER, "/tasks/standalone")
@@ -136,7 +165,10 @@ class TestTaskList:
     @pytest.mark.parametrize("user", [MANAGER, ADMIN], ids=["manager", "admin"])
     async def test_managers_and_admins_list_every_root_task(self, tasks, mas_client, user):
         assert await self._listed(mas_client, user) == {
-            "mine", "via-conversation", "theirs", "standalone",
+            "mine",
+            "via-conversation",
+            "theirs",
+            "standalone",
         }
 
 
@@ -149,8 +181,11 @@ def stays_queued(monkeypatch):
 
 
 async def _post(mas_client, user: dict, conversation_id: int | None, headers: dict | None = None):
-    body = {"demand": "What was Q4 2025 revenue?", "conversation_id": conversation_id,
-            "skills_required": []}
+    body = {
+        "demand": "What was Q4 2025 revenue?",
+        "conversation_id": conversation_id,
+        "skills_required": [],
+    }
     async with mas_client(user) as client:
         response = await client.post("/tasks/new_task/", json=body, headers=headers or {})
     await task_jobs.drain()
@@ -158,11 +193,20 @@ async def _post(mas_client, user: dict, conversation_id: int | None, headers: di
 
 
 WHO_POSTS = [
-    (OWNER, 7, 202), (OTHER, 7, 403), (MANAGER, 7, 403), (MANAGER, 9, 202),
-    (ADMIN, 8, 202), (SYSTEM, 7, 403),
+    (OWNER, 7, 202),
+    (OTHER, 7, 403),
+    (MANAGER, 7, 403),
+    (MANAGER, 9, 202),
+    (ADMIN, 8, 202),
+    (SYSTEM, 7, 403),
 ]
 WHO_POSTS_IDS = [
-    "owner", "another-user", "manager-elsewhere", "manager-own", "admin-anywhere", "system",
+    "owner",
+    "another-user",
+    "manager-elsewhere",
+    "manager-own",
+    "admin-anywhere",
+    "system",
 ]
 
 
@@ -179,7 +223,9 @@ class TestCreatingATask:
         tasks.expire_all()
         assert tasks.query(Task).count() == tasks_before + (1 if expected == 202 else 0)
 
-    async def test_a_refused_post_adds_no_message_and_says_why(self, tasks, mas_client, stays_queued):
+    async def test_a_refused_post_adds_no_message_and_says_why(
+        self, tasks, mas_client, stays_queued
+    ):
         response = await _post(mas_client, OTHER, 7)
 
         assert response.json()["detail"] == (
@@ -256,24 +302,55 @@ class TestCancellingATask:
     async def test_the_owner_cancels_a_subtask_that_has_no_owner_of_its_own(
         self, tasks, mas_client
     ):
-        assert (await self._cancel(mas_client, OWNER, "/tasks/task-cancel/my-step")).status_code == 200
+        assert (
+            await self._cancel(mas_client, OWNER, "/tasks/task-cancel/my-step")
+        ).status_code == 200
 
     async def test_an_unknown_task_is_404_before_any_ownership_check(self, tasks, mas_client):
-        assert (await self._cancel(mas_client, OTHER, "/tasks/task-cancel/missing")).status_code == 404
+        assert (
+            await self._cancel(mas_client, OTHER, "/tasks/task-cancel/missing")
+        ).status_code == 404
 
 
 @pytest.fixture
 def admin_posted(tasks):
     tasks.add_all(
         [
-            Task(id="admin-in-mine", agent_id="manager", status="running",
-                 query="Posted by an admin", conversation_id=7, owner_username="admin"),
-            Task(id="admin-step", agent_id="agent-finance", status="running", query="Step 1",
-                 conversation_id=None, owner_username=None, parent_task_id="admin-in-mine"),
-            Task(id="loop-a", agent_id="agent-finance", status="running", query="Loop A",
-                 conversation_id=None, owner_username=None, parent_task_id="loop-b"),
-            Task(id="loop-b", agent_id="agent-finance", status="running", query="Loop B",
-                 conversation_id=None, owner_username="user", parent_task_id="loop-a"),
+            Task(
+                id="admin-in-mine",
+                agent_id="manager",
+                status="running",
+                query="Posted by an admin",
+                conversation_id=7,
+                owner_username="admin",
+            ),
+            Task(
+                id="admin-step",
+                agent_id="agent-finance",
+                status="running",
+                query="Step 1",
+                conversation_id=None,
+                owner_username=None,
+                parent_task_id="admin-in-mine",
+            ),
+            Task(
+                id="loop-a",
+                agent_id="agent-finance",
+                status="running",
+                query="Loop A",
+                conversation_id=None,
+                owner_username=None,
+                parent_task_id="loop-b",
+            ),
+            Task(
+                id="loop-b",
+                agent_id="agent-finance",
+                status="running",
+                query="Loop B",
+                conversation_id=None,
+                owner_username="user",
+                parent_task_id="loop-a",
+            ),
         ]
     )
     tasks.commit()

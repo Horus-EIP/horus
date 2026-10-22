@@ -58,13 +58,15 @@ class MASUser(HttpUser):
 
     @task(10)
     def list_conversations(self):
-        self.client.get("/conversations/get-conversations/", headers=self._headers(),
-                        name="GET /conversations/get-conversations/")
+        self.client.get(
+            "/conversations/get-conversations/",
+            headers=self._headers(),
+            name="GET /conversations/get-conversations/",
+        )
 
     @task(5)
     def list_agents(self):
-        self.client.get("/agents/details/", headers=self._headers(),
-                        name="GET /agents/details/")
+        self.client.get("/agents/details/", headers=self._headers(), name="GET /agents/details/")
 
     @task(5)
     def me(self):
@@ -72,8 +74,9 @@ class MASUser(HttpUser):
 
     @task(3)
     def task_queue_stats(self):
-        self.client.get("/tasks/stats/queue", headers=self._headers(),
-                        name="GET /tasks/stats/queue")
+        self.client.get(
+            "/tasks/stats/queue", headers=self._headers(), name="GET /tasks/stats/queue"
+        )
 
     @task(3)
     def task_list(self):
@@ -81,8 +84,7 @@ class MASUser(HttpUser):
 
     @task(2)
     def users_list(self):
-        self.client.get("/users/users_list", headers=self._headers(),
-                        name="GET /users/users_list")
+        self.client.get("/users/users_list", headers=self._headers(), name="GET /users/users_list")
 
     @task(2)
     def create_conversation(self):

@@ -33,6 +33,7 @@ def check_password_policy(value: str) -> str:
         raise PydanticCustomError("password_policy", PASSWORD_POLICY)
     return value
 
+
 class RegistrationForm(BaseModel):
     """Agent registration payload (name, skills, description, type)."""
 

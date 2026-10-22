@@ -151,9 +151,7 @@ class BetaResultTracker:
             "failed": failed,
             "total": total,
             "success_rate": f"{passed}/{total}",
-            "status": (
-                "PASS" if passed == total else "PARTIAL" if passed > 0 else "FAIL"
-            ),
+            "status": ("PASS" if passed == total else "PARTIAL" if passed > 0 else "FAIL"),
         }
 
     def summary(self) -> str:
@@ -178,9 +176,7 @@ class TestF1Login:
 
     @patch("auth.routes.authenticate_user")
     @patch("auth.routes.create_access_token")
-    def test_login_success_multiple(
-        self, mock_create_token, mock_authenticate, app, mock_db
-    ):
+    def test_login_success_multiple(self, mock_create_token, mock_authenticate, app, mock_db):
         """Test 30 successful login attempts."""
         setup_app_overrides(app, mock_db, None)
         client = TestClient(app)
@@ -209,9 +205,7 @@ class TestF1Login:
                 failed += 1
 
         tracker.record("F1", passed, failed, self.ITERATIONS)
-        assert (
-            passed == self.ITERATIONS
-        ), f"F1: Login failed {failed}/{self.ITERATIONS} times"
+        assert passed == self.ITERATIONS, f"F1: Login failed {failed}/{self.ITERATIONS} times"
 
     @patch("auth.routes.authenticate_user")
     def test_login_failure_invalid_credentials(self, mock_authenticate, app, mock_db):
@@ -221,9 +215,7 @@ class TestF1Login:
 
         mock_authenticate.return_value = False
 
-        response = client.post(
-            "/auth/token", data={"username": "invalid", "password": "wrong"}
-        )
+        response = client.post("/auth/token", data={"username": "invalid", "password": "wrong"})
 
         assert response.status_code == 401
         assert "Could not validate User" in response.json()["detail"]
@@ -268,9 +260,9 @@ class TestF2CreateUser:
                 failed += 1
 
         tracker.record("F2", passed, failed, self.ITERATIONS)
-        assert (
-            passed == self.ITERATIONS
-        ), f"F2: User creation failed {failed}/{self.ITERATIONS} times"
+        assert passed == self.ITERATIONS, (
+            f"F2: User creation failed {failed}/{self.ITERATIONS} times"
+        )
 
 
 # ============================================================================
@@ -298,9 +290,7 @@ class TestF3DeleteUser:
             mock_user = MagicMock()
             mock_user.id = user_id
             mock_user.username = f"deleteuser_{i}"
-            mock_db.query.return_value.filter.return_value.first.return_value = (
-                mock_user
-            )
+            mock_db.query.return_value.filter.return_value.first.return_value = mock_user
             mock_db.reset_mock()
 
             with patch("users.routes.delete_user_tool") as mock_delete:
@@ -317,9 +307,9 @@ class TestF3DeleteUser:
                     failed += 1
 
         tracker.record("F3", passed, failed, self.ITERATIONS)
-        assert (
-            passed == self.ITERATIONS
-        ), f"F3: User deletion failed {failed}/{self.ITERATIONS} times"
+        assert passed == self.ITERATIONS, (
+            f"F3: User deletion failed {failed}/{self.ITERATIONS} times"
+        )
 
 
 # ============================================================================
@@ -363,9 +353,7 @@ class TestF4AssignRole:
                 failed += 1
 
         tracker.record("F4", passed, failed, self.ITERATIONS)
-        assert (
-            passed == self.ITERATIONS
-        ), f"F4: Role change failed {failed}/{self.ITERATIONS} times"
+        assert passed == self.ITERATIONS, f"F4: Role change failed {failed}/{self.ITERATIONS} times"
 
 
 # ============================================================================
@@ -438,9 +426,9 @@ class TestF6CreateConversation:
                 failed += 1
 
         tracker.record("F6", passed, failed, self.ITERATIONS)
-        assert (
-            passed == self.ITERATIONS
-        ), f"F6: Conversation creation failed {failed}/{self.ITERATIONS} times"
+        assert passed == self.ITERATIONS, (
+            f"F6: Conversation creation failed {failed}/{self.ITERATIONS} times"
+        )
 
 
 # ============================================================================
@@ -480,9 +468,9 @@ class TestF7ListConversations:
                     failed += 1
 
         tracker.record("F7", passed, failed, self.ITERATIONS)
-        assert (
-            passed == self.ITERATIONS
-        ), f"F7: List conversations failed {failed}/{self.ITERATIONS} times"
+        assert passed == self.ITERATIONS, (
+            f"F7: List conversations failed {failed}/{self.ITERATIONS} times"
+        )
 
 
 # ============================================================================
@@ -520,9 +508,9 @@ class TestF8DeleteConversation:
                 failed += 1
 
         tracker.record("F8", passed, failed, self.ITERATIONS)
-        assert (
-            passed == self.ITERATIONS
-        ), f"F8: Conversation deletion failed {failed}/{self.ITERATIONS} times"
+        assert passed == self.ITERATIONS, (
+            f"F8: Conversation deletion failed {failed}/{self.ITERATIONS} times"
+        )
 
 
 # ============================================================================
@@ -554,9 +542,7 @@ class TestF9SendMessage:
             for i in range(self.ITERATIONS):
                 mock_conv = MagicMock()
                 mock_conv.owner_username = "user"
-                mock_db.query.return_value.filter.return_value.first.return_value = (
-                    mock_conv
-                )
+                mock_db.query.return_value.filter.return_value.first.return_value = mock_conv
 
                 with patch("tasks.routes.add_messages"):
                     start_time = time.time()
@@ -577,9 +563,9 @@ class TestF9SendMessage:
                         failed += 1
 
         tracker.record("F9", passed, failed, self.ITERATIONS)
-        assert (
-            passed >= self.ITERATIONS * 0.9
-        ), f"F9: Message latency failed {failed}/{self.ITERATIONS} times"
+        assert passed >= self.ITERATIONS * 0.9, (
+            f"F9: Message latency failed {failed}/{self.ITERATIONS} times"
+        )
 
 
 # ============================================================================
@@ -635,9 +621,9 @@ class TestF10AIResponse:
                                 failed += 1
 
         tracker.record("F10", passed, failed, self.ITERATIONS)
-        assert (
-            passed == self.ITERATIONS
-        ), f"F10: AI response failed {failed}/{self.ITERATIONS} times"
+        assert passed == self.ITERATIONS, (
+            f"F10: AI response failed {failed}/{self.ITERATIONS} times"
+        )
 
 
 # ============================================================================
@@ -668,9 +654,7 @@ class TestF11MessageHistory:
             for i in range(self.ITERATIONS):
                 mock_conv = MagicMock()
                 mock_conv.owner_username = "user"
-                mock_db.query.return_value.filter.return_value.first.return_value = (
-                    mock_conv
-                )
+                mock_db.query.return_value.filter.return_value.first.return_value = mock_conv
 
                 response = client.get(f"/conversations/get_history/{i + 1}")
 
@@ -689,9 +673,9 @@ class TestF11MessageHistory:
                     failed += 1
 
         tracker.record("F11", passed, failed, self.ITERATIONS)
-        assert (
-            passed == self.ITERATIONS
-        ), f"F11: History load failed {failed}/{self.ITERATIONS} times"
+        assert passed == self.ITERATIONS, (
+            f"F11: History load failed {failed}/{self.ITERATIONS} times"
+        )
 
 
 # ============================================================================
@@ -816,9 +800,9 @@ class TestF16RegisterAgent:
                             failed += 1
 
         tracker.record("F16", passed, failed, self.ITERATIONS)
-        assert (
-            passed == self.ITERATIONS
-        ), f"F16: Agent registration failed {failed}/{self.ITERATIONS} times"
+        assert passed == self.ITERATIONS, (
+            f"F16: Agent registration failed {failed}/{self.ITERATIONS} times"
+        )
 
 
 # ============================================================================
@@ -880,9 +864,9 @@ class TestF18DeleteAgent:
                         failed += 1
 
         tracker.record("F18", passed, failed, self.ITERATIONS)
-        assert (
-            passed == self.ITERATIONS
-        ), f"F18: Agent deletion failed {failed}/{self.ITERATIONS} times"
+        assert passed == self.ITERATIONS, (
+            f"F18: Agent deletion failed {failed}/{self.ITERATIONS} times"
+        )
 
 
 # ============================================================================
@@ -937,9 +921,9 @@ class TestF19CreateTask:
                                 failed += 1
 
         tracker.record("F19", passed, failed, self.ITERATIONS)
-        assert (
-            passed >= self.ITERATIONS * 0.9
-        ), f"F19: Task creation failed {failed}/{self.ITERATIONS} times"
+        assert passed >= self.ITERATIONS * 0.9, (
+            f"F19: Task creation failed {failed}/{self.ITERATIONS} times"
+        )
 
 
 # ============================================================================
@@ -984,9 +968,9 @@ class TestF20TaskQueue:
                         failed += 1
 
         tracker.record("F20", passed, failed, self.ITERATIONS)
-        assert (
-            passed == self.ITERATIONS
-        ), f"F20: Task queue check failed {failed}/{self.ITERATIONS} times"
+        assert passed == self.ITERATIONS, (
+            f"F20: Task queue check failed {failed}/{self.ITERATIONS} times"
+        )
 
 
 # ============================================================================
@@ -1022,18 +1006,15 @@ class TestF21CancelTask:
                         )
                         end_time = time.time()
 
-                        if (
-                            response.status_code == 200
-                            and (end_time - start_time) < 5.0
-                        ):
+                        if response.status_code == 200 and (end_time - start_time) < 5.0:
                             passed += 1
                         else:
                             failed += 1
 
         tracker.record("F21", passed, failed, self.ITERATIONS)
-        assert (
-            passed == self.ITERATIONS
-        ), f"F21: Task cancellation failed {failed}/{self.ITERATIONS} times"
+        assert passed == self.ITERATIONS, (
+            f"F21: Task cancellation failed {failed}/{self.ITERATIONS} times"
+        )
 
 
 # ============================================================================
@@ -1091,9 +1072,9 @@ class TestF23Dashboard:
                     failed += 1
 
         tracker.record("F23", passed, failed, self.ITERATIONS)
-        assert (
-            passed == self.ITERATIONS
-        ), f"F23: Dashboard load failed {failed}/{self.ITERATIONS} times"
+        assert passed == self.ITERATIONS, (
+            f"F23: Dashboard load failed {failed}/{self.ITERATIONS} times"
+        )
 
 
 # ============================================================================
@@ -1133,9 +1114,9 @@ class TestF24Analytics:
                         failed += 1
 
         tracker.record("F24", passed, failed, self.ITERATIONS)
-        assert (
-            passed == self.ITERATIONS
-        ), f"F24: Analytics update failed {failed}/{self.ITERATIONS} times"
+        assert passed == self.ITERATIONS, (
+            f"F24: Analytics update failed {failed}/{self.ITERATIONS} times"
+        )
 
 
 # ============================================================================

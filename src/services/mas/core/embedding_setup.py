@@ -123,22 +123,16 @@ def start_embedding_preload_background_thread() -> None:
             except Exception:
                 logger.exception("Router examples warm failed during embedding preload.")
         except Exception:
-            logger.exception(
-                "Background embedder preload failed; first suggest call will retry."
-            )
+            logger.exception("Background embedder preload failed; first suggest call will retry.")
 
-    threading.Thread(
-        target=_worker, name="mas-embedder-preload", daemon=True
-    ).start()
+    threading.Thread(target=_worker, name="mas-embedder-preload", daemon=True).start()
 
 
 def embed_texts(texts: list[str]) -> np.ndarray:
     """Return an ``(N, D)`` float32 matrix of L2-normalised embeddings."""
     _ensure_embedder_loaded()
     if _embedder is None:
-        raise RuntimeError(
-            "Embedding model is not loaded. Check container logs for load errors."
-        )
+        raise RuntimeError("Embedding model is not loaded. Check container logs for load errors.")
     vectors = list(_embedder.embed(list(texts)))
     if not vectors:
         return np.empty((0, _embedder.embedding_size), dtype=np.float32)

@@ -107,9 +107,7 @@ CREATE_CONVERSATION_RESPONSES = {
                     },
                     "unexpected_error": {
                         "summary": "Unexpected system error",
-                        "value": {
-                            "detail": "Error: Internal server error occurred"
-                        },
+                        "value": {"detail": "Error: Internal server error occurred"},
                     },
                 }
             }
@@ -145,9 +143,7 @@ CREATE_CONVERSATION_OPENAPI_EXTRA = {
                     },
                     "project": {
                         "summary": "Project discussion with special characters",
-                        "value": {
-                            "name": "Project Planning (Q1/Q2) Discussion 2025"
-                        },
+                        "value": {"name": "Project Planning (Q1/Q2) Discussion 2025"},
                     },
                     "long_title": {
                         "summary": "Conversation with longer descriptive title",
@@ -246,7 +242,9 @@ GET_HISTORY_RESPONSES = {
                     },
                     "not_owner": {
                         "summary": "Neither the conversation's owner nor an admin (managers included)",
-                        "value": {"detail": "Only the conversation's owner or an admin can read it"},
+                        "value": {
+                            "detail": "Only the conversation's owner or an admin can read it"
+                        },
                     },
                 }
             }
@@ -272,9 +270,7 @@ GET_HISTORY_RESPONSES = {
                 "examples": {
                     "database_error": {
                         "summary": "Database connection error",
-                        "value": {
-                            "detail": "Error: could not retrieve history from database"
-                        },
+                        "value": {"detail": "Error: could not retrieve history from database"},
                     },
                 }
             }
@@ -378,15 +374,11 @@ DELETE_CONVERSATION_RESPONSES = {
                 "examples": {
                     "database_error": {
                         "summary": "Database transaction error",
-                        "value": {
-                            "detail": "Error: could not delete conversation from database"
-                        },
+                        "value": {"detail": "Error: could not delete conversation from database"},
                     },
                     "websocket_error": {
                         "summary": "Error closing WebSocket connections",
-                        "value": {
-                            "detail": "Error: error closing active connections"
-                        },
+                        "value": {"detail": "Error: error closing active connections"},
                     },
                 }
             }

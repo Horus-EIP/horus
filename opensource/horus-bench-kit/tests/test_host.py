@@ -85,7 +85,13 @@ LSBLK_NVME = json.dumps(
                 "tran": None,
                 "model": None,
                 "children": [
-                    {"name": "nvme0n1", "type": "disk", "rota": False, "tran": "nvme", "model": "Example NVMe 1TB"}
+                    {
+                        "name": "nvme0n1",
+                        "type": "disk",
+                        "rota": False,
+                        "tran": "nvme",
+                        "model": "Example NVMe 1TB",
+                    }
                 ],
             }
         ]
@@ -104,7 +110,15 @@ LSBLK_LVM_ON_SATA_HDD = json.dumps(
                         "name": "sda3",
                         "type": "part",
                         "rota": "1",
-                        "children": [{"name": "sda", "type": "disk", "rota": "1", "tran": "sata", "model": "Example HDD 2TB  "}],
+                        "children": [
+                            {
+                                "name": "sda",
+                                "type": "disk",
+                                "rota": "1",
+                                "tran": "sata",
+                                "model": "Example HDD 2TB  ",
+                            }
+                        ],
                     }
                 ],
             }
@@ -142,7 +156,9 @@ class TestLinux:
         assert parse_cpuinfo(None) == {"cpu_model": None, "physical_cores": None, "avx2": None}
 
     def test_meminfo_total(self):
-        assert parse_meminfo_total("MemTotal:       16303916 kB\nMemFree: 1 kB\n") == 16303916 * 1024
+        assert (
+            parse_meminfo_total("MemTotal:       16303916 kB\nMemFree: 1 kB\n") == 16303916 * 1024
+        )
         assert parse_meminfo_total("") is None
 
     def test_dmidecode_gives_installed_size_type_and_configured_speed(self):
@@ -162,20 +178,38 @@ class TestLinux:
         }
 
     def test_lsblk_nvme_partition_resolves_to_its_disk(self):
-        assert parse_lsblk_disk(LSBLK_NVME) == {"disk_type": "NVMe SSD", "disk_model": "Example NVMe 1TB"}
+        assert parse_lsblk_disk(LSBLK_NVME) == {
+            "disk_type": "NVMe SSD",
+            "disk_model": "Example NVMe 1TB",
+        }
 
     def test_lsblk_lvm_on_a_sata_hard_disk(self):
-        assert parse_lsblk_disk(LSBLK_LVM_ON_SATA_HDD) == {"disk_type": "SATA HDD", "disk_model": "Example HDD 2TB"}
+        assert parse_lsblk_disk(LSBLK_LVM_ON_SATA_HDD) == {
+            "disk_type": "SATA HDD",
+            "disk_model": "Example HDD 2TB",
+        }
 
     def test_lsblk_garbage_gives_nothing(self):
         assert parse_lsblk_disk("not json") == {}
-        assert parse_lsblk_disk(json.dumps({"blockdevices": [{"name": "loop0", "type": "loop"}]})) == {}
+        assert (
+            parse_lsblk_disk(json.dumps({"blockdevices": [{"name": "loop0", "type": "loop"}]}))
+            == {}
+        )
 
 
 class TestWindows:
     def test_processor_name_and_core_count(self):
-        text = json.dumps({"Name": "Example CPU 4C @ 2.40GHz  ", "NumberOfCores": 4, "NumberOfLogicalProcessors": 8})
-        assert parse_windows_cpu(text) == {"cpu_model": "Example CPU 4C @ 2.40GHz", "physical_cores": 4}
+        text = json.dumps(
+            {
+                "Name": "Example CPU 4C @ 2.40GHz  ",
+                "NumberOfCores": 4,
+                "NumberOfLogicalProcessors": 8,
+            }
+        )
+        assert parse_windows_cpu(text) == {
+            "cpu_model": "Example CPU 4C @ 2.40GHz",
+            "physical_cores": 4,
+        }
 
     def test_memory_modules_give_size_type_and_speed(self):
         assert parse_windows_memory(WINDOWS_MEMORY) == {
@@ -186,14 +220,26 @@ class TestWindows:
         }
 
     def test_single_module_comes_back_as_an_object(self):
-        text = json.dumps({"Capacity": 8 * GIB, "Speed": 6400, "ConfiguredClockSpeed": 6400, "SMBIOSMemoryType": 35})
+        text = json.dumps(
+            {
+                "Capacity": 8 * GIB,
+                "Speed": 6400,
+                "ConfiguredClockSpeed": 6400,
+                "SMBIOSMemoryType": 35,
+            }
+        )
         facts = parse_windows_memory(text)
         assert facts["ram_type"] == "LPDDR5"
         assert facts["ram_speed"] == "6400 MT/s"
 
     def test_physical_disk(self):
-        text = json.dumps({"FriendlyName": "Example NVMe 2TB", "MediaType": "SSD", "BusType": "NVMe"})
-        assert parse_windows_disk(text) == {"disk_type": "NVMe SSD", "disk_model": "Example NVMe 2TB"}
+        text = json.dumps(
+            {"FriendlyName": "Example NVMe 2TB", "MediaType": "SSD", "BusType": "NVMe"}
+        )
+        assert parse_windows_disk(text) == {
+            "disk_type": "NVMe SSD",
+            "disk_model": "Example NVMe 2TB",
+        }
         assert parse_windows_disk("") == {}
 
 
@@ -234,7 +280,10 @@ class TestDocker:
 
     def test_docker_data_path_is_the_docker_root_on_linux(self, monkeypatch, tmp_path):
         monkeypatch.setattr(host.sys, "platform", "linux")
-        assert str(docker_data_path({"root_dir": "/var/lib/docker"})).replace("\\", "/") == "/var/lib/docker"
+        assert (
+            str(docker_data_path({"root_dir": "/var/lib/docker"})).replace("\\", "/")
+            == "/var/lib/docker"
+        )
         monkeypatch.setattr(host.sys, "platform", "win32")
         monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
         assert docker_data_path({"root_dir": "/var/lib/docker"}) == tmp_path
@@ -306,7 +355,9 @@ class TestCollectHost:
             host.WINDOWS_CPU_QUERY: json.dumps({"Name": "Example CPU 4C", "NumberOfCores": 4}),
             host.WINDOWS_TOTAL_MEMORY_QUERY: str(16 * GIB),
             host.WINDOWS_MEMORY_QUERY: WINDOWS_MEMORY,
-            host.WINDOWS_DISK_QUERY.format(letter="D"): json.dumps({"MediaType": "HDD", "BusType": "SATA"}),
+            host.WINDOWS_DISK_QUERY.format(letter="D"): json.dumps(
+                {"MediaType": "HDD", "BusType": "SATA"}
+            ),
         }
         monkeypatch.setattr(host, "powershell", replies.get)
         monkeypatch.setattr(host, "_windows_avx2", lambda: True)
@@ -341,7 +392,9 @@ class TestShell:
         assert shell.run_text(["hbk-no-such-program-here"]) is None
 
     def test_captured_output_and_exit_code(self):
-        code, output = Shell().run_captured([sys.executable, "-c", "print('[1]'); raise SystemExit(2)"])
+        code, output = Shell().run_captured(
+            [sys.executable, "-c", "print('[1]'); raise SystemExit(2)"]
+        )
         assert (code, output.strip()) == (2, "[1]")
 
     def test_a_missing_program_is_reported_not_raised(self, capsys):
@@ -362,7 +415,8 @@ class TestShell:
 
     def test_run_and_echo_feeds_stdin_and_keeps_the_lines(self, capsys):
         code, lines = Shell().run_and_echo(
-            [sys.executable, "-c", "import sys; print(sys.stdin.read().upper())"], stdin_text="probe job"
+            [sys.executable, "-c", "import sys; print(sys.stdin.read().upper())"],
+            stdin_text="probe job",
         )
         assert (code, lines) == (0, ["PROBE JOB"])
         assert capsys.readouterr().out.startswith("[info] ")

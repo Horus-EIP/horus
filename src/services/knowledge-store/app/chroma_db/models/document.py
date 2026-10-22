@@ -9,6 +9,7 @@ class EntityModel(BaseModel):
     amounts: list[str] = Field(default_factory=list)
     dates: list[str] = Field(default_factory=list)
 
+
 class DocumentModel(BaseModel):
     id: str
     title: str
