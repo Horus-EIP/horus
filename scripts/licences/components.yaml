@@ -304,3 +304,73 @@ components:
     source: project page
     url: https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
     note: run once by the installer to test the GPU (docker run --gpus all ... nvidia-smi); not part of the stack
+  libcupti:
+    version: bundled
+    licence: LicenseRef-NVIDIA-CUDA-Toolkit-EULA
+    spdx: LicenseRef-NVIDIA-CUDA-Toolkit-EULA
+    source: bundled in triton and torch (libcupti.so, libnvperf_host.so, libnvperf_target.so, libpcsamplingutil.so, libcheckpoint.so)
+    url: https://docs.nvidia.com/cuda/eula/index.html
+    note: NVIDIA CUPTI and Nsight profiling tools
+  libgomp:
+    version: "1"
+    licence: GPL-3.0-or-later WITH GCC-exception-3.1
+    spdx: GPL-3.0-or-later WITH GCC-exception-3.1
+    source: bundled in torch wheel (libgomp.so.1)
+    url: https://gcc.gnu.org/onlinedocs/libstdc++/manual/license.html
+    note: GCC OpenMP runtime
+  libpq:
+    version: "5.16"
+    licence: PostgreSQL
+    spdx: PostgreSQL
+    source: bundled in psycopg2-binary wheel (libpq.so.5.16)
+    url: https://www.postgresql.org/about/licence/
+    note: PostgreSQL client library
+  openssl-bundled:
+    version: "1.1"
+    licence: OpenSSL
+    spdx: OpenSSL
+    source: bundled in psycopg2-binary wheel (libssl.so, libcrypto.so)
+    url: https://www.openssl.org/source/license-1.1.1.html
+    note: OpenSSL 1.1 libraries
+  openldap-kerberos-bundled:
+    version: bundled
+    licence: OpenLDAP AND MIT
+    spdx: OpenLDAP AND MIT
+    source: bundled in psycopg2-binary wheel (libldap, liblber, libkrb5, libgssapi_krb5, libk5crypto, libkrb5support)
+    url: https://www.openldap.org/software/release/license.html
+    note: OpenLDAP, MIT Kerberos, SASL, and PCRE dependencies
+  libpcre:
+    version: bundled
+    licence: BSD-3-Clause
+    spdx: BSD-3-Clause
+    source: bundled in psycopg2-binary wheel (libpcre.so)
+    url: https://www.pcre.org/
+    note: Perl-Compatible Regular Expressions
+  libsasl2:
+    version: bundled
+    licence: BSD-3-Clause
+    spdx: BSD-3-Clause
+    source: bundled in psycopg2-binary wheel (libsasl2.so)
+    url: https://www.cyrusimap.org/sasl/
+    note: Cyrus SASL library
+  libselinux:
+    version: bundled
+    licence: LicenseRef-Public-Domain
+    spdx: LicenseRef-Public-Domain
+    source: bundled in psycopg2-binary wheel (libselinux.so)
+    url: https://github.com/SELinuxProject/selinux
+    note: SELinux userland library
+  libkeyutils:
+    version: bundled
+    licence: GPL-2.0-or-later
+    spdx: GPL-2.0-or-later
+    source: bundled in psycopg2-binary wheel (libkeyutils.so)
+    url: https://git.kernel.org/pub/scm/linux/kernel/git/dhowells/keyutils.git
+    note: Linux key management utilities
+  libcom_err:
+    version: bundled
+    licence: MIT
+    spdx: MIT
+    source: bundled in psycopg2-binary wheel (libcom_err.so)
+    url: https://e2fsprogs.sourceforge.net/
+    note: Common error description library

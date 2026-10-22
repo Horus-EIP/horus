@@ -5716,6 +5716,46 @@ Downloaded at install or build time, or by the services on first use.
   https://github.com/qdrant/fastembed
   embeddings in MAS and the knowledge store (section 1); its wheel ships LICENSE and NOTICE
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
+- libcom_err bundled
+  Licence: MIT (source: bundled in psycopg2-binary wheel (libcom_err.so))
+  https://e2fsprogs.sourceforge.net/
+  Common error description library
+  Licence text (MIT): LICENSES/MIT.txt
+- libcupti bundled
+  Licence: LicenseRef-NVIDIA-CUDA-Toolkit-EULA (source: bundled in triton and torch (libcupti.so, libnvperf_host.so, libnvperf_target.so, libpcsamplingutil.so, libcheckpoint.so))
+  https://docs.nvidia.com/cuda/eula/index.html
+  NVIDIA CUPTI and Nsight profiling tools
+  Licence text (LicenseRef-NVIDIA-CUDA-Toolkit-EULA): LICENSES/LicenseRef-NVIDIA-CUDA-Toolkit-EULA.txt
+- libgomp 1
+  Licence: GPL-3.0-or-later WITH GCC-exception-3.1 (source: bundled in torch wheel (libgomp.so.1))
+  https://gcc.gnu.org/onlinedocs/libstdc++/manual/license.html
+  GCC OpenMP runtime
+  Licence text (GPL-3.0-or-later WITH GCC-exception-3.1): LICENSES/GPL-3.0-or-later.txt, LICENSES/GCC-exception-3.1.txt
+- libkeyutils bundled
+  Licence: GPL-2.0-or-later (source: bundled in psycopg2-binary wheel (libkeyutils.so))
+  https://git.kernel.org/pub/scm/linux/kernel/git/dhowells/keyutils.git
+  Linux key management utilities
+  Licence text (GPL-2.0-or-later): LICENSES/GPL-2.0-or-later.txt
+- libpcre bundled
+  Licence: BSD-3-Clause (source: bundled in psycopg2-binary wheel (libpcre.so))
+  https://www.pcre.org/
+  Perl-Compatible Regular Expressions
+  Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
+- libpq 5.16
+  Licence: PostgreSQL (source: bundled in psycopg2-binary wheel (libpq.so.5.16))
+  https://www.postgresql.org/about/licence/
+  PostgreSQL client library
+  Licence text (PostgreSQL): LICENSES/PostgreSQL.txt
+- libsasl2 bundled
+  Licence: BSD-3-Clause (source: bundled in psycopg2-binary wheel (libsasl2.so))
+  https://www.cyrusimap.org/sasl/
+  Cyrus SASL library
+  Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
+- libselinux bundled
+  Licence: LicenseRef-Public-Domain (source: bundled in psycopg2-binary wheel (libselinux.so))
+  https://github.com/SELinuxProject/selinux
+  SELinux userland library
+  Licence text (LicenseRef-Public-Domain): LICENSES/LicenseRef-Public-Domain.txt
 - llama.cpp b11382
   Licence: MIT (source: project page, LICENSE, Copyright (c) 2023-2026 The ggml authors)
   https://github.com/ggml-org/llama.cpp
@@ -5731,6 +5771,16 @@ Downloaded at install or build time, or by the services on first use.
   https://github.com/microsoft/onnxruntime
   runs the embedding models, through fastembed and chromadb (section 1); its wheel ships ThirdPartyNotices.txt
   Licence text (MIT): LICENSES/MIT.txt
+- openldap-kerberos-bundled bundled
+  Licence: OpenLDAP AND MIT (source: bundled in psycopg2-binary wheel (libldap, liblber, libkrb5, libgssapi_krb5, libk5crypto, libkrb5support))
+  https://www.openldap.org/software/release/license.html
+  OpenLDAP, MIT Kerberos, SASL, and PCRE dependencies
+  Licence text (OpenLDAP AND MIT): LICENSES/OpenLDAP.txt, LICENSES/MIT.txt
+- openssl-bundled 1.1
+  Licence: OpenSSL (source: bundled in psycopg2-binary wheel (libssl.so, libcrypto.so))
+  https://www.openssl.org/source/license-1.1.1.html
+  OpenSSL 1.1 libraries
+  Licence text (OpenSSL): LICENSES/OpenSSL.txt
 - poppler-utils
   Licence: GPL-2.0 OR GPL-3.0 (source: licence inventory)
   https://poppler.freedesktop.org/
