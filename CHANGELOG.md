@@ -107,6 +107,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 ### Added
 
+- Release-candidate image runs now generate, verify and upload the GPL/LGPL source bundle alongside each CPU and GPU image bundle; the Alpine source fetcher falls back promptly to the GitHub APorts mirror when GitLab is unreachable. The workflow and all nine bundle artifacts completed successfully on `v0.1.2-rc8` (B-127, `07343cc`, `10453335`, `5cb1f6c`, `c2bdd37`, `05520096`).
 - A dedicated, least-privilege MAS account for agent workers (B-116): the installer and `init-env.sh` generate `SUPER_AGENT_PASSWORD`, MAS creates or upgrades the account at startup, and agent containers no longer authenticate with the super-user login. The role can register agents and execute agent work; it does not receive admin permissions (`ac5236e`, `05178b7`).
 - CI runs Bandit to scan Python code for security issues (B-42, `8561544`)
 - One llama-server (`ghcr.io/ggml-org/llama.cpp:server-b11382`, Qwen3-4B-Instruct-2507 Q4_K_M) serves MAS and every agent on the CPU profiles; neither service loads a local model (B-90, `9739864`)
