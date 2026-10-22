@@ -12,7 +12,7 @@ from common import (
     run,
 )
 
-DEFAULT_REGISTRY = "ghcr.io/hrous-eip"
+DEFAULT_REGISTRY = "ghcr.io/horus-eip"
 
 REGISTRY_KEY = "HORUS_REGISTRY"
 IMAGE_ENV_KEYS: tuple[str, ...] = (REGISTRY_KEY,)
