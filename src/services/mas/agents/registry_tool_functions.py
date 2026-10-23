@@ -9,17 +9,16 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Optional
- 
+
 from sqlalchemy import select
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
+from auth.passwords import hash_credential
 from core.logger import get_logger
 from core.rabbitmq_tool import rabbitmq_instance
 from core.work_queues import work_queue_name_for_agent_type
 from db.models import Agents, AgentTypes
-from bcrypt import hashpw, gensalt
-import hashlib
 
 
 def _skill_cache_upsert(agent_id: str, name: str, skills: list, description: str) -> None:
@@ -161,9 +160,7 @@ async def create_agent(
     """
     agent_id = str(uuid.uuid4())
     api_key = secrets.token_urlsafe(32)
-    password_sha = hashlib.sha256(api_key.encode('utf-8')).hexdigest()
-    salt = gensalt()
-    hash_api_key = hashpw(password_sha.encode('utf-8'), salt)
+    hash_api_key = hash_credential(api_key)
     try:
         existing_agent = get_agent_by_name(name, db)
         if existing_agent is not None:
@@ -216,9 +213,7 @@ def regenerate_agent_api_key(agent_id: str, db: Session) -> str | None:
             return None
 
         api_key = secrets.token_urlsafe(32)
-        password_sha = hashlib.sha256(api_key.encode('utf-8')).hexdigest()
-        salt = gensalt()
-        agent.api_key = hashpw(password_sha.encode('utf-8'), salt)
+        agent.api_key = hash_credential(api_key)
         db.commit()
         # Drop any cached verifications of the OLD key so it stops working
         # immediately (otherwise the positive-cache TTL would keep honouring it).

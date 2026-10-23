@@ -13,7 +13,7 @@ from auth.permissions import Role
 from db import agent_account
 from db.database import Base
 from db.models import Users
-from unit.password_test_helpers import hash_password, verify_password
+from unit.password_test_helpers import hash_legacy_password, hash_password, verify_password
 
 GENERATED = "Kq3-vT9xLm2_Rw7pZc4Nd8"
 CHOSEN = "Chosen-Pass-2026!"
@@ -119,6 +119,18 @@ class TestAnUpgradeWhereTheAgentChangedThePassword:
         assert stored_hash(session) == before
         assert verify_password(CHOSEN, stored_hash(session))
         assert "SUPER_AGENT_PASSWORD" in logs["logger"].warning.call_args.args[0]
+
+    def test_a_legacy_password_matches_the_environment_during_startup(
+        self, session, logs
+    ):
+        agent = add_agent(session, GENERATED)
+        agent.hashed_password = hash_legacy_password(GENERATED)
+        session.commit()
+        before = stored_hash(session)
+
+        assert agent_account.ensure_agent_account(session, "agent", GENERATED) == "matches"
+
+        assert stored_hash(session) == before
 
     def test_an_existing_admin_account_is_restricted_without_changing_its_password(
         self, session, logs

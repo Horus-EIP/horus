@@ -23,6 +23,7 @@ from auth.auth_tool_functions import (
 from core.config import settings
 from db.models import Agents
 from unit.password_test_helpers import (
+    hash_legacy_password,
     hash_password,
     verify_password,
 )
@@ -68,6 +69,21 @@ class TestAuthenticateUser:
         result = authenticate_user("testuser", password, self.mock_db)
 
         assert result == self.mock_user
+        mock_log_auth.assert_called_with("LOGIN", "testuser", success=True)
+
+    @patch("auth.auth_tool_functions.log_auth_operation")
+    @patch("auth.auth_tool_functions.log_security_event")
+    def test_authenticate_user_upgrades_legacy_password_hash(
+        self, mock_log_security, mock_log_auth
+    ):
+        self.mock_user.hashed_password = hash_legacy_password("password123")
+        self.mock_db.query().filter().first.return_value = self.mock_user
+
+        result = authenticate_user("testuser", "password123", self.mock_db)
+
+        assert result == self.mock_user
+        assert verify_password("password123", self.mock_user.hashed_password)
+        self.mock_db.commit.assert_called_once()
         mock_log_auth.assert_called_with("LOGIN", "testuser", success=True)
 
     @patch("auth.auth_tool_functions.log_auth_operation")
@@ -395,6 +411,19 @@ class TestPasswordHashing:
         assert verify_password(password, hash1) is True
         assert verify_password(password, hash2) is True
 
+    def test_legacy_raw_bcrypt_hash_verifies_and_returns_an_upgrade(self):
+        from auth.passwords import verify_and_upgrade_credential
+
+        legacy_hash = hash_legacy_password("legacy-password")
+        valid, upgraded_hash = verify_and_upgrade_credential(
+            "legacy-password", legacy_hash
+        )
+
+        assert valid is True
+        assert upgraded_hash is not None
+        assert verify_password("legacy-password", upgraded_hash)
+        assert not verify_password("legacy-password", legacy_hash)
+
 
 class TestModifyUserPassword:
     """Test password modification functionality."""
@@ -411,6 +440,22 @@ class TestModifyUserPassword:
     @patch("auth.auth_tool_functions.log_security_event")
     def test_modify_user_password_success(self, mock_log_security, mock_log_auth):
         """Test successful password modification."""
+        self.mock_db.query().filter().first.return_value = self.mock_user
+
+        result = modify_user_password(
+            "testuser", "old_password", "new_password", self.mock_db
+        )
+
+        assert result is True
+        assert verify_password("new_password", self.mock_user.hashed_password)
+        self.mock_db.commit.assert_called_once()
+
+    @patch("auth.auth_tool_functions.log_auth_operation")
+    @patch("auth.auth_tool_functions.log_security_event")
+    def test_modify_user_password_accepts_legacy_hash(
+        self, mock_log_security, mock_log_auth
+    ):
+        self.mock_user.hashed_password = hash_legacy_password("old_password")
         self.mock_db.query().filter().first.return_value = self.mock_user
 
         result = modify_user_password(
@@ -525,6 +570,20 @@ class TestAgentAuthentication:
         result = verify_agent_api_key(header_value, self.mock_db)
 
         assert result == (agent_id, api_key)
+
+    @patch("auth.auth_tool_functions.log_security_event")
+    def test_verify_agent_api_key_upgrades_legacy_hash(self, mock_log_security):
+        agent_id = "legacy-agent"
+        api_key = "legacy-api-key"
+        self.mock_agent.id = agent_id
+        self.mock_agent.api_key = hash_legacy_password(api_key)
+        self.mock_db.query().filter().first.return_value = self.mock_agent
+
+        result = verify_agent_api_key(f"{agent_id}:{api_key}", self.mock_db)
+
+        assert result == (agent_id, api_key)
+        assert verify_password(api_key, self.mock_agent.api_key)
+        self.mock_db.commit.assert_called_once()
 
     @patch("auth.auth_tool_functions.log_security_event")
     def test_verify_agent_api_key_invalid_format(self, mock_log_security):

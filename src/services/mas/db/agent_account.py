@@ -1,7 +1,6 @@
 import sys
 
-from bcrypt import hashpw, gensalt
-import hashlib
+from auth.passwords import hash_credential
 from auth.permissions import Role
 from core.config import settings
 from core.hybrid_logging import log_user_action
@@ -36,11 +35,9 @@ def create_agent(db, username: str, password: str) -> str:
             f"or '{SHIPPED_PASSWORD}'. {HOW_TO_SET}",
         )
         return REFUSED
-    password_sha = hashlib.sha256(password.encode('utf-8')).hexdigest()
-    salt = gensalt()
     agent = Users(
         username=username,
-        hashed_password=hashpw(password_sha.encode('utf-8'), salt),
+        hashed_password=hash_credential(password),
         role=Role.AGENT.value,
     )
     db.add(agent)
@@ -60,9 +57,7 @@ def replace_shipped_agent_password(db, agent: Users, password: str) -> str:
             f"'{SHIPPED_PASSWORD}'. {HOW_TO_SET}",
         )
         return SHIPPED
-    password_sha = hashlib.sha256(password.encode('utf-8')).hexdigest()
-    salt = gensalt()
-    agent.hashed_password = hashpw(password_sha.encode('utf-8'), salt)
+    agent.hashed_password = hash_credential(password)
     db.commit()
     log_success("init_db", f"The shipped password of {agent.username} was replaced")
     log_user_action(

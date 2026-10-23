@@ -11,12 +11,12 @@ The seed is idempotent: rows are matched by ``name``; existing entries are
 left untouched so re-running ``init_db()`` is safe.
 """
 
+import hashlib
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
-from bcrypt import hashpw, gensalt
-import hashlib
 
+from bcrypt import gensalt, hashpw
 from sqlalchemy.orm import Session
 
 from core.logger import get_logger, log_db_operation, log_success

@@ -13,7 +13,7 @@ from auth.permissions import Role
 from db import admin_account, init_setup
 from db.database import Base
 from db.models import Users
-from unit.password_test_helpers import hash_password, verify_password
+from unit.password_test_helpers import hash_legacy_password, hash_password, verify_password
 
 GENERATED = "Kq3-vT9xLm2_Rw7pZc4Nd8"
 CHOSEN = "Chosen-Pass-2026!"
@@ -137,6 +137,18 @@ class TestAnUpgradeWhereTheAdminChangedThePassword:
         assert stored_hash(session) == before
         assert verify_password(CHOSEN, stored_hash(session))
         assert "SUPER_USER_PASSWORD" in logs["logger"].warning.call_args.args[0]
+
+    def test_a_legacy_password_matches_the_environment_during_startup(
+        self, session, logs
+    ):
+        admin = add_admin(session, GENERATED)
+        admin.hashed_password = hash_legacy_password(GENERATED)
+        session.commit()
+        before = stored_hash(session)
+
+        assert admin_account.ensure_admin_account(session, "admin", GENERATED) == "matches"
+
+        assert stored_hash(session) == before
 
 
 class TestThePasswordStaysOutOfTheLogs:

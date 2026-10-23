@@ -10,7 +10,6 @@ opentelemetry-distro
 opentelemetry-exporter-otlp
 langchain
 langchain-core
-# Force legacy bcrypt for MAS compatibility
 bcrypt==5.0.0
 spacy
 python-multipart

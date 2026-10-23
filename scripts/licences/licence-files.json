@@ -107,12 +107,6 @@
    "notices": [],
    "spdx": "MIT"
   },
-  "bcrypt 3.2.2": {
-   "copies": [],
-   "from": "bcrypt-3.2.2-cp36-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_24_x86_64.whl",
-   "notices": [],
-   "spdx": "Apache-2.0"
-  },
   "bcrypt 5.0.0": {
    "copies": [],
    "from": "bcrypt-5.0.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
@@ -785,7 +779,7 @@
    ],
    "from": "nvidia_cuda_runtime-13.0.96-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
    "notices": [],
-   "spdx": "LicenseRef-NVIDIA-CUDA-Toolkit-EULA"
+   "spdx": "LicenseRef-NVIDIA-Proprietary"
   },
   "nvidia-cudnn-cu13 9.24.0.43": {
    "copies": [
@@ -865,7 +859,7 @@
    ],
    "from": "nvidia_nvshmem_cu13-3.4.5-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
    "notices": [],
-   "spdx": "LicenseRef-NVIDIA-NVSHMEM-SLA"
+   "spdx": "LicenseRef-NVIDIA-Proprietary"
   },
   "nvidia-nvtx 13.0.85": {
    "copies": [],
@@ -1019,14 +1013,6 @@
    "from": "packaging-26.3-py3-none-any.whl",
    "notices": [],
    "spdx": "Apache-2.0 OR BSD-2-Clause"
-  },
-  "passlib 1.7.4": {
-   "copies": [
-    "LICENSES/components/python/passlib-1.7.4.txt"
-   ],
-   "from": "passlib-1.7.4-py2.py3-none-any.whl",
-   "notices": [],
-   "spdx": "BSD-3-Clause"
   },
   "pdf2image 1.17.0": {
    "copies": [
@@ -1813,7 +1799,7 @@
     "LICENSES/components/rust/adler2-2.0.1.LICENSE-0BSD.txt",
     "LICENSES/components/rust/adler2-2.0.1.LICENSE-MIT.txt"
    ],
-   "from": "adler2-2.0.1 (cargo registry)",
+   "from": "adler2-2.0.1.crate",
    "notices": [],
    "spdx": "0BSD OR MIT OR Apache-2.0"
   },
@@ -1823,7 +1809,7 @@
     "LICENSES/components/rust/aho-corasick-1.1.5.LICENSE-MIT.txt",
     "LICENSES/components/rust/aho-corasick-1.1.5.UNLICENSE.txt"
    ],
-   "from": "aho-corasick-1.1.5 (cargo registry)",
+   "from": "aho-corasick-1.1.5.crate",
    "notices": [],
    "spdx": "Unlicense OR MIT"
   },
@@ -1831,7 +1817,7 @@
    "copies": [
     "LICENSES/components/rust/alloc-no-stdlib-2.0.4.txt"
    ],
-   "from": "alloc-no-stdlib-2.0.4 (cargo registry)",
+   "from": "alloc-no-stdlib-2.0.4.crate",
    "notices": [],
    "spdx": "BSD-3-Clause"
   },
@@ -1839,7 +1825,7 @@
    "copies": [
     "LICENSES/components/rust/alloc-stdlib-0.2.4.txt"
    ],
-   "from": "alloc-stdlib-0.2.4 (cargo registry)",
+   "from": "alloc-stdlib-0.2.4.crate",
    "licence_from": "https://github.com/dropbox/rust-alloc-no-stdlib/blob/master/LICENSE",
    "notices": [],
    "spdx": "BSD-3-Clause"
@@ -1849,7 +1835,7 @@
     "LICENSES/components/rust/android_system_properties-0.1.6.LICENSE-APACHE.txt",
     "LICENSES/components/rust/android_system_properties-0.1.6.LICENSE-MIT.txt"
    ],
-   "from": "android_system_properties-0.1.6 (cargo registry)",
+   "from": "android_system_properties-0.1.6.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -1857,7 +1843,7 @@
    "copies": [
     "LICENSES/components/rust/anyhow-1.0.104.txt"
    ],
-   "from": "anyhow-1.0.104 (cargo registry)",
+   "from": "anyhow-1.0.104.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -1866,7 +1852,7 @@
     "LICENSES/components/rust/atk-0.18.2.COPYRIGHT.txt",
     "LICENSES/components/rust/atk-0.18.2.LICENSE.txt"
    ],
-   "from": "atk-0.18.2 (cargo registry)",
+   "from": "atk-0.18.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -1874,7 +1860,7 @@
    "copies": [
     "LICENSES/components/rust/atk-sys-0.18.2.txt"
    ],
-   "from": "atk-sys-0.18.2 (cargo registry)",
+   "from": "atk-sys-0.18.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -1883,7 +1869,7 @@
     "LICENSES/components/rust/atomic-waker-1.1.2.LICENSE-MIT.txt",
     "LICENSES/components/rust/atomic-waker-1.1.2.LICENSE-THIRD-PARTY.txt"
    ],
-   "from": "atomic-waker-1.1.2 (cargo registry)",
+   "from": "atomic-waker-1.1.2.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -1891,7 +1877,7 @@
    "copies": [
     "LICENSES/components/rust/autocfg-1.5.1.txt"
    ],
-   "from": "autocfg-1.5.1 (cargo registry)",
+   "from": "autocfg-1.5.1.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -1899,7 +1885,7 @@
    "copies": [
     "LICENSES/components/rust/base64-0.21.7.txt"
    ],
-   "from": "base64-0.21.7 (cargo registry)",
+   "from": "base64-0.21.7.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -1907,7 +1893,7 @@
    "copies": [
     "LICENSES/components/rust/base64-0.22.1.txt"
    ],
-   "from": "base64-0.22.1 (cargo registry)",
+   "from": "base64-0.22.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -1915,7 +1901,7 @@
    "copies": [
     "LICENSES/components/rust/bit-set-0.8.0.txt"
    ],
-   "from": "bit-set-0.8.0 (cargo registry)",
+   "from": "bit-set-0.8.0.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -1923,7 +1909,7 @@
    "copies": [
     "LICENSES/components/rust/bit-vec-0.8.0.txt"
    ],
-   "from": "bit-vec-0.8.0 (cargo registry)",
+   "from": "bit-vec-0.8.0.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -1931,7 +1917,7 @@
    "copies": [
     "LICENSES/components/rust/bitflags-1.3.2.txt"
    ],
-   "from": "bitflags-1.3.2 (cargo registry)",
+   "from": "bitflags-1.3.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -1939,7 +1925,7 @@
    "copies": [
     "LICENSES/components/rust/bitflags-2.13.1.txt"
    ],
-   "from": "bitflags-2.13.1 (cargo registry)",
+   "from": "bitflags-2.13.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -1947,7 +1933,7 @@
    "copies": [
     "LICENSES/components/rust/block-buffer-0.10.4.txt"
    ],
-   "from": "block-buffer-0.10.4 (cargo registry)",
+   "from": "block-buffer-0.10.4.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -1955,7 +1941,7 @@
    "copies": [
     "LICENSES/components/rust/block2-0.6.2.txt"
    ],
-   "from": "block2-0.6.2 (cargo registry)",
+   "from": "block2-0.6.2.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "MIT"
@@ -1965,7 +1951,7 @@
     "LICENSES/components/rust/brotli-8.0.4.LICENSE.BSD-3-Clause.txt",
     "LICENSES/components/rust/brotli-8.0.4.LICENSE.MIT.txt"
    ],
-   "from": "brotli-8.0.4 (cargo registry)",
+   "from": "brotli-8.0.4.crate",
    "notices": [],
    "spdx": "BSD-3-Clause AND MIT"
   },
@@ -1973,7 +1959,7 @@
    "copies": [
     "LICENSES/components/rust/brotli-decompressor-5.0.3.txt"
    ],
-   "from": "brotli-decompressor-5.0.3 (cargo registry)",
+   "from": "brotli-decompressor-5.0.3.crate",
    "notices": [],
    "spdx": "BSD-3-Clause OR MIT"
   },
@@ -1981,7 +1967,7 @@
    "copies": [
     "LICENSES/components/rust/bs58-0.5.1.txt"
    ],
-   "from": "bs58-0.5.1 (cargo registry)",
+   "from": "bs58-0.5.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -1989,7 +1975,7 @@
    "copies": [
     "LICENSES/components/rust/bumpalo-3.20.3.txt"
    ],
-   "from": "bumpalo-3.20.3 (cargo registry)",
+   "from": "bumpalo-3.20.3.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -1998,7 +1984,7 @@
     "LICENSES/components/rust/bytemuck-1.25.2.LICENSE-MIT.txt",
     "LICENSES/components/rust/bytemuck-1.25.2.LICENSE-ZLIB.txt"
    ],
-   "from": "bytemuck-1.25.2 (cargo registry)",
+   "from": "bytemuck-1.25.2.crate",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
   },
@@ -2008,7 +1994,7 @@
     "LICENSES/components/rust/byteorder-1.5.0.LICENSE-MIT.txt",
     "LICENSES/components/rust/byteorder-1.5.0.UNLICENSE.txt"
    ],
-   "from": "byteorder-1.5.0 (cargo registry)",
+   "from": "byteorder-1.5.0.crate",
    "notices": [],
    "spdx": "Unlicense OR MIT"
   },
@@ -2016,7 +2002,7 @@
    "copies": [
     "LICENSES/components/rust/bytes-1.12.1.txt"
    ],
-   "from": "bytes-1.12.1 (cargo registry)",
+   "from": "bytes-1.12.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2025,7 +2011,7 @@
     "LICENSES/components/rust/cairo-rs-0.18.5.COPYRIGHT.txt",
     "LICENSES/components/rust/cairo-rs-0.18.5.LICENSE.txt"
    ],
-   "from": "cairo-rs-0.18.5 (cargo registry)",
+   "from": "cairo-rs-0.18.5.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2033,7 +2019,7 @@
    "copies": [
     "LICENSES/components/rust/cairo-sys-rs-0.18.2.txt"
    ],
-   "from": "cairo-sys-rs-0.18.2 (cargo registry)",
+   "from": "cairo-sys-rs-0.18.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2041,7 +2027,7 @@
    "copies": [
     "LICENSES/components/rust/camino-1.2.5.txt"
    ],
-   "from": "camino-1.2.5 (cargo registry)",
+   "from": "camino-1.2.5.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2049,7 +2035,7 @@
    "copies": [
     "LICENSES/components/rust/cargo-platform-0.1.9.txt"
    ],
-   "from": "cargo-platform-0.1.9 (cargo registry)",
+   "from": "cargo-platform-0.1.9.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2057,7 +2043,7 @@
    "copies": [
     "LICENSES/components/rust/cargo_metadata-0.19.2.txt"
    ],
-   "from": "cargo_metadata-0.19.2 (cargo registry)",
+   "from": "cargo_metadata-0.19.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2065,7 +2051,7 @@
    "copies": [
     "LICENSES/components/rust/cargo_toml-0.22.3.txt"
    ],
-   "from": "cargo_toml-0.22.3 (cargo registry)",
+   "from": "cargo_toml-0.22.3.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -2073,7 +2059,7 @@
    "copies": [
     "LICENSES/components/rust/cc-1.4.4.txt"
    ],
-   "from": "cc-1.4.4 (cargo registry)",
+   "from": "cc-1.4.4.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2081,7 +2067,7 @@
    "copies": [
     "LICENSES/components/rust/cesu8-1.1.0.txt"
    ],
-   "from": "cesu8-1.1.0 (cargo registry)",
+   "from": "cesu8-1.1.0.crate",
    "licence_from": "https://github.com/emk/cesu8-rs/blob/master/COPYRIGHT-RUST.txt",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
@@ -2090,7 +2076,7 @@
    "copies": [
     "LICENSES/components/rust/cfb-0.7.3.txt"
    ],
-   "from": "cfb-0.7.3 (cargo registry)",
+   "from": "cfb-0.7.3.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2098,7 +2084,7 @@
    "copies": [
     "LICENSES/components/rust/cfg-expr-0.15.8.txt"
    ],
-   "from": "cfg-expr-0.15.8 (cargo registry)",
+   "from": "cfg-expr-0.15.8.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2106,7 +2092,7 @@
    "copies": [
     "LICENSES/components/rust/cfg-if-1.0.4.txt"
    ],
-   "from": "cfg-if-1.0.4 (cargo registry)",
+   "from": "cfg-if-1.0.4.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2114,7 +2100,7 @@
    "copies": [
     "LICENSES/components/rust/chrono-0.4.45.txt"
    ],
-   "from": "chrono-0.4.45 (cargo registry)",
+   "from": "chrono-0.4.45.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2122,7 +2108,7 @@
    "copies": [
     "LICENSES/components/rust/combine-4.6.8.txt"
    ],
-   "from": "combine-4.6.8 (cargo registry)",
+   "from": "combine-4.6.8.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2131,7 +2117,7 @@
     "LICENSES/components/rust/cookie-0.18.2.LICENSE-APACHE.txt",
     "LICENSES/components/rust/cookie-0.18.2.LICENSE-MIT.txt"
    ],
-   "from": "cookie-0.18.2 (cargo registry)",
+   "from": "cookie-0.18.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2139,7 +2125,7 @@
    "copies": [
     "LICENSES/components/rust/core-foundation-0.10.1.txt"
    ],
-   "from": "core-foundation-0.10.1 (cargo registry)",
+   "from": "core-foundation-0.10.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2147,7 +2133,7 @@
    "copies": [
     "LICENSES/components/rust/core-foundation-sys-0.8.7.txt"
    ],
-   "from": "core-foundation-sys-0.8.7 (cargo registry)",
+   "from": "core-foundation-sys-0.8.7.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2155,7 +2141,7 @@
    "copies": [
     "LICENSES/components/rust/core-graphics-0.25.0.txt"
    ],
-   "from": "core-graphics-0.25.0 (cargo registry)",
+   "from": "core-graphics-0.25.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2163,7 +2149,7 @@
    "copies": [
     "LICENSES/components/rust/core-graphics-types-0.2.0.txt"
    ],
-   "from": "core-graphics-types-0.2.0 (cargo registry)",
+   "from": "core-graphics-types-0.2.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2171,7 +2157,7 @@
    "copies": [
     "LICENSES/components/rust/cpufeatures-0.2.17.txt"
    ],
-   "from": "cpufeatures-0.2.17 (cargo registry)",
+   "from": "cpufeatures-0.2.17.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2179,7 +2165,7 @@
    "copies": [
     "LICENSES/components/rust/crc32fast-1.5.1.txt"
    ],
-   "from": "crc32fast-1.5.1 (cargo registry)",
+   "from": "crc32fast-1.5.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2188,7 +2174,7 @@
     "LICENSES/components/rust/crossbeam-channel-0.5.16.LICENSE-MIT.txt",
     "LICENSES/components/rust/crossbeam-channel-0.5.16.LICENSE-THIRD-PARTY.txt"
    ],
-   "from": "crossbeam-channel-0.5.16 (cargo registry)",
+   "from": "crossbeam-channel-0.5.16.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2196,7 +2182,7 @@
    "copies": [
     "LICENSES/components/rust/crossbeam-utils-0.8.22.txt"
    ],
-   "from": "crossbeam-utils-0.8.22 (cargo registry)",
+   "from": "crossbeam-utils-0.8.22.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2204,19 +2190,19 @@
    "copies": [
     "LICENSES/components/rust/crypto-common-0.1.7.txt"
    ],
-   "from": "crypto-common-0.1.7 (cargo registry)",
+   "from": "crypto-common-0.1.7.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "cssparser 0.36.0": {
    "copies": [],
-   "from": "cssparser-0.36.0 (cargo registry)",
+   "from": "cssparser-0.36.0.crate",
    "notices": [],
    "spdx": "MPL-2.0"
   },
   "cssparser-macros 0.6.1": {
    "copies": [],
-   "from": "cssparser-macros-0.6.1 (cargo registry)",
+   "from": "cssparser-macros-0.6.1.crate",
    "notices": [],
    "spdx": "MPL-2.0"
   },
@@ -2224,7 +2210,7 @@
    "copies": [
     "LICENSES/components/rust/ctor-0.8.0.txt"
    ],
-   "from": "ctor-0.8.0 (cargo registry)",
+   "from": "ctor-0.8.0.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -2232,7 +2218,7 @@
    "copies": [
     "LICENSES/components/rust/ctor-proc-macro-0.0.7.txt"
    ],
-   "from": "ctor-proc-macro-0.0.7 (cargo registry)",
+   "from": "ctor-proc-macro-0.0.7.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -2240,7 +2226,7 @@
    "copies": [
     "LICENSES/components/rust/darling-0.23.0.txt"
    ],
-   "from": "darling-0.23.0 (cargo registry)",
+   "from": "darling-0.23.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2248,7 +2234,7 @@
    "copies": [
     "LICENSES/components/rust/darling_core-0.23.0.txt"
    ],
-   "from": "darling_core-0.23.0 (cargo registry)",
+   "from": "darling_core-0.23.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2256,7 +2242,7 @@
    "copies": [
     "LICENSES/components/rust/darling_macro-0.23.0.txt"
    ],
-   "from": "darling_macro-0.23.0 (cargo registry)",
+   "from": "darling_macro-0.23.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2265,7 +2251,7 @@
     "LICENSES/components/rust/dbus-0.9.12.LICENSE-APACHE.txt",
     "LICENSES/components/rust/dbus-0.9.12.LICENSE-MIT.txt"
    ],
-   "from": "dbus-0.9.12 (cargo registry)",
+   "from": "dbus-0.9.12.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -2273,7 +2259,7 @@
    "copies": [
     "LICENSES/components/rust/defmt-1.1.1.txt"
    ],
-   "from": "defmt-1.1.1 (cargo registry)",
+   "from": "defmt-1.1.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2281,13 +2267,13 @@
    "copies": [
     "LICENSES/components/rust/defmt-macros-1.1.1.txt"
    ],
-   "from": "defmt-macros-1.1.1 (cargo registry)",
+   "from": "defmt-macros-1.1.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "defmt-parser 1.0.0": {
    "copies": [],
-   "from": "defmt-parser-1.0.0 (cargo registry)",
+   "from": "defmt-parser-1.0.0.crate",
    "licence_from": "https://github.com/knurling-rs/defmt/blob/main/LICENSE-APACHE",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
@@ -2297,7 +2283,7 @@
     "LICENSES/components/rust/deranged-0.5.8.LICENSE-Apache.txt",
     "LICENSES/components/rust/deranged-0.5.8.LICENSE-MIT.txt"
    ],
-   "from": "deranged-0.5.8 (cargo registry)",
+   "from": "deranged-0.5.8.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2305,7 +2291,7 @@
    "copies": [
     "LICENSES/components/rust/derive_more-2.1.1.txt"
    ],
-   "from": "derive_more-2.1.1 (cargo registry)",
+   "from": "derive_more-2.1.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2313,7 +2299,7 @@
    "copies": [
     "LICENSES/components/rust/derive_more-impl-2.1.1.txt"
    ],
-   "from": "derive_more-impl-2.1.1 (cargo registry)",
+   "from": "derive_more-impl-2.1.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2321,7 +2307,7 @@
    "copies": [
     "LICENSES/components/rust/digest-0.10.7.txt"
    ],
-   "from": "digest-0.10.7 (cargo registry)",
+   "from": "digest-0.10.7.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2329,7 +2315,7 @@
    "copies": [
     "LICENSES/components/rust/dirs-6.0.0.txt"
    ],
-   "from": "dirs-6.0.0 (cargo registry)",
+   "from": "dirs-6.0.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2337,7 +2323,7 @@
    "copies": [
     "LICENSES/components/rust/dirs-sys-0.5.0.txt"
    ],
-   "from": "dirs-sys-0.5.0 (cargo registry)",
+   "from": "dirs-sys-0.5.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2345,7 +2331,7 @@
    "copies": [
     "LICENSES/components/rust/dispatch2-0.3.1.txt"
    ],
-   "from": "dispatch2-0.3.1 (cargo registry)",
+   "from": "dispatch2-0.3.1.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
@@ -2354,7 +2340,7 @@
    "copies": [
     "LICENSES/components/rust/displaydoc-0.2.7.txt"
    ],
-   "from": "displaydoc-0.2.7 (cargo registry)",
+   "from": "displaydoc-0.2.7.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2362,7 +2348,7 @@
    "copies": [
     "LICENSES/components/rust/dlopen2-0.8.2.txt"
    ],
-   "from": "dlopen2-0.8.2 (cargo registry)",
+   "from": "dlopen2-0.8.2.crate",
    "licence_from": "https://github.com/OpenByteDev/dlopen2/blob/master/LICENSE",
    "notices": [],
    "spdx": "MIT"
@@ -2371,7 +2357,7 @@
    "copies": [
     "LICENSES/components/rust/dlopen2_derive-0.4.3.txt"
    ],
-   "from": "dlopen2_derive-0.4.3 (cargo registry)",
+   "from": "dlopen2_derive-0.4.3.crate",
    "licence_from": "https://github.com/OpenByteDev/dlopen2/blob/master/LICENSE",
    "notices": [],
    "spdx": "MIT"
@@ -2380,7 +2366,7 @@
    "copies": [
     "LICENSES/components/rust/dom_query-0.27.0.txt"
    ],
-   "from": "dom_query-0.27.0 (cargo registry)",
+   "from": "dom_query-0.27.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2388,7 +2374,7 @@
    "copies": [
     "LICENSES/components/rust/dpi-0.1.2.txt"
    ],
-   "from": "dpi-0.1.2 (cargo registry)",
+   "from": "dpi-0.1.2.crate",
    "notices": [],
    "spdx": "Apache-2.0 AND MIT"
   },
@@ -2396,13 +2382,13 @@
    "copies": [
     "LICENSES/components/rust/dtoa-1.0.11.txt"
    ],
-   "from": "dtoa-1.0.11 (cargo registry)",
+   "from": "dtoa-1.0.11.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "dtoa-short 0.3.5": {
    "copies": [],
-   "from": "dtoa-short-0.3.5 (cargo registry)",
+   "from": "dtoa-short-0.3.5.crate",
    "notices": [],
    "spdx": "MPL-2.0"
   },
@@ -2410,7 +2396,7 @@
    "copies": [
     "LICENSES/components/rust/dtor-0.3.0.txt"
    ],
-   "from": "dtor-0.3.0 (cargo registry)",
+   "from": "dtor-0.3.0.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -2418,7 +2404,7 @@
    "copies": [
     "LICENSES/components/rust/dtor-proc-macro-0.0.6.txt"
    ],
-   "from": "dtor-proc-macro-0.0.6 (cargo registry)",
+   "from": "dtor-proc-macro-0.0.6.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -2426,7 +2412,7 @@
    "copies": [
     "LICENSES/components/rust/dunce-1.0.5.txt"
    ],
-   "from": "dunce-1.0.5 (cargo registry)",
+   "from": "dunce-1.0.5.crate",
    "notices": [],
    "spdx": "CC0-1.0 OR MIT-0 OR Apache-2.0"
   },
@@ -2434,7 +2420,7 @@
    "copies": [
     "LICENSES/components/rust/dyn-clone-1.0.20.txt"
    ],
-   "from": "dyn-clone-1.0.20 (cargo registry)",
+   "from": "dyn-clone-1.0.20.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2442,7 +2428,7 @@
    "copies": [
     "LICENSES/components/rust/embed-resource-3.0.11.txt"
    ],
-   "from": "embed-resource-3.0.11 (cargo registry)",
+   "from": "embed-resource-3.0.11.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2450,7 +2436,7 @@
    "copies": [
     "LICENSES/components/rust/embed_plist-1.2.2.txt"
    ],
-   "from": "embed_plist-1.2.2 (cargo registry)",
+   "from": "embed_plist-1.2.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2458,7 +2444,7 @@
    "copies": [
     "LICENSES/components/rust/equivalent-1.0.2.txt"
    ],
-   "from": "equivalent-1.0.2 (cargo registry)",
+   "from": "equivalent-1.0.2.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -2466,7 +2452,7 @@
    "copies": [
     "LICENSES/components/rust/erased-serde-0.4.10.txt"
    ],
-   "from": "erased-serde-0.4.10 (cargo registry)",
+   "from": "erased-serde-0.4.10.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2474,7 +2460,7 @@
    "copies": [
     "LICENSES/components/rust/fastrand-2.5.0.txt"
    ],
-   "from": "fastrand-2.5.0 (cargo registry)",
+   "from": "fastrand-2.5.0.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -2482,7 +2468,7 @@
    "copies": [
     "LICENSES/components/rust/fdeflate-0.3.7.txt"
    ],
-   "from": "fdeflate-0.3.7 (cargo registry)",
+   "from": "fdeflate-0.3.7.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2490,7 +2476,7 @@
    "copies": [
     "LICENSES/components/rust/field-offset-0.3.6.txt"
    ],
-   "from": "field-offset-0.3.6 (cargo registry)",
+   "from": "field-offset-0.3.6.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2498,7 +2484,7 @@
    "copies": [
     "LICENSES/components/rust/find-msvc-tools-0.1.11.txt"
    ],
-   "from": "find-msvc-tools-0.1.11 (cargo registry)",
+   "from": "find-msvc-tools-0.1.11.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2506,7 +2492,7 @@
    "copies": [
     "LICENSES/components/rust/flate2-1.1.10.txt"
    ],
-   "from": "flate2-1.1.10 (cargo registry)",
+   "from": "flate2-1.1.10.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2514,7 +2500,7 @@
    "copies": [
     "LICENSES/components/rust/fnv-1.0.7.txt"
    ],
-   "from": "fnv-1.0.7 (cargo registry)",
+   "from": "fnv-1.0.7.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -2522,7 +2508,7 @@
    "copies": [
     "LICENSES/components/rust/foldhash-0.2.0.txt"
    ],
-   "from": "foldhash-0.2.0 (cargo registry)",
+   "from": "foldhash-0.2.0.crate",
    "notices": [],
    "spdx": "Zlib"
   },
@@ -2530,7 +2516,7 @@
    "copies": [
     "LICENSES/components/rust/foreign-types-0.5.0.txt"
    ],
-   "from": "foreign-types-0.5.0 (cargo registry)",
+   "from": "foreign-types-0.5.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2538,7 +2524,7 @@
    "copies": [
     "LICENSES/components/rust/foreign-types-macros-0.2.4.txt"
    ],
-   "from": "foreign-types-macros-0.2.4 (cargo registry)",
+   "from": "foreign-types-macros-0.2.4.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2546,7 +2532,7 @@
    "copies": [
     "LICENSES/components/rust/foreign-types-shared-0.3.1.txt"
    ],
-   "from": "foreign-types-shared-0.3.1 (cargo registry)",
+   "from": "foreign-types-shared-0.3.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2554,7 +2540,7 @@
    "copies": [
     "LICENSES/components/rust/form_urlencoded-1.2.2.txt"
    ],
-   "from": "form_urlencoded-1.2.2 (cargo registry)",
+   "from": "form_urlencoded-1.2.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2563,7 +2549,7 @@
     "LICENSES/components/rust/futures-channel-0.3.34.LICENSE-APACHE.txt",
     "LICENSES/components/rust/futures-channel-0.3.34.LICENSE-MIT.txt"
    ],
-   "from": "futures-channel-0.3.34 (cargo registry)",
+   "from": "futures-channel-0.3.34.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2572,7 +2558,7 @@
     "LICENSES/components/rust/futures-core-0.3.34.LICENSE-APACHE.txt",
     "LICENSES/components/rust/futures-core-0.3.34.LICENSE-MIT.txt"
    ],
-   "from": "futures-core-0.3.34 (cargo registry)",
+   "from": "futures-core-0.3.34.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2581,7 +2567,7 @@
     "LICENSES/components/rust/futures-executor-0.3.34.LICENSE-APACHE.txt",
     "LICENSES/components/rust/futures-executor-0.3.34.LICENSE-MIT.txt"
    ],
-   "from": "futures-executor-0.3.34 (cargo registry)",
+   "from": "futures-executor-0.3.34.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2590,7 +2576,7 @@
     "LICENSES/components/rust/futures-io-0.3.34.LICENSE-APACHE.txt",
     "LICENSES/components/rust/futures-io-0.3.34.LICENSE-MIT.txt"
    ],
-   "from": "futures-io-0.3.34 (cargo registry)",
+   "from": "futures-io-0.3.34.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2599,7 +2585,7 @@
     "LICENSES/components/rust/futures-macro-0.3.34.LICENSE-APACHE.txt",
     "LICENSES/components/rust/futures-macro-0.3.34.LICENSE-MIT.txt"
    ],
-   "from": "futures-macro-0.3.34 (cargo registry)",
+   "from": "futures-macro-0.3.34.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2608,7 +2594,7 @@
     "LICENSES/components/rust/futures-sink-0.3.34.LICENSE-APACHE.txt",
     "LICENSES/components/rust/futures-sink-0.3.34.LICENSE-MIT.txt"
    ],
-   "from": "futures-sink-0.3.34 (cargo registry)",
+   "from": "futures-sink-0.3.34.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2617,7 +2603,7 @@
     "LICENSES/components/rust/futures-task-0.3.34.LICENSE-APACHE.txt",
     "LICENSES/components/rust/futures-task-0.3.34.LICENSE-MIT.txt"
    ],
-   "from": "futures-task-0.3.34 (cargo registry)",
+   "from": "futures-task-0.3.34.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2626,7 +2612,7 @@
     "LICENSES/components/rust/futures-util-0.3.34.LICENSE-APACHE.txt",
     "LICENSES/components/rust/futures-util-0.3.34.LICENSE-MIT.txt"
    ],
-   "from": "futures-util-0.3.34 (cargo registry)",
+   "from": "futures-util-0.3.34.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2635,7 +2621,7 @@
     "LICENSES/components/rust/gdk-0.18.2.COPYRIGHT.txt",
     "LICENSES/components/rust/gdk-0.18.2.LICENSE.txt"
    ],
-   "from": "gdk-0.18.2 (cargo registry)",
+   "from": "gdk-0.18.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2644,7 +2630,7 @@
     "LICENSES/components/rust/gdk-pixbuf-0.18.5.COPYRIGHT.txt",
     "LICENSES/components/rust/gdk-pixbuf-0.18.5.LICENSE.txt"
    ],
-   "from": "gdk-pixbuf-0.18.5 (cargo registry)",
+   "from": "gdk-pixbuf-0.18.5.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2652,7 +2638,7 @@
    "copies": [
     "LICENSES/components/rust/gdk-pixbuf-sys-0.18.0.txt"
    ],
-   "from": "gdk-pixbuf-sys-0.18.0 (cargo registry)",
+   "from": "gdk-pixbuf-sys-0.18.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2660,7 +2646,7 @@
    "copies": [
     "LICENSES/components/rust/gdk-sys-0.18.2.txt"
    ],
-   "from": "gdk-sys-0.18.2 (cargo registry)",
+   "from": "gdk-sys-0.18.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2668,7 +2654,7 @@
    "copies": [
     "LICENSES/components/rust/gdkwayland-sys-0.18.2.txt"
    ],
-   "from": "gdkwayland-sys-0.18.2 (cargo registry)",
+   "from": "gdkwayland-sys-0.18.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2677,7 +2663,7 @@
     "LICENSES/components/rust/gdkx11-0.18.2.COPYRIGHT.txt",
     "LICENSES/components/rust/gdkx11-0.18.2.LICENSE.txt"
    ],
-   "from": "gdkx11-0.18.2 (cargo registry)",
+   "from": "gdkx11-0.18.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2685,7 +2671,7 @@
    "copies": [
     "LICENSES/components/rust/gdkx11-sys-0.18.2.txt"
    ],
-   "from": "gdkx11-sys-0.18.2 (cargo registry)",
+   "from": "gdkx11-sys-0.18.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2693,7 +2679,7 @@
    "copies": [
     "LICENSES/components/rust/generic-array-0.14.7.txt"
    ],
-   "from": "generic-array-0.14.7 (cargo registry)",
+   "from": "generic-array-0.14.7.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2701,7 +2687,7 @@
    "copies": [
     "LICENSES/components/rust/getrandom-0.2.17.txt"
    ],
-   "from": "getrandom-0.2.17 (cargo registry)",
+   "from": "getrandom-0.2.17.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2709,7 +2695,7 @@
    "copies": [
     "LICENSES/components/rust/getrandom-0.3.4.txt"
    ],
-   "from": "getrandom-0.3.4 (cargo registry)",
+   "from": "getrandom-0.3.4.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2717,7 +2703,7 @@
    "copies": [
     "LICENSES/components/rust/getrandom-0.4.3.txt"
    ],
-   "from": "getrandom-0.4.3 (cargo registry)",
+   "from": "getrandom-0.4.3.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2726,7 +2712,7 @@
     "LICENSES/components/rust/gio-0.18.4.COPYRIGHT.txt",
     "LICENSES/components/rust/gio-0.18.4.LICENSE.txt"
    ],
-   "from": "gio-0.18.4 (cargo registry)",
+   "from": "gio-0.18.4.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2734,7 +2720,7 @@
    "copies": [
     "LICENSES/components/rust/gio-sys-0.18.1.txt"
    ],
-   "from": "gio-sys-0.18.1 (cargo registry)",
+   "from": "gio-sys-0.18.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2743,7 +2729,7 @@
     "LICENSES/components/rust/glib-0.18.5.COPYRIGHT.txt",
     "LICENSES/components/rust/glib-0.18.5.LICENSE.txt"
    ],
-   "from": "glib-0.18.5 (cargo registry)",
+   "from": "glib-0.18.5.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2752,7 +2738,7 @@
     "LICENSES/components/rust/glib-macros-0.18.5.COPYRIGHT.txt",
     "LICENSES/components/rust/glib-macros-0.18.5.LICENSE.txt"
    ],
-   "from": "glib-macros-0.18.5 (cargo registry)",
+   "from": "glib-macros-0.18.5.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2760,7 +2746,7 @@
    "copies": [
     "LICENSES/components/rust/glib-sys-0.18.1.txt"
    ],
-   "from": "glib-sys-0.18.1 (cargo registry)",
+   "from": "glib-sys-0.18.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2768,7 +2754,7 @@
    "copies": [
     "LICENSES/components/rust/glob-0.3.4.txt"
    ],
-   "from": "glob-0.3.4 (cargo registry)",
+   "from": "glob-0.3.4.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2776,7 +2762,7 @@
    "copies": [
     "LICENSES/components/rust/gobject-sys-0.18.0.txt"
    ],
-   "from": "gobject-sys-0.18.0 (cargo registry)",
+   "from": "gobject-sys-0.18.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2785,7 +2771,7 @@
     "LICENSES/components/rust/gtk-0.18.2.COPYRIGHT.txt",
     "LICENSES/components/rust/gtk-0.18.2.LICENSE.txt"
    ],
-   "from": "gtk-0.18.2 (cargo registry)",
+   "from": "gtk-0.18.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2793,7 +2779,7 @@
    "copies": [
     "LICENSES/components/rust/gtk-sys-0.18.2.txt"
    ],
-   "from": "gtk-sys-0.18.2 (cargo registry)",
+   "from": "gtk-sys-0.18.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2802,7 +2788,7 @@
     "LICENSES/components/rust/gtk3-macros-0.18.2.COPYRIGHT.txt",
     "LICENSES/components/rust/gtk3-macros-0.18.2.LICENSE.txt"
    ],
-   "from": "gtk3-macros-0.18.2 (cargo registry)",
+   "from": "gtk3-macros-0.18.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2810,7 +2796,7 @@
    "copies": [
     "LICENSES/components/rust/hashbrown-0.12.3.txt"
    ],
-   "from": "hashbrown-0.12.3 (cargo registry)",
+   "from": "hashbrown-0.12.3.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2818,7 +2804,7 @@
    "copies": [
     "LICENSES/components/rust/hashbrown-0.17.1.txt"
    ],
-   "from": "hashbrown-0.17.1 (cargo registry)",
+   "from": "hashbrown-0.17.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2826,7 +2812,7 @@
    "copies": [
     "LICENSES/components/rust/heck-0.4.1.txt"
    ],
-   "from": "heck-0.4.1 (cargo registry)",
+   "from": "heck-0.4.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2834,7 +2820,7 @@
    "copies": [
     "LICENSES/components/rust/heck-0.5.0.txt"
    ],
-   "from": "heck-0.5.0 (cargo registry)",
+   "from": "heck-0.5.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2842,7 +2828,7 @@
    "copies": [
     "LICENSES/components/rust/hex-0.4.3.txt"
    ],
-   "from": "hex-0.4.3 (cargo registry)",
+   "from": "hex-0.4.3.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2850,7 +2836,7 @@
    "copies": [
     "LICENSES/components/rust/html5ever-0.38.0.txt"
    ],
-   "from": "html5ever-0.38.0 (cargo registry)",
+   "from": "html5ever-0.38.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2859,7 +2845,7 @@
     "LICENSES/components/rust/http-1.5.0.LICENSE-APACHE.txt",
     "LICENSES/components/rust/http-1.5.0.LICENSE-MIT.txt"
    ],
-   "from": "http-1.5.0 (cargo registry)",
+   "from": "http-1.5.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2867,7 +2853,7 @@
    "copies": [
     "LICENSES/components/rust/http-body-1.1.0.txt"
    ],
-   "from": "http-body-1.1.0 (cargo registry)",
+   "from": "http-body-1.1.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2875,7 +2861,7 @@
    "copies": [
     "LICENSES/components/rust/http-body-util-0.1.5.txt"
    ],
-   "from": "http-body-util-0.1.5 (cargo registry)",
+   "from": "http-body-util-0.1.5.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2883,7 +2869,7 @@
    "copies": [
     "LICENSES/components/rust/httparse-1.10.1.txt"
    ],
-   "from": "httparse-1.10.1 (cargo registry)",
+   "from": "httparse-1.10.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2891,7 +2877,7 @@
    "copies": [
     "LICENSES/components/rust/hyper-1.11.1.txt"
    ],
-   "from": "hyper-1.11.1 (cargo registry)",
+   "from": "hyper-1.11.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2899,7 +2885,7 @@
    "copies": [
     "LICENSES/components/rust/hyper-util-0.1.20.txt"
    ],
-   "from": "hyper-util-0.1.20 (cargo registry)",
+   "from": "hyper-util-0.1.20.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2908,7 +2894,7 @@
     "LICENSES/components/rust/iana-time-zone-0.1.65.LICENSE-APACHE.txt",
     "LICENSES/components/rust/iana-time-zone-0.1.65.LICENSE-MIT.txt"
    ],
-   "from": "iana-time-zone-0.1.65 (cargo registry)",
+   "from": "iana-time-zone-0.1.65.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2917,7 +2903,7 @@
     "LICENSES/components/rust/iana-time-zone-haiku-0.1.2.LICENSE-APACHE.txt",
     "LICENSES/components/rust/iana-time-zone-haiku-0.1.2.LICENSE-MIT.txt"
    ],
-   "from": "iana-time-zone-haiku-0.1.2 (cargo registry)",
+   "from": "iana-time-zone-haiku-0.1.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2925,7 +2911,7 @@
    "copies": [
     "LICENSES/components/rust/ico-0.5.0.txt"
    ],
-   "from": "ico-0.5.0 (cargo registry)",
+   "from": "ico-0.5.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -2933,7 +2919,7 @@
    "copies": [
     "LICENSES/components/rust/icu_collections-2.3.0.txt"
    ],
-   "from": "icu_collections-2.3.0 (cargo registry)",
+   "from": "icu_collections-2.3.0.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -2941,7 +2927,7 @@
    "copies": [
     "LICENSES/components/rust/icu_locale_core-2.3.0.txt"
    ],
-   "from": "icu_locale_core-2.3.0 (cargo registry)",
+   "from": "icu_locale_core-2.3.0.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -2949,7 +2935,7 @@
    "copies": [
     "LICENSES/components/rust/icu_normalizer-2.3.0.txt"
    ],
-   "from": "icu_normalizer-2.3.0 (cargo registry)",
+   "from": "icu_normalizer-2.3.0.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -2957,7 +2943,7 @@
    "copies": [
     "LICENSES/components/rust/icu_normalizer_data-2.3.0.txt"
    ],
-   "from": "icu_normalizer_data-2.3.0 (cargo registry)",
+   "from": "icu_normalizer_data-2.3.0.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -2965,7 +2951,7 @@
    "copies": [
     "LICENSES/components/rust/icu_properties-2.3.0.txt"
    ],
-   "from": "icu_properties-2.3.0 (cargo registry)",
+   "from": "icu_properties-2.3.0.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -2973,7 +2959,7 @@
    "copies": [
     "LICENSES/components/rust/icu_properties_data-2.3.0.txt"
    ],
-   "from": "icu_properties_data-2.3.0 (cargo registry)",
+   "from": "icu_properties_data-2.3.0.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -2981,7 +2967,7 @@
    "copies": [
     "LICENSES/components/rust/icu_provider-2.3.1.txt"
    ],
-   "from": "icu_provider-2.3.1 (cargo registry)",
+   "from": "icu_provider-2.3.1.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -2989,7 +2975,7 @@
    "copies": [
     "LICENSES/components/rust/ident_case-1.0.1.txt"
    ],
-   "from": "ident_case-1.0.1 (cargo registry)",
+   "from": "ident_case-1.0.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -2997,7 +2983,7 @@
    "copies": [
     "LICENSES/components/rust/idna-1.1.0.txt"
    ],
-   "from": "idna-1.1.0 (cargo registry)",
+   "from": "idna-1.1.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3005,7 +2991,7 @@
    "copies": [
     "LICENSES/components/rust/idna_adapter-1.2.2.txt"
    ],
-   "from": "idna_adapter-1.2.2 (cargo registry)",
+   "from": "idna_adapter-1.2.2.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -3013,7 +2999,7 @@
    "copies": [
     "LICENSES/components/rust/indexmap-1.9.3.txt"
    ],
-   "from": "indexmap-1.9.3 (cargo registry)",
+   "from": "indexmap-1.9.3.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -3021,7 +3007,7 @@
    "copies": [
     "LICENSES/components/rust/indexmap-2.14.1.txt"
    ],
-   "from": "indexmap-2.14.1 (cargo registry)",
+   "from": "indexmap-2.14.1.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -3029,7 +3015,7 @@
    "copies": [
     "LICENSES/components/rust/infer-0.19.0.txt"
    ],
-   "from": "infer-0.19.0 (cargo registry)",
+   "from": "infer-0.19.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3038,7 +3024,7 @@
     "LICENSES/components/rust/ipnet-2.12.1.LICENSE-APACHE.txt",
     "LICENSES/components/rust/ipnet-2.12.1.LICENSE-MIT.txt"
    ],
-   "from": "ipnet-2.12.1 (cargo registry)",
+   "from": "ipnet-2.12.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3046,7 +3032,7 @@
    "copies": [
     "LICENSES/components/rust/itoa-1.0.18.txt"
    ],
-   "from": "itoa-1.0.18 (cargo registry)",
+   "from": "itoa-1.0.18.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3054,7 +3040,7 @@
    "copies": [
     "LICENSES/components/rust/javascriptcore-rs-1.1.2.txt"
    ],
-   "from": "javascriptcore-rs-1.1.2 (cargo registry)",
+   "from": "javascriptcore-rs-1.1.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3062,7 +3048,7 @@
    "copies": [
     "LICENSES/components/rust/javascriptcore-rs-sys-1.1.1.txt"
    ],
-   "from": "javascriptcore-rs-sys-1.1.1 (cargo registry)",
+   "from": "javascriptcore-rs-sys-1.1.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3072,7 +3058,7 @@
     "LICENSES/components/rust/jiff-0.2.35.LICENSE-MIT.txt",
     "LICENSES/components/rust/jiff-0.2.35.UNLICENSE.txt"
    ],
-   "from": "jiff-0.2.35 (cargo registry)",
+   "from": "jiff-0.2.35.crate",
    "notices": [],
    "spdx": "Unlicense OR MIT"
   },
@@ -3082,7 +3068,7 @@
     "LICENSES/components/rust/jiff-core-0.1.0.LICENSE-MIT.txt",
     "LICENSES/components/rust/jiff-core-0.1.0.UNLICENSE.txt"
    ],
-   "from": "jiff-core-0.1.0 (cargo registry)",
+   "from": "jiff-core-0.1.0.crate",
    "notices": [],
    "spdx": "Unlicense OR MIT"
   },
@@ -3092,7 +3078,7 @@
     "LICENSES/components/rust/jiff-static-0.2.35.LICENSE-MIT.txt",
     "LICENSES/components/rust/jiff-static-0.2.35.UNLICENSE.txt"
    ],
-   "from": "jiff-static-0.2.35 (cargo registry)",
+   "from": "jiff-static-0.2.35.crate",
    "notices": [],
    "spdx": "Unlicense OR MIT"
   },
@@ -3102,7 +3088,7 @@
     "LICENSES/components/rust/jiff-tzdb-0.1.8.LICENSE-MIT.txt",
     "LICENSES/components/rust/jiff-tzdb-0.1.8.UNLICENSE.txt"
    ],
-   "from": "jiff-tzdb-0.1.8 (cargo registry)",
+   "from": "jiff-tzdb-0.1.8.crate",
    "notices": [],
    "spdx": "Unlicense OR MIT"
   },
@@ -3112,7 +3098,7 @@
     "LICENSES/components/rust/jiff-tzdb-platform-0.1.3.LICENSE-MIT.txt",
     "LICENSES/components/rust/jiff-tzdb-platform-0.1.3.UNLICENSE.txt"
    ],
-   "from": "jiff-tzdb-platform-0.1.3 (cargo registry)",
+   "from": "jiff-tzdb-platform-0.1.3.crate",
    "notices": [],
    "spdx": "Unlicense OR MIT"
   },
@@ -3120,7 +3106,7 @@
    "copies": [
     "LICENSES/components/rust/jni-0.21.1.txt"
    ],
-   "from": "jni-0.21.1 (cargo registry)",
+   "from": "jni-0.21.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3128,7 +3114,7 @@
    "copies": [
     "LICENSES/components/rust/jni-sys-0.3.1.txt"
    ],
-   "from": "jni-sys-0.3.1 (cargo registry)",
+   "from": "jni-sys-0.3.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3136,13 +3122,13 @@
    "copies": [
     "LICENSES/components/rust/jni-sys-0.4.1.txt"
    ],
-   "from": "jni-sys-0.4.1 (cargo registry)",
+   "from": "jni-sys-0.4.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "jni-sys-macros 0.4.1": {
    "copies": [],
-   "from": "jni-sys-macros-0.4.1 (cargo registry)",
+   "from": "jni-sys-macros-0.4.1.crate",
    "licence_from": "https://github.com/jni-rs/jni-sys/blob/master/LICENSE-APACHE",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
@@ -3151,7 +3137,7 @@
    "copies": [
     "LICENSES/components/rust/js-sys-0.3.104.txt"
    ],
-   "from": "js-sys-0.3.104 (cargo registry)",
+   "from": "js-sys-0.3.104.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3159,7 +3145,7 @@
    "copies": [
     "LICENSES/components/rust/json-patch-3.0.1.txt"
    ],
-   "from": "json-patch-3.0.1 (cargo registry)",
+   "from": "json-patch-3.0.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3168,7 +3154,7 @@
     "LICENSES/components/rust/jsonptr-0.6.3.LICENSE-APACHE.txt",
     "LICENSES/components/rust/jsonptr-0.6.3.LICENSE-MIT.txt"
    ],
-   "from": "jsonptr-0.6.3 (cargo registry)",
+   "from": "jsonptr-0.6.3.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3176,7 +3162,7 @@
    "copies": [
     "LICENSES/components/rust/keyboard-types-0.7.0.txt"
    ],
-   "from": "keyboard-types-0.7.0 (cargo registry)",
+   "from": "keyboard-types-0.7.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3184,13 +3170,13 @@
    "copies": [
     "LICENSES/components/rust/libappindicator-0.9.0.txt"
    ],
-   "from": "libappindicator-0.9.0 (cargo registry)",
+   "from": "libappindicator-0.9.0.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
   "libappindicator-sys 0.9.0": {
    "copies": [],
-   "from": "libappindicator-sys-0.9.0 (cargo registry)",
+   "from": "libappindicator-sys-0.9.0.crate",
    "no_licence_file": true,
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
@@ -3199,7 +3185,7 @@
    "copies": [
     "LICENSES/components/rust/libc-0.2.189.txt"
    ],
-   "from": "libc-0.2.189 (cargo registry)",
+   "from": "libc-0.2.189.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3210,7 +3196,7 @@
     "LICENSES/components/rust/libdbus-sys-0.2.7.COPYING.txt",
     "LICENSES/components/rust/libdbus-sys-0.2.7.COPYING-CMAKE-SCRIPTS.txt"
    ],
-   "from": "libdbus-sys-0.2.7 (cargo registry)",
+   "from": "libdbus-sys-0.2.7.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -3218,7 +3204,7 @@
    "copies": [
     "LICENSES/components/rust/libloading-0.7.4.txt"
    ],
-   "from": "libloading-0.7.4 (cargo registry)",
+   "from": "libloading-0.7.4.crate",
    "notices": [],
    "spdx": "ISC"
   },
@@ -3226,7 +3212,7 @@
    "copies": [
     "LICENSES/components/rust/libredox-0.1.21.txt"
    ],
-   "from": "libredox-0.1.21 (cargo registry)",
+   "from": "libredox-0.1.21.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3234,7 +3220,7 @@
    "copies": [
     "LICENSES/components/rust/litemap-0.8.3.txt"
    ],
-   "from": "litemap-0.8.3 (cargo registry)",
+   "from": "litemap-0.8.3.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -3242,7 +3228,7 @@
    "copies": [
     "LICENSES/components/rust/lock_api-0.4.14.txt"
    ],
-   "from": "lock_api-0.4.14 (cargo registry)",
+   "from": "lock_api-0.4.14.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3250,7 +3236,7 @@
    "copies": [
     "LICENSES/components/rust/log-0.4.34.txt"
    ],
-   "from": "log-0.4.34 (cargo registry)",
+   "from": "log-0.4.34.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3258,7 +3244,7 @@
    "copies": [
     "LICENSES/components/rust/markup5ever-0.38.0.txt"
    ],
-   "from": "markup5ever-0.38.0 (cargo registry)",
+   "from": "markup5ever-0.38.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3268,7 +3254,7 @@
     "LICENSES/components/rust/memchr-2.8.3.LICENSE-MIT.txt",
     "LICENSES/components/rust/memchr-2.8.3.UNLICENSE.txt"
    ],
-   "from": "memchr-2.8.3 (cargo registry)",
+   "from": "memchr-2.8.3.crate",
    "notices": [],
    "spdx": "Unlicense OR MIT"
   },
@@ -3276,7 +3262,7 @@
    "copies": [
     "LICENSES/components/rust/memoffset-0.9.1.txt"
    ],
-   "from": "memoffset-0.9.1 (cargo registry)",
+   "from": "memoffset-0.9.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3284,7 +3270,7 @@
    "copies": [
     "LICENSES/components/rust/mime-0.3.17.txt"
    ],
-   "from": "mime-0.3.17 (cargo registry)",
+   "from": "mime-0.3.17.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3294,7 +3280,7 @@
     "LICENSES/components/rust/miniz_oxide-0.8.9.LICENSE-MIT.md.txt",
     "LICENSES/components/rust/miniz_oxide-0.8.9.LICENSE-ZLIB.md.txt"
    ],
-   "from": "miniz_oxide-0.8.9 (cargo registry)",
+   "from": "miniz_oxide-0.8.9.crate",
    "notices": [],
    "spdx": "MIT OR Zlib OR Apache-2.0"
   },
@@ -3304,7 +3290,7 @@
     "LICENSES/components/rust/miniz_oxide-0.9.1.LICENSE-MIT.md.txt",
     "LICENSES/components/rust/miniz_oxide-0.9.1.LICENSE-ZLIB.md.txt"
    ],
-   "from": "miniz_oxide-0.9.1 (cargo registry)",
+   "from": "miniz_oxide-0.9.1.crate",
    "notices": [],
    "spdx": "MIT OR Zlib OR Apache-2.0"
   },
@@ -3312,7 +3298,7 @@
    "copies": [
     "LICENSES/components/rust/mio-1.2.2.txt"
    ],
-   "from": "mio-1.2.2 (cargo registry)",
+   "from": "mio-1.2.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3321,20 +3307,20 @@
     "LICENSES/components/rust/muda-0.19.3.LICENSE-MIT.txt",
     "LICENSES/components/rust/muda-0.19.3.LICENSE.spdx.txt"
    ],
-   "from": "muda-0.19.3 (cargo registry)",
+   "from": "muda-0.19.3.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
   "ndk 0.9.0": {
    "copies": [],
-   "from": "ndk-0.9.0 (cargo registry)",
+   "from": "ndk-0.9.0.crate",
    "licence_from": "https://github.com/rust-mobile/ndk/blob/master/LICENSE-APACHE",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "ndk-sys 0.6.0+11769913": {
    "copies": [],
-   "from": "ndk-sys-0.6.0+11769913 (cargo registry)",
+   "from": "ndk-sys-0.6.0+11769913.crate",
    "licence_from": "https://github.com/rust-mobile/ndk/blob/master/LICENSE-APACHE",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
@@ -3343,7 +3329,7 @@
    "copies": [
     "LICENSES/components/rust/new_debug_unreachable-1.0.6.txt"
    ],
-   "from": "new_debug_unreachable-1.0.6 (cargo registry)",
+   "from": "new_debug_unreachable-1.0.6.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3351,7 +3337,7 @@
    "copies": [
     "LICENSES/components/rust/num-conv-0.2.2.txt"
    ],
-   "from": "num-conv-0.2.2 (cargo registry)",
+   "from": "num-conv-0.2.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3359,7 +3345,7 @@
    "copies": [
     "LICENSES/components/rust/num-traits-0.2.19.txt"
    ],
-   "from": "num-traits-0.2.19 (cargo registry)",
+   "from": "num-traits-0.2.19.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3368,7 +3354,7 @@
     "LICENSES/components/rust/num_enum-0.7.6.LICENSE-BSD.txt",
     "LICENSES/components/rust/num_enum-0.7.6.LICENSE-MIT.txt"
    ],
-   "from": "num_enum-0.7.6 (cargo registry)",
+   "from": "num_enum-0.7.6.crate",
    "notices": [],
    "spdx": "BSD-3-Clause OR MIT OR Apache-2.0"
   },
@@ -3377,7 +3363,7 @@
     "LICENSES/components/rust/num_enum_derive-0.7.6.LICENSE-BSD.txt",
     "LICENSES/components/rust/num_enum_derive-0.7.6.LICENSE-MIT.txt"
    ],
-   "from": "num_enum_derive-0.7.6 (cargo registry)",
+   "from": "num_enum_derive-0.7.6.crate",
    "notices": [],
    "spdx": "BSD-3-Clause OR MIT OR Apache-2.0"
   },
@@ -3385,7 +3371,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-0.6.4.txt"
    ],
-   "from": "objc2-0.6.4 (cargo registry)",
+   "from": "objc2-0.6.4.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "MIT"
@@ -3394,7 +3380,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-app-kit-0.3.2.txt"
    ],
-   "from": "objc2-app-kit-0.3.2 (cargo registry)",
+   "from": "objc2-app-kit-0.3.2.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
@@ -3403,7 +3389,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-cloud-kit-0.3.2.txt"
    ],
-   "from": "objc2-cloud-kit-0.3.2 (cargo registry)",
+   "from": "objc2-cloud-kit-0.3.2.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
@@ -3412,7 +3398,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-core-data-0.3.2.txt"
    ],
-   "from": "objc2-core-data-0.3.2 (cargo registry)",
+   "from": "objc2-core-data-0.3.2.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
@@ -3421,7 +3407,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-core-foundation-0.3.2.txt"
    ],
-   "from": "objc2-core-foundation-0.3.2 (cargo registry)",
+   "from": "objc2-core-foundation-0.3.2.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
@@ -3430,7 +3416,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-core-graphics-0.3.2.txt"
    ],
-   "from": "objc2-core-graphics-0.3.2 (cargo registry)",
+   "from": "objc2-core-graphics-0.3.2.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
@@ -3439,7 +3425,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-core-image-0.3.2.txt"
    ],
-   "from": "objc2-core-image-0.3.2 (cargo registry)",
+   "from": "objc2-core-image-0.3.2.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
@@ -3448,7 +3434,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-core-location-0.3.2.txt"
    ],
-   "from": "objc2-core-location-0.3.2 (cargo registry)",
+   "from": "objc2-core-location-0.3.2.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
@@ -3457,7 +3443,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-core-text-0.3.2.txt"
    ],
-   "from": "objc2-core-text-0.3.2 (cargo registry)",
+   "from": "objc2-core-text-0.3.2.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
@@ -3466,7 +3452,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-encode-4.1.0.txt"
    ],
-   "from": "objc2-encode-4.1.0 (cargo registry)",
+   "from": "objc2-encode-4.1.0.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "MIT"
@@ -3475,7 +3461,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-exception-helper-0.1.1.txt"
    ],
-   "from": "objc2-exception-helper-0.1.1 (cargo registry)",
+   "from": "objc2-exception-helper-0.1.1.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
@@ -3484,7 +3470,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-foundation-0.3.2.txt"
    ],
-   "from": "objc2-foundation-0.3.2 (cargo registry)",
+   "from": "objc2-foundation-0.3.2.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "MIT"
@@ -3493,7 +3479,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-io-surface-0.3.2.txt"
    ],
-   "from": "objc2-io-surface-0.3.2 (cargo registry)",
+   "from": "objc2-io-surface-0.3.2.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
@@ -3502,7 +3488,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-quartz-core-0.3.2.txt"
    ],
-   "from": "objc2-quartz-core-0.3.2 (cargo registry)",
+   "from": "objc2-quartz-core-0.3.2.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
@@ -3511,7 +3497,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-ui-kit-0.3.2.txt"
    ],
-   "from": "objc2-ui-kit-0.3.2 (cargo registry)",
+   "from": "objc2-ui-kit-0.3.2.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
@@ -3520,7 +3506,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-user-notifications-0.3.2.txt"
    ],
-   "from": "objc2-user-notifications-0.3.2 (cargo registry)",
+   "from": "objc2-user-notifications-0.3.2.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
@@ -3529,7 +3515,7 @@
    "copies": [
     "LICENSES/components/rust/objc2-web-kit-0.3.2.txt"
    ],
-   "from": "objc2-web-kit-0.3.2 (cargo registry)",
+   "from": "objc2-web-kit-0.3.2.crate",
    "licence_from": "https://github.com/madsmtm/objc2/blob/main/LICENSE.md",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
@@ -3538,13 +3524,13 @@
    "copies": [
     "LICENSES/components/rust/once_cell-1.21.4.txt"
    ],
-   "from": "once_cell-1.21.4 (cargo registry)",
+   "from": "once_cell-1.21.4.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "option-ext 0.2.0": {
    "copies": [],
-   "from": "option-ext-0.2.0 (cargo registry)",
+   "from": "option-ext-0.2.0.crate",
    "notices": [],
    "spdx": "MPL-2.0"
   },
@@ -3553,7 +3539,7 @@
     "LICENSES/components/rust/pango-0.18.3.COPYRIGHT.txt",
     "LICENSES/components/rust/pango-0.18.3.LICENSE.txt"
    ],
-   "from": "pango-0.18.3 (cargo registry)",
+   "from": "pango-0.18.3.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3561,7 +3547,7 @@
    "copies": [
     "LICENSES/components/rust/pango-sys-0.18.0.txt"
    ],
-   "from": "pango-sys-0.18.0 (cargo registry)",
+   "from": "pango-sys-0.18.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3569,7 +3555,7 @@
    "copies": [
     "LICENSES/components/rust/parking_lot-0.12.5.txt"
    ],
-   "from": "parking_lot-0.12.5 (cargo registry)",
+   "from": "parking_lot-0.12.5.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3577,7 +3563,7 @@
    "copies": [
     "LICENSES/components/rust/parking_lot_core-0.9.12.txt"
    ],
-   "from": "parking_lot_core-0.9.12 (cargo registry)",
+   "from": "parking_lot_core-0.9.12.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3585,7 +3571,7 @@
    "copies": [
     "LICENSES/components/rust/percent-encoding-2.3.2.txt"
    ],
-   "from": "percent-encoding-2.3.2 (cargo registry)",
+   "from": "percent-encoding-2.3.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3593,7 +3579,7 @@
    "copies": [
     "LICENSES/components/rust/phf-0.13.1.txt"
    ],
-   "from": "phf-0.13.1 (cargo registry)",
+   "from": "phf-0.13.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3601,7 +3587,7 @@
    "copies": [
     "LICENSES/components/rust/phf_codegen-0.13.1.txt"
    ],
-   "from": "phf_codegen-0.13.1 (cargo registry)",
+   "from": "phf_codegen-0.13.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3609,7 +3595,7 @@
    "copies": [
     "LICENSES/components/rust/phf_generator-0.13.1.txt"
    ],
-   "from": "phf_generator-0.13.1 (cargo registry)",
+   "from": "phf_generator-0.13.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3617,7 +3603,7 @@
    "copies": [
     "LICENSES/components/rust/phf_macros-0.13.1.txt"
    ],
-   "from": "phf_macros-0.13.1 (cargo registry)",
+   "from": "phf_macros-0.13.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3625,7 +3611,7 @@
    "copies": [
     "LICENSES/components/rust/phf_shared-0.13.1.txt"
    ],
-   "from": "phf_shared-0.13.1 (cargo registry)",
+   "from": "phf_shared-0.13.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3633,7 +3619,7 @@
    "copies": [
     "LICENSES/components/rust/pin-project-lite-0.2.17.txt"
    ],
-   "from": "pin-project-lite-0.2.17 (cargo registry)",
+   "from": "pin-project-lite-0.2.17.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -3641,7 +3627,7 @@
    "copies": [
     "LICENSES/components/rust/pkg-config-0.3.34.txt"
    ],
-   "from": "pkg-config-0.3.34 (cargo registry)",
+   "from": "pkg-config-0.3.34.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3649,7 +3635,7 @@
    "copies": [
     "LICENSES/components/rust/plist-1.10.0.txt"
    ],
-   "from": "plist-1.10.0 (cargo registry)",
+   "from": "plist-1.10.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3657,7 +3643,7 @@
    "copies": [
     "LICENSES/components/rust/png-0.17.16.txt"
    ],
-   "from": "png-0.17.16 (cargo registry)",
+   "from": "png-0.17.16.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3665,7 +3651,7 @@
    "copies": [
     "LICENSES/components/rust/png-0.18.1.txt"
    ],
-   "from": "png-0.18.1 (cargo registry)",
+   "from": "png-0.18.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3673,7 +3659,7 @@
    "copies": [
     "LICENSES/components/rust/portable-atomic-1.15.0.txt"
    ],
-   "from": "portable-atomic-1.15.0 (cargo registry)",
+   "from": "portable-atomic-1.15.0.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -3681,7 +3667,7 @@
    "copies": [
     "LICENSES/components/rust/portable-atomic-util-0.2.7.txt"
    ],
-   "from": "portable-atomic-util-0.2.7 (cargo registry)",
+   "from": "portable-atomic-util-0.2.7.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -3689,7 +3675,7 @@
    "copies": [
     "LICENSES/components/rust/potential_utf-0.1.6.txt"
    ],
-   "from": "potential_utf-0.1.6 (cargo registry)",
+   "from": "potential_utf-0.1.6.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -3698,7 +3684,7 @@
     "LICENSES/components/rust/powerfmt-0.2.0.LICENSE-Apache.txt",
     "LICENSES/components/rust/powerfmt-0.2.0.LICENSE-MIT.txt"
    ],
-   "from": "powerfmt-0.2.0 (cargo registry)",
+   "from": "powerfmt-0.2.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3706,7 +3692,7 @@
    "copies": [
     "LICENSES/components/rust/precomputed-hash-0.1.1.txt"
    ],
-   "from": "precomputed-hash-0.1.1 (cargo registry)",
+   "from": "precomputed-hash-0.1.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3714,7 +3700,7 @@
    "copies": [
     "LICENSES/components/rust/proc-macro-crate-1.3.1.txt"
    ],
-   "from": "proc-macro-crate-1.3.1 (cargo registry)",
+   "from": "proc-macro-crate-1.3.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3722,7 +3708,7 @@
    "copies": [
     "LICENSES/components/rust/proc-macro-crate-2.0.2.txt"
    ],
-   "from": "proc-macro-crate-2.0.2 (cargo registry)",
+   "from": "proc-macro-crate-2.0.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3730,7 +3716,7 @@
    "copies": [
     "LICENSES/components/rust/proc-macro-crate-3.5.0.txt"
    ],
-   "from": "proc-macro-crate-3.5.0 (cargo registry)",
+   "from": "proc-macro-crate-3.5.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3739,7 +3725,7 @@
     "LICENSES/components/rust/proc-macro-error-1.0.4.LICENSE-APACHE.txt",
     "LICENSES/components/rust/proc-macro-error-1.0.4.LICENSE-MIT.txt"
    ],
-   "from": "proc-macro-error-1.0.4 (cargo registry)",
+   "from": "proc-macro-error-1.0.4.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3748,7 +3734,7 @@
     "LICENSES/components/rust/proc-macro-error-attr-1.0.4.LICENSE-APACHE.txt",
     "LICENSES/components/rust/proc-macro-error-attr-1.0.4.LICENSE-MIT.txt"
    ],
-   "from": "proc-macro-error-attr-1.0.4 (cargo registry)",
+   "from": "proc-macro-error-attr-1.0.4.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3756,7 +3742,7 @@
    "copies": [
     "LICENSES/components/rust/proc-macro2-1.0.107.txt"
    ],
-   "from": "proc-macro2-1.0.107 (cargo registry)",
+   "from": "proc-macro2-1.0.107.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3764,7 +3750,7 @@
    "copies": [
     "LICENSES/components/rust/quick-xml-0.41.0.txt"
    ],
-   "from": "quick-xml-0.41.0 (cargo registry)",
+   "from": "quick-xml-0.41.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3772,20 +3758,20 @@
    "copies": [
     "LICENSES/components/rust/quote-1.0.47.txt"
    ],
-   "from": "quote-1.0.47 (cargo registry)",
+   "from": "quote-1.0.47.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "r-efi 5.3.0": {
    "copies": [],
-   "from": "r-efi-5.3.0 (cargo registry)",
+   "from": "r-efi-5.3.0.crate",
    "no_licence_file": true,
    "notices": [],
    "spdx": "MIT OR Apache-2.0 OR LGPL-2.1-or-later"
   },
   "r-efi 6.0.0": {
    "copies": [],
-   "from": "r-efi-6.0.0 (cargo registry)",
+   "from": "r-efi-6.0.0.crate",
    "no_licence_file": true,
    "notices": [],
    "spdx": "MIT OR Apache-2.0 OR LGPL-2.1-or-later"
@@ -3795,7 +3781,7 @@
     "LICENSES/components/rust/raw-window-handle-0.6.2.LICENSE-MIT.md.txt",
     "LICENSES/components/rust/raw-window-handle-0.6.2.LICENSE-ZLIB.md.txt"
    ],
-   "from": "raw-window-handle-0.6.2 (cargo registry)",
+   "from": "raw-window-handle-0.6.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0 OR Zlib"
   },
@@ -3803,7 +3789,7 @@
    "copies": [
     "LICENSES/components/rust/redox_syscall-0.5.18.txt"
    ],
-   "from": "redox_syscall-0.5.18 (cargo registry)",
+   "from": "redox_syscall-0.5.18.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3811,7 +3797,7 @@
    "copies": [
     "LICENSES/components/rust/redox_users-0.5.2.txt"
    ],
-   "from": "redox_users-0.5.2 (cargo registry)",
+   "from": "redox_users-0.5.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3819,7 +3805,7 @@
    "copies": [
     "LICENSES/components/rust/ref-cast-1.0.27.txt"
    ],
-   "from": "ref-cast-1.0.27 (cargo registry)",
+   "from": "ref-cast-1.0.27.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3827,7 +3813,7 @@
    "copies": [
     "LICENSES/components/rust/ref-cast-impl-1.0.27.txt"
    ],
-   "from": "ref-cast-impl-1.0.27 (cargo registry)",
+   "from": "ref-cast-impl-1.0.27.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3835,7 +3821,7 @@
    "copies": [
     "LICENSES/components/rust/regex-1.13.1.txt"
    ],
-   "from": "regex-1.13.1 (cargo registry)",
+   "from": "regex-1.13.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3843,7 +3829,7 @@
    "copies": [
     "LICENSES/components/rust/regex-automata-0.4.18.txt"
    ],
-   "from": "regex-automata-0.4.18 (cargo registry)",
+   "from": "regex-automata-0.4.18.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3852,7 +3838,7 @@
     "LICENSES/components/rust/regex-syntax-0.8.11.LICENSE-MIT.txt",
     "LICENSES/components/rust/regex-syntax-0.8.11.LICENSE-UNICODE.txt"
    ],
-   "from": "regex-syntax-0.8.11 (cargo registry)",
+   "from": "regex-syntax-0.8.11.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3861,7 +3847,7 @@
     "LICENSES/components/rust/reqwest-0.13.4.LICENSE-APACHE.txt",
     "LICENSES/components/rust/reqwest-0.13.4.LICENSE-MIT.txt"
    ],
-   "from": "reqwest-0.13.4 (cargo registry)",
+   "from": "reqwest-0.13.4.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3869,7 +3855,7 @@
    "copies": [
     "LICENSES/components/rust/rustc-hash-2.1.3.txt"
    ],
-   "from": "rustc-hash-2.1.3 (cargo registry)",
+   "from": "rustc-hash-2.1.3.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -3877,7 +3863,7 @@
    "copies": [
     "LICENSES/components/rust/rustc_version-0.4.1.txt"
    ],
-   "from": "rustc_version-0.4.1 (cargo registry)",
+   "from": "rustc_version-0.4.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3885,7 +3871,7 @@
    "copies": [
     "LICENSES/components/rust/rustversion-1.0.23.txt"
    ],
-   "from": "rustversion-1.0.23 (cargo registry)",
+   "from": "rustversion-1.0.23.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3895,7 +3881,7 @@
     "LICENSES/components/rust/same-file-1.0.6.LICENSE-MIT.txt",
     "LICENSES/components/rust/same-file-1.0.6.UNLICENSE.txt"
    ],
-   "from": "same-file-1.0.6 (cargo registry)",
+   "from": "same-file-1.0.6.crate",
    "notices": [],
    "spdx": "Unlicense OR MIT"
   },
@@ -3903,7 +3889,7 @@
    "copies": [
     "LICENSES/components/rust/schemars-0.8.22.txt"
    ],
-   "from": "schemars-0.8.22 (cargo registry)",
+   "from": "schemars-0.8.22.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3911,7 +3897,7 @@
    "copies": [
     "LICENSES/components/rust/schemars-0.9.0.txt"
    ],
-   "from": "schemars-0.9.0 (cargo registry)",
+   "from": "schemars-0.9.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3919,7 +3905,7 @@
    "copies": [
     "LICENSES/components/rust/schemars-1.2.2.txt"
    ],
-   "from": "schemars-1.2.2 (cargo registry)",
+   "from": "schemars-1.2.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3927,7 +3913,7 @@
    "copies": [
     "LICENSES/components/rust/schemars_derive-0.8.22.txt"
    ],
-   "from": "schemars_derive-0.8.22 (cargo registry)",
+   "from": "schemars_derive-0.8.22.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -3935,13 +3921,13 @@
    "copies": [
     "LICENSES/components/rust/scopeguard-1.2.0.txt"
    ],
-   "from": "scopeguard-1.2.0 (cargo registry)",
+   "from": "scopeguard-1.2.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "selectors 0.36.1": {
    "copies": [],
-   "from": "selectors-0.36.1 (cargo registry)",
+   "from": "selectors-0.36.1.crate",
    "no_licence_file": true,
    "notices": [],
    "spdx": "MPL-2.0"
@@ -3950,7 +3936,7 @@
    "copies": [
     "LICENSES/components/rust/semver-1.0.28.txt"
    ],
-   "from": "semver-1.0.28 (cargo registry)",
+   "from": "semver-1.0.28.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3958,7 +3944,7 @@
    "copies": [
     "LICENSES/components/rust/serde-1.0.229.txt"
    ],
-   "from": "serde-1.0.229 (cargo registry)",
+   "from": "serde-1.0.229.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3966,7 +3952,7 @@
    "copies": [
     "LICENSES/components/rust/serde-untagged-0.1.9.txt"
    ],
-   "from": "serde-untagged-0.1.9 (cargo registry)",
+   "from": "serde-untagged-0.1.9.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3974,7 +3960,7 @@
    "copies": [
     "LICENSES/components/rust/serde_core-1.0.229.txt"
    ],
-   "from": "serde_core-1.0.229 (cargo registry)",
+   "from": "serde_core-1.0.229.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3982,7 +3968,7 @@
    "copies": [
     "LICENSES/components/rust/serde_derive-1.0.229.txt"
    ],
-   "from": "serde_derive-1.0.229 (cargo registry)",
+   "from": "serde_derive-1.0.229.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3990,7 +3976,7 @@
    "copies": [
     "LICENSES/components/rust/serde_derive_internals-0.29.1.txt"
    ],
-   "from": "serde_derive_internals-0.29.1 (cargo registry)",
+   "from": "serde_derive_internals-0.29.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -3998,7 +3984,7 @@
    "copies": [
     "LICENSES/components/rust/serde_json-1.0.151.txt"
    ],
-   "from": "serde_json-1.0.151 (cargo registry)",
+   "from": "serde_json-1.0.151.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4006,7 +3992,7 @@
    "copies": [
     "LICENSES/components/rust/serde_repr-0.1.21.txt"
    ],
-   "from": "serde_repr-0.1.21 (cargo registry)",
+   "from": "serde_repr-0.1.21.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4014,7 +4000,7 @@
    "copies": [
     "LICENSES/components/rust/serde_spanned-0.6.9.txt"
    ],
-   "from": "serde_spanned-0.6.9 (cargo registry)",
+   "from": "serde_spanned-0.6.9.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4022,7 +4008,7 @@
    "copies": [
     "LICENSES/components/rust/serde_spanned-1.1.1.txt"
    ],
-   "from": "serde_spanned-1.1.1 (cargo registry)",
+   "from": "serde_spanned-1.1.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4030,7 +4016,7 @@
    "copies": [
     "LICENSES/components/rust/serde_with-3.22.0.txt"
    ],
-   "from": "serde_with-3.22.0 (cargo registry)",
+   "from": "serde_with-3.22.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4038,7 +4024,7 @@
    "copies": [
     "LICENSES/components/rust/serde_with_macros-3.22.0.txt"
    ],
-   "from": "serde_with_macros-3.22.0 (cargo registry)",
+   "from": "serde_with_macros-3.22.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4046,7 +4032,7 @@
    "copies": [
     "LICENSES/components/rust/serialize-to-javascript-0.1.2.txt"
    ],
-   "from": "serialize-to-javascript-0.1.2 (cargo registry)",
+   "from": "serialize-to-javascript-0.1.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4054,7 +4040,7 @@
    "copies": [
     "LICENSES/components/rust/serialize-to-javascript-impl-0.1.2.txt"
    ],
-   "from": "serialize-to-javascript-impl-0.1.2 (cargo registry)",
+   "from": "serialize-to-javascript-impl-0.1.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4062,7 +4048,7 @@
    "copies": [
     "LICENSES/components/rust/servo_arc-0.4.3.txt"
    ],
-   "from": "servo_arc-0.4.3 (cargo registry)",
+   "from": "servo_arc-0.4.3.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4070,7 +4056,7 @@
    "copies": [
     "LICENSES/components/rust/sha2-0.10.9.txt"
    ],
-   "from": "sha2-0.10.9 (cargo registry)",
+   "from": "sha2-0.10.9.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4079,7 +4065,7 @@
     "LICENSES/components/rust/shlex-2.0.1.LICENSE-APACHE.txt",
     "LICENSES/components/rust/shlex-2.0.1.LICENSE-MIT.txt"
    ],
-   "from": "shlex-2.0.1 (cargo registry)",
+   "from": "shlex-2.0.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4087,7 +4073,7 @@
    "copies": [
     "LICENSES/components/rust/simd-adler32-0.3.10.txt"
    ],
-   "from": "simd-adler32-0.3.10 (cargo registry)",
+   "from": "simd-adler32-0.3.10.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4095,7 +4081,7 @@
    "copies": [
     "LICENSES/components/rust/siphasher-1.0.3.txt"
    ],
-   "from": "siphasher-1.0.3 (cargo registry)",
+   "from": "siphasher-1.0.3.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4103,7 +4089,7 @@
    "copies": [
     "LICENSES/components/rust/slab-0.4.12.txt"
    ],
-   "from": "slab-0.4.12 (cargo registry)",
+   "from": "slab-0.4.12.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4111,7 +4097,7 @@
    "copies": [
     "LICENSES/components/rust/smallvec-1.16.0.txt"
    ],
-   "from": "smallvec-1.16.0 (cargo registry)",
+   "from": "smallvec-1.16.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4119,7 +4105,7 @@
    "copies": [
     "LICENSES/components/rust/socket2-0.6.5.txt"
    ],
-   "from": "socket2-0.6.5 (cargo registry)",
+   "from": "socket2-0.6.5.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4128,7 +4114,7 @@
     "LICENSES/components/rust/softbuffer-0.4.8.LICENSE-APACHE.txt",
     "LICENSES/components/rust/softbuffer-0.4.8.LICENSE-MIT.txt"
    ],
-   "from": "softbuffer-0.4.8 (cargo registry)",
+   "from": "softbuffer-0.4.8.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4136,7 +4122,7 @@
    "copies": [
     "LICENSES/components/rust/soup3-0.5.0.txt"
    ],
-   "from": "soup3-0.5.0 (cargo registry)",
+   "from": "soup3-0.5.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4144,7 +4130,7 @@
    "copies": [
     "LICENSES/components/rust/soup3-sys-0.5.0.txt"
    ],
-   "from": "soup3-sys-0.5.0 (cargo registry)",
+   "from": "soup3-sys-0.5.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4152,7 +4138,7 @@
    "copies": [
     "LICENSES/components/rust/stable_deref_trait-1.2.1.txt"
    ],
-   "from": "stable_deref_trait-1.2.1 (cargo registry)",
+   "from": "stable_deref_trait-1.2.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4160,7 +4146,7 @@
    "copies": [
     "LICENSES/components/rust/string_cache-0.9.0.txt"
    ],
-   "from": "string_cache-0.9.0 (cargo registry)",
+   "from": "string_cache-0.9.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4168,7 +4154,7 @@
    "copies": [
     "LICENSES/components/rust/string_cache_codegen-0.6.1.txt"
    ],
-   "from": "string_cache_codegen-0.6.1 (cargo registry)",
+   "from": "string_cache_codegen-0.6.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4176,7 +4162,7 @@
    "copies": [
     "LICENSES/components/rust/strsim-0.11.1.txt"
    ],
-   "from": "strsim-0.11.1 (cargo registry)",
+   "from": "strsim-0.11.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4185,7 +4171,7 @@
     "LICENSES/components/rust/swift-rs-1.0.8.LICENSE-APACHE.txt",
     "LICENSES/components/rust/swift-rs-1.0.8.LICENSE-MIT.txt"
    ],
-   "from": "swift-rs-1.0.8 (cargo registry)",
+   "from": "swift-rs-1.0.8.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4193,7 +4179,7 @@
    "copies": [
     "LICENSES/components/rust/syn-1.0.109.txt"
    ],
-   "from": "syn-1.0.109 (cargo registry)",
+   "from": "syn-1.0.109.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4201,7 +4187,7 @@
    "copies": [
     "LICENSES/components/rust/syn-2.0.119.txt"
    ],
-   "from": "syn-2.0.119 (cargo registry)",
+   "from": "syn-2.0.119.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4209,13 +4195,13 @@
    "copies": [
     "LICENSES/components/rust/syn-3.0.4.txt"
    ],
-   "from": "syn-3.0.4 (cargo registry)",
+   "from": "syn-3.0.4.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "sync_wrapper 1.0.2": {
    "copies": [],
-   "from": "sync_wrapper-1.0.2 (cargo registry)",
+   "from": "sync_wrapper-1.0.2.crate",
    "notices": [],
    "spdx": "Apache-2.0"
   },
@@ -4223,7 +4209,7 @@
    "copies": [
     "LICENSES/components/rust/synstructure-0.13.2.txt"
    ],
-   "from": "synstructure-0.13.2 (cargo registry)",
+   "from": "synstructure-0.13.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4231,13 +4217,13 @@
    "copies": [
     "LICENSES/components/rust/system-deps-6.2.2.txt"
    ],
-   "from": "system-deps-6.2.2 (cargo registry)",
+   "from": "system-deps-6.2.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "tao 0.35.3": {
    "copies": [],
-   "from": "tao-0.35.3 (cargo registry)",
+   "from": "tao-0.35.3.crate",
    "notices": [],
    "spdx": "Apache-2.0"
   },
@@ -4246,13 +4232,13 @@
     "LICENSES/components/rust/tao-macros-0.1.4.LICENSE-MIT.txt",
     "LICENSES/components/rust/tao-macros-0.1.4.LICENSE.spdx.txt"
    ],
-   "from": "tao-macros-0.1.4 (cargo registry)",
+   "from": "tao-macros-0.1.4.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "target-lexicon 0.12.16": {
    "copies": [],
-   "from": "target-lexicon-0.12.16 (cargo registry)",
+   "from": "target-lexicon-0.12.16.crate",
    "notices": [],
    "spdx": "Apache-2.0 WITH LLVM-exception"
   },
@@ -4260,7 +4246,7 @@
    "copies": [
     "LICENSES/components/rust/tauri-2.11.5.txt"
    ],
-   "from": "tauri-2.11.5 (cargo registry)",
+   "from": "tauri-2.11.5.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -4268,7 +4254,7 @@
    "copies": [
     "LICENSES/components/rust/tauri-build-2.6.3.txt"
    ],
-   "from": "tauri-build-2.6.3 (cargo registry)",
+   "from": "tauri-build-2.6.3.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -4276,7 +4262,7 @@
    "copies": [
     "LICENSES/components/rust/tauri-codegen-2.6.3.txt"
    ],
-   "from": "tauri-codegen-2.6.3 (cargo registry)",
+   "from": "tauri-codegen-2.6.3.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -4284,7 +4270,7 @@
    "copies": [
     "LICENSES/components/rust/tauri-macros-2.6.3.txt"
    ],
-   "from": "tauri-macros-2.6.3 (cargo registry)",
+   "from": "tauri-macros-2.6.3.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -4292,7 +4278,7 @@
    "copies": [
     "LICENSES/components/rust/tauri-runtime-2.11.3.txt"
    ],
-   "from": "tauri-runtime-2.11.3 (cargo registry)",
+   "from": "tauri-runtime-2.11.3.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -4300,7 +4286,7 @@
    "copies": [
     "LICENSES/components/rust/tauri-runtime-wry-2.11.4.txt"
    ],
-   "from": "tauri-runtime-wry-2.11.4 (cargo registry)",
+   "from": "tauri-runtime-wry-2.11.4.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -4308,7 +4294,7 @@
    "copies": [
     "LICENSES/components/rust/tauri-utils-2.9.3.txt"
    ],
-   "from": "tauri-utils-2.9.3 (cargo registry)",
+   "from": "tauri-utils-2.9.3.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -4316,7 +4302,7 @@
    "copies": [
     "LICENSES/components/rust/tauri-winres-0.3.6.txt"
    ],
-   "from": "tauri-winres-0.3.6 (cargo registry)",
+   "from": "tauri-winres-0.3.6.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4324,7 +4310,7 @@
    "copies": [
     "LICENSES/components/rust/tendril-0.5.1.txt"
    ],
-   "from": "tendril-0.5.1 (cargo registry)",
+   "from": "tendril-0.5.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4332,7 +4318,7 @@
    "copies": [
     "LICENSES/components/rust/thiserror-1.0.69.txt"
    ],
-   "from": "thiserror-1.0.69 (cargo registry)",
+   "from": "thiserror-1.0.69.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4340,7 +4326,7 @@
    "copies": [
     "LICENSES/components/rust/thiserror-2.0.20.txt"
    ],
-   "from": "thiserror-2.0.20 (cargo registry)",
+   "from": "thiserror-2.0.20.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4348,7 +4334,7 @@
    "copies": [
     "LICENSES/components/rust/thiserror-impl-1.0.69.txt"
    ],
-   "from": "thiserror-impl-1.0.69 (cargo registry)",
+   "from": "thiserror-impl-1.0.69.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4356,7 +4342,7 @@
    "copies": [
     "LICENSES/components/rust/thiserror-impl-2.0.20.txt"
    ],
-   "from": "thiserror-impl-2.0.20 (cargo registry)",
+   "from": "thiserror-impl-2.0.20.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4364,7 +4350,7 @@
    "copies": [
     "LICENSES/components/rust/time-0.3.55.txt"
    ],
-   "from": "time-0.3.55 (cargo registry)",
+   "from": "time-0.3.55.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4372,7 +4358,7 @@
    "copies": [
     "LICENSES/components/rust/time-core-0.1.9.txt"
    ],
-   "from": "time-core-0.1.9 (cargo registry)",
+   "from": "time-core-0.1.9.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4380,7 +4366,7 @@
    "copies": [
     "LICENSES/components/rust/time-macros-0.2.32.txt"
    ],
-   "from": "time-macros-0.2.32 (cargo registry)",
+   "from": "time-macros-0.2.32.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4388,7 +4374,7 @@
    "copies": [
     "LICENSES/components/rust/tinystr-0.8.4.txt"
    ],
-   "from": "tinystr-0.8.4 (cargo registry)",
+   "from": "tinystr-0.8.4.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -4397,7 +4383,7 @@
     "LICENSES/components/rust/tinyvec-1.12.0.LICENSE-MIT.md.txt",
     "LICENSES/components/rust/tinyvec-1.12.0.LICENSE-ZLIB.md.txt"
    ],
-   "from": "tinyvec-1.12.0 (cargo registry)",
+   "from": "tinyvec-1.12.0.crate",
    "notices": [],
    "spdx": "Zlib OR Apache-2.0 OR MIT"
   },
@@ -4407,7 +4393,7 @@
     "LICENSES/components/rust/tinyvec_macros-0.1.1.LICENSE-MIT.md.txt",
     "LICENSES/components/rust/tinyvec_macros-0.1.1.LICENSE-ZLIB.md.txt"
    ],
-   "from": "tinyvec_macros-0.1.1 (cargo registry)",
+   "from": "tinyvec_macros-0.1.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0 OR Zlib"
   },
@@ -4415,7 +4401,7 @@
    "copies": [
     "LICENSES/components/rust/tokio-1.53.1.txt"
    ],
-   "from": "tokio-1.53.1 (cargo registry)",
+   "from": "tokio-1.53.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4423,7 +4409,7 @@
    "copies": [
     "LICENSES/components/rust/tokio-util-0.7.19.txt"
    ],
-   "from": "tokio-util-0.7.19 (cargo registry)",
+   "from": "tokio-util-0.7.19.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4431,7 +4417,7 @@
    "copies": [
     "LICENSES/components/rust/toml-0.8.2.txt"
    ],
-   "from": "toml-0.8.2 (cargo registry)",
+   "from": "toml-0.8.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4439,7 +4425,7 @@
    "copies": [
     "LICENSES/components/rust/toml-0.9.12+spec-1.1.0.txt"
    ],
-   "from": "toml-0.9.12+spec-1.1.0 (cargo registry)",
+   "from": "toml-0.9.12+spec-1.1.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4447,7 +4433,7 @@
    "copies": [
     "LICENSES/components/rust/toml-1.1.4+spec-1.1.0.txt"
    ],
-   "from": "toml-1.1.4+spec-1.1.0 (cargo registry)",
+   "from": "toml-1.1.4+spec-1.1.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4455,7 +4441,7 @@
    "copies": [
     "LICENSES/components/rust/toml_datetime-0.6.3.txt"
    ],
-   "from": "toml_datetime-0.6.3 (cargo registry)",
+   "from": "toml_datetime-0.6.3.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4463,7 +4449,7 @@
    "copies": [
     "LICENSES/components/rust/toml_datetime-0.7.5+spec-1.1.0.txt"
    ],
-   "from": "toml_datetime-0.7.5+spec-1.1.0 (cargo registry)",
+   "from": "toml_datetime-0.7.5+spec-1.1.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4471,7 +4457,7 @@
    "copies": [
     "LICENSES/components/rust/toml_datetime-1.1.1+spec-1.1.0.txt"
    ],
-   "from": "toml_datetime-1.1.1+spec-1.1.0 (cargo registry)",
+   "from": "toml_datetime-1.1.1+spec-1.1.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4479,7 +4465,7 @@
    "copies": [
     "LICENSES/components/rust/toml_edit-0.19.15.txt"
    ],
-   "from": "toml_edit-0.19.15 (cargo registry)",
+   "from": "toml_edit-0.19.15.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4487,7 +4473,7 @@
    "copies": [
     "LICENSES/components/rust/toml_edit-0.20.2.txt"
    ],
-   "from": "toml_edit-0.20.2 (cargo registry)",
+   "from": "toml_edit-0.20.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4495,7 +4481,7 @@
    "copies": [
     "LICENSES/components/rust/toml_edit-0.25.13+spec-1.1.0.txt"
    ],
-   "from": "toml_edit-0.25.13+spec-1.1.0 (cargo registry)",
+   "from": "toml_edit-0.25.13+spec-1.1.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4503,7 +4489,7 @@
    "copies": [
     "LICENSES/components/rust/toml_parser-1.1.3+spec-1.1.0.txt"
    ],
-   "from": "toml_parser-1.1.3+spec-1.1.0 (cargo registry)",
+   "from": "toml_parser-1.1.3+spec-1.1.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4511,7 +4497,7 @@
    "copies": [
     "LICENSES/components/rust/toml_writer-1.1.2+spec-1.1.0.txt"
    ],
-   "from": "toml_writer-1.1.2+spec-1.1.0 (cargo registry)",
+   "from": "toml_writer-1.1.2+spec-1.1.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4519,7 +4505,7 @@
    "copies": [
     "LICENSES/components/rust/tower-0.5.3.txt"
    ],
-   "from": "tower-0.5.3 (cargo registry)",
+   "from": "tower-0.5.3.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4527,7 +4513,7 @@
    "copies": [
     "LICENSES/components/rust/tower-http-0.6.11.txt"
    ],
-   "from": "tower-http-0.6.11 (cargo registry)",
+   "from": "tower-http-0.6.11.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4535,7 +4521,7 @@
    "copies": [
     "LICENSES/components/rust/tower-layer-0.3.3.txt"
    ],
-   "from": "tower-layer-0.3.3 (cargo registry)",
+   "from": "tower-layer-0.3.3.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4543,7 +4529,7 @@
    "copies": [
     "LICENSES/components/rust/tower-service-0.3.3.txt"
    ],
-   "from": "tower-service-0.3.3 (cargo registry)",
+   "from": "tower-service-0.3.3.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4551,7 +4537,7 @@
    "copies": [
     "LICENSES/components/rust/tracing-0.1.44.txt"
    ],
-   "from": "tracing-0.1.44 (cargo registry)",
+   "from": "tracing-0.1.44.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4560,7 +4546,7 @@
     "LICENSES/components/rust/tracing-core-0.1.36.LICENSE.txt",
     "LICENSES/components/rust/tracing-core-0.1.36.spin.LICENSE.txt"
    ],
-   "from": "tracing-core-0.1.36 (cargo registry)",
+   "from": "tracing-core-0.1.36.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4569,7 +4555,7 @@
     "LICENSES/components/rust/tray-icon-0.24.2.LICENSE-MIT.txt",
     "LICENSES/components/rust/tray-icon-0.24.2.LICENSE.spdx.txt"
    ],
-   "from": "tray-icon-0.24.2 (cargo registry)",
+   "from": "tray-icon-0.24.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4577,7 +4563,7 @@
    "copies": [
     "LICENSES/components/rust/try-lock-0.2.5.txt"
    ],
-   "from": "try-lock-0.2.5 (cargo registry)",
+   "from": "try-lock-0.2.5.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4585,7 +4571,7 @@
    "copies": [
     "LICENSES/components/rust/typeid-1.0.3.txt"
    ],
-   "from": "typeid-1.0.3 (cargo registry)",
+   "from": "typeid-1.0.3.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4595,41 +4581,41 @@
     "LICENSES/components/rust/typenum-1.20.1.LICENSE-APACHE.txt",
     "LICENSES/components/rust/typenum-1.20.1.LICENSE-MIT.txt"
    ],
-   "from": "typenum-1.20.1 (cargo registry)",
+   "from": "typenum-1.20.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "unic-char-property 0.9.0": {
    "copies": [],
-   "from": "unic-char-property-0.9.0 (cargo registry)",
+   "from": "unic-char-property-0.9.0.crate",
    "licence_from": "https://github.com/open-i18n/rust-unic/blob/master/LICENSE-APACHE",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "unic-char-range 0.9.0": {
    "copies": [],
-   "from": "unic-char-range-0.9.0 (cargo registry)",
+   "from": "unic-char-range-0.9.0.crate",
    "licence_from": "https://github.com/open-i18n/rust-unic/blob/master/LICENSE-APACHE",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "unic-common 0.9.0": {
    "copies": [],
-   "from": "unic-common-0.9.0 (cargo registry)",
+   "from": "unic-common-0.9.0.crate",
    "licence_from": "https://github.com/open-i18n/rust-unic/blob/master/LICENSE-APACHE",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "unic-ucd-ident 0.9.0": {
    "copies": [],
-   "from": "unic-ucd-ident-0.9.0 (cargo registry)",
+   "from": "unic-ucd-ident-0.9.0.crate",
    "licence_from": "https://github.com/open-i18n/rust-unic/blob/master/LICENSE-APACHE",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "unic-ucd-version 0.9.0": {
    "copies": [],
-   "from": "unic-ucd-version-0.9.0 (cargo registry)",
+   "from": "unic-ucd-version-0.9.0.crate",
    "licence_from": "https://github.com/open-i18n/rust-unic/blob/master/LICENSE-APACHE",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
@@ -4639,7 +4625,7 @@
     "LICENSES/components/rust/unicode-ident-1.0.24.LICENSE-MIT.txt",
     "LICENSES/components/rust/unicode-ident-1.0.24.LICENSE-UNICODE.txt"
    ],
-   "from": "unicode-ident-1.0.24 (cargo registry)",
+   "from": "unicode-ident-1.0.24.crate",
    "notices": [],
    "spdx": "(MIT OR Apache-2.0) AND Unicode-3.0"
   },
@@ -4647,7 +4633,7 @@
    "copies": [
     "LICENSES/components/rust/unicode-segmentation-1.13.3.txt"
    ],
-   "from": "unicode-segmentation-1.13.3 (cargo registry)",
+   "from": "unicode-segmentation-1.13.3.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4655,7 +4641,7 @@
    "copies": [
     "LICENSES/components/rust/url-2.5.8.txt"
    ],
-   "from": "url-2.5.8 (cargo registry)",
+   "from": "url-2.5.8.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4663,7 +4649,7 @@
    "copies": [
     "LICENSES/components/rust/urlpattern-0.3.0.txt"
    ],
-   "from": "urlpattern-0.3.0 (cargo registry)",
+   "from": "urlpattern-0.3.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4671,7 +4657,7 @@
    "copies": [
     "LICENSES/components/rust/utf8_iter-1.0.4.txt"
    ],
-   "from": "utf8_iter-1.0.4 (cargo registry)",
+   "from": "utf8_iter-1.0.4.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -4679,7 +4665,7 @@
    "copies": [
     "LICENSES/components/rust/uuid-1.26.0.txt"
    ],
-   "from": "uuid-1.26.0 (cargo registry)",
+   "from": "uuid-1.26.0.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -4687,7 +4673,7 @@
    "copies": [
     "LICENSES/components/rust/version-compare-0.2.1.txt"
    ],
-   "from": "version-compare-0.2.1 (cargo registry)",
+   "from": "version-compare-0.2.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4695,7 +4681,7 @@
    "copies": [
     "LICENSES/components/rust/version_check-0.9.5.txt"
    ],
-   "from": "version_check-0.9.5 (cargo registry)",
+   "from": "version_check-0.9.5.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4703,7 +4689,7 @@
    "copies": [
     "LICENSES/components/rust/vswhom-0.1.0.txt"
    ],
-   "from": "vswhom-0.1.0 (cargo registry)",
+   "from": "vswhom-0.1.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4711,7 +4697,7 @@
    "copies": [
     "LICENSES/components/rust/vswhom-sys-0.1.3.txt"
    ],
-   "from": "vswhom-sys-0.1.3 (cargo registry)",
+   "from": "vswhom-sys-0.1.3.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4721,7 +4707,7 @@
     "LICENSES/components/rust/walkdir-2.5.0.LICENSE-MIT.txt",
     "LICENSES/components/rust/walkdir-2.5.0.UNLICENSE.txt"
    ],
-   "from": "walkdir-2.5.0 (cargo registry)",
+   "from": "walkdir-2.5.0.crate",
    "notices": [],
    "spdx": "Unlicense OR MIT"
   },
@@ -4729,7 +4715,7 @@
    "copies": [
     "LICENSES/components/rust/want-0.3.1.txt"
    ],
-   "from": "want-0.3.1 (cargo registry)",
+   "from": "want-0.3.1.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4737,7 +4723,7 @@
    "copies": [
     "LICENSES/components/rust/wasi-0.11.1+wasi-snapshot-preview1.txt"
    ],
-   "from": "wasi-0.11.1+wasi-snapshot-preview1 (cargo registry)",
+   "from": "wasi-0.11.1+wasi-snapshot-preview1.crate",
    "notices": [],
    "spdx": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
   },
@@ -4745,7 +4731,7 @@
    "copies": [
     "LICENSES/components/rust/wasip2-1.0.4+wasi-0.2.12.txt"
    ],
-   "from": "wasip2-1.0.4+wasi-0.2.12 (cargo registry)",
+   "from": "wasip2-1.0.4+wasi-0.2.12.crate",
    "notices": [],
    "spdx": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
   },
@@ -4753,7 +4739,7 @@
    "copies": [
     "LICENSES/components/rust/wasm-bindgen-0.2.127.txt"
    ],
-   "from": "wasm-bindgen-0.2.127 (cargo registry)",
+   "from": "wasm-bindgen-0.2.127.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4761,7 +4747,7 @@
    "copies": [
     "LICENSES/components/rust/wasm-bindgen-futures-0.4.77.txt"
    ],
-   "from": "wasm-bindgen-futures-0.4.77 (cargo registry)",
+   "from": "wasm-bindgen-futures-0.4.77.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4769,7 +4755,7 @@
    "copies": [
     "LICENSES/components/rust/wasm-bindgen-macro-0.2.127.txt"
    ],
-   "from": "wasm-bindgen-macro-0.2.127 (cargo registry)",
+   "from": "wasm-bindgen-macro-0.2.127.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4777,7 +4763,7 @@
    "copies": [
     "LICENSES/components/rust/wasm-bindgen-macro-support-0.2.127.txt"
    ],
-   "from": "wasm-bindgen-macro-support-0.2.127 (cargo registry)",
+   "from": "wasm-bindgen-macro-support-0.2.127.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4785,7 +4771,7 @@
    "copies": [
     "LICENSES/components/rust/wasm-bindgen-shared-0.2.127.txt"
    ],
-   "from": "wasm-bindgen-shared-0.2.127 (cargo registry)",
+   "from": "wasm-bindgen-shared-0.2.127.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4793,7 +4779,7 @@
    "copies": [
     "LICENSES/components/rust/wasm-streams-0.5.0.txt"
    ],
-   "from": "wasm-streams-0.5.0 (cargo registry)",
+   "from": "wasm-streams-0.5.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4801,7 +4787,7 @@
    "copies": [
     "LICENSES/components/rust/web-sys-0.3.104.txt"
    ],
-   "from": "web-sys-0.3.104 (cargo registry)",
+   "from": "web-sys-0.3.104.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4809,7 +4795,7 @@
    "copies": [
     "LICENSES/components/rust/web_atoms-0.2.6.txt"
    ],
-   "from": "web_atoms-0.2.6 (cargo registry)",
+   "from": "web_atoms-0.2.6.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4817,7 +4803,7 @@
    "copies": [
     "LICENSES/components/rust/webkit2gtk-2.0.2.txt"
    ],
-   "from": "webkit2gtk-2.0.2 (cargo registry)",
+   "from": "webkit2gtk-2.0.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4825,7 +4811,7 @@
    "copies": [
     "LICENSES/components/rust/webkit2gtk-sys-2.0.2.txt"
    ],
-   "from": "webkit2gtk-sys-2.0.2 (cargo registry)",
+   "from": "webkit2gtk-sys-2.0.2.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -4833,7 +4819,7 @@
    "copies": [
     "LICENSES/components/rust/webview2-com-0.38.2.txt"
    ],
-   "from": "webview2-com-0.38.2 (cargo registry)",
+   "from": "webview2-com-0.38.2.crate",
    "licence_from": "https://github.com/wravery/webview2-rs/blob/main/LICENSE",
    "notices": [],
    "spdx": "MIT"
@@ -4842,7 +4828,7 @@
    "copies": [
     "LICENSES/components/rust/webview2-com-macros-0.8.1.txt"
    ],
-   "from": "webview2-com-macros-0.8.1 (cargo registry)",
+   "from": "webview2-com-macros-0.8.1.crate",
    "licence_from": "https://github.com/wravery/webview2-rs/blob/main/LICENSE",
    "notices": [],
    "spdx": "MIT"
@@ -4851,7 +4837,7 @@
    "copies": [
     "LICENSES/components/rust/webview2-com-sys-0.38.2.txt"
    ],
-   "from": "webview2-com-sys-0.38.2 (cargo registry)",
+   "from": "webview2-com-sys-0.38.2.crate",
    "licence_from": "https://github.com/wravery/webview2-rs/blob/main/LICENSE",
    "notices": [],
    "spdx": "MIT"
@@ -4860,13 +4846,13 @@
    "copies": [
     "LICENSES/components/rust/winapi-0.3.9.txt"
    ],
-   "from": "winapi-0.3.9 (cargo registry)",
+   "from": "winapi-0.3.9.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
   "winapi-i686-pc-windows-gnu 0.4.0": {
    "copies": [],
-   "from": "winapi-i686-pc-windows-gnu-0.4.0 (cargo registry)",
+   "from": "winapi-i686-pc-windows-gnu-0.4.0.crate",
    "licence_from": "https://github.com/retep998/winapi-rs/blob/0.3/LICENSE-APACHE",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
@@ -4877,13 +4863,13 @@
     "LICENSES/components/rust/winapi-util-0.1.11.LICENSE-MIT.txt",
     "LICENSES/components/rust/winapi-util-0.1.11.UNLICENSE.txt"
    ],
-   "from": "winapi-util-0.1.11 (cargo registry)",
+   "from": "winapi-util-0.1.11.crate",
    "notices": [],
    "spdx": "Unlicense OR MIT"
   },
   "winapi-x86_64-pc-windows-gnu 0.4.0": {
    "copies": [],
-   "from": "winapi-x86_64-pc-windows-gnu-0.4.0 (cargo registry)",
+   "from": "winapi-x86_64-pc-windows-gnu-0.4.0.crate",
    "licence_from": "https://github.com/retep998/winapi-rs/blob/0.3/LICENSE-APACHE",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
@@ -4893,7 +4879,7 @@
     "LICENSES/components/rust/window-vibrancy-0.6.0.LICENSE-MIT.txt",
     "LICENSES/components/rust/window-vibrancy-0.6.0.LICENSE.spdx.txt"
    ],
-   "from": "window-vibrancy-0.6.0 (cargo registry)",
+   "from": "window-vibrancy-0.6.0.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -4901,7 +4887,7 @@
    "copies": [
     "LICENSES/components/rust/windows-0.61.3.txt"
    ],
-   "from": "windows-0.61.3 (cargo registry)",
+   "from": "windows-0.61.3.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4909,7 +4895,7 @@
    "copies": [
     "LICENSES/components/rust/windows-collections-0.2.0.txt"
    ],
-   "from": "windows-collections-0.2.0 (cargo registry)",
+   "from": "windows-collections-0.2.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4917,7 +4903,7 @@
    "copies": [
     "LICENSES/components/rust/windows-core-0.61.2.txt"
    ],
-   "from": "windows-core-0.61.2 (cargo registry)",
+   "from": "windows-core-0.61.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4925,7 +4911,7 @@
    "copies": [
     "LICENSES/components/rust/windows-core-0.62.2.txt"
    ],
-   "from": "windows-core-0.62.2 (cargo registry)",
+   "from": "windows-core-0.62.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4933,7 +4919,7 @@
    "copies": [
     "LICENSES/components/rust/windows-future-0.2.1.txt"
    ],
-   "from": "windows-future-0.2.1 (cargo registry)",
+   "from": "windows-future-0.2.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4941,7 +4927,7 @@
    "copies": [
     "LICENSES/components/rust/windows-implement-0.60.2.txt"
    ],
-   "from": "windows-implement-0.60.2 (cargo registry)",
+   "from": "windows-implement-0.60.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4949,7 +4935,7 @@
    "copies": [
     "LICENSES/components/rust/windows-interface-0.59.3.txt"
    ],
-   "from": "windows-interface-0.59.3 (cargo registry)",
+   "from": "windows-interface-0.59.3.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4957,7 +4943,7 @@
    "copies": [
     "LICENSES/components/rust/windows-link-0.1.3.txt"
    ],
-   "from": "windows-link-0.1.3 (cargo registry)",
+   "from": "windows-link-0.1.3.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4965,7 +4951,7 @@
    "copies": [
     "LICENSES/components/rust/windows-link-0.2.1.txt"
    ],
-   "from": "windows-link-0.2.1 (cargo registry)",
+   "from": "windows-link-0.2.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4973,7 +4959,7 @@
    "copies": [
     "LICENSES/components/rust/windows-numerics-0.2.0.txt"
    ],
-   "from": "windows-numerics-0.2.0 (cargo registry)",
+   "from": "windows-numerics-0.2.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4981,7 +4967,7 @@
    "copies": [
     "LICENSES/components/rust/windows-result-0.3.4.txt"
    ],
-   "from": "windows-result-0.3.4 (cargo registry)",
+   "from": "windows-result-0.3.4.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4989,7 +4975,7 @@
    "copies": [
     "LICENSES/components/rust/windows-result-0.4.1.txt"
    ],
-   "from": "windows-result-0.4.1 (cargo registry)",
+   "from": "windows-result-0.4.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -4997,7 +4983,7 @@
    "copies": [
     "LICENSES/components/rust/windows-strings-0.4.2.txt"
    ],
-   "from": "windows-strings-0.4.2 (cargo registry)",
+   "from": "windows-strings-0.4.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5005,7 +4991,7 @@
    "copies": [
     "LICENSES/components/rust/windows-strings-0.5.1.txt"
    ],
-   "from": "windows-strings-0.5.1 (cargo registry)",
+   "from": "windows-strings-0.5.1.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5013,7 +4999,7 @@
    "copies": [
     "LICENSES/components/rust/windows-sys-0.45.0.txt"
    ],
-   "from": "windows-sys-0.45.0 (cargo registry)",
+   "from": "windows-sys-0.45.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5021,7 +5007,7 @@
    "copies": [
     "LICENSES/components/rust/windows-sys-0.59.0.txt"
    ],
-   "from": "windows-sys-0.59.0 (cargo registry)",
+   "from": "windows-sys-0.59.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5029,7 +5015,7 @@
    "copies": [
     "LICENSES/components/rust/windows-sys-0.61.2.txt"
    ],
-   "from": "windows-sys-0.61.2 (cargo registry)",
+   "from": "windows-sys-0.61.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5037,7 +5023,7 @@
    "copies": [
     "LICENSES/components/rust/windows-targets-0.42.2.txt"
    ],
-   "from": "windows-targets-0.42.2 (cargo registry)",
+   "from": "windows-targets-0.42.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5045,7 +5031,7 @@
    "copies": [
     "LICENSES/components/rust/windows-targets-0.52.6.txt"
    ],
-   "from": "windows-targets-0.52.6 (cargo registry)",
+   "from": "windows-targets-0.52.6.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5053,7 +5039,7 @@
    "copies": [
     "LICENSES/components/rust/windows-threading-0.1.0.txt"
    ],
-   "from": "windows-threading-0.1.0 (cargo registry)",
+   "from": "windows-threading-0.1.0.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5061,7 +5047,7 @@
    "copies": [
     "LICENSES/components/rust/windows-version-0.1.7.txt"
    ],
-   "from": "windows-version-0.1.7 (cargo registry)",
+   "from": "windows-version-0.1.7.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5069,7 +5055,7 @@
    "copies": [
     "LICENSES/components/rust/windows_aarch64_gnullvm-0.42.2.txt"
    ],
-   "from": "windows_aarch64_gnullvm-0.42.2 (cargo registry)",
+   "from": "windows_aarch64_gnullvm-0.42.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5077,7 +5063,7 @@
    "copies": [
     "LICENSES/components/rust/windows_aarch64_gnullvm-0.52.6.txt"
    ],
-   "from": "windows_aarch64_gnullvm-0.52.6 (cargo registry)",
+   "from": "windows_aarch64_gnullvm-0.52.6.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5085,7 +5071,7 @@
    "copies": [
     "LICENSES/components/rust/windows_aarch64_msvc-0.42.2.txt"
    ],
-   "from": "windows_aarch64_msvc-0.42.2 (cargo registry)",
+   "from": "windows_aarch64_msvc-0.42.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5093,7 +5079,7 @@
    "copies": [
     "LICENSES/components/rust/windows_aarch64_msvc-0.52.6.txt"
    ],
-   "from": "windows_aarch64_msvc-0.52.6 (cargo registry)",
+   "from": "windows_aarch64_msvc-0.52.6.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5101,7 +5087,7 @@
    "copies": [
     "LICENSES/components/rust/windows_i686_gnu-0.42.2.txt"
    ],
-   "from": "windows_i686_gnu-0.42.2 (cargo registry)",
+   "from": "windows_i686_gnu-0.42.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5109,7 +5095,7 @@
    "copies": [
     "LICENSES/components/rust/windows_i686_gnu-0.52.6.txt"
    ],
-   "from": "windows_i686_gnu-0.52.6 (cargo registry)",
+   "from": "windows_i686_gnu-0.52.6.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5117,7 +5103,7 @@
    "copies": [
     "LICENSES/components/rust/windows_i686_gnullvm-0.52.6.txt"
    ],
-   "from": "windows_i686_gnullvm-0.52.6 (cargo registry)",
+   "from": "windows_i686_gnullvm-0.52.6.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5125,7 +5111,7 @@
    "copies": [
     "LICENSES/components/rust/windows_i686_msvc-0.42.2.txt"
    ],
-   "from": "windows_i686_msvc-0.42.2 (cargo registry)",
+   "from": "windows_i686_msvc-0.42.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5133,7 +5119,7 @@
    "copies": [
     "LICENSES/components/rust/windows_i686_msvc-0.52.6.txt"
    ],
-   "from": "windows_i686_msvc-0.52.6 (cargo registry)",
+   "from": "windows_i686_msvc-0.52.6.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5141,7 +5127,7 @@
    "copies": [
     "LICENSES/components/rust/windows_x86_64_gnu-0.42.2.txt"
    ],
-   "from": "windows_x86_64_gnu-0.42.2 (cargo registry)",
+   "from": "windows_x86_64_gnu-0.42.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5149,7 +5135,7 @@
    "copies": [
     "LICENSES/components/rust/windows_x86_64_gnu-0.52.6.txt"
    ],
-   "from": "windows_x86_64_gnu-0.52.6 (cargo registry)",
+   "from": "windows_x86_64_gnu-0.52.6.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5157,7 +5143,7 @@
    "copies": [
     "LICENSES/components/rust/windows_x86_64_gnullvm-0.42.2.txt"
    ],
-   "from": "windows_x86_64_gnullvm-0.42.2 (cargo registry)",
+   "from": "windows_x86_64_gnullvm-0.42.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5165,7 +5151,7 @@
    "copies": [
     "LICENSES/components/rust/windows_x86_64_gnullvm-0.52.6.txt"
    ],
-   "from": "windows_x86_64_gnullvm-0.52.6 (cargo registry)",
+   "from": "windows_x86_64_gnullvm-0.52.6.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5173,7 +5159,7 @@
    "copies": [
     "LICENSES/components/rust/windows_x86_64_msvc-0.42.2.txt"
    ],
-   "from": "windows_x86_64_msvc-0.42.2 (cargo registry)",
+   "from": "windows_x86_64_msvc-0.42.2.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5181,7 +5167,7 @@
    "copies": [
     "LICENSES/components/rust/windows_x86_64_msvc-0.52.6.txt"
    ],
-   "from": "windows_x86_64_msvc-0.52.6 (cargo registry)",
+   "from": "windows_x86_64_msvc-0.52.6.crate",
    "notices": [],
    "spdx": "MIT OR Apache-2.0"
   },
@@ -5189,7 +5175,7 @@
    "copies": [
     "LICENSES/components/rust/winnow-0.5.40.txt"
    ],
-   "from": "winnow-0.5.40 (cargo registry)",
+   "from": "winnow-0.5.40.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5197,7 +5183,7 @@
    "copies": [
     "LICENSES/components/rust/winnow-0.7.15.txt"
    ],
-   "from": "winnow-0.7.15 (cargo registry)",
+   "from": "winnow-0.7.15.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5205,7 +5191,7 @@
    "copies": [
     "LICENSES/components/rust/winnow-1.0.4.txt"
    ],
-   "from": "winnow-1.0.4 (cargo registry)",
+   "from": "winnow-1.0.4.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5213,7 +5199,7 @@
    "copies": [
     "LICENSES/components/rust/winreg-0.55.0.txt"
    ],
-   "from": "winreg-0.55.0 (cargo registry)",
+   "from": "winreg-0.55.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5221,7 +5207,7 @@
    "copies": [
     "LICENSES/components/rust/wit-bindgen-0.57.1.txt"
    ],
-   "from": "wit-bindgen-0.57.1 (cargo registry)",
+   "from": "wit-bindgen-0.57.1.crate",
    "notices": [],
    "spdx": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
   },
@@ -5229,7 +5215,7 @@
    "copies": [
     "LICENSES/components/rust/writeable-0.6.4.txt"
    ],
-   "from": "writeable-0.6.4 (cargo registry)",
+   "from": "writeable-0.6.4.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -5238,7 +5224,7 @@
     "LICENSES/components/rust/wry-0.55.1.LICENSE-MIT.txt",
     "LICENSES/components/rust/wry-0.55.1.LICENSE.spdx.txt"
    ],
-   "from": "wry-0.55.1 (cargo registry)",
+   "from": "wry-0.55.1.crate",
    "notices": [],
    "spdx": "Apache-2.0 OR MIT"
   },
@@ -5246,7 +5232,7 @@
    "copies": [
     "LICENSES/components/rust/x11-2.21.0.txt"
    ],
-   "from": "x11-2.21.0 (cargo registry)",
+   "from": "x11-2.21.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5254,7 +5240,7 @@
    "copies": [
     "LICENSES/components/rust/x11-dl-2.21.0.txt"
    ],
-   "from": "x11-dl-2.21.0 (cargo registry)",
+   "from": "x11-dl-2.21.0.crate",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5262,7 +5248,7 @@
    "copies": [
     "LICENSES/components/rust/yoke-0.8.3.txt"
    ],
-   "from": "yoke-0.8.3 (cargo registry)",
+   "from": "yoke-0.8.3.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -5270,7 +5256,7 @@
    "copies": [
     "LICENSES/components/rust/yoke-derive-0.8.2.txt"
    ],
-   "from": "yoke-derive-0.8.2 (cargo registry)",
+   "from": "yoke-derive-0.8.2.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -5278,7 +5264,7 @@
    "copies": [
     "LICENSES/components/rust/zerofrom-0.1.8.txt"
    ],
-   "from": "zerofrom-0.1.8 (cargo registry)",
+   "from": "zerofrom-0.1.8.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -5286,7 +5272,7 @@
    "copies": [
     "LICENSES/components/rust/zerofrom-derive-0.1.7.txt"
    ],
-   "from": "zerofrom-derive-0.1.7 (cargo registry)",
+   "from": "zerofrom-derive-0.1.7.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -5294,7 +5280,7 @@
    "copies": [
     "LICENSES/components/rust/zerotrie-0.2.5.txt"
    ],
-   "from": "zerotrie-0.2.5 (cargo registry)",
+   "from": "zerotrie-0.2.5.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -5302,7 +5288,7 @@
    "copies": [
     "LICENSES/components/rust/zerovec-0.11.8.txt"
    ],
-   "from": "zerovec-0.11.8 (cargo registry)",
+   "from": "zerovec-0.11.8.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -5310,7 +5296,7 @@
    "copies": [
     "LICENSES/components/rust/zerovec-derive-0.11.6.txt"
    ],
-   "from": "zerovec-derive-0.11.6 (cargo registry)",
+   "from": "zerovec-derive-0.11.6.crate",
    "notices": [],
    "spdx": "Unicode-3.0"
   },
@@ -5318,7 +5304,7 @@
    "copies": [
     "LICENSES/components/rust/zlib-rs-0.6.7.txt"
    ],
-   "from": "zlib-rs-0.6.7 (cargo registry)",
+   "from": "zlib-rs-0.6.7.crate",
    "notices": [],
    "spdx": "Zlib"
   },
@@ -5326,7 +5312,7 @@
    "copies": [
     "LICENSES/components/rust/zmij-1.0.23.txt"
    ],
-   "from": "zmij-1.0.23 (cargo registry)",
+   "from": "zmij-1.0.23.crate",
    "notices": [],
    "spdx": "MIT"
   }
@@ -5337,7 +5323,7 @@
    "copies": [
     "LICENSES/components/web/babel+runtime-7.28.6.txt"
    ],
-   "from": "node_modules/@babel/runtime (local node_modules)",
+   "from": "runtime-7.28.6.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5345,7 +5331,7 @@
    "copies": [
     "LICENSES/components/web/floating-ui+core-1.7.3.txt"
    ],
-   "from": "node_modules/@floating-ui/core (local node_modules)",
+   "from": "core-1.7.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5353,7 +5339,7 @@
    "copies": [
     "LICENSES/components/web/floating-ui+dom-1.7.4.txt"
    ],
-   "from": "node_modules/@floating-ui/dom (local node_modules)",
+   "from": "dom-1.7.4.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5361,7 +5347,7 @@
    "copies": [
     "LICENSES/components/web/floating-ui+react-0.27.16.txt"
    ],
-   "from": "node_modules/@floating-ui/react (local node_modules)",
+   "from": "react-0.27.16.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5369,7 +5355,7 @@
    "copies": [
     "LICENSES/components/web/floating-ui+react-dom-2.1.6.txt"
    ],
-   "from": "node_modules/@floating-ui/react-dom (local node_modules)",
+   "from": "react-dom-2.1.6.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5377,7 +5363,7 @@
    "copies": [
     "LICENSES/components/web/floating-ui+utils-0.2.10.txt"
    ],
-   "from": "node_modules/@floating-ui/utils (local node_modules)",
+   "from": "utils-0.2.10.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5385,7 +5371,7 @@
    "copies": [
     "LICENSES/components/web/img+colour-1.0.0.txt"
    ],
-   "from": "node_modules/@img/colour (local node_modules)",
+   "from": "colour-1.0.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5406,47 +5392,37 @@
    "spdx": "Apache-2.0"
   },
   "@mantine/charts 8.3.12": {
-   "copies": [
-    "LICENSES/components/web/mantine+charts-8.3.12.txt"
-   ],
-   "from": "node_modules/@mantine/charts (local node_modules)",
-   "licence_from": "https://github.com/mantinedev/mantine/blob/master/LICENSE",
+   "copies": [],
+   "from": "charts-8.3.12.tgz",
+   "no_licence_file": true,
    "notices": [],
    "spdx": "MIT"
   },
   "@mantine/core 8.3.12": {
-   "copies": [
-    "LICENSES/components/web/mantine+core-8.3.12.txt"
-   ],
-   "from": "node_modules/@mantine/core (local node_modules)",
-   "licence_from": "https://github.com/mantinedev/mantine/blob/master/LICENSE",
+   "copies": [],
+   "from": "core-8.3.12.tgz",
+   "no_licence_file": true,
    "notices": [],
    "spdx": "MIT"
   },
   "@mantine/hooks 8.3.12": {
-   "copies": [
-    "LICENSES/components/web/mantine+hooks-8.3.12.txt"
-   ],
-   "from": "node_modules/@mantine/hooks (local node_modules)",
-   "licence_from": "https://github.com/mantinedev/mantine/blob/master/LICENSE",
+   "copies": [],
+   "from": "hooks-8.3.12.tgz",
+   "no_licence_file": true,
    "notices": [],
    "spdx": "MIT"
   },
   "@mantine/modals 8.3.12": {
-   "copies": [
-    "LICENSES/components/web/mantine+modals-8.3.12.txt"
-   ],
-   "from": "node_modules/@mantine/modals (local node_modules)",
-   "licence_from": "https://github.com/mantinedev/mantine/blob/master/LICENSE",
+   "copies": [],
+   "from": "modals-8.3.12.tgz",
+   "no_licence_file": true,
    "notices": [],
    "spdx": "MIT"
   },
   "@next/env 16.1.1": {
-   "copies": [
-    "LICENSES/components/web/next+env-16.1.1.txt"
-   ],
-   "from": "node_modules/@next/env (local node_modules)",
-   "licence_from": "https://github.com/vercel/next.js/blob/canary/license.md",
+   "copies": [],
+   "from": "env-16.1.1.tgz",
+   "no_licence_file": true,
    "notices": [],
    "spdx": "MIT"
   },
@@ -5461,7 +5437,7 @@
   },
   "@swc/helpers 0.5.15": {
    "copies": [],
-   "from": "node_modules/next/node_modules/@swc/helpers (local node_modules)",
+   "from": "helpers-0.5.15.tgz",
    "notices": [],
    "spdx": "Apache-2.0"
   },
@@ -5471,7 +5447,7 @@
     "LICENSES/components/web/tabler+icons-3.36.1.license-off.svg.txt",
     "LICENSES/components/web/tabler+icons-3.36.1.license.svg.txt"
    ],
-   "from": "node_modules/@tabler/icons (local node_modules)",
+   "from": "icons-3.36.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5479,7 +5455,7 @@
    "copies": [
     "LICENSES/components/web/tabler+icons-react-3.36.1.txt"
    ],
-   "from": "node_modules/@tabler/icons-react (local node_modules)",
+   "from": "icons-react-3.36.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5487,7 +5463,7 @@
    "copies": [
     "LICENSES/components/web/tanstack+devtools-event-client-0.4.0.txt"
    ],
-   "from": "node_modules/@tanstack/devtools-event-client (local node_modules)",
+   "from": "devtools-event-client-0.4.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5495,7 +5471,7 @@
    "copies": [
     "LICENSES/components/web/tanstack+form-core-1.27.7.txt"
    ],
-   "from": "node_modules/@tanstack/form-core (local node_modules)",
+   "from": "form-core-1.27.7.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5503,7 +5479,7 @@
    "copies": [
     "LICENSES/components/web/tanstack+pacer-lite-0.1.1.txt"
    ],
-   "from": "node_modules/@tanstack/pacer-lite (local node_modules)",
+   "from": "pacer-lite-0.1.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5511,7 +5487,7 @@
    "copies": [
     "LICENSES/components/web/tanstack+react-form-1.27.7.txt"
    ],
-   "from": "node_modules/@tanstack/react-form (local node_modules)",
+   "from": "react-form-1.27.7.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5519,7 +5495,7 @@
    "copies": [
     "LICENSES/components/web/tanstack+react-store-0.8.0.txt"
    ],
-   "from": "node_modules/@tanstack/react-store (local node_modules)",
+   "from": "react-store-0.8.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5527,7 +5503,7 @@
    "copies": [
     "LICENSES/components/web/tanstack+store-0.7.7.txt"
    ],
-   "from": "node_modules/@tanstack/store (local node_modules)",
+   "from": "store-0.7.7.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5535,7 +5511,7 @@
    "copies": [
     "LICENSES/components/web/tanstack+store-0.8.0.txt"
    ],
-   "from": "node_modules/@tanstack/react-store/node_modules/@tanstack/store (local node_modules)",
+   "from": "store-0.8.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5543,7 +5519,7 @@
    "copies": [
     "LICENSES/components/web/types+d3-array-3.2.2.txt"
    ],
-   "from": "node_modules/@types/d3-array (local node_modules)",
+   "from": "d3-array-3.2.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5551,7 +5527,7 @@
    "copies": [
     "LICENSES/components/web/types+d3-color-3.1.3.txt"
    ],
-   "from": "node_modules/@types/d3-color (local node_modules)",
+   "from": "d3-color-3.1.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5559,7 +5535,7 @@
    "copies": [
     "LICENSES/components/web/types+d3-ease-3.0.2.txt"
    ],
-   "from": "node_modules/@types/d3-ease (local node_modules)",
+   "from": "d3-ease-3.0.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5567,7 +5543,7 @@
    "copies": [
     "LICENSES/components/web/types+d3-interpolate-3.0.4.txt"
    ],
-   "from": "node_modules/@types/d3-interpolate (local node_modules)",
+   "from": "d3-interpolate-3.0.4.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5575,7 +5551,7 @@
    "copies": [
     "LICENSES/components/web/types+d3-path-3.1.1.txt"
    ],
-   "from": "node_modules/@types/d3-path (local node_modules)",
+   "from": "d3-path-3.1.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5583,7 +5559,7 @@
    "copies": [
     "LICENSES/components/web/types+d3-scale-4.0.9.txt"
    ],
-   "from": "node_modules/@types/d3-scale (local node_modules)",
+   "from": "d3-scale-4.0.9.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5591,7 +5567,7 @@
    "copies": [
     "LICENSES/components/web/types+d3-shape-3.1.8.txt"
    ],
-   "from": "node_modules/@types/d3-shape (local node_modules)",
+   "from": "d3-shape-3.1.8.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5599,7 +5575,7 @@
    "copies": [
     "LICENSES/components/web/types+d3-time-3.0.4.txt"
    ],
-   "from": "node_modules/@types/d3-time (local node_modules)",
+   "from": "d3-time-3.0.4.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5607,7 +5583,7 @@
    "copies": [
     "LICENSES/components/web/types+d3-timer-3.0.2.txt"
    ],
-   "from": "node_modules/@types/d3-timer (local node_modules)",
+   "from": "d3-timer-3.0.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5615,7 +5591,7 @@
    "copies": [
     "LICENSES/components/web/types+debug-4.1.13.txt"
    ],
-   "from": "node_modules/@types/debug (local node_modules)",
+   "from": "debug-4.1.13.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5623,7 +5599,7 @@
    "copies": [
     "LICENSES/components/web/types+estree-1.0.8.txt"
    ],
-   "from": "node_modules/@types/estree (local node_modules)",
+   "from": "estree-1.0.8.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5631,7 +5607,7 @@
    "copies": [
     "LICENSES/components/web/types+estree-jsx-1.0.5.txt"
    ],
-   "from": "node_modules/@types/estree-jsx (local node_modules)",
+   "from": "estree-jsx-1.0.5.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5639,7 +5615,7 @@
    "copies": [
     "LICENSES/components/web/types+hast-3.0.4.txt"
    ],
-   "from": "node_modules/@types/hast (local node_modules)",
+   "from": "hast-3.0.4.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5647,7 +5623,7 @@
    "copies": [
     "LICENSES/components/web/types+mdast-4.0.4.txt"
    ],
-   "from": "node_modules/@types/mdast (local node_modules)",
+   "from": "mdast-4.0.4.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5655,7 +5631,7 @@
    "copies": [
     "LICENSES/components/web/types+ms-2.1.0.txt"
    ],
-   "from": "node_modules/@types/ms (local node_modules)",
+   "from": "ms-2.1.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5663,7 +5639,7 @@
    "copies": [
     "LICENSES/components/web/types+react-19.2.8.txt"
    ],
-   "from": "node_modules/@types/react (local node_modules)",
+   "from": "react-19.2.8.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5671,7 +5647,7 @@
    "copies": [
     "LICENSES/components/web/types+unist-2.0.11.txt"
    ],
-   "from": "node_modules/parse-entities/node_modules/@types/unist (local node_modules)",
+   "from": "unist-2.0.11.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5679,7 +5655,7 @@
    "copies": [
     "LICENSES/components/web/types+unist-3.0.3.txt"
    ],
-   "from": "node_modules/@types/unist (local node_modules)",
+   "from": "unist-3.0.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5687,7 +5663,7 @@
    "copies": [
     "LICENSES/components/web/ungap+structured-clone-1.3.0.txt"
    ],
-   "from": "node_modules/@ungap/structured-clone (local node_modules)",
+   "from": "structured-clone-1.3.0.tgz",
    "notices": [],
    "spdx": "ISC"
   },
@@ -5695,7 +5671,7 @@
    "copies": [
     "LICENSES/components/web/attr-accept-2.2.5.txt"
    ],
-   "from": "node_modules/attr-accept (local node_modules)",
+   "from": "attr-accept-2.2.5.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5703,13 +5679,13 @@
    "copies": [
     "LICENSES/components/web/bail-2.0.2.txt"
    ],
-   "from": "node_modules/bail (local node_modules)",
+   "from": "bail-2.0.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
   "baseline-browser-mapping 2.9.14": {
    "copies": [],
-   "from": "node_modules/baseline-browser-mapping (local node_modules)",
+   "from": "baseline-browser-mapping-2.9.14.tgz",
    "notices": [],
    "spdx": "Apache-2.0"
   },
@@ -5717,7 +5693,7 @@
    "copies": [
     "LICENSES/components/web/caniuse-lite-1.0.30001764.txt"
    ],
-   "from": "node_modules/caniuse-lite (local node_modules)",
+   "from": "caniuse-lite-1.0.30001764.tgz",
    "notices": [],
    "spdx": "CC-BY-4.0"
   },
@@ -5725,7 +5701,7 @@
    "copies": [
     "LICENSES/components/web/ccount-2.0.1.txt"
    ],
-   "from": "node_modules/ccount (local node_modules)",
+   "from": "ccount-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5733,7 +5709,7 @@
    "copies": [
     "LICENSES/components/web/character-entities-2.0.2.txt"
    ],
-   "from": "node_modules/character-entities (local node_modules)",
+   "from": "character-entities-2.0.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5741,7 +5717,7 @@
    "copies": [
     "LICENSES/components/web/character-entities-html4-2.1.0.txt"
    ],
-   "from": "node_modules/character-entities-html4 (local node_modules)",
+   "from": "character-entities-html4-2.1.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5749,7 +5725,7 @@
    "copies": [
     "LICENSES/components/web/character-entities-legacy-3.0.0.txt"
    ],
-   "from": "node_modules/character-entities-legacy (local node_modules)",
+   "from": "character-entities-legacy-3.0.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5757,13 +5733,13 @@
    "copies": [
     "LICENSES/components/web/character-reference-invalid-2.0.1.txt"
    ],
-   "from": "node_modules/character-reference-invalid (local node_modules)",
+   "from": "character-reference-invalid-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
   "client-only 0.0.1": {
    "copies": [],
-   "from": "node_modules/client-only (local node_modules)",
+   "from": "client-only-0.0.1.tgz",
    "no_licence_file": true,
    "notices": [],
    "spdx": "MIT"
@@ -5772,7 +5748,7 @@
    "copies": [
     "LICENSES/components/web/clsx-2.1.1.txt"
    ],
-   "from": "node_modules/clsx (local node_modules)",
+   "from": "clsx-2.1.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5780,7 +5756,7 @@
    "copies": [
     "LICENSES/components/web/comma-separated-tokens-2.0.3.txt"
    ],
-   "from": "node_modules/comma-separated-tokens (local node_modules)",
+   "from": "comma-separated-tokens-2.0.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5788,7 +5764,7 @@
    "copies": [
     "LICENSES/components/web/csstype-3.2.3.txt"
    ],
-   "from": "node_modules/csstype (local node_modules)",
+   "from": "csstype-3.2.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5796,7 +5772,7 @@
    "copies": [
     "LICENSES/components/web/d3-array-3.2.4.txt"
    ],
-   "from": "node_modules/d3-array (local node_modules)",
+   "from": "d3-array-3.2.4.tgz",
    "notices": [],
    "spdx": "ISC"
   },
@@ -5804,7 +5780,7 @@
    "copies": [
     "LICENSES/components/web/d3-color-3.1.0.txt"
    ],
-   "from": "node_modules/d3-color (local node_modules)",
+   "from": "d3-color-3.1.0.tgz",
    "notices": [],
    "spdx": "ISC"
   },
@@ -5812,7 +5788,7 @@
    "copies": [
     "LICENSES/components/web/d3-ease-3.0.1.txt"
    ],
-   "from": "node_modules/d3-ease (local node_modules)",
+   "from": "d3-ease-3.0.1.tgz",
    "notices": [],
    "spdx": "BSD-3-Clause"
   },
@@ -5820,7 +5796,7 @@
    "copies": [
     "LICENSES/components/web/d3-format-3.1.2.txt"
    ],
-   "from": "node_modules/d3-format (local node_modules)",
+   "from": "d3-format-3.1.2.tgz",
    "notices": [],
    "spdx": "ISC"
   },
@@ -5828,7 +5804,7 @@
    "copies": [
     "LICENSES/components/web/d3-interpolate-3.0.1.txt"
    ],
-   "from": "node_modules/d3-interpolate (local node_modules)",
+   "from": "d3-interpolate-3.0.1.tgz",
    "notices": [],
    "spdx": "ISC"
   },
@@ -5836,7 +5812,7 @@
    "copies": [
     "LICENSES/components/web/d3-path-3.1.0.txt"
    ],
-   "from": "node_modules/d3-path (local node_modules)",
+   "from": "d3-path-3.1.0.tgz",
    "notices": [],
    "spdx": "ISC"
   },
@@ -5844,7 +5820,7 @@
    "copies": [
     "LICENSES/components/web/d3-scale-4.0.2.txt"
    ],
-   "from": "node_modules/d3-scale (local node_modules)",
+   "from": "d3-scale-4.0.2.tgz",
    "notices": [],
    "spdx": "ISC"
   },
@@ -5852,7 +5828,7 @@
    "copies": [
     "LICENSES/components/web/d3-shape-3.2.0.txt"
    ],
-   "from": "node_modules/d3-shape (local node_modules)",
+   "from": "d3-shape-3.2.0.tgz",
    "notices": [],
    "spdx": "ISC"
   },
@@ -5860,7 +5836,7 @@
    "copies": [
     "LICENSES/components/web/d3-time-3.1.0.txt"
    ],
-   "from": "node_modules/d3-time (local node_modules)",
+   "from": "d3-time-3.1.0.tgz",
    "notices": [],
    "spdx": "ISC"
   },
@@ -5868,7 +5844,7 @@
    "copies": [
     "LICENSES/components/web/d3-time-format-4.1.0.txt"
    ],
-   "from": "node_modules/d3-time-format (local node_modules)",
+   "from": "d3-time-format-4.1.0.tgz",
    "notices": [],
    "spdx": "ISC"
   },
@@ -5876,7 +5852,7 @@
    "copies": [
     "LICENSES/components/web/d3-timer-3.0.1.txt"
    ],
-   "from": "node_modules/d3-timer (local node_modules)",
+   "from": "d3-timer-3.0.1.tgz",
    "notices": [],
    "spdx": "ISC"
   },
@@ -5884,7 +5860,7 @@
    "copies": [
     "LICENSES/components/web/debug-4.4.3.txt"
    ],
-   "from": "node_modules/debug (local node_modules)",
+   "from": "debug-4.4.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5892,7 +5868,7 @@
    "copies": [
     "LICENSES/components/web/decimal.js-light-2.5.1.txt"
    ],
-   "from": "node_modules/decimal.js-light (local node_modules)",
+   "from": "decimal.js-light-2.5.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5900,7 +5876,7 @@
    "copies": [
     "LICENSES/components/web/decode-named-character-reference-1.3.0.txt"
    ],
-   "from": "node_modules/decode-named-character-reference (local node_modules)",
+   "from": "decode-named-character-reference-1.3.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5908,13 +5884,13 @@
    "copies": [
     "LICENSES/components/web/dequal-2.0.3.txt"
    ],
-   "from": "node_modules/dequal (local node_modules)",
+   "from": "dequal-2.0.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
   "detect-libc 2.1.2": {
    "copies": [],
-   "from": "node_modules/detect-libc (local node_modules)",
+   "from": "detect-libc-2.1.2.tgz",
    "notices": [],
    "spdx": "Apache-2.0"
   },
@@ -5922,7 +5898,7 @@
    "copies": [
     "LICENSES/components/web/detect-node-es-1.1.0.txt"
    ],
-   "from": "node_modules/detect-node-es (local node_modules)",
+   "from": "detect-node-es-1.1.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5930,7 +5906,7 @@
    "copies": [
     "LICENSES/components/web/devlop-1.1.0.txt"
    ],
-   "from": "node_modules/devlop (local node_modules)",
+   "from": "devlop-1.1.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5938,7 +5914,7 @@
    "copies": [
     "LICENSES/components/web/dom-helpers-5.2.1.txt"
    ],
-   "from": "node_modules/dom-helpers (local node_modules)",
+   "from": "dom-helpers-5.2.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5946,7 +5922,7 @@
    "copies": [
     "LICENSES/components/web/estree-util-is-identifier-name-3.0.0.txt"
    ],
-   "from": "node_modules/estree-util-is-identifier-name (local node_modules)",
+   "from": "estree-util-is-identifier-name-3.0.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5954,7 +5930,7 @@
    "copies": [
     "LICENSES/components/web/eventemitter3-4.0.7.txt"
    ],
-   "from": "node_modules/eventemitter3 (local node_modules)",
+   "from": "eventemitter3-4.0.7.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5962,7 +5938,7 @@
    "copies": [
     "LICENSES/components/web/extend-3.0.2.txt"
    ],
-   "from": "node_modules/extend (local node_modules)",
+   "from": "extend-3.0.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5970,7 +5946,7 @@
    "copies": [
     "LICENSES/components/web/fast-equals-5.4.0.txt"
    ],
-   "from": "node_modules/fast-equals (local node_modules)",
+   "from": "fast-equals-5.4.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5978,7 +5954,7 @@
    "copies": [
     "LICENSES/components/web/file-selector-2.1.2.txt"
    ],
-   "from": "node_modules/file-selector (local node_modules)",
+   "from": "file-selector-2.1.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5986,7 +5962,7 @@
    "copies": [
     "LICENSES/components/web/framer-motion-12.26.2.txt"
    ],
-   "from": "node_modules/framer-motion (local node_modules)",
+   "from": "framer-motion-12.26.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -5994,7 +5970,7 @@
    "copies": [
     "LICENSES/components/web/get-nonce-1.0.1.txt"
    ],
-   "from": "node_modules/get-nonce (local node_modules)",
+   "from": "get-nonce-1.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6002,7 +5978,7 @@
    "copies": [
     "LICENSES/components/web/goober-2.1.18.txt"
    ],
-   "from": "node_modules/goober (local node_modules)",
+   "from": "goober-2.1.18.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6010,7 +5986,7 @@
    "copies": [
     "LICENSES/components/web/hast-util-to-jsx-runtime-2.3.6.txt"
    ],
-   "from": "node_modules/hast-util-to-jsx-runtime (local node_modules)",
+   "from": "hast-util-to-jsx-runtime-2.3.6.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6018,7 +5994,7 @@
    "copies": [
     "LICENSES/components/web/hast-util-whitespace-3.0.0.txt"
    ],
-   "from": "node_modules/hast-util-whitespace (local node_modules)",
+   "from": "hast-util-whitespace-3.0.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6026,7 +6002,7 @@
    "copies": [
     "LICENSES/components/web/html-url-attributes-3.0.1.txt"
    ],
-   "from": "node_modules/html-url-attributes (local node_modules)",
+   "from": "html-url-attributes-3.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6034,7 +6010,7 @@
    "copies": [
     "LICENSES/components/web/inline-style-parser-0.2.7.txt"
    ],
-   "from": "node_modules/inline-style-parser (local node_modules)",
+   "from": "inline-style-parser-0.2.7.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6042,7 +6018,7 @@
    "copies": [
     "LICENSES/components/web/internmap-2.0.3.txt"
    ],
-   "from": "node_modules/internmap (local node_modules)",
+   "from": "internmap-2.0.3.tgz",
    "notices": [],
    "spdx": "ISC"
   },
@@ -6050,7 +6026,7 @@
    "copies": [
     "LICENSES/components/web/is-alphabetical-2.0.1.txt"
    ],
-   "from": "node_modules/is-alphabetical (local node_modules)",
+   "from": "is-alphabetical-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6058,7 +6034,7 @@
    "copies": [
     "LICENSES/components/web/is-alphanumerical-2.0.1.txt"
    ],
-   "from": "node_modules/is-alphanumerical (local node_modules)",
+   "from": "is-alphanumerical-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6066,7 +6042,7 @@
    "copies": [
     "LICENSES/components/web/is-decimal-2.0.1.txt"
    ],
-   "from": "node_modules/is-decimal (local node_modules)",
+   "from": "is-decimal-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6074,7 +6050,7 @@
    "copies": [
     "LICENSES/components/web/is-hexadecimal-2.0.1.txt"
    ],
-   "from": "node_modules/is-hexadecimal (local node_modules)",
+   "from": "is-hexadecimal-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6082,7 +6058,7 @@
    "copies": [
     "LICENSES/components/web/is-plain-obj-4.1.0.txt"
    ],
-   "from": "node_modules/is-plain-obj (local node_modules)",
+   "from": "is-plain-obj-4.1.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6090,7 +6066,7 @@
    "copies": [
     "LICENSES/components/web/js-tokens-4.0.0.txt"
    ],
-   "from": "node_modules/js-tokens (local node_modules)",
+   "from": "js-tokens-4.0.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6098,7 +6074,7 @@
    "copies": [
     "LICENSES/components/web/lodash-4.18.1.txt"
    ],
-   "from": "node_modules/lodash (local node_modules)",
+   "from": "lodash-4.18.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6106,7 +6082,7 @@
    "copies": [
     "LICENSES/components/web/longest-streak-3.1.0.txt"
    ],
-   "from": "node_modules/longest-streak (local node_modules)",
+   "from": "longest-streak-3.1.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6114,7 +6090,7 @@
    "copies": [
     "LICENSES/components/web/loose-envify-1.4.0.txt"
    ],
-   "from": "node_modules/loose-envify (local node_modules)",
+   "from": "loose-envify-1.4.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6122,7 +6098,7 @@
    "copies": [
     "LICENSES/components/web/mdast-util-from-markdown-2.0.3.txt"
    ],
-   "from": "node_modules/mdast-util-from-markdown (local node_modules)",
+   "from": "mdast-util-from-markdown-2.0.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6130,7 +6106,7 @@
    "copies": [
     "LICENSES/components/web/mdast-util-mdx-expression-2.0.1.txt"
    ],
-   "from": "node_modules/mdast-util-mdx-expression (local node_modules)",
+   "from": "mdast-util-mdx-expression-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6138,7 +6114,7 @@
    "copies": [
     "LICENSES/components/web/mdast-util-mdx-jsx-3.2.0.txt"
    ],
-   "from": "node_modules/mdast-util-mdx-jsx (local node_modules)",
+   "from": "mdast-util-mdx-jsx-3.2.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6146,7 +6122,7 @@
    "copies": [
     "LICENSES/components/web/mdast-util-mdxjs-esm-2.0.1.txt"
    ],
-   "from": "node_modules/mdast-util-mdxjs-esm (local node_modules)",
+   "from": "mdast-util-mdxjs-esm-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6154,7 +6130,7 @@
    "copies": [
     "LICENSES/components/web/mdast-util-phrasing-4.1.0.txt"
    ],
-   "from": "node_modules/mdast-util-phrasing (local node_modules)",
+   "from": "mdast-util-phrasing-4.1.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6162,7 +6138,7 @@
    "copies": [
     "LICENSES/components/web/mdast-util-to-hast-13.2.1.txt"
    ],
-   "from": "node_modules/mdast-util-to-hast (local node_modules)",
+   "from": "mdast-util-to-hast-13.2.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6170,7 +6146,7 @@
    "copies": [
     "LICENSES/components/web/mdast-util-to-markdown-2.1.2.txt"
    ],
-   "from": "node_modules/mdast-util-to-markdown (local node_modules)",
+   "from": "mdast-util-to-markdown-2.1.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6178,7 +6154,7 @@
    "copies": [
     "LICENSES/components/web/mdast-util-to-string-4.0.0.txt"
    ],
-   "from": "node_modules/mdast-util-to-string (local node_modules)",
+   "from": "mdast-util-to-string-4.0.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6186,7 +6162,7 @@
    "copies": [
     "LICENSES/components/web/micromark-4.0.2.txt"
    ],
-   "from": "node_modules/micromark (local node_modules)",
+   "from": "micromark-4.0.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6194,7 +6170,7 @@
    "copies": [
     "LICENSES/components/web/micromark-core-commonmark-2.0.3.txt"
    ],
-   "from": "node_modules/micromark-core-commonmark (local node_modules)",
+   "from": "micromark-core-commonmark-2.0.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6202,7 +6178,7 @@
    "copies": [
     "LICENSES/components/web/micromark-factory-destination-2.0.1.txt"
    ],
-   "from": "node_modules/micromark-factory-destination (local node_modules)",
+   "from": "micromark-factory-destination-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6210,7 +6186,7 @@
    "copies": [
     "LICENSES/components/web/micromark-factory-label-2.0.1.txt"
    ],
-   "from": "node_modules/micromark-factory-label (local node_modules)",
+   "from": "micromark-factory-label-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6218,7 +6194,7 @@
    "copies": [
     "LICENSES/components/web/micromark-factory-space-2.0.1.txt"
    ],
-   "from": "node_modules/micromark-factory-space (local node_modules)",
+   "from": "micromark-factory-space-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6226,7 +6202,7 @@
    "copies": [
     "LICENSES/components/web/micromark-factory-title-2.0.1.txt"
    ],
-   "from": "node_modules/micromark-factory-title (local node_modules)",
+   "from": "micromark-factory-title-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6234,7 +6210,7 @@
    "copies": [
     "LICENSES/components/web/micromark-factory-whitespace-2.0.1.txt"
    ],
-   "from": "node_modules/micromark-factory-whitespace (local node_modules)",
+   "from": "micromark-factory-whitespace-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6242,7 +6218,7 @@
    "copies": [
     "LICENSES/components/web/micromark-util-character-2.1.1.txt"
    ],
-   "from": "node_modules/micromark-util-character (local node_modules)",
+   "from": "micromark-util-character-2.1.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6250,7 +6226,7 @@
    "copies": [
     "LICENSES/components/web/micromark-util-chunked-2.0.1.txt"
    ],
-   "from": "node_modules/micromark-util-chunked (local node_modules)",
+   "from": "micromark-util-chunked-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6258,7 +6234,7 @@
    "copies": [
     "LICENSES/components/web/micromark-util-classify-character-2.0.1.txt"
    ],
-   "from": "node_modules/micromark-util-classify-character (local node_modules)",
+   "from": "micromark-util-classify-character-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6266,7 +6242,7 @@
    "copies": [
     "LICENSES/components/web/micromark-util-combine-extensions-2.0.1.txt"
    ],
-   "from": "node_modules/micromark-util-combine-extensions (local node_modules)",
+   "from": "micromark-util-combine-extensions-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6274,7 +6250,7 @@
    "copies": [
     "LICENSES/components/web/micromark-util-decode-numeric-character-reference-2.0.2.txt"
    ],
-   "from": "node_modules/micromark-util-decode-numeric-character-reference (local node_modules)",
+   "from": "micromark-util-decode-numeric-character-reference-2.0.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6282,7 +6258,7 @@
    "copies": [
     "LICENSES/components/web/micromark-util-decode-string-2.0.1.txt"
    ],
-   "from": "node_modules/micromark-util-decode-string (local node_modules)",
+   "from": "micromark-util-decode-string-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6290,7 +6266,7 @@
    "copies": [
     "LICENSES/components/web/micromark-util-encode-2.0.1.txt"
    ],
-   "from": "node_modules/micromark-util-encode (local node_modules)",
+   "from": "micromark-util-encode-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6298,7 +6274,7 @@
    "copies": [
     "LICENSES/components/web/micromark-util-html-tag-name-2.0.1.txt"
    ],
-   "from": "node_modules/micromark-util-html-tag-name (local node_modules)",
+   "from": "micromark-util-html-tag-name-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6306,7 +6282,7 @@
    "copies": [
     "LICENSES/components/web/micromark-util-normalize-identifier-2.0.1.txt"
    ],
-   "from": "node_modules/micromark-util-normalize-identifier (local node_modules)",
+   "from": "micromark-util-normalize-identifier-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6314,7 +6290,7 @@
    "copies": [
     "LICENSES/components/web/micromark-util-resolve-all-2.0.1.txt"
    ],
-   "from": "node_modules/micromark-util-resolve-all (local node_modules)",
+   "from": "micromark-util-resolve-all-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6322,7 +6298,7 @@
    "copies": [
     "LICENSES/components/web/micromark-util-sanitize-uri-2.0.1.txt"
    ],
-   "from": "node_modules/micromark-util-sanitize-uri (local node_modules)",
+   "from": "micromark-util-sanitize-uri-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6330,7 +6306,7 @@
    "copies": [
     "LICENSES/components/web/micromark-util-subtokenize-2.1.0.txt"
    ],
-   "from": "node_modules/micromark-util-subtokenize (local node_modules)",
+   "from": "micromark-util-subtokenize-2.1.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6338,7 +6314,7 @@
    "copies": [
     "LICENSES/components/web/micromark-util-symbol-2.0.1.txt"
    ],
-   "from": "node_modules/micromark-util-symbol (local node_modules)",
+   "from": "micromark-util-symbol-2.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6346,7 +6322,7 @@
    "copies": [
     "LICENSES/components/web/micromark-util-types-2.0.2.txt"
    ],
-   "from": "node_modules/micromark-util-types (local node_modules)",
+   "from": "micromark-util-types-2.0.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6354,7 +6330,7 @@
    "copies": [
     "LICENSES/components/web/motion-dom-12.26.2.txt"
    ],
-   "from": "node_modules/motion-dom (local node_modules)",
+   "from": "motion-dom-12.26.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6362,7 +6338,7 @@
    "copies": [
     "LICENSES/components/web/motion-utils-12.24.10.txt"
    ],
-   "from": "node_modules/motion-utils (local node_modules)",
+   "from": "motion-utils-12.24.10.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6370,7 +6346,7 @@
    "copies": [
     "LICENSES/components/web/ms-2.1.3.txt"
    ],
-   "from": "node_modules/ms (local node_modules)",
+   "from": "ms-2.1.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6378,7 +6354,7 @@
    "copies": [
     "LICENSES/components/web/nanoid-3.3.11.txt"
    ],
-   "from": "node_modules/next/node_modules/nanoid (local node_modules)",
+   "from": "nanoid-3.3.11.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6461,7 +6437,7 @@
     "LICENSES/components/web/next-16.1.1.nft.LICENSE.txt",
     "LICENSES/components/web/next-16.1.1.routing-utils.LICENSE.txt"
    ],
-   "from": "node_modules/next (local node_modules)",
+   "from": "next-16.1.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6469,7 +6445,7 @@
    "copies": [
     "LICENSES/components/web/object-assign-4.1.1.txt"
    ],
-   "from": "node_modules/object-assign (local node_modules)",
+   "from": "object-assign-4.1.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6477,7 +6453,7 @@
    "copies": [
     "LICENSES/components/web/parse-entities-4.0.2.txt"
    ],
-   "from": "node_modules/parse-entities (local node_modules)",
+   "from": "parse-entities-4.0.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6485,7 +6461,7 @@
    "copies": [
     "LICENSES/components/web/picocolors-1.1.1.txt"
    ],
-   "from": "node_modules/picocolors (local node_modules)",
+   "from": "picocolors-1.1.1.tgz",
    "notices": [],
    "spdx": "ISC"
   },
@@ -6493,7 +6469,7 @@
    "copies": [
     "LICENSES/components/web/postcss-8.4.31.txt"
    ],
-   "from": "node_modules/next/node_modules/postcss (local node_modules)",
+   "from": "postcss-8.4.31.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6501,7 +6477,7 @@
    "copies": [
     "LICENSES/components/web/prop-types-15.8.1.txt"
    ],
-   "from": "node_modules/prop-types (local node_modules)",
+   "from": "prop-types-15.8.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6509,7 +6485,7 @@
    "copies": [
     "LICENSES/components/web/property-information-7.1.0.txt"
    ],
-   "from": "node_modules/property-information (local node_modules)",
+   "from": "property-information-7.1.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6517,7 +6493,7 @@
    "copies": [
     "LICENSES/components/web/react-19.2.3.txt"
    ],
-   "from": "node_modules/react (local node_modules)",
+   "from": "react-19.2.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6525,7 +6501,7 @@
    "copies": [
     "LICENSES/components/web/react-dom-19.2.3.txt"
    ],
-   "from": "node_modules/react-dom (local node_modules)",
+   "from": "react-dom-19.2.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6533,7 +6509,7 @@
    "copies": [
     "LICENSES/components/web/react-dropzone-14.3.8.txt"
    ],
-   "from": "node_modules/react-dropzone (local node_modules)",
+   "from": "react-dropzone-14.3.8.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6541,7 +6517,7 @@
    "copies": [
     "LICENSES/components/web/react-hot-toast-2.6.0.txt"
    ],
-   "from": "node_modules/react-hot-toast (local node_modules)",
+   "from": "react-hot-toast-2.6.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6549,7 +6525,7 @@
    "copies": [
     "LICENSES/components/web/react-is-16.13.1.txt"
    ],
-   "from": "node_modules/react-is (local node_modules)",
+   "from": "react-is-16.13.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6557,7 +6533,7 @@
    "copies": [
     "LICENSES/components/web/react-is-18.3.1.txt"
    ],
-   "from": "node_modules/recharts/node_modules/react-is (local node_modules)",
+   "from": "react-is-18.3.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6565,7 +6541,7 @@
    "copies": [
     "LICENSES/components/web/react-markdown-10.1.0.txt"
    ],
-   "from": "node_modules/react-markdown (local node_modules)",
+   "from": "react-markdown-10.1.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6573,7 +6549,7 @@
    "copies": [
     "LICENSES/components/web/react-number-format-5.4.4.txt"
    ],
-   "from": "node_modules/react-number-format (local node_modules)",
+   "from": "react-number-format-5.4.4.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6581,16 +6557,14 @@
    "copies": [
     "LICENSES/components/web/react-remove-scroll-2.7.2.txt"
    ],
-   "from": "node_modules/react-remove-scroll (local node_modules)",
+   "from": "react-remove-scroll-2.7.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
   "react-remove-scroll-bar 2.3.8": {
-   "copies": [
-    "LICENSES/components/web/react-remove-scroll-bar-2.3.8.txt"
-   ],
-   "from": "node_modules/react-remove-scroll-bar (local node_modules)",
-   "licence_from": "https://github.com/theKashey/react-remove-scroll-bar/blob/master/LICENSE",
+   "copies": [],
+   "from": "react-remove-scroll-bar-2.3.8.tgz",
+   "no_licence_file": true,
    "notices": [],
    "spdx": "MIT"
   },
@@ -6598,7 +6572,7 @@
    "copies": [
     "LICENSES/components/web/react-smooth-4.0.4.txt"
    ],
-   "from": "node_modules/react-smooth (local node_modules)",
+   "from": "react-smooth-4.0.4.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6606,7 +6580,7 @@
    "copies": [
     "LICENSES/components/web/react-style-singleton-2.2.3.txt"
    ],
-   "from": "node_modules/react-style-singleton (local node_modules)",
+   "from": "react-style-singleton-2.2.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6614,7 +6588,7 @@
    "copies": [
     "LICENSES/components/web/react-textarea-autosize-8.5.9.txt"
    ],
-   "from": "node_modules/react-textarea-autosize (local node_modules)",
+   "from": "react-textarea-autosize-8.5.9.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6622,7 +6596,7 @@
    "copies": [
     "LICENSES/components/web/react-transition-group-4.4.5.txt"
    ],
-   "from": "node_modules/react-transition-group (local node_modules)",
+   "from": "react-transition-group-4.4.5.tgz",
    "notices": [],
    "spdx": "BSD-3-Clause"
   },
@@ -6630,7 +6604,7 @@
    "copies": [
     "LICENSES/components/web/recharts-2.15.4.txt"
    ],
-   "from": "node_modules/recharts (local node_modules)",
+   "from": "recharts-2.15.4.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6638,7 +6612,7 @@
    "copies": [
     "LICENSES/components/web/recharts-scale-0.4.5.txt"
    ],
-   "from": "node_modules/recharts-scale (local node_modules)",
+   "from": "recharts-scale-0.4.5.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6646,7 +6620,7 @@
    "copies": [
     "LICENSES/components/web/remark-parse-11.0.0.txt"
    ],
-   "from": "node_modules/remark-parse (local node_modules)",
+   "from": "remark-parse-11.0.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6654,7 +6628,7 @@
    "copies": [
     "LICENSES/components/web/remark-rehype-11.1.2.txt"
    ],
-   "from": "node_modules/remark-rehype (local node_modules)",
+   "from": "remark-rehype-11.1.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6662,7 +6636,7 @@
    "copies": [
     "LICENSES/components/web/scheduler-0.27.0.txt"
    ],
-   "from": "node_modules/scheduler (local node_modules)",
+   "from": "scheduler-0.27.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6670,13 +6644,13 @@
    "copies": [
     "LICENSES/components/web/semver-7.7.3.txt"
    ],
-   "from": "node_modules/sharp/node_modules/semver (local node_modules)",
+   "from": "semver-7.7.3.tgz",
    "notices": [],
    "spdx": "ISC"
   },
   "sharp 0.34.5": {
    "copies": [],
-   "from": "node_modules/sharp (local node_modules)",
+   "from": "sharp-0.34.5.tgz",
    "notices": [],
    "spdx": "Apache-2.0"
   },
@@ -6684,7 +6658,7 @@
    "copies": [
     "LICENSES/components/web/source-map-js-1.2.1.txt"
    ],
-   "from": "node_modules/source-map-js (local node_modules)",
+   "from": "source-map-js-1.2.1.tgz",
    "notices": [],
    "spdx": "BSD-3-Clause"
   },
@@ -6692,7 +6666,7 @@
    "copies": [
     "LICENSES/components/web/space-separated-tokens-2.0.2.txt"
    ],
-   "from": "node_modules/space-separated-tokens (local node_modules)",
+   "from": "space-separated-tokens-2.0.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6700,7 +6674,7 @@
    "copies": [
     "LICENSES/components/web/stringify-entities-4.0.4.txt"
    ],
-   "from": "node_modules/stringify-entities (local node_modules)",
+   "from": "stringify-entities-4.0.4.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6708,7 +6682,7 @@
    "copies": [
     "LICENSES/components/web/style-to-js-1.1.21.txt"
    ],
-   "from": "node_modules/style-to-js (local node_modules)",
+   "from": "style-to-js-1.1.21.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6716,7 +6690,7 @@
    "copies": [
     "LICENSES/components/web/style-to-object-1.0.14.txt"
    ],
-   "from": "node_modules/style-to-object (local node_modules)",
+   "from": "style-to-object-1.0.14.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6724,7 +6698,7 @@
    "copies": [
     "LICENSES/components/web/styled-jsx-5.1.6.txt"
    ],
-   "from": "node_modules/styled-jsx (local node_modules)",
+   "from": "styled-jsx-5.1.6.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6732,7 +6706,7 @@
    "copies": [
     "LICENSES/components/web/tabbable-6.4.0.txt"
    ],
-   "from": "node_modules/tabbable (local node_modules)",
+   "from": "tabbable-6.4.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6740,7 +6714,7 @@
    "copies": [
     "LICENSES/components/web/tiny-invariant-1.3.3.txt"
    ],
-   "from": "node_modules/tiny-invariant (local node_modules)",
+   "from": "tiny-invariant-1.3.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6748,7 +6722,7 @@
    "copies": [
     "LICENSES/components/web/trim-lines-3.0.1.txt"
    ],
-   "from": "node_modules/trim-lines (local node_modules)",
+   "from": "trim-lines-3.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6756,7 +6730,7 @@
    "copies": [
     "LICENSES/components/web/trough-2.2.0.txt"
    ],
-   "from": "node_modules/trough (local node_modules)",
+   "from": "trough-2.2.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6764,7 +6738,7 @@
    "copies": [
     "LICENSES/components/web/tslib-2.8.1.txt"
    ],
-   "from": "node_modules/tslib (local node_modules)",
+   "from": "tslib-2.8.1.tgz",
    "notices": [],
    "spdx": "0BSD"
   },
@@ -6773,7 +6747,7 @@
     "LICENSES/components/web/type-fest-4.41.0.license-cc0.txt",
     "LICENSES/components/web/type-fest-4.41.0.license-mit.txt"
    ],
-   "from": "node_modules/type-fest (local node_modules)",
+   "from": "type-fest-4.41.0.tgz",
    "notices": [],
    "spdx": "(MIT OR CC0-1.0)"
   },
@@ -6781,7 +6755,7 @@
    "copies": [
     "LICENSES/components/web/unified-11.0.5.txt"
    ],
-   "from": "node_modules/unified (local node_modules)",
+   "from": "unified-11.0.5.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6789,7 +6763,7 @@
    "copies": [
     "LICENSES/components/web/unist-util-is-6.0.1.txt"
    ],
-   "from": "node_modules/unist-util-is (local node_modules)",
+   "from": "unist-util-is-6.0.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6797,7 +6771,7 @@
    "copies": [
     "LICENSES/components/web/unist-util-position-5.0.0.txt"
    ],
-   "from": "node_modules/unist-util-position (local node_modules)",
+   "from": "unist-util-position-5.0.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6805,7 +6779,7 @@
    "copies": [
     "LICENSES/components/web/unist-util-stringify-position-4.0.0.txt"
    ],
-   "from": "node_modules/unist-util-stringify-position (local node_modules)",
+   "from": "unist-util-stringify-position-4.0.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6813,7 +6787,7 @@
    "copies": [
     "LICENSES/components/web/unist-util-visit-5.1.0.txt"
    ],
-   "from": "node_modules/unist-util-visit (local node_modules)",
+   "from": "unist-util-visit-5.1.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6821,7 +6795,7 @@
    "copies": [
     "LICENSES/components/web/unist-util-visit-parents-6.0.2.txt"
    ],
-   "from": "node_modules/unist-util-visit-parents (local node_modules)",
+   "from": "unist-util-visit-parents-6.0.2.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6829,13 +6803,13 @@
    "copies": [
     "LICENSES/components/web/use-callback-ref-1.3.3.txt"
    ],
-   "from": "node_modules/use-callback-ref (local node_modules)",
+   "from": "use-callback-ref-1.3.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
   "use-composed-ref 1.4.0": {
    "copies": [],
-   "from": "node_modules/use-composed-ref (local node_modules)",
+   "from": "use-composed-ref-1.4.0.tgz",
    "no_licence_file": true,
    "notices": [],
    "spdx": "MIT"
@@ -6844,7 +6818,7 @@
    "copies": [
     "LICENSES/components/web/use-isomorphic-layout-effect-1.2.1.txt"
    ],
-   "from": "node_modules/use-isomorphic-layout-effect (local node_modules)",
+   "from": "use-isomorphic-layout-effect-1.2.1.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6852,7 +6826,7 @@
    "copies": [
     "LICENSES/components/web/use-latest-1.3.0.txt"
    ],
-   "from": "node_modules/use-latest (local node_modules)",
+   "from": "use-latest-1.3.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6860,7 +6834,7 @@
    "copies": [
     "LICENSES/components/web/use-sidecar-1.1.3.txt"
    ],
-   "from": "node_modules/use-sidecar (local node_modules)",
+   "from": "use-sidecar-1.1.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6868,7 +6842,7 @@
    "copies": [
     "LICENSES/components/web/use-sync-external-store-1.6.0.txt"
    ],
-   "from": "node_modules/use-sync-external-store (local node_modules)",
+   "from": "use-sync-external-store-1.6.0.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6876,7 +6850,7 @@
    "copies": [
     "LICENSES/components/web/vfile-6.0.3.txt"
    ],
-   "from": "node_modules/vfile (local node_modules)",
+   "from": "vfile-6.0.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6884,7 +6858,7 @@
    "copies": [
     "LICENSES/components/web/vfile-message-4.0.3.txt"
    ],
-   "from": "node_modules/vfile-message (local node_modules)",
+   "from": "vfile-message-4.0.3.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6897,7 +6871,7 @@
     "LICENSES/components/web/victory-vendor-36.9.2.d3-voronoi.LICENSE.txt",
     "LICENSES/components/web/victory-vendor-36.9.2.internmap.LICENSE.txt"
    ],
-   "from": "node_modules/victory-vendor (local node_modules)",
+   "from": "victory-vendor-36.9.2.tgz",
    "notices": [],
    "spdx": "MIT AND ISC"
   },
@@ -6905,7 +6879,7 @@
    "copies": [
     "LICENSES/components/web/zod-3.25.76.txt"
    ],
-   "from": "node_modules/zod (local node_modules)",
+   "from": "zod-3.25.76.tgz",
    "notices": [],
    "spdx": "MIT"
   },
@@ -6913,7 +6887,7 @@
    "copies": [
     "LICENSES/components/web/zwitch-2.0.4.txt"
    ],
-   "from": "node_modules/zwitch (local node_modules)",
+   "from": "zwitch-2.0.4.tgz",
    "notices": [],
    "spdx": "MIT"
   }

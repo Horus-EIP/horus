@@ -11,7 +11,7 @@ cd "$REPO_ROOT"
 export OTEL_ENABLED="${OTEL_ENABLED:-false}"
 export OTEL_TRACES_EXPORTER="${OTEL_TRACES_EXPORTER:-none}"
 
-# passlib 1.7.4 is incompatible with bcrypt>=4.1 (long-password self-test fails).
+# Keep local runs on the bcrypt version required by the services.
 PY="${PYTHON:-python3}"
 command -v "$PY" >/dev/null 2>&1 || PY=python
 "$PY" -m pip install "bcrypt==5.0.0" -q

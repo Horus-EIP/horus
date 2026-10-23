@@ -1,8 +1,8 @@
 # ADR-005: Quality debt we accept (for now), and when we repay it
 
 **Date:** 2026-09-24
-**Status:** Accepted (24/09/2026). Reviewed at every MINOR release (see `VERSIONING.md`). The 07/10/2026 and 09/10/2026 updates, which mark what was repaid since, are not reviewed by the team yet.
-**Last updated:** 2026-10-09
+**Status:** Accepted (24/09/2026). Reviewed at every MINOR release (see `VERSIONING.md`). The 07/10/2026, 09/10/2026 and 23/10/2026 updates, which mark what was repaid since, are not reviewed by the team yet.
+**Last updated:** 2026-10-23
 **Deciders:** Loup Marquez-Luttringer, Noah Gibelli, Matheus Lopez
 **Related:**
 
@@ -77,7 +77,7 @@ The debt as recorded on 24/09/2026. The Decision column says where each item sta
 | C1 | **Unpinned Python dependencies**; images on `latest` and `redis:7` | Lock files (`uv pip compile`), pinned tags and a CI licence gate | Easier upgrades during development | S | Silent breakage or licence changes (Redis 7.4 went RSALv2/SSPL) | **Repaid**, not released yet (`b816e70`, `a820a0d`, `ade67e9`; Valkey instead of Redis in `9b72084`) |
 | C2 | **Test tools installed in production images** (pytest, pytest-cov, pytest-asyncio; pytest-html in the agent) | A `requirements-dev.txt` for tests only | One requirements file per service was simpler | XS | Bigger images, more licences to declare | **Repaid**, not released yet (B-46) |
 | C3 | **The MAS image is single-stage** and keeps compilers (`build-essential`, `g++`); pip runs with `--use-deprecated=legacy-resolver` | Multi-stage build (like the knowledge store); fix the conflicts the legacy resolver hides | The legacy resolver unblocked a dependency conflict quickly | S–M | Larger image; the resolver may install incompatible versions | **Repaid**, not released yet (B-67) |
-| C4 | **passlib 1.7.4 + `bcrypt<4.0`** in MAS, `bcrypt==3.2.2` pinned in the agent. passlib has had no release since 2020 and clashes with recent bcrypt. | Use `bcrypt` directly (or a maintained wrapper), with one version everywhere | Works today; it touches password hashing, so it needs care | S | Stuck on old crypto packages; future security fixes may be blocked | **Open.** Repay by 0.3.0 (before pilots) |
+| C4 | **passlib 1.7.4 + `bcrypt<4.0`** in MAS, `bcrypt==3.2.2` pinned in the agent. Passlib clashes with recent bcrypt. | Use `bcrypt` directly, with one version everywhere | It touches password hashing, so it needs care | S | Stuck on old crypto packages; future security fixes may be blocked | **Repaid in B-68 (23/10/2026; release pending):** direct bcrypt 5.0.0, refreshed locks and licence notices, and successful authentication transparently re-hashes legacy credentials |
 | C5 | **The Python version is not consistent**: the README badge says 3.13, ruff targets `py313`, CI runs 3.13, and the Docker images use `python:3.11-slim` | One supported version, the same everywhere | Each part was set up at a different time | XS–S | "Works on my machine" bugs; lint rules for a version we don't run | **Part repaid**: the README says 3.11 (`8dc2410`), and CI runs the service and installer tests on the images' Python, read from `src/services/PYTHON_VERSION` (09/10/2026). Ruff's `py313` target by 0.1.2 |
 | C6 | **Unused or odd dependencies**: PyMuPDF (AGPL, never imported) in the knowledge store; the PyPI `graphlib` package in MAS next to the standard-library `graphlib` | Remove them | Nobody cleaned the requirements after refactors | XS | PyMuPDF is the only licence blocker (ADR-004) | **Part repaid**: PyMuPDF removed (`a2e5807`). `graphlib` by 0.1.2 |
 | C7 | **Promtail** (log shipper) is end-of-life since March 2026 | Grafana Alloy | Still works | S | No more security fixes | **Repaid**, not released yet (B-67) |
@@ -146,12 +146,16 @@ Checked against `Sprint#1_September2026_Tek5` at `8f11aaa`. Line numbers are at 
 | A6 | Repaid on 09/10/2026: `ci.yml` runs `pytest installer/tests` in its `test-installer` job on every push and pull request, on the images' Python. `desktop-release.yml` and `images.yml` still run them on a `v*` tag. |
 | B3 | `src/services/knowledge-store/tests/test_corpus_safety.py` is still there; CI runs `tests/knowledge_store` only (`ci.yml`, line 295). |
 | B4 | The repository records no ATP after v7 (18/09/2026, `docs/eip/regressions.md`), so the rule has not been applied yet. |
-| C4 | `src/services/mas/requirements.txt` lines 23–24; `src/services/agent/requirements.txt` line 18. passlib hashes the passwords in `src/services/mas/auth/auth_tool_functions.py` (line 10). |
+| C4 | Historical evidence: the old MAS and agent requirements pinned Passlib/bcrypt. B-68 switches password and API-key hashing to the direct bcrypt API, with SHA-256 prehashing for inputs over bcrypt's 72-byte limit. The 23/10/2026 follow-up refreshes the service locks and licence notices, and verifies then re-hashes legacy raw-password hashes after successful authentication. |
 | D2 | `packaging/build_bundle.py` (lines 27–31) still puts the service source in the ZIP; `docs/operations.md` (line 79) lists it as not done. The images are signed by `images.yml`, but the installer does not check the signature (`docs/operations.md`, line 80). |
 
 The accepted items still hold: B904 is still ignored (`pyproject.toml`, line 51), the coverage gates are still 85 / 90 / 85 % (`ci.yml`, lines 198, 247 and 298), and the stack still runs `grafana/loki:3.4.2` and `grafana/tempo:2.6.0` (`src/infra/docker-compose.yml`, lines 469 and 496). For E3, the work since 24/09 is in small commits, most named after a backlog item; merging `Sprint#1_September2026_Tek5` into `master` as one squash would repeat it.
 
 ---
+
+## Status on 23/10/2026
+
+C4 is repaid for the next release: the MAS and agent lock files now resolve bcrypt 5.0.0 with no Passlib, generated licence records are refreshed, and legacy raw-bcrypt passwords/API keys are verified and upgraded on successful use.
 
 ## Summary: what is left and when we pay
 
@@ -159,10 +163,10 @@ The accepted items still hold: B904 is still ignored (`pyproject.toml`, line 51)
 |---|---|---|
 | **0.1.2** (not tagged yet) | A1, A3, B3; the rest of C5 and C6 | Under 2.5 d by the cost scale (S: A1; XS: A3, B3, C6; XS–S: C5). Fixing the 20 lint errors before `npm run lint` can gate CI is not estimated. |
 | **0.2.0** (end of Oct) | A2 (start), A5, D2; the rest of B2 and D1 | A2 and A5: about 1 to 2.5 d by the cost scale. B2 (M) and D1 + D2 (L) are part repaid and not re-estimated. |
-| **0.3.0** (Dec) | C4, D1 (slimmer profile) | ~3 d (24/09 estimate) |
+| **0.3.0** (Dec) | D1 (slimmer profile) | ~3 d (24/09 estimate) |
 | **Next ATP** | B4 | XS |
 | **Accepted** | A4, A7 (gates), D7, E3 | — |
-| **Repaid** | D3, D6 (in 0.1.2); B1, C1, C2, C3, C7, D4, D5, E1, E2, E4 (not released yet) | — |
+| **Repaid** | C4, D3, D6 (in 0.1.2); B1, C1, C2, C3, C7, D4, D5, E1, E2, E4 (not released yet) | — |
 
 **Why this order:**
 

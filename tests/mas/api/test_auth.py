@@ -27,7 +27,7 @@ def _checkpw_result(result: bool):
 
 
 class TestLogin:
-    @patch("auth.auth_tool_functions.checkpw")
+    @patch("auth.passwords.checkpw")
     def test_valid_credentials_return_token(self, mock_checkpw, make_client, mock_db):
         user = MagicMock(
             username="admin",
@@ -50,7 +50,7 @@ class TestLogin:
         r = client.post("/auth/token", data={"username": "ghost", "password": "x"})
         assert r.status_code == 401
 
-    @patch("auth.auth_tool_functions.checkpw")
+    @patch("auth.passwords.checkpw")
     def test_wrong_password_returns_401(self, mock_checkpw, make_client, mock_db):
         user = MagicMock(hashed_password="hash", username="u", role="user", id="u-id")
         mock_db.query.return_value.filter.return_value.first.return_value = user
@@ -58,7 +58,7 @@ class TestLogin:
         client = make_client(auth_router)
         r = client.post("/auth/token", data={"username": "u", "password": "bad"})
         assert r.status_code == 401
-        mock_checkpw.assert_called_once()
+        assert mock_checkpw.call_count == 2
 
 
 class TestRegister:

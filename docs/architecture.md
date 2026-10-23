@@ -545,7 +545,7 @@ A complete example with all variables is available at `src/infra/.env.example`.
 | Alembic | Database schema migrations |
 | Pydantic | Request/response validation and settings management |
 | python-jose | JWT token encoding/decoding |
-| passlib + bcrypt | Password hashing |
+| bcrypt | Password hashing (direct API, with SHA-256 prehashing) |
 | pika | RabbitMQ (AMQP) client |
 | redis-py | Redis client |
 | httpx | Async HTTP client for inter-service communication |
@@ -708,7 +708,7 @@ User 1 ─── N Conversation 1 ─── N Message
 
 #### Security notes
 
-- Passwords are always stored as bcrypt hashes. No plaintext path exists.
+- Passwords are always stored as bcrypt hashes of SHA-256-prehashed inputs. No plaintext path exists.
 - Cascading deletes are deliberate; orphaned rows are never acceptable.
 - The audit log is append-only at the application layer.
 
@@ -1786,7 +1786,7 @@ Horus is an AI-powered Multi-Agent System (MAS) designed to orchestrate intellig
 
 - **Method:** JWT (JSON Web Tokens)
 - **Token Lifetime:** Configurable (default 30 minutes)
-- **Password Storage:** bcrypt with cost factor 12
+- **Password Storage:** SHA-256-prehashed input, then bcrypt with cost factor 12. Legacy raw-password bcrypt hashes are re-hashed on successful authentication.
 
 #### 5.2 Authorization
 
