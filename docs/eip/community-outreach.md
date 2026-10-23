@@ -485,3 +485,167 @@ Quantization Sweet Spot: For GGUF/CPU, Q4_K_M is acceptable, but Q5_K_M is prefe
   > To be transparent: Horus is closed source and will be licensed to companies. Contributing is voluntary and unpaid. Before seeing any code, contributors sign a short confidentiality and contributor agreement, and the code they contribute becomes part of Horus. In return we offer thorough code reviews, full credit in the project and a professional reference on request.
   > 
   > We're not sharing code or private links publicly. If this interests you, comment below or DM me with your experience in local inference, CPU optimisation or offline apps.
+
+### 11. Reddit: r/Backend
+* **Name + link:** Reddit - r/Backend (https://www.reddit.com/r/Backend/comments/1x6j10e/pattern_for_handling_long_cpublocking_tasks/)
+* **Type:** Subreddit / Online Community
+* **Audience:** Backend engineers, API architects, and systems developers.
+* **Posting rules:** Technical focus on server-side architecture, asynchronous queues, and persistent connections.
+  * *Date checked:* Oct 15, 2026
+* **Why it fits Horus:** Perfect for discussing the decoupling of CPU-heavy inference tasks (40s latency) from persistent WebSocket client connections.
+* **Published Post Content:**
+  > **Title:** Pattern for handling long CPU-blocking tasks behind persistent WebSocket connections
+  > 
+  > Hello backend devs,
+  > 
+  > In an offline backend architecture, client apps communicate via WebSockets while tasks are processed by a local background engine. On CPU-only systems, synchronous processing steps can create 30+ second gaps before streaming begins, causing connection timeouts.
+  > 
+  > We are refactoring the transport layer to immediately return an async job ID, queue work in a bounded worker pool, and emit regular heartbeat/ping frames over the WebSocket during execution gaps.
+  > 
+  > How do you typically decouple persistent transport layers from blocking compute steps to prevent transport dropouts in local desktop backends?
+  > 
+  > *Context:* Architectural feedback query on async job queuing and WebSocket state management.
+* **Status:** Published & Active
+
+* **Key Community Feedback & Advice Received (r/Backend):**
+  * **Event Loop Non-Blocking Imperative:** CPU-bound tasks must run in dedicated background processes/workers rather than blocking the main asyncio thread, otherwise heartbeats and pings will freeze regardless.
+  * **Job Persistence vs WebSocket Lifecycles:** Decouple job execution from connection state so that background inference survives client drops and clients can reconnect using a `job_id`.
+  * **Bounded Work Queues:** Implement hard capacity limits on the job queue to prevent memory and CPU overload from stacked client requests.
+  * **Job Persistence Beyond Socket Drops:** Store execution results under the `job_id` so background tasks survive client disconnections. Clients can re-attach using `{"resume": job_id}` instead of re-running CPU passes.
+  * **Native Ping/Pong Usage:** Use native WebSocket ping/pong frames to keep connections alive efficiently without over-engineering custom protocol frames.
+
+---
+
+### 12. Reddit: r/mlops
+* **Name + link:** Reddit - r/mlops (https://www.reddit.com/r/mlops/comments/1x6ixlq/managing_memory_footprints_for_local_cpubound/)
+* **Type:** Subreddit / Online Community
+* **Audience:** MLOps engineers, AI infrastructure specialists, and deployment engineers.
+* **Posting rules:** Focuses on production ML pipelines, local model execution, and hardware resource constraints. AI disclosure provided in comments as required.
+  * *Date checked:* Oct 15, 2026
+* **Why it fits Horus:** Ideal for gathering feedback on model quantization choices (Q4_K_M vs Q5_K_M) and CPU-bound fallback strategies.
+* **Published Post Content:**
+  > **Title:** Managing memory footprints for local CPU-bound model execution daemons
+  > 
+  > Hi MLOps community,
+  > 
+  > We are working on optimizing an offline local inference engine running on client machines without discrete GPUs.
+  > 
+  > To fit within 16 GB RAM client constraints, we are evaluating GGUF quantization tiers (Q4_K_M vs Q5_K_M) paired with dynamic KV-cache caps and a single resident daemon model architecture.
+  > 
+  > When benchmarking local CPU inference engines under strict RAM constraints, what metrics (peak RSS, first-token latency, memory bandwidth pressure) do you prioritize to establish the stability ceiling?
+  > 
+  > *Context:* Engineering inquiry into local CPU model execution and quantization trade-offs.
+* **Status:** Published & Active (AI disclosure submitted)
+
+* **Key Community Feedback & Advice Received (r/mlops):**
+  * **Peak RSS is the Critical Metric:** Peak Resident Set Size (RSS) must be the primary metric monitored to establish stability limits; if Peak RSS breaches memory caps, OOM kills render latency metrics irrelevant.
+  * **Latency vs Stability:** First-token latency measures UX, whereas Peak RSS measures system survival under memory caps.
+  * **Memory Bandwidth Bottlenecks:** Memory bandwidth saturation explains unexpected CPU performance dips, though tracking it requires dedicated profiling tooling.
+  * **Benchmark Priorities:** Focus benchmarking efforts on **Peak RAM usage** and **First Token Latency** (UX metric), paired with long-run stability testing to verify that memory allocation remains stable and leak-free across extended multi-agent reasoning loops.
+  * **Benchmarking Priority Stack:** Prioritize **Peak RAM usage** (hard stability ceiling) and **First Token Latency** (UX metric), backed by long-run stability testing to verify zero memory accumulation across multi-agent loops.
+
+---
+
+### 13. Reddit: r/docker
+* **Name + link:** Reddit - r/docker (https://www.reddit.com/r/docker/comments/1x6iwv7/setting_strict_cgroup_memorymax_bounds_on_local/)
+* **Type:** Subreddit / Online Community
+* **Audience:** Infrastructure, containerization, and DevOps specialists.
+* **Posting rules:** Technical discussions on container isolation, resource caps, and daemon configuration.
+  * *Date checked:* Oct 15, 2026
+* **Why it fits Horus:** Addresses process boundaries and memory caps (`cgroups v2`, `--memory-swap`, `MemoryMax`) to avoid host freezes on client devices.
+* **Published Post Content:**
+  > **Title:** Setting strict cgroup / MemoryMax bounds on local background container daemons
+  > 
+  > Hi everyone,
+  > 
+  > We are testing a local background service running on client laptops. During peak context processing, memory spikes can risk pushing the host OS into swap death.
+  > 
+  > We are configuring container resource limits (`--memory`, `--memory-swap`, `cgroups v2`) to isolate the local execution daemon from the rest of the host system.
+  > 
+  > For those deploying background containers on desktop client endpoints: what memory overhead buffer do you leave for the host OS to prevent hard freezes when a container hits its hard limit?
+  > 
+  > *Context:* Architectural query regarding container limits on client endpoints.
+* **Status:** Published & Active
+* **Key Community Feedback & Advice Received (r/docker):**
+  * **Zero Container Swap (`memory.swap.max 0`):** Set `--memory-swap` equal to `--memory` in cgroups v2. This ensures internal container OOM rather than host-wide swap death, keeping the user's OS responsive.
+  * **Soft Cap Throttling (`memory.high`):** Set `memory.high` at 80–90% of `memory.max` to trigger kernel memory reclamation before hitting hard OOM limits, smoothing out context spikes.
+  * **The 70% Physical RAM Rule:** Cap total container allocations to <= 70% of physical RAM (e.g., max 11 GB capped on a 16 GB laptop), leaving ~30% for host OS, display drivers, and user applications.
+  * **Data-Driven Sizing & Telemetry:** Read `memory.peak` to determine the actual high watermark under load, and monitor `memory.events` (`oom_kill` counter) to detect silent crashes.
+  * **CPU Throttling (`cpu.max`):** Enforce CPU quotas to prevent multithreaded inference from freezing the desktop UI.
+---
+
+### 14. Reddit: r/Python
+* **Name + link:** Reddit - r/Python (https://www.reddit.com/r/Python/comments/1x6iq32/bypassing_heavy_pytorch_wheels_for_desktop_python/)
+* **Type:** Subreddit / Online Community
+* **Audience:** Python developers, library authors, and packaging maintainers.
+* **Posting rules:** Technical topics regarding Python runtimes, C-extensions, packaging, and execution speed.
+  * *Date checked:* Oct 15, 2026
+* **Why it fits Horus:** Tackles the 21–46 minute PyTorch/CUDA setup bottleneck and options for lightweight binary runtimes (e.g., `llama-cpp-python`, Nuitka).
+* **Published Post Content:**
+  > **Title:** Bypassing heavy PyTorch wheels for desktop Python application distribution
+  > 
+  > Hi Python devs,
+  > 
+  > We are three final-year students at Epitech working on Horus, a local offline multi-agent backend written in Python. Our biggest distribution hurdle is dependency management on end-user machines.
+  > 
+  > Bottlenecks observed in our last user test:
+  > * Dependency installation takes 21–46 minutes on user machines due to PyTorch/CUDA wheel resolution, reaching a 25 GB footprint.
+  > * CPU-bound inference takes ~40 seconds during routing, causing persistent WebSocket connections to drop.
+  > 
+  > We are looking for Python packaging and runtime advice on:
+  > * Replacing PyTorch with prebuilt C++ bindings (`llama-cpp-python` or native C binaries) for the CPU execution path.
+  > * Compiling CPython orchestrator code into standalone executables via Nuitka.
+  > * Pinning wheels and pre-bundling runtimes to eliminate on-device compilation.
+  > * Implementing async heartbeats to keep WebSockets alive during blocking compute tasks.
+  > 
+  > **Looking for code reviews:** We have 1–4 hour scoped tasks for Python packaging and hardware detection reviews.
+  > 
+  > *Disclosure:* Horus is closed source and licensed commercially. Our benchmark suite is open source (`Horus-EIP/horus-bench-kit`). Contributions are unpaid/voluntary under an NDA agreement, returning thorough code reviews, project credit, and professional references.
+* **Status:** Published & Active
+
+* **Key Community Feedback & Advice Received (r/Python):**
+  * **Replace PyTorch with ONNX Runtime:** To avoid pulling massive PyTorch/CUDA binaries, export non-generative models or embedding/routing classifiers to ONNX format and execute them via `onnxruntime` (CPU).
+  * **Fast Package Resolution with `uv`:** Replace `pip` with `uv` for dependency resolution during setup, or ship pre-built runtime containers/executables so end-users perform zero local package compilation.
+  * **`llama.cpp` + Docker Stack Validation:** Standardizing on a pre-packaged Docker container executing `llama.cpp` directly is recommended as the cleanest distribution path, isolating the Python orchestrator from C++ binary execution and avoiding client system contamination.
+  * **Astral Optimized Wheels (`wheels.astral.sh`):** Leverage pre-built, ultra-fast Python wheels from the Astral ecosystem (`uv`) to bypass PyTorch/CUDA compilation stages and minimize installation time on end-user machines.
+  * * **llama-cpp-python Adoption:** Recommended for shipping lightweight cross-platform CPU binaries without multi-GB PyTorch wheels. Allocate engineering effort for the runtime adapter layer.
+  * **Packaging Tooling:** Start with PyInstaller for distribution builds; Nuitka introduces high friction when bundling C-extension bindings like `llama-cpp-python`.
+  * **CI Prebuilt Wheels:** Build and pin platform-specific wheels in CI to avoid native C++ compilation on user hardware.
+
+---
+
+### 15. GitHub Discussions: FastAPI
+* **Name + link:** GitHub Discussions - FastAPI (https://github.com/fastapi/fastapi/discussions/16502)
+* **Type:** Public Discussion Board
+* **Audience:** Asynchronous Python engineers, ASGI specialists, and API developers.
+* **Posting rules:** Focused on async event loop mechanics, WebSockets, and queueing patterns.
+  * *Date checked:* Oct 15, 2026
+* **Why it fits Horus:** Direct focus on ASGI/FastAPI WebSocket connection state, heartbeat frames, and async worker queue management under long synchronous CPU blocks.
+* **Published Post Content:**
+  > **Title:** Maintaining healthy WebSocket connections during 30s+ synchronous CPU inference blocks
+  > 
+  > Hi everyone,
+  > 
+  > In our offline assistant project, a FastAPI backend communicates with a local frontend over WebSockets. On machines without GPUs, agent reasoning steps can take up to 40 seconds before the first token is generated. This idle gap causes WebSocket connections to drop or time out.
+  > 
+  > We are restructuring the transport logic: returning an immediate job acknowledgment, running inference in a bounded background queue, and pushing progress/heartbeat frames every few seconds prior to token streaming.
+  > 
+  > What async patterns or middleware do you recommend in FastAPI to ensure background CPU-bound tasks never starve the main asyncio event loop or disconnect WebSockets?
+  > 
+  > *Note on context:* Horus is a commercial, closed-source project (student final-year project), but our testing tools are open source (`Horus-EIP/horus-bench-kit`). Voluntary, unpaid code reviews on our async WebSocket queue are welcomed under NDA with full credit and references provided.
+* **Status:** Published & Active
+* **Key Community Feedback & Advice Received (FastAPI Discussions):**
+  * **Provide a Minimal Reproducible Example (MRE):** Abstract questions often trigger automated or vague responses. Providing a runnable MRE using dummy CPU loops (`time.sleep` / heavy CPU functions) yields direct, code-level architectural fixes from maintainers.
+  * **Event Loop Isolation:** Ensure blocking tasks are offloaded to `asyncio.to_thread` or a `ProcessPoolExecutor` so worker pings continue emitting during execution.
+  * **Root Cause Identified:** WebSocket dropouts are caused by `asyncio` event loop starvation during 40s CPU calls, preventing Uvicorn from responding to keepalive pings (20s interval / 20s timeout).
+  * **ProcessPoolExecutor Pattern:** Offload CPU tasks to `ProcessPoolExecutor` with model pre-loading in `initializer=_init_worker` and explicit core thread limits (`OMP_NUM_THREADS`).
+  * **Dedicated Routing Pool:** Run light classification/routing in a isolated `ProcessPoolExecutor(max_workers=1)` so short tasks never queue behind heavy 40s generations.
+  * **Resumable Protocol Implementation:**
+    ```python
+    # Core async state pattern for CPU-bound tasks in FastAPI
+    fut = loop.run_in_executor(app.state.pool, route_request, payload)
+    jobs[job_id] = fut
+    fut.add_done_callback(lambda f, j=job_id: loop.call_later(300, jobs.pop, j, None))
+    ```
+
+---
