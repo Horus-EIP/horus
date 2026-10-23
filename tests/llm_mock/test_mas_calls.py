@@ -1,9 +1,9 @@
 import json
-
+from pathlib import Path
+import yaml
 import jsonschema
 import pytest
 from clients import ROSTER, mas_prompts, route_body, text_body
-
 from llm_mock.mas_calls import SMALL_TALK_REPLY
 
 PROMPTS = mas_prompts()
@@ -25,8 +25,11 @@ GREETINGS = ("Hello!", "hi there", "Thanks!", "Thank you very much", "good morni
 
 def route(server, question, roster=ROSTER):
     body = route_body(question, roster)
+    
+    schema = body.get("response_format", {}).get("json_schema", {}).get("schema", {})
+            
     reply = json.loads(server.content(body, "task_route"))
-    jsonschema.validate(reply, body["response_format"]["json_schema"]["schema"])
+    jsonschema.validate(reply, schema)
     return reply
 
 
@@ -160,24 +163,92 @@ def test_the_review_continues_while_steps_remain_and_is_done_after(server):
 
 
 def test_the_aggregate_has_one_section_per_step_and_the_sources(server):
-    history = [
-        {"role": "user", "message": "Compare Q4 spend with the policy"},
-        {"role": "assistant", "message": "Q4 spend was $3.1M. [Source: 1_Q4_2025_Financial_Report.md]"},
-        {"role": "assistant", "message": "first try", "status": "failed", "reason": "error", "attempt": 1},
-        {"role": "assistant", "message": "Hotels are capped at $250. [Source: 4_Expense_Policy.md]\n\nMore."},
-        {"role": "assistant", "message": "Hotels are capped at $250. [Source: 4_Expense_Policy.md]\n\nMore."},
-    ]
-    body = text_body(PROMPTS.get_prompt_final_answer_generation(history, history[-1]["message"]), 3072)
-    assert server.content(body, "aggregate") == (
-        "## Answer\n\n"
-        "### Step 1\n\nQ4 spend was $3.1M. [Source: 1_Q4_2025_Financial_Report.md]\n\n"
-        "### Step 2\n\nHotels are capped at $250. [Source: 4_Expense_Policy.md]\n\nMore.\n\n"
-        "**Sources:** 1_Q4_2025_Financial_Report.md, 4_Expense_Policy.md"
-    )
-
+        history = [
+            {"role": "user", "message": "Compare Q4 spend with the policy"},
+            {"role": "assistant", "message": "Q4 spend was $3.1M. [1_Q4_2025_Financial_Report.md]"},
+            {"role": "assistant", "message": "first try", "status": "failed", "reason": "error", "attempt": 1},
+            {"role": "assistant", "message": "Hotels are capped at $250.\n\nMore. [4_Expense_Policy.md]"},
+            {"role": "assistant", "message": "Hotels are capped at $250.\n\nMore. [4_Expense_Policy.md]"},
+        ]
+        body = text_body(PROMPTS.get_prompt_final_answer_generation(history, history[-1]["message"]), 3072)
+        assert server.content(body, "aggregate") == (
+            "## Answer\n\n"
+            "### Step 1\n\nQ4 spend was $3.1M. [1_Q4_2025_Financial_Report.md]\n\n"
+            "### Step 2\n\nHotels are capped at $250.\n\nMore. [4_Expense_Policy.md]\n\n"
+            "**Sources:** 1_Q4_2025_Financial_Report.md, 4_Expense_Policy.md"
+        )
 
 def test_an_aggregate_with_an_unreadable_history_keeps_the_final_output(server):
     body = text_body(PROMPTS.get_prompt_final_answer_generation("not a list(", "Only this."))
     assert server.content(body, "aggregate") == "## Answer\n\n### Step 1\n\nOnly this."
     body = text_body(PROMPTS.get_prompt_final_answer_generation({"role": "user"}, "Still this."))
     assert server.content(body, "aggregate") == "## Answer\n\n### Step 1\n\nStill this."
+
+
+def test_router_accuracy_on_testset(server):
+    testset_path = Path(__file__).parents[2] / "tests" / "mas" / "data" / "router_testset.yaml"
+    with open(testset_path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+
+    items = data.get("items", [])
+    correct = 0
+    total = len(items)
+
+    for item in items:
+        question = item["question"]
+        expected_route = item["route"]
+        expected_agents = item.get("agents", [])
+
+        reply = route(server, question)
+        predicted_route = reply["route"]
+        predicted_agent = reply["agent"]
+
+        if expected_route == "DIRECT_ANSWER":
+            route_ok = (predicted_route == "SINGLE_AGENT")
+            agent_ok = (predicted_agent == "General-Assistant")
+        else:
+            route_ok = (predicted_route == expected_route)
+            agent_ok = True
+            if expected_agents:
+                agent_ok = (predicted_agent in expected_agents)
+
+        if route_ok and agent_ok:
+            correct += 1
+
+    accuracy = correct / total if total > 0 else 0
+    assert accuracy >= 0.90, f"Current accuracy : {accuracy * 100:.1f}% (required threshold : 90%)"
+
+
+def test_router_accuracy_on_holdout(server):
+    holdout_path = Path(__file__).parents[2] / "tests" / "mas" / "data" / "router_holdout.yaml"
+    assert holdout_path.exists(), "Holdout dataset missing! Required to validate accuracy (B-138)."
+        
+    with open(holdout_path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+
+    items = data.get("items", [])
+    correct = 0
+    total = len(items)
+
+    for item in items:
+        expected_route = item["route"]
+        expected_agents = item.get("agents", [])
+
+        reply = route(server, item["question"])
+        predicted_route = reply["route"]
+        predicted_agent = reply["agent"]
+
+        if expected_route == "DIRECT_ANSWER":
+            route_ok = (predicted_route == "SINGLE_AGENT")
+            agent_ok = (predicted_agent == "General-Assistant")
+        else:
+            route_ok = (predicted_route == expected_route)
+            agent_ok = True
+            if expected_agents:
+                agent_ok = (predicted_agent in expected_agents)
+
+        if route_ok and agent_ok:
+            correct += 1
+
+    accuracy = correct / total if total > 0 else 0
+    assert accuracy >= 0.90, f"Holdout accuracy : {accuracy * 100:.1f}% (required threshold : 90%)"

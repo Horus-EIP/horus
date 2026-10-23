@@ -1,0 +1,161 @@
+version: 1.0.0
+items:
+# --- DIRECT ANSWER (Small Talk & Math) ---
+  - id: holdout-direct-01
+    category: direct
+    question: "good day to you horus"
+    route: DIRECT_ANSWER
+
+  - id: holdout-direct-02
+    category: direct
+    question: "calculate 15 multiply by 4"
+    route: DIRECT_ANSWER
+
+  - id: holdout-direct-03
+    category: direct
+    question: "hey horus, what can you do?"
+    route: DIRECT_ANSWER
+
+  - id: holdout-direct-04
+    category: direct
+    question: "500 minus 120"
+    route: DIRECT_ANSWER
+
+# --- FINANCE (SINGLE_AGENT) ---
+  - id: holdout-fin-01
+    category: document
+    question: "What are the projected profits for the next quarter?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst]
+
+  - id: holdout-fin-02
+    category: document
+    question: "Can you give me a breakdown of the operating costs and the payroll?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst]
+
+  - id: holdout-fin-03
+    category: document
+    question: "Did we exceed our budget for cloud services?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst]
+
+  - id: holdout-fin-04
+    category: document
+    question: "Show me the EBITDA and net margins."
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst]
+
+# --- HR (SINGLE_AGENT) ---
+  - id: holdout-hr-01
+    category: document
+    question: "What is the probation period for new staff?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+
+  - id: holdout-hr-02
+    category: document
+    question: "Can I take unpaid vacation to care for my dependents?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+
+  - id: holdout-hr-03
+    category: document
+    question: "Who do I contact regarding workplace harassment?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+
+  - id: holdout-hr-04
+    category: document
+    question: "What are the rules around overtime pay?"
+    route: SINGLE_AGENT
+    agents: [HR-Assistant]
+
+# --- COMPLIANCE & IT SECURITY (SINGLE_AGENT) ---
+  - id: holdout-comp-01
+    category: document
+    question: "What encryption level is needed for customer data protection?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+
+  - id: holdout-comp-02
+    category: document
+    question: "Have we had any suspicious activities or phishing attempts recently?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+
+  - id: holdout-comp-03
+    category: document
+    question: "Who are the administrators for the restricted accounts?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+
+  - id: holdout-comp-04
+    category: document
+    question: "Is MFA mandatory for all remote access?"
+    route: SINGLE_AGENT
+    agents: [Compliance-Officer]
+
+# --- EXPENSES (SINGLE_AGENT - Both Finance and HR can handle) ---
+  - id: holdout-exp-01
+    category: document
+    question: "What is the corporate allowance for a business meal?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst, HR-Assistant]
+
+  - id: holdout-exp-02
+    category: document
+    question: "Do I need to submit receipts for train tickets?"
+    route: SINGLE_AGENT
+    agents: [Finance-Analyst, HR-Assistant]
+
+# --- RESEARCH (SINGLE_AGENT) ---
+  - id: holdout-res-01
+    category: research
+    question: "Search across all sources for mentions of the CEO."
+    route: SINGLE_AGENT
+    agents: [Researcher]
+
+  - id: holdout-res-02
+    category: research
+    question: "Summarise every document in the knowledge base."
+    route: SINGLE_AGENT
+    agents: [Researcher]
+
+# --- GENERAL TRIVIA (SINGLE_AGENT) ---
+  - id: holdout-gen-01
+    category: general
+    question: "Who wrote the play Hamlet?"
+    route: SINGLE_AGENT
+    agents: [General-Assistant]
+
+  - id: holdout-gen-02
+    category: general
+    question: "What is the speed of light?"
+    route: SINGLE_AGENT
+    agents: [General-Assistant]
+
+# --- COMPLEX TASKS (Multi-domain or Comparison) ---
+  - id: holdout-complex-01
+    category: complex
+    question: "Compare the Q3 revenues with the Q4 revenues."
+    route: COMPLEX_TASK
+    agents: [Finance-Analyst]
+
+  - id: holdout-complex-02
+    category: complex
+    question: "What is the hotel limit, and how many vacation days do we get?"
+    route: COMPLEX_TASK
+    agents: [Finance-Analyst, HR-Assistant]
+
+  - id: holdout-complex-03
+    category: complex
+    question: "Who approves the payroll, and what is our data retention policy for those records?"
+    route: COMPLEX_TASK
+    agents: [Finance-Analyst, HR-Assistant, Compliance-Officer]
+
+  - id: holdout-complex-04
+    category: complex
+    question: "Summarize the financial results and also the security incident logs."
+    route: COMPLEX_TASK
+    agents: [Finance-Analyst, Compliance-Officer]
