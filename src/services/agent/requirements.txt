@@ -11,7 +11,7 @@ opentelemetry-exporter-otlp
 langchain
 langchain-core
 # Force legacy bcrypt for MAS compatibility
-bcrypt==3.2.2
+bcrypt==5.0.0
 spacy
 python-multipart
 pydantic

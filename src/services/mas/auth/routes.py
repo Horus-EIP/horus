@@ -6,6 +6,8 @@ a Redis blacklist keyed by the JWT's ``nonce``.
 
 from datetime import datetime, timedelta
 from typing import Annotated
+from bcrypt import hashpw, gensalt
+import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
@@ -14,7 +16,6 @@ from starlette import status
 
 from auth.auth_tool_functions import (
     authenticate_user,
-    bcrypt_context,
     create_access_token,
     get_current_user,
 )
@@ -46,9 +47,11 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 )
 async def create_user(db: db_dependency, create_user_request: CreateUserRequest):
     """Create a user with a bcrypt-hashed password. 409 if username exists."""
+    password_sha = hashlib.sha256(create_user_request.password.encode('utf-8')).hexdigest()
+    salt = gensalt()
     create_user_model = Users(
         username=create_user_request.username,
-        hashed_password=bcrypt_context.hash(create_user_request.password),
+        hashed_password=hashpw(password_sha.encode('utf-8'), salt),
     )
     db.add(create_user_model)
     try:

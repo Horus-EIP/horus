@@ -7,7 +7,7 @@ from typing import Annotated, Any
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+from bcrypt import checkpw, hashpw, gensalt
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
@@ -21,7 +21,6 @@ from db.redis_client import redis_db
 
 logger = get_logger("auth")
 
-bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_bearer = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 api_key = APIKeyHeader(name="x-api-key")
@@ -67,7 +66,9 @@ def authenticate_user(username: str, password: str, db, ip_address: str = None):
         logger.warning(f"Authentication failed - User not found: {username}")
         return False
 
-    if not bcrypt_context.verify(password, user.hashed_password):
+    password_sha = hashlib.sha256(password.encode('utf-8')).hexdigest()
+    
+    if not checkpw(password_sha.encode('utf-8'), user.hashed_password.encode('utf-8')):
         log_auth_operation("LOGIN", username, success=False)
         log_security_event(
             "LOGIN_INVALID_PASSWORD",
@@ -237,7 +238,9 @@ def modify_user_password(
         logger.warning(f"Authentication failed - User not found: {username}")
         return False
 
-    if not bcrypt_context.verify(old_password, user.hashed_password):
+    password_sha = hashlib.sha256(old_password.encode('utf-8')).hexdigest()
+
+    if not checkpw(password_sha.encode('utf-8'), user.hashed_password.encode('utf-8')):
         log_auth_operation("LOGIN", username, success=False)
         log_security_event(
             "LOGIN_INVALID_PASSWORD",
@@ -247,7 +250,10 @@ def modify_user_password(
         logger.warning(f"Authentication failed - Invalid password for user: {username}")
         return False
 
-    user.hashed_password = bcrypt_context.hash(new_password)
+    password_sha = hashlib.sha256(new_password.encode('utf-8')).hexdigest()
+    salt = gensalt()
+    user.hashed_password = hashpw(password_sha.encode('utf-8'), salt)
+
     try:
         db.commit()
         return True
@@ -364,8 +370,9 @@ def verify_agent_api_key(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid API key",
             )
-
-        if not bcrypt_context.verify(api_key, agent.api_key):
+        password_sha = hashlib.sha256(api_key.encode('utf-8')).hexdigest()
+        agent_key = agent.api_key
+        if not checkpw(password_sha.encode('utf-8'), agent_key.encode('utf-8')):
             log_security_event(
                 "AGENT_API_KEY_INVALID",
                 agent_id=agent.id,
@@ -391,4 +398,6 @@ def verify_agent_api_key(
 
 def hash_api_key(api_key: str) -> str:
     """Hash API key for secure storage"""
-    return bcrypt_context.hash(api_key)
+    password_sha = hashlib.sha256(api_key.encode('utf-8')).hexdigest()
+    salt = gensalt()
+    return hashpw(password_sha.encode('utf-8'), salt).decode('utf-8')

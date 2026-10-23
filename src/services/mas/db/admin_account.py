@@ -1,6 +1,7 @@
 import sys
 
-from auth.auth_tool_functions import bcrypt_context
+from bcrypt import hashpw, gensalt, checkpw
+import hashlib
 from auth.permissions import Role
 from core.config import settings
 from core.hybrid_logging import log_user_action
@@ -30,7 +31,8 @@ def usable_password(password: str | None) -> bool:
 
 def has_password(user: Users, password: str | None) -> bool:
     try:
-        return bool(bcrypt_context.verify(password or "", user.hashed_password))
+        password_sha = hashlib.sha256(password.encode('utf-8')).hexdigest()
+        return bool(checkpw(password_sha.encode('utf-8') or "", user.hashed_password))
     except (TypeError, ValueError):
         return False
 
@@ -43,9 +45,12 @@ def create_admin(db, username: str, password: str) -> str:
             f"or '{SHIPPED_PASSWORD}'. {HOW_TO_SET}",
         )
         return REFUSED
+    
+    password_sha = hashlib.sha256(password.encode('utf-8')).hexdigest()
+    salt = gensalt()
     admin = Users(
         username=username,
-        hashed_password=bcrypt_context.hash(password),
+        hashed_password=hashpw(password_sha.encode('utf-8'), salt),
         role=Role.ADMIN.value,
     )
     db.add(admin)
@@ -66,7 +71,10 @@ def replace_shipped_password(db, admin: Users, password: str) -> str:
             f"'{SHIPPED_PASSWORD}'. {HOW_TO_SET}",
         )
         return SHIPPED
-    admin.hashed_password = bcrypt_context.hash(password)
+    
+    password_sha = hashlib.sha256(password.encode('utf-8')).hexdigest()
+    salt = gensalt()
+    admin.hashed_password = hashpw(password_sha.encode('utf-8'), salt)
     db.commit()
     log_success(
         "init_db",

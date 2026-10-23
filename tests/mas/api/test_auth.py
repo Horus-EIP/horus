@@ -16,9 +16,19 @@ from sqlalchemy.exc import IntegrityError
 from auth.routes import router as auth_router
 
 
+def _checkpw_result(result: bool):
+    def checkpw(password: bytes, hashed_password: bytes) -> bool:
+        assert isinstance(password, bytes)
+        assert isinstance(hashed_password, bytes)
+        assert len(password) <= 72
+        return result
+
+    return checkpw
+
+
 class TestLogin:
-    @patch("auth.auth_tool_functions.bcrypt_context")
-    def test_valid_credentials_return_token(self, mock_bcrypt, make_client, mock_db):
+    @patch("auth.auth_tool_functions.checkpw")
+    def test_valid_credentials_return_token(self, mock_checkpw, make_client, mock_db):
         user = MagicMock(
             username="admin",
             hashed_password="hash",
@@ -26,12 +36,13 @@ class TestLogin:
             id="admin-id",
         )
         mock_db.query.return_value.filter.return_value.first.return_value = user
-        mock_bcrypt.verify.return_value = True
+        mock_checkpw.side_effect = _checkpw_result(True)
         client = make_client(auth_router)
         r = client.post("/auth/token", data={"username": "admin", "password": "good"})
         # JWT encoding may fail in CI without the env secret; 200 or 401 both
         # confirm the credential check ran.
         assert r.status_code in (200, 401)
+        mock_checkpw.assert_called_once()
 
     def test_unknown_user_returns_401(self, make_client, mock_db):
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -39,14 +50,15 @@ class TestLogin:
         r = client.post("/auth/token", data={"username": "ghost", "password": "x"})
         assert r.status_code == 401
 
-    @patch("auth.auth_tool_functions.bcrypt_context")
-    def test_wrong_password_returns_401(self, mock_bcrypt, make_client, mock_db):
+    @patch("auth.auth_tool_functions.checkpw")
+    def test_wrong_password_returns_401(self, mock_checkpw, make_client, mock_db):
         user = MagicMock(hashed_password="hash", username="u", role="user", id="u-id")
         mock_db.query.return_value.filter.return_value.first.return_value = user
-        mock_bcrypt.verify.return_value = False
+        mock_checkpw.side_effect = _checkpw_result(False)
         client = make_client(auth_router)
         r = client.post("/auth/token", data={"username": "u", "password": "bad"})
         assert r.status_code == 401
+        mock_checkpw.assert_called_once()
 
 
 class TestRegister:
