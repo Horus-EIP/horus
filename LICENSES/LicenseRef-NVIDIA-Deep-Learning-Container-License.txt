@@ -1,4 +1,4 @@
-LicenseRef-NVIDIA-Deep-Learning-Container-License: the text shipped in nvidia/cuda:12.4.0-base-ubuntu22.04 at /NGC-DL-CONTAINER-LICENSE, read on 2026-10-08.
+LicenseRef-NVIDIA-Deep-Learning-Container-License: the text shipped in nvidia/cuda:12.4.0-base-ubuntu22.04 at /NGC-DL-CONTAINER-LICENSE, read on 2026-10-23.
 
 NVIDIA DEEP LEARNING CONTAINER LICENSE
 

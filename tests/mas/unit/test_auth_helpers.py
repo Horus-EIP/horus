@@ -13,7 +13,6 @@ from starlette import status
 
 from auth.auth_tool_functions import (
     authenticate_user,
-    bcrypt_context,
     create_access_token,
     get_current_user,
     get_current_user_from_token,
@@ -23,6 +22,11 @@ from auth.auth_tool_functions import (
 )
 from core.config import settings
 from db.models import Agents
+from unit.password_test_helpers import (
+    hash_legacy_password,
+    hash_password,
+    verify_password,
+)
 
 
 class TestAuthenticateUser:
@@ -34,7 +38,7 @@ class TestAuthenticateUser:
         self.mock_user = MagicMock()
         self.mock_user.id = 1
         self.mock_user.username = "testuser"
-        self.mock_user.hashed_password = bcrypt_context.hash("password123")
+        self.mock_user.hashed_password = hash_password("password123").decode("ascii")
 
     @patch("auth.auth_tool_functions.log_auth_operation")
     @patch("auth.auth_tool_functions.log_security_event")
@@ -52,6 +56,35 @@ class TestAuthenticateUser:
             details="Successful login: testuser",
             ip_address="127.0.0.1",
         )
+
+    @patch("auth.auth_tool_functions.log_auth_operation")
+    @patch("auth.auth_tool_functions.log_security_event")
+    def test_authenticate_user_supports_passwords_longer_than_bcrypt_limit(
+        self, mock_log_security, mock_log_auth
+    ):
+        password = "p" * 200
+        self.mock_user.hashed_password = hash_password(password).decode("ascii")
+        self.mock_db.query().filter().first.return_value = self.mock_user
+
+        result = authenticate_user("testuser", password, self.mock_db)
+
+        assert result == self.mock_user
+        mock_log_auth.assert_called_with("LOGIN", "testuser", success=True)
+
+    @patch("auth.auth_tool_functions.log_auth_operation")
+    @patch("auth.auth_tool_functions.log_security_event")
+    def test_authenticate_user_upgrades_legacy_password_hash(
+        self, mock_log_security, mock_log_auth
+    ):
+        self.mock_user.hashed_password = hash_legacy_password("password123")
+        self.mock_db.query().filter().first.return_value = self.mock_user
+
+        result = authenticate_user("testuser", "password123", self.mock_db)
+
+        assert result == self.mock_user
+        assert verify_password("password123", self.mock_user.hashed_password)
+        self.mock_db.commit.assert_called_once()
+        mock_log_auth.assert_called_with("LOGIN", "testuser", success=True)
 
     @patch("auth.auth_tool_functions.log_auth_operation")
     @patch("auth.auth_tool_functions.log_security_event")
@@ -353,30 +386,43 @@ class TestGetCurrentUserFromToken:
 class TestPasswordHashing:
     """Test password hashing functionality."""
 
-    def test_bcrypt_context_hash_and_verify(self):
+    def test_bcrypt_hash_and_verify(self):
         """Test password hashing and verification."""
         password = "test_password_123"
 
         # Hash the password
-        hashed = bcrypt_context.hash(password)
+        hashed = hash_password(password)
 
         # Verify the password
-        assert bcrypt_context.verify(password, hashed) is True
-        assert bcrypt_context.verify("wrong_password", hashed) is False
+        assert verify_password(password, hashed) is True
+        assert verify_password("wrong_password", hashed) is False
 
-    def test_bcrypt_context_different_hashes(self):
+    def test_bcrypt_hashes_are_salted(self):
         """Test that same password produces different hashes."""
         password = "test_password_123"
 
-        hash1 = bcrypt_context.hash(password)
-        hash2 = bcrypt_context.hash(password)
+        hash1 = hash_password(password)
+        hash2 = hash_password(password)
 
         # Hashes should be different (due to salt)
         assert hash1 != hash2
 
         # But both should verify correctly
-        assert bcrypt_context.verify(password, hash1) is True
-        assert bcrypt_context.verify(password, hash2) is True
+        assert verify_password(password, hash1) is True
+        assert verify_password(password, hash2) is True
+
+    def test_legacy_raw_bcrypt_hash_verifies_and_returns_an_upgrade(self):
+        from auth.passwords import verify_and_upgrade_credential
+
+        legacy_hash = hash_legacy_password("legacy-password")
+        valid, upgraded_hash = verify_and_upgrade_credential(
+            "legacy-password", legacy_hash
+        )
+
+        assert valid is True
+        assert upgraded_hash is not None
+        assert verify_password("legacy-password", upgraded_hash)
+        assert not verify_password("legacy-password", legacy_hash)
 
 
 class TestModifyUserPassword:
@@ -388,7 +434,7 @@ class TestModifyUserPassword:
         self.mock_user = MagicMock()
         self.mock_user.id = 1
         self.mock_user.username = "testuser"
-        self.mock_user.hashed_password = bcrypt_context.hash("old_password")
+        self.mock_user.hashed_password = hash_password("old_password").decode("ascii")
 
     @patch("auth.auth_tool_functions.log_auth_operation")
     @patch("auth.auth_tool_functions.log_security_event")
@@ -401,7 +447,23 @@ class TestModifyUserPassword:
         )
 
         assert result is True
-        assert bcrypt_context.verify("new_password", self.mock_user.hashed_password)
+        assert verify_password("new_password", self.mock_user.hashed_password)
+        self.mock_db.commit.assert_called_once()
+
+    @patch("auth.auth_tool_functions.log_auth_operation")
+    @patch("auth.auth_tool_functions.log_security_event")
+    def test_modify_user_password_accepts_legacy_hash(
+        self, mock_log_security, mock_log_auth
+    ):
+        self.mock_user.hashed_password = hash_legacy_password("old_password")
+        self.mock_db.query().filter().first.return_value = self.mock_user
+
+        result = modify_user_password(
+            "testuser", "old_password", "new_password", self.mock_db
+        )
+
+        assert result is True
+        assert verify_password("new_password", self.mock_user.hashed_password)
         self.mock_db.commit.assert_called_once()
 
     @patch("auth.auth_tool_functions.log_auth_operation")
@@ -445,7 +507,7 @@ class TestModifyUserPassword:
         )
         self.mock_db.commit.assert_not_called()
         # Password should remain unchanged
-        assert bcrypt_context.verify("old_password", self.mock_user.hashed_password)
+        assert verify_password("old_password", self.mock_user.hashed_password)
 
     def test_modify_user_password_db_error(self):
         """Test password modification with database error."""
@@ -494,7 +556,7 @@ class TestAgentAuthentication:
         self.mock_db = MagicMock()
         self.mock_agent = MagicMock(spec=Agents)
         self.mock_agent.id = "test-agent-id"
-        self.mock_agent.api_key = bcrypt_context.hash("valid-api-key")
+        self.mock_agent.api_key = hash_password("valid-api-key").decode("ascii")
 
     @patch("auth.auth_tool_functions.log_security_event")
     def test_verify_agent_api_key_success(self, mock_log_security):
@@ -508,6 +570,20 @@ class TestAgentAuthentication:
         result = verify_agent_api_key(header_value, self.mock_db)
 
         assert result == (agent_id, api_key)
+
+    @patch("auth.auth_tool_functions.log_security_event")
+    def test_verify_agent_api_key_upgrades_legacy_hash(self, mock_log_security):
+        agent_id = "legacy-agent"
+        api_key = "legacy-api-key"
+        self.mock_agent.id = agent_id
+        self.mock_agent.api_key = hash_legacy_password(api_key)
+        self.mock_db.query().filter().first.return_value = self.mock_agent
+
+        result = verify_agent_api_key(f"{agent_id}:{api_key}", self.mock_db)
+
+        assert result == (agent_id, api_key)
+        assert verify_password(api_key, self.mock_agent.api_key)
+        self.mock_db.commit.assert_called_once()
 
     @patch("auth.auth_tool_functions.log_security_event")
     def test_verify_agent_api_key_invalid_format(self, mock_log_security):
@@ -563,4 +639,4 @@ class TestAgentAuthentication:
         hashed = hash_api_key(api_key)
 
         assert hashed != api_key
-        assert bcrypt_context.verify(api_key, hashed) is True
+        assert verify_password(api_key, hashed) is True

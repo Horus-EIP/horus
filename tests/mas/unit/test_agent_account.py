@@ -9,11 +9,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import db.models  # noqa: F401
-from auth.auth_tool_functions import bcrypt_context
 from auth.permissions import Role
 from db import agent_account
 from db.database import Base
 from db.models import Users
+from unit.password_test_helpers import hash_legacy_password, hash_password, verify_password
 
 GENERATED = "Kq3-vT9xLm2_Rw7pZc4Nd8"
 CHOSEN = "Chosen-Pass-2026!"
@@ -46,7 +46,7 @@ def logs():
 def add_agent(db, password: str, role: str = Role.AGENT.value) -> Users:
     agent = Users(
         username="agent",
-        hashed_password=bcrypt_context.hash(password),
+        hashed_password=hash_password(password),
         role=role,
     )
     db.add(agent)
@@ -63,7 +63,7 @@ class TestANewInstall:
         assert agent_account.ensure_agent_account(session, "agent", GENERATED) == "created"
         agent = session.query(Users).filter_by(username="agent").one()
         assert agent.role == Role.AGENT.value
-        assert bcrypt_context.verify(GENERATED, agent.hashed_password)
+        assert verify_password(GENERATED, agent.hashed_password)
 
     @pytest.mark.parametrize("password", ["", "   ", "agent", " agent "])
     def test_an_empty_or_shipped_password_creates_no_account(self, session, logs, password):
@@ -83,8 +83,8 @@ class TestAnUpgradeFromAnInstallThatStillHasTheShippedAgentPassword:
 
         assert agent_account.ensure_agent_account(session, "agent", GENERATED) == "replaced"
 
-        assert bcrypt_context.verify(GENERATED, stored_hash(session))
-        assert not bcrypt_context.verify("agent", stored_hash(session))
+        assert verify_password(GENERATED, stored_hash(session))
+        assert not verify_password("agent", stored_hash(session))
         logs["log_user_action"].assert_called_once()
         assert logs["log_user_action"].call_args.args[0] == "REPLACE_SHIPPED_AGENT_PASSWORD"
 
@@ -117,8 +117,20 @@ class TestAnUpgradeWhereTheAgentChangedThePassword:
         assert agent_account.ensure_agent_account(session, "agent", environment) == "differs"
 
         assert stored_hash(session) == before
-        assert bcrypt_context.verify(CHOSEN, stored_hash(session))
+        assert verify_password(CHOSEN, stored_hash(session))
         assert "SUPER_AGENT_PASSWORD" in logs["logger"].warning.call_args.args[0]
+
+    def test_a_legacy_password_matches_the_environment_during_startup(
+        self, session, logs
+    ):
+        agent = add_agent(session, GENERATED)
+        agent.hashed_password = hash_legacy_password(GENERATED)
+        session.commit()
+        before = stored_hash(session)
+
+        assert agent_account.ensure_agent_account(session, "agent", GENERATED) == "matches"
+
+        assert stored_hash(session) == before
 
     def test_an_existing_admin_account_is_restricted_without_changing_its_password(
         self, session, logs
@@ -131,7 +143,7 @@ class TestAnUpgradeWhereTheAgentChangedThePassword:
         account = session.query(Users).filter_by(username="agent").one()
         assert account.role == Role.AGENT.value
         assert account.hashed_password == before
-        assert bcrypt_context.verify(CHOSEN, account.hashed_password)
+        assert verify_password(CHOSEN, account.hashed_password)
 
 
 class TestTheCommandTheInstallerRuns:

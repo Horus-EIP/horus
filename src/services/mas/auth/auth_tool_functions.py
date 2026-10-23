@@ -7,10 +7,10 @@ from typing import Annotated, Any
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
+from auth.passwords import hash_credential, verify_and_upgrade_credential
 from auth.permissions import Permission, check_permission
 from core.config import settings
 from core.hybrid_logging import log_security_event
@@ -21,7 +21,6 @@ from db.redis_client import redis_db
 
 logger = get_logger("auth")
 
-bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_bearer = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 api_key = APIKeyHeader(name="x-api-key")
@@ -67,7 +66,10 @@ def authenticate_user(username: str, password: str, db, ip_address: str = None):
         logger.warning(f"Authentication failed - User not found: {username}")
         return False
 
-    if not bcrypt_context.verify(password, user.hashed_password):
+    valid_password, upgraded_hash = verify_and_upgrade_credential(
+        password, user.hashed_password
+    )
+    if not valid_password:
         log_auth_operation("LOGIN", username, success=False)
         log_security_event(
             "LOGIN_INVALID_PASSWORD",
@@ -77,6 +79,15 @@ def authenticate_user(username: str, password: str, db, ip_address: str = None):
         )
         logger.warning(f"Authentication failed - Invalid password for user: {username}")
         return False
+
+    if upgraded_hash:
+        user.hashed_password = upgraded_hash
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to upgrade a legacy password hash for %s", username)
+            raise
 
     log_auth_operation("LOGIN", username, success=True)
     log_security_event(
@@ -237,7 +248,10 @@ def modify_user_password(
         logger.warning(f"Authentication failed - User not found: {username}")
         return False
 
-    if not bcrypt_context.verify(old_password, user.hashed_password):
+    valid_password, _ = verify_and_upgrade_credential(
+        old_password, user.hashed_password
+    )
+    if not valid_password:
         log_auth_operation("LOGIN", username, success=False)
         log_security_event(
             "LOGIN_INVALID_PASSWORD",
@@ -247,7 +261,8 @@ def modify_user_password(
         logger.warning(f"Authentication failed - Invalid password for user: {username}")
         return False
 
-    user.hashed_password = bcrypt_context.hash(new_password)
+    user.hashed_password = hash_credential(new_password)
+
     try:
         db.commit()
         return True
@@ -263,7 +278,7 @@ def modify_user_password(
 # ---------------------------------------------------------------------------
 # Agent credentials are high-entropy machine tokens presented on every
 # authenticated agent request (heartbeats, and hundreds of /tasks/task-step/
-# POSTs per streamed answer). Each verify runs bcrypt at passlib's default
+# POSTs per streamed answer). Each verify runs bcrypt at its default
 # cost factor (~150 ms) — pure CPU on a CPU-bound MAS. Cache successful
 # (agent_id, api_key) verifications so bcrypt runs once per credential, not
 # once per request: a process-local L1 dict in front of Redis (shared across
@@ -341,54 +356,57 @@ def verify_agent_api_key(
     Verifies the provided API key against stored agent API keys.
     Returns (agent_id, api_key) if the API key is valid, otherwise raises an HTTPException.
     """
-    try:
-        if ":" not in key:
-            raise ValueError("Invalid API key format")
-
-        agent_id, api_key = key.split(":", 1)
-
-        # Fast path: a recently verified (agent_id, key) pair skips the
-        # expensive bcrypt verify (and the DB lookup). Positive-only.
-        if _agent_auth_cache_get(agent_id, api_key):
-            return agent_id, api_key
-
-        agent = db.query(Agents).filter(Agents.id == agent_id).first()
-
-        if not agent:
-            log_security_event(
-                "AGENT_API_KEY_INVALID",
-                details="Invalid API key provided",
-            )
-            logger.warning("API key verification failed - Invalid API key")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid API key",
-            )
-
-        if not bcrypt_context.verify(api_key, agent.api_key):
-            log_security_event(
-                "AGENT_API_KEY_INVALID",
-                agent_id=agent.id,
-                details="Invalid API key provided",
-            )
-            logger.warning(f"API key verification failed for agent: {agent.id}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid API key",
-            )
-
-        _agent_auth_cache_store(agent_id, api_key)
-    except Exception as e:
-        log_error("auth", f"API key verification error: {str(e)}")
+    if ":" not in key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key format",
         )
 
+    agent_id, api_key = key.split(":", 1)
+
+    # Fast path: a recently verified (agent_id, key) pair skips bcrypt and the DB lookup.
+    if _agent_auth_cache_get(agent_id, api_key):
+        return agent_id, api_key
+
+    agent = db.query(Agents).filter(Agents.id == agent_id).first()
+    if not agent:
+        log_security_event(
+            "AGENT_API_KEY_INVALID",
+            details="Invalid API key provided",
+        )
+        logger.warning("API key verification failed - Invalid API key")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key",
+        )
+
+    valid_key, upgraded_hash = verify_and_upgrade_credential(api_key, agent.api_key)
+    if not valid_key:
+        log_security_event(
+            "AGENT_API_KEY_INVALID",
+            agent_id=agent.id,
+            details="Invalid API key provided",
+        )
+        logger.warning(f"API key verification failed for agent: {agent.id}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key",
+        )
+
+    if upgraded_hash:
+        agent.api_key = upgraded_hash
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to upgrade a legacy API key for agent %s", agent_id)
+            raise
+
+    _agent_auth_cache_store(agent_id, api_key)
     logger.debug(f"API key verified successfully for agent: {agent.id}")
     return agent_id, api_key
 
 
 def hash_api_key(api_key: str) -> str:
     """Hash API key for secure storage"""
-    return bcrypt_context.hash(api_key)
+    return hash_credential(api_key)
