@@ -16,7 +16,9 @@ OVER_BUDGET = "agent_llm_prompts_over_budget_total"
 
 
 def histogram(suffix: str, call: str, source: str) -> float:
-    return REGISTRY.get_sample_value(f"{HISTOGRAM}_{suffix}", {"call": call, "source": source}) or 0.0
+    return (
+        REGISTRY.get_sample_value(f"{HISTOGRAM}_{suffix}", {"call": call, "source": source}) or 0.0
+    )
 
 
 def over_budget(call: str) -> float:
@@ -83,8 +85,9 @@ class TestPromptTokensPerCall:
     def test_the_usage_chunk_of_a_stream_is_recorded(self, llama_server_env):
         llama_server_env.setenv("AGENT_STREAM_TOKENS", "1")
         total = histogram("sum", "answer", "usage")
-        with patch("requests.post", streamed("{}", 733)), patch(
-            "ai_agents.step_emitter.emit_step", MagicMock()
+        with (
+            patch("requests.post", streamed("{}", 733)),
+            patch("ai_agents.step_emitter.emit_step", MagicMock()),
         ):
             remote_agent().complete("q", "user", "rules")
 
@@ -95,7 +98,9 @@ class TestPromptTokensPerCall:
         with patch("requests.post", return_value=completion("ok", None)):
             remote_agent().decide("q", context="ctx")
 
-        expected = estimate_tokens(f"{GROUNDED_SYSTEM_PROMPT}\n\nRetrieved Content:\nctx\n\nTask: q")
+        expected = estimate_tokens(
+            f"{GROUNDED_SYSTEM_PROMPT}\n\nRetrieved Content:\nctx\n\nTask: q"
+        )
         assert histogram("sum", "grounded", "estimate") == total + expected
 
     def test_an_injected_model_given_its_own_prompt_records_an_estimate_of_that_prompt(self):
@@ -106,7 +111,9 @@ class TestPromptTokensPerCall:
         agent.decide("What was revenue?", context="Revenue was $5M.")
 
         sent = model.call_args.args[0]
-        assert sent.startswith("You are a helpful assistant. Answer using ONLY the provided context.")
+        assert sent.startswith(
+            "You are a helpful assistant. Answer using ONLY the provided context."
+        )
         assert histogram("sum", "grounded", "estimate") == total + estimate_tokens(sent)
 
     def test_an_injected_model_records_an_estimate_of_the_prompt_it_was_given(self):
@@ -140,8 +147,9 @@ class TestPromptTokenBudget:
         llama_server_env.setenv("AGENT_PROMPT_TOKEN_BUDGET", "1000")
         before = over_budget("answer")
         usage = {"prompt_tokens": 1880, "completion_tokens": 96}
-        with caplog.at_level(logging.WARNING, logger=prompt_tokens.__name__), patch(
-            "requests.post", return_value=completion("{}", usage)
+        with (
+            caplog.at_level(logging.WARNING, logger=prompt_tokens.__name__),
+            patch("requests.post", return_value=completion("{}", usage)),
         ):
             remote_agent().complete("q", "user", "rules")
 
@@ -160,7 +168,9 @@ class TestPromptTokenBudget:
     def test_an_unusable_budget_falls_back_to_the_default(self, monkeypatch, raw):
         monkeypatch.setenv("AGENT_PROMPT_TOKEN_BUDGET", raw)
 
-        assert prompt_tokens.prompt_token_budget() == prompt_tokens.DEFAULT_PROMPT_TOKEN_BUDGET == 4096
+        assert (
+            prompt_tokens.prompt_token_budget() == prompt_tokens.DEFAULT_PROMPT_TOKEN_BUDGET == 4096
+        )
 
     def test_every_call_is_logged_with_its_count_and_source(self, monkeypatch, caplog):
         monkeypatch.delenv("AGENT_PROMPT_TOKEN_BUDGET", raising=False)

@@ -62,7 +62,7 @@ DEMO_DOCUMENTS = [
         - Expanded to 5 new markets
         - 150 new enterprise customers acquired
         - Customer satisfaction score: 4.6/5.0
-        """
+        """,
     },
     {
         "id": "demo_product_roadmap",
@@ -92,7 +92,7 @@ DEMO_DOCUMENTS = [
         - Advanced workflow automation
         - Marketplace for agent templates
         - On-premise deployment option
-        """
+        """,
     },
     {
         "id": "demo_customer_faq",
@@ -117,7 +117,7 @@ DEMO_DOCUMENTS = [
         
         Q: What is the pricing model?
         A: Contact our sales team for enterprise pricing. We offer flexible plans based on usage, number of agents, and support level.
-        """
+        """,
     },
     {
         "id": "demo_sales_data",
@@ -152,8 +152,8 @@ DEMO_DOCUMENTS = [
         - Gross churn: 3.2%
         - Net revenue retention: 112%
         - Expansion revenue: $1.8M
-        """
-    }
+        """,
+    },
 ]
 
 
@@ -169,12 +169,12 @@ class DemoSeeder:
 
     async def run(self):
         """Run the complete seeding process."""
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("🌱 HORUS DEMO DATA SEEDER")
-        print("="*60)
+        print("=" * 60)
         print(f"MAS URL: {self.mas_url}")
         print(f"Knowledge Store URL: {self.ks_url}")
-        print("="*60 + "\n")
+        print("=" * 60 + "\n")
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             # Step 1: Authenticate
@@ -207,13 +207,13 @@ class DemoSeeder:
             print(f"   ✅ Found {agents} registered agent(s)\n")
 
             # Summary
-            print("="*60)
+            print("=" * 60)
             print("✅ DEMO DATA SEEDING COMPLETE")
-            print("="*60)
+            print("=" * 60)
             print(f"   📚 Documents: {docs_created}")
             print(f"   💬 Conversations: {convs_created}")
             print(f"   🤖 Agents: {agents}")
-            print("="*60 + "\n")
+            print("=" * 60 + "\n")
 
             return True
 
@@ -222,7 +222,7 @@ class DemoSeeder:
         try:
             response = await client.post(
                 f"{self.mas_url}/auth/token",
-                data={"username": self.admin_user, "password": self.admin_pass}
+                data={"username": self.admin_user, "password": self.admin_pass},
             )
             if response.status_code == 200:
                 self.token = response.json().get("access_token")
@@ -241,8 +241,7 @@ class DemoSeeder:
         # Check MAS
         try:
             response = await client.post(
-                f"{self.mas_url}/rabbitmq/heartbeat",
-                headers=self._headers()
+                f"{self.mas_url}/rabbitmq/heartbeat", headers=self._headers()
             )
             if response.status_code != 200:
                 print("   ⚠️  MAS health check failed")
@@ -268,10 +267,7 @@ class DemoSeeder:
         created = 0
         for doc in DEMO_DOCUMENTS:
             try:
-                response = await client.post(
-                    f"{self.ks_url}/store/add",
-                    json=doc
-                )
+                response = await client.post(f"{self.ks_url}/store/add", json=doc)
                 if response.status_code in [200, 201]:
                     created += 1
                     print(f"   📄 Added: {doc['title']}")
@@ -290,9 +286,7 @@ class DemoSeeder:
         for conv in DEMO_CONVERSATIONS:
             try:
                 response = await client.post(
-                    f"{self.mas_url}/conversations/create",
-                    headers=self._headers(),
-                    json=conv
+                    f"{self.mas_url}/conversations/create", headers=self._headers(), json=conv
                 )
                 if response.status_code in [200, 201]:
                     created += 1
@@ -306,10 +300,7 @@ class DemoSeeder:
     async def _get_agents(self, client: httpx.AsyncClient) -> int:
         """Get number of registered agents."""
         try:
-            response = await client.get(
-                f"{self.mas_url}/agents/",
-                headers=self._headers()
-            )
+            response = await client.get(f"{self.mas_url}/agents/", headers=self._headers())
             if response.status_code == 200:
                 agents = response.json()
                 if isinstance(agents, list):

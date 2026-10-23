@@ -78,15 +78,11 @@ UPDATE_ROLE_RESPONSES = {
                 "examples": {
                     "database_error": {
                         "summary": "Database transaction error",
-                        "value": {
-                            "detail": "Error: could not update user role in database"
-                        },
+                        "value": {"detail": "Error: could not update user role in database"},
                     },
                     "unexpected_error": {
                         "summary": "Unexpected server error",
-                        "value": {
-                            "detail": "Error: Internal server error during update"
-                        },
+                        "value": {"detail": "Error: Internal server error during update"},
                     },
                 }
             }
@@ -134,9 +130,7 @@ USERS_LIST_RESPONSES = {
                 "examples": {
                     "forbidden": {
                         "summary": "User does not have admin privileges",
-                        "value": {
-                            "detail": "You have to use an admin user to handle this action"
-                        },
+                        "value": {"detail": "You have to use an admin user to handle this action"},
                     },
                 }
             }
@@ -181,9 +175,7 @@ USER_DETAILS_RESPONSES = {
                 "examples": {
                     "forbidden": {
                         "summary": "User does not have admin privileges",
-                        "value": {
-                            "detail": "You have to use an admin user to handle this action"
-                        },
+                        "value": {"detail": "You have to use an admin user to handle this action"},
                     },
                 }
             }
@@ -280,9 +272,7 @@ DELETE_USER_RESPONSES = {
                 "examples": {
                     "forbidden_admin": {
                         "summary": "User does not have admin privileges",
-                        "value": {
-                            "detail": "You have to use an admin user to handle this action"
-                        },
+                        "value": {"detail": "You have to use an admin user to handle this action"},
                     },
                     "delete_self": {
                         "summary": "Admin attempted to delete themselves",
@@ -376,9 +366,7 @@ CHANGE_PASSWORD_RESPONSES = {
                 "examples": {
                     "db_error": {
                         "summary": "Database error during update",
-                        "value": {
-                            "detail": "User Password Modification Error : ..."
-                        },
+                        "value": {"detail": "User Password Modification Error : ..."},
                     }
                 }
             }

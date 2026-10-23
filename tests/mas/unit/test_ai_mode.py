@@ -23,8 +23,13 @@ def served(owner: str, model: str = "horus-mock") -> MagicMock:
 def fresh_mode(monkeypatch):
     for key, value in SERVER_ENV.items():
         monkeypatch.setenv(key, value)
-    for key in ("MAS_EMBED_URL", "MAS_EMBED_MODEL", "HORUS_SPACY", "HORUS_MONITORING",
-                "OTEL_SDK_DISABLED"):
+    for key in (
+        "MAS_EMBED_URL",
+        "MAS_EMBED_MODEL",
+        "HORUS_SPACY",
+        "HORUS_MONITORING",
+        "OTEL_SDK_DISABLED",
+    ):
         monkeypatch.delenv(key, raising=False)
     ai_mode.reset()
     yield
@@ -35,8 +40,12 @@ def test_a_server_owned_by_horus_mock_means_mock_mode():
     with patch("urllib.request.urlopen", return_value=served("horus-mock")) as urlopen:
         mode = ai_mode.probe()
     assert mode == ai_mode.AiMode("mock", "horus-mock", "horus-mock")
-    assert mode.as_dict() == {"mode": "mock", "model": "horus-mock", "server": "horus-mock",
-                              "simulated": True}
+    assert mode.as_dict() == {
+        "mode": "mock",
+        "model": "horus-mock",
+        "server": "horus-mock",
+        "simulated": True,
+    }
     assert urlopen.call_args[0][0] == "http://llm-mock:8080/v1/models"
 
 
@@ -70,7 +79,9 @@ def test_the_in_process_backend_is_local_without_asking(monkeypatch):
     monkeypatch.setenv("LLM_BACKEND", "transformers")
     monkeypatch.setenv("LLM_MODEL_ID", "Qwen/Qwen2.5-1.5B-Instruct")
     with patch("urllib.request.urlopen") as urlopen:
-        assert ai_mode.probe() == ai_mode.AiMode("local", "Qwen/Qwen2.5-1.5B-Instruct", "in-process")
+        assert ai_mode.probe() == ai_mode.AiMode(
+            "local", "Qwen/Qwen2.5-1.5B-Instruct", "in-process"
+        )
     urlopen.assert_not_called()
 
 
@@ -84,8 +95,10 @@ def test_the_mode_is_asked_once_and_asked_again_while_unknown():
 
 
 def test_mock_mode_is_logged_once_as_a_warning(caplog):
-    with caplog.at_level(logging.WARNING), \
-            patch("urllib.request.urlopen", return_value=served("horus-mock")):
+    with (
+        caplog.at_level(logging.WARNING),
+        patch("urllib.request.urlopen", return_value=served("horus-mock")),
+    ):
         ai_mode.current()
         ai_mode.current()
     warnings = [r for r in caplog.records if "Mock AI mode" in r.getMessage()]
@@ -134,10 +147,21 @@ def test_an_embeddings_server_that_cannot_be_asked_is_asked_again(monkeypatch):
         assert ai_mode.embeddings() == "mock"
 
 
-@pytest.mark.parametrize(("value", "state"), [
-    (None, "on"), ("", "on"), ("on", "on"), ("off", "off"), ("OFF", "off"), ("0", "off"),
-    ("false", "off"), ("no", "off"), ('"off"', "off"), ("off # mock mode", "off"),
-])
+@pytest.mark.parametrize(
+    ("value", "state"),
+    [
+        (None, "on"),
+        ("", "on"),
+        ("on", "on"),
+        ("off", "off"),
+        ("OFF", "off"),
+        ("0", "off"),
+        ("false", "off"),
+        ("no", "off"),
+        ('"off"', "off"),
+        ("off # mock mode", "off"),
+    ],
+)
 def test_spacy_and_monitoring_follow_their_settings(monkeypatch, value, state):
     for name in ("HORUS_SPACY", "HORUS_MONITORING"):
         if value is None:
@@ -151,8 +175,10 @@ def test_spacy_and_monitoring_follow_their_settings(monkeypatch, value, state):
 def test_the_mock_warning_says_what_is_faked_and_what_is_off(monkeypatch, caplog):
     monkeypatch.setenv("MAS_EMBED_URL", "http://llm-mock:8080/v1")
     monkeypatch.setenv("OTEL_SDK_DISABLED", "true")
-    with caplog.at_level(logging.WARNING), \
-            patch("urllib.request.urlopen", return_value=served("horus-mock")):
+    with (
+        caplog.at_level(logging.WARNING),
+        patch("urllib.request.urlopen", return_value=served("horus-mock")),
+    ):
         ai_mode.current()
     warnings = [r.getMessage() for r in caplog.records if "Mock AI mode" in r.getMessage()]
     assert len(warnings) == 1

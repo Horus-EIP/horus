@@ -39,6 +39,7 @@ def _skill_cache_evict(agent_id: str) -> None:
     except Exception:
         logger.exception("Skill cache evict failed for agent %s", agent_id)
 
+
 logger = get_logger("registry_tool_functions")
 
 bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -65,9 +66,7 @@ def _get_all_agents_internal(db: Session) -> list:
         if 'relation "agents" does not exist' in str(e):
             logger.debug("Agents table does not exist yet. Skipping agent retrieval.")
             return []
-        logger.error(
-            f"Database programming error in _get_all_agents_internal: {str(e)}"
-        )
+        logger.error(f"Database programming error in _get_all_agents_internal: {str(e)}")
         return []
     except Exception as e:
         logger.error(f"Failed to retrieve available agents: {str(e)}")
@@ -79,9 +78,7 @@ def _update_alive_agent_status_internal(agent_id: str, db: Session) -> bool:
     try:
         agent = db.query(Agents).filter(Agents.id == agent_id).first()
         if agent is None:
-            logger.warning(
-                f"Agent not found for heartbeat update - Agent ID: {agent_id}"
-            )
+            logger.warning(f"Agent not found for heartbeat update - Agent ID: {agent_id}")
             return False
 
         agent.status = "active"
@@ -136,10 +133,12 @@ def _batch_update_agent_status_internal(agent_statuses: dict, db: Session) -> bo
         logger.error(f"Error batch updating agents: {str(e)}")
         return False
 
+
 # ============================================================================
 # PUBLIC FUNCTIONS - With Depends (used by FastAPI routes)
 # Can be called from routes and internally from controller via wrappers
 # ============================================================================
+
 
 def get_agent_by_name(name: str, db: Session) -> Optional[Agents]:
     """Retrieve an agent by their exact name.
@@ -151,6 +150,7 @@ def get_agent_by_name(name: str, db: Session) -> Optional[Agents]:
     result = db.execute(query)
 
     return result.scalar_one_or_none()
+
 
 async def create_agent(
     name: str, skills: list, description: str, db: Session, Agent_type: AgentTypes
@@ -229,9 +229,7 @@ def regenerate_agent_api_key(agent_id: str, db: Session) -> str | None:
         return api_key
     except Exception as e:
         db.rollback()
-        logger.error(
-            f"Error regenerating API key - Agent ID: {agent_id}, Error: {str(e)}"
-        )
+        logger.error(f"Error regenerating API key - Agent ID: {agent_id}, Error: {str(e)}")
         return None
 
 
@@ -281,9 +279,7 @@ def get_agent_details(agent_id: str, db: Session):
             agent.created_at,
         )
     except Exception as e:
-        logger.error(
-            f"Failed to retrieve agent details - Agent ID: {agent_id}, Error: {str(e)}"
-        )
+        logger.error(f"Failed to retrieve agent details - Agent ID: {agent_id}, Error: {str(e)}")
         return None, None, None, None, None, None, None
 
 
@@ -314,9 +310,7 @@ def update_dead_agent_status(agent_id: str, db: Session) -> bool:
     try:
         agent = db.query(Agents).filter(Agents.id == agent_id).first()
         if agent is None:
-            logger.debug(
-                f"Agent not found for dead status update - Agent ID: {agent_id}"
-            )
+            logger.debug(f"Agent not found for dead status update - Agent ID: {agent_id}")
             return False
 
         agent.status = "inactive"
@@ -354,9 +348,7 @@ def get_agent_id(agent_name: str, db: Session) -> str:
             return None
         return agent.id
     except Exception as e:
-        logger.error(
-            f"Failed to retrieve agent ID - Agent Name: {agent_name}, Error: {str(e)}"
-        )
+        logger.error(f"Failed to retrieve agent ID - Agent Name: {agent_name}, Error: {str(e)}")
         return None
 
 
@@ -396,13 +388,26 @@ def get_agent_by_type(agent_type: str, db: Session) -> str:
         # agent's NAME and SKILLS (plus a few synonyms) so a multi-step plan
         # routes to the right distinct specialists.
         _syn = {
-            "finance": "analyst", "financial": "analyst", "budget": "analyst",
-            "accounting": "analyst", "analysis": "analyst",
-            "compliance": "compliance", "legal": "compliance", "policy": "compliance",
-            "audit": "compliance", "risk": "compliance", "security": "compliance",
-            "hr": "hr", "people": "hr", "human": "hr",
-            "communication": "writer", "writer": "writer", "write": "writer",
-            "draft": "writer", "messaging": "writer", "memo": "writer",
+            "finance": "analyst",
+            "financial": "analyst",
+            "budget": "analyst",
+            "accounting": "analyst",
+            "analysis": "analyst",
+            "compliance": "compliance",
+            "legal": "compliance",
+            "policy": "compliance",
+            "audit": "compliance",
+            "risk": "compliance",
+            "security": "compliance",
+            "hr": "hr",
+            "people": "hr",
+            "human": "hr",
+            "communication": "writer",
+            "writer": "writer",
+            "write": "writer",
+            "draft": "writer",
+            "messaging": "writer",
+            "memo": "writer",
         }
         mapped = _syn.get(target)
 
@@ -471,9 +476,7 @@ def get_available_agents(db: Session) -> list:
 
         for agent in agents:
             if is_available_worker(agent):
-                available_agents.append(
-                    (agent.id, agent.name, agent.description or "", agent.type)
-                )
+                available_agents.append((agent.id, agent.name, agent.description or "", agent.type))
 
         logger.info(
             f"Agent availability check - Available: {len(available_agents)}/{len(agents)} (Manager excluded)"
@@ -481,9 +484,7 @@ def get_available_agents(db: Session) -> list:
         return available_agents
     except ProgrammingError as e:
         if 'relation "agents" does not exist' in str(e):
-            logger.debug(
-                "Agents table does not exist yet. Skipping availability check."
-            )
+            logger.debug("Agents table does not exist yet. Skipping availability check.")
             return available_agents
         logger.error(f"Database programming error in get_available_agents: {str(e)}")
         return available_agents

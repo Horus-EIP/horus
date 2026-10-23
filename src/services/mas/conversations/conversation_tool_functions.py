@@ -37,9 +37,7 @@ def get_history(conv_id: int, db: Session = Depends(get_db)) -> list[dict[str, A
             close_db = True
 
         # Verify conversation exists
-        conversation = (
-            db.query(Conversations).filter(Conversations.id == conv_id).first()
-        )
+        conversation = db.query(Conversations).filter(Conversations.id == conv_id).first()
 
         if not conversation:
             logger.warning(f"Conversation {conv_id} not found")
@@ -54,9 +52,7 @@ def get_history(conv_id: int, db: Session = Depends(get_db)) -> list[dict[str, A
         )
 
         if messages:
-            logger.debug(
-                f"Retrieved {len(messages)} messages - Conversation ID: {conv_id}"
-            )
+            logger.debug(f"Retrieved {len(messages)} messages - Conversation ID: {conv_id}")
 
         # Convert to dictionaries for consistency. Attribution fields are
         # included so the chat history endpoint returns enough metadata for
@@ -103,9 +99,7 @@ def get_full_history(conv_id: int, db: Session = None) -> list[dict[str, Any]]:
     return get_history(conv_id, db)
 
 
-def get_conversations(
-    user_name: str, db: Session = Depends(get_db)
-) -> list[dict[str, Any]]:
+def get_conversations(user_name: str, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     """List conversations owned by ``user_name``, most-recent first.
 
     Args:
@@ -130,9 +124,7 @@ def get_conversations(
         )
 
         if conversations:
-            logger.debug(
-                f"Retrieved {len(conversations)} conversations - User: {user_name}"
-            )
+            logger.debug(f"Retrieved {len(conversations)} conversations - User: {user_name}")
 
         # Convert to dictionaries
         return [
@@ -141,9 +133,7 @@ def get_conversations(
                 "name": conv.name,
                 "owner_username": conv.owner_username,
                 "created_at": conv.created_at.isoformat() if conv.created_at else None,
-                "modified_at": (
-                    conv.modified_at.isoformat() if conv.modified_at else None
-                ),
+                "modified_at": (conv.modified_at.isoformat() if conv.modified_at else None),
             }
             for conv in conversations
         ]
@@ -177,9 +167,7 @@ def get_all_conversations(db: Session = Depends(get_db)) -> list[dict[str, Any]]
             db = SessionLocal()
             close_db = True
 
-        conversations = (
-            db.query(Conversations).order_by(Conversations.modified_at.desc()).all()
-        )
+        conversations = db.query(Conversations).order_by(Conversations.modified_at.desc()).all()
 
         if conversations:
             logger.debug(f"Retrieved {len(conversations)} conversations")
@@ -191,9 +179,7 @@ def get_all_conversations(db: Session = Depends(get_db)) -> list[dict[str, Any]]
                 "name": conv.name,
                 "owner_username": conv.owner_username,
                 "created_at": conv.created_at.isoformat() if conv.created_at else None,
-                "modified_at": (
-                    conv.modified_at.isoformat() if conv.modified_at else None
-                ),
+                "modified_at": (conv.modified_at.isoformat() if conv.modified_at else None),
             }
             for conv in conversations
         ]
@@ -253,14 +239,10 @@ def add_messages(
             close_db = True
 
         # Verify conversation exists before adding message
-        conversation = (
-            db.query(Conversations).filter(Conversations.id == conversation_id).first()
-        )
+        conversation = db.query(Conversations).filter(Conversations.id == conversation_id).first()
 
         if not conversation:
-            logger.warning(
-                f"Conversation {conversation_id} not found - cannot add message"
-            )
+            logger.warning(f"Conversation {conversation_id} not found - cannot add message")
             return None
 
         # Create savepoint for nested transaction

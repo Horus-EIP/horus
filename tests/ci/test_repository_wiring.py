@@ -18,8 +18,12 @@ INFRA = REPO / "src" / "infra"
 SERVICES = REPO / "src" / "services"
 WORKFLOWS = REPO / ".github" / "workflows"
 DOCS = REPO / "docs"
-COMPOSE_FILES = (INFRA / "docker-compose.yml", INFRA / "docker-compose.cpu.yml",
-                 INFRA / "docker-compose.mock.yml", INFRA / "docker-compose.monitoring-off.yml")
+COMPOSE_FILES = (
+    INFRA / "docker-compose.yml",
+    INFRA / "docker-compose.cpu.yml",
+    INFRA / "docker-compose.mock.yml",
+    INFRA / "docker-compose.monitoring-off.yml",
+)
 EVAL_TESTS = REPO / "tests" / "eval"
 RESEARCH_NOTE = "tech-watch/IGPU_NPU_RESEARCH.md"
 
@@ -56,8 +60,11 @@ def installed_projects() -> set[str]:
 def compose_variables() -> set[str]:
     names = set()
     for path in COMPOSE_FILES:
-        names.update(re.findall(r"^\s*-\s*([A-Z][A-Z0-9_]*)=", path.read_text(encoding="utf-8"),
-                                re.MULTILINE))
+        names.update(
+            re.findall(
+                r"^\s*-\s*([A-Z][A-Z0-9_]*)=", path.read_text(encoding="utf-8"), re.MULTILINE
+            )
+        )
     return names
 
 
@@ -76,9 +83,11 @@ def step_running(job: dict, text: str) -> dict:
 
 
 def requirement_pins_torch(path: Path) -> bool:
-    return any(project_name(line.strip()) == "torch"
-               for line in path.read_text(encoding="utf-8").splitlines()
-               if not line.strip().startswith(("#", "-")))
+    return any(
+        project_name(line.strip()) == "torch"
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if not line.strip().startswith(("#", "-"))
+    )
 
 
 def ignore_patterns() -> list[str]:
@@ -107,8 +116,10 @@ class ComposeEnvironment(unittest.TestCase):
             for prefix, project in LIBRARY_SWITCHES.items():
                 if variable.startswith(prefix):
                     with self.subTest(variable):
-                        self.assertTrue(project in installed,
-                                        f"{variable} configures {project}, which no image installs")
+                        self.assertTrue(
+                            project in installed,
+                            f"{variable} configures {project}, which no image installs",
+                        )
 
 
 @needs_yaml
@@ -121,8 +132,11 @@ class ReleaseWorkflow(unittest.TestCase):
 
     def test_the_cpu_image_check_name_matches_requirements_without_torch(self):
         release = load_workflow("images.yml")["jobs"]["image"]
-        requirements = [entry["requirements"] for entry in release["strategy"]["matrix"]["include"]
-                        if "requirements" in entry]
+        requirements = [
+            entry["requirements"]
+            for entry in release["strategy"]["matrix"]["include"]
+            if "requirements" in entry
+        ]
         self.assertTrue(requirements)
         name = step_running(release, "scripts/ci/check-cpu-image.py")["name"]
         for path in requirements:
@@ -148,7 +162,7 @@ def compose_service(name: str, path: Path = INFRA / "docker-compose.yml") -> str
     lines = path.read_text(encoding="utf-8").splitlines()
     start = lines.index(f"  {name}:")
     block = []
-    for line in lines[start + 1:]:
+    for line in lines[start + 1 :]:
         if line.strip() and not line.startswith("   "):
             break
         block.append(line)
@@ -196,7 +210,7 @@ def compose_document(path: Path) -> dict:
 def final_stage(dockerfile: Path) -> list[str]:
     lines = [line.strip() for line in dockerfile.read_text(encoding="utf-8").splitlines()]
     starts = [index for index, line in enumerate(lines) if line.upper().startswith("FROM ")]
-    return lines[starts[-1]:]
+    return lines[starts[-1] :]
 
 
 class LicenceFilesInImages(unittest.TestCase):
@@ -211,9 +225,12 @@ class LicenceFilesInImages(unittest.TestCase):
         text = "".join(path.read_text(encoding="utf-8") for path in COMPOSE_FILES)
         for service in IMAGE_SERVICES:
             with self.subTest(service):
-                self.assertRegex(text, rf"context: \.\./services/{re.escape(service)}\n"
-                                       r"\s+dockerfile: Dockerfile\n"
-                                       r"\s+additional_contexts:\n\s+notices: \.\./\.\.\n")
+                self.assertRegex(
+                    text,
+                    rf"context: \.\./services/{re.escape(service)}\n"
+                    r"\s+dockerfile: Dockerfile\n"
+                    r"\s+additional_contexts:\n\s+notices: \.\./\.\.\n",
+                )
 
     def test_the_notices_exist_at_the_repository_root(self):
         self.assertTrue((REPO / "THIRD_PARTY_NOTICES").is_file())
@@ -246,7 +263,9 @@ class LogShipping(unittest.TestCase):
         self.assertIn("- /var/run/docker.sock:/var/run/docker.sock:ro", block)
 
     def test_loki_gets_the_labels_the_admin_logs_page_queries(self):
-        route = (SERVICES / "web-client" / "app" / "api" / "logs" / "route.ts").read_text(encoding="utf-8")
+        route = (SERVICES / "web-client" / "app" / "api" / "logs" / "route.ts").read_text(
+            encoding="utf-8"
+        )
         used = set(re.findall(r"label/(\w+)/values|\{(\w+)=|stream\?\.(\w+)", route))
         labels = {name for match in used for name in match if name}
         self.assertEqual(labels, {"compose_service", "container"})
@@ -256,20 +275,28 @@ class LogShipping(unittest.TestCase):
 
     def test_containers_without_a_compose_service_are_never_read(self):
         self.assertRegex(self.config, r"targets\s*=\s*discovery\.relabel\.compose\.output")
-        self.assertRegex(self.config, r'com_docker_compose_service"\]\s*regex\s*=\s*""\s*action\s*=\s*"drop"')
+        self.assertRegex(
+            self.config, r'com_docker_compose_service"\]\s*regex\s*=\s*""\s*action\s*=\s*"drop"'
+        )
         self.assertNotIn("relabel_rules", self.config)
 
     def test_alloy_reads_only_the_containers_of_its_own_compose_project(self):
-        self.assertRegex(self.config, r'filter\s*\{\s*name\s*=\s*"label"\s*values\s*=\s*'
-                                      r'\["com\.docker\.compose\.project=" \+ sys\.env\("HORUS_COMPOSE_PROJECT"\)\]')
+        self.assertRegex(
+            self.config,
+            r'filter\s*\{\s*name\s*=\s*"label"\s*values\s*=\s*'
+            r'\["com\.docker\.compose\.project=" \+ sys\.env\("HORUS_COMPOSE_PROJECT"\)\]',
+        )
         self.assertIn("- HORUS_COMPOSE_PROJECT=${COMPOSE_PROJECT_NAME}", compose_service("alloy"))
 
     def test_loki_keeps_the_compose_service_project_and_container_labels(self):
         for label in ("compose_service", "compose_project", "container"):
             with self.subTest(label):
                 self.assertRegex(self.config, rf'target_label\s*=\s*"{label}"')
-        self.assertRegex(self.config, r'regex\s*=\s*"__meta_docker_container_id\|compose_service\|'
-                                      r'compose_project\|container"\s*action\s*=\s*"labelkeep"')
+        self.assertRegex(
+            self.config,
+            r'regex\s*=\s*"__meta_docker_container_id\|compose_service\|'
+            r'compose_project\|container"\s*action\s*=\s*"labelkeep"',
+        )
 
 
 @needs_yaml
@@ -294,7 +321,9 @@ class LogRotation(unittest.TestCase):
                     if path != COMPOSE_FILES[0] and name in base:
                         self.assertNotIn("logging", spec)
                     else:
-                        self.assertIn("    logging: *logging", compose_service(name, path).splitlines())
+                        self.assertIn(
+                            "    logging: *logging", compose_service(name, path).splitlines()
+                        )
 
 
 class ImageTags(unittest.TestCase):

@@ -10,15 +10,24 @@ from app.chroma_db.services import file_service
 KEYWORDS = ("parking", "lunch", "meeting", "laptop", "holiday")
 MODEL_READS_CHARS = 2000
 CHUNK_METADATA_KEYS = {
-    "doc_id", "title", "source_path", "chunk_index", "char_start", "char_end",
-    "category", "embed_model",
+    "doc_id",
+    "title",
+    "source_path",
+    "chunk_index",
+    "char_start",
+    "char_end",
+    "category",
+    "embed_model",
 }
 
 HANDBOOK_TITLE = "Employee_Handbook.txt"
-HANDBOOK = "\n".join(
-    f"Section {n}. New starters read the welcome pack and sign the onboarding checklist."
-    for n in range(1, 60)
-) + "\nParking. Every employee gets a parking permit for the parking garage on level two."
+HANDBOOK = (
+    "\n".join(
+        f"Section {n}. New starters read the welcome pack and sign the onboarding checklist."
+        for n in range(1, 60)
+    )
+    + "\nParking. Every employee gets a parking permit for the parking garage on level two."
+)
 
 MEMO_TITLE = "Team_Memo.txt"
 MEMO = (
@@ -76,7 +85,7 @@ class TestPassageRetrieval:
         assert top_metadata["chunk_index"] > 0
         assert top_id == f"{handbook_id}:{top_metadata['chunk_index']}"
         assert "parking permit" in top_text
-        assert HANDBOOK[top_metadata["char_start"]:top_metadata["char_end"]] == top_text
+        assert HANDBOOK[top_metadata["char_start"] : top_metadata["char_end"]] == top_text
 
     def test_every_retrieved_passage_has_a_chunk_id_and_its_metadata(self, client):
         _upload(client, HANDBOOK_TITLE, HANDBOOK)

@@ -65,9 +65,7 @@ async def test_agent_heartbeat_flow():
                 (a["id"] for a in agents if a["name"] == "heartbeat_test_agent"), None
             )
             if existing_id:
-                await client.delete(
-                    f"/agents/unregister/{existing_id}", headers=headers
-                )
+                await client.delete(f"/agents/unregister/{existing_id}", headers=headers)
         except Exception as e:
             print(f"⚠️  Warning during cleanup: {e}")
 

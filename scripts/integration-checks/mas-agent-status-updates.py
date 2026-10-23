@@ -47,8 +47,7 @@ class TestUpdateAliveAgentStatusInternal:
         assert mock_agent.status == "active"
         assert mock_db.commit.called
         assert any(
-            "Agent heartbeat updated successfully" in record.message
-            for record in caplog.records
+            "Agent heartbeat updated successfully" in record.message for record in caplog.records
         )
 
     def test_update_alive_agent_status_agent_not_found(self, caplog):
@@ -66,8 +65,7 @@ class TestUpdateAliveAgentStatusInternal:
         assert result is False
         assert not mock_db.commit.called
         assert any(
-            "Agent not found for heartbeat update" in record.message
-            for record in caplog.records
+            "Agent not found for heartbeat update" in record.message for record in caplog.records
         )
 
     def test_update_alive_agent_status_database_error(self, caplog):
@@ -89,10 +87,7 @@ class TestUpdateAliveAgentStatusInternal:
         # Assertions
         assert result is False
         assert mock_db.rollback.called
-        assert any(
-            "Error updating agent heartbeat" in record.message
-            for record in caplog.records
-        )
+        assert any("Error updating agent heartbeat" in record.message for record in caplog.records)
 
     def test_update_alive_agent_status_updates_timestamp(self):
         """Test that last_heartbeat is updated to current time"""
@@ -144,9 +139,7 @@ class TestUpdateDeadAgentStatusInternal:
         assert result is True
         assert mock_agent.status == "dead"
         assert mock_db.commit.called
-        assert any(
-            "Agent marked as dead" in record.message for record in caplog.records
-        )
+        assert any("Agent marked as dead" in record.message for record in caplog.records)
 
     def test_update_dead_agent_status_agent_not_found(self, caplog):
         """Test when agent is not found for marking as dead"""
@@ -163,8 +156,7 @@ class TestUpdateDeadAgentStatusInternal:
         assert result is False
         assert not mock_db.commit.called
         assert any(
-            "Agent not found for marking dead" in record.message
-            for record in caplog.records
+            "Agent not found for marking dead" in record.message for record in caplog.records
         )
 
     def test_update_dead_agent_status_database_error(self, caplog):
@@ -187,9 +179,7 @@ class TestUpdateDeadAgentStatusInternal:
         # Assertions
         assert result is False
         assert mock_db.rollback.called
-        assert any(
-            "Error updating agent status" in record.message for record in caplog.records
-        )
+        assert any("Error updating agent status" in record.message for record in caplog.records)
 
     def test_update_dead_agent_status_logs_heartbeat_age(self, caplog):
         """Test that the age of last heartbeat is logged"""
@@ -248,10 +238,7 @@ class TestBatchUpdateAgentStatusInternal:
         mock_db.query.return_value.filter.return_value.first.side_effect = lambda: (
             mock_agents.get(
                 [k for k in mock_agents.keys()][
-                    len(
-                        mock_db.query.return_value.filter.return_value.first.call_args_list
-                    )
-                    - 1
+                    len(mock_db.query.return_value.filter.return_value.first.call_args_list) - 1
                 ]
             )
             if mock_db.query.return_value.filter.return_value.first.call_count > 0
@@ -286,9 +273,7 @@ class TestBatchUpdateAgentStatusInternal:
         # Assertions
         assert result is True
         assert mock_db.commit.called
-        assert any(
-            "Batch updated 0 agents" in record.message for record in caplog.records
-        )
+        assert any("Batch updated 0 agents" in record.message for record in caplog.records)
 
     def test_batch_update_agent_status_partial_agents_found(self, caplog):
         """Test batch update when only some agents are found"""
@@ -346,9 +331,7 @@ class TestBatchUpdateAgentStatusInternal:
         # Assertions
         assert result is False
         assert mock_db.rollback.called
-        assert any(
-            "Error batch updating agents" in record.message for record in caplog.records
-        )
+        assert any("Error batch updating agents" in record.message for record in caplog.records)
 
     def test_batch_update_agent_status_with_multiple_status_types(self, caplog):
         """Test batch update with various status values"""

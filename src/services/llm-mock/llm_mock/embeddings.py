@@ -35,8 +35,10 @@ class EmbeddingRequest:
         if body.get("encoding_format", "float") != "float":
             raise BadRequest("only encoding_format float is served")
         dimensions = body.get("dimensions", DEFAULT_DIMENSIONS)
-        if isinstance(dimensions, bool) or not isinstance(dimensions, int) or not (
-            1 <= dimensions <= MAX_DIMENSIONS
+        if (
+            isinstance(dimensions, bool)
+            or not isinstance(dimensions, int)
+            or not (1 <= dimensions <= MAX_DIMENSIONS)
         ):
             raise BadRequest(f"dimensions must be a whole number from 1 to {MAX_DIMENSIONS}")
         return cls(tuple(texts), dimensions, str(body.get("model") or ""))

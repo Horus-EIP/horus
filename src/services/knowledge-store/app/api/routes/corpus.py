@@ -30,6 +30,7 @@ DISABLED_VALUES = frozenset({"0", "false", "no", "off"})
 REQUESTED = "request"
 STARTUP = "startup"
 
+
 async def require_corpus_token(
     presented: str | None = Header(default=None, alias=CORPUS_TOKEN_HEADER),
 ) -> None:
@@ -48,11 +49,13 @@ async def require_corpus_token(
             detail=f"Missing or invalid {CORPUS_TOKEN_HEADER} header.",
         )
 
+
 router = APIRouter(tags=["Corpus"], dependencies=[Depends(require_corpus_token)])
 
 _ANALYZER: ContentAnalyzer = _content_analyzer
 
 CORPUS_ROOT = Path(os.getenv("CORPUS_DIR", "/app/corpus")).resolve(strict=False)
+
 
 def _env_int(name: str, default: int) -> int:
     try:
@@ -61,14 +64,26 @@ def _env_int(name: str, default: int) -> int:
         return default
     return value if value > 0 else default
 
+
 ALLOWED_EXTENSIONS = frozenset({".pdf", ".docx", ".txt", ".md", ".csv", ".json", ".log"})
 
 MAX_FILE_BYTES = _env_int("CORPUS_MAX_FILE_BYTES", 20 * 1024 * 1024)
 
-PRUNED_DIR_NAMES = frozenset({
-    ".git", ".ssh", ".svn", ".hg", "node_modules", "__pycache__",
-    ".venv", "venv", ".tox", ".mypy_cache", ".pytest_cache",
-})
+PRUNED_DIR_NAMES = frozenset(
+    {
+        ".git",
+        ".ssh",
+        ".svn",
+        ".hg",
+        "node_modules",
+        "__pycache__",
+        ".venv",
+        "venv",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+    }
+)
 
 HASH_CHUNK_BYTES = 1024 * 1024
 
@@ -88,6 +103,7 @@ SKIP_EMPTY = "empty-file"
 SKIP_TOO_LARGE = "too-large"
 SKIP_CHANGED_DURING_SCAN = "changed-during-scan"
 
+
 class Candidate(NamedTuple):
     resolved: Path | None
     reason: str | None
@@ -95,8 +111,10 @@ class Candidate(NamedTuple):
     dev: int = 0
     ino: int = 0
 
+
 def _rejected(reason: str, size: int = 0) -> Candidate:
     return Candidate(None, reason, size)
+
 
 def inspect_candidate(
     path: Path,
@@ -137,11 +155,13 @@ def inspect_candidate(
 
     return Candidate(resolved, None, info.st_size, info.st_dev, info.st_ino)
 
+
 def _relative_label(path: Path, root: Path) -> str:
     try:
         return path.relative_to(root).as_posix()
     except ValueError:
         return path.name
+
 
 def walk_corpus(
     root: Path,
@@ -155,20 +175,24 @@ def walk_corpus(
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         here = Path(dirpath)
         dirnames[:] = [
-            name for name in sorted(dirnames)
+            name
+            for name in sorted(dirnames)
             if not name.startswith(".")
             and name not in PRUNED_DIR_NAMES
             and not (here / name).is_symlink()
         ]
         for name in sorted(filenames):
             path = here / name
-            rows.append((
-                path,
-                _relative_label(path, root),
-                inspect_candidate(path, root, max_bytes),
-            ))
+            rows.append(
+                (
+                    path,
+                    _relative_label(path, root),
+                    inspect_candidate(path, root, max_bytes),
+                )
+            )
 
     return rows
+
 
 def sha256_of_fd(fd: int, chunk_bytes: int = HASH_CHUNK_BYTES) -> str:
     digest = hashlib.sha256()
@@ -178,6 +202,7 @@ def sha256_of_fd(fd: int, chunk_bytes: int = HASH_CHUNK_BYTES) -> str:
     os.lseek(fd, 0, os.SEEK_SET)
     return digest.hexdigest()
 
+
 def sha256_of_file(path: Path, chunk_bytes: int = HASH_CHUNK_BYTES) -> str:
     fd = os.open(path, OPEN_FLAGS)
     try:
@@ -185,11 +210,14 @@ def sha256_of_file(path: Path, chunk_bytes: int = HASH_CHUNK_BYTES) -> str:
     finally:
         os.close(fd)
 
+
 def doc_id_for(digest: str) -> str:
     return f"corpus-{digest[:32]}"
 
+
 def _identity(info: os.stat_result) -> tuple[int, int, int]:
     return (info.st_dev, info.st_ino, info.st_size)
+
 
 def _open_pinned(path: Path, pinned: Candidate) -> int | None:
     fd = os.open(path, OPEN_FLAGS)
@@ -198,6 +226,7 @@ def _open_pinned(path: Path, pinned: Candidate) -> int | None:
         return None
     return fd
 
+
 def _still_pinned(path: Path, pinned: Candidate) -> bool:
     fd = _open_pinned(path, pinned)
     if fd is None:
@@ -205,11 +234,14 @@ def _still_pinned(path: Path, pinned: Candidate) -> bool:
     os.close(fd)
     return True
 
+
 def _pinned_path(fd: int, path: Path) -> str:
     return f"/proc/self/fd/{fd}" if HAS_PROC_FD else str(path)
 
+
 def _extract_text_blocking(path: str, ext: str) -> ExtractedText:
     return asyncio.run(extract_document(path, ext))
+
 
 def _store_blocking(
     doc: DocumentModel,
@@ -217,9 +249,15 @@ def _store_blocking(
     extra_metadata: dict[str, Any],
     page_starts: tuple[int, ...] = (),
 ) -> int:
-    return asyncio.run(store_file(
-        doc, auto_analysis=auto_analysis, extra_metadata=extra_metadata, page_starts=page_starts,
-    ))
+    return asyncio.run(
+        store_file(
+            doc,
+            auto_analysis=auto_analysis,
+            extra_metadata=extra_metadata,
+            page_starts=page_starts,
+        )
+    )
+
 
 def _already_stored(doc_id: str) -> bool:
     try:
@@ -228,6 +266,7 @@ def _already_stored(doc_id: str) -> bool:
         logger.warning("corpus: id lookup failed for %s: %s", doc_id, exc)
         return False
     return bool(found and found.get("ids"))
+
 
 def _drop_previous_versions(rel: str, keep_id: str) -> int:
     try:
@@ -254,6 +293,7 @@ def _drop_previous_versions(rel: str, keep_id: str) -> int:
     bump_corpus_version()
     return len(stale_documents)
 
+
 _scan_slot = asyncio.Semaphore(1)
 _job: dict[str, Any] | None = None
 _scan_task: asyncio.Task | None = None
@@ -261,13 +301,19 @@ _reindex_job: dict[str, Any] | None = None
 _reindex_task: asyncio.Task | None = None
 _startup_check: asyncio.Task | None = None
 
+
 def _busy_detail() -> str:
     if (_reindex_job or {}).get("state") == "running":
-        return (f"A re-index is running (job {_reindex_job['job_id']}). "
-                f"Poll GET /corpus/reindex and retry when it reports completed.")
+        return (
+            f"A re-index is running (job {_reindex_job['job_id']}). "
+            f"Poll GET /corpus/reindex and retry when it reports completed."
+        )
     running = (_job or {}).get("job_id", "unknown")
-    return (f"A corpus scan is already running (job {running}). "
-            f"Poll GET /corpus/status and retry when it reports completed.")
+    return (
+        f"A corpus scan is already running (job {running}). "
+        f"Poll GET /corpus/status and retry when it reports completed."
+    )
+
 
 def _new_job(dry_run: bool, include_deleted: bool = False) -> dict[str, Any]:
     return {
@@ -294,18 +340,26 @@ def _new_job(dry_run: bool, include_deleted: bool = False) -> dict[str, Any]:
         "report_truncated": False,
     }
 
+
 def _record(job: dict[str, Any], entry: dict[str, Any]) -> None:
     if len(job["files"]) < MAX_REPORT_ENTRIES:
         job["files"].append(entry)
     else:
         job["report_truncated"] = True
 
+
 def _record_changed(job: dict[str, Any], rel: str, size: int) -> None:
     job["totals"]["rejected"] += 1
-    _record(job, {
-        "path": rel, "decision": "skipped",
-        "reason": SKIP_CHANGED_DURING_SCAN, "bytes": size,
-    })
+    _record(
+        job,
+        {
+            "path": rel,
+            "decision": "skipped",
+            "reason": SKIP_CHANGED_DURING_SCAN,
+            "bytes": size,
+        },
+    )
+
 
 async def _ingest_one(job: dict[str, Any], path: Path, rel: str, pinned: Candidate) -> None:
     fd = await asyncio.to_thread(_open_pinned, path, pinned)
@@ -320,26 +374,41 @@ async def _ingest_one(job: dict[str, Any], path: Path, rel: str, pinned: Candida
 
         if await asyncio.to_thread(_already_stored, doc_id):
             job["totals"]["skipped_unchanged"] += 1
-            _record(job, {
-                "path": rel, "decision": "skipped_unchanged",
-                "doc_id": doc_id, "bytes": size,
-            })
+            _record(
+                job,
+                {
+                    "path": rel,
+                    "decision": "skipped_unchanged",
+                    "doc_id": doc_id,
+                    "bytes": size,
+                },
+            )
             return
 
         if not job["include_deleted"] and await asyncio.to_thread(was_deleted, rel, digest):
             job["totals"]["skipped_deleted"] += 1
-            _record(job, {
-                "path": rel, "decision": "skipped_deleted",
-                "doc_id": doc_id, "bytes": size,
-            })
+            _record(
+                job,
+                {
+                    "path": rel,
+                    "decision": "skipped_deleted",
+                    "doc_id": doc_id,
+                    "bytes": size,
+                },
+            )
             return
 
         if job["dry_run"]:
             job["totals"]["would_ingest"] += 1
-            _record(job, {
-                "path": rel, "decision": "would_ingest",
-                "doc_id": doc_id, "bytes": size,
-            })
+            _record(
+                job,
+                {
+                    "path": rel,
+                    "decision": "would_ingest",
+                    "doc_id": doc_id,
+                    "bytes": size,
+                },
+            )
             return
 
         if not HAS_PROC_FD and not await asyncio.to_thread(_still_pinned, path, pinned):
@@ -365,13 +434,21 @@ async def _ingest_one(job: dict[str, Any], path: Path, rel: str, pinned: Candida
             await asyncio.to_thread(forget_deleted, rel, digest)
 
         job["totals"]["ingested"] += 1
-        _record(job, {
-            "path": rel, "decision": "ingested", "doc_id": doc_id,
-            "bytes": size, "characters": len(extracted.text), "chunks": chunks,
-            **({"replaced_stale": replaced} if replaced else {}),
-        })
+        _record(
+            job,
+            {
+                "path": rel,
+                "decision": "ingested",
+                "doc_id": doc_id,
+                "bytes": size,
+                "characters": len(extracted.text),
+                "chunks": chunks,
+                **({"replaced_stale": replaced} if replaced else {}),
+            },
+        )
     finally:
         os.close(fd)
+
 
 async def _run_scan(job: dict[str, Any]) -> None:
     try:
@@ -386,10 +463,15 @@ async def _run_scan(job: dict[str, Any]) -> None:
 
             if candidate.reason is not None:
                 job["totals"]["rejected"] += 1
-                _record(job, {
-                    "path": rel, "decision": "skipped",
-                    "reason": candidate.reason, "bytes": candidate.size,
-                })
+                _record(
+                    job,
+                    {
+                        "path": rel,
+                        "decision": "skipped",
+                        "reason": candidate.reason,
+                        "bytes": candidate.size,
+                    },
+                )
                 continue
 
             job["totals"]["eligible"] += 1
@@ -397,10 +479,15 @@ async def _run_scan(job: dict[str, Any]) -> None:
                 await _ingest_one(job, candidate.resolved, rel, candidate)
             except Exception as exc:  # noqa: BLE001
                 job["totals"]["failed"] += 1
-                _record(job, {
-                    "path": rel, "decision": "failed",
-                    "reason": f"{type(exc).__name__}: {exc}", "bytes": candidate.size,
-                })
+                _record(
+                    job,
+                    {
+                        "path": rel,
+                        "decision": "failed",
+                        "reason": f"{type(exc).__name__}: {exc}",
+                        "bytes": candidate.size,
+                    },
+                )
                 logger.warning("corpus: %s failed: %s", rel, exc)
 
         job["state"] = "completed"
@@ -412,6 +499,7 @@ async def _run_scan(job: dict[str, Any]) -> None:
     finally:
         job["finished_at"] = datetime.now(UTC).isoformat()
         _scan_slot.release()
+
 
 @router.post(
     "/scan",
@@ -433,8 +521,10 @@ async def _run_scan(job: dict[str, Any]) -> None:
             "content": {
                 "application/json": {
                     "example": {
-                        "job_id": "9f2c...", "state": "running",
-                        "dry_run": False, "include_deleted": False,
+                        "job_id": "9f2c...",
+                        "state": "running",
+                        "dry_run": False,
+                        "include_deleted": False,
                     }
                 }
             },
@@ -474,12 +564,23 @@ async def scan_corpus(
     await _scan_slot.acquire()
 
     _job = _new_job(dry_run, include_deleted)
-    logger.info("corpus scan %s starting (dry_run=%s, include_deleted=%s) on %s",
-                _job["job_id"], dry_run, include_deleted, CORPUS_ROOT)
+    logger.info(
+        "corpus scan %s starting (dry_run=%s, include_deleted=%s) on %s",
+        _job["job_id"],
+        dry_run,
+        include_deleted,
+        CORPUS_ROOT,
+    )
     _scan_task = asyncio.create_task(_run_scan(_job))
 
-    return {"job_id": _job["job_id"], "state": "running", "dry_run": dry_run,
-            "include_deleted": include_deleted, "root": str(CORPUS_ROOT)}
+    return {
+        "job_id": _job["job_id"],
+        "state": "running",
+        "dry_run": dry_run,
+        "include_deleted": include_deleted,
+        "root": str(CORPUS_ROOT),
+    }
+
 
 @router.get(
     "/status",
@@ -498,16 +599,29 @@ async def scan_corpus(
                         "job_id": "9f2c...",
                         "state": "completed",
                         "totals": {
-                            "files_seen": 12, "eligible": 5, "ingested": 5,
-                            "would_ingest": 0, "skipped_unchanged": 0,
+                            "files_seen": 12,
+                            "eligible": 5,
+                            "ingested": 5,
+                            "would_ingest": 0,
+                            "skipped_unchanged": 0,
                             "skipped_deleted": 0,
-                            "rejected": 7, "failed": 0, "replaced_stale": 0,
+                            "rejected": 7,
+                            "failed": 0,
+                            "replaced_stale": 0,
                         },
                         "files": [
-                            {"path": "reports/q4.md", "decision": "ingested",
-                             "doc_id": "corpus-1a2b", "bytes": 4096},
-                            {"path": "id_rsa.pem", "decision": "skipped",
-                             "reason": "unsupported-extension", "bytes": 0},
+                            {
+                                "path": "reports/q4.md",
+                                "decision": "ingested",
+                                "doc_id": "corpus-1a2b",
+                                "bytes": 4096,
+                            },
+                            {
+                                "path": "id_rsa.pem",
+                                "decision": "skipped",
+                                "reason": "unsupported-extension",
+                                "bytes": 0,
+                            },
                         ],
                     }
                 }
@@ -528,6 +642,7 @@ async def corpus_status():
         }
     return _job
 
+
 def _new_reindex_job(trigger: str = REQUESTED) -> dict[str, Any]:
     return {
         "job_id": uuid.uuid4().hex,
@@ -546,6 +661,7 @@ def _new_reindex_job(trigger: str = REQUESTED) -> dict[str, Any]:
         },
         "failures": [],
     }
+
 
 async def _run_reindex(job: dict[str, Any]) -> None:
     try:
@@ -579,14 +695,17 @@ async def _run_reindex(job: dict[str, Any]) -> None:
         job["finished_at"] = datetime.now(UTC).isoformat()
         _scan_slot.release()
 
+
 def reindex_on_startup_enabled() -> bool:
     return os.getenv(STARTUP_REINDEX_ENV, "1").strip().lower() not in DISABLED_VALUES
+
 
 def _start_reindex(trigger: str) -> dict[str, Any]:
     global _reindex_job, _reindex_task
     _reindex_job = _new_reindex_job(trigger)
     _reindex_task = asyncio.create_task(_run_reindex(_reindex_job))
     return _reindex_job
+
 
 async def check_index_on_startup() -> dict[str, Any] | None:
     embed_model = file_service.EMBED_MODEL
@@ -604,30 +723,38 @@ async def check_index_on_startup() -> dict[str, Any] | None:
         logger.warning(
             "startup: %d documents are stored as whole files or with another embedder than "
             "%s, and %s is off; run scripts/reindex-knowledge-store.py",
-            len(pending), embed_model, STARTUP_REINDEX_ENV,
+            len(pending),
+            embed_model,
+            STARTUP_REINDEX_ENV,
         )
         return None
     if _scan_slot.locked():
-        logger.warning("startup: %d documents need a re-index, but %s",
-                       len(pending), _busy_detail())
+        logger.warning(
+            "startup: %d documents need a re-index, but %s", len(pending), _busy_detail()
+        )
         return None
     await _scan_slot.acquire()
     job = _start_reindex(STARTUP)
     logger.info(
         "startup: re-index %s started in the background for %d documents stored as whole "
         "files or with another embedder than %s",
-        job["job_id"], len(pending), embed_model,
+        job["job_id"],
+        len(pending),
+        embed_model,
     )
     return job
+
 
 def schedule_startup_check() -> asyncio.Task:
     global _startup_check
     _startup_check = asyncio.create_task(check_index_on_startup())
     return _startup_check
 
+
 def cancel_startup_check() -> None:
     if _startup_check is not None and not _startup_check.done():
         _startup_check.cancel()
+
 
 @router.post(
     "/reindex",
@@ -650,7 +777,8 @@ def cancel_startup_check() -> None:
             "content": {
                 "application/json": {
                     "example": {
-                        "job_id": "9f2c...", "state": "running",
+                        "job_id": "9f2c...",
+                        "state": "running",
                         "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5",
                     }
                 }
@@ -670,6 +798,7 @@ async def reindex_corpus():
     logger.info("re-index %s starting with %s", job["job_id"], job["embed_model"])
 
     return {"job_id": job["job_id"], "state": "running", "embed_model": job["embed_model"]}
+
 
 @router.get(
     "/reindex",
@@ -691,8 +820,11 @@ async def reindex_corpus():
                         "trigger": "startup",
                         "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5",
                         "totals": {
-                            "pending": 5, "migrated": 5, "reembedded": 0,
-                            "unchanged": 0, "failed": 0,
+                            "pending": 5,
+                            "migrated": 5,
+                            "reembedded": 0,
+                            "unchanged": 0,
+                            "failed": 0,
                         },
                         "failures": [],
                     }

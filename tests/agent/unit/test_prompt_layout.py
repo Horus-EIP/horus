@@ -15,7 +15,9 @@ from ai_agents.decision_making_agent import (
 from ai_agents.rag_pipeline import RAGPipeline
 from ai_agents.react_agent import ReactAgent
 
-FINANCE = next(profile for profile in profiles.DEFAULT_PROFILES if profile.name == "Finance-Analyst")
+FINANCE = next(
+    profile for profile in profiles.DEFAULT_PROFILES if profile.name == "Finance-Analyst"
+)
 HR = next(profile for profile in profiles.DEFAULT_PROFILES if profile.name == "HR-Assistant")
 
 Q4_PASSAGE = {
@@ -294,7 +296,10 @@ class TestPurposeHeader:
             ]
         )
         agent = ReactAgent(
-            remote_agent(), _retrieval({"data": "Q4 2025 revenue was $4.2M."}), MagicMock(), max_steps=3
+            remote_agent(),
+            _retrieval({"data": "Q4 2025 revenue was $4.2M."}),
+            MagicMock(),
+            max_steps=3,
         )
         with identity(FINANCE), patch("requests.post", server):
             await agent.run("What was Q4 2025 revenue?")

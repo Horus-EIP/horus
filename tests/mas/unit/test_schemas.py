@@ -317,7 +317,13 @@ class TestCreateUserRequest:
         assert any(error["loc"] == ("password",) for error in exc_info.value.errors())
 
     def test_create_user_request_rejects_weak_passwords(self):
-        for weak in ("Short1!", "alllowercase1!", "ALLUPPERCASE1!", "NoDigitsHere!", "NoSpecial123x"):
+        for weak in (
+            "Short1!",
+            "alllowercase1!",
+            "ALLUPPERCASE1!",
+            "NoDigitsHere!",
+            "NoSpecial123x",
+        ):
             with pytest.raises(ValidationError) as exc_info:
                 CreateUserRequest(username="testuser", password=weak)
             assert any(error["loc"] == ("password",) for error in exc_info.value.errors())

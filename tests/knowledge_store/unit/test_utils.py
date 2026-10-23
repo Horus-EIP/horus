@@ -31,6 +31,7 @@ async def test_save_file(tmp_path):
 
     # Since shutil.copyfileobj takes a file-like object, let's use IoBytes
     from io import BytesIO
+
     mock_file.file = BytesIO(content)
 
     # We need to patch os.path.join or ensure the directory exists
@@ -48,10 +49,11 @@ async def test_save_file(tmp_path):
 
         saved_path = await save_file(mock_file, "test_dir")
 
-        expected_path = os.path.join('documents/', "test_dir", filename)
+        expected_path = os.path.join("documents/", "test_dir", filename)
         assert saved_path == expected_path
         # Verification of copy logic is hidden in shutil.copyfileobj which writes to mock_file_handle
         # We assume shutil works if called.
+
 
 @pytest.mark.asyncio
 async def test_pdf_to_text():
@@ -65,6 +67,7 @@ async def test_pdf_to_text():
 
         text = await pdf_to_text("dummy.pdf")
         assert "Page text" in text
+
 
 class SlowPdf:
     def __init__(self, release, waits, texts):

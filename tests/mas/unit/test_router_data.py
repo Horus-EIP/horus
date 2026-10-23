@@ -104,7 +104,10 @@ class TestRouterDataLoader:
         pyyaml = requirement(file_name, "PyYAML")
 
         assert has_upper_bound(pyyaml), str(pyyaml.specifier)
-        assert pyyaml.specifier.contains(yaml.__version__), (str(pyyaml.specifier), yaml.__version__)
+        assert pyyaml.specifier.contains(yaml.__version__), (
+            str(pyyaml.specifier),
+            yaml.__version__,
+        )
 
 
 class TestRouterExamples:

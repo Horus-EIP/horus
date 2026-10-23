@@ -56,9 +56,7 @@ def insert_new_task(
         return new_task_id
     except Exception as e:
         db.rollback()
-        logger.error(
-            f"Failed to create agent task - Task ID: {new_task_id}, Error: {str(e)}"
-        )
+        logger.error(f"Failed to create agent task - Task ID: {new_task_id}, Error: {str(e)}")
         return None
 
 
@@ -130,12 +128,8 @@ def validating_task_results(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(
-            f"Failed to validate task results - Task ID: {task_id}, Error: {str(e)}"
-        )
-        raise HTTPException(
-            status_code=500, detail=f"Error validating task results: {str(e)}"
-        )
+        logger.error(f"Failed to validate task results - Task ID: {task_id}, Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error validating task results: {str(e)}")
 
 
 async def interrupt_task(
@@ -155,9 +149,7 @@ async def interrupt_task(
             TaskStatus.FAILED.value,
             TaskStatus.CANCELED.value,
         ]:
-            raise HTTPException(
-                status_code=400, detail="Cannot interrupt a completed task"
-            )
+            raise HTTPException(status_code=400, detail="Cannot interrupt a completed task")
         task.status = TaskStatus.CANCELED
         db.commit()
     except HTTPException:
@@ -213,6 +205,4 @@ def get_tasks_in_progress(db: Session):
         return tasks_in_progress
     except Exception as e:
         logger.error(f"Failed to retrieve tasks in progress - Error: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Error retrieving tasks in progress: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error retrieving tasks in progress: {str(e)}")

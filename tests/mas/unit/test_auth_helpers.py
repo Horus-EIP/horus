@@ -59,9 +59,7 @@ class TestAuthenticateUser:
         """Test authentication with non-existent user."""
         self.mock_db.query().filter().first.return_value = None
 
-        result = authenticate_user(
-            "nonexistent", "password123", self.mock_db, "127.0.0.1"
-        )
+        result = authenticate_user("nonexistent", "password123", self.mock_db, "127.0.0.1")
 
         assert result is False
         mock_log_auth.assert_called_with("LOGIN", "nonexistent", success=False)
@@ -77,9 +75,7 @@ class TestAuthenticateUser:
         """Test authentication with invalid password."""
         self.mock_db.query().filter().first.return_value = self.mock_user
 
-        result = authenticate_user(
-            "testuser", "wrongpassword", self.mock_db, "127.0.0.1"
-        )
+        result = authenticate_user("testuser", "wrongpassword", self.mock_db, "127.0.0.1")
 
         assert result is False
         mock_log_auth.assert_called_with("LOGIN", "testuser", success=False)
@@ -92,9 +88,7 @@ class TestAuthenticateUser:
 
     @patch("auth.auth_tool_functions.log_auth_operation")
     @patch("auth.auth_tool_functions.log_security_event")
-    def test_authenticate_user_without_ip_address(
-        self, mock_log_security, mock_log_auth
-    ):
+    def test_authenticate_user_without_ip_address(self, mock_log_security, mock_log_auth):
         """Test authentication without IP address."""
         self.mock_db.query().filter().first.return_value = self.mock_user
 
@@ -116,9 +110,7 @@ class TestAuthenticateUser:
 
         # Mock the query to raise ProgrammingError
         # The error needs to be raised when first() is called
-        self.mock_db.query().filter().first.side_effect = ProgrammingError(
-            "SELECT ...", {}, None
-        )
+        self.mock_db.query().filter().first.side_effect = ProgrammingError("SELECT ...", {}, None)
 
         result = authenticate_user("testuser", "password", self.mock_db)
 
@@ -136,9 +128,7 @@ class TestCreateAccessToken:
         token = create_access_token("testuser", 1, expires_delta, "user")
 
         # Decode token to verify contents
-        payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
-        )
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
 
         assert payload["sub"] == "testuser"
         assert payload["id"] == 1
@@ -157,9 +147,7 @@ class TestCreateAccessToken:
 
         token = create_access_token("adminuser", 2, expires_delta, "admin")
 
-        payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
-        )
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
 
         assert payload["sub"] == "adminuser"
         assert payload["id"] == 2
@@ -172,9 +160,7 @@ class TestCreateAccessToken:
 
         token = create_access_token("testuser", 1, expires_delta, "user")
 
-        payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
-        )
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
         token_exp = datetime.fromtimestamp(payload["exp"], tz=UTC)
         expected_exp = before_creation + expires_delta
 
@@ -206,9 +192,7 @@ class TestGetCurrentUser:
         self.mock_user.id = 1
         self.mock_user.username = "testuser"
         self.mock_user.role = "user"
-        self.mock_db.query.return_value.filter.return_value.first.return_value = (
-            self.mock_user
-        )
+        self.mock_db.query.return_value.filter.return_value.first.return_value = self.mock_user
 
     @patch("auth.auth_tool_functions.redis_db")
     def test_get_current_user_success(self, mock_redis):
@@ -396,9 +380,7 @@ class TestModifyUserPassword:
         """Test successful password modification."""
         self.mock_db.query().filter().first.return_value = self.mock_user
 
-        result = modify_user_password(
-            "testuser", "old_password", "new_password", self.mock_db
-        )
+        result = modify_user_password("testuser", "old_password", "new_password", self.mock_db)
 
         assert result is True
         assert bcrypt_context.verify("new_password", self.mock_user.hashed_password)
@@ -406,15 +388,11 @@ class TestModifyUserPassword:
 
     @patch("auth.auth_tool_functions.log_auth_operation")
     @patch("auth.auth_tool_functions.log_security_event")
-    def test_modify_user_password_user_not_found(
-        self, mock_log_security, mock_log_auth
-    ):
+    def test_modify_user_password_user_not_found(self, mock_log_security, mock_log_auth):
         """Test password modification with non-existent user."""
         self.mock_db.query().filter().first.return_value = None
 
-        result = modify_user_password(
-            "nonexistent", "old_password", "new_password", self.mock_db
-        )
+        result = modify_user_password("nonexistent", "old_password", "new_password", self.mock_db)
 
         assert result is False
         mock_log_auth.assert_called_with("LOGIN", "nonexistent", success=False)
@@ -426,15 +404,11 @@ class TestModifyUserPassword:
 
     @patch("auth.auth_tool_functions.log_auth_operation")
     @patch("auth.auth_tool_functions.log_security_event")
-    def test_modify_user_password_invalid_old_password(
-        self, mock_log_security, mock_log_auth
-    ):
+    def test_modify_user_password_invalid_old_password(self, mock_log_security, mock_log_auth):
         """Test password modification with invalid old password."""
         self.mock_db.query().filter().first.return_value = self.mock_user
 
-        result = modify_user_password(
-            "testuser", "wrong_password", "new_password", self.mock_db
-        )
+        result = modify_user_password("testuser", "wrong_password", "new_password", self.mock_db)
 
         assert result is False
         mock_log_auth.assert_called_with("LOGIN", "testuser", success=False)
@@ -458,9 +432,7 @@ class TestModifyUserPassword:
         self.mock_db.commit.side_effect = mock_exception
 
         with pytest.raises(HTTPException) as exc_info:
-            modify_user_password(
-                "testuser", "old_password", "new_password", self.mock_db
-            )
+            modify_user_password("testuser", "old_password", "new_password", self.mock_db)
 
         assert exc_info.value.status_code == 409
         assert "User Password Modification Error" in exc_info.value.detail
@@ -468,20 +440,14 @@ class TestModifyUserPassword:
 
     @patch("auth.auth_tool_functions.log_auth_operation")
     @patch("auth.auth_tool_functions.log_security_event")
-    def test_modify_user_password_table_not_exist(
-        self, mock_log_security, mock_log_auth
-    ):
+    def test_modify_user_password_table_not_exist(self, mock_log_security, mock_log_auth):
         """Test password modification when Users table does not exist."""
         from sqlalchemy.exc import ProgrammingError
 
         # Mock the query to raise ProgrammingError
-        self.mock_db.query().filter().first.side_effect = ProgrammingError(
-            "SELECT ...", {}, None
-        )
+        self.mock_db.query().filter().first.side_effect = ProgrammingError("SELECT ...", {}, None)
 
-        result = modify_user_password(
-            "testuser", "old_password", "new_password", self.mock_db
-        )
+        result = modify_user_password("testuser", "old_password", "new_password", self.mock_db)
 
         assert result is False
 

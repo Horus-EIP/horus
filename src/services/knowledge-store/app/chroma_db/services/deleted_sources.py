@@ -27,7 +27,8 @@ def _read_entries() -> list[dict[str, Any]]:
     except (ValueError, KeyError, TypeError) as exc:
         logger.warning(
             "deleted sources list %s is unreadable, treating it as empty: %s",
-            DELETED_SOURCES_FILE, exc,
+            DELETED_SOURCES_FILE,
+            exc,
         )
         return []
 
@@ -64,12 +65,14 @@ def remember_deleted(sources: Iterable[Mapping[str, Any]]) -> int:
             if not key[0] or key in known:
                 continue
             known.add(key)
-            entries.append({
-                "doc_id": str(source.get("doc_id") or ""),
-                "source_path": key[0],
-                "content_sha256": key[1],
-                "deleted_at": deleted_at,
-            })
+            entries.append(
+                {
+                    "doc_id": str(source.get("doc_id") or ""),
+                    "source_path": key[0],
+                    "content_sha256": key[1],
+                    "deleted_at": deleted_at,
+                }
+            )
             added += 1
         if added:
             _write_entries(entries)

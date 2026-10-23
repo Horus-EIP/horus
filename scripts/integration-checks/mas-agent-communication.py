@@ -34,6 +34,7 @@ from schemas.agent_message import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_rabbitmq():
     rmq = MagicMock()
@@ -55,6 +56,7 @@ def communicator_no_rmq():
 # ---------------------------------------------------------------------------
 # MessageStore tests
 # ---------------------------------------------------------------------------
+
 
 class TestMessageStore:
     def test_store_and_retrieve(self):
@@ -119,6 +121,7 @@ class TestMessageStore:
 # DelegationRegistry tests
 # ---------------------------------------------------------------------------
 
+
 class TestDelegationRegistry:
     def test_register_and_resolve(self):
         registry = DelegationRegistry()
@@ -155,6 +158,7 @@ class TestDelegationRegistry:
 # ---------------------------------------------------------------------------
 # AgentCommunicator tests
 # ---------------------------------------------------------------------------
+
 
 class TestAgentCommunicator:
     def test_agent_queue_name(self, communicator):
@@ -242,6 +246,7 @@ class TestAgentCommunicator:
 # ---------------------------------------------------------------------------
 # Delegation orchestration tests
 # ---------------------------------------------------------------------------
+
 
 class TestDelegationOrchestration:
     @pytest.mark.asyncio
@@ -343,16 +348,12 @@ class TestDelegationOrchestration:
 
     def test_receive_delegation_result(self, communicator):
         event = communicator.delegation_registry.register("del-100")
-        resolved = communicator.receive_delegation_result(
-            "del-100", "Result text", "agent-b"
-        )
+        resolved = communicator.receive_delegation_result("del-100", "Result text", "agent-b")
         assert resolved is True
         assert event.is_set()
 
     def test_receive_delegation_result_unknown(self, communicator):
-        resolved = communicator.receive_delegation_result(
-            "nonexistent", "Result", "agent-b"
-        )
+        resolved = communicator.receive_delegation_result("nonexistent", "Result", "agent-b")
         assert resolved is False
 
     @pytest.mark.asyncio
@@ -378,6 +379,7 @@ class TestDelegationOrchestration:
 
         call_args = mock_rabbitmq.publish.call_args
         import json
+
         published = json.loads(call_args[0][1])
 
         assert len(published["delegation_context"]) == 2

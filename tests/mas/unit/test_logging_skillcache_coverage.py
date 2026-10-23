@@ -205,14 +205,15 @@ class TestStructuredLogger:
         saved_handlers = root.handlers[:]
         saved_level = root.level
         try:
-            with patch("core.structured_logging.Path") as mock_path, patch(
-                "core.structured_logging.logging.FileHandler"
-            ) as mock_file_handler, patch(
-                "core.structured_logging.logging.StreamHandler"
-            ) as mock_stream_handler, patch.dict(
-                "os.environ",
-                {"LOG_LEVEL": "DEBUG", "JSON_LOGGING": "true"},
-                clear=False,
+            with (
+                patch("core.structured_logging.Path") as mock_path,
+                patch("core.structured_logging.logging.FileHandler") as mock_file_handler,
+                patch("core.structured_logging.logging.StreamHandler") as mock_stream_handler,
+                patch.dict(
+                    "os.environ",
+                    {"LOG_LEVEL": "DEBUG", "JSON_LOGGING": "true"},
+                    clear=False,
+                ),
             ):
                 mock_stream_handler.return_value = MagicMock()
                 mock_file_handler.return_value = MagicMock()
@@ -228,9 +229,7 @@ class TestStructuredLogger:
                 # JSON branch: console handler gets a JSONFormatter.
                 console = mock_stream_handler.return_value
                 set_formatter_calls = console.setFormatter.call_args_list
-                assert any(
-                    isinstance(c.args[0], JSONFormatter) for c in set_formatter_calls
-                )
+                assert any(isinstance(c.args[0], JSONFormatter) for c in set_formatter_calls)
         finally:
             root.handlers[:] = saved_handlers
             root.setLevel(saved_level)
@@ -243,14 +242,15 @@ class TestStructuredLogger:
         saved_handlers = root.handlers[:]
         saved_level = root.level
         try:
-            with patch("core.structured_logging.Path") as mock_path, patch(
-                "core.structured_logging.logging.FileHandler"
-            ) as mock_file_handler, patch(
-                "core.structured_logging.logging.StreamHandler"
-            ) as mock_stream_handler, patch.dict(
-                "os.environ",
-                {"LOG_LEVEL": "INFO", "JSON_LOGGING": "false"},
-                clear=False,
+            with (
+                patch("core.structured_logging.Path") as mock_path,
+                patch("core.structured_logging.logging.FileHandler") as mock_file_handler,
+                patch("core.structured_logging.logging.StreamHandler") as mock_stream_handler,
+                patch.dict(
+                    "os.environ",
+                    {"LOG_LEVEL": "INFO", "JSON_LOGGING": "false"},
+                    clear=False,
+                ),
             ):
                 mock_path.return_value.mkdir = MagicMock()
                 mock_stream_handler.return_value = MagicMock()
@@ -275,9 +275,7 @@ class TestLogHelpers:
     def test_log_with_context_forwards_level_and_extra(self):
         mock_logger = MagicMock()
         log_with_context(mock_logger, logging.WARNING, "msg", request_id="r1")
-        mock_logger.log.assert_called_once_with(
-            logging.WARNING, "msg", extra={"request_id": "r1"}
-        )
+        mock_logger.log.assert_called_once_with(logging.WARNING, "msg", extra={"request_id": "r1"})
 
     def test_log_request_builds_structured_extra(self):
         mock_logger = MagicMock()
@@ -299,9 +297,7 @@ class TestLogHelpers:
 
     def test_log_request_passes_through_extra_kwargs(self):
         mock_logger = MagicMock()
-        with patch(
-            "core.structured_logging.get_structured_logger", return_value=mock_logger
-        ):
+        with patch("core.structured_logging.get_structured_logger", return_value=mock_logger):
             log_request("POST", "/p", 201, 1.0, region="eu")
         extra = mock_logger.info.call_args.kwargs["extra"]
         assert extra["region"] == "eu"
@@ -333,9 +329,7 @@ class TestLogHelpers:
 
     def test_log_task_event_without_duration_is_none(self):
         mock_logger = MagicMock()
-        with patch(
-            "core.structured_logging.get_structured_logger", return_value=mock_logger
-        ):
+        with patch("core.structured_logging.get_structured_logger", return_value=mock_logger):
             log_task_event("task-2", "started")
         extra = mock_logger.info.call_args.kwargs["extra"]
         # duration_ms is None -> the rounding branch is skipped.
@@ -373,9 +367,7 @@ class TestLogHelpers:
 
     def test_log_security_event_failure_uses_warning(self):
         mock_logger = MagicMock()
-        with patch(
-            "core.structured_logging.get_structured_logger", return_value=mock_logger
-        ):
+        with patch("core.structured_logging.get_structured_logger", return_value=mock_logger):
             log_security_event("login", username="mallory", success=False)
         level, message = mock_logger.log.call_args.args
         assert level == logging.WARNING
@@ -430,9 +422,7 @@ class TestSkillCacheBuild:
     def test_build_rows_embeds_and_zips(self):
         vecs = [_unit_vec([1, 0]), _unit_vec([0, 1])]
         with patch.object(skill_cache, "embed_texts", return_value=vecs) as embed:
-            rows = skill_cache._build_rows_for_agent(
-                "a1", "Scout", ["search", "summarize"], "desc"
-            )
+            rows = skill_cache._build_rows_for_agent("a1", "Scout", ["search", "summarize"], "desc")
         # One embed call for all skill texts.
         embed.assert_called_once()
         assert [r.skill for r in rows] == ["search", "summarize"]
@@ -455,8 +445,13 @@ class TestSkillCacheWarm:
         fake_db = MagicMock()
         fake_db.query.return_value.all.return_value = [agent_a, agent_b]
 
-        with patch.object(skill_cache, "SessionLocal", return_value=fake_db), patch.object(
-            skill_cache, "embed_texts", side_effect=lambda texts: [_unit_vec([1, 0]) for _ in texts]
+        with (
+            patch.object(skill_cache, "SessionLocal", return_value=fake_db),
+            patch.object(
+                skill_cache,
+                "embed_texts",
+                side_effect=lambda texts: [_unit_vec([1, 0]) for _ in texts],
+            ),
         ):
             skill_cache.warm_skill_cache()
 
@@ -471,9 +466,10 @@ class TestSkillCacheWarm:
         fake_db = MagicMock()
         fake_db.query.return_value.all.return_value = [agent]
 
-        with patch.object(skill_cache, "SessionLocal", return_value=fake_db), patch.object(
-            skill_cache, "embed_texts"
-        ) as embed:
+        with (
+            patch.object(skill_cache, "SessionLocal", return_value=fake_db),
+            patch.object(skill_cache, "embed_texts") as embed,
+        ):
             skill_cache.warm_skill_cache()
 
         assert skill_cache._rows == []
@@ -482,22 +478,16 @@ class TestSkillCacheWarm:
 
 class TestSkillCacheUpsertEvict:
     def test_upsert_adds_rows(self):
-        with patch.object(
-            skill_cache, "embed_texts", return_value=[_unit_vec([1, 0])]
-        ):
+        with patch.object(skill_cache, "embed_texts", return_value=[_unit_vec([1, 0])]):
             skill_cache.upsert_agent("a1", "Scout", ["search"], "desc")
         assert len(skill_cache._rows) == 1
         assert skill_cache._rows[0].agent_id == "a1"
 
     def test_upsert_replaces_only_target_agent(self):
         # Seed two agents.
-        with patch.object(
-            skill_cache, "embed_texts", return_value=[_unit_vec([1, 0])]
-        ):
+        with patch.object(skill_cache, "embed_texts", return_value=[_unit_vec([1, 0])]):
             skill_cache.upsert_agent("a1", "Scout", ["search"], "")
-        with patch.object(
-            skill_cache, "embed_texts", return_value=[_unit_vec([0, 1])]
-        ):
+        with patch.object(skill_cache, "embed_texts", return_value=[_unit_vec([0, 1])]):
             skill_cache.upsert_agent("a2", "Writer", ["summarize"], "")
 
         # Re-upsert a1 with new skills; a2 must be untouched.
@@ -514,24 +504,18 @@ class TestSkillCacheUpsertEvict:
         assert a2_skills == {"summarize"}
 
     def test_upsert_none_description_does_not_raise(self):
-        with patch.object(
-            skill_cache, "embed_texts", return_value=[_unit_vec([1, 0])]
-        ):
+        with patch.object(skill_cache, "embed_texts", return_value=[_unit_vec([1, 0])]):
             skill_cache.upsert_agent("a9", "Nameless", ["x"], None)
         assert len(skill_cache._rows) == 1
 
     def test_evict_removes_matching_rows(self):
-        with patch.object(
-            skill_cache, "embed_texts", return_value=[_unit_vec([1, 0])]
-        ):
+        with patch.object(skill_cache, "embed_texts", return_value=[_unit_vec([1, 0])]):
             skill_cache.upsert_agent("a1", "Scout", ["search"], "")
         skill_cache.evict_agent("a1")
         assert skill_cache._rows == []
 
     def test_evict_missing_agent_is_noop(self):
-        with patch.object(
-            skill_cache, "embed_texts", return_value=[_unit_vec([1, 0])]
-        ):
+        with patch.object(skill_cache, "embed_texts", return_value=[_unit_vec([1, 0])]):
             skill_cache.upsert_agent("a1", "Scout", ["search"], "")
         # Evicting an unknown id removes nothing (the ``if removed`` log branch
         # stays false) and leaves existing rows intact.

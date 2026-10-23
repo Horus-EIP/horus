@@ -22,8 +22,12 @@ logger = logging.getLogger("llm_mock")
 class MockServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, address: tuple[str, int], settings: Settings,
-                 sleep: Callable[[float], None] = time.sleep):
+    def __init__(
+        self,
+        address: tuple[str, int],
+        settings: Settings,
+        sleep: Callable[[float], None] = time.sleep,
+    ):
         super().__init__(address, Handler)
         self.settings = settings
         self.sleep = sleep
@@ -61,7 +65,10 @@ class Handler(BaseHTTPRequestHandler):
         self.server.sleep(delay_seconds(call, settings))
         logger.info(
             "chat completion: purpose=%s schema=%s stream=%s status=%d",
-            call.purpose or "-", call.schema_name or "-", call.stream, reply.status,
+            call.purpose or "-",
+            call.schema_name or "-",
+            call.stream,
+            reply.status,
         )
         model = call.model or settings.model
         if reply.error:
@@ -79,8 +86,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         settings = self.server.settings
         failed = settings.scenario == "error"
-        logger.info("embeddings: inputs=%d dimensions=%d status=%d",
-                    len(request.texts), request.dimensions, 500 if failed else 200)
+        logger.info(
+            "embeddings: inputs=%d dimensions=%d status=%d",
+            len(request.texts),
+            request.dimensions,
+            500 if failed else 200,
+        )
         if failed:
             self.send_json(500, completions.error_body(ERROR_TEXT, 500))
         else:
@@ -134,7 +145,9 @@ def serve(settings: Settings, host: str = "0.0.0.0", port: int = DEFAULT_PORT) -
         "deterministic text and computes embeddings from the words of each text "
         "(scenario %s, latency %d ms, model %s). No AI model runs: answers and search "
         "are simulated.",
-        settings.scenario, settings.latency_ms, settings.model,
+        settings.scenario,
+        settings.latency_ms,
+        settings.model,
     )
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     try:
@@ -147,7 +160,8 @@ def serve(settings: Settings, host: str = "0.0.0.0", port: int = DEFAULT_PORT) -
 
 def main() -> None:
     logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
         stream=sys.stdout,
     )
     serve(Settings.from_env())

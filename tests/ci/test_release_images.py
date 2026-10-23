@@ -62,7 +62,7 @@ def resolve(text: str, env: dict[str, str]) -> str:
                 continue
             depth -= text[end] == "}"
             end += 1
-        out.append(expand(text[at + 2:end - 1], env))
+        out.append(expand(text[at + 2 : end - 1], env))
         at = end
     return "".join(out)
 
@@ -119,8 +119,9 @@ class ComposeImageNames(unittest.TestCase):
         return None if value is None else resolve(value, env)
 
     def test_the_app_services_are_the_four_built_from_source(self):
-        built = {name for name, spec in self.layers[profiles.BASE_COMPOSE].items()
-                 if "build" in spec}
+        built = {
+            name for name, spec in self.layers[profiles.BASE_COMPOSE].items() if "build" in spec
+        }
         self.assertEqual(built, set(images.APP_SERVICES))
 
     def test_every_profile_names_each_app_image_after_registry_release_and_flavor(self):
@@ -129,8 +130,10 @@ class ComposeImageNames(unittest.TestCase):
             flavor = profiles.image_flavor(profile)
             for service in images.APP_SERVICES:
                 with self.subTest(f"{profile} {service}"):
-                    self.assertEqual(self.image(service, compose_files(profile), env),
-                                     images.image_name(REGISTRY, service, RELEASE, flavor))
+                    self.assertEqual(
+                        self.image(service, compose_files(profile), env),
+                        images.image_name(REGISTRY, service, RELEASE, flavor),
+                    )
 
     def test_without_a_registry_the_images_keep_their_local_build_names(self):
         env = {"HORUS_VERSION": RELEASE}
@@ -146,9 +149,13 @@ class ComposeImageNames(unittest.TestCase):
 
     def test_the_mock_model_server_is_a_cpu_image_named_like_the_others(self):
         env = {images.REGISTRY_KEY: REGISTRY, "HORUS_VERSION": RELEASE}
-        self.assertEqual(self.image(images.MOCK_SERVICE, MOCK_COMPOSE_FILES, env),
-                         images.image_name(REGISTRY, images.MOCK_SERVICE, RELEASE, images.CPU_FLAVOR))
-        self.assertEqual(self.image(images.MOCK_SERVICE, MOCK_COMPOSE_FILES, {"HORUS_VERSION": RELEASE}), "")
+        self.assertEqual(
+            self.image(images.MOCK_SERVICE, MOCK_COMPOSE_FILES, env),
+            images.image_name(REGISTRY, images.MOCK_SERVICE, RELEASE, images.CPU_FLAVOR),
+        )
+        self.assertEqual(
+            self.image(images.MOCK_SERVICE, MOCK_COMPOSE_FILES, {"HORUS_VERSION": RELEASE}), ""
+        )
         build = self.layers[MOCK_OVERLAY][images.MOCK_SERVICE]["build"]
         self.assertTrue((INFRA / build["context"] / "Dockerfile").is_file())
         self.assertEqual(build["additional_contexts"], {"notices": "../.."})
@@ -195,12 +202,16 @@ class ReleaseWorkflow(unittest.TestCase):
         self.assertEqual(self.matrix["flavor"], [images.CPU_FLAVOR, images.GPU_FLAVOR])
 
     def test_the_mock_model_server_is_built_once_through_the_mock_overlay(self):
-        self.assertEqual(self.matrix["exclude"],
-                         [{"service": images.MOCK_SERVICE, "flavor": images.GPU_FLAVOR}])
+        self.assertEqual(
+            self.matrix["exclude"], [{"service": images.MOCK_SERVICE, "flavor": images.GPU_FLAVOR}]
+        )
         entry = self.includes("service")[images.MOCK_SERVICE]
-        self.assertEqual(entry, {"service": images.MOCK_SERVICE,
-                                 "compose_files": ":".join(MOCK_COMPOSE_FILES)})
-        flavor_entries = [index for index, item in enumerate(self.matrix["include"]) if "flavor" in item]
+        self.assertEqual(
+            entry, {"service": images.MOCK_SERVICE, "compose_files": ":".join(MOCK_COMPOSE_FILES)}
+        )
+        flavor_entries = [
+            index for index, item in enumerate(self.matrix["include"]) if "flavor" in item
+        ]
         self.assertGreater(self.matrix["include"].index(entry), max(flavor_entries))
 
     def test_each_flavor_builds_with_the_compose_files_its_profiles_run(self):
@@ -208,8 +219,9 @@ class ReleaseWorkflow(unittest.TestCase):
         for profile in profiles.PROFILE_ORDER:
             with self.subTest(profile):
                 entry = by_flavor[profiles.image_flavor(profile)]
-                self.assertEqual(entry["compose_files"],
-                                 profiles.env_for(profile, LINUX)["COMPOSE_FILE"])
+                self.assertEqual(
+                    entry["compose_files"], profiles.env_for(profile, LINUX)["COMPOSE_FILE"]
+                )
 
     def test_compose_reads_the_files_the_registry_and_the_release_from_the_job(self):
         env = self.job["env"]
@@ -229,8 +241,11 @@ class ReleaseWorkflow(unittest.TestCase):
         self.assertEqual(step["working-directory"], "src/infra")
 
     def test_cpu_torch_images_are_checked_for_cuda_before_anything_is_pushed(self):
-        requirements = {name: entry["requirements"]
-                        for name, entry in self.includes("service").items() if "requirements" in entry}
+        requirements = {
+            name: entry["requirements"]
+            for name, entry in self.includes("service").items()
+            if "requirements" in entry
+        }
         self.assertEqual(requirements, TORCH_REQUIREMENTS)
         for path in requirements.values():
             self.assertTrue((REPO / path).is_file(), path)
@@ -243,14 +258,16 @@ class ReleaseWorkflow(unittest.TestCase):
 
     def test_every_build_gets_a_commit_tag_and_only_a_release_moves_the_version_tag(self):
         _, plan = self.step(self.plan, "GITHUB_OUTPUT")
-        self.assertIn('commit_tag=sha-${GITHUB_SHA::12}', plan["run"])
-        self.assertIn('if [ "$GITHUB_REF" = "refs/tags/v$version" ]; then\n  release=true',
-                      plan["run"])
+        self.assertIn("commit_tag=sha-${GITHUB_SHA::12}", plan["run"])
+        self.assertIn(
+            'if [ "$GITHUB_REF" = "refs/tags/v$version" ]; then\n  release=true', plan["run"]
+        )
         _, push = self.step(self.job, "docker push")
         self.assertIn('docker push "$REPOSITORY:$COMMIT_TAG"', push["run"])
         self.assertIn('if [ "$RELEASE" = "true" ]; then\n  docker push "$IMAGE"', push["run"])
-        self.assertEqual(push["env"]["COMMIT_TAG"],
-                         "${{ needs.plan.outputs.commit_tag }}-${{ matrix.flavor }}")
+        self.assertEqual(
+            push["env"]["COMMIT_TAG"], "${{ needs.plan.outputs.commit_tag }}-${{ matrix.flavor }}"
+        )
 
     def test_a_release_tag_must_name_the_version_file(self):
         _, step = self.step(self.plan, "check-versions.py --tag")
@@ -276,14 +293,16 @@ class ReleaseWorkflow(unittest.TestCase):
 
     def test_only_the_image_job_may_write_packages_and_request_an_oidc_token(self):
         self.assertEqual(self.workflow["permissions"], {"contents": "read"})
-        self.assertEqual(self.job["permissions"],
-                         {"contents": "read", "packages": "write", "id-token": "write"})
+        self.assertEqual(
+            self.job["permissions"], {"contents": "read", "packages": "write", "id-token": "write"}
+        )
         self.assertNotIn("permissions", self.plan)
 
     def test_the_signature_is_verified_against_this_workflow_and_commit(self):
         _, step = self.step(self.job, "cosign verify")
-        self.assertIn('--certificate-identity "https://github.com/$GITHUB_WORKFLOW_REF"',
-                      step["run"])
+        self.assertIn(
+            '--certificate-identity "https://github.com/$GITHUB_WORKFLOW_REF"', step["run"]
+        )
         self.assertIn('--certificate-oidc-issuer "$OIDC_ISSUER"', step["run"])
         self.assertIn('--certificate-github-workflow-sha "$GITHUB_SHA"', step["run"])
         self.assertEqual(self.workflow["env"]["OIDC_ISSUER"], OIDC_ISSUER)
@@ -296,11 +315,14 @@ class ReleaseWorkflow(unittest.TestCase):
 
     def test_registry_credentials_come_from_repository_variables_and_secrets(self):
         _, step = self.step(self.job, "docker/login-action")
-        self.assertEqual(step["with"], {
-            "registry": "${{ needs.plan.outputs.registry_host }}",
-            "username": "${{ vars.HORUS_REGISTRY_USERNAME || github.actor }}",
-            "password": "${{ secrets.HORUS_REGISTRY_TOKEN || secrets.GITHUB_TOKEN }}",
-        })
+        self.assertEqual(
+            step["with"],
+            {
+                "registry": "${{ needs.plan.outputs.registry_host }}",
+                "username": "${{ vars.HORUS_REGISTRY_USERNAME || github.actor }}",
+                "password": "${{ secrets.HORUS_REGISTRY_TOKEN || secrets.GITHUB_TOKEN }}",
+            },
+        )
 
     def test_the_wiring_and_installer_tests_run_before_any_image_is_built(self):
         _, wiring = self.step(self.plan, THIS_FILE)

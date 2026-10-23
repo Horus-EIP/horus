@@ -40,8 +40,7 @@ logger = get_logger("Embedder")
 CHROMA_DATA_DIR = Path(__file__).parent.parent.parent / "chroma_data"
 
 chroma_client = chromadb.PersistentClient(
-    path=str(CHROMA_DATA_DIR),
-    settings=Settings(anonymized_telemetry=False)
+    path=str(CHROMA_DATA_DIR), settings=Settings(anonymized_telemetry=False)
 )
 
 FASTEMBED_MODEL = "BAAI/bge-base-en-v1.5"
@@ -93,7 +92,8 @@ def wants_cuda(requested: str, available_providers: Sequence[str]) -> bool:
     if not cuda_available:
         logger.warning(
             "KNOWLEDGE_STORE_EMBED_DEVICE=%s, but this onnxruntime has no %s; embedding on CPU",
-            requested, CUDA_PROVIDER,
+            requested,
+            CUDA_PROVIDER,
         )
     return cuda_available
 
@@ -116,8 +116,12 @@ def load_fastembed():
     loaded = TextEmbedding(MODEL_NAME, threads=threads, cuda=use_cuda)
     logger.info(
         "BGE embedder %s loaded with %s %s on %s (KNOWLEDGE_STORE_EMBED_DEVICE=%s, threads=%s)",
-        MODEL_NAME, EMBED_RUNTIME, EMBED_RUNTIME_VERSION, "cuda" if use_cuda else "cpu",
-        device, threads or "onnxruntime default",
+        MODEL_NAME,
+        EMBED_RUNTIME,
+        EMBED_RUNTIME_VERSION,
+        "cuda" if use_cuda else "cpu",
+        device,
+        threads or "onnxruntime default",
     )
     return loaded
 
@@ -127,13 +131,16 @@ def connect_to_embeddings_server() -> EmbeddingsClient:
     logger.info(
         "Embeddings come from %s with the model %s, %d values per vector: "
         "no embedding model is loaded in this service",
-        EMBED_URL, MODEL_NAME, EMBED_DIMENSIONS,
+        EMBED_URL,
+        MODEL_NAME,
+        EMBED_DIMENSIONS,
     )
     refused = client.wait_until_ready(time.monotonic() + STARTUP_WAIT_SECONDS)
     if refused:
         logger.warning(
             "The embeddings server is up but refused a test request, so search and "
-            "uploads fail until it answers: %s", refused,
+            "uploads fail until it answers: %s",
+            refused,
         )
     return client
 

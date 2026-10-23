@@ -95,7 +95,9 @@ def schema_violations(value: Any, schema: Any, path: str = "$") -> list[str]:
         return [f"{path}: the checker does not support {', '.join(unsupported)}"]
     malformed = _malformed_keywords(schema)
     if malformed:
-        return [f"{path}: the checker does not support {name} {schema[name]!r}" for name in malformed]
+        return [
+            f"{path}: the checker does not support {name} {schema[name]!r}" for name in malformed
+        ]
     expected = schema.get("type")
     if expected is not None:
         allowed = expected if isinstance(expected, list) else [expected]
@@ -107,9 +109,13 @@ def schema_violations(value: Any, schema: Any, path: str = "$") -> list[str]:
     if "const" in schema and not _same_json(value, schema["const"]):
         problems.append(f"{path}: {value!r} is not {schema['const']!r}")
     if isinstance(value, str):
-        problems.extend(_length_violations(path, len(value), schema, "minLength", "maxLength", "characters"))
+        problems.extend(
+            _length_violations(path, len(value), schema, "minLength", "maxLength", "characters")
+        )
     if isinstance(value, list):
-        problems.extend(_length_violations(path, len(value), schema, "minItems", "maxItems", "items"))
+        problems.extend(
+            _length_violations(path, len(value), schema, "minItems", "maxItems", "items")
+        )
         if isinstance(schema.get("items"), (bool, dict)):
             for index, element in enumerate(value):
                 problems.extend(schema_violations(element, schema["items"], f"{path}[{index}]"))
@@ -131,7 +137,9 @@ def _length_violations(
 
 def _object_violations(value: dict[str, Any], schema: dict[str, Any], path: str) -> list[str]:
     properties = schema.get("properties") or {}
-    problems = [f"{path}: missing {name!r}" for name in schema.get("required") or [] if name not in value]
+    problems = [
+        f"{path}: missing {name!r}" for name in schema.get("required") or [] if name not in value
+    ]
     extra = schema.get("additionalProperties", True)
     for name, element in value.items():
         if name in properties:

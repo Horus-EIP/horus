@@ -63,7 +63,10 @@ def suite_row(suite: str, coverage_xml: Path, junit_xml: Path) -> str:
 def collected_table(rows: dict[str, str]) -> str:
     lines = ["## Coverage", "", HEADER]
     for suite, row in rows.items():
-        lines.append(row.strip() or f"| {suite} | {NOTHING_ARRIVED} | {NOTHING_ARRIVED} | {NOTHING_ARRIVED} |")
+        lines.append(
+            row.strip()
+            or f"| {suite} | {NOTHING_ARRIVED} | {NOTHING_ARRIVED} | {NOTHING_ARRIVED} |"
+        )
     if not any(row.strip() for row in rows.values()):
         lines += ["", "No test job sent its coverage line."]
     return "\n".join(lines)

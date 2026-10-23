@@ -30,9 +30,7 @@ QUEUE_STATS_RESPONSES = {
     },
     403: {
         "description": "Forbidden",
-        "content": {
-            "application/json": {"example": {"detail": "Insufficient permissions"}}
-        },
+        "content": {"application/json": {"example": {"detail": "Insufficient permissions"}}},
     },
 }
 
@@ -529,9 +527,7 @@ CANCEL_TASK_RESPONSES = {
                 "examples": {
                     "success": {
                         "summary": "Task canceled",
-                        "value": {
-                            "message": "Task task-uuid-1234 has been canceled successfully."
-                        },
+                        "value": {"message": "Task task-uuid-1234 has been canceled successfully."},
                     }
                 }
             }

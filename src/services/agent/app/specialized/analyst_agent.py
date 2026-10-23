@@ -7,6 +7,7 @@ from ai_agents.payment_analyzer_tool import PaymentAnalyzerTool
 
 logger = logging.getLogger(__name__)
 
+
 class AnalystAgent:
     def __init__(self):
         self.type = "analyst"
@@ -27,7 +28,7 @@ class AnalystAgent:
     async def process_request(self, task_type: str, data: Any, extra_parameters: dict = None):
         """
         Process extraction, analysis, or calculation requests.
-        
+
         Args:
             task_type: 'extract', 'analyze', or 'calculate'.
             data: The content to process (text, payments data, or calculation details).

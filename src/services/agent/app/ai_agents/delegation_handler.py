@@ -127,11 +127,13 @@ class DelegationHandler:
         )
 
         context_chain = list(delegation_context or [])
-        context_chain.append({
-            "agent_id": self.agent_id,
-            "request": request,
-            "data": data or {},
-        })
+        context_chain.append(
+            {
+                "agent_id": self.agent_id,
+                "request": request,
+                "data": data or {},
+            }
+        )
 
         url = f"{self.orchestrator_url}/rabbitmq/delegate"
         payload = {

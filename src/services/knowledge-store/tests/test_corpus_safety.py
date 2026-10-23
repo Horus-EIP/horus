@@ -16,6 +16,7 @@ if str(SERVICE_ROOT) not in sys.path:
 os.environ.setdefault("TEST_MODE", "1")
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
+
 def _stub(name: str, **attrs) -> types.ModuleType:
     module = types.ModuleType(name)
     module.__spec__ = types.SimpleNamespace(origin="mock", submodule_search_locations=[])
@@ -23,6 +24,7 @@ def _stub(name: str, **attrs) -> types.ModuleType:
         setattr(module, key, value)
     sys.modules[name] = module
     return module
+
 
 _stub("spacy", load=MagicMock(return_value=MagicMock()), cli=MagicMock())
 _stub("spacy.lang")
@@ -42,17 +44,18 @@ from app.api.routes import corpus  # noqa: E402
 
 MAX_BYTES = 1024
 
+
 def _accepted(root: Path) -> set[str]:
-    return {
-        rel for _p, rel, cand in corpus.walk_corpus(root, MAX_BYTES)
-        if cand.reason is None
-    }
+    return {rel for _p, rel, cand in corpus.walk_corpus(root, MAX_BYTES) if cand.reason is None}
+
 
 def _reasons(root: Path) -> dict[str, str]:
     return {
-        rel: cand.reason for _p, rel, cand in corpus.walk_corpus(root, MAX_BYTES)
+        rel: cand.reason
+        for _p, rel, cand in corpus.walk_corpus(root, MAX_BYTES)
         if cand.reason is not None
     }
+
 
 def _hard_link(link: Path, target: Path) -> None:
     try:
@@ -60,11 +63,13 @@ def _hard_link(link: Path, target: Path) -> None:
     except (OSError, NotImplementedError) as exc:
         pytest.skip(f"cannot create hard links in this environment: {exc}")
 
+
 def _symlink(link: Path, target: Path, is_dir: bool = False) -> None:
     try:
         link.symlink_to(target, target_is_directory=is_dir)
     except (OSError, NotImplementedError) as exc:
         pytest.skip(f"cannot create symlinks in this environment: {exc}")
+
 
 @pytest.fixture
 def corpus_root(tmp_path: Path) -> Path:
@@ -72,6 +77,7 @@ def corpus_root(tmp_path: Path) -> Path:
     root.mkdir()
     (root / "report.md").write_text("Q4 2025 revenue was 4.2M.", encoding="utf-8")
     return root
+
 
 class TestBaseline:
     def test_plain_document_is_accepted(self, corpus_root):
@@ -92,6 +98,7 @@ class TestBaseline:
         assert "nested/memo.txt" in rels
         assert not any(os.path.isabs(rel) for rel in rels)
 
+
 class TestAbsoluteEscape:
     def test_path_outside_root_is_rejected(self, tmp_path, corpus_root):
         outside = tmp_path / "secret.txt"
@@ -111,6 +118,7 @@ class TestAbsoluteEscape:
 
         assert cand.resolved is None
         assert cand.reason == corpus.SKIP_OUTSIDE_ROOT
+
 
 class TestSymlinkedFile:
     def test_symlinked_file_pointing_outside_is_rejected(self, tmp_path, corpus_root):
@@ -137,6 +145,7 @@ class TestSymlinkedFile:
         cand = corpus.inspect_candidate(corpus_root / "alias.md", corpus_root, MAX_BYTES)
         assert cand.reason == corpus.SKIP_SYMLINK
 
+
 class TestSymlinkedDirectory:
     def test_symlinked_directory_is_not_descended(self, tmp_path, corpus_root):
         outside_dir = tmp_path / "elsewhere"
@@ -158,6 +167,7 @@ class TestSymlinkedDirectory:
 
         assert _accepted(corpus_root) == {"report.md"}
 
+
 class TestExtensionAllowlist:
     @pytest.mark.parametrize("name", ["id_rsa.pem", "history.sqlite", "blob.bin", "noext"])
     def test_unsupported_extension_is_rejected(self, corpus_root, name):
@@ -176,6 +186,7 @@ class TestExtensionAllowlist:
     def test_extension_match_is_case_insensitive(self, corpus_root):
         (corpus_root / "SHOUTING.MD").write_text("content", encoding="utf-8")
         assert "SHOUTING.MD" in _accepted(corpus_root)
+
 
 class TestSizeLimits:
     def test_oversized_file_is_rejected(self, corpus_root):
@@ -197,6 +208,7 @@ class TestSizeLimits:
         cand = corpus.inspect_candidate(corpus_root / "empty.txt", corpus_root, MAX_BYTES)
 
         assert cand.reason == corpus.SKIP_EMPTY
+
 
 class TestMiscellaneous:
     def test_missing_root_yields_no_rows(self, tmp_path):
@@ -229,6 +241,7 @@ class TestMiscellaneous:
         assert reasons["empty.txt"] == corpus.SKIP_EMPTY
         assert reasons["huge.txt"] == corpus.SKIP_TOO_LARGE
         assert all(reason for reason in reasons.values())
+
 
 class TestHardLink:
     def test_hard_link_to_a_private_key_is_rejected(self, tmp_path, corpus_root):
@@ -263,13 +276,16 @@ class TestHardLink:
         cand = corpus.inspect_candidate(corpus_root / "report.md", corpus_root, MAX_BYTES)
         assert cand.reason is None
 
+
 def _pinned(root: Path, name: str):
     rows = {rel: cand for _p, rel, cand in corpus.walk_corpus(root, MAX_BYTES)}
     return rows[name]
 
+
 def _ingest(job: dict, root: Path, name: str, cand) -> dict:
     asyncio.run(corpus._ingest_one(job, cand.resolved or (root / name), name, cand))
     return job["files"][-1]
+
 
 class TestChangedDuringScan:
     def test_file_swapped_after_the_walk_is_not_read(self, tmp_path, corpus_root):
@@ -322,9 +338,7 @@ class TestChangedDuringScan:
 
         assert corpus._still_pinned(corpus_root / "z.txt", cand) is False
 
-    def test_pinned_path_names_the_open_inode_where_proc_exists(
-        self, corpus_root, monkeypatch
-    ):
+    def test_pinned_path_names_the_open_inode_where_proc_exists(self, corpus_root, monkeypatch):
         report = corpus_root / "report.md"
         fd = os.open(report, corpus.OPEN_FLAGS)
         try:
@@ -344,9 +358,11 @@ class TestChangedDuringScan:
         finally:
             os.close(fd)
 
+
 TOKEN = "s3cret-corpus-token"
 UI_ORIGIN = "http://localhost:3000"
 DRIVE_BY_ORIGIN = "https://evil.example"
+
 
 @pytest.fixture
 def client(monkeypatch, tmp_path):
@@ -357,10 +373,9 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(corpus, "CORPUS_ROOT", tmp_path / "not-mounted")
     return TestClient(app)
 
+
 class TestCorpusTokenGate:
-    def test_unset_token_disables_the_routes_rather_than_opening_them(
-        self, client, monkeypatch
-    ):
+    def test_unset_token_disables_the_routes_rather_than_opening_them(self, client, monkeypatch):
         monkeypatch.delenv(corpus.CORPUS_TOKEN_ENV, raising=False)
 
         assert client.post("/corpus/scan").status_code == 503
@@ -390,6 +405,7 @@ class TestCorpusTokenGate:
         assert client.get("/corpus/status", headers=headers).status_code == 200
         assert client.post("/corpus/scan", headers=headers).status_code == 404
 
+
 class TestCorsOrigins:
     def test_drive_by_page_cannot_read_the_response(self, client, monkeypatch):
         monkeypatch.setenv(corpus.CORPUS_TOKEN_ENV, TOKEN)
@@ -401,9 +417,7 @@ class TestCorsOrigins:
 
         assert "access-control-allow-origin" not in response.headers
 
-    def test_preflight_for_the_token_header_is_refused_cross_origin(
-        self, client, monkeypatch
-    ):
+    def test_preflight_for_the_token_header_is_refused_cross_origin(self, client, monkeypatch):
         monkeypatch.setenv(corpus.CORPUS_TOKEN_ENV, TOKEN)
 
         preflight = client.options(

@@ -115,9 +115,7 @@ class TestSkillCacheHelpers:
         fake.assert_called_once_with("a1", "name", [], "")
 
     def test_upsert_real_swallows_exceptions(self, monkeypatch):
-        mod = SimpleNamespace(
-            upsert_agent=MagicMock(side_effect=RuntimeError("boom"))
-        )
+        mod = SimpleNamespace(upsert_agent=MagicMock(side_effect=RuntimeError("boom")))
         monkeypatch.setitem(sys.modules, "core.skill_cache", mod)
         _ORIG_UPSERT("a1", "n", ["s"], "d")  # must not raise
 
@@ -129,9 +127,7 @@ class TestSkillCacheHelpers:
         fake.assert_called_once_with("a1")
 
     def test_evict_real_swallows_exceptions(self, monkeypatch):
-        mod = SimpleNamespace(
-            evict_agent=MagicMock(side_effect=RuntimeError("boom"))
-        )
+        mod = SimpleNamespace(evict_agent=MagicMock(side_effect=RuntimeError("boom")))
         monkeypatch.setitem(sys.modules, "core.skill_cache", mod)
         _ORIG_EVICT("a1")  # must not raise
 
@@ -350,9 +346,7 @@ class TestCreateAgent:
         assert new_agent.status == "active"
         assert new_agent.last_heartbeat > existing.last_heartbeat
         db.commit.assert_called_once()
-        rtf.rabbitmq_instance.ensure_work_queue.assert_called_once_with(
-            "horus.work.researcher"
-        )
+        rtf.rabbitmq_instance.ensure_work_queue.assert_called_once_with("horus.work.researcher")
 
     async def test_existing_agent_is_not_replaced_when_deletion_fails(self, monkeypatch):
         db = MagicMock()
@@ -471,9 +465,7 @@ class TestGetAgentDetails:
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.parametrize(
-    "func", [rtf.update_alive_agent_status, rtf.update_active_status]
-)
+@pytest.mark.parametrize("func", [rtf.update_alive_agent_status, rtf.update_active_status])
 class TestUpdateActiveWrappers:
     def test_success(self, func):
         agent = _make_agent(status="dead")

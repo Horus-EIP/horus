@@ -34,9 +34,7 @@ def _event_kinds(task_id):
 def routed_to_finance():
     with (
         patch.object(routes, "select_agent_by_mode", return_value=(None, None, None, [])),
-        patch.object(
-            routes, "route_task", return_value=("agent-finance", QUESTION, None, [])
-        ),
+        patch.object(routes, "route_task", return_value=("agent-finance", QUESTION, None, [])),
         patch.object(routes, "_publish_task_to_work_queue") as publish,
         patch.object(routes, "add_messages", return_value={"id": 41}),
     ):
@@ -264,9 +262,7 @@ class TestIdempotencyKey:
         routing_db.commit()
 
         mine = await submit_task(_chat_task(), user=as_user, headers=headers)
-        theirs = await submit_task(
-            _chat_task(conversation_id=9), user=as_manager, headers=headers
-        )
+        theirs = await submit_task(_chat_task(conversation_id=9), user=as_manager, headers=headers)
 
         assert mine.response.json()["task_id"] != theirs.response.json()["task_id"]
         assert routing_db.query(Task).count() == 2

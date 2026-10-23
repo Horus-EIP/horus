@@ -158,17 +158,24 @@ def build_parser(
     parser.add_argument("--catalog", default=profile.catalog, help=helps.get("--catalog"))
     parser.add_argument("--only", type=comma_list, help=helps.get("--only"))
     parser.add_argument("--all-quants", action="store_true", help=helps.get("--all-quants"))
-    parser.add_argument("--steps", type=comma_list, default=list(profile.steps), help=helps.get("--steps"))
+    parser.add_argument(
+        "--steps", type=comma_list, default=list(profile.steps), help=helps.get("--steps")
+    )
     parser.add_argument("--models-dir", default=profile.models_dir, help=helps.get("--models-dir"))
     parser.add_argument("--out-dir", default=profile.out_dir, help=helps.get("--out-dir"))
     parser.add_argument("--reference", default=profile.reference, help=helps.get("--reference"))
-    parser.add_argument("--reasoning", choices=REASONING_MODES, default="off", help=helps.get("--reasoning"))
+    parser.add_argument(
+        "--reasoning", choices=REASONING_MODES, default="off", help=helps.get("--reasoning")
+    )
     parser.add_argument("--llm-mem-limit", help=helps.get("--llm-mem-limit"))
     parser.add_argument("--server-image", help=helps.get("--server-image"))
     if run_class is not None:
         run_class.add_serving_arguments(parser)
     parser.add_argument(
-        "--start-timeout", type=float, default=DEFAULT_START_TIMEOUT_S, help=helps.get("--start-timeout")
+        "--start-timeout",
+        type=float,
+        default=DEFAULT_START_TIMEOUT_S,
+        help=helps.get("--start-timeout"),
     )
     parser.add_argument("--testset", default=profile.testset, help=helps.get("--testset"))
     parser.add_argument("--ids", type=comma_list, help=helps.get("--ids"))
@@ -287,7 +294,10 @@ class CandidateRun:
         for variant in variants:
             entry = earlier.get(variant.id) or {}
             problems = list(entry.get("problems") or [])
-            gate = [f"skipped: {text}" for text in variant_gate(variant, catalog, profile.summary.gate_build)]
+            gate = [
+                f"skipped: {text}"
+                for text in variant_gate(variant, catalog, profile.summary.gate_build)
+            ]
             self.state[variant.id] = {
                 "skipped": bool(gate),
                 "fetch": entry.get("fetch"),
@@ -336,7 +346,11 @@ class CandidateRun:
             "path": relative_to(self.args.testset, self.profile.base_dir),
             "version": str(self.testset.get("version")),
             "sha256": file_sha256(testset_path),
-            "filters": {"ids": self.args.ids, "categories": self.args.category, "limit": self.args.limit},
+            "filters": {
+                "ids": self.args.ids,
+                "categories": self.args.category,
+                "limit": self.args.limit,
+            },
             "probe_items": len(self.probe_items()),
         }
 
@@ -365,7 +379,9 @@ class CandidateRun:
             "finished_at": current["finished_at"],
             "completed": current["completed"],
             "git_commit": current["git_commit"],
-            "steps": [step for step in STEPS if any(step in (s.get("steps") or []) for s in sessions)],
+            "steps": [
+                step for step in STEPS if any(step in (s.get("steps") or []) for s in sessions)
+            ],
             "reasoning": (serving[-1] if serving else current)["reasoning"],
             "stack_llm": self.stack,
             "testset": current["testset"],
@@ -419,7 +435,9 @@ class CandidateRun:
     def execute(self) -> int:
         docker = self.shell.docker_facts()
         overrides = {name: getattr(self.args, name) for name in MACHINE_OVERRIDES}
-        self.machine = machine_section(self.args.reference, self.shell.collect_host(self.models_dir), overrides, docker)
+        self.machine = machine_section(
+            self.args.reference, self.shell.collect_host(self.models_dir), overrides, docker
+        )
         for item in missing_fields(self.machine):
             print(f"[warn] machine {item}")
         for variant in self.variants:
@@ -453,7 +471,11 @@ class CandidateRun:
         )
         returncode, _lines = self.shell.run_and_echo(command)
         if returncode != 0:
-            return {"status": "failed", "method": "docker", "error": f"fetch-model.sh exited with {returncode}"}
+            return {
+                "status": "failed",
+                "method": "docker",
+                "error": f"fetch-model.sh exited with {returncode}",
+            }
         return {"status": "verified", "method": "docker", "path": recorded_model_path(variant.file)}
 
     def fetch_all(self) -> None:
@@ -463,8 +485,12 @@ class CandidateRun:
             state = self.state[variant.id]
             if state["skipped"]:
                 continue
-            state["problems"] = [text for text in state["problems"] if not text.startswith(DOWNLOAD_FAILED)]
-            print(f"[info] {variant.id}: {variant.file} ({variant.gguf['size_bytes']:,} bytes) from {variant.url}")
+            state["problems"] = [
+                text for text in state["problems"] if not text.startswith(DOWNLOAD_FAILED)
+            ]
+            print(
+                f"[info] {variant.id}: {variant.file} ({variant.gguf['size_bytes']:,} bytes) from {variant.url}"
+            )
             outcome = self.fetch_variant(variant)
             state["fetch"] = outcome
             if outcome["status"] != "verified":
@@ -472,27 +498,46 @@ class CandidateRun:
             self.save()
 
     def bench_tool(self) -> list[str]:
-        return [sys.executable, "-m", LLAMA_BENCH_TOOL, "--known-models", str(Path(self.args.catalog).resolve())]
+        return [
+            sys.executable,
+            "-m",
+            LLAMA_BENCH_TOOL,
+            "--known-models",
+            str(Path(self.args.catalog).resolve()),
+        ]
 
     def bench_command(self, variant: Variant) -> list[str]:
         matrix = self.catalog["llama_bench"]
         reference = ["--reference", self.args.reference] if self.args.reference else []
         return [
             *self.bench_tool(),
-            "--models-dir", str(self.models_dir),
-            "--model", variant.file,
-            "--label", f"{variant.id}-llama-bench",
-            "--out-dir", str(self.run_dir),
+            "--models-dir",
+            str(self.models_dir),
+            "--model",
+            variant.file,
+            "--label",
+            f"{variant.id}-llama-bench",
+            "--out-dir",
+            str(self.run_dir),
             *reference,
-            "--image", self.catalog["llama_cpp"]["bench_image"],
-            "--fetch-image", self.server_image,
-            "--prompts", str(matrix["prompts"]),
-            "--generations", str(matrix["generations"]),
-            "--depths", str(matrix["depths"]),
-            "--cache-types-k", str(matrix["cache_types_k"]),
-            "--cache-types-v", str(matrix["cache_types_v"]),
-            "--threads", str(matrix["threads"]),
-            "--repetitions", str(matrix["repetitions"]),
+            "--image",
+            self.catalog["llama_cpp"]["bench_image"],
+            "--fetch-image",
+            self.server_image,
+            "--prompts",
+            str(matrix["prompts"]),
+            "--generations",
+            str(matrix["generations"]),
+            "--depths",
+            str(matrix["depths"]),
+            "--cache-types-k",
+            str(matrix["cache_types_k"]),
+            "--cache-types-v",
+            str(matrix["cache_types_v"]),
+            "--threads",
+            str(matrix["threads"]),
+            "--repetitions",
+            str(matrix["repetitions"]),
             *machine_overrides(self.args),
             *self.args.bench_arg,
         ]
@@ -506,7 +551,9 @@ class CandidateRun:
             if returncode != 0 or not written:
                 self.problem(variant, f"llama-bench failed (exit {returncode})")
             if written:
-                self.state[variant.id]["reports"]["llama_bench"] = relative_to(written, self.base_dir)
+                self.state[variant.id]["reports"]["llama_bench"] = relative_to(
+                    written, self.base_dir
+                )
             self.save()
 
     def serving_trouble(self, serving: list[Variant]) -> str | None:
@@ -568,17 +615,27 @@ class CandidateRun:
             state = parse_container_inspect(self.shell.docker_text(["inspect", self.container]))
             if not state or not state["running"]:
                 return "llama-server stopped while loading the model:\n" + self.log_tail()
-            if self.shell.docker_text(["exec", self.container, "curl", "-fsS", "-m", "10", url]) is not None:
+            if (
+                self.shell.docker_text(["exec", self.container, "curl", "-fsS", "-m", "10", url])
+                is not None
+            ):
                 return None
             self.shell.sleep(HEALTH_POLL_S)
-        return f"llama-server was not healthy after {self.args.start_timeout:.0f}s:\n" + self.log_tail()
+        return (
+            f"llama-server was not healthy after {self.args.start_timeout:.0f}s:\n"
+            + self.log_tail()
+        )
 
     def log_tail(self) -> str:
-        return self.shell.docker_output(["logs", "--tail", str(LOG_TAIL_LINES), self.container]).strip()
+        return self.shell.docker_output(
+            ["logs", "--tail", str(LOG_TAIL_LINES), self.container]
+        ).strip()
 
     def server_facts(self, command: list[str]) -> dict[str, Any]:
         url = f"http://localhost:{self.server_port()}/props"
-        props = parse_props(self.shell.docker_text(["exec", self.container, "curl", "-fsS", "-m", "10", url]))
+        props = parse_props(
+            self.shell.docker_text(["exec", self.container, "curl", "-fsS", "-m", "10", url])
+        )
         return {
             "container": self.container,
             "image": self.server_image,
@@ -586,7 +643,8 @@ class CandidateRun:
             "memory_limit_bytes": self.memory_limit(),
             "reasoning": self.args.reasoning,
             "build_info": props.get("build_info"),
-            "build": build_tag(props.get("build_info")) or build_tag(self.server_image.rsplit(":", 1)[-1]),
+            "build": build_tag(props.get("build_info"))
+            or build_tag(self.server_image.rsplit(":", 1)[-1]),
             "n_ctx": props.get("n_ctx"),
             "model_path": props.get("model_path"),
         }
@@ -608,7 +666,9 @@ class CandidateRun:
     def model_missing(self, variant: Variant) -> bool:
         if (self.models_dir / variant.file).is_file():
             return False
-        self.problem(variant, f"{variant.file} is not in {self.models_dir}: run the fetch step first")
+        self.problem(
+            variant, f"{variant.file} is not in {self.models_dir}: run the fetch step first"
+        )
         return True
 
     def serve(self, variant: Variant) -> None:
@@ -662,14 +722,18 @@ class CandidateRun:
         )
         for variant in self.variants:
             state = self.state[variant.id]
-            print(f"\n[plan] {variant.id}: {variant.name} {variant.gguf['quant']} ({variant.candidate['licence']})")
+            print(
+                f"\n[plan] {variant.id}: {variant.name} {variant.gguf['quant']} ({variant.candidate['licence']})"
+            )
             for text in state["problems"]:
                 print(f"  {text}")
             if state["skipped"]:
                 continue
             if "fetch" in self.args.steps:
                 print(f"  fetch {variant.url} -> {self.models_dir / variant.file}")
-                print(f"        {variant.gguf['size_bytes']:,} bytes, SHA-256 {variant.gguf['sha256']}")
+                print(
+                    f"        {variant.gguf['size_bytes']:,} bytes, SHA-256 {variant.gguf['sha256']}"
+                )
             if "bench" in self.args.steps:
                 print("  " + shlex.join(self.bench_command(variant)))
             if SERVING_STEPS & set(self.args.steps):
@@ -683,19 +747,35 @@ class CandidateRun:
 class PublishedCandidateRun(CandidateRun):
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        serving = parser.add_argument_group("serving (each candidate in its own llama-server container)")
-        serving.add_argument("--port", type=int, default=DEFAULT_PUBLISHED_PORT, help="Host port on 127.0.0.1.")
-        serving.add_argument("--ctx-size", type=int, default=DEFAULT_CTX_SIZE, help="Context size of llama-server.")
-        serving.add_argument("--server-arg", action="append", default=[], help="Extra llama-server argument.")
+        serving = parser.add_argument_group(
+            "serving (each candidate in its own llama-server container)"
+        )
+        serving.add_argument(
+            "--port", type=int, default=DEFAULT_PUBLISHED_PORT, help="Host port on 127.0.0.1."
+        )
+        serving.add_argument(
+            "--ctx-size", type=int, default=DEFAULT_CTX_SIZE, help="Context size of llama-server."
+        )
+        serving.add_argument(
+            "--server-arg", action="append", default=[], help="Extra llama-server argument."
+        )
         probe = parser.add_argument_group("probe step")
         probe.add_argument("--probe-items", help="Probe items, .json, .jsonl or .yaml.")
         probe.add_argument("--probe-system", help="System prompt file (template mode).")
-        probe.add_argument("--probe-user-template", help="User message template with {question} and {context}.")
+        probe.add_argument(
+            "--probe-user-template", help="User message template with {question} and {context}."
+        )
         probe.add_argument("--probe-schema", help="JSON schema of the reply (template mode).")
-        probe.add_argument("--probe-response-format", help="Whole response_format object instead of --probe-schema.")
+        probe.add_argument(
+            "--probe-response-format",
+            help="Whole response_format object instead of --probe-schema.",
+        )
         probe.add_argument("--probe-context-dir", help="Folder of <item id>.txt context files.")
         probe.add_argument(
-            "--probe-max-tokens", type=int, default=DEFAULT_PROBE_MAX_TOKENS, help="max_tokens of each template request."
+            "--probe-max-tokens",
+            type=int,
+            default=DEFAULT_PROBE_MAX_TOKENS,
+            help="max_tokens of each template request.",
         )
         probe.add_argument(
             "--probe-timeout",
@@ -703,9 +783,15 @@ class PublishedCandidateRun(CandidateRun):
             default=DEFAULT_PROBE_TIMEOUT_S,
             help="Seconds to wait for the server to connect or to send more data.",
         )
-        probe.add_argument("--probe-command", help="Command that runs a probe v1 job instead of the template.")
-        probe.add_argument("--probe-setup", help="Command run once per candidate before --probe-command.")
-        probe.add_argument("--warmup", metavar="QUESTION", help="Ask this first in the probe and do not score it.")
+        probe.add_argument(
+            "--probe-command", help="Command that runs a probe v1 job instead of the template."
+        )
+        probe.add_argument(
+            "--probe-setup", help="Command run once per candidate before --probe-command."
+        )
+        probe.add_argument(
+            "--warmup", metavar="QUESTION", help="Ask this first in the probe and do not score it."
+        )
 
     @classmethod
     def argument_errors(cls, args: argparse.Namespace) -> list[str]:
@@ -720,7 +806,9 @@ class PublishedCandidateRun(CandidateRun):
             if not args.probe_items:
                 errors.append("--steps probe needs --probe-items")
             template = [getattr(args, name) for name in TEMPLATE_OPTIONS]
-            if not args.probe_command and not (all(template) and (args.probe_schema or args.probe_response_format)):
+            if not args.probe_command and not (
+                all(template) and (args.probe_schema or args.probe_response_format)
+            ):
                 errors.append(
                     "--steps probe needs --probe-command, or --probe-system, --probe-user-template and "
                     "--probe-schema (or --probe-response-format)"
@@ -755,16 +843,21 @@ class PublishedCandidateRun(CandidateRun):
             )
 
     def probe_items(self) -> list[dict[str, Any]]:
-        return select_probe_items(self.probe_source, self.args.ids, self.args.category, self.args.limit)
+        return select_probe_items(
+            self.probe_source, self.args.ids, self.args.category, self.args.limit
+        )
 
     def base_url(self) -> str:
         return f"http://127.0.0.1:{self.args.port}/v1"
 
     def base_server_args(self) -> list[str]:
         return [
-            "--host", "0.0.0.0",
-            "--port", str(DEFAULT_PORT),
-            "--ctx-size", str(self.args.ctx_size),
+            "--host",
+            "0.0.0.0",
+            "--port",
+            str(DEFAULT_PORT),
+            "--ctx-size",
+            str(self.args.ctx_size),
             *self.args.server_arg,
         ]
 
@@ -779,12 +872,16 @@ class PublishedCandidateRun(CandidateRun):
         )
 
     def announce_serving(self) -> None:
-        print(f"[info] each candidate is served by the {self.container!r} container on {self.base_url()}")
+        print(
+            f"[info] each candidate is served by the {self.container!r} container on {self.base_url()}"
+        )
 
     def probe_mode(self) -> str:
         return "command" if self.args.probe_command else "template"
 
-    def command_replies(self, items: list[dict[str, Any]]) -> tuple[int, dict[str, dict[str, Any]], str | None]:
+    def command_replies(
+        self, items: list[dict[str, Any]]
+    ) -> tuple[int, dict[str, dict[str, Any]], str | None]:
         if self.args.probe_setup:
             code, _lines = self.shell.run_and_echo(split_command(self.args.probe_setup))
             if code != 0:
@@ -794,7 +891,9 @@ class PublishedCandidateRun(CandidateRun):
             context = item_context(item, self.probe_base, self.args.probe_context_dir)
             resolved.append({**item, "context": context} if context else item)
         job = {**probe_job(resolved, self.args.warmup), "endpoint": self.base_url()}
-        code, lines = self.shell.run_and_echo(split_command(self.args.probe_command), json.dumps(job))
+        code, lines = self.shell.run_and_echo(
+            split_command(self.args.probe_command), json.dumps(job)
+        )
         return code, read_reply_lines(lines), None
 
     def probe(self, variant: Variant) -> None:
@@ -849,11 +948,16 @@ class PublishedCandidateRun(CandidateRun):
             "-m",
             EVAL_TOOL,
             "run",
-            "--base-url", self.base_url(),
-            "--model", variant.id,
-            "--testset", str(self.args.testset),
-            "--label", f"{variant.id}-eval",
-            "--out-dir", str(self.run_dir),
+            "--base-url",
+            self.base_url(),
+            "--model",
+            variant.id,
+            "--testset",
+            str(self.args.testset),
+            "--label",
+            f"{variant.id}-eval",
+            "--out-dir",
+            str(self.run_dir),
             *item_filters(self.args),
             *self.args.eval_arg,
         ]
@@ -870,18 +974,29 @@ def earlier_summary(path: Path, profile: CandidatesProfile = DEFAULT_PROFILE) ->
     if not isinstance(report, dict) or report.get("kind") != profile.kind:
         raise ValueError(f"{path} is not a {profile.kind} summary")
     version = report.get("schema_version")
-    if isinstance(version, int) and not isinstance(version, bool) and version > profile.schema_version:
-        raise ValueError(f"{path} has schema_version {version}, newer than the {profile.schema_version} read here")
+    if (
+        isinstance(version, int)
+        and not isinstance(version, bool)
+        and version > profile.schema_version
+    ):
+        raise ValueError(
+            f"{path} has schema_version {version}, newer than the {profile.schema_version} read here"
+        )
     return report
 
 
-def resummarize(path: Path, catalog: dict[str, Any], profile: CandidatesProfile = DEFAULT_PROFILE) -> int:
+def resummarize(
+    path: Path, catalog: dict[str, Any], profile: CandidatesProfile = DEFAULT_PROFILE
+) -> int:
     try:
         report = earlier_summary(path, profile)
     except ValueError as exc:
         print(f"[error] --resummarize: {exc}")
         return 2
-    by_id = {variant.id: variant for variant in select_variants(catalog, all_quants=True, name_key=profile.name_key)}
+    by_id = {
+        variant.id: variant
+        for variant in select_variants(catalog, all_quants=True, name_key=profile.name_key)
+    }
     cache_type = str(catalog["llama_bench"]["cache_types_k"]).split(",")[0]
     refreshed = []
     for entry in report.get("variants") or []:
@@ -962,7 +1077,15 @@ def main(
     try:
         testset = run_class.load_testset(args.testset) if args.testset else None
         run = run_class(
-            args, catalog, variants, testset, summary_path, started, previous, profile=profile, shell=shell
+            args,
+            catalog,
+            variants,
+            testset,
+            summary_path,
+            started,
+            previous,
+            profile=profile,
+            shell=shell,
         )
     except profile.input_errors as exc:
         print(f"[error] {exc}")

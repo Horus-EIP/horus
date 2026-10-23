@@ -190,6 +190,7 @@ class TestTopicExtraction:
     def test_simple_topics_extracted(self):
         """Simple frequency-based topics are extracted when spaCy is unavailable."""
         import app.services.content_analyzer as ca_mod
+
         original_model = ca_mod._nlp_model
         ca_mod._nlp_model = False
         try:
@@ -218,7 +219,14 @@ class TestReturnFormat:
         """analyze() returns all expected keys."""
         analyzer = ContentAnalyzer(init_llm=False)
         result = analyzer.analyze("Test document about accounting invoices.")
-        expected_keys = {"auto_category", "auto_type", "auto_summary", "entities", "topics", "confidence_score"}
+        expected_keys = {
+            "auto_category",
+            "auto_type",
+            "auto_summary",
+            "entities",
+            "topics",
+            "confidence_score",
+        }
         assert expected_keys == set(result.keys())
 
     def test_title_param_accepted(self):
@@ -348,8 +356,13 @@ class TestSpacyOff:
         import app.services.content_analyzer as ca_mod
 
         env = {**os.environ, "HORUS_SPACY": setting}
-        done = subprocess.run([sys.executable, "-B", "-c", FRESH_ANALYZER, ca_mod.__file__, INVOICE],
-                              env=env, capture_output=True, text=True, check=True)
+        done = subprocess.run(
+            [sys.executable, "-B", "-c", FRESH_ANALYZER, ca_mod.__file__, INVOICE],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
 
         assert bool(json.loads(done.stdout.splitlines()[-1])) is imports_spacy
 

@@ -58,10 +58,10 @@ class CalculatorTool:
     def run(self, payload: dict[str, Any]) -> str:
         """
         Execute the calculation tool.
-        
+
         Args:
             payload: Dictionary containing 'expression' or 'query'.
-            
+
         Returns:
             The calculated result as a string.
         """
@@ -78,10 +78,10 @@ class CalculatorTool:
     def evaluate(self, expression: str) -> float:
         """
         Safely evaluate a mathematical expression using AST.
-        
+
         Args:
             expression: The math string to evaluate.
-            
+
         Returns:
             The float result.
         """
@@ -134,7 +134,7 @@ class CalculatorTool:
         if isinstance(op, ast.Mod):
             return left % right
         if isinstance(op, ast.Pow):
-            return left ** right
+            return left**right
         raise ValueError("Operator not allowed")
 
     def _resolve_name(self, node: ast.AST) -> str:
@@ -143,5 +143,3 @@ class CalculatorTool:
         if isinstance(node, ast.Attribute):
             return node.attr
         raise ValueError("Invalid function reference")
-
-

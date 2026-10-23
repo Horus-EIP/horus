@@ -20,13 +20,20 @@ SERVER_ENV = {
     "LLM_VLLM_MODEL": "qwen3-4b",
     "LLM_VLLM_MAX_MODEL_LEN": "8192",
 }
-UNSET = ("AGENT_STREAM_TOKENS", "AGENT_RESPONSE_CACHE", "AGENT_MAX_NEW_TOKENS",
-         "AGENT_MAX_CONTEXT_CHARS")
+UNSET = (
+    "AGENT_STREAM_TOKENS",
+    "AGENT_RESPONSE_CACHE",
+    "AGENT_MAX_NEW_TOKENS",
+    "AGENT_MAX_CONTEXT_CHARS",
+)
 FINANCE = next(p for p in profiles.DEFAULT_PROFILES if p.name == "Finance-Analyst")
 QUESTIONS = (
     ("in_corpus", "What was our Q4 2025 revenue?", ("1_Q4_2025_Financial_Report.md",)),
-    ("out_of_corpus", "What is the capital of Peru?",
-     ("1_Q4_2025_Financial_Report.md", "2_Employee_Handbook.md")),
+    (
+        "out_of_corpus",
+        "What is the capital of Peru?",
+        ("1_Q4_2025_Financial_Report.md", "2_Employee_Handbook.md"),
+    ),
     ("no_passages", "What was our Q4 2025 revenue?", ()),
 )
 
@@ -37,8 +44,15 @@ def demo_passages(titles) -> list[dict]:
         lines, size, part = [], 0, 0
         for line in (DEMO / title).read_text(encoding="utf-8").splitlines() + [None]:
             if line is None or (lines and size + len(line) > CHUNK_CHARS):
-                passages.append({"chunk_id": f"{title}:{part}", "doc_id": title, "title": title,
-                                 "page": None, "text": "\n".join(lines)})
+                passages.append(
+                    {
+                        "chunk_id": f"{title}:{part}",
+                        "doc_id": title,
+                        "title": title,
+                        "page": None,
+                        "text": "\n".join(lines),
+                    }
+                )
                 lines, size, part = [], 0, part + 1
             if line is not None:
                 lines.append(line)
@@ -84,8 +98,10 @@ async def requests_the_agent_sends() -> list[dict]:
         env = {key: value for key, value in os.environ.items() if key not in UNSET}
         token = profiles.current_persona.set(FINANCE.system_prompt)
         try:
-            with patch.dict(os.environ, {**env, **SERVER_ENV}, clear=True), \
-                    patch("requests.post", post):
+            with (
+                patch.dict(os.environ, {**env, **SERVER_ENV}, clear=True),
+                patch("requests.post", post),
+            ):
                 await RAGPipeline(retrieval, remote_agent()).generate_response(question)
         finally:
             profiles.current_persona.reset(token)
@@ -98,11 +114,14 @@ async def test_the_contract_tests_send_what_the_agent_sends():
     built = await requests_the_agent_sends()
     if UPDATE:
         REQUESTS.parent.mkdir(parents=True, exist_ok=True)
-        REQUESTS.write_text(json.dumps(built, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+        REQUESTS.write_text(
+            json.dumps(built, indent=1, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
     recorded = json.loads(REQUESTS.read_text(encoding="utf-8"))
     assert recorded == built, (
         "The agent's answer requests changed. Run HORUS_UPDATE_CONTRACT_REQUESTS=1 pytest "
-        "tests/agent/unit/test_contract_requests.py, then the contract tests (tests/contract).")
+        "tests/agent/unit/test_contract_requests.py, then the contract tests (tests/contract)."
+    )
 
 
 async def test_every_answer_request_is_the_structured_answer_call():

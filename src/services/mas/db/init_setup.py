@@ -30,9 +30,7 @@ def ensure_task_status_enum(bind) -> list[str]:
         with bind.connect() as connection:
             autocommit = connection.execution_options(isolation_level="AUTOCOMMIT")
             for value in missing:
-                autocommit.execute(
-                    text(f"ALTER TYPE taskstatus ADD VALUE IF NOT EXISTS '{value}'")
-                )
+                autocommit.execute(text(f"ALTER TYPE taskstatus ADD VALUE IF NOT EXISTS '{value}'"))
         logger.warning(f"The taskstatus enum lacked {missing}; the values were added")
     return missing
 
@@ -100,9 +98,7 @@ def init_db():
 
         # If only alembic_version exists, or no tables, something is wrong if we expect users table
         if "users" not in tables:
-            logger.warning(
-                "Users table missing after migration! Attempting fallback creation..."
-            )
+            logger.warning("Users table missing after migration! Attempting fallback creation...")
             try:
                 Base.metadata.create_all(bind=engine)
                 logger.info("Database tables created via SQLAlchemy fallback")

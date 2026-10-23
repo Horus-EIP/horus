@@ -113,9 +113,7 @@ class TestArithmeticAnswer:
         assert arithmetic_answer("12 multiplied by 7") == "12 multiplied by 7 = 84"
 
     def test_division_by_zero_is_explained_instead_of_answered(self):
-        assert arithmetic_answer("1/0") == (
-            "1/0 is undefined: a number cannot be divided by zero."
-        )
+        assert arithmetic_answer("1/0") == ("1/0 is undefined: a number cannot be divided by zero.")
 
     @pytest.mark.parametrize(
         "expression",

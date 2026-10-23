@@ -104,10 +104,7 @@ async def get_conversation_history(
     if not conversation:
         raise HTTPException(status_code=404, detail=f"Conversation {chat_id} not found")
 
-    if (
-        conversation.owner_username != user.get("username")
-        and user.get("role") != Role.ADMIN.value
-    ):
+    if conversation.owner_username != user.get("username") and user.get("role") != Role.ADMIN.value:
         raise HTTPException(
             status_code=403, detail="Only the conversation's owner or an admin can read it"
         )
@@ -152,9 +149,7 @@ async def remove_conversation(
     conv_owner = (getattr(conv, "owner_username", "") or "").casefold().strip()
     req_user = (user.get("username") or "").casefold().strip()
 
-    if (not conv_owner or conv_owner != req_user) and user.get(
-        "role"
-    ) != Role.ADMIN.value:
+    if (not conv_owner or conv_owner != req_user) and user.get("role") != Role.ADMIN.value:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     try:
@@ -172,9 +167,7 @@ async def remove_conversation(
             conversation_id=chat_id,
             error=str(e),
         )
-        raise HTTPException(
-            status_code=409, detail="Conversation has dependent records"
-        )
+        raise HTTPException(status_code=409, detail="Conversation has dependent records")
     except SQLAlchemyError as e:
         db.rollback()
         logger.error(
@@ -199,13 +192,9 @@ async def remove_conversation(
                 try:
                     await ws.close()
                 except Exception as e:
-                    logger.warning(
-                        f"Error closing WebSocket for conversation {chat_id}: {str(e)}"
-                    )
+                    logger.warning(f"Error closing WebSocket for conversation {chat_id}: {str(e)}")
     except Exception as e:
-        logger.warning(
-            f"Error managing WebSocket connections for conversation {chat_id}: {str(e)}"
-        )
+        logger.warning(f"Error managing WebSocket connections for conversation {chat_id}: {str(e)}")
 
     return {"message": "Conversation correctly deleted"}
 
@@ -234,9 +223,5 @@ async def get_conversation_list(
             logger.debug(f"No conversations found for user {user.get('username')}")
         return convs
     except Exception as e:
-        logger.error(
-            f"Error retrieving conversations for user {user.get('username')}: {str(e)}"
-        )
-        raise HTTPException(
-            status_code=500, detail="Error: Failed to retrieve conversations"
-        )
+        logger.error(f"Error retrieving conversations for user {user.get('username')}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error: Failed to retrieve conversations")

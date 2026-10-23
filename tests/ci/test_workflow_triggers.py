@@ -13,8 +13,10 @@ REPO = Path(__file__).resolve().parents[2]
 WORKFLOWS = REPO / ".github" / "workflows"
 PULL_REQUEST_WORKFLOWS = ("ci.yml", "eval-testset.yml")
 BRANCHES = ["main", "master"]
-GROUP = ("${{ github.workflow }}-${{ github.event_name == 'pull_request' && "
-         "format('pr-{0}', github.event.pull_request.number) || github.run_id }}")
+GROUP = (
+    "${{ github.workflow }}-${{ github.event_name == 'pull_request' && "
+    "format('pr-{0}', github.event.pull_request.number) || github.run_id }}"
+)
 CANCEL = "${{ github.event_name == 'pull_request' }}"
 SECRETS = re.compile(r"\bsecrets\b|github\.token|GITHUB_TOKEN", re.IGNORECASE)
 
@@ -37,13 +39,23 @@ def evaluate(expression: str, context: dict[str, object]) -> object:
 
 
 def resolved(template: object, context: dict[str, object]) -> str:
-    return re.sub(r"\$\{\{(.*?)\}\}", lambda match: str(evaluate(match.group(1), context)), str(template))
+    return re.sub(
+        r"\$\{\{(.*?)\}\}", lambda match: str(evaluate(match.group(1), context)), str(template)
+    )
 
 
-def run(event: str, run_id: int, pull_request: int | None = None, workflow: str = "CI") -> dict[str, object]:
-    return {"github.workflow": workflow, "github.event_name": event, "github.run_id": run_id,
-            "github.event.pull_request.number": pull_request, "github.ref": "refs/heads/main",
-            "github.head_ref": "feature" if pull_request else "", "github.sha": f"sha-{run_id}"}
+def run(
+    event: str, run_id: int, pull_request: int | None = None, workflow: str = "CI"
+) -> dict[str, object]:
+    return {
+        "github.workflow": workflow,
+        "github.event_name": event,
+        "github.run_id": run_id,
+        "github.event.pull_request.number": pull_request,
+        "github.ref": "refs/heads/main",
+        "github.head_ref": "feature" if pull_request else "",
+        "github.sha": f"sha-{run_id}",
+    }
 
 
 @needs_yaml
@@ -74,24 +86,34 @@ class Concurrency(unittest.TestCase):
     def test_a_new_commit_cancels_only_the_older_run_of_the_same_pull_request(self):
         for name in PULL_REQUEST_WORKFLOWS:
             with self.subTest(name):
-                self.assertEqual(load(name)["concurrency"], {"group": GROUP, "cancel-in-progress": CANCEL})
+                self.assertEqual(
+                    load(name)["concurrency"], {"group": GROUP, "cancel-in-progress": CANCEL}
+                )
 
     def test_two_commits_to_one_pull_request_share_a_group_and_cancel(self):
         for name in PULL_REQUEST_WORKFLOWS:
             workflow = load(name)
-            group, cancel = workflow["concurrency"]["group"], workflow["concurrency"]["cancel-in-progress"]
+            group, cancel = (
+                workflow["concurrency"]["group"],
+                workflow["concurrency"]["cancel-in-progress"],
+            )
             title = workflow["name"]
             first, second = run("pull_request", 101, 7, title), run("pull_request", 102, 7, title)
             with self.subTest(name):
                 self.assertEqual(resolved(group, first), f"{title}-pr-7")
                 self.assertEqual(resolved(group, first), resolved(group, second))
                 self.assertEqual(resolved(cancel, second), "True")
-                self.assertNotEqual(resolved(group, first), resolved(group, run("pull_request", 103, 8, title)))
+                self.assertNotEqual(
+                    resolved(group, first), resolved(group, run("pull_request", 103, 8, title))
+                )
 
     def test_pushes_and_manual_runs_never_share_a_group_or_cancel(self):
         for name in PULL_REQUEST_WORKFLOWS:
             workflow = load(name)
-            group, cancel = workflow["concurrency"]["group"], workflow["concurrency"]["cancel-in-progress"]
+            group, cancel = (
+                workflow["concurrency"]["group"],
+                workflow["concurrency"]["cancel-in-progress"],
+            )
             title = workflow["name"]
             for event in ("push", "workflow_dispatch"):
                 first, second = run(event, 101, workflow=title), run(event, 102, workflow=title)
@@ -120,8 +142,11 @@ class ForkPullRequests(unittest.TestCase):
                         self.assertNotIn("permissions", job)
 
     def test_only_the_pull_request_workflows_run_on_pull_requests(self):
-        running = [path.name for path in sorted(WORKFLOWS.glob("*.y*ml"))
-                   if "pull_request" in triggers(load(path.name))]
+        running = [
+            path.name
+            for path in sorted(WORKFLOWS.glob("*.y*ml"))
+            if "pull_request" in triggers(load(path.name))
+        ]
         self.assertEqual(running, list(PULL_REQUEST_WORKFLOWS))
 
 

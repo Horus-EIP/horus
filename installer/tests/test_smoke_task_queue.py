@@ -42,8 +42,20 @@ class TestSmokeAgainstTheQueuedTaskApi(unittest.TestCase):
 
     def test_a_202_queued_task_waits_for_the_answer_on_the_socket(self):
         frames = [
-            {"type": "task_status", "status": "queued", "task_id": "3f6c", "seq": 1, "event": "progress"},
-            {"type": "heartbeat", "elapsed_s": 5.0, "task_id": "3f6c", "seq": 2, "event": "heartbeat"},
+            {
+                "type": "task_status",
+                "status": "queued",
+                "task_id": "3f6c",
+                "seq": 1,
+                "event": "progress",
+            },
+            {
+                "type": "heartbeat",
+                "elapsed_s": 5.0,
+                "task_id": "3f6c",
+                "seq": 2,
+                "event": "heartbeat",
+            },
             {
                 "type": "task_complete",
                 "content": "Q4 2025 revenue was $4.2M.",
@@ -86,16 +98,22 @@ class TestSmokeAgainstTheQueuedTaskApi(unittest.TestCase):
 
 class TestFailedTaskNote(unittest.TestCase):
     def test_only_error_events_are_failures(self):
-        self.assertIsNone(smoke._failed_task_note({"type": "agent", "content": "Hi", "event": "result"}))
+        self.assertIsNone(
+            smoke._failed_task_note({"type": "agent", "content": "Hi", "event": "result"})
+        )
         self.assertIsNone(smoke._failed_task_note({"type": "agent", "content": "Hi"}))
 
     def test_the_reason_is_kept(self):
-        note = smoke._failed_task_note({"type": "agent", "content": " Request cancelled. ", "event": "error"})
+        note = smoke._failed_task_note(
+            {"type": "agent", "content": " Request cancelled. ", "event": "error"}
+        )
 
         self.assertEqual(note, "the task ended without an answer: Request cancelled.")
 
     def test_an_error_without_text_still_fails(self):
-        self.assertEqual(smoke._failed_task_note({"event": "error"}), "the task ended without an answer")
+        self.assertEqual(
+            smoke._failed_task_note({"event": "error"}), "the task ended without an answer"
+        )
 
 
 if __name__ == "__main__":

@@ -40,8 +40,11 @@ class TestStoreCreate:
 
 
 class TestStoreQuery:
-    @patch("app.api.routes.store.query_knowledge", new_callable=AsyncMock,
-           return_value={"documents": [["chunk"]], "metadatas": [[{}]], "distances": [[0.1]]})
+    @patch(
+        "app.api.routes.store.query_knowledge",
+        new_callable=AsyncMock,
+        return_value={"documents": [["chunk"]], "metadatas": [[{}]], "distances": [[0.1]]},
+    )
     def test_get_with_query_returns_200(self, _q, client):
         r = client.get("/", params={"query": "policy", "n_results": 2})
         assert r.status_code == 200
@@ -52,13 +55,20 @@ class TestStoreQuery:
 
 
 class TestStoreDelete:
-    @patch("app.api.routes.store.delete_document", new_callable=AsyncMock, return_value={"status": "ok"})
+    @patch(
+        "app.api.routes.store.delete_document",
+        new_callable=AsyncMock,
+        return_value={"status": "ok"},
+    )
     def test_delete_by_id_returns_200(self, _del, client):
         r = client.delete("/doc-id-1")
         assert r.status_code == 200
 
-    @patch("app.api.routes.store.delete_document", new_callable=AsyncMock,
-           side_effect=ValueError("not found"))
+    @patch(
+        "app.api.routes.store.delete_document",
+        new_callable=AsyncMock,
+        side_effect=ValueError("not found"),
+    )
     def test_delete_unknown_returns_404(self, _del, client):
         r = client.delete("/ghost-id")
         assert r.status_code == 404
@@ -127,8 +137,11 @@ class TestStoreDelete:
 
 
 class TestSmartSearch:
-    @patch("app.api.routes.store.query_with_filters", new_callable=AsyncMock,
-           return_value={"documents": [[]], "metadatas": [[]], "distances": [[]]})
+    @patch(
+        "app.api.routes.store.query_with_filters",
+        new_callable=AsyncMock,
+        return_value={"documents": [[]], "metadatas": [[]], "distances": [[]]},
+    )
     def test_smart_search_returns_200_or_404(self, _q, client):
         r = client.post(
             "/smart-search",
@@ -156,7 +169,11 @@ class TestCategories:
 
     def test_documents_without_category_are_counted_as_general(self, client, fake_collection):
         metadatas = [
-            {"auto_category": "finance"}, {"auto_category": ""}, {"auto_category": "  "}, {}, {},
+            {"auto_category": "finance"},
+            {"auto_category": ""},
+            {"auto_category": "  "},
+            {},
+            {},
         ]
         fake_collection.add(
             ids=[f"doc-{n}" for n in range(5)],

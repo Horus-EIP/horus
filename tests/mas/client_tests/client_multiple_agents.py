@@ -84,9 +84,7 @@ async def setup_agents_and_conversation(headers_http: dict) -> tuple:
     """
     agent_ids = {}
     agent_keys = {}
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers_http, timeout=300.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers_http, timeout=300.0) as client:
         # Helper to get agent ID by name
         async def get_agent_id_by_name(name):
             r = await client.get("/agents/details/")
@@ -125,9 +123,7 @@ async def setup_agents_and_conversation(headers_http: dict) -> tuple:
         # Use combined key format for compatibility
         combined_key = f"{agent_ids['agent_test']}:{agent_keys['agent_test']}"
         headers_agent = {"X-API-Key": combined_key}
-        await client.post(
-            f"/agents/heartbeat/{agent_ids['agent_test']}", headers=headers_agent
-        )
+        await client.post(f"/agents/heartbeat/{agent_ids['agent_test']}", headers=headers_agent)
 
         # Register second agent - translation
         print("[Agents] Registering agent_test2 for translation...")
@@ -156,9 +152,7 @@ async def setup_agents_and_conversation(headers_http: dict) -> tuple:
         # headers_agent2 = {"X-API-Key": agent_keys["agent_test2"], "Agent-ID": agent_ids["agent_test2"]}
         combined_key2 = f"{agent_ids['agent_test2']}:{agent_keys['agent_test2']}"
         headers_agent2 = {"X-API-Key": combined_key2}
-        await client.post(
-            f"/agents/heartbeat/{agent_ids['agent_test2']}", headers=headers_agent2
-        )
+        await client.post(f"/agents/heartbeat/{agent_ids['agent_test2']}", headers=headers_agent2)
 
         # Create conversation
         print("[Conversation] Creating new conversation...")
@@ -295,9 +289,7 @@ async def submit_agent_results(
         await asyncio.sleep(0.5)
 
 
-async def websocket_listener(
-    token: str, conv_id: str, agent_id: str, timeout: int = 5
-) -> None:
+async def websocket_listener(token: str, conv_id: str, agent_id: str, timeout: int = 5) -> None:
     """
     Listen to WebSocket for real-time message updates.
 
@@ -344,9 +336,7 @@ async def cleanup_resources(agent_ids: dict, conv_id: str, headers_http: dict) -
     print("\n[Cleanup] Cleaning up test resources...")
     print("-" * 60)
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers_http, timeout=10.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers_http, timeout=10.0) as client:
         # Unregister agents
         for name, agent_id in agent_ids.items():
             try:
@@ -358,9 +348,7 @@ async def cleanup_resources(agent_ids: dict, conv_id: str, headers_http: dict) -
 
         # Delete conversation
         try:
-            response = await client.delete(
-                f"/conversations/delete-conversation/{conv_id}"
-            )
+            response = await client.delete(f"/conversations/delete-conversation/{conv_id}")
             if response.is_success:
                 print(f"✅ Deleted conversation {conv_id}")
         except Exception as e:
@@ -393,9 +381,7 @@ async def main():
         # Step 2: Setup agents and conversation
         print("\n[Setup] Initializing agents and conversation...")
         print("-" * 70)
-        agent_ids, agent_keys, conv_id, task_id = await setup_agents_and_conversation(
-            headers_http
-        )
+        agent_ids, agent_keys, conv_id, task_id = await setup_agents_and_conversation(headers_http)
         print("✅ Setup complete")
         print(f"   Agents: {list(agent_ids.keys())}")
         print(f"   Conversation ID: {conv_id}")
@@ -436,9 +422,7 @@ async def main():
 
     except httpx.HTTPStatusError as e:
         resp = e.response
-        print(
-            f"\n❌ HTTP error {resp.status_code} on {resp.request.method} {resp.request.url}"
-        )
+        print(f"\n❌ HTTP error {resp.status_code} on {resp.request.method} {resp.request.url}")
         try:
             print(f"   Response: {resp.json()}")
         except Exception:

@@ -9,8 +9,11 @@ STEP_COUNT = 9
 
 
 def steps_in(log: Path) -> list[dict]:
-    lines = [line for line in log.read_text(encoding="utf-8", errors="replace").splitlines()
-             if MARKER in line]
+    lines = [
+        line
+        for line in log.read_text(encoding="utf-8", errors="replace").splitlines()
+        if MARKER in line
+    ]
     if not lines:
         raise ValueError(f"{log} has no '{MARKER}' line: smoke.py did not finish")
     return json.loads(lines[-1].split(MARKER, 1)[1])
@@ -34,7 +37,9 @@ def main(argv: list[str]) -> int:
         print(error, file=sys.stderr)
         return 1
     for step in steps:
-        print(f"{'ok    ' if step.get('ok') else 'NOT OK'} {step['name']} - {step.get('detail', '')}")
+        print(
+            f"{'ok    ' if step.get('ok') else 'NOT OK'} {step['name']} - {step.get('detail', '')}"
+        )
     failed = problems(steps)
     for problem in failed:
         print(f"::error::{problem}")

@@ -17,8 +17,7 @@ logger = logging.getLogger(__name__)
 class Tool(Protocol):
     name: str
 
-    def run(self, payload: dict[str, Any]) -> str:
-        ...
+    def run(self, payload: dict[str, Any]) -> str: ...
 
 
 class ToolRegistry:
@@ -45,10 +44,10 @@ class ToolRegistry:
     def get(self, name: str) -> Tool | None:
         """
         Retrieve a tool by name or alias.
-        
+
         Args:
             name: tool name or alias
-            
+
         Returns:
             The tool instance or None.
         """
@@ -78,5 +77,3 @@ class ToolRegistry:
         if tool is None:
             raise KeyError(f"Unknown tool: {name}")
         return tool.run(payload)
-
-

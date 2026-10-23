@@ -10,7 +10,6 @@ from ai_agents.data_extractor_tool import DataExtractorTool
 
 
 class TestDataExtractorTool:
-
     @pytest.fixture
     def tool(self):
         return DataExtractorTool()
@@ -51,8 +50,8 @@ class TestDataExtractorTool:
         result = tool._extract_tables(text)
         # If it finds nothing, that's acceptable for broken input
         if result != "No tables found":
-             data = json.loads(result)
-             assert isinstance(data, list)
+            data = json.loads(result)
+            assert isinstance(data, list)
 
     def test_extract_tables_multiple(self, tool):
         text = """
@@ -133,8 +132,8 @@ class TestDataExtractorTool:
             # Regex extracts "500 EUR"
             found = False
             for payment in data:
-                 if payment["amount"] == 500.0 and payment["currency"] == "EUR":
-                     found = True
+                if payment["amount"] == 500.0 and payment["currency"] == "EUR":
+                    found = True
             assert found
 
     def test_extract_payments_formats(self, tool):
@@ -166,7 +165,7 @@ class TestDataExtractorTool:
 
     def test_run_routing_payments(self, tool):
         text = "Payment of 100 USD."
-        with patch.object(DataExtractorTool, '_extract_payments') as mock_method:
+        with patch.object(DataExtractorTool, "_extract_payments") as mock_method:
             mock_method.return_value = "Mock Result"
             res = tool._run(text, "payments")
             assert res == "Mock Result"
@@ -174,7 +173,7 @@ class TestDataExtractorTool:
 
     def test_run_routing_tables(self, tool):
         text = "Some table text"
-        with patch.object(DataExtractorTool, '_extract_tables') as mock_method:
+        with patch.object(DataExtractorTool, "_extract_tables") as mock_method:
             mock_method.return_value = "Mock Table"
             res = tool._run(text, "tables")
             assert res == "Mock Table"
@@ -231,18 +230,17 @@ class TestDataExtractorTool:
         text = "Paid 100 EUR to Bob on 2023-01-01."
 
         # Mocking extract_entities_regex and extract_entities_spacy to control inputs to logic
-        with patch.object(DataExtractorTool, 'extract_entities_regex') as mock_regex:
-            with patch.object(DataExtractorTool, 'extract_entities_spacy') as mock_spacy:
-
+        with patch.object(DataExtractorTool, "extract_entities_regex") as mock_regex:
+            with patch.object(DataExtractorTool, "extract_entities_spacy") as mock_spacy:
                 mock_regex.return_value = {
                     "amounts": ["100 EUR"],
-                    "dates": ["2023-01-01"] # Regex finds date
+                    "dates": ["2023-01-01"],  # Regex finds date
                 }
                 mock_spacy.return_value = {
-                    "people": ["Bob"], # Spacy finds person
+                    "people": ["Bob"],  # Spacy finds person
                     "companies": [],
                     "amounts": [],
-                    "dates": []
+                    "dates": [],
                 }
 
                 # We need to ensure the text.find() works, so inputs must match text content.
@@ -257,12 +255,7 @@ class TestDataExtractorTool:
 
     def test_parse_table_delimiters(self, tool):
         """Test explicitly ignoring separator lines."""
-        table_lines = [
-            "| Header1 | Header2 |",
-            "|---|---|",
-            "|___|___|",
-            "| Val1 | Val2 |"
-        ]
+        table_lines = ["| Header1 | Header2 |", "|---|---|", "|___|___|", "| Val1 | Val2 |"]
         res = tool.parse_table(table_lines)
         assert res["header"] == ["Header1", "Header2"]
         assert len(res["content"]) == 1
@@ -270,28 +263,29 @@ class TestDataExtractorTool:
 
     def test_parse_table_empty(self, tool):
         assert tool.parse_table([]) == {}
-        assert tool.parse_table(["   "]) == {} # Cleaned empty
+        assert tool.parse_table(["   "]) == {}  # Cleaned empty
 
     # --- Initialization & Edge Case Tests ---
 
     def test_init_spacy_load_failures(self):
-         # Reset global _nlp_model to ensure init logic runs
-         import ai_agents.data_extractor_tool as det
-         original_model = det._nlp_model
-         det._nlp_model = None
+        # Reset global _nlp_model to ensure init logic runs
+        import ai_agents.data_extractor_tool as det
 
-         try:
-             # Patch spacy.load to fail for both 'en_core_web_trf' and 'en_core_web_sm'
-             # Note: We patch where it is imported or used. It is used as `spacy.load`.
-             with patch("spacy.load", side_effect=[OSError("trf missing"), OSError("sm missing")]):
-                 tool = DataExtractorTool()
-                 # Should fallback to dummy
-                 # Verify dummy behavior (empty ents)
-                 mock_res = tool.nlp("test")
-                 assert mock_res.ents == []
-         finally:
-             # Restore
-             det._nlp_model = original_model
+        original_model = det._nlp_model
+        det._nlp_model = None
+
+        try:
+            # Patch spacy.load to fail for both 'en_core_web_trf' and 'en_core_web_sm'
+            # Note: We patch where it is imported or used. It is used as `spacy.load`.
+            with patch("spacy.load", side_effect=[OSError("trf missing"), OSError("sm missing")]):
+                tool = DataExtractorTool()
+                # Should fallback to dummy
+                # Verify dummy behavior (empty ents)
+                mock_res = tool.nlp("test")
+                assert mock_res.ents == []
+        finally:
+            # Restore
+            det._nlp_model = original_model
 
     def test_regex_date_formats(self, tool):
         # Test full_date_pattern parts
@@ -386,7 +380,10 @@ class TestSpacyOff:
     def test_with_spacy_off_payments_come_from_the_regex_extraction(self, spacy_off):
         payments = json.loads(DataExtractorTool()._run(INVOICE, "payments"))
 
-        assert {(row["amount"], row["currency"]) for row in payments} >= {(1250.0, "USD"), (300.0, "EUR")}
+        assert {(row["amount"], row["currency"]) for row in payments} >= {
+            (1250.0, "USD"),
+            (300.0, "EUR"),
+        }
         assert all(row["payee"] is None for row in payments)
 
     def test_with_spacy_off_tables_and_key_values_still_work(self, spacy_off):
@@ -397,7 +394,10 @@ class TestSpacyOff:
 
     def test_no_document_means_no_spacy_entities(self, spacy_off):
         assert DataExtractorTool().extract_entities_spacy(None) == {
-            "people": [], "companies": [], "amounts": [], "dates": [],
+            "people": [],
+            "companies": [],
+            "amounts": [],
+            "dates": [],
         }
 
     def test_with_spacy_on_the_model_loads_as_before(self, monkeypatch):
@@ -417,8 +417,13 @@ class TestSpacyOff:
         import ai_agents.data_extractor_tool as det
 
         env = {**os.environ, "HORUS_SPACY": setting, "AGENT_SPACY_PREFER_SM": "1"}
-        done = subprocess.run([sys.executable, "-B", "-c", FRESH_EXTRACTOR, det.__file__, INVOICE],
-                              env=env, capture_output=True, text=True, check=True)
+        done = subprocess.run(
+            [sys.executable, "-B", "-c", FRESH_EXTRACTOR, det.__file__, INVOICE],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
 
         assert bool(json.loads(done.stdout.splitlines()[-1])) is imports_spacy
 
@@ -445,7 +450,3 @@ spec.loader.exec_module(module)
 module.DataExtractorTool()._run(sys.argv[2], "payments")
 print(json.dumps(seen))
 """
-
-
-
-

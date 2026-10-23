@@ -23,7 +23,9 @@ HOST_FACTS = {
 
 @pytest.fixture(scope="module")
 def bench_runner():
-    spec = importlib.util.spec_from_file_location("run_llama_bench", BENCH_DIR / "run-llama-bench.py")
+    spec = importlib.util.spec_from_file_location(
+        "run_llama_bench", BENCH_DIR / "run-llama-bench.py"
+    )
     module = importlib.util.module_from_spec(spec)
     sys.modules["run_llama_bench"] = module
     spec.loader.exec_module(module)
@@ -65,7 +67,11 @@ class FakeDocker(Shell):
             return self.listings.pop(0) if len(self.listings) > 1 else self.listings[0]
         if "sha256sum" in argv:
             sums = {Q4: Q4_SHA256, Q5: Q5_SHA256}
-            return "".join(f"{sums[path.rsplit('/', 1)[-1]]}  {path}\n" for path in argv if path.startswith("/models/"))
+            return "".join(
+                f"{sums[path.rsplit('/', 1)[-1]]}  {path}\n"
+                for path in argv
+                if path.startswith("/models/")
+            )
         if argv[:2] == ["docker", "image"]:
             return "ghcr.io/ggml-org/llama.cpp@sha256:" + "a" * 64 + "\n"
         if argv[:2] == ["docker", "ps"]:
@@ -108,7 +114,11 @@ class TestArguments:
         assert args.image == "ghcr.io/ggml-org/llama.cpp:full-b11382"
         assert args.fetch_image == "ghcr.io/ggml-org/llama.cpp:server-b11382"
         assert (args.prompts, args.generations, args.depths) == ("512,2048", "128", "0,4096")
-        assert (args.cache_types_k, args.cache_types_v, args.threads) == ("f16,q8_0", "f16,q8_0", "4,8")
+        assert (args.cache_types_k, args.cache_types_v, args.threads) == (
+            "f16,q8_0",
+            "f16,q8_0",
+            "4,8",
+        )
         assert Path(args.out_dir) == BENCH_DIR.parents[1] / "benchmarks"
         assert kit_cli.argument_errors(args, bench_runner.LLAMA_BENCH) == []
 
@@ -116,7 +126,9 @@ class TestArguments:
 class TestErrorsStayUncaught:
     def test_a_missing_saved_run_raises(self, bench_runner, tmp_path):
         with pytest.raises(FileNotFoundError):
-            bench_runner.main(["--from-json", str(tmp_path / "missing.json"), "--dry-run"], shell=NoDocker())
+            bench_runner.main(
+                ["--from-json", str(tmp_path / "missing.json"), "--dry-run"], shell=NoDocker()
+            )
 
     def test_a_broken_saved_run_raises(self, bench_runner, tmp_path):
         raw = tmp_path / "raw.json"
@@ -133,18 +145,36 @@ class TestErrorsStayUncaught:
 
 
 class TestDryRun:
-    def test_prints_the_commands_for_the_two_known_models_without_running_docker(self, bench_runner, capsys, tmp_path):
-        assert bench_runner.main(["--models-dir", str(tmp_path), "--fetch", "--dry-run"], shell=NoDocker()) == 0
+    def test_prints_the_commands_for_the_two_known_models_without_running_docker(
+        self, bench_runner, capsys, tmp_path
+    ):
+        assert (
+            bench_runner.main(
+                ["--models-dir", str(tmp_path), "--fetch", "--dry-run"], shell=NoDocker()
+            )
+            == 0
+        )
         lines = capsys.readouterr().out.splitlines()
-        assert [f"LLM_GGUF_FILE={Q4}" in lines[0], f"LLM_GGUF_FILE={Q5}" in lines[1]] == [True, True]
-        assert lines[0].endswith("ghcr.io/ggml-org/llama.cpp:server-b11382 /opt/horus/fetch-model.sh")
-        assert "src/infra/llm/fetch-model.sh:/opt/horus/fetch-model.sh:ro" in lines[0].replace("\\", "/")
-        assert lines[-1].endswith(f"--bench -m /models/{Q4} -m /models/{Q5} -p 512,2048 -n 128 -d 0,4096 "
-                                  "-ctk f16,q8_0 -ctv f16,q8_0 -t 4,8 -r 5 -o json --progress")
+        assert [f"LLM_GGUF_FILE={Q4}" in lines[0], f"LLM_GGUF_FILE={Q5}" in lines[1]] == [
+            True,
+            True,
+        ]
+        assert lines[0].endswith(
+            "ghcr.io/ggml-org/llama.cpp:server-b11382 /opt/horus/fetch-model.sh"
+        )
+        assert "src/infra/llm/fetch-model.sh:/opt/horus/fetch-model.sh:ro" in lines[0].replace(
+            "\\", "/"
+        )
+        assert lines[-1].endswith(
+            f"--bench -m /models/{Q4} -m /models/{Q5} -p 512,2048 -n 128 -d 0,4096 "
+            "-ctk f16,q8_0 -ctv f16,q8_0 -t 4,8 -r 5 -o json --progress"
+        )
 
 
 class TestRun:
-    def test_benchmark_is_run_and_saved_with_build_hashes_and_machine(self, bench_runner, tmp_path, capsys):
+    def test_benchmark_is_run_and_saved_with_build_hashes_and_machine(
+        self, bench_runner, tmp_path, capsys
+    ):
         docker = FakeDocker(f"2497281120 {Q4}\n2889514080 {Q5}\n")
         out_dir = tmp_path / "benchmarks"
         models = tmp_path / "models"
@@ -162,24 +192,36 @@ class TestRun:
         assert report["machine"]["reference"] == "cpu16"
         assert report["machine"]["ram_speed"] == "3200 MT/s"
         assert report["run"]["git_commit"] == "abc1234"
-        assert report["run"]["command"] == [*docker.launched[0][:4], "<models-dir>:/models:ro", *docker.launched[0][5:]]
+        assert report["run"]["command"] == [
+            *docker.launched[0][:4],
+            "<models-dir>:/models:ro",
+            *docker.launched[0][5:],
+        ]
         assert docker.host_paths == [models.resolve()]
         output = capsys.readouterr().out
         assert "[warn] Horus containers are running (llm) and compete for CPU and RAM" in output
         assert "[done] wrote" in output
 
-    def test_a_missing_default_model_stops_before_the_benchmark(self, bench_runner, tmp_path, capsys):
+    def test_a_missing_default_model_stops_before_the_benchmark(
+        self, bench_runner, tmp_path, capsys
+    ):
         docker = FakeDocker(f"2497281120 {Q4}\n")
         argv = ["--models-dir", str(tmp_path), "--out-dir", str(tmp_path / "out")]
         assert bench_runner.main(argv, shell=docker) == 1
         output = capsys.readouterr().out
         assert f"{Q5}: not found in" in output
-        assert "[error] pass --fetch to download the known models, see benchmarks/README.md" in output
+        assert (
+            "[error] pass --fetch to download the known models, see benchmarks/README.md" in output
+        )
         assert docker.launched == []
         assert not (tmp_path / "out").exists()
 
-    def test_fetch_downloads_a_missing_known_model_with_the_stack_script(self, bench_runner, tmp_path):
-        docker = FakeDocker(f"2497281120 {Q4}\n", f"2497281120 {Q4}\n2889514080 {Q5}\n", rows=bench_rows())
+    def test_fetch_downloads_a_missing_known_model_with_the_stack_script(
+        self, bench_runner, tmp_path
+    ):
+        docker = FakeDocker(
+            f"2497281120 {Q4}\n", f"2497281120 {Q4}\n2889514080 {Q5}\n", rows=bench_rows()
+        )
         models = tmp_path / "new-models"
         argv = ["--models-dir", str(models), "--fetch", "--out-dir", str(tmp_path / "out")]
         assert bench_runner.main(argv, shell=docker) == 0

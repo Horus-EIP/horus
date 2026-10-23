@@ -22,9 +22,7 @@ ANSWER_SCHEMA_NAME = "agent_answer"
 SOURCE_LABEL_PREFIX = "S"
 CONTEXT_TRUNCATED_MARK = "\n…[retrieved content truncated]"
 NOT_IN_DOCUMENTS_ANSWER = "The documents don't contain this information."
-UNREADABLE_ANSWER = (
-    "The model's answer could not be read, so this request was not answered."
-)
+UNREADABLE_ANSWER = "The model's answer could not be read, so this request was not answered."
 
 REASON_NOT_IN_DOCUMENTS = "not_in_documents"
 REASON_INVALID_OUTPUT = "invalid_output"
@@ -232,7 +230,9 @@ class SourceCatalog:
             seen.add(label)
             sources.append(dict(self._records[label]))
         if dropped:
-            logger.info("Dropped %d cited source(s) that were not retrieved: %r", len(dropped), dropped)
+            logger.info(
+                "Dropped %d cited source(s) that were not retrieved: %r", len(dropped), dropped
+            )
         return sources
 
     def _label_for(self, item: Any) -> str | None:

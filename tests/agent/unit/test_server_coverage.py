@@ -193,9 +193,7 @@ class TestBuildHeaders:
 
     def test_includes_api_key_with_explicit_credentials(self):
         with patch.object(server, "_get_orchestrator_token", return_value=None):
-            headers = server._build_headers(
-                include_api_key=True, agent_id="aid-1", api_key="key-1"
-            )
+            headers = server._build_headers(include_api_key=True, agent_id="aid-1", api_key="key-1")
         assert headers["X-API-Key"] == "aid-1:key-1"
         assert headers["Agent-ID"] == "aid-1"
 
@@ -221,9 +219,7 @@ class TestRegisterOneProfile:
     def _profile(self):
         from agent_server.profiles import AgentProfile
 
-        return AgentProfile(
-            name="Tester", type="general", skills=["s1"], description="d"
-        )
+        return AgentProfile(name="Tester", type="general", skills=["s1"], description="d")
 
     def test_success_sets_ids(self, restore_module_state):
         profile = self._profile()
@@ -243,7 +239,9 @@ class TestRegisterOneProfile:
         profile = self._profile()
         with (
             patch.object(server, "_build_headers", return_value={}),
-            patch.object(server.requests, "post", return_value=_make_response(409, text="exists")) as mock_post,
+            patch.object(
+                server.requests, "post", return_value=_make_response(409, text="exists")
+            ) as mock_post,
             patch.object(server.requests, "get") as mock_get,
             patch.object(server.requests, "delete") as mock_delete,
         ):
@@ -338,9 +336,7 @@ class TestRegisterProfiles:
         # Slept at least once because the first sweep produced no successes.
         assert mock_sleep.called
 
-    def test_refused_primary_aborts_startup_even_if_secondary_registers(
-        self, restore_module_state
-    ):
+    def test_refused_primary_aborts_startup_even_if_secondary_registers(self, restore_module_state):
         primary, secondary = server.PROFILES[:2]
         primary.agent_id = None
         primary.api_key = None
@@ -407,8 +403,12 @@ class TestHeartbeat:
         from agent_server.profiles import AgentProfile
 
         return AgentProfile(
-            name="HB", type="general", skills=[], description="",
-            agent_id=agent_id, api_key=api_key,
+            name="HB",
+            type="general",
+            skills=[],
+            description="",
+            agent_id=agent_id,
+            api_key=api_key,
         )
 
     def test_skips_unregistered_profile(self):
@@ -494,9 +494,7 @@ class TestSendResult:
             patch.object(server, "_build_headers", return_value={"H": "1"}),
             patch.object(server.requests, "post", return_value=resp) as mock_post,
         ):
-            server.send_result(
-                "the answer", "conv-1", "task-1", skill_used="financial_analysis"
-            )
+            server.send_result("the answer", "conv-1", "task-1", skill_used="financial_analysis")
         url = mock_post.call_args.args[0]
         payload = mock_post.call_args.kwargs["json"]
         assert url.endswith("/tasks/task-result/")
@@ -542,9 +540,7 @@ class TestSendResult:
             patch.object(server, "_build_headers", return_value={}),
             patch.object(server.requests, "post", return_value=resp) as mock_post,
         ):
-            server.send_result(
-                "res", "conv", "task", assigned_agent_id="assignee-xyz"
-            )
+            server.send_result("res", "conv", "task", assigned_agent_id="assignee-xyz")
         payload = mock_post.call_args.kwargs["json"]
         assert payload["agent_id"] == "assignee-xyz"
         assert payload["agent_name"] == target.name
@@ -732,9 +728,7 @@ class TestTaskEndpoint:
             patch.object(server, "get_pipeline_for_type", return_value=fake_pipeline),
             patch.object(server, "send_result") as mock_send,
         ):
-            r = client.post(
-                "/task", json={"query": "hi", "conversation_id": "c-1"}
-            )
+            r = client.post("/task", json={"query": "hi", "conversation_id": "c-1"})
         assert r.status_code == 200
         body = r.json()
         assert body == {"agent_id": "agent-007", "result": "general answer"}

@@ -22,9 +22,7 @@ def running_task(created_at):
 
 @patch("tasks.routes.agent_may_submit_task_result", return_value=True)
 @patch("tasks.routes.validating_task_results")
-def test_a_completed_task_records_its_processing_time(
-    _validate, _allowed, make_client, mock_db
-):
+def test_a_completed_task_records_its_processing_time(_validate, _allowed, make_client, mock_db):
     created_at = datetime.now(UTC) - timedelta(minutes=3)
     mock_db.query.return_value.filter.return_value.first.return_value = running_task(created_at)
     client = make_client(router, agent_api_auth=("agent-1", "k"))

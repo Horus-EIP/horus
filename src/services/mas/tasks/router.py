@@ -248,9 +248,7 @@ def split_sub_questions(question: str) -> list[str]:
     return parts
 
 
-def confident_agent(
-    scores: Sequence[AgentScore], settings: RouterSettings
-) -> RosterAgent | None:
+def confident_agent(scores: Sequence[AgentScore], settings: RouterSettings) -> RosterAgent | None:
     if not scores:
         return None
     runner_up = scores[1].score if len(scores) > 1 else 0.0
@@ -290,7 +288,9 @@ def embedding_decision(
         agent = confident_agent(scores, settings)
         if agent is None:
             return None, scores
-        return RouteDecision(Route.SINGLE_AGENT, RouteMethod.EMBEDDING, agent, scores=scores), scores
+        return RouteDecision(
+            Route.SINGLE_AGENT, RouteMethod.EMBEDDING, agent, scores=scores
+        ), scores
     part_agents = [
         confident_agent(index.agent_scores(vector, owners), settings) for vector in vectors[1:]
     ]

@@ -76,8 +76,10 @@ class MockOverlay(unittest.TestCase):
             with self.subTest(name):
                 env = environment(self.mock[name])
                 self.assertEqual(env["LLM_BACKEND"], "vllm")
-                self.assertEqual(env["LLM_VLLM_URL"],
-                                 f"http://{profiles.MOCK_MODEL_SERVER}:{mock_settings.DEFAULT_PORT}/v1")
+                self.assertEqual(
+                    env["LLM_VLLM_URL"],
+                    f"http://{profiles.MOCK_MODEL_SERVER}:{mock_settings.DEFAULT_PORT}/v1",
+                )
                 self.assertEqual(env["LLM_VLLM_MODEL"], profiles.MOCK_MODEL_NAME)
 
     def test_legacy_env_files_keep_the_agent_login_working(self):
@@ -90,23 +92,31 @@ class MockOverlay(unittest.TestCase):
     def test_the_answer_cache_can_never_mix_mock_and_model_answers(self):
         local_names = {profiles.env_for(name)["LLM_VLLM_MODEL"] for name in profiles.PROFILE_ORDER}
         self.assertNotIn(profiles.MOCK_MODEL_NAME, local_names)
-        self.assertEqual(environment(self.mock[profiles.MOCK_MODEL_SERVER])["LLM_VLLM_MODEL"],
-                         profiles.MOCK_MODEL_NAME)
+        self.assertEqual(
+            environment(self.mock[profiles.MOCK_MODEL_SERVER])["LLM_VLLM_MODEL"],
+            profiles.MOCK_MODEL_NAME,
+        )
 
     def test_mas_and_the_agent_wait_for_llm_mock_and_no_longer_for_llm(self):
         for name in CLIENTS:
             with self.subTest(name):
                 needs = self.mock[name]["depends_on"]
                 self.assertEqual(needs["llm"], {"condition": "service_healthy", "required": False})
-                self.assertEqual(needs[profiles.MOCK_MODEL_SERVER], {"condition": "service_healthy"})
-                self.assertEqual(self.cpu[name]["depends_on"]["llm"], {"condition": "service_healthy"})
+                self.assertEqual(
+                    needs[profiles.MOCK_MODEL_SERVER], {"condition": "service_healthy"}
+                )
+                self.assertEqual(
+                    self.cpu[name]["depends_on"]["llm"], {"condition": "service_healthy"}
+                )
 
     def test_mas_and_the_knowledge_store_embed_with_llm_mock(self):
         for name, prefix in EMBEDDERS.items():
             with self.subTest(name):
                 env = environment(self.mock[name])
-                self.assertEqual(env[f"{prefix}_URL"],
-                                 f"http://{profiles.MOCK_MODEL_SERVER}:{mock_settings.DEFAULT_PORT}/v1")
+                self.assertEqual(
+                    env[f"{prefix}_URL"],
+                    f"http://{profiles.MOCK_MODEL_SERVER}:{mock_settings.DEFAULT_PORT}/v1",
+                )
                 self.assertEqual(env[f"{prefix}_MODEL"], profiles.MOCK_MODEL_NAME)
 
     def test_the_overlay_sets_the_names_the_services_read(self):
@@ -136,8 +146,10 @@ class MockOverlay(unittest.TestCase):
         self.assertEqual(environment(self.mock["mas"])["HORUS_SPACY"], "off")
 
     def test_the_knowledge_store_waits_for_llm_mock_before_it_embeds(self):
-        self.assertEqual(self.mock["knowledge_store"]["depends_on"],
-                         {profiles.MOCK_MODEL_SERVER: {"condition": "service_healthy"}})
+        self.assertEqual(
+            self.mock["knowledge_store"]["depends_on"],
+            {profiles.MOCK_MODEL_SERVER: {"condition": "service_healthy"}},
+        )
 
     def test_a_local_install_leaves_the_embeddings_urls_unset(self):
         env = environment(self.base["knowledge_store"])
@@ -146,8 +158,10 @@ class MockOverlay(unittest.TestCase):
         for spec in (self.base["mas"], self.cpu["mas"], self.cpu["knowledge_store"]):
             self.assertNotIn("MAS_EMBED_URL", environment(spec))
         self.assertNotIn("KNOWLEDGE_STORE_EMBED_URL", environment(self.cpu["knowledge_store"]))
-        self.assertFalse({"MAS_EMBED_URL", "KNOWLEDGE_STORE_EMBED_URL"}
-                         & smoke.read_env(INFRA / ".env.example").keys())
+        self.assertFalse(
+            {"MAS_EMBED_URL", "KNOWLEDGE_STORE_EMBED_URL"}
+            & smoke.read_env(INFRA / ".env.example").keys()
+        )
 
     def test_every_service_learns_the_mode_from_the_files_not_from_env(self):
         for name in AI_MODE_SERVICES:
@@ -161,14 +175,21 @@ class MockOverlay(unittest.TestCase):
 
     def test_the_overlay_defaults_are_the_server_defaults(self):
         env = environment(self.mock[profiles.MOCK_MODEL_SERVER])
-        self.assertEqual(int(default_of(env["HORUS_MOCK_LATENCY_MS"])), mock_settings.DEFAULT_LATENCY_MS)
+        self.assertEqual(
+            int(default_of(env["HORUS_MOCK_LATENCY_MS"])), mock_settings.DEFAULT_LATENCY_MS
+        )
         self.assertEqual(default_of(env["HORUS_MOCK_SCENARIO"]), mock_settings.DEFAULT_SCENARIO)
-        self.assertEqual(float(default_of(env["HORUS_MOCK_MIN_SCORE"])), mock_settings.DEFAULT_MIN_SCORE)
+        self.assertEqual(
+            float(default_of(env["HORUS_MOCK_MIN_SCORE"])), mock_settings.DEFAULT_MIN_SCORE
+        )
 
     def test_the_server_reads_the_header_the_clients_send(self):
-        mas = (REPO / "src" / "services" / "mas" / "core" / "llm_setup.py").read_text(encoding="utf-8")
-        agent = (REPO / "src" / "services" / "agent" / "app" / "ai_agents"
-                 / "decision_making_agent.py").read_text(encoding="utf-8")
+        mas = (REPO / "src" / "services" / "mas" / "core" / "llm_setup.py").read_text(
+            encoding="utf-8"
+        )
+        agent = (
+            REPO / "src" / "services" / "agent" / "app" / "ai_agents" / "decision_making_agent.py"
+        ).read_text(encoding="utf-8")
         for text in (mas, agent):
             self.assertIn(f'PURPOSE_HEADER = "{PURPOSE_HEADER}"', text)
 

@@ -23,8 +23,11 @@ def minilm_on_disk() -> bool:
     from huggingface_hub import try_to_load_from_cache
 
     described = next(
-        (model for model in TextEmbedding.list_supported_models()
-         if model["model"] == EMBED_MODEL_ID),
+        (
+            model
+            for model in TextEmbedding.list_supported_models()
+            if model["model"] == EMBED_MODEL_ID
+        ),
         None,
     )
     if described is None or not described["sources"].get("hf"):

@@ -147,9 +147,7 @@ class TestExecutionHistory:
 class TestParseAction:
     def test_structured_action_with_multiple_args(self):
         agent = make_agent(["x"])
-        name, args = agent._parse_action(
-            "THOUGHT: go\nACTION: extract_data('report.pdf', pdf)"
-        )
+        name, args = agent._parse_action("THOUGHT: go\nACTION: extract_data('report.pdf', pdf)")
         assert name == "extract_data"  # lower-cased
         assert args == ["report.pdf", "pdf"]  # quotes stripped
 
@@ -220,14 +218,9 @@ class TestAttachCitations:
 # --------------------------------------------------------------------------- #
 class TestGenerateThought:
     async def test_detects_final_answer_with_multiline_body(self):
-        raw = (
-            "THOUGHT: done.\n"
-            "FINAL_ANSWER: The answer is 42.\nWith extra detail."
-        )
+        raw = "THOUGHT: done.\nFINAL_ANSWER: The answer is 42.\nWith extra detail."
         agent = make_agent([raw])
-        thought, is_final, final_text = await agent._generate_thought(
-            "q", [], 1
-        )
+        thought, is_final, final_text = await agent._generate_thought("q", [], 1)
         assert is_final is True
         assert thought == raw.strip()
         # DOTALL: the final-answer body spans newlines.
@@ -235,9 +228,7 @@ class TestGenerateThought:
 
     async def test_non_final_thought(self):
         agent = make_agent(["THOUGHT: keep going\nACTION: calc(1)"])
-        thought, is_final, final_text = await agent._generate_thought(
-            "q", [], 1
-        )
+        thought, is_final, final_text = await agent._generate_thought("q", [], 1)
         assert is_final is False
         assert final_text == ""
         assert thought.startswith("THOUGHT: keep going")
@@ -302,9 +293,7 @@ class TestToolHandlers:
         registry = MagicMock()
         registry.run = MagicMock(return_value="extracted text")
         agent = make_agent(["x"], tool_registry=registry)
-        obs, source = await agent._execute_action(
-            "extract_data", ["report.pdf", "pdf"]
-        )
+        obs, source = await agent._execute_action("extract_data", ["report.pdf", "pdf"])
         assert obs == "extracted text"
         assert source == "file:report.pdf"
         name, payload = registry.run.call_args.args
@@ -342,9 +331,7 @@ class TestToolHandlers:
         retrieval = make_retrieval("insights")
         agent = make_agent(["x"], retrieval=retrieval)
         await agent._execute_action("analyze_payments", [])
-        retrieval.fetch.assert_awaited_once_with(
-            "payment analysis: payment analysis"
-        )
+        retrieval.fetch.assert_awaited_once_with("payment analysis: payment analysis")
 
     async def test_analyze_payments_no_data(self):
         agent = make_agent(["x"], retrieval=make_retrieval(""))
@@ -377,9 +364,7 @@ class TestToolHandlers:
             return_value={"status": "completed", "result": "analyst says hi"}
         )
         agent = make_agent(["x"], delegation_handler=handler)
-        obs, source = await agent._execute_action(
-            "delegate", ["analyst", "do the thing"]
-        )
+        obs, source = await agent._execute_action("delegate", ["analyst", "do the thing"])
         assert obs == "analyst says hi"
         assert source == "delegation:analyst"
         args = handler.delegate.call_args.args
@@ -395,9 +380,7 @@ class TestToolHandlers:
 
     async def test_delegate_failed_status(self):
         handler = MagicMock()
-        handler.delegate = MagicMock(
-            return_value={"status": "error", "error": "agent offline"}
-        )
+        handler.delegate = MagicMock(return_value={"status": "error", "error": "agent offline"})
         agent = make_agent(["x"], delegation_handler=handler)
         obs, source = await agent._execute_action("delegate", ["analyst", "task"])
         assert obs == "[Delegation failed] agent offline"
@@ -441,9 +424,7 @@ class TestToolHandlers:
 # --------------------------------------------------------------------------- #
 class TestRunLoop:
     async def test_immediate_final_answer(self):
-        agent = make_agent(
-            ["THOUGHT: easy.\nFINAL_ANSWER: The sky is blue."]
-        )
+        agent = make_agent(["THOUGHT: easy.\nFINAL_ANSWER: The sky is blue."])
         result = await agent.run("why is the sky blue?")
         assert result["answer"] == "The sky is blue."
         # No tools used -> no sources -> no appended citation block.
@@ -507,15 +488,9 @@ class TestRunLoop:
         )
         result = await agent.run("q")
         assert result["answer"] == "Could not teleport."
-        obs_steps = [
-            s
-            for s in result["history"]["steps"]
-            if s["type"] == "OBSERVATION"
-        ]
+        obs_steps = [s for s in result["history"]["steps"] if s["type"] == "OBSERVATION"]
         assert len(obs_steps) == 1
-        assert obs_steps[0]["content"].startswith(
-            "[Error] Unknown tool 'teleport'"
-        )
+        assert obs_steps[0]["content"].startswith("[Error] Unknown tool 'teleport'")
         # Unknown tool yields no source.
         assert result["sources"] == []
 
@@ -524,9 +499,7 @@ class TestRunLoop:
         registry = MagicMock()
         registry.run = MagicMock(return_value="num")
         # The synthesis call (last decide) returns the summary answer.
-        responses = ["THOUGHT: keep going.\nACTION: calc(1)"] * 2 + [
-            "Synthesized final summary."
-        ]
+        responses = ["THOUGHT: keep going.\nACTION: calc(1)"] * 2 + ["Synthesized final summary."]
         agent = make_agent(responses, tool_registry=registry, max_steps=2)
         result = await agent.run("never-ending")
 
@@ -636,9 +609,7 @@ class TestFallbackBuilders:
 
     def test_error_answer_includes_exception_text(self):
         agent = make_agent(["x"])
-        out = agent._build_error_answer(
-            ExecutionHistory(query="q"), ValueError("specific failure")
-        )
+        out = agent._build_error_answer(ExecutionHistory(query="q"), ValueError("specific failure"))
         assert "encountered an error" in out
         assert "specific failure" in out
 
@@ -650,9 +621,7 @@ class TestFallbackBuilders:
 
     def test_exhausted_answer_no_context(self):
         agent = make_agent(["x"])
-        out = agent._build_exhausted_answer(
-            "q", [], ExecutionHistory(query="q")
-        )
+        out = agent._build_exhausted_answer("q", [], ExecutionHistory(query="q"))
         assert "unable to find enough information" in out
 
 

@@ -13,13 +13,14 @@ async def main():
 
     try:
         async with httpx.AsyncClient() as client:
-            files = {'file': (filepath, open(filepath, 'rb'), 'text/plain')}
+            files = {"file": (filepath, open(filepath, "rb"), "text/plain")}
             response = await client.post(url, files=files)
             print("Status:", response.status_code)
             print("Response:", response.json())
     finally:
         if os.path.exists(filepath):
             os.remove(filepath)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

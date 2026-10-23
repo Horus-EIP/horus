@@ -35,7 +35,8 @@ def _results(docs: list[str]) -> dict:
 class TestAddText:
     def test_add_text_success(self, client, monkeypatch):
         monkeypatch.setattr(
-            store_mod._content_analyzer, "analyze",
+            store_mod._content_analyzer,
+            "analyze",
             MagicMock(return_value={"auto_category": "general"}),
         )
         monkeypatch.setattr(store_mod, "store_file", AsyncMock())
@@ -49,14 +50,18 @@ class TestAddText:
 
 class TestQuery:
     def test_query_no_filters_success(self, client, monkeypatch):
-        monkeypatch.setattr(store_mod, "query_knowledge", AsyncMock(return_value=_results(["chunk"])))
+        monkeypatch.setattr(
+            store_mod, "query_knowledge", AsyncMock(return_value=_results(["chunk"]))
+        )
         r = client.get("/", params={"query": "policy", "n_results": 2})
         assert r.status_code == 200
 
     def test_query_with_valid_filters(self, client, monkeypatch):
         qwf = AsyncMock(return_value=_results(["c"]))
         monkeypatch.setattr(store_mod, "query_with_filters", qwf)
-        r = client.get("/", params={"query": "x", "filters": '{"auto_category": {"$eq": "finance"}}'})
+        r = client.get(
+            "/", params={"query": "x", "filters": '{"auto_category": {"$eq": "finance"}}'}
+        )
         assert r.status_code == 200
         assert qwf.await_args.args[1] == {"auto_category": {"$eq": "finance"}}
 
@@ -65,12 +70,16 @@ class TestQuery:
         assert r.status_code == 400
 
     def test_query_backend_error_returns_500(self, client, monkeypatch):
-        monkeypatch.setattr(store_mod, "query_knowledge", AsyncMock(side_effect=RuntimeError("boom")))
+        monkeypatch.setattr(
+            store_mod, "query_knowledge", AsyncMock(side_effect=RuntimeError("boom"))
+        )
         r = client.get("/", params={"query": "x"})
         assert r.status_code == 500
 
     def test_query_no_results_returns_404(self, client, monkeypatch):
-        monkeypatch.setattr(store_mod, "query_knowledge", AsyncMock(return_value={"documents": [[]]}))
+        monkeypatch.setattr(
+            store_mod, "query_knowledge", AsyncMock(return_value={"documents": [[]]})
+        )
         r = client.get("/", params={"query": "x"})
         assert r.status_code == 404
 
@@ -79,10 +88,15 @@ def _add_chunk(collection, doc_id: str, index: int, text: str, **metadata) -> No
     collection.add(
         ids=[f"{doc_id}:{index}"],
         documents=[text],
-        metadatas=[{
-            "doc_id": doc_id, "chunk_index": index, "title": f"{doc_id}.md",
-            "category": "general", **metadata,
-        }],
+        metadatas=[
+            {
+                "doc_id": doc_id,
+                "chunk_index": index,
+                "title": f"{doc_id}.md",
+                "category": "general",
+                **metadata,
+            }
+        ],
     )
 
 
@@ -157,7 +171,9 @@ class TestSmartSearchFull:
         assert r.status_code == 404
 
     def test_backend_error_500(self, client, monkeypatch):
-        monkeypatch.setattr(store_mod, "search_documents", AsyncMock(side_effect=RuntimeError("boom")))
+        monkeypatch.setattr(
+            store_mod, "search_documents", AsyncMock(side_effect=RuntimeError("boom"))
+        )
         r = client.post("/smart-search", json={"query": "x"})
         assert r.status_code == 500
 
@@ -178,7 +194,9 @@ class TestSearchByEntityFull:
         assert r.status_code == 404
 
     def test_backend_error_500(self, client, monkeypatch):
-        monkeypatch.setattr(store_mod, "search_documents", AsyncMock(side_effect=RuntimeError("boom")))
+        monkeypatch.setattr(
+            store_mod, "search_documents", AsyncMock(side_effect=RuntimeError("boom"))
+        )
         r = client.get("/search-by-entity", params={"entity": "X", "entity_type": "dates"})
         assert r.status_code == 500
 
@@ -189,7 +207,9 @@ class TestCategoriesFull:
             ids=["a", "b", "c"],
             documents=["a", "b", "c"],
             metadatas=[
-                {"auto_category": "finance"}, {"auto_category": "finance"}, {"auto_category": ""},
+                {"auto_category": "finance"},
+                {"auto_category": "finance"},
+                {"auto_category": ""},
             ],
         )
         r = client.get("/categories")
@@ -204,7 +224,9 @@ class TestCategoriesFull:
         assert r.json() == {"total_documents": 0, "categories": []}
 
     def test_error_500(self, client, monkeypatch):
-        monkeypatch.setattr(store_mod, "stored_documents", MagicMock(side_effect=RuntimeError("boom")))
+        monkeypatch.setattr(
+            store_mod, "stored_documents", MagicMock(side_effect=RuntimeError("boom"))
+        )
         r = client.get("/categories")
         assert r.status_code == 500
 
@@ -213,7 +235,9 @@ class TestUploadAndChunk:
     def test_upload_pdf_success(self, client, monkeypatch):
         monkeypatch.setattr(store_mod, "save_file", AsyncMock(return_value="/tmp/x.pdf"))
         monkeypatch.setattr(store_mod, "pdf_to_text", AsyncMock(return_value="hello world " * 50))
-        monkeypatch.setattr(store_mod._content_analyzer, "analyze", MagicMock(return_value={"topics": ["t"]}))
+        monkeypatch.setattr(
+            store_mod._content_analyzer, "analyze", MagicMock(return_value={"topics": ["t"]})
+        )
         r = client.post("/upload", files={"file": ("x.pdf", b"%PDF", "application/pdf")})
         assert r.status_code == 200
         body = r.json()

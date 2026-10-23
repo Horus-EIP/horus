@@ -32,6 +32,7 @@ def _import_spacy():
         return None
     return spacy
 
+
 class DataExtractorTool(BaseTool):
     """Extract payments, dates, tables, and key-value pairs from raw text."""
 
@@ -50,7 +51,8 @@ class DataExtractorTool(BaseTool):
         if spacy_is_off():
             logger.info(
                 "spaCy is off (%s=%s): payments are extracted with regular expressions only",
-                SPACY_ENV, os.getenv(SPACY_ENV),
+                SPACY_ENV,
+                os.getenv(SPACY_ENV),
             )
             self.nlp = None
             return
@@ -59,18 +61,24 @@ class DataExtractorTool(BaseTool):
 
         # Check if we are in a testing environment
         import sys
-        is_test = "pytest" in sys.modules or "unittest" in sys.modules or os.environ.get("TEST_MODE") == "true"
+
+        is_test = (
+            "pytest" in sys.modules
+            or "unittest" in sys.modules
+            or os.environ.get("TEST_MODE") == "true"
+        )
 
         if is_test:
-             # Use a mock/dummy or explicitly 'sm' during tests to avoid heavy load
-             logger.info("Test environment detected. Skipping 'trf' model load.")
-             try:
+            # Use a mock/dummy or explicitly 'sm' during tests to avoid heavy load
+            logger.info("Test environment detected. Skipping 'trf' model load.")
+            try:
                 if spacy:
                     _nlp_model = spacy.load("en_core_web_sm")
                 else:
                     raise ImportError("Spacy missing")
-             except (OSError, ImportError, AttributeError):
+            except (OSError, ImportError, AttributeError):
                 from unittest.mock import MagicMock
+
                 mock = MagicMock()
                 mock.ents = []
                 _nlp_model = lambda text: mock
@@ -96,14 +104,14 @@ class DataExtractorTool(BaseTool):
                 try:
                     _nlp_model = spacy.load("en_core_web_sm")
                 except (OSError, ImportError):
-                     logger.warning("No Spacy model found. Using dummy.")
-                     from unittest.mock import MagicMock
-                     mock = MagicMock()
-                     mock.ents = []
-                     _nlp_model = lambda text: mock
+                    logger.warning("No Spacy model found. Using dummy.")
+                    from unittest.mock import MagicMock
+
+                    mock = MagicMock()
+                    mock.ents = []
+                    _nlp_model = lambda text: mock
 
         self.nlp = _nlp_model
-
 
     def _run(self, text: str, extraction_type: str) -> str:
         """
@@ -111,7 +119,7 @@ class DataExtractorTool(BaseTool):
 
         Args:
             text (str): The raw text content of the document.
-            extraction_type (str): The type of extraction to perform. 
+            extraction_type (str): The type of extraction to perform.
                                    Options: 'payments', 'tables', 'key_values'.
 
         Returns:
@@ -164,7 +172,9 @@ class DataExtractorTool(BaseTool):
         matches_dates = re.findall(full_date_pattern, text, re.IGNORECASE)
         matches_dates = [d.strip() for d in matches_dates if d.strip()]
 
-        logger.debug(f"Regex extracted {len(matches_amounts)} amounts and {len(matches_dates)} dates.")
+        logger.debug(
+            f"Regex extracted {len(matches_amounts)} amounts and {len(matches_dates)} dates."
+        )
         return {
             "amounts": matches_amounts,
             "dates": matches_dates,
@@ -197,7 +207,9 @@ class DataExtractorTool(BaseTool):
             if ent.label_ == "DATE":
                 dates.append(ent.text.strip())
 
-        logger.debug(f"Spacy extraction summary: Money={len(money)}, Dates={len(dates)}, People={len(people)}, Org={len(companies)}")
+        logger.debug(
+            f"Spacy extraction summary: Money={len(money)}, Dates={len(dates)}, People={len(people)}, Org={len(companies)}"
+        )
 
         people = list(set(people))
         companies = list(set(companies))
@@ -232,7 +244,8 @@ class DataExtractorTool(BaseTool):
             lines = text.splitlines()
             for line in lines:
                 line = line.strip()
-                if not line: continue
+                if not line:
+                    continue
                 parts = [p.strip() for p in line.split(",")]
                 if len(parts) >= 3:
                     currencies = ["USD", "EUR", "GBP", "CHF", "AUD", "CAD"]
@@ -247,7 +260,8 @@ class DataExtractorTool(BaseTool):
                     if found_currency:
                         candidates = []
                         for idx, part in enumerate(parts):
-                            if idx == currency_idx: continue
+                            if idx == currency_idx:
+                                continue
                             clean = part.replace(" ", "")
                             try:
                                 val = float(clean)
@@ -270,10 +284,13 @@ class DataExtractorTool(BaseTool):
                             possible_dates = []
                             possible_payees = []
                             for idx, part in enumerate(parts):
-                                if idx == currency_idx: continue
+                                if idx == currency_idx:
+                                    continue
                                 try:
-                                    if float(part.replace(" ", "")) == best_candidate: continue
-                                except Exception: pass
+                                    if float(part.replace(" ", "")) == best_candidate:
+                                        continue
+                                except Exception:
+                                    pass
 
                                 if re.search(date_pattern, part):
                                     possible_dates.append(part)
@@ -285,14 +302,16 @@ class DataExtractorTool(BaseTool):
                             est_date = possible_dates[0] if possible_dates else None
                             est_payee = possible_payees[-1] if possible_payees else None
 
-                            payment_data.append({
-                                "raw_value": str(best_candidate),
-                                "amount": best_candidate,
-                                "currency": found_currency,
-                                "payee": est_payee,
-                                "context": line,
-                                "estimated_date": est_date
-                            })
+                            payment_data.append(
+                                {
+                                    "raw_value": str(best_candidate),
+                                    "amount": best_candidate,
+                                    "currency": found_currency,
+                                    "payee": est_payee,
+                                    "context": line,
+                                    "estimated_date": est_date,
+                                }
+                            )
         except Exception as e:
             logger.warning(f"CSV scan failed: {e}")
 
@@ -300,9 +319,12 @@ class DataExtractorTool(BaseTool):
         spacy_entities = self.extract_entities_spacy(doc)
 
         all_dates = list(set(regex_entities.get("dates", []) + spacy_entities.get("dates", [])))
-        all_amounts = list(set(regex_entities.get("amounts", []) + spacy_entities.get("amounts", [])))
-        all_payees = list(set(spacy_entities.get("people", []) + spacy_entities.get("companies", [])))
-
+        all_amounts = list(
+            set(regex_entities.get("amounts", []) + spacy_entities.get("amounts", []))
+        )
+        all_payees = list(
+            set(spacy_entities.get("people", []) + spacy_entities.get("companies", []))
+        )
 
         # payment_data initialized above
 
@@ -326,19 +348,19 @@ class DataExtractorTool(BaseTool):
                     # US/UK format: 1,000.50 -> 1000.50
                     cleaned = cleaned.replace(",", "")
                 else:
-                     # EU format: 1.000,50 -> 1000.50
-                     cleaned = cleaned.replace(".", "").replace(",", ".")
+                    # EU format: 1.000,50 -> 1000.50
+                    cleaned = cleaned.replace(".", "").replace(",", ".")
             elif "," in cleaned:
-                 # Assume comma is decimal if no dots found? Or thousand separator?
-                 # Heuristic: if comma is near end (2 chars), it is likely decimal
-                 if len(cleaned) - cleaned.rfind(",") == 3:
-                     # 10,50 -> 10.50
-                     cleaned = cleaned.replace(",", ".")
-                 else:
-                     # 1,000 -> 1000
-                     cleaned = cleaned.replace(",", "")
+                # Assume comma is decimal if no dots found? Or thousand separator?
+                # Heuristic: if comma is near end (2 chars), it is likely decimal
+                if len(cleaned) - cleaned.rfind(",") == 3:
+                    # 10,50 -> 10.50
+                    cleaned = cleaned.replace(",", ".")
+                else:
+                    # 1,000 -> 1000
+                    cleaned = cleaned.replace(",", "")
 
-            cleaned_number = "".join(c for c in cleaned if c.isdigit() or c == '.')
+            cleaned_number = "".join(c for c in cleaned if c.isdigit() or c == ".")
 
             try:
                 price = float(cleaned_number)
@@ -386,7 +408,7 @@ class DataExtractorTool(BaseTool):
                 "currency": currency,
                 "payee": estimated_person,
                 "context": context,
-                "estimated_date": estimated_date
+                "estimated_date": estimated_date,
             }
             payment_data.append(res)
 
@@ -422,7 +444,7 @@ class DataExtractorTool(BaseTool):
                     continue
                 # Skip divider lines entirely if the whole cell is dashes
                 if all(c in "-_" for c in cell):
-                     continue
+                    continue
 
                 clean_cells.append(cell)
 
@@ -434,10 +456,7 @@ class DataExtractorTool(BaseTool):
             return {}
 
         # First line is header, rest is content
-        return {
-            "header": parsed_table[0],
-            "content": parsed_table[1:]
-        }
+        return {"header": parsed_table[0], "content": parsed_table[1:]}
 
     def _extract_tables(self, text: str) -> str:
         """
@@ -451,7 +470,7 @@ class DataExtractorTool(BaseTool):
             str: JSON list of found tables.
         """
         logger.info("Extracting tables...")
-        lines  = text.splitlines()
+        lines = text.splitlines()
         tables = []
         current_table = []
 
@@ -470,8 +489,8 @@ class DataExtractorTool(BaseTool):
                 if len(clean_line) >= 2:
                     current_table.append(line)
                 else:
-                     # Not a valid table row
-                     if current_table:
+                    # Not a valid table row
+                    if current_table:
                         table = self.parse_table(current_table)
                         if table:
                             tables.append(table)
@@ -507,7 +526,7 @@ class DataExtractorTool(BaseTool):
             str: JSON list of pairs found.
         """
         logger.info("Extracting key-value pairs...")
-        lines  = text.splitlines()
+        lines = text.splitlines()
         key_data = {}
 
         # Simpler pattern: Capture Key (at start or distinct) : Value (rest of line)

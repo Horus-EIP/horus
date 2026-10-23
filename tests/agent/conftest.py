@@ -1,6 +1,7 @@
 """
 Pytest configuration for async tests.
 """
+
 import os
 import sys
 from unittest.mock import MagicMock
@@ -22,9 +23,16 @@ if "langchain" not in sys.modules:
     class MockBaseTool:
         name: str = "mock_tool"
         description: str = "mock"
-        def __init__(self, *args, **kwargs): pass
-        def _run(self, *args, **kwargs): return "Mock Result"
-        def _arun(self, *args, **kwargs): raise NotImplementedError
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def _run(self, *args, **kwargs):
+            return "Mock Result"
+
+        def _arun(self, *args, **kwargs):
+            raise NotImplementedError
+
         def run(self, *args, **kwargs):
             # args[0] is usually the input.
             # If input is dict and tool expects string, normally BaseTool handles it.
@@ -39,7 +47,8 @@ if "langchain" not in sys.modules:
     # (MagicMock handles attributes, but explicit assignment ensures class vs instance behavior if needed)
 
 # This file ensures pytest-asyncio is loaded as a plugin
-pytest_plugins = ('pytest_asyncio',)
+pytest_plugins = ("pytest_asyncio",)
+
 
 @pytest.fixture(autouse=True)
 def mock_transformers_pipeline(monkeypatch):
@@ -72,9 +81,7 @@ def mock_transformers_pipeline(monkeypatch):
             [torch.nn.Parameter(torch.tensor([1.0], dtype=torch.float32))]
         )
 
-        monkeypatch.setattr(
-            AutoTokenizer, "from_pretrained", MagicMock(return_value=mock_tok)
-        )
+        monkeypatch.setattr(AutoTokenizer, "from_pretrained", MagicMock(return_value=mock_tok))
         monkeypatch.setattr(
             AutoModelForCausalLM, "from_pretrained", MagicMock(return_value=mock_mdl)
         )
@@ -89,7 +96,6 @@ def mock_transformers_pipeline(monkeypatch):
         pass
 
     return mock_pipe
-
 
 
 # Mock transformers to prevent model loading

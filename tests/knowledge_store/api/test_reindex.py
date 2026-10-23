@@ -15,10 +15,13 @@ HEADERS = {corpus.CORPUS_TOKEN_HEADER: TOKEN}
 CURRENT_MODEL = "fake-keywords:v2"
 KEYWORDS = ("parking", "lunch", "meeting", "laptop")
 
-LONG_POLICY = "\n".join(
-    f"Rule {n}. Staff keep the shared spaces tidy and report broken equipment."
-    for n in range(1, 60)
-) + "\nParking. Visitors get a parking pass from reception for the parking garage."
+LONG_POLICY = (
+    "\n".join(
+        f"Rule {n}. Staff keep the shared spaces tidy and report broken equipment."
+        for n in range(1, 60)
+    )
+    + "\nParking. Visitors get a parking pass from reception for the parking garage."
+)
 LEGACY_METADATA = {
     "title": "Office_Policy.md",
     "date": "2026-06-01 09:00:00+00:00",
@@ -220,7 +223,9 @@ class TestReindexDocument:
         self, legacy_store, embedder
     ):
         reindex.reindex_document("policy", file_service.get_embeddings, "old-model")
-        ids_before = sorted(entry_id for entry_id in legacy_store.rows if entry_id.startswith("policy:"))
+        ids_before = sorted(
+            entry_id for entry_id in legacy_store.rows if entry_id.startswith("policy:")
+        )
         embedded = sum(embedder)
 
         outcome = reindex.reindex_document("policy", file_service.get_embeddings, CURRENT_MODEL)

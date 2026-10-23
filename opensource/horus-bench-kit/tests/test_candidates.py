@@ -47,7 +47,10 @@ class TestCatalog:
 
     def test_download_urls_pin_the_revision(self, catalog):
         variant = variant_by_id(catalog, "beta-2b-q4km")
-        assert variant.url == f"https://huggingface.co/example/models-GGUF/resolve/{'1' * 40}/beta_2b_Q4_K_M.gguf"
+        assert (
+            variant.url
+            == f"https://huggingface.co/example/models-GGUF/resolve/{'1' * 40}/beta_2b_Q4_K_M.gguf"
+        )
         assert download_url(variant.gguf) == variant.url
         assert variant.known_model().sha256 == "b1" * 32
 
@@ -73,10 +76,16 @@ class TestCatalog:
         for entry in labelled["candidates"]:
             entry["label"] = entry["name"].upper()
         assert catalog_problems(labelled, "label") == []
-        assert {v.name for v in select_variants(labelled, name_key="label")} == {"ALPHA-1B", "BETA-2B", "GAMMA-3B"}
+        assert {v.name for v in select_variants(labelled, name_key="label")} == {
+            "ALPHA-1B",
+            "BETA-2B",
+            "GAMMA-3B",
+        }
         assert {v.name for v in all_variants(labelled)} == {"Alpha-1B", "Beta-2B", "Gamma-3B"}
         labelled["candidates"][0]["label"] = " "
-        assert catalog_problems(labelled, "label") == ["candidate alpha-1b: label must be a non-empty string"]
+        assert catalog_problems(labelled, "label") == [
+            "candidate alpha-1b: label must be a non-empty string"
+        ]
 
     def test_build_number(self):
         assert build_number("b11382") == 11382
@@ -100,12 +109,18 @@ class TestCatalogProblems:
         assert "candidate ids must be unique: beta-2b" in problems
 
     def test_a_build_newer_than_the_pin_is_refused(self, catalog):
-        problems = self.broken(catalog, lambda c: c["candidates"][1]["llama_cpp"].update(since_build=99999))
-        assert problems == ["candidate beta-2b: needs llama.cpp b99999, newer than the pinned b11382"]
+        problems = self.broken(
+            catalog, lambda c: c["candidates"][1]["llama_cpp"].update(since_build=99999)
+        )
+        assert problems == [
+            "candidate beta-2b: needs llama.cpp b99999, newer than the pinned b11382"
+        ]
 
     def test_hashes_revisions_and_sizes_are_checked(self, catalog):
         def damage(c):
-            c["candidates"][1]["ggufs"][0].update(sha256="ABC", revision="main", size_bytes=0, file="../x.gguf", default="yes")
+            c["candidates"][1]["ggufs"][0].update(
+                sha256="ABC", revision="main", size_bytes=0, file="../x.gguf", default="yes"
+            )
 
         problems = self.broken(catalog, damage)
         label = "candidate beta-2b gguf beta-2b-q4km"
@@ -131,7 +146,9 @@ class TestCatalogProblems:
             for entry in c["candidates"][2]["ggufs"]:
                 entry["default"] = False
 
-        assert self.broken(catalog, no_default) == ["candidate gamma-3b: at least one gguf must be a default"]
+        assert self.broken(catalog, no_default) == [
+            "candidate gamma-3b: at least one gguf must be a default"
+        ]
 
     def test_other_shapes_are_refused(self):
         assert catalog_problems([]) == ["the catalog must be a mapping"]
@@ -140,7 +157,11 @@ class TestCatalogProblems:
 
 class TestSelectionAndGate:
     def test_defaults_are_one_file_per_candidate(self, catalog):
-        assert [v.id for v in select_variants(catalog)] == ["alpha-1b-q4km", "beta-2b-q4km", "gamma-3b-q4km"]
+        assert [v.id for v in select_variants(catalog)] == [
+            "alpha-1b-q4km",
+            "beta-2b-q4km",
+            "gamma-3b-q4km",
+        ]
 
     def test_only_takes_candidate_or_gguf_ids(self, catalog):
         assert [v.id for v in select_variants(catalog, ["gamma-3b"])] == ["gamma-3b-q4km"]
@@ -169,23 +190,61 @@ class TestSelectionAndGate:
             "the licence Custom is not one of Apache-2.0, MIT",
             "needs llama.cpp b12000, the catalog pins b11382",
         ]
-        assert variant_gate(variant, copied, "needs b{since}, pinned b{pinned}")[1] == "needs b12000, pinned b11382"
+        assert (
+            variant_gate(variant, copied, "needs b{since}, pinned b{pinned}")[1]
+            == "needs b12000, pinned b11382"
+        )
         assert variant_gate(variant_by_id(catalog, "beta-2b-q4km"), catalog) == []
 
 
 def test_written_report_takes_the_last_path_a_tool_printed():
-    lines = ["[info] 9 question(s), writing /b/x-eval-2026-10-08.json", "[ 1/9] ...", "[done] wrote /b/x-eval-2026-10-08.json"]
+    lines = [
+        "[info] 9 question(s), writing /b/x-eval-2026-10-08.json",
+        "[ 1/9] ...",
+        "[done] wrote /b/x-eval-2026-10-08.json",
+    ]
     assert written_report(lines) == "/b/x-eval-2026-10-08.json"
-    assert written_report(["[info] 5 question(s), writing D:\\b\\y.json", "[error] stopped"]) == "D:\\b\\y.json"
+    assert (
+        written_report(["[info] 5 question(s), writing D:\\b\\y.json", "[error] stopped"])
+        == "D:\\b\\y.json"
+    )
     assert written_report(["nothing"]) is None
 
 
 def bench_report(file):
     rows = []
     for threads, scale in ((4, 1.0), (8, 1.5)):
-        for test, depth, tps in (("pp512", 0, 60.0), ("pp512", 4096, 40.0), ("pp2048", 0, 50.0), ("tg128", 0, 9.0), ("tg128", 4096, 7.0)):
-            rows.append({"model": file, "test": test, "n_depth": depth, "type_k": "f16", "type_v": "f16", "n_threads": threads, "avg_ts": tps * scale, "stddev_ts": 0.5})
-        rows.append({"model": file, "test": "tg128", "n_depth": 0, "type_k": "q8_0", "type_v": "q8_0", "n_threads": threads, "avg_ts": 99.0, "stddev_ts": 0.1})
+        for test, depth, tps in (
+            ("pp512", 0, 60.0),
+            ("pp512", 4096, 40.0),
+            ("pp2048", 0, 50.0),
+            ("tg128", 0, 9.0),
+            ("tg128", 4096, 7.0),
+        ):
+            rows.append(
+                {
+                    "model": file,
+                    "test": test,
+                    "n_depth": depth,
+                    "type_k": "f16",
+                    "type_v": "f16",
+                    "n_threads": threads,
+                    "avg_ts": tps * scale,
+                    "stddev_ts": 0.5,
+                }
+            )
+        rows.append(
+            {
+                "model": file,
+                "test": "tg128",
+                "n_depth": 0,
+                "type_k": "q8_0",
+                "type_v": "q8_0",
+                "n_threads": threads,
+                "avg_ts": 99.0,
+                "stddev_ts": 0.1,
+            }
+        )
     return {
         "kind": "horus-llama-bench",
         "llama_cpp": {"build": "b11382"},
@@ -275,13 +334,40 @@ class TestAggregation:
             contract_report=contract_report(),
             eval_report=kit_eval_report(),
             server={"build": "b11382"},
-            memory={"after_probe": {"process": {"vm_hwm_bytes": GIB}, "cgroup_peak_bytes": GIB + 7, "oom_kills": 0}},
+            memory={
+                "after_probe": {
+                    "process": {"vm_hwm_bytes": GIB},
+                    "cgroup_peak_bytes": GIB + 7,
+                    "oom_kills": 0,
+                }
+            },
             problems=[],
         )
         assert list(summary) == [
-            "id", "candidate", "role", "name", "model_repo", "licence", "licence_flags", "gguf_architecture",
-            "thinking_default", "quant", "file", "gguf_repo", "revision", "publisher", "size_bytes", "sha256",
-            "fetch", "reports", "llama_bench", "contract", "eval", "server", "memory", "problems",
+            "id",
+            "candidate",
+            "role",
+            "name",
+            "model_repo",
+            "licence",
+            "licence_flags",
+            "gguf_architecture",
+            "thinking_default",
+            "quant",
+            "file",
+            "gguf_repo",
+            "revision",
+            "publisher",
+            "size_bytes",
+            "sha256",
+            "fetch",
+            "reports",
+            "llama_bench",
+            "contract",
+            "eval",
+            "server",
+            "memory",
+            "problems",
         ]
         assert summary["name"] == "Beta-2B"
         assert summary["llama_bench"]["sha256_matches_catalog"] is True
@@ -290,9 +376,26 @@ class TestAggregation:
             "contract": None,
             "eval": "model-candidates-2026-10-08/beta-2b-q4km-eval-2026-10-08.json",
         }
-        report = build_report(run={"started_at": "2026-10-08T08:00:00Z"}, catalog={"version": "1.0.0"}, machine=None, variants=[summary])
-        assert list(report) == ["kind", "schema_version", "label", "catalog", "run", "machine", "variants"]
-        assert (report["kind"], report["schema_version"], report["label"]) == (REPORT_KIND, 1, "model-candidates")
+        report = build_report(
+            run={"started_at": "2026-10-08T08:00:00Z"},
+            catalog={"version": "1.0.0"},
+            machine=None,
+            variants=[summary],
+        )
+        assert list(report) == [
+            "kind",
+            "schema_version",
+            "label",
+            "catalog",
+            "run",
+            "machine",
+            "variants",
+        ]
+        assert (report["kind"], report["schema_version"], report["label"]) == (
+            REPORT_KIND,
+            1,
+            "model-candidates",
+        )
         assert report["machine"] == {}
         json.dumps(report)
 
@@ -322,7 +425,13 @@ class TestMarkdown:
             bench_report=bench_report("alpha-1b-Q4_K_M.gguf"),
             contract_report=contract_report(),
             eval_report=kit_eval_report(),
-            memory={"after_eval": {"process": {"vm_hwm_bytes": 3 * GIB}, "cgroup_peak_bytes": 4 * GIB, "oom_kills": 0}},
+            memory={
+                "after_eval": {
+                    "process": {"vm_hwm_bytes": 3 * GIB},
+                    "cgroup_peak_bytes": 4 * GIB,
+                    "oom_kills": 0,
+                }
+            },
         )
         failed = variant_summary(
             variant_by_id(catalog, "beta-2b-q4km"),
@@ -330,9 +439,18 @@ class TestMarkdown:
             problems=["download failed: HTTP 404"],
         )
         return build_report(
-            run={"started_at": "2026-10-08T08:00:00Z", "steps": ["fetch", "bench", "probe", "eval"], "reasoning": "off", "completed": True},
+            run={
+                "started_at": "2026-10-08T08:00:00Z",
+                "steps": ["fetch", "bench", "probe", "eval"],
+                "reasoning": "off",
+                "completed": True,
+            },
             catalog={"path": "catalog.yaml", "version": "1.0.0", "pinned_build": "b11382"},
-            machine={"reference": "bench-01", "cpu_model": "Example CPU 6C", "ram": "16 GiB installed"},
+            machine={
+                "reference": "bench-01",
+                "cpu_model": "Example CPU 6C",
+                "ram": "16 GiB installed",
+            },
             variants=[done, failed],
         )
 
@@ -371,7 +489,10 @@ class TestMarkdown:
         text = markdown_summary(self.report(catalog), texts)
         assert text.startswith("# Screening 2026-10-08\n")
         assert "Answers from the 9-question evaluation." in text
-        assert "| Model | GGUF | Valid |\n|---|---|---:|\n| Alpha-1B (baseline) | Q4_K_M, community | 7/8 (87.5%) |" in text
+        assert (
+            "| Model | GGUF | Valid |\n|---|---|---:|\n| Alpha-1B (baseline) | Q4_K_M, community | 7/8 (87.5%) |"
+            in text
+        )
         assert "## Speed\n\nFast or not.\n\n| Model | GGUF |" in text
 
     def test_the_evaluation_name_follows_the_question_counts(self, catalog):
@@ -385,9 +506,16 @@ class TestMarkdown:
     def test_licence_flags_are_listed_once_per_candidate(self, catalog):
         report = self.report(catalog)
         report["variants"].append(dict(report["variants"][1]))
-        assert markdown_summary(report).count("- Beta-2B: The licence is only in the card metadata.") == 1
+        assert (
+            markdown_summary(report).count("- Beta-2B: The licence is only in the card metadata.")
+            == 1
+        )
 
 
 def test_a_variant_is_a_candidate_and_one_of_its_files(catalog):
     variant = Variant(catalog["candidates"][0], catalog["candidates"][0]["ggufs"][1])
-    assert (variant.id, variant.file, variant.name) == ("alpha-1b-q5km", "alpha-1b-Q5_K_M.gguf", "Alpha-1B")
+    assert (variant.id, variant.file, variant.name) == (
+        "alpha-1b-q5km",
+        "alpha-1b-Q5_K_M.gguf",
+        "Alpha-1B",
+    )

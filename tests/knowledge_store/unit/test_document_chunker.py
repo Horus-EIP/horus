@@ -40,7 +40,7 @@ def test_every_chunk_is_the_exact_slice_of_the_text_it_points_at():
     chunks = DocumentChunker().split(text)
 
     assert len(chunks) > 3
-    assert all(text[c.char_start:c.char_end] == c.text for c in chunks)
+    assert all(text[c.char_start : c.char_end] == c.text for c in chunks)
 
 
 def test_no_chunk_is_longer_than_the_chunk_size():

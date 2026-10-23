@@ -3,6 +3,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class WriterAgent:
     def __init__(self, decision_agent):
         self.type = "writer"
@@ -19,12 +20,12 @@ class WriterAgent:
     async def process_request(self, task_type: str, data: str, extra_parameters: dict = None):
         """
         Process a request based on task type.
-        
+
         Args:
             task_type: 'write' (generate report) or 'format' (format text).
             data: The main text content to process.
             extra_parameters: Dict containing 'format' key for formatting tasks.
-            
+
         Returns:
             The generated or formatted text as a string.
         """
@@ -35,4 +36,3 @@ class WriterAgent:
             return await self.format_text(data, extra_parameters["format"])
         else:
             return "Task type not found"
-

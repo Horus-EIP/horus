@@ -280,9 +280,7 @@ def _fit_vllm_prompt(system_content: str, user_content: str) -> tuple[str, int]:
         keep_chars = max_user_tok * 3
         head = user_content[: (keep_chars * 2) // 3]
         tail = user_content[-(keep_chars // 3) :]
-        user_content = (
-            head + "\n…[input truncated to fit the context window]…\n" + tail
-        )
+        user_content = head + "\n…[input truncated to fit the context window]…\n" + tail
         user_tok = len(user_content) // 3
     budget = max_len - sys_tok - user_tok - margin
     max_tokens = max(min_gen, min(_max_new_tokens(), budget))
@@ -400,13 +398,12 @@ def _cpu_dtype():
     except Exception:
         return torch.float32
 
+
 APP_DIR = Path(__file__).resolve().parent.parent
 # The agent runs the actual task work (RAG, synthesis, generation), so its
 # default is the full 4B Qwen. MAS uses the 1.5B variant for routing only —
 # see services/mas/core/llm_setup.py.
-DEFAULT_MODEL_ID = os.environ.get(
-    "MODEL_NAME", "Qwen/Qwen3-4B-Instruct-2507"
-).strip()
+DEFAULT_MODEL_ID = os.environ.get("MODEL_NAME", "Qwen/Qwen3-4B-Instruct-2507").strip()
 
 
 def _resolve_local_model_dir() -> Path:
@@ -426,13 +423,14 @@ REQUIRED_LOCAL_FILES = [
     "tokenizer.json",
 ]
 
+
 def _agent_accelerate_max_memory() -> dict | None:
     """
     Unset caps → use all VRAM. Set AGENT_GPU_MEMORY_CAP or LLM_GPU_MEMORY_CAP to limit/split.
     """
-    cap = os.getenv("AGENT_GPU_MEMORY_CAP", "").strip() or os.getenv(
-        "LLM_GPU_MEMORY_CAP", ""
-    ).strip()
+    cap = (
+        os.getenv("AGENT_GPU_MEMORY_CAP", "").strip() or os.getenv("LLM_GPU_MEMORY_CAP", "").strip()
+    )
     if not cap:
         return None
     cpu = (
@@ -592,9 +590,7 @@ class DecisionMakingAgent:
             torch.backends.cuda.matmul.allow_tf32 = True
 
         if self._lazy:
-            logger.info(
-                "Decision model will load on first use (AGENT_LAZY_DECISION_MODEL=1)."
-            )
+            logger.info("Decision model will load on first use (AGENT_LAZY_DECISION_MODEL=1).")
             return
 
         if _llm_backend() == "vllm":
@@ -617,9 +613,7 @@ class DecisionMakingAgent:
         if _agent_force_cpu():
             return False
         return bool(
-            self.device.startswith("cuda")
-            and torch is not None
-            and torch.cuda.is_available()
+            self.device.startswith("cuda") and torch is not None and torch.cuda.is_available()
         )
 
     def _load_causal_model(self) -> None:
@@ -647,22 +641,16 @@ class DecisionMakingAgent:
                     if max_memory is not None:
                         gpu_kw["max_memory"] = max_memory
                         gpu_kw["offload_folder"] = str(OFFLOAD_DIR)
-                        logger.info(
-                            "Agent LLM load with max_memory=%s", max_memory
-                        )
+                        logger.info("Agent LLM load with max_memory=%s", max_memory)
                     else:
-                        logger.info(
-                            "Agent LLM load without VRAM cap (full GPU when possible)."
-                        )
+                        logger.info("Agent LLM load without VRAM cap (full GPU when possible).")
                     model = AutoModelForCausalLM.from_pretrained(
                         model_path,
                         **gpu_kw,
                     )
                 else:
                     cpu_dtype = _cpu_dtype()
-                    logger.info(
-                        "Loading agent decision LLM on CPU, dtype=%s.", cpu_dtype
-                    )
+                    logger.info("Loading agent decision LLM on CPU, dtype=%s.", cpu_dtype)
                     model = AutoModelForCausalLM.from_pretrained(
                         model_path,
                         torch_dtype=cpu_dtype,
@@ -673,9 +661,7 @@ class DecisionMakingAgent:
                     )
             except Exception as e:
                 if use_gpu:
-                    logger.warning(
-                        "Agent LLM GPU load failed (%s), retrying on CPU.", e
-                    )
+                    logger.warning("Agent LLM GPU load failed (%s), retrying on CPU.", e)
                     self.device = "cpu"
                     model = AutoModelForCausalLM.from_pretrained(
                         model_path,
@@ -730,7 +716,11 @@ class DecisionMakingAgent:
 
     def _prompt_token_count(self, prompt: str) -> tuple[int, TokenSource]:
         counted = self._last_prompt_tokens
-        if self.decision_model is None and isinstance(counted, int) and not isinstance(counted, bool):
+        if (
+            self.decision_model is None
+            and isinstance(counted, int)
+            and not isinstance(counted, bool)
+        ):
             if _llm_backend() == "vllm":
                 return counted, TokenSource.USAGE
             return counted, TokenSource.TOKENIZER
@@ -782,10 +772,21 @@ class DecisionMakingAgent:
         # producing them. Lower-cased and prefixed variants cover both
         # mid-sentence and start-of-sentence occurrences.
         _antiloop_phrases = [
-            " wait", " Wait", " No —", " no —",
-            " Actually", " actually", " correction", " Correction",
-            " let me recheck", " Let me recheck", " let me re-check",
-            " No.", " no.", " No,", " no,",
+            " wait",
+            " Wait",
+            " No —",
+            " no —",
+            " Actually",
+            " actually",
+            " correction",
+            " Correction",
+            " let me recheck",
+            " Let me recheck",
+            " let me re-check",
+            " No.",
+            " no.",
+            " No,",
+            " no,",
         ]
         bad_words_ids: list[list[int]] = []
         for phrase in _antiloop_phrases:
@@ -880,12 +881,11 @@ class DecisionMakingAgent:
         try:
             from ai_agents.step_emitter import emit_step as _emit
         except Exception:  # pragma: no cover - emitter unbound (e.g. unit tests)
+
             def _emit(*_a: Any, **_kw: Any) -> None:  # type: ignore[misc]
                 return None
 
-        streamer = TextIteratorStreamer(
-            tok, skip_prompt=True, skip_special_tokens=True
-        )
+        streamer = TextIteratorStreamer(tok, skip_prompt=True, skip_special_tokens=True)
         holder: dict[str, Any] = {}
 
         def _run() -> None:
@@ -1256,9 +1256,7 @@ class DecisionMakingAgent:
         if persona:
             system_content = f"{persona}\n\n---\n\n{system_content}"
 
-        logger.debug(
-            "Decision inference model=%s device=%s", self.model_name, self.device
-        )
+        logger.debug("Decision inference model=%s device=%s", self.model_name, self.device)
 
         # Coarse "thought process" boundary — the consumer binds an emitter
         # per-task; nothing happens in unit tests calling decide() directly.
@@ -1267,6 +1265,7 @@ class DecisionMakingAgent:
 
             _emit = emit_step
         except Exception:
+
             def _emit(*_a, **_kw):  # type: ignore[no-redef]
                 return None
 
@@ -1309,9 +1308,7 @@ class DecisionMakingAgent:
                     call=call,
                 )
             else:
-                text = self._generate_causal(
-                    user_content, system_content, stream_view=stream_view
-                )
+                text = self._generate_causal(user_content, system_content, stream_view=stream_view)
 
             inference_duration = time.time() - start_time
             record_prompt_tokens(call, *self._prompt_token_count(prompt))

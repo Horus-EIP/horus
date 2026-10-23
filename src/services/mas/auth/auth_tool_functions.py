@@ -48,12 +48,8 @@ def authenticate_user(username: str, password: str, db, ip_address: str = None):
         try:
             all_users = db.query(Users).all()
             user_list = [u.username for u in all_users]
-            logger.error(
-                f"DEBUG: User '{username}' not found. Existing users: {user_list}"
-            )
-            logger.error(
-                f"DEBUG: Username type: {type(username)}, length: {len(username)}"
-            )
+            logger.error(f"DEBUG: User '{username}' not found. Existing users: {user_list}")
+            logger.error(f"DEBUG: Username type: {type(username)}, length: {len(username)}")
             logger.error(f"DEBUG: DB Session ID: {id(db)}")
         except Exception as e:
             logger.error(f"DEBUG: Failed to list users: {e}")
@@ -88,9 +84,7 @@ def authenticate_user(username: str, password: str, db, ip_address: str = None):
     return user
 
 
-def create_access_token(
-    username: str, user_id: int, expires_delta: timedelta, user_role: str
-):
+def create_access_token(username: str, user_id: int, expires_delta: timedelta, user_role: str):
     """
     Generates a JWT access token with an expiration time.
     """
@@ -109,26 +103,20 @@ def create_access_token(
         }
     )
 
-    token = jwt.encode(
-        encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
-    )
+    token = jwt.encode(encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
     log_auth_operation("TOKEN", username, success=True)
     logger.info(f"Token created successfully for user: {username}, expires: {exp}")
 
     return token
 
 
-def get_current_user(
-    token: Annotated[str, Depends(oauth2_bearer)], db: Session = Depends(get_db)
-):
+def get_current_user(token: Annotated[str, Depends(oauth2_bearer)], db: Session = Depends(get_db)):
     """
     Decodes the JWT token and retrieves user details.
     Raises an exception if the token is invalid or expired.
     """
     try:
-        payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
-        )
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
         username: str = payload.get("sub")
         user_id: str = payload.get("id")
         nonce: str = payload.get("nonce")
@@ -171,9 +159,7 @@ def get_current_user(
 def get_current_user_from_token(token: str) -> dict[str, Any]:
     """Extract user info from token string"""
     try:
-        payload = jwt.decode(
-            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
-        )
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
         username = payload.get("sub")
         user_id = payload.get("id")
 
@@ -217,9 +203,7 @@ class PermissionChecker:
         return hash(self.required_permission)
 
 
-def modify_user_password(
-    username: str, old_password: str, new_password: str, db: Session
-):
+def modify_user_password(username: str, old_password: str, new_password: str, db: Session):
     logger.info(f"Authentication attempt for user: {username}")
 
     try:
@@ -326,9 +310,7 @@ def invalidate_agent_api_key_cache(agent_id: str) -> None:
     for k in stale:
         _AGENT_AUTH_L1.pop(k, None)
     try:
-        for rk in redis_db.scan_iter(
-            match=f"{_AGENT_AUTH_REDIS_PREFIX}{agent_id}:*"
-        ):
+        for rk in redis_db.scan_iter(match=f"{_AGENT_AUTH_REDIS_PREFIX}{agent_id}:*"):
             redis_db.delete(rk)
     except Exception as exc:  # noqa: BLE001 - invalidation is best-effort
         logger.debug(f"Agent auth cache invalidation failed for {agent_id}: {exc}")

@@ -69,7 +69,12 @@ def build_report(
         "resources": resources,
     }
     return kit.build_report(
-        label=label, run=run, testset=testset, records=records, sections=sections, profile=EVAL_PROFILE
+        label=label,
+        run=run,
+        testset=testset,
+        records=records,
+        sections=sections,
+        profile=EVAL_PROFILE,
     )
 
 
@@ -201,14 +206,20 @@ def questions_peak_checks(
     return {
         "at_questions_start": at_start,
         "unsampled_peak_excess_bytes": dict(sorted(excess.items())),
-        "docker_host_swap_growth_bytes": max(questions_swap_peak - swap_at_start, 0) if swap_known else None,
+        "docker_host_swap_growth_bytes": max(questions_swap_peak - swap_at_start, 0)
+        if swap_known
+        else None,
     }
 
 
 def llm_mapped_outside_docker_stats(
     process: dict[str, Any] | None, memory_stat: dict[str, int] | None
 ) -> int | None:
-    if not process or process.get("name") != LLM_PROCESS_NAME or process.get("rss_file_bytes") is None:
+    if (
+        not process
+        or process.get("name") != LLM_PROCESS_NAME
+        or process.get("rss_file_bytes") is None
+    ):
         return None
     if not memory_stat:
         return None

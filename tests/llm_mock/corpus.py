@@ -28,5 +28,7 @@ def demo_chunks(titles=None) -> list[tuple[str, str]]:
 
 def demo_context(titles=None, header="[S{n}] {title}") -> tuple[str, tuple[str, ...]]:
     chunks = demo_chunks(titles)
-    blocks = [f"{header.format(n=n, title=title)}\n{text}" for n, (title, text) in enumerate(chunks, 1)]
+    blocks = [
+        f"{header.format(n=n, title=title)}\n{text}" for n, (title, text) in enumerate(chunks, 1)
+    ]
     return "\n\n".join(blocks), tuple(f"S{n}" for n in range(1, len(chunks) + 1))

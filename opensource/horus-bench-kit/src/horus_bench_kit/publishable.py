@@ -13,7 +13,9 @@ from pathlib import Path, PurePosixPath
 SPDX_LINE = "# SPDX-License-Identifier: Apache-2.0"
 REQUIRED_FILES = ("LICENSE", "NOTICE", "README.md")
 HEADER_SUFFIXES = frozenset({".py", ".sh"})
-TEXT_SUFFIXES = frozenset({".py", ".md", ".txt", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".cfg", ".sh"})
+TEXT_SUFFIXES = frozenset(
+    {".py", ".md", ".txt", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".cfg", ".sh"}
+)
 TEXT_NAMES = frozenset({"LICENSE", "NOTICE", ".gitignore"})
 SKIPPED_FOLDERS = frozenset(
     {
@@ -58,20 +60,43 @@ class Forbidden:
 
 
 FORBIDDEN = (
-    Forbidden("a product source path", "5c06cdf845c9f116b645eae3b6de0d31f723a0c9598c614c86a60b32e8e59ad8", 12),
-    Forbidden("a private registry", "ee91dfadf795111bd5180b8075b8af974036ed66d6772ae3e11b38ce1dfb6d8a", 24),
-    Forbidden("closed licence wording", "9049697da52b7e0efb06ef942d752352a8336c4cc657b095b882a63495d75d51", 11),
+    Forbidden(
+        "a product source path",
+        "5c06cdf845c9f116b645eae3b6de0d31f723a0c9598c614c86a60b32e8e59ad8",
+        12,
+    ),
+    Forbidden(
+        "a private registry", "ee91dfadf795111bd5180b8075b8af974036ed66d6772ae3e11b38ce1dfb6d8a", 24
+    ),
+    Forbidden(
+        "closed licence wording",
+        "9049697da52b7e0efb06ef942d752352a8336c4cc657b095b882a63495d75d51",
+        11,
+    ),
     Forbidden(
         "a maintainer email domain",
         "a459ebb6e7f7f9e932cb840f11bb99418a9947842ef57a97e6fae8932139bc25",
         11,
         allowed_in=frozenset({"LICENSE", "NOTICE", "CODE_OF_CONDUCT.md"}),
     ),
-    Forbidden("a product container path", "8f446954d61fc9b34bd1e9235dcb9a1fd431c26ac4c08a4c9e0a9b05121e5b87", 10),
-    Forbidden("a product setting", "230922a8bc86275ec43c08794f5a7e248def15d202f5cada9b9e667d27b6ae13", 20),
-    Forbidden("a product network name", "f246f2a4eb9f70fc7831ced2639ef7f012a6bca88cef6d40fc4fad1489ec6b92", 9),
     Forbidden(
-        "a product prompt", "779c331b2f5f237d228b76ebdf152973cbeb35d9c2827742a2e62c7f803e2aa3", 9, words=True
+        "a product container path",
+        "8f446954d61fc9b34bd1e9235dcb9a1fd431c26ac4c08a4c9e0a9b05121e5b87",
+        10,
+    ),
+    Forbidden(
+        "a product setting", "230922a8bc86275ec43c08794f5a7e248def15d202f5cada9b9e667d27b6ae13", 20
+    ),
+    Forbidden(
+        "a product network name",
+        "f246f2a4eb9f70fc7831ced2639ef7f012a6bca88cef6d40fc4fad1489ec6b92",
+        9,
+    ),
+    Forbidden(
+        "a product prompt",
+        "779c331b2f5f237d228b76ebdf152973cbeb35d9c2827742a2e62c7f803e2aa3",
+        9,
+        words=True,
     ),
 )
 
@@ -92,7 +117,11 @@ def is_packaged(relative: PurePosixPath) -> bool:
 
 
 def packaged_files(root: Path) -> list[PurePosixPath]:
-    relative = (PurePosixPath(path.relative_to(root).as_posix()) for path in root.rglob("*") if path.is_file())
+    relative = (
+        PurePosixPath(path.relative_to(root).as_posix())
+        for path in root.rglob("*")
+        if path.is_file()
+    )
     return sorted(path for path in relative if is_packaged(path))
 
 
@@ -154,7 +183,9 @@ def import_problems(root: Path, files: Sequence[PurePosixPath]) -> list[str]:
             problems.append(f"{relative}: does not parse: {exc}")
             continue
         for module in sorted(set(modules) - allowed):
-            problems.append(f"{relative}: imports {module}, which is neither the standard library nor allowed")
+            problems.append(
+                f"{relative}: imports {module}, which is neither the standard library nor allowed"
+            )
     return problems
 
 
@@ -180,7 +211,10 @@ def windows(text: str, size: int, words: bool) -> set[str]:
 
 
 def found_in(text: str, forbidden: Forbidden) -> bool:
-    return any(digest(window) == forbidden.sha256 for window in windows(text, forbidden.size, forbidden.words))
+    return any(
+        digest(window) == forbidden.sha256
+        for window in windows(text, forbidden.size, forbidden.words)
+    )
 
 
 def forbidden_problems(
@@ -198,7 +232,11 @@ def forbidden_problems(
 
 
 def personal_folders(text: str) -> set[str]:
-    return {name for name in _HOME_FOLDER.findall(normalized_text(text)) if len(name) > 2 and name not in PLACEHOLDER_USERS}
+    return {
+        name
+        for name in _HOME_FOLDER.findall(normalized_text(text))
+        if len(name) > 2 and name not in PLACEHOLDER_USERS
+    }
 
 
 def home_folder_problems(root: Path, files: Sequence[PurePosixPath]) -> list[str]:

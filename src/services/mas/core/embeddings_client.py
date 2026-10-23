@@ -68,7 +68,7 @@ class EmbeddingsClient:
         texts = list(texts)
         vectors: list[list[float]] = []
         for start in range(0, len(texts), BATCH_SIZE):
-            vectors.extend(self.embed_batch(texts[start:start + BATCH_SIZE]))
+            vectors.extend(self.embed_batch(texts[start : start + BATCH_SIZE]))
         return vectors
 
     def wait_until_ready(self, deadline: float) -> EmbeddingsRefused | None:
@@ -108,9 +108,13 @@ class EmbeddingsClient:
             indexes = [item["index"] for item in items]
             vectors = [item["embedding"] for item in items]
         except (KeyError, TypeError) as error:
-            raise EmbeddingsError(f"{self.url} answered without a list of indexed embeddings") from error
+            raise EmbeddingsError(
+                f"{self.url} answered without a list of indexed embeddings"
+            ) from error
         if indexes != list(range(len(texts))):
-            raise EmbeddingsError(f"{self.url} returned {len(items)} embeddings for {len(texts)} texts")
+            raise EmbeddingsError(
+                f"{self.url} returned {len(items)} embeddings for {len(texts)} texts"
+            )
         for vector in vectors:
             size = len(vector) if isinstance(vector, list) else None
             if size != self.dimensions:
@@ -121,7 +125,9 @@ class EmbeddingsClient:
         try:
             return [unit(vector) for vector in vectors]
         except (TypeError, ValueError) as error:
-            raise EmbeddingsError(f"{self.url} returned a vector that is not all numbers") from error
+            raise EmbeddingsError(
+                f"{self.url} returned a vector that is not all numbers"
+            ) from error
 
     def post(self, body: dict, timeout: float = TIMEOUT_SECONDS) -> dict:
         request = urllib.request.Request(
@@ -134,8 +140,12 @@ class EmbeddingsClient:
             with self.open_url(request, timeout=timeout) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
-            problem = EmbeddingsUnavailable if error.code in UNAVAILABLE_STATUSES else EmbeddingsRefused
-            raise problem(f"{self.url} answered HTTP {error.code}: {server_message(error)}") from error
+            problem = (
+                EmbeddingsUnavailable if error.code in UNAVAILABLE_STATUSES else EmbeddingsRefused
+            )
+            raise problem(
+                f"{self.url} answered HTTP {error.code}: {server_message(error)}"
+            ) from error
         except http.client.InvalidURL as error:
             raise EmbeddingsError(f"{self.url} is not a valid address: {error}") from error
         except (OSError, http.client.HTTPException) as error:

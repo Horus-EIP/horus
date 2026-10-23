@@ -43,10 +43,12 @@ def unit_vector_for(text: str, dimensions: int) -> list[float]:
 
 def vectors(body: dict, native: int = NATIVE) -> tuple[int, dict]:
     dimensions = body.get("dimensions", native)
-    return 200, {"data": [
-        {"index": index, "embedding": vector_for(text, dimensions)}
-        for index, text in enumerate(body["input"])
-    ]}
+    return 200, {
+        "data": [
+            {"index": index, "embedding": vector_for(text, dimensions)}
+            for index, text in enumerate(body["input"])
+        ]
+    }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -109,6 +111,7 @@ def closed_port_url() -> str:
 def failing_with(error: Exception):
     def open_url(request, timeout):
         raise error
+
     return open_url
 
 
@@ -116,9 +119,17 @@ class TestClient:
     def test_the_request_names_the_model_the_size_and_the_texts(self, server):
         EmbeddingsClient(server.url + "/", "horus-mock", 4).embed(["a", "bb"])
 
-        assert server.requests == [("/v1/embeddings", {
-            "model": "horus-mock", "input": ["a", "bb"], "encoding_format": "float", "dimensions": 4,
-        })]
+        assert server.requests == [
+            (
+                "/v1/embeddings",
+                {
+                    "model": "horus-mock",
+                    "input": ["a", "bb"],
+                    "encoding_format": "float",
+                    "dimensions": 4,
+                },
+            )
+        ]
 
     def test_vectors_come_back_at_unit_length_in_the_order_of_the_texts(self, server):
         def reversed_vectors(body):
@@ -152,26 +163,86 @@ class TestClient:
     def test_the_size_is_the_one_asked_for(self):
         assert EmbeddingsClient("http://embeddings/v1", "m", 768).embedding_size == 768
 
-    @pytest.mark.parametrize(("answer", "error", "message"), [
-        ((500, {"error": {"message": "The mock model server failed."}}), EmbeddingsRefused,
-         "answered HTTP 500: The mock model server failed."),
-        ((400, b"not json"), EmbeddingsRefused, "answered HTTP 400: Bad Request"),
-        ((200, b"not json"), EmbeddingsError, "did not answer JSON"),
-        ((200, {"vectors": []}), EmbeddingsError, "without a list of indexed embeddings"),
-        ((200, ["not", "an", "object"]), EmbeddingsError, "without a list of indexed embeddings"),
-        ((200, {"data": [{"embedding": [1.0, 0.0]}]}), EmbeddingsError,
-         "without a list of indexed embeddings"),
-        ((200, {"data": [{"index": 0, "embedding": [1.0, 0.0]}]}), EmbeddingsError,
-         "returned 1 embeddings for 2 texts"),
-        ((200, {"data": [{"index": 0, "embedding": [1.0, 0.0]}, {"index": 0, "embedding": [1.0, 0.0]}]}),
-         EmbeddingsError, "returned 2 embeddings for 2 texts"),
-        ((200, {"data": [{"index": 0, "embedding": [1.0]}, {"index": 1, "embedding": [1.0, 0.0]}]}),
-         WrongSize, "returned a vector of 1 values for the model m, but this service needs 2"),
-        ((200, {"data": [{"index": 0, "embedding": "1,0"}, {"index": 1, "embedding": [1.0, 0.0]}]}),
-         WrongSize, "returned a vector of None values"),
-        ((200, {"data": [{"index": 0, "embedding": [1.0, "x"]}, {"index": 1, "embedding": [1.0, 0.0]}]}),
-         EmbeddingsError, "not all numbers"),
-    ])
+    @pytest.mark.parametrize(
+        ("answer", "error", "message"),
+        [
+            (
+                (500, {"error": {"message": "The mock model server failed."}}),
+                EmbeddingsRefused,
+                "answered HTTP 500: The mock model server failed.",
+            ),
+            ((400, b"not json"), EmbeddingsRefused, "answered HTTP 400: Bad Request"),
+            ((200, b"not json"), EmbeddingsError, "did not answer JSON"),
+            ((200, {"vectors": []}), EmbeddingsError, "without a list of indexed embeddings"),
+            (
+                (200, ["not", "an", "object"]),
+                EmbeddingsError,
+                "without a list of indexed embeddings",
+            ),
+            (
+                (200, {"data": [{"embedding": [1.0, 0.0]}]}),
+                EmbeddingsError,
+                "without a list of indexed embeddings",
+            ),
+            (
+                (200, {"data": [{"index": 0, "embedding": [1.0, 0.0]}]}),
+                EmbeddingsError,
+                "returned 1 embeddings for 2 texts",
+            ),
+            (
+                (
+                    200,
+                    {
+                        "data": [
+                            {"index": 0, "embedding": [1.0, 0.0]},
+                            {"index": 0, "embedding": [1.0, 0.0]},
+                        ]
+                    },
+                ),
+                EmbeddingsError,
+                "returned 2 embeddings for 2 texts",
+            ),
+            (
+                (
+                    200,
+                    {
+                        "data": [
+                            {"index": 0, "embedding": [1.0]},
+                            {"index": 1, "embedding": [1.0, 0.0]},
+                        ]
+                    },
+                ),
+                WrongSize,
+                "returned a vector of 1 values for the model m, but this service needs 2",
+            ),
+            (
+                (
+                    200,
+                    {
+                        "data": [
+                            {"index": 0, "embedding": "1,0"},
+                            {"index": 1, "embedding": [1.0, 0.0]},
+                        ]
+                    },
+                ),
+                WrongSize,
+                "returned a vector of None values",
+            ),
+            (
+                (
+                    200,
+                    {
+                        "data": [
+                            {"index": 0, "embedding": [1.0, "x"]},
+                            {"index": 1, "embedding": [1.0, 0.0]},
+                        ]
+                    },
+                ),
+                EmbeddingsError,
+                "not all numbers",
+            ),
+        ],
+    )
     def test_a_bad_answer_is_a_clear_error(self, server, answer, error, message):
         server.answer = lambda body: answer
 
@@ -191,11 +262,14 @@ class TestClient:
         with pytest.raises(EmbeddingsUnavailable, match="Could not reach"):
             EmbeddingsClient(closed_port_url(), "m", 2).embed(["a"])
 
-    @pytest.mark.parametrize("broken", [
-        http.client.IncompleteRead(b"{\"data\""),
-        http.client.BadStatusLine("garbage"),
-        http.client.RemoteDisconnected("closed"),
-    ])
+    @pytest.mark.parametrize(
+        "broken",
+        [
+            http.client.IncompleteRead(b'{"data"'),
+            http.client.BadStatusLine("garbage"),
+            http.client.RemoteDisconnected("closed"),
+        ],
+    )
     def test_an_answer_broken_off_is_unavailable(self, broken):
         client = EmbeddingsClient("http://embeddings/v1", "m", 2, open_url=failing_with(broken))
 
@@ -203,8 +277,12 @@ class TestClient:
             client.embed(["a"])
 
     def test_an_address_with_a_bad_port_is_a_clear_error(self):
-        client = EmbeddingsClient("http://embeddings:port/v1", "m", 2,
-                                  open_url=failing_with(http.client.InvalidURL("nonnumeric port")))
+        client = EmbeddingsClient(
+            "http://embeddings:port/v1",
+            "m",
+            2,
+            open_url=failing_with(http.client.InvalidURL("nonnumeric port")),
+        )
 
         with pytest.raises(EmbeddingsError, match="is not a valid address") as raised:
             client.embed(["a"])
@@ -218,8 +296,9 @@ class TestWaitingAtStart:
         server.answer = lambda body: answers.pop(0) if answers else vectors(body, native=2)
         slept: list[float] = []
 
-        refused = EmbeddingsClient(server.url, "m", 2, clock=lambda: 0.0,
-                                   sleep=slept.append).wait_until_ready(10.0)
+        refused = EmbeddingsClient(
+            server.url, "m", 2, clock=lambda: 0.0, sleep=slept.append
+        ).wait_until_ready(10.0)
 
         assert refused is None
         assert slept == [RETRY_SECONDS, RETRY_SECONDS]
@@ -229,8 +308,9 @@ class TestWaitingAtStart:
         server.answer = lambda body: (503, {})
         ticks = iter(range(0, 100, 2))
         slept: list[float] = []
-        client = EmbeddingsClient(server.url, "m", 2, clock=lambda: float(next(ticks)),
-                                  sleep=slept.append)
+        client = EmbeddingsClient(
+            server.url, "m", 2, clock=lambda: float(next(ticks)), sleep=slept.append
+        )
 
         with pytest.raises(EmbeddingsUnavailable):
             client.wait_until_ready(10.0)
@@ -276,11 +356,14 @@ class TestWaitingAtStart:
         assert slept == []
         assert client.send_dimensions is True
 
-    @pytest.mark.parametrize(("left", "timeout"), [
-        (0.3, SHORTEST_PROBE_SECONDS),
-        (5.0, 5.0),
-        (600.0, TIMEOUT_SECONDS),
-    ])
+    @pytest.mark.parametrize(
+        ("left", "timeout"),
+        [
+            (0.3, SHORTEST_PROBE_SECONDS),
+            (5.0, 5.0),
+            (600.0, TIMEOUT_SECONDS),
+        ],
+    )
     def test_a_probe_never_waits_much_past_the_deadline(self, left, timeout):
         seen: list[float] = []
 
@@ -289,8 +372,14 @@ class TestWaitingAtStart:
             raise ConnectionRefusedError("refused")
 
         ticks = iter([100.0, 100.0 + left + 1])
-        client = EmbeddingsClient("http://embeddings/v1", "m", 2, open_url=open_url,
-                                  clock=lambda: next(ticks), sleep=lambda seconds: None)
+        client = EmbeddingsClient(
+            "http://embeddings/v1",
+            "m",
+            2,
+            open_url=open_url,
+            clock=lambda: next(ticks),
+            sleep=lambda seconds: None,
+        )
 
         with pytest.raises(EmbeddingsUnavailable):
             client.wait_until_ready(100.0 + left)
@@ -331,7 +420,12 @@ class TestTheSetting:
         assert not any(name in sys.modules for name in MODEL_LOADERS)
         assert [body for _, body in server.requests] == [
             {"model": "horus-mock", "input": ["ready"], "encoding_format": "float"},
-            {"model": "horus-mock", "input": ["ready"], "encoding_format": "float", "dimensions": 384},
+            {
+                "model": "horus-mock",
+                "input": ["ready"],
+                "encoding_format": "float",
+                "dimensions": 384,
+            },
         ]
 
     def test_without_a_model_name_the_server_is_asked_for_minilm(
@@ -373,7 +467,8 @@ class TestTheSetting:
     ):
         server.answer = lambda body: (503, {})
         monkeypatch.setattr(
-            embedding_setup, "_started_at",
+            embedding_setup,
+            "_started_at",
             time.monotonic() - embedding_setup.STARTUP_WAIT_SECONDS - 1,
         )
 
@@ -390,7 +485,9 @@ class TestTheSetting:
         with caplog.at_level(logging.WARNING):
             embedder = embedding_setup._load_embedder()
 
-        warnings = [r.getMessage() for r in caplog.records if "refused a test request" in r.getMessage()]
+        warnings = [
+            r.getMessage() for r in caplog.records if "refused a test request" in r.getMessage()
+        ]
         assert warnings and "Simulated model server failure" in warnings[0]
         with pytest.raises(EmbeddingsRefused):
             embedder.embed(["finance"])

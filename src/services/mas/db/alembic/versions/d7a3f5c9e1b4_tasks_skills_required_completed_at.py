@@ -11,9 +11,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.add_column("tasks", sa.Column("skills_required", sa.JSON(), nullable=True))
-    op.add_column(
-        "tasks", sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True)
-    )
+    op.add_column("tasks", sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True))
     op.execute(
         "UPDATE tasks SET completed_at = updated_at "
         "WHERE status IN ('completed', 'canceled', 'failed')"

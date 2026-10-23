@@ -104,9 +104,7 @@ class TestGetHistory:
         ]
         # First query() -> Conversations lookup; second -> Messages ordered.
         mock_db.query.return_value.filter.return_value.first.return_value = conv
-        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = (
-            msgs
-        )
+        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = msgs
 
         out = conv_tf.get_history(1, mock_db)
 
@@ -145,9 +143,7 @@ class TestGetHistory:
     def test_empty_messages_returns_empty(self, mock_db):
         conv = _make_conv()
         mock_db.query.return_value.filter.return_value.first.return_value = conv
-        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = (
-            []
-        )
+        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
         assert conv_tf.get_history(1, mock_db) == []
 
     def test_sqlalchemy_error_returns_empty(self, mock_db):
@@ -201,9 +197,7 @@ class TestGetConversations:
         ]
 
     def test_empty_list(self, mock_db):
-        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = (
-            []
-        )
+        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
         assert conv_tf.get_conversations("nobody", mock_db) == []
 
     def test_null_timestamps(self, mock_db):
@@ -223,9 +217,7 @@ class TestGetConversations:
 
     def test_opens_session_when_db_none(self):
         fake_db = MagicMock()
-        fake_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = (
-            []
-        )
+        fake_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
         with patch.object(conv_tf, "SessionLocal", return_value=fake_db) as sl:
             assert conv_tf.get_conversations("user", None) == []
         sl.assert_called_once()
@@ -366,8 +358,8 @@ class TestAddMessages:
     def test_sqlalchemy_error_before_savepoint_skips_savepoint_rollback(self, mock_db):
         """Error during the conversation lookup -> savepoint is still None,
         so only db.rollback() runs (covers the ``if savepoint`` false branch)."""
-        mock_db.query.return_value.filter.return_value.first.side_effect = (
-            SQLAlchemyError("lookup failed")
+        mock_db.query.return_value.filter.return_value.first.side_effect = SQLAlchemyError(
+            "lookup failed"
         )
         assert conv_tf.add_messages("user", "hi", 1, mock_db) is None
         mock_db.begin_nested.assert_not_called()
@@ -505,18 +497,14 @@ class TestSaveNewClient:
         ws = _fake_ws()
         fake_redis = MagicMock()
         with patch.object(ctf, "redis_db", fake_redis):
-            session_id = ctf.save_new_client(
-                5, ws, "u-1", "tok", username="user", role="user"
-            )
+            session_id = ctf.save_new_client(5, ws, "u-1", "tok", username="user", role="user")
         assert isinstance(session_id, str) and session_id
         assert ws in ctf.active_connections["5"]
         fake_redis.setex.assert_called_once()
         key, ttl, _payload = fake_redis.setex.call_args.args
         assert key == f"ws_session:{session_id}"
         assert ttl == 3600
-        fake_redis.sadd.assert_called_once_with(
-            "conversation_sessions:5", session_id
-        )
+        fake_redis.sadd.assert_called_once_with("conversation_sessions:5", session_id)
 
     def test_does_not_duplicate_existing_socket(self):
         ws = _fake_ws()
@@ -543,9 +531,7 @@ class TestDeleteClient:
         # Last socket removed -> key popped from the registry entirely.
         assert "5" not in ctf.active_connections
         fake_redis.delete.assert_called_once_with("ws_session:sess-1")
-        fake_redis.srem.assert_called_once_with(
-            "conversation_sessions:5", "sess-1"
-        )
+        fake_redis.srem.assert_called_once_with("conversation_sessions:5", "sess-1")
 
     def test_keeps_list_when_other_sockets_remain(self):
         ws1, ws2 = _fake_ws(), _fake_ws()
@@ -855,9 +841,7 @@ class TestGetHistoryRoute:
         # First query().filter().first() -> ownership check (conv).
         mock_db.query.return_value.filter.return_value.first.return_value = conv
         # get_history's second query() (ordered messages).
-        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = (
-            msgs
-        )
+        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = msgs
         client = make_client(conv_router, current_user=as_user)
         r = client.get("/conversations/get_history/1")
         assert r.status_code == 200
@@ -867,9 +851,7 @@ class TestGetHistoryRoute:
     def test_owner_success_empty_history(self, make_client, mock_db, as_user):
         conv = _make_conv(owner_username="user")
         mock_db.query.return_value.filter.return_value.first.return_value = conv
-        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = (
-            []
-        )
+        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
         client = make_client(conv_router, current_user=as_user)
         r = client.get("/conversations/get_history/1")
         assert r.status_code == 200
@@ -878,9 +860,7 @@ class TestGetHistoryRoute:
     def test_admin_can_read_foreign_history(self, make_client, mock_db, as_admin):
         conv = _make_conv(owner_username="someone-else")
         mock_db.query.return_value.filter.return_value.first.return_value = conv
-        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = (
-            []
-        )
+        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
         client = make_client(conv_router, current_user=as_admin)
         r = client.get("/conversations/get_history/1")
         assert r.status_code == 200
@@ -1052,9 +1032,7 @@ class TestGetConversationListRoute:
         assert r.json()[0]["name"] == "a"
 
     def test_empty_list_200(self, make_client, mock_db, as_user):
-        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = (
-            []
-        )
+        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
         client = make_client(conv_router, current_user=as_user)
         r = client.get("/conversations/get-conversations/")
         assert r.status_code == 200

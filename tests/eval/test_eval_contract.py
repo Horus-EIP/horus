@@ -73,7 +73,12 @@ def answer_schema(labels):
     if labels:
         properties["sources"] = {"type": "array", "items": {"type": "string", "enum": list(labels)}}
         required.append("sources")
-    return {"type": "object", "properties": properties, "required": required, "additionalProperties": False}
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": False,
+    }
 
 
 SOURCES = {
@@ -151,7 +156,11 @@ class TestReplyRecord:
             expected_source=None,
             answer_patterns=[r"\b(does|do)\s*(not|n.t)\s+contain\b"],
         )
-        refusal = {"status": "not_found", "answer": "The documents do not contain this.", "sources": []}
+        refusal = {
+            "status": "not_found",
+            "answer": "The documents do not contain this.",
+            "sources": [],
+        }
         record = reply_record(item, reply(refusal))
         assert record["expected_status"] == "not_found"
         assert record["status_correct"] is True
@@ -161,7 +170,9 @@ class TestReplyRecord:
         assert confident["status_correct"] is False
 
     def test_a_retrieval_error_is_not_scored_against_the_model(self, make_item):
-        record = reply_record(make_item(), {"id": "x-01", "error_stage": "retrieval", "error": "store down"})
+        record = reply_record(
+            make_item(), {"id": "x-01", "error_stage": "retrieval", "error": "store down"}
+        )
         assert record["failure"] == FAILURE_RETRIEVAL
         assert record["json_valid"] is None
         assert record["status_correct"] is None
@@ -169,7 +180,12 @@ class TestReplyRecord:
         assert record["source_correct_auto"] is None
 
     def test_thinking_is_detected_in_either_field(self, make_item):
-        assert reply_record(make_item(), reply(GOOD, reasoning_content="Let me look."))["thought_first"] is True
+        assert (
+            reply_record(make_item(), reply(GOOD, reasoning_content="Let me look."))[
+                "thought_first"
+            ]
+            is True
+        )
         assert reply_record(make_item(), reply("<think>hm</think>{}"))["thought_first"] is True
 
     def test_a_blank_ok_answer_is_valid_but_counted(self, make_item):
@@ -187,20 +203,33 @@ def test_cited_titles_keep_order_and_skip_unknown_labels():
 def test_probe_items_leave_out_direct_questions(items):
     probed = probe_items(items)
     assert len(probed) == 94
-    assert {item["category"] for item in probed} == {"lookup", "numeric", "multi_hop", "not_in_corpus"}
+    assert {item["category"] for item in probed} == {
+        "lookup",
+        "numeric",
+        "multi_hop",
+        "not_in_corpus",
+    }
 
 
 class TestSummary:
     def records(self, make_item):
         refusal_item = make_item(
-            id="none-01", category="not_in_corpus", expected_source=None, answer_patterns=[r"\bnot\b"]
+            id="none-01",
+            category="not_in_corpus",
+            expected_source=None,
+            answer_patterns=[r"\bnot\b"],
         )
         return [
             reply_record(make_item(), reply(GOOD)),
             reply_record(make_item(id="x-02"), reply("not json", finish_reason="length")),
             reply_record(make_item(id="x-03"), reply(GOOD, reasoning_content="thinking")),
-            reply_record(refusal_item, reply({"status": "not_found", "answer": "Not in the documents.", "sources": []})),
-            reply_record(make_item(id="x-04"), {"id": "x-04", "error_stage": "retrieval", "error": "down"}),
+            reply_record(
+                refusal_item,
+                reply({"status": "not_found", "answer": "Not in the documents.", "sources": []}),
+            ),
+            reply_record(
+                make_item(id="x-04"), {"id": "x-04", "error_stage": "retrieval", "error": "down"}
+            ),
         ]
 
     def test_rates_failures_and_speed(self, make_item):
@@ -218,7 +247,11 @@ class TestSummary:
         assert summary["generation_tps"] == 10.0
         assert summary["wall_s"]["n"] == 4
         assert set(summary["by_category"]) == {"lookup", "not_in_corpus"}
-        assert summary["by_category"]["not_in_corpus"]["json_valid"] == {"n": 1, "correct": 1, "pct": 100.0}
+        assert summary["by_category"]["not_in_corpus"]["json_valid"] == {
+            "n": 1,
+            "correct": 1,
+            "pct": 100.0,
+        }
 
     def test_the_report_keeps_every_reply(self, make_item):
         records = self.records(make_item)

@@ -31,9 +31,7 @@ class Users(Base):
 @event.listens_for(Users, "after_insert")
 def log_user_insert(mapper, connection, target):
     """Log user creation events for security auditing."""
-    log_db_operation(
-        "CREATE", "users", f"username: {target.username}, role: {target.role}"
-    )
+    log_db_operation("CREATE", "users", f"username: {target.username}, role: {target.role}")
 
 
 @event.listens_for(Users, "after_update")

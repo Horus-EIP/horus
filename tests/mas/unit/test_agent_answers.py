@@ -14,7 +14,12 @@ from tasks.agent_answers import (
 
 Q4 = {"doc_id": "doc-q4", "chunk_id": "doc-q4:3", "title": "q4.md", "page": 2}
 Q4_OTHER_PASSAGE = {"doc_id": "doc-q4", "chunk_id": "doc-q4:5", "title": "q4.md", "page": 3}
-EXPENSES = {"doc_id": "doc-expense", "chunk_id": "doc-expense:0", "title": "expenses.md", "page": None}
+EXPENSES = {
+    "doc_id": "doc-expense",
+    "chunk_id": "doc-expense:0",
+    "title": "expenses.md",
+    "page": None,
+}
 ATTACHED = {"doc_id": "doc-notes", "chunk_id": None, "title": "notes.txt", "page": None}
 
 

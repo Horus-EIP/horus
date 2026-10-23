@@ -120,7 +120,9 @@ def fetch_metrics(url: str) -> str:
 
 
 def format_report(averages: Sequence[CallAverage]) -> str:
-    lines = [f"{'service':<8}{'call':<14}{'calls':>7}{'avg tokens':>12}{'over':>6}{'budget':>8}  verdict"]
+    lines = [
+        f"{'service':<8}{'call':<14}{'calls':>7}{'avg tokens':>12}{'over':>6}{'budget':>8}  verdict"
+    ]
     for row in averages:
         verdict = "ok" if row.within_budget else "OVER BUDGET"
         lines.append(
@@ -182,7 +184,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     for service, text in current.items():
         before = {}
         if args.since is not None:
-            before = call_totals(service, (args.since / f"{service}.prom").read_text(encoding="utf-8"))
+            before = call_totals(
+                service, (args.since / f"{service}.prom").read_text(encoding="utf-8")
+            )
         budget = getattr(args, f"{service}_budget")
         averages += call_averages(service, call_totals(service, text), before, budget)
     if not averages:
@@ -190,7 +194,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_NO_CALLS
     print(format_report(averages))
     if args.json is not None:
-        args.json.write_text(json.dumps([asdict(row) for row in averages], indent=2), encoding="utf-8")
+        args.json.write_text(
+            json.dumps([asdict(row) for row in averages], indent=2), encoding="utf-8"
+        )
     if all(row.within_budget for row in averages):
         return EXIT_WITHIN_BUDGET
     return EXIT_OVER_BUDGET

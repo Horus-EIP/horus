@@ -51,6 +51,7 @@ def extract_probable_filename_from_query(query: str) -> str | None:
         return matches[-1].strip()
     return None
 
+
 def _first_row(value: Any) -> list[Any]:
     if isinstance(value, list) and value and isinstance(value[0], list):
         return value[0]
@@ -66,16 +67,18 @@ def passages_from_query_result(result: dict[str, Any]) -> list[dict[str, Any]]:
         metadata = metadatas[index] if index < len(metadatas) else None
         metadata = dict(metadata) if isinstance(metadata, dict) else {}
         chunk_id = str(ids[index]) if index < len(ids) else ""
-        passages.append({
-            "chunk_id": chunk_id,
-            "doc_id": str(metadata.get("doc_id") or chunk_id),
-            "title": metadata.get("title") or "",
-            "chunk_index": metadata.get("chunk_index"),
-            "page": metadata.get("page"),
-            "distance": distances[index] if index < len(distances) else None,
-            "text": text if isinstance(text, str) else str(text or ""),
-            "metadata": metadata,
-        })
+        passages.append(
+            {
+                "chunk_id": chunk_id,
+                "doc_id": str(metadata.get("doc_id") or chunk_id),
+                "title": metadata.get("title") or "",
+                "chunk_index": metadata.get("chunk_index"),
+                "page": metadata.get("page"),
+                "distance": distances[index] if index < len(distances) else None,
+                "text": text if isinstance(text, str) else str(text or ""),
+                "metadata": metadata,
+            }
+        )
     return passages
 
 
@@ -135,6 +138,7 @@ try:
         knowledge_store_request_duration,
         knowledge_store_requests_total,
     )
+
     _METRICS_AVAILABLE = True
 except ImportError:
     _METRICS_AVAILABLE = False
@@ -181,9 +185,10 @@ class KnowledgeStoreClient:
         if self.base_url.endswith("/"):
             self.base_url = self.base_url.rstrip("/")
         raw_prefix = (
-            (api_prefix if api_prefix is not None else KNOWLEDGE_STORE_API_PREFIX)
-            or ""
-        ).strip().rstrip("/")
+            ((api_prefix if api_prefix is not None else KNOWLEDGE_STORE_API_PREFIX) or "")
+            .strip()
+            .rstrip("/")
+        )
         if raw_prefix and not raw_prefix.startswith("/"):
             raw_prefix = f"/{raw_prefix}"
         self._api_prefix = raw_prefix
@@ -213,15 +218,11 @@ class KnowledgeStoreClient:
             'query' and 'data' fields, where 'data' contains an error message
             or empty string.
         """
-        limit = (
-            n_results if n_results is not None else KNOWLEDGE_STORE_N_RESULTS
-        )
+        limit = n_results if n_results is not None else KNOWLEDGE_STORE_N_RESULTS
         url = f"{self._api_root()}/"
         params = {"query": query, "n_results": limit}
 
-        logger.debug(
-            f"Querying knowledge store: query='{query}', n_results={limit}"
-        )
+        logger.debug(f"Querying knowledge store: query='{query}', n_results={limit}")
 
         start_time = time.time()
         last_exception = None
@@ -256,7 +257,9 @@ class KnowledgeStoreClient:
                         }
                     else:
                         # No results found
-                        logger.debug(f"No documents found for query: {query} (duration: {duration:.3f}s)")
+                        logger.debug(
+                            f"No documents found for query: {query} (duration: {duration:.3f}s)"
+                        )
                         return {
                             "query": query,
                             "data": "",
@@ -266,7 +269,11 @@ class KnowledgeStoreClient:
                     last_exception = e
                     logger.warning(
                         f"Timeout querying knowledge store (attempt {attempt + 1}/{self.max_retries}): {e}",
-                        extra={"query": query, "attempt": attempt + 1, "max_retries": self.max_retries}
+                        extra={
+                            "query": query,
+                            "attempt": attempt + 1,
+                            "max_retries": self.max_retries,
+                        },
                     )
                 except httpx.HTTPStatusError as e:
                     # For 404 (no results) or 400 (bad request), don't retry
@@ -282,7 +289,7 @@ class KnowledgeStoreClient:
                                 error_detail = e.response.text
                             logger.error(
                                 f"Bad request to knowledge store: {error_detail}",
-                                extra={"query": query, "status_code": 400}
+                                extra={"query": query, "status_code": 400},
                             )
                             return {
                                 "query": query,
@@ -297,21 +304,29 @@ class KnowledgeStoreClient:
                             "query": query,
                             "status_code": e.response.status_code,
                             "attempt": attempt + 1,
-                            "max_retries": self.max_retries
-                        }
+                            "max_retries": self.max_retries,
+                        },
                     )
                 except httpx.RequestError as e:
                     last_exception = e
                     logger.warning(
                         f"Request error querying knowledge store (attempt {attempt + 1}/{self.max_retries}): {e}",
-                        extra={"query": query, "attempt": attempt + 1, "max_retries": self.max_retries}
+                        extra={
+                            "query": query,
+                            "attempt": attempt + 1,
+                            "max_retries": self.max_retries,
+                        },
                     )
                 except Exception as e:
                     last_exception = e
                     logger.error(
                         f"Unexpected error querying knowledge store (attempt {attempt + 1}/{self.max_retries}): {e}",
-                        extra={"query": query, "attempt": attempt + 1, "max_retries": self.max_retries},
-                        exc_info=True
+                        extra={
+                            "query": query,
+                            "attempt": attempt + 1,
+                            "max_retries": self.max_retries,
+                        },
+                        exc_info=True,
                     )
 
                 # Wait before retrying (exponential backoff)
@@ -336,7 +351,7 @@ class KnowledgeStoreClient:
         logger.error(
             f"{error_msg} (duration: {duration:.3f}s)",
             extra={"query": query, "max_retries": self.max_retries},
-            exc_info=last_exception
+            exc_info=last_exception,
         )
 
         return {
@@ -345,9 +360,7 @@ class KnowledgeStoreClient:
             "error": error_msg,
         }
 
-    async def fetch_document_inventory(
-        self, content_preview_chars: int = 400
-    ) -> dict[str, Any]:
+    async def fetch_document_inventory(self, content_preview_chars: int = 400) -> dict[str, Any]:
         """
         List documents via GET /file (titles and short text previews).
 
@@ -503,9 +516,7 @@ class KnowledgeStoreClient:
         return {"query": label, "data": ""}
 
     @tracer.start_as_current_span("knowledge_store_fetch_for_rag")
-    async def fetch_for_rag(
-        self, query: str, n_results: int | None = None
-    ) -> dict[str, Any]:
+    async def fetch_for_rag(self, query: str, n_results: int | None = None) -> dict[str, Any]:
         """
         Prefer exact file resolution when the query names a stored filename, then semantic
         search; if no excerpts are returned, attach a document inventory.
@@ -528,8 +539,7 @@ class KnowledgeStoreClient:
         if inv_text:
             result["data"] = (
                 "Semantic search did not return close excerpts for this question. "
-                "Documents currently in the knowledge store:\n\n"
-                + inv_text
+                "Documents currently in the knowledge store:\n\n" + inv_text
             )
         return result
 
@@ -545,7 +555,15 @@ class KnowledgeStoreClient:
         """
         return await self.fetch_for_rag(query)
 
-    async def smart_search(self, query: str, n_results: int = 5, categories: list | None = None, entities: list | None = None, min_confidence: float | None = None, entity_type: str | None = None) -> dict[str, Any]:
+    async def smart_search(
+        self,
+        query: str,
+        n_results: int = 5,
+        categories: list | None = None,
+        entities: list | None = None,
+        min_confidence: float | None = None,
+        entity_type: str | None = None,
+    ) -> dict[str, Any]:
         """
         Perform a smart search on the knowledge store with optional filters.
 
@@ -594,7 +612,9 @@ class KnowledgeStoreClient:
                     documents = result.get("results", {}).get("documents", [[]])
                     document_text = "\n\n".join(documents) if documents and documents else ""
 
-                    logger.debug(f"Smart search returned {result.get('total', 0)} results (duration: {duration:.3f}s)")
+                    logger.debug(
+                        f"Smart search returned {result.get('total', 0)} results (duration: {duration:.3f}s)"
+                    )
                     return {
                         "query": query,
                         "data": document_text,
@@ -606,9 +626,14 @@ class KnowledgeStoreClient:
                         logger.debug(f"No results found for smart search query: {query}")
                         return {"query": query, "data": "", "total": 0}
 
-                    logger.warning(f"HTTP error {e.response.status_code} on smart search (attempt {attempt + 1}/{self.max_retries}): {e}")
+                    logger.warning(
+                        f"HTTP error {e.response.status_code} on smart search (attempt {attempt + 1}/{self.max_retries}): {e}"
+                    )
                 except (httpx.TimeoutException, httpx.RequestError, Exception) as e:
-                    logger.warning(f"Error on smart search (attempt {attempt + 1}/{self.max_retries}): {e}", exc_info=True)
+                    logger.warning(
+                        f"Error on smart search (attempt {attempt + 1}/{self.max_retries}): {e}",
+                        exc_info=True,
+                    )
 
                 if attempt < self.max_retries - 1:
                     await asyncio.sleep(delay)
@@ -619,7 +644,9 @@ class KnowledgeStoreClient:
             "total": 0,
         }
 
-    async def search_by_entity(self, entity: str, entity_type: str, n_results: int = 5) -> dict[str, Any]:
+    async def search_by_entity(
+        self, entity: str, entity_type: str, n_results: int = 5
+    ) -> dict[str, Any]:
         """
         Search for documents by entity.
 
@@ -635,7 +662,9 @@ class KnowledgeStoreClient:
         url = f"{self._api_root()}/search-by-entity"
         params = {"entity": entity, "entity_type": entity_type, "n_results": n_results}
 
-        logger.debug(f"Searching by entity: entity='{entity}', entity_type='{entity_type}', n_results={n_results}")
+        logger.debug(
+            f"Searching by entity: entity='{entity}', entity_type='{entity_type}', n_results={n_results}"
+        )
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             for attempt in range(self.max_retries):
@@ -655,12 +684,18 @@ class KnowledgeStoreClient:
 
                 except httpx.HTTPStatusError as e:
                     if e.response.status_code in (400, 404):
-                        logger.debug(f"No results for entity: {entity} ({entity_type}) (status {e.response.status_code})")
+                        logger.debug(
+                            f"No results for entity: {entity} ({entity_type}) (status {e.response.status_code})"
+                        )
                         return {"entity": entity, "data": "", "total": 0}
 
-                    logger.warning(f"HTTP error {e.response.status_code} on search by entity (attempt {attempt + 1}/{self.max_retries}): {e}")
+                    logger.warning(
+                        f"HTTP error {e.response.status_code} on search by entity (attempt {attempt + 1}/{self.max_retries}): {e}"
+                    )
                 except (httpx.TimeoutException, httpx.RequestError, Exception) as e:
-                    logger.warning(f"Error on search by entity (attempt {attempt + 1}/{self.max_retries}): {e}")
+                    logger.warning(
+                        f"Error on search by entity (attempt {attempt + 1}/{self.max_retries}): {e}"
+                    )
 
                 if attempt < self.max_retries - 1:
                     await asyncio.sleep(self.retry_delay)
@@ -690,9 +725,13 @@ class KnowledgeStoreClient:
                     response.raise_for_status()
                     return response.json()
                 except httpx.HTTPStatusError as e:
-                    logger.warning(f"HTTP error {e.response.status_code} on get categories: {e} (attempt {attempt + 1}/{self.max_retries})")
+                    logger.warning(
+                        f"HTTP error {e.response.status_code} on get categories: {e} (attempt {attempt + 1}/{self.max_retries})"
+                    )
                 except (httpx.TimeoutException, httpx.RequestError, Exception) as e:
-                    logger.warning(f"Error on get categories: {e} (attempt {attempt + 1}/{self.max_retries})")
+                    logger.warning(
+                        f"Error on get categories: {e} (attempt {attempt + 1}/{self.max_retries})"
+                    )
 
                 if attempt < self.max_retries - 1:
                     await asyncio.sleep(self.retry_delay)

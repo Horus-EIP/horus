@@ -22,11 +22,14 @@ TRACES_OFF_VALUES = frozenset({"1", "true", "yes"})
 def mock_ai_warning() -> str:
     parts = ["the answers built on this knowledge store are simulated by llm-mock"]
     if EMBED_URL:
-        parts.append("llm-mock computes its embeddings from the words of each text, so search "
-                     "is word matching")
+        parts.append(
+            "llm-mock computes its embeddings from the words of each text, so search "
+            "is word matching"
+        )
     if spacy_is_off():
-        parts.append("spaCy is off, so entities, topics and summaries come from regular "
-                     "expressions")
+        parts.append(
+            "spaCy is off, so entities, topics and summaries come from regular expressions"
+        )
     if os.getenv("OTEL_SDK_DISABLED", "").strip().lower() in TRACES_OFF_VALUES:
         parts.append("monitoring is off, so it exports no trace")
     return "Mock AI mode: " + "; ".join(parts)
@@ -117,7 +120,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Request-ID", "X-Correlation-ID"]
+    expose_headers=["X-Request-ID", "X-Correlation-ID"],
 )
 
 # Set system info for metrics
@@ -138,12 +141,9 @@ def handle_http_exception(_: Request, exc: HTTPException):
             "type": "http_exception",
             "status_code": exc.status_code,
             "detail": exc.detail,
-        }
+        },
     )
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"error": exc.detail}
-    )
+    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
 
 
 for prefix, router in zip(ROUTERS.keys(), ROUTERS.values(), strict=False):

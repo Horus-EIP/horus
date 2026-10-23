@@ -53,12 +53,17 @@ class TestRoutingDecisions:
         assert sample("mas_routing_decisions_total", labels) == before + 1
 
     def test_routing_latency_is_kept_per_method_with_millisecond_buckets(self):
-        under_ten_ms = sample("mas_routing_decision_seconds_bucket", {"method": "rules", "le": "0.01"}) or 0.0
+        under_ten_ms = (
+            sample("mas_routing_decision_seconds_bucket", {"method": "rules", "le": "0.01"}) or 0.0
+        )
         count = sample("mas_routing_decision_seconds_count", {"method": "rules"}) or 0.0
 
         metrics.observe_routing_decision("rules", "DIRECT_ANSWER", 0.0004)
 
-        assert sample("mas_routing_decision_seconds_bucket", {"method": "rules", "le": "0.01"}) == under_ten_ms + 1
+        assert (
+            sample("mas_routing_decision_seconds_bucket", {"method": "rules", "le": "0.01"})
+            == under_ten_ms + 1
+        )
         assert sample("mas_routing_decision_seconds_count", {"method": "rules"}) == count + 1
 
     def test_a_slow_cpu_llm_fallback_lands_in_a_finite_bucket(self):
@@ -68,7 +73,10 @@ class TestRoutingDecisions:
         metrics.observe_routing_decision("llm", "SINGLE_AGENT", 240.0)
 
         assert sample("mas_routing_decision_seconds_bucket", labels) == before + 1
-        assert sample("mas_routing_decision_seconds_bucket", {"method": "llm", "le": "1800.0"}) is not None
+        assert (
+            sample("mas_routing_decision_seconds_bucket", {"method": "llm", "le": "1800.0"})
+            is not None
+        )
 
 
 class TestPromptTokens:
@@ -85,9 +93,13 @@ class TestPromptTokens:
     def test_the_buckets_reach_a_whole_chain_transcript(self):
         metrics.observe_prompt_tokens("aggregate", "estimate", 20000, 4096)
 
-        assert sample(
-            "mas_llm_prompt_tokens_bucket", {"call": "aggregate", "source": "estimate", "le": "32768.0"}
-        ) is not None
+        assert (
+            sample(
+                "mas_llm_prompt_tokens_bucket",
+                {"call": "aggregate", "source": "estimate", "le": "32768.0"},
+            )
+            is not None
+        )
 
     def test_only_a_prompt_over_the_budget_is_counted(self):
         before = sample("mas_llm_prompts_over_budget_total", {"call": "review"}) or 0.0

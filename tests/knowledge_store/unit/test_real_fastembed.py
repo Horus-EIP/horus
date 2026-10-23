@@ -61,7 +61,9 @@ print(json.dumps({
 
 
 def model_cache() -> Path:
-    return Path(os.environ.get("FASTEMBED_CACHE_PATH") or Path(tempfile.gettempdir()) / "fastembed_cache")
+    return Path(
+        os.environ.get("FASTEMBED_CACHE_PATH") or Path(tempfile.gettempdir()) / "fastembed_cache"
+    )
 
 
 def missing() -> str | None:
@@ -81,17 +83,32 @@ def test_real_fastembed_finds_the_passage_that_answers_each_question():
         pytest.fail(f"HORUS_REQUIRE_MODEL_TESTS=1, but {reason}")
     if reason:
         pytest.skip(reason)
-    env = {key: value for key, value in os.environ.items()
-           if key not in ("KNOWLEDGE_STORE_EMBED_URL", "KNOWLEDGE_STORE_EMBED_MODEL")}
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in ("KNOWLEDGE_STORE_EMBED_URL", "KNOWLEDGE_STORE_EMBED_MODEL")
+    }
     env.update(PYTHONPATH=str(SERVICE), HF_HUB_OFFLINE="1", KNOWLEDGE_STORE_EMBED_DEVICE="cpu")
-    documents = {title: (DEMO / title).read_text(encoding="utf-8") for title in sorted(set(ANSWERED_BY.values()))}
+    documents = {
+        title: (DEMO / title).read_text(encoding="utf-8")
+        for title in sorted(set(ANSWERED_BY.values()))
+    }
     done = subprocess.run(
-        [sys.executable, "-c", SEARCH], input=json.dumps([documents, list(ANSWERED_BY)]),
-        capture_output=True, text=True, encoding="utf-8", env=env, cwd=SERVICE, timeout=600, check=False,
+        [sys.executable, "-c", SEARCH],
+        input=json.dumps([documents, list(ANSWERED_BY)]),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        cwd=SERVICE,
+        timeout=600,
+        check=False,
     )
     assert done.returncode == 0, done.stderr[-3000:]
     found = json.loads(done.stdout.strip().splitlines()[-1])
-    assert found["embed_model"] == f"fastembed-{metadata.version('fastembed')}:BAAI/bge-base-en-v1.5"
+    assert (
+        found["embed_model"] == f"fastembed-{metadata.version('fastembed')}:BAAI/bge-base-en-v1.5"
+    )
     assert found["embedder"].startswith("fastembed")
     assert found["sizes"] == [768]
     assert found["closest"] == ANSWERED_BY

@@ -47,11 +47,17 @@ class TestPromptTokenBuckets:
         metrics.llm_prompt_tokens.labels(**labels).observe(3600)
 
         assert sample("agent_llm_prompt_tokens_bucket", {**labels, "le": "3072.0"}) == under_3072
-        assert sample("agent_llm_prompt_tokens_bucket", {**labels, "le": "4096.0"}) == under_4096 + 1
+        assert (
+            sample("agent_llm_prompt_tokens_bucket", {**labels, "le": "4096.0"}) == under_4096 + 1
+        )
 
     def test_the_buckets_reach_a_whole_chain_transcript(self):
         metrics.llm_prompt_tokens.labels(call="answer", source="estimate")
 
-        assert sample(
-            "agent_llm_prompt_tokens_bucket", {"call": "answer", "source": "estimate", "le": "32768.0"}
-        ) is not None
+        assert (
+            sample(
+                "agent_llm_prompt_tokens_bucket",
+                {"call": "answer", "source": "estimate", "le": "32768.0"},
+            )
+            is not None
+        )

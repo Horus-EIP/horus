@@ -65,9 +65,7 @@ def upgrade() -> None:
     )
     # Indexes on frequently queried fields
     op.create_index("ix_agents_name", "agents", ["name"], unique=True)
-    op.create_index(
-        "ix_agents_last_heartbeat", "agents", ["last_heartbeat"], unique=False
-    )
+    op.create_index("ix_agents_last_heartbeat", "agents", ["last_heartbeat"], unique=False)
     op.create_index("ix_agents_status", "agents", ["status"], unique=False)
 
     # Create conversations table (depends on users)
@@ -127,9 +125,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name="messages_pkey"),
     )
     op.create_index("ix_messages_id", "messages", ["id"], unique=False)
-    op.create_index(
-        "ix_messages_conversation_id", "messages", ["conversation_id"], unique=False
-    )
+    op.create_index("ix_messages_conversation_id", "messages", ["conversation_id"], unique=False)
 
     # Create tasks table (depends on conversations and agents)
     op.create_table(
@@ -153,20 +149,14 @@ def upgrade() -> None:
             name="tasks_conversation_id_fkey",
             ondelete="CASCADE",
         ),
-        sa.ForeignKeyConstraint(
-            ["parent_task_id"], ["tasks.id"], name="tasks_parent_task_id_fkey"
-        ),
+        sa.ForeignKeyConstraint(["parent_task_id"], ["tasks.id"], name="tasks_parent_task_id_fkey"),
         sa.PrimaryKeyConstraint("id", name="tasks_pkey"),
     )
     # Indexes on frequently queried fields
-    op.create_index(
-        "ix_tasks_conversation_id", "tasks", ["conversation_id"], unique=False
-    )
+    op.create_index("ix_tasks_conversation_id", "tasks", ["conversation_id"], unique=False)
     op.create_index("ix_tasks_agent_id", "tasks", ["agent_id"], unique=False)
     op.create_index("ix_tasks_status", "tasks", ["status"], unique=False)
-    op.create_index(
-        "ix_tasks_parent_task_id", "tasks", ["parent_task_id"], unique=False
-    )
+    op.create_index("ix_tasks_parent_task_id", "tasks", ["parent_task_id"], unique=False)
 
     # Create task_results table (depends on tasks)
     op.create_table(
@@ -175,9 +165,7 @@ def upgrade() -> None:
         sa.Column("task_id", sa.String(), nullable=False, unique=True),
         sa.Column("result_data", postgresql.JSON(astext_type=sa.Text()), nullable=True),
         sa.Column("history", postgresql.JSON(astext_type=sa.Text()), nullable=True),
-        sa.Column(
-            "future_actions", postgresql.JSON(astext_type=sa.Text()), nullable=True
-        ),
+        sa.Column("future_actions", postgresql.JSON(astext_type=sa.Text()), nullable=True),
         sa.Column(
             "created_at",
             postgresql.TIMESTAMP(timezone=True),
@@ -216,21 +204,11 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name="critical_logs_pkey"),
     )
     # Indexes for performance
-    op.create_index(
-        "idx_critical_logs_timestamp", "critical_logs", ["timestamp"], unique=False
-    )
-    op.create_index(
-        "idx_critical_logs_category", "critical_logs", ["category"], unique=False
-    )
-    op.create_index(
-        "idx_critical_logs_user", "critical_logs", ["user_id"], unique=False
-    )
-    op.create_index(
-        "idx_critical_logs_component", "critical_logs", ["component"], unique=False
-    )
-    op.create_index(
-        "idx_critical_logs_operation", "critical_logs", ["operation"], unique=False
-    )
+    op.create_index("idx_critical_logs_timestamp", "critical_logs", ["timestamp"], unique=False)
+    op.create_index("idx_critical_logs_category", "critical_logs", ["category"], unique=False)
+    op.create_index("idx_critical_logs_user", "critical_logs", ["user_id"], unique=False)
+    op.create_index("idx_critical_logs_component", "critical_logs", ["component"], unique=False)
+    op.create_index("idx_critical_logs_operation", "critical_logs", ["operation"], unique=False)
 
 
 def downgrade() -> None:

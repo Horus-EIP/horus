@@ -76,9 +76,7 @@ def test_get_history_handles_empty_result(mock_session_local):
 
 @patch("conversations.conversation_tool_functions.SessionLocal")
 @patch("conversations.conversation_tool_functions.Messages")
-def test_add_messages_creates_and_saves_message(
-    mock_messages_model, mock_session_local
-):
+def test_add_messages_creates_and_saves_message(mock_messages_model, mock_session_local):
     """Test that add_messages creates a message and saves it to database"""
     mock_db = MagicMock()
     mock_session_local.return_value = mock_db
@@ -183,9 +181,7 @@ def test_get_conversations_with_no_db_session(mock_session_local):
     """Test get_conversations creates its own session when none provided."""
     mock_db = MagicMock()
     mock_session_local.return_value = mock_db
-    mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = (
-        []
-    )
+    mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
 
     conv.get_conversations("user", db=None)
 

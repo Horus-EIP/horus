@@ -303,9 +303,7 @@ class TestGetTaskDetail:
         r = client.get("/tasks/ghost")
         assert r.status_code == 404
 
-    def test_returns_detail_with_string_result_and_children(
-        self, make_fake_client, as_admin
-    ):
+    def test_returns_detail_with_string_result_and_children(self, make_fake_client, as_admin):
         task = _task(id="t-detail", status=TaskStatus.COMPLETED.value, conversation_id=3)
         tr = _result(
             result_data="the answer",
@@ -337,9 +335,7 @@ class TestGetTaskDetail:
     def test_serializes_dict_result_as_json(self, make_fake_client, as_admin):
         task = _task(id="t-json")
         tr = _result(result_data={"k": "v"})
-        fake = _FakeSession(
-            first_map={"Task": task, "TaskResult": tr}, all_map={"Task": []}
-        )
+        fake = _FakeSession(first_map={"Task": task, "TaskResult": tr}, all_map={"Task": []})
         client = make_fake_client(fake, current_user=as_admin)
         r = client.get("/tasks/t-json")
         assert r.status_code == 200
@@ -347,9 +343,7 @@ class TestGetTaskDetail:
 
     def test_no_result_row_yields_empty_history(self, make_fake_client, as_admin):
         task = _task(id="t-noresult")
-        fake = _FakeSession(
-            first_map={"Task": task, "TaskResult": None}, all_map={"Task": []}
-        )
+        fake = _FakeSession(first_map={"Task": task, "TaskResult": None}, all_map={"Task": []})
         client = make_fake_client(fake, current_user=as_admin)
         r = client.get("/tasks/t-noresult")
         assert r.status_code == 200
@@ -378,9 +372,7 @@ class TestSuggestSkills:
         mock_rank.assert_called_once()
 
     @patch("tasks.routes.rank_skills", side_effect=RuntimeError("embedder cold"))
-    def test_ranker_failure_returns_empty_list(
-        self, _mock_rank, make_fake_client, as_user
-    ):
+    def test_ranker_failure_returns_empty_list(self, _mock_rank, make_fake_client, as_user):
         fake = _FakeSession()
         client = make_fake_client(fake, current_user=as_user)
         r = client.post("/tasks/suggest-skills", json={"demand": "x", "top_k": 2})
@@ -809,9 +801,7 @@ class TestCreateNewTaskDecomposeMode:
         )
         _add_agent(routing_db, "manager-id", "Manager", type_value="manager")
 
-        submitted = await submit_task(
-            _task_form(mode="decompose", conversation_id=7), user=as_user
-        )
+        submitted = await submit_task(_task_form(mode="decompose", conversation_id=7), user=as_user)
 
         root_id = submitted.response.json()["task_id"]
         assert submitted.outcome["task_id"] == root_id
@@ -825,9 +815,7 @@ class TestCreateNewTaskDecomposeMode:
     async def test_force_decompose_no_specialists_message(
         self, _decompose, dispatch, submit_task, as_user
     ):
-        submitted = await submit_task(
-            _task_form(mode="decompose", conversation_id=7), user=as_user
-        )
+        submitted = await submit_task(_task_form(mode="decompose", conversation_id=7), user=as_user)
 
         assert "no specialist" in submitted.outcome["message"]
 
@@ -837,9 +825,7 @@ class TestCreateNewTaskDecomposeMode:
     ):
         _add_agent(routing_db, "only-one", "Researcher")
 
-        submitted = await submit_task(
-            _task_form(mode="decompose", conversation_id=7), user=as_user
-        )
+        submitted = await submit_task(_task_form(mode="decompose", conversation_id=7), user=as_user)
 
         assert "only one non-Manager" in submitted.outcome["message"]
 
@@ -897,9 +883,7 @@ class TestInlineFileValidation:
     ):
         small = base64.b64encode(b"hello world").decode()
         body = _task_form(
-            inline_files=[
-                {"filename": "ok.txt", "mime": "text/plain", "content_b64": small}
-            ],
+            inline_files=[{"filename": "ok.txt", "mime": "text/plain", "content_b64": small}],
         )
 
         submitted = await submit_task(body, user=as_user)
@@ -962,9 +946,7 @@ class TestAttachedKnowledgeStoreRefs:
 
         assert submitted.response.status_code == 202
         _agent_id, payload = _dispatched(dispatch)
-        assert payload["files"] == [
-            {"source": "knowledge_store", "filename": "report.pdf"}
-        ]
+        assert payload["files"] == [{"source": "knowledge_store", "filename": "report.pdf"}]
 
 
 # --------------------------------------------------------------------------- #
@@ -989,9 +971,7 @@ class TestTaskResultAuthAndLookup:
         task = _task(id="t1", agent_id="other-agent")
         fake = _FakeSession(first_map={"Task": task})
         client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
-        r = client.post(
-            "/tasks/task-result/", json=_result_body(agent_id="agent-1")
-        )
+        r = client.post("/tasks/task-result/", json=_result_body(agent_id="agent-1"))
         assert r.status_code == 403
         assert "must match" in r.json()["detail"]
 
@@ -1008,9 +988,7 @@ class TestTaskResultAuthAndLookup:
         fake = _FakeSession()
         client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
         # missing required "result"
-        r = client.post(
-            "/tasks/task-result/", json={"task_id": "t1", "agent_id": "agent-1"}
-        )
+        r = client.post("/tasks/task-result/", json={"task_id": "t1", "agent_id": "agent-1"})
         assert r.status_code == 422
 
 
@@ -1027,9 +1005,7 @@ class TestTaskResultCompletion:
         task = _task(id="t1", agent_id="agent-1", conversation_id=12, result=tr)
         agent_row = _agent(id="agent-1", name="Researcher")
         fake = _FakeSession(first_map={"Task": task, "Agents": agent_row})
-        with patch(
-            "tasks.routes.aggregate_results", return_value="final synthesized answer"
-        ):
+        with patch("tasks.routes.aggregate_results", return_value="final synthesized answer"):
             client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
             r = client.post(
                 "/tasks/task-result/",
@@ -1088,13 +1064,9 @@ class TestTaskResultCompletion:
         tr = _result(future_actions=[])
         task = _task(id="t1", agent_id="agent-1", conversation_id=None, result=tr)
         fake = _FakeSession(first_map={"Task": task})
-        with patch(
-            "tasks.routes.aggregate_results", side_effect=RuntimeError("LLM down")
-        ):
+        with patch("tasks.routes.aggregate_results", side_effect=RuntimeError("LLM down")):
             client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
-            r = client.post(
-                "/tasks/task-result/", json=_result_body(result="raw text")
-            )
+            r = client.post("/tasks/task-result/", json=_result_body(result="raw text"))
         assert r.status_code == 200  # fell back gracefully
 
     def test_completion_log_line_reports_the_peak_rss(
@@ -1103,15 +1075,14 @@ class TestTaskResultCompletion:
         tr = _result(future_actions=[])
         task = _task(id="t1", agent_id="agent-1", conversation_id=None, result=tr)
         fake = _FakeSession(first_map={"Task": task})
-        with patch("tasks.routes.peak_rss_mb", return_value="4321"), patch(
-            "tasks.routes.log_agent_operation"
-        ) as log_operation:
+        with (
+            patch("tasks.routes.peak_rss_mb", return_value="4321"),
+            patch("tasks.routes.log_agent_operation") as log_operation,
+        ):
             client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
             r = client.post("/tasks/task-result/", json=_result_body())
         assert r.status_code == 200
-        log_operation.assert_any_call(
-            "agent-1", "TASK", "Completed task t1 peak_rss_mb=4321"
-        )
+        log_operation.assert_any_call("agent-1", "TASK", "Completed task t1 peak_rss_mb=4321")
 
     def test_missing_taskresult_row_returns_404(
         self, _validate, _allowed, mock_add, mock_ws, make_fake_client
@@ -1183,17 +1154,18 @@ class TestTaskResultChaining:
             first_map={"Task": task_first, "Agents": prev_row},
             all_map={"Task": []},
         )
-        with patch(
-            "tasks.routes.manager_review_step",
-            return_value={"decision": "CONTINUE", "reasoning": "keep going"},
-        ), patch(
-            "tasks.routes._build_chain_transcript",
-            return_value=("transcript", "demand"),
+        with (
+            patch(
+                "tasks.routes.manager_review_step",
+                return_value={"decision": "CONTINUE", "reasoning": "keep going"},
+            ),
+            patch(
+                "tasks.routes._build_chain_transcript",
+                return_value=("transcript", "demand"),
+            ),
         ):
             client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
-            r = client.post(
-                "/tasks/task-result/", json=_result_body(conversation_id="20")
-            )
+            r = client.post("/tasks/task-result/", json=_result_body(conversation_id="20"))
         assert r.status_code == 200
         assert "Result received" in r.json()["message"]
         # Chained dispatch happened.
@@ -1224,19 +1196,19 @@ class TestTaskResultChaining:
             parent_task_id=None,
         )
         fake = _FakeSession(first_map={"Task": task, "Agents": _agent()})
-        with patch(
-            "tasks.routes.manager_review_step",
-            return_value={"decision": "DONE", "reasoning": "already answered"},
-        ), patch(
-            "tasks.routes._build_chain_transcript",
-            return_value=("transcript", "demand"),
-        ), patch(
-            "tasks.routes.aggregate_results", return_value="aggregated final"
+        with (
+            patch(
+                "tasks.routes.manager_review_step",
+                return_value={"decision": "DONE", "reasoning": "already answered"},
+            ),
+            patch(
+                "tasks.routes._build_chain_transcript",
+                return_value=("transcript", "demand"),
+            ),
+            patch("tasks.routes.aggregate_results", return_value="aggregated final"),
         ):
             client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
-            r = client.post(
-                "/tasks/task-result/", json=_result_body(conversation_id="21")
-            )
+            r = client.post("/tasks/task-result/", json=_result_body(conversation_id="21"))
         assert r.status_code == 200
         # DONE clears the action list → no chained publish.
         mock_publish.assert_not_called()
@@ -1278,22 +1250,23 @@ class TestTaskResultChaining:
             first_map={"Task": task_first, "Agents": resolved},
             all_map={"Task": []},
         )
-        with patch(
-            "tasks.routes.manager_review_step",
-            return_value={
-                "decision": "INSERT",
-                "reasoning": "need more data",
-                "next_agent_type": "analyst",
-                "next_action": "fetch extra data",
-            },
-        ), patch(
-            "tasks.routes._build_chain_transcript",
-            return_value=("transcript", "demand"),
+        with (
+            patch(
+                "tasks.routes.manager_review_step",
+                return_value={
+                    "decision": "INSERT",
+                    "reasoning": "need more data",
+                    "next_agent_type": "analyst",
+                    "next_action": "fetch extra data",
+                },
+            ),
+            patch(
+                "tasks.routes._build_chain_transcript",
+                return_value=("transcript", "demand"),
+            ),
         ):
             client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
-            r = client.post(
-                "/tasks/task-result/", json=_result_body(conversation_id="22")
-            )
+            r = client.post("/tasks/task-result/", json=_result_body(conversation_id="22"))
         assert r.status_code == 200
         # Inserted step + planned step both queued → chained publish fired.
         mock_publish.assert_called_once()
@@ -1336,22 +1309,23 @@ class TestTaskResultChaining:
             first_map={"Task": task_first, "Agents": None},
             all_map={"Task": []},
         )
-        with patch(
-            "tasks.routes.manager_review_step",
-            return_value={
-                "decision": "INSERT",
-                "reasoning": "want more",
-                "next_agent_type": "ghost-type",
-                "next_action": "extra",
-            },
-        ), patch(
-            "tasks.routes._build_chain_transcript",
-            return_value=("transcript", "demand"),
+        with (
+            patch(
+                "tasks.routes.manager_review_step",
+                return_value={
+                    "decision": "INSERT",
+                    "reasoning": "want more",
+                    "next_agent_type": "ghost-type",
+                    "next_action": "extra",
+                },
+            ),
+            patch(
+                "tasks.routes._build_chain_transcript",
+                return_value=("transcript", "demand"),
+            ),
         ):
             client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
-            r = client.post(
-                "/tasks/task-result/", json=_result_body(conversation_id="23")
-            )
+            r = client.post("/tasks/task-result/", json=_result_body(conversation_id="23"))
         assert r.status_code == 200
         # Planned action still dispatched (just no inserted step).
         mock_publish.assert_called_once()
@@ -1468,8 +1442,9 @@ class TestTaskResultChaining:
 
         fake = _FakeSession(first_map={"Task": task_first, "Agents": _agent()})
         threadpool = AsyncMock(return_value="THREADPOOL ANSWER")
-        with patch("tasks.routes.aggregate_results") as mock_aggregate, patch(
-            "tasks.routes.run_in_threadpool", threadpool
+        with (
+            patch("tasks.routes.aggregate_results") as mock_aggregate,
+            patch("tasks.routes.run_in_threadpool", threadpool),
         ):
             client = make_fake_client(fake, agent_api_auth=("agent-1", "k"))
             r = client.post("/tasks/task-result/", json=_result_body())
@@ -1556,13 +1531,9 @@ class TestTaskStep:
         assert mock_ws.call_args.args[:2] == ("t1", None)
 
     @patch("tasks.routes.agent_may_submit_task_result", return_value=True)
-    def test_step_broadcasts_under_root_task_id(
-        self, _allowed, mock_ws, make_fake_client
-    ):
+    def test_step_broadcasts_under_root_task_id(self, _allowed, mock_ws, make_fake_client):
         # Subtask with a root parent → broadcast keyed on the root id.
-        subtask = _task(
-            id="t1", agent_id="agent-1", conversation_id=30, parent_task_id="root-x"
-        )
+        subtask = _task(id="t1", agent_id="agent-1", conversation_id=30, parent_task_id="root-x")
         root = _task(id="root-x", conversation_id=30)
         calls = {"n": 0}
 
@@ -1619,9 +1590,7 @@ class TestCancelTask:
 
     def test_cancel_unexpected_error_returns_500(self, make_fake_client, as_user):
         fake = _FakeSession()
-        with patch(
-            "tasks.routes.interrupt_task", side_effect=RuntimeError("rmq down")
-        ):
+        with patch("tasks.routes.interrupt_task", side_effect=RuntimeError("rmq down")):
             client = make_fake_client(fake, current_user=as_user)
             r = client.patch("/tasks/task-cancel/t1")
         assert r.status_code == 500
@@ -1645,9 +1614,7 @@ class TestPublishHelper:
 
         from tasks.routes import _publish_task_to_work_queue
 
-        with patch(
-            "tasks.routes.resolve_work_queue_for_agent_id", return_value=None
-        ):
+        with patch("tasks.routes.resolve_work_queue_for_agent_id", return_value=None):
             with pytest.raises(HTTPException) as exc:
                 await _publish_task_to_work_queue(MagicMock(), "agent-1", {})
         assert exc.value.status_code == 500
@@ -1655,9 +1622,10 @@ class TestPublishHelper:
     async def test_resolved_queue_publishes_payload(self):
         from tasks.routes import _publish_task_to_work_queue
 
-        with patch(
-            "tasks.routes.resolve_work_queue_for_agent_id", return_value="q.general"
-        ), patch("tasks.routes.rabbitmq_instance") as mock_rmq:
+        with (
+            patch("tasks.routes.resolve_work_queue_for_agent_id", return_value="q.general"),
+            patch("tasks.routes.rabbitmq_instance") as mock_rmq,
+        ):
             payload = {"task_id": "x"}
             await _publish_task_to_work_queue(MagicMock(), "agent-9", payload)
         # assignee id injected + published to the resolved queue.
@@ -1817,9 +1785,7 @@ class TestPromoteToChainRoot:
     def test_root_is_attributed_to_the_manager_and_marked_running(self):
         from tasks.routes import _promote_to_chain_root
 
-        root = _task(
-            id="root-1", status=TaskStatus.QUEUED.value, agent_id="unassigned", order=None
-        )
+        root = _task(id="root-1", status=TaskStatus.QUEUED.value, agent_id="unassigned", order=None)
         fake = _FakeSession(first_map={"Agents": _agent(id="mgr", name="Manager")})
         _promote_to_chain_root(root, fake)
         assert root.agent_id == "mgr"
@@ -1840,9 +1806,10 @@ class TestBroadcastManagerMessage:
     async def test_skips_when_conversation_none(self):
         from tasks.routes import _broadcast_manager_message
 
-        with patch("tasks.routes.add_messages") as mock_add, patch(
-            "tasks.routes.publish_agent_message"
-        ) as mock_ws:
+        with (
+            patch("tasks.routes.add_messages") as mock_add,
+            patch("tasks.routes.publish_agent_message") as mock_ws,
+        ):
             await _broadcast_manager_message(None, "text", _FakeSession(), task_id="root-1")
         mock_add.assert_not_called()
         mock_ws.assert_not_called()
@@ -1850,9 +1817,10 @@ class TestBroadcastManagerMessage:
     async def test_skips_when_text_empty(self):
         from tasks.routes import _broadcast_manager_message
 
-        with patch("tasks.routes.add_messages") as mock_add, patch(
-            "tasks.routes.publish_agent_message"
-        ) as mock_ws:
+        with (
+            patch("tasks.routes.add_messages") as mock_add,
+            patch("tasks.routes.publish_agent_message") as mock_ws,
+        ):
             await _broadcast_manager_message(5, "", _FakeSession(), task_id="root-1")
         mock_add.assert_not_called()
         mock_ws.assert_not_called()
@@ -1861,11 +1829,11 @@ class TestBroadcastManagerMessage:
         from tasks.routes import _broadcast_manager_message
 
         manager = _agent(id="mgr", name="Manager")
-        with patch(
-            "tasks.routes.get_manager_agent", return_value=manager
-        ), patch("tasks.routes.add_messages") as mock_add, patch(
-            "tasks.routes.publish_agent_message"
-        ) as mock_ws:
+        with (
+            patch("tasks.routes.get_manager_agent", return_value=manager),
+            patch("tasks.routes.add_messages") as mock_add,
+            patch("tasks.routes.publish_agent_message") as mock_ws,
+        ):
             await _broadcast_manager_message(7, "hello", _FakeSession(), task_id="root-1")
         mock_add.assert_called_once()
         mock_ws.assert_called_once()
@@ -1877,11 +1845,11 @@ class TestBroadcastManagerMessage:
     async def test_missing_manager_drops_attribution_but_still_persists(self):
         from tasks.routes import _broadcast_manager_message
 
-        with patch(
-            "tasks.routes.get_manager_agent", return_value=None
-        ), patch("tasks.routes.add_messages") as mock_add, patch(
-            "tasks.routes.publish_agent_message"
-        ) as mock_ws:
+        with (
+            patch("tasks.routes.get_manager_agent", return_value=None),
+            patch("tasks.routes.add_messages") as mock_add,
+            patch("tasks.routes.publish_agent_message") as mock_ws,
+        ):
             await _broadcast_manager_message(7, "hello", _FakeSession(), task_id="root-1")
         mock_add.assert_called_once()
         # Falls back to a literal "Manager" name with no id.
@@ -2043,9 +2011,7 @@ class TestBuildFilesPayload:
         form = TaskForm(
             demand="d",
             skills_required=[],
-            inline_files=[
-                {"filename": f"f{i}.bin", "content_b64": chunk} for i in range(6)
-            ],
+            inline_files=[{"filename": f"f{i}.bin", "content_b64": chunk} for i in range(6)],
         )
         with pytest.raises(HTTPException) as exc:
             _build_files_payload(form)

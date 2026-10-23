@@ -42,7 +42,9 @@ def write_metrics(directory: Path, agent: str, mas: str) -> tuple[Path, Path]:
 
 
 def test_the_average_per_call_adds_every_source_of_a_call():
-    totals = prompt_tokens_script.call_totals("agent", exposition("agent", {"answer": [1000, 2000, 3000]}))
+    totals = prompt_tokens_script.call_totals(
+        "agent", exposition("agent", {"answer": [1000, 2000, 3000]})
+    )
 
     assert totals["answer"].calls == 3
     assert totals["answer"].tokens == 6000
@@ -60,7 +62,10 @@ def test_the_report_passes_when_every_average_is_within_its_budget(tmp_path, cap
     )
 
     assert status == prompt_tokens_script.EXIT_WITHIN_BUDGET
-    rows = {(row["service"], row["call"]): row for row in json.loads((tmp_path / "out.json").read_text())}
+    rows = {
+        (row["service"], row["call"]): row
+        for row in json.loads((tmp_path / "out.json").read_text())
+    }
     assert rows[("agent", "answer")]["average_prompt_tokens"] == 1500.0
     assert rows[("mas", "task_route")]["calls"] == 2
     assert "OVER BUDGET" not in capsys.readouterr().out
@@ -100,9 +105,19 @@ def test_only_the_calls_made_after_a_saved_snapshot_are_counted(tmp_path):
         exposition("agent", {"answer": [9000]}),
         exposition("mas", {}),
     )
-    assert prompt_tokens_script.main(
-        ["--agent", str(before_agent), "--mas", str(before_mas), "--save", str(tmp_path / "before")]
-    ) == prompt_tokens_script.EXIT_WITHIN_BUDGET
+    assert (
+        prompt_tokens_script.main(
+            [
+                "--agent",
+                str(before_agent),
+                "--mas",
+                str(before_mas),
+                "--save",
+                str(tmp_path / "before"),
+            ]
+        )
+        == prompt_tokens_script.EXIT_WITHIN_BUDGET
+    )
     agent_file, mas_file = write_metrics(
         tmp_path / "now",
         exposition("agent", {"answer": [9000, 1000, 2000]}),
@@ -111,15 +126,22 @@ def test_only_the_calls_made_after_a_saved_snapshot_are_counted(tmp_path):
 
     status = prompt_tokens_script.main(
         [
-            "--agent", str(agent_file),
-            "--mas", str(mas_file),
-            "--since", str(tmp_path / "before"),
-            "--json", str(tmp_path / "out.json"),
+            "--agent",
+            str(agent_file),
+            "--mas",
+            str(mas_file),
+            "--since",
+            str(tmp_path / "before"),
+            "--json",
+            str(tmp_path / "out.json"),
         ]
     )
 
     assert status == prompt_tokens_script.EXIT_WITHIN_BUDGET
-    rows = {(row["service"], row["call"]): row for row in json.loads((tmp_path / "out.json").read_text())}
+    rows = {
+        (row["service"], row["call"]): row
+        for row in json.loads((tmp_path / "out.json").read_text())
+    }
     assert rows[("agent", "answer")]["calls"] == 2
     assert rows[("agent", "answer")]["average_prompt_tokens"] == 1500.0
     assert rows[("agent", "answer")]["calls_over_budget"] == 0

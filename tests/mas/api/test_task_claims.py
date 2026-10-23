@@ -14,9 +14,7 @@ from db.models.agent_types import AgentTypes
 from tasks import routes
 
 WORKER = "agent-container-1"
-TIMEOUT_TEXT = (
-    "The model did not finish its answer within 900s, so this request was stopped."
-)
+TIMEOUT_TEXT = "The model did not finish its answer within 900s, so this request was stopped."
 
 
 def _stored(db, task_id):
@@ -135,9 +133,7 @@ class TestClaim:
         assert _stored(routing_db, "t1").claimed_by == "agent-container-2"
 
     @pytest.mark.parametrize("status", ["canceled", "completed", "failed"])
-    async def test_a_finished_or_cancelled_task_is_not_run(
-        self, agent_client, routing_db, status
-    ):
+    async def test_a_finished_or_cancelled_task_is_not_run(self, agent_client, routing_db, status):
         _add_task(routing_db, "t1", status=status)
 
         response = await _claim(agent_client, "t1")
@@ -303,9 +299,10 @@ class TestFailedResult:
             future_actions=[["agent-2", "write the summary"]],
         )
 
-        with patch.object(routes, "_publish_task_to_work_queue") as publish, patch.object(
-            routes, "manager_review_step"
-        ) as review:
+        with (
+            patch.object(routes, "_publish_task_to_work_queue") as publish,
+            patch.object(routes, "manager_review_step") as review,
+        ):
             await _report(agent_client, "step-1")
 
         assert _stored(routing_db, "root").status == "failed"

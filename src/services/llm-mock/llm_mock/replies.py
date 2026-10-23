@@ -51,12 +51,15 @@ def reply_to(call: Call, settings: Settings) -> Reply:
 
 
 def answer(call: Call, settings: Settings) -> str:
-    calls, name = (STRUCTURED_CALLS, call.schema_name) if call.structured else (TEXT_CALLS, call.purpose)
+    calls, name = (
+        (STRUCTURED_CALLS, call.schema_name) if call.structured else (TEXT_CALLS, call.purpose)
+    )
     handler = calls.get(name)
     if handler is None:
         logger.warning(
             "No simulated reply for this call (schema %r, purpose %r): sending a neutral one",
-            call.schema_name or None, call.purpose or None,
+            call.schema_name or None,
+            call.purpose or None,
         )
         return neutral(call)
     try:

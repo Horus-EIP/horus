@@ -44,9 +44,7 @@ async def login() -> str:
 
 
 async def setup_agent(headers: dict) -> str:
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=10.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=10.0) as client:
         # Register agent
         agent_data = {
             "name": "cancellation_test_agent",
@@ -71,9 +69,7 @@ async def setup_agent(headers: dict) -> str:
 
 
 async def create_conversation(headers: dict) -> str:
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=10.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=10.0) as client:
         r = await client.post(
             "/conversations/create-conversation/", json={"name": "Cancellation Test"}
         )
@@ -91,9 +87,7 @@ async def test_cancellation_workflow():
         agent_id = await setup_agent(headers)
         conv_id = await create_conversation(headers)
 
-        async with httpx.AsyncClient(
-            base_url=BASE_URL, headers=headers, timeout=30.0
-        ) as client:
+        async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=30.0) as client:
             # 1. Create a task
             print("\n1️⃣  Creating new task...")
             task_payload = {

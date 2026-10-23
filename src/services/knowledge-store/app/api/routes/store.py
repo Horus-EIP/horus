@@ -90,20 +90,31 @@ async def add_text(doc: DocumentModel):
                     "example": {
                         "ids": [["3f9a2c:4", "b71e09:0"]],
                         "distances": [[0.1, 0.2]],
-                        "metadatas": [[
-                            {
-                                "doc_id": "3f9a2c", "title": "Doc 1.pdf", "chunk_index": 4,
-                                "char_start": 3200, "char_end": 4180, "page": 2,
-                                "source_path": "", "category": "finance",
-                                "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5",
-                            },
-                            {
-                                "doc_id": "b71e09", "title": "Doc 2.md", "chunk_index": 0,
-                                "char_start": 0, "char_end": 950,
-                                "source_path": "policies/doc2.md", "category": "hr",
-                                "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5",
-                            },
-                        ]],
+                        "metadatas": [
+                            [
+                                {
+                                    "doc_id": "3f9a2c",
+                                    "title": "Doc 1.pdf",
+                                    "chunk_index": 4,
+                                    "char_start": 3200,
+                                    "char_end": 4180,
+                                    "page": 2,
+                                    "source_path": "",
+                                    "category": "finance",
+                                    "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5",
+                                },
+                                {
+                                    "doc_id": "b71e09",
+                                    "title": "Doc 2.md",
+                                    "chunk_index": 0,
+                                    "char_start": 0,
+                                    "char_end": 950,
+                                    "source_path": "policies/doc2.md",
+                                    "category": "hr",
+                                    "embed_model": "fastembed-0.8.1:BAAI/bge-base-en-v1.5",
+                                },
+                            ]
+                        ],
                         "documents": [["Passage of Doc 1", "Passage of Doc 2"]],
                     }
                 }
@@ -112,9 +123,7 @@ async def add_text(doc: DocumentModel):
         404: {"description": "No results found"},
     },
 )
-async def query_knowledge_store(
-    query: str, n_results: int = 1, filters: str | None = Query(None)
-):
+async def query_knowledge_store(query: str, n_results: int = 1, filters: str | None = Query(None)):
     """
     Query the knowledge store with optional JSON metadata filters.
 

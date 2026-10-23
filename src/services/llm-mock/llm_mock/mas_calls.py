@@ -19,34 +19,101 @@ COMPARISON_WORDS = frozenset(
 DOMAINS = {
     "finance": frozenset(
         {
-            "revenue", "profit", "margin", "earning", "income", "ebitda", "budget", "financial",
-            "finance", "quarter", "quarterly", "q1", "q2", "q3", "q4", "sale", "spend", "spent",
-            "cost", "cash", "forecast", "segment", "fiscal", "opex", "payroll",
+            "revenue",
+            "profit",
+            "margin",
+            "earning",
+            "income",
+            "ebitda",
+            "budget",
+            "financial",
+            "finance",
+            "quarter",
+            "quarterly",
+            "q1",
+            "q2",
+            "q3",
+            "q4",
+            "sale",
+            "spend",
+            "spent",
+            "cost",
+            "cash",
+            "forecast",
+            "segment",
+            "fiscal",
+            "opex",
+            "payroll",
         }
     ),
     "hr": frozenset(
         {
-            "hr", "leave", "vacation", "holiday", "benefit", "handbook", "employee", "remote",
-            "onboard", "pto", "conduct", "parental", "sick", "recruit", "salary", "overtime",
-            "probation", "staff", "workplace", "harassment",
+            "hr",
+            "leave",
+            "vacation",
+            "holiday",
+            "benefit",
+            "handbook",
+            "employee",
+            "remote",
+            "onboard",
+            "pto",
+            "conduct",
+            "parental",
+            "sick",
+            "recruit",
+            "salary",
+            "overtime",
+            "probation",
+            "staff",
+            "workplace",
+            "harassment",
         }
     ),
     "compliance": frozenset(
         {
-            "compliance", "sox", "gdpr", "mica", "finra", "audit", "regulatory", "regulation",
-            "aml", "kyc", "sanction",
+            "compliance",
+            "sox",
+            "gdpr",
+            "mica",
+            "finra",
+            "audit",
+            "regulatory",
+            "regulation",
+            "aml",
+            "kyc",
+            "sanction",
         }
     ),
     "it_security": frozenset(
         {
-            "password", "security", "mfa", "encryption", "phish", "incident", "vpn",
-            "classification", "breach", "malware", "access", "laptop", "device",
+            "password",
+            "security",
+            "mfa",
+            "encryption",
+            "phish",
+            "incident",
+            "vpn",
+            "classification",
+            "breach",
+            "malware",
+            "access",
+            "laptop",
+            "device",
         }
     ),
     "expenses": frozenset(
         {
-            "expense", "reimbursement", "reimburse", "hotel", "travel", "diem", "meal",
-            "mileage", "receipt", "allowance",
+            "expense",
+            "reimbursement",
+            "reimburse",
+            "hotel",
+            "travel",
+            "diem",
+            "meal",
+            "mileage",
+            "receipt",
+            "allowance",
         }
     ),
 }
@@ -58,7 +125,9 @@ DOMAIN_HINTS = {
     "expenses": frozenset({"expense"}),
 }
 ROSTER_LINE = re.compile(r"^- (?P<name>[^:\n]+?)(?:: (?P<description>.*))?$")
-PLAN_ROSTER_LINE = re.compile(r"^- Type: [^\n]*? \(Name: (?P<name>[^)\n]+)\)(?:: (?P<description>.*))?$")
+PLAN_ROSTER_LINE = re.compile(
+    r"^- Type: [^\n]*? \(Name: (?P<name>[^)\n]+)\)(?:: (?P<description>.*))?$"
+)
 TYPE_SUFFIX = re.compile(r" \(Type: [^)]*\)$")
 DOCUMENTS_OF = re.compile(r"From the (.+?) documents:")
 PLANNED_STEP = re.compile(r"^ {2}\d+\. ([^:\n]+):", re.MULTILINE)
@@ -80,7 +149,7 @@ class Agent:
 
 def after(text: str, marker: str) -> str:
     at = text.find(marker)
-    return text[at + len(marker):] if at >= 0 else text
+    return text[at + len(marker) :] if at >= 0 else text
 
 
 def question_of(call: Call) -> str:
@@ -117,8 +186,9 @@ def domains_in(question: str) -> list[str]:
     return sorted(found, key=found.get)
 
 
-def agent_for(domain: str, roster: list[Agent], question: frozenset[str],
-              taken: list[str]) -> Agent | None:
+def agent_for(
+    domain: str, roster: list[Agent], question: frozenset[str], taken: list[str]
+) -> Agent | None:
     hinted = [agent for agent in roster if agent.words & DOMAIN_HINTS[domain]]
     fresh = [agent for agent in hinted if agent.name not in taken] or hinted
     if not fresh:
@@ -168,19 +238,23 @@ def task_route(call: Call, settings: Settings) -> str:
 def intent(call: Call, settings: Settings) -> str:
     question = question_of(call)
     if is_small_talk(question):
-        return dumps({
-            "classification": "DIRECT_ANSWER",
-            "agent_name": "",
-            "rewritten_input": "",
-            "final_answer": SMALL_TALK_REPLY,
-        })
+        return dumps(
+            {
+                "classification": "DIRECT_ANSWER",
+                "agent_name": "",
+                "rewritten_input": "",
+                "final_answer": SMALL_TALK_REPLY,
+            }
+        )
     agents = choose_agents(question, roster_from(after(call.system, "AVAILABLE AGENTS")))
-    return dumps({
-        "classification": "COMPLEX_TASK" if is_complex(question, agents) else "SINGLE_AGENT",
-        "agent_name": agents[0] if agents else "",
-        "rewritten_input": question,
-        "final_answer": "",
-    })
+    return dumps(
+        {
+            "classification": "COMPLEX_TASK" if is_complex(question, agents) else "SINGLE_AGENT",
+            "agent_name": agents[0] if agents else "",
+            "rewritten_input": question,
+            "final_answer": "",
+        }
+    )
 
 
 def plan(call: Call, settings: Settings) -> str:
@@ -188,13 +262,15 @@ def plan(call: Call, settings: Settings) -> str:
     roster = roster_from(after(call.system, "AVAILABLE AGENT TYPES:"), PLAN_ROSTER_LINE)
     sub_tasks = []
     for number, name in enumerate(choose_agents(question, roster), start=1):
-        sub_tasks.append({
-            "id": str(number),
-            "agent_type": name,
-            "description": f"From the {name} documents: {question}",
-            "depends_on": [str(number - 1)] if number > 1 else [],
-            "status": "pending",
-        })
+        sub_tasks.append(
+            {
+                "id": str(number),
+                "agent_type": name,
+                "description": f"From the {name} documents: {question}",
+                "depends_on": [str(number - 1)] if number > 1 else [],
+                "status": "pending",
+            }
+        )
     return dumps({"sub_tasks": sub_tasks})
 
 
@@ -212,21 +288,25 @@ def announce(call: Call, settings: Settings) -> str:
 def review(call: Call, settings: Settings) -> str:
     text = call.user
     start = text.rfind("REMAINING PLANNED STEPS:\n")
-    remaining = text[start + len("REMAINING PLANNED STEPS:\n"):] if start >= 0 else ""
+    remaining = text[start + len("REMAINING PLANNED STEPS:\n") :] if start >= 0 else ""
     remaining = remaining.split("\n\nAVAILABLE AGENT TYPES", 1)[0].strip()
     if not remaining or remaining.startswith(NO_STEP_LEFT):
-        return dumps({
-            "decision": "DONE",
+        return dumps(
+            {
+                "decision": "DONE",
+                "next_agent_type": None,
+                "next_action": None,
+                "reasoning": "No planned step remains.",
+            }
+        )
+    return dumps(
+        {
+            "decision": "CONTINUE",
             "next_agent_type": None,
             "next_action": None,
-            "reasoning": "No planned step remains.",
-        })
-    return dumps({
-        "decision": "CONTINUE",
-        "next_agent_type": None,
-        "next_action": None,
-        "reasoning": "The next planned step can start.",
-    })
+            "reasoning": "The next planned step can start.",
+        }
+    )
 
 
 def aggregate(call: Call, settings: Settings) -> str:
@@ -236,9 +316,9 @@ def aggregate(call: Call, settings: Settings) -> str:
     lines = ["## Answer", ""]
     for number, result in enumerate(results, start=1):
         lines += [f"### Step {number}", "", result, ""]
-    sources = list(dict.fromkeys(
-        source.strip() for result in results for source in SOURCE_TAG.findall(result)
-    ))
+    sources = list(
+        dict.fromkeys(source.strip() for result in results for source in SOURCE_TAG.findall(result))
+    )
     if sources:
         lines += [f"**Sources:** {', '.join(sources)}", ""]
     return "\n".join(lines).strip()
@@ -254,7 +334,8 @@ def step_results(history: str) -> list[str]:
     results = [
         str(entry.get("message", "")).strip()
         for entry in entries
-        if isinstance(entry, dict) and entry.get("role") == "assistant"
+        if isinstance(entry, dict)
+        and entry.get("role") == "assistant"
         and not RETRY_KEYS & set(entry)
     ]
     return list(dict.fromkeys(result for result in results if result))

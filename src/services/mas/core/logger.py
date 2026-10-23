@@ -46,9 +46,7 @@ class ColoredFormatter(logging.Formatter):
         colored_timestamp = f"{Fore.WHITE}{Style.DIM}[{timestamp}]{Style.RESET_ALL}"
 
         level_color = self.COLORS.get(record.levelname, Fore.WHITE)
-        colored_level = (
-            f"{level_color}{Style.BRIGHT}[{record.levelname:8}]{Style.RESET_ALL}"
-        )
+        colored_level = f"{level_color}{Style.BRIGHT}[{record.levelname:8}]{Style.RESET_ALL}"
 
         module_name = record.name.split(".")[-1].upper()
         component_color = self.COMPONENT_COLORS.get(module_name, Fore.WHITE)
@@ -56,9 +54,7 @@ class ColoredFormatter(logging.Formatter):
 
         message = record.getMessage()
 
-        formatted_message = (
-            f"{colored_timestamp} {colored_level} {colored_component} {message}"
-        )
+        formatted_message = f"{colored_timestamp} {colored_level} {colored_component} {message}"
 
         if record.exc_info:
             formatted_message += (
@@ -136,9 +132,7 @@ class MASLogger:
             )
             root_logger.addHandler(file_handler)
 
-            error_file = (
-                self.log_dir / f"mas_errors_{datetime.now().strftime('%Y%m%d')}.log"
-            )
+            error_file = self.log_dir / f"mas_errors_{datetime.now().strftime('%Y%m%d')}.log"
             error_handler = logging.FileHandler(error_file, encoding="utf-8")
             error_handler.setLevel(logging.ERROR)
             error_handler.setFormatter(
@@ -178,9 +172,7 @@ class MASLogger:
             message (str): Startup message
         """
         logger = self.get_logger(component)
-        logger.info(
-            "startup_event", component=component.upper(), message=message, icon="🚀"
-        )
+        logger.info("startup_event", component=component.upper(), message=message, icon="🚀")
 
     def log_success(self, component: str, message: str):
         """
@@ -287,9 +279,7 @@ class MASLogger:
                 details=description,
             )
 
-    def log_api_request(
-        self, method: str, endpoint: str, status_code: int, duration: float = None
-    ):
+    def log_api_request(self, method: str, endpoint: str, status_code: int, duration: float = None):
         """
         Log an API request.
 
@@ -383,9 +373,7 @@ def log_auth_operation(operation: str, username: str, success: bool = True):
     mas_logger.log_auth_operation(operation, username, success)
 
 
-def log_api_request(
-    method: str, endpoint: str, status_code: int, duration: float = None
-):
+def log_api_request(method: str, endpoint: str, status_code: int, duration: float = None):
     mas_logger.log_api_request(method, endpoint, status_code, duration)
 
 

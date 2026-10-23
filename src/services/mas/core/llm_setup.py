@@ -75,9 +75,7 @@ IN_PROCESS_STACK_MISSING = (
     "llama-server or vLLM, or run the GPU image."
 )
 
-os.environ.setdefault(
-    "PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True,max_split_size_mb:64"
-)
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True,max_split_size_mb:64")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 if torch is not None:
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -135,6 +133,7 @@ def _cpu_dtype() -> torch.dtype:
         return torch.bfloat16
     except Exception:
         return torch.float32
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 # MAS is a thin router/classifier — it picks an agent, sometimes decomposes a
@@ -233,9 +232,7 @@ def get_llm():
     else:
         model_path = MODEL_ID
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_path, use_fast=True, trust_remote_code=True
-    )
+    tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True, trust_remote_code=True)
 
     if use_gpu:
         max_memory = _accelerate_max_memory()
@@ -255,9 +252,7 @@ def get_llm():
         model = AutoModelForCausalLM.from_pretrained(model_path, **gpu_kw)
     else:
         cpu_dtype = _cpu_dtype()
-        logger.info(
-            "Loading LLM on CPU (no GPU or LLM_FORCE_CPU=1), dtype=%s.", cpu_dtype
-        )
+        logger.info("Loading LLM on CPU (no GPU or LLM_FORCE_CPU=1), dtype=%s.", cpu_dtype)
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
             torch_dtype=cpu_dtype,
@@ -321,9 +316,7 @@ def start_llm_preload_background_thread() -> None:
             _ensure_llm_loaded()
             logger.info("Background thread: orchestrator LLM preload finished.")
         except Exception:
-            logger.exception(
-                "Background LLM preload failed; first ask_llm will retry loading."
-            )
+            logger.exception("Background LLM preload failed; first ask_llm will retry loading.")
 
     threading.Thread(target=_worker, name="mas-llm-preload", daemon=True).start()
 

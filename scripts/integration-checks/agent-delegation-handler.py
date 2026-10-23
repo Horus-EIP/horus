@@ -26,6 +26,7 @@ from ai_agents.delegation_handler import (
 # DelegationChainTracker tests
 # ---------------------------------------------------------------------------
 
+
 class TestDelegationChainTracker:
     def test_empty_chain(self):
         tracker = DelegationChainTracker()
@@ -59,6 +60,7 @@ class TestDelegationChainTracker:
 # ---------------------------------------------------------------------------
 # DelegationHandler tests
 # ---------------------------------------------------------------------------
+
 
 class TestDelegationHandler:
     @pytest.fixture
@@ -119,6 +121,7 @@ class TestDelegationHandler:
     @patch("ai_agents.delegation_handler.requests.post")
     def test_delegation_timeout(self, mock_post, handler):
         import requests
+
         mock_post.side_effect = requests.Timeout("Request timed out")
 
         result = handler.delegate("analyst", "Slow task")

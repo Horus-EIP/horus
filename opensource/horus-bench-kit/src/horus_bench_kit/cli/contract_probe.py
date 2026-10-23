@@ -57,27 +57,37 @@ def build_parser(prog: str | None = "hbk-contract-probe") -> argparse.ArgumentPa
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--label", help="run label, used in <out-dir>/<label>-<date>.json")
     parser.add_argument("--out-dir", default=".")
-    parser.add_argument("--items", help="probe items, .json, .jsonl or .yaml (template and command modes)")
+    parser.add_argument(
+        "--items", help="probe items, .json, .jsonl or .yaml (template and command modes)"
+    )
     parser.add_argument("--ids", type=comma_list, help="comma-separated item ids")
     parser.add_argument("--category", type=comma_list, help="comma-separated item categories")
     parser.add_argument("--limit", type=int)
-    parser.add_argument("--base-url", help="OpenAI-compatible API root, for example http://127.0.0.1:8080/v1")
+    parser.add_argument(
+        "--base-url", help="OpenAI-compatible API root, for example http://127.0.0.1:8080/v1"
+    )
     parser.add_argument("--model", help="model name sent in each request")
-    parser.add_argument("--api-key-env", default=DEFAULT_API_KEY_ENV, help="variable that holds the API key")
+    parser.add_argument(
+        "--api-key-env", default=DEFAULT_API_KEY_ENV, help="variable that holds the API key"
+    )
     parser.add_argument("--timeout", type=float, default=600.0, help=TIMEOUT_HELP)
     parser.add_argument("--warmup", metavar="QUESTION", help="ask this first and do not score it")
     template = parser.add_argument_group("template mode")
     template.add_argument("--system", help="system prompt file")
     template.add_argument("--user-template", help="user message file with {question} and {context}")
     template.add_argument("--schema", help="JSON schema of the reply")
-    template.add_argument("--response-format", help="whole response_format object instead of --schema")
+    template.add_argument(
+        "--response-format", help="whole response_format object instead of --schema"
+    )
     template.add_argument("--context-dir", help="folder of <item id>.txt context files")
     template.add_argument("--max-tokens", type=int, default=512)
     template.add_argument("--temperature", type=float, default=0.0)
     prepared = parser.add_argument_group("prepared mode")
     prepared.add_argument("--prepared", help="JSON Lines file of prepared chat completion requests")
     command = parser.add_argument_group("command mode")
-    command.add_argument("--probe-command", help="command that reads a probe v1 job and writes reply lines")
+    command.add_argument(
+        "--probe-command", help="command that reads a probe v1 job and writes reply lines"
+    )
     command.add_argument("--probe-setup", help="command run once before --probe-command")
     return parser
 
@@ -220,7 +230,12 @@ def main(
     if problems:
         print_errors(f"{Path(source).name}: ", problems)
         return 2
-    items = select_probe_items(prepared_items(loaded) if mode == "prepared" else loaded, args.ids, args.category, args.limit)
+    items = select_probe_items(
+        prepared_items(loaded) if mode == "prepared" else loaded,
+        args.ids,
+        args.category,
+        args.limit,
+    )
     if not items:
         print("[error] no probe item matches the filters")
         return 2
@@ -247,7 +262,11 @@ def main(
         )
     else:
         replies = run_prepared_probe(
-            items, url=chat_url(args.base_url), timeout=args.timeout, model=args.model, headers=headers
+            items,
+            url=chat_url(args.base_url),
+            timeout=args.timeout,
+            model=args.model,
+            headers=headers,
         )
     records = probe_records(items, replies, profile)
     run = {
@@ -272,7 +291,9 @@ def main(
     write_json(out_path, report)
     print(json.dumps(headline(report["summary"], profile), indent=2))
     if len(records) < len(items):
-        print(f"[warn] {len(items) - len(records)} of {len(items)} items got no reply line (exit {returncode})")
+        print(
+            f"[warn] {len(items) - len(records)} of {len(items)} items got no reply line (exit {returncode})"
+        )
     if not answered(records):
         print(f"[error] no item got a reply; the errors are in {out_path}")
         return 1

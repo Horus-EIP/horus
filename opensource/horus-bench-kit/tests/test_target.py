@@ -85,7 +85,13 @@ class TestRunItems:
         events = []
         target = ScriptedTarget({"t-01": "14", "t-02": "Brandt"}, events)
         records = asyncio.run(
-            run_items(target, items, record=question_record, hooks=RecordingHooks(events), progress=lambda _: None)
+            run_items(
+                target,
+                items,
+                record=question_record,
+                hooks=RecordingHooks(events),
+                progress=lambda _: None,
+            )
         )
         assert events == ["start", "before", "ask:t-01", "after", "before", "ask:t-02", "after"]
         assert records[0]["models"] == ["seen-by-hook"]
@@ -114,7 +120,13 @@ class TestRunItems:
                 return shared
 
         asyncio.run(
-            run_items(SharedTarget(), items[:1], record=question_record, hooks=RecordingHooks([]), progress=lambda _: None)
+            run_items(
+                SharedTarget(),
+                items[:1],
+                record=question_record,
+                hooks=RecordingHooks([]),
+                progress=lambda _: None,
+            )
         )
         assert "models" not in shared
 
@@ -158,9 +170,18 @@ class TestTestsetInfo:
             "filters": {"ids": None, "categories": ["lookup"], "limit": 1},
         }
 
-    def test_a_test_set_outside_the_root_keeps_no_part_of_its_folder(self, host_folder, host_folder_leaks):
+    def test_a_test_set_outside_the_root_keeps_no_part_of_its_folder(
+        self, host_folder, host_folder_leaks
+    ):
         testset = {"version": "1.0.0", "corpus": {}, "items": []}
-        info = describe_testset(f"{host_folder}/own-testset.json", testset, [], {}, root="/srv/elsewhere", sha256="0" * 64)
+        info = describe_testset(
+            f"{host_folder}/own-testset.json",
+            testset,
+            [],
+            {},
+            root="/srv/elsewhere",
+            sha256="0" * 64,
+        )
         assert info["path"] == "own-testset.json"
         assert host_folder_leaks(json.dumps(info)) == []
 
@@ -176,8 +197,9 @@ class TestTestsetInfo:
         assert shown == "own-testset.json"
         assert host_folder_leaks(shown) == []
 
-
-    def test_a_path_rooted_with_a_slash_inside_the_root_keeps_its_relative_path(self, tmp_path, monkeypatch):
+    def test_a_path_rooted_with_a_slash_inside_the_root_keeps_its_relative_path(
+        self, tmp_path, monkeypatch
+    ):
         monkeypatch.chdir(tmp_path)
         rooted = "/" + tmp_path.relative_to(tmp_path.anchor).as_posix() + "/sets/own.json"
         assert shown_path(rooted, root=tmp_path) == "sets/own.json"
@@ -195,7 +217,9 @@ class TestTestsetInfo:
         ("sets\\own.json", False),
     ],
 )
-def test_only_a_drive_or_unc_path_read_outside_windows_comes_from_another_os(path, from_another_os_outside_windows):
+def test_only_a_drive_or_unc_path_read_outside_windows_comes_from_another_os(
+    path, from_another_os_outside_windows
+):
     assert absolute_on_another_os(path) == (os.name != "nt" and from_another_os_outside_windows)
 
 

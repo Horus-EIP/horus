@@ -114,7 +114,9 @@ def build_report(
     machine: dict[str, Any] | None,
     variants: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    return kit.build_report(run=run, catalog=catalog, machine=machine, variants=variants, profile=CANDIDATES)
+    return kit.build_report(
+        run=run, catalog=catalog, machine=machine, variants=variants, profile=CANDIDATES
+    )
 
 
 def markdown_summary(report: dict[str, Any]) -> str:

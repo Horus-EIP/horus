@@ -104,9 +104,7 @@ async def _run_rounds(db, rounds):
 
 
 class TestHeartbeatCadence:
-    async def test_running_task_with_a_socket_gets_a_heartbeat_every_5_seconds(
-        self, heartbeat_db
-    ):
+    async def test_running_task_with_a_socket_gets_a_heartbeat_every_5_seconds(self, heartbeat_db):
         _add_task(heartbeat_db, "root-1")
         ws = _socket("7")
 
@@ -241,9 +239,7 @@ class TestTimeoutEvents:
         assert read_task_events("step-1") == []
         assert len(ws.send_json.await_args_list) == 1
 
-    async def test_queued_tasks_are_watched_for_the_timeout_too(
-        self, heartbeat_db, monkeypatch
-    ):
+    async def test_queued_tasks_are_watched_for_the_timeout_too(self, heartbeat_db, monkeypatch):
         _add_task(heartbeat_db, "root-1", status="queued")
         monkeypatch.setattr(controller, "SessionLocal", lambda: heartbeat_db)
         monkeypatch.setattr(controller.settings, "task_timeout", -1)

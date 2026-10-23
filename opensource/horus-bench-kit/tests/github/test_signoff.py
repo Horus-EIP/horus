@@ -31,10 +31,14 @@ def log(*commits):
 
 class TestSignedByAuthor:
     def test_a_line_with_the_authors_name_and_email(self):
-        assert signoff.signed_by_author(commit("[+] Add\n\nSigned-off-by: Ada Lovelace <ada@example.org>"))
+        assert signoff.signed_by_author(
+            commit("[+] Add\n\nSigned-off-by: Ada Lovelace <ada@example.org>")
+        )
 
     def test_the_email_ignores_case(self):
-        assert signoff.signed_by_author(commit("[+] Add\n\nSigned-off-by: Ada Lovelace <Ada@Example.org>"))
+        assert signoff.signed_by_author(
+            commit("[+] Add\n\nSigned-off-by: Ada Lovelace <Ada@Example.org>")
+        )
 
     def test_one_matching_line_among_several_is_enough(self):
         message = "[+] Add\n\nSigned-off-by: Grace Hopper <grace@example.org>\nSigned-off-by: Ada Lovelace <ada@example.org>"
@@ -64,6 +68,7 @@ class TestMain:
             assert command[:3] == ["git", "log", "--no-merges"]
             assert command[-1] == "base..head"
             return subprocess.CompletedProcess(command, 0, stdout=text)
+
         return run
 
     def test_every_commit_signed_off_passes(self, capsys):
@@ -76,9 +81,16 @@ class TestMain:
         bad = commit("[x] Fix", sha="b" * 40)
         assert signoff.main(["base", "head"], run=self.fake_run(log(good, bad))) == 1
         out = capsys.readouterr().out
-        assert f"::error::{'b' * 12} by Ada Lovelace <ada@example.org> has no matching Signed-off-by line" in out
-        for expected in ("git commit --amend --signoff --no-edit", f"git rebase --signoff {'c' * 12}\n",
-                         f"where {'c' * 12} is the commit your branch starts from", "git push --force-with-lease"):
+        assert (
+            f"::error::{'b' * 12} by Ada Lovelace <ada@example.org> has no matching Signed-off-by line"
+            in out
+        )
+        for expected in (
+            "git commit --amend --signoff --no-edit",
+            f"git rebase --signoff {'c' * 12}\n",
+            f"where {'c' * 12} is the commit your branch starts from",
+            "git push --force-with-lease",
+        ):
             assert expected in out
 
     def test_it_needs_a_base_and_a_head(self):
@@ -88,8 +100,17 @@ class TestMain:
 @pytest.mark.skipif(shutil.which("git") is None, reason="needs git")
 def test_it_reads_the_commits_of_a_real_repository(tmp_path, capsys):
     def git(*args):
-        identity = ["-c", "user.name=Ada Lovelace", "-c", "user.email=ada@example.org", "-c", "commit.gpgsign=false"]
-        done = subprocess.run(["git", *identity, *args], cwd=tmp_path, capture_output=True, text=True, check=True)
+        identity = [
+            "-c",
+            "user.name=Ada Lovelace",
+            "-c",
+            "user.email=ada@example.org",
+            "-c",
+            "commit.gpgsign=false",
+        ]
+        done = subprocess.run(
+            ["git", *identity, *args], cwd=tmp_path, capture_output=True, text=True, check=True
+        )
         return done.stdout.strip()
 
     git("init", "-q")
@@ -108,7 +129,9 @@ def test_it_reads_the_commits_of_a_real_repository(tmp_path, capsys):
         (head, "Ada Lovelace", "ada@example.org"),
         (signed, "Ada Lovelace", "ada@example.org"),
     ]
-    assert found[1].message.startswith("[+] Signed\n\nWith a body.\n\nSigned-off-by: Ada Lovelace <ada@example.org>")
+    assert found[1].message.startswith(
+        "[+] Signed\n\nWith a body.\n\nSigned-off-by: Ada Lovelace <ada@example.org>"
+    )
     assert signoff.main([base, signed], run=run_here) == 0
     assert signoff.main([base, head], run=run_here) == 1
     out = capsys.readouterr().out

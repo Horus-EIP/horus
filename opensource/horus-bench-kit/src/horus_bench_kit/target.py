@@ -83,7 +83,9 @@ async def run_items(
     for index, item in enumerate(items, 1):
         if hooks:
             await hooks.before()
-        outcome = dict(await target.ask(item["question"], item_id=item["id"], files=files_for(item)))
+        outcome = dict(
+            await target.ask(item["question"], item_id=item["id"], files=files_for(item))
+        )
         if hooks:
             await hooks.after(outcome)
         records.append(record(item, outcome))

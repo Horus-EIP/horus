@@ -1,4 +1,3 @@
-
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
@@ -60,9 +59,7 @@ def get_user_details(user_id: int, db: Session):
             user.role,
         )
     except Exception as e:
-        logger.error(
-            f"Failed to retrieve user details - User ID: {user_id}, Error: {str(e)}"
-        )
+        logger.error(f"Failed to retrieve user details - User ID: {user_id}, Error: {str(e)}")
         return None, None, None, None
 
 
@@ -75,9 +72,7 @@ def delete_user(user_id: int, db: Session):
 
     if target_user.username == Role.ADMIN.value or target_user.username == Role.AGENT.value:
         logger.warning("Attempt to delete main admin account")
-        raise HTTPException(
-            status_code=403, detail="Cannot delete the main admin account"
-        )
+        raise HTTPException(status_code=403, detail="Cannot delete the main admin account")
 
     try:
         username = target_user.username
@@ -95,9 +90,7 @@ def modify_user_username(user_id: int, new_username: str, db: Session):
     user = db.query(Users).filter(Users.id == user_id).first()
 
     if not user:
-        logger.warning(
-            f"Attempt to modify username for non-existent user ID: {user_id}"
-        )
+        logger.warning(f"Attempt to modify username for non-existent user ID: {user_id}")
         raise HTTPException(status_code=404, detail="User not found")
 
     existing_user = db.query(Users).filter(Users.username == new_username).first()
@@ -118,6 +111,4 @@ def modify_user_username(user_id: int, new_username: str, db: Session):
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to change username for user ID {user_id}: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Error changing username: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error changing username: {str(e)}")

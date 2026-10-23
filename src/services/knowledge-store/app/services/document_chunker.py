@@ -40,7 +40,7 @@ class DocumentChunker:
         text = text or ""
         pieces = [piece for sentence in _sentences(text) for piece in self._fit(text, sentence)]
         chunks = [
-            TextChunk(text[group[0].start:group[-1].end], group[0].start, group[-1].end)
+            TextChunk(text[group[0].start : group[-1].end], group[0].start, group[-1].end)
             for group in self._pack(pieces)
         ]
         logger.debug("Split %d characters into %d chunks", len(text), len(chunks))

@@ -51,7 +51,9 @@ class TestCorpusScanAfterDelete:
     async def test_an_edited_deleted_file_stays_out(self, corpus_root, fake_collection):
         first = await _scan(corpus_root, "reports/q4.md")
         await file_service.delete_document(first["files"][-1]["doc_id"])
-        (corpus_root / "reports" / "q4.md").write_text("Q4 2025 revenue was 4.3M.", encoding="utf-8")
+        (corpus_root / "reports" / "q4.md").write_text(
+            "Q4 2025 revenue was 4.3M.", encoding="utf-8"
+        )
 
         second = await _scan(corpus_root, "reports/q4.md")
 
@@ -74,7 +76,9 @@ class TestCorpusScanAfterDelete:
     async def test_a_file_that_was_never_deleted_is_still_ingested(
         self, corpus_root, fake_collection
     ):
-        (corpus_root / "reports" / "q3.md").write_text("Q3 2025 revenue was 3.9M.", encoding="utf-8")
+        (corpus_root / "reports" / "q3.md").write_text(
+            "Q3 2025 revenue was 3.9M.", encoding="utf-8"
+        )
         first = await _scan(corpus_root, "reports/q4.md")
         await file_service.delete_document(first["files"][-1]["doc_id"])
 

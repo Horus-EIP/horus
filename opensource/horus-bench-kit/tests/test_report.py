@@ -144,7 +144,9 @@ class TestQuestionRecord:
         ]
 
     def test_wrong_answer_and_wrong_source(self, lookup_item):
-        outcome = chat_outcome(answer="Twelve.", retrieved_sources=[["harbour-rules.md", "north-pier.md"]])
+        outcome = chat_outcome(
+            answer="Twelve.", retrieved_sources=[["harbour-rules.md", "north-pier.md"]]
+        )
         record = question_record(lookup_item, outcome)
         assert record["answer_correct_auto"] is False
         assert record["missing_patterns"] == [r"\b(?:14|fourteen)\b"]
@@ -160,7 +162,12 @@ class TestQuestionRecord:
         assert record["route_correct"] is None
 
     def test_failed_question_counts_as_a_wrong_answer_and_leaves_the_source_open(self, lookup_item):
-        outcome = {"mode": "chat", "status": "timeout", "error": "no answer", "timing_source": "poll"}
+        outcome = {
+            "mode": "chat",
+            "status": "timeout",
+            "error": "no answer",
+            "timing_source": "poll",
+        }
         record = question_record(lookup_item, outcome)
         assert record["status"] == "timeout"
         assert record["error"] == "no answer"
@@ -174,7 +181,11 @@ class TestQuestionRecord:
 
     def test_direct_answer_without_sources(self, direct_item):
         outcome = chat_outcome(
-            observed_route=ROUTE_DIRECT, answer="4", retrieval_steps=0, retrieved_sources=[], ttft_s=None
+            observed_route=ROUTE_DIRECT,
+            answer="4",
+            retrieval_steps=0,
+            retrieved_sources=[],
+            ttft_s=None,
         )
         record = question_record(direct_item, outcome)
         assert record["answer_correct_auto"] is True
@@ -198,13 +209,18 @@ class TestQuestionRecord:
         assert record["retrieval_steps"] is None
         assert record["review"] is None
 
-    def test_retrieval_mode_with_the_whole_corpus_ranked_needs_the_document_first(self, lookup_item):
+    def test_retrieval_mode_with_the_whole_corpus_ranked_needs_the_document_first(
+        self, lookup_item
+    ):
         record = question_record(lookup_item, retrieval_outcome(ALL_DOCUMENTS))
         assert record["source_correct_auto"] is False
         assert record["source_ranks"] == [5]
 
     def test_retrieval_mode_does_not_score_direct_items(self, direct_item):
-        assert question_record(direct_item, retrieval_outcome(ALL_DOCUMENTS))["source_correct_auto"] is None
+        assert (
+            question_record(direct_item, retrieval_outcome(ALL_DOCUMENTS))["source_correct_auto"]
+            is None
+        )
 
 
 class TestProfile:
@@ -241,7 +257,9 @@ class TestProfile:
         assert question_record(lookup_item, chat_outcome(), profile)["status"] == "ok"
 
     def test_summary_sections_sit_between_ttft_and_manual_review(self, lookup_item):
-        profile = Profile(summary_sections=(("queue_s", field_stats("queue_s")), ("extra", lambda r: len(r))))
+        profile = Profile(
+            summary_sections=(("queue_s", field_stats("queue_s")), ("extra", lambda r: len(r)))
+        )
         record = question_record(lookup_item, chat_outcome(), Profile(outcome_fields=("queue_s",)))
         record["queue_s"] = 0.5
         summary = build_summary([record], profile)
@@ -252,7 +270,9 @@ class TestProfile:
 
     def test_categories_order_the_per_category_summary(self, make_item):
         records = [
-            question_record(make_item(id="d", category="direct", expected_source=None), chat_outcome()),
+            question_record(
+                make_item(id="d", category="direct", expected_source=None), chat_outcome()
+            ),
             question_record(make_item(id="l"), chat_outcome()),
         ]
         assert list(build_summary(records)["by_category"]) == ["lookup", "direct"]
@@ -267,7 +287,9 @@ class TestSummary:
     def test_summary_totals_and_categories(self, lookup_item, direct_item):
         records = [
             question_record(lookup_item, chat_outcome()),
-            question_record(lookup_item, chat_outcome(answer="Twelve", retrieved_sources=[ALL_DOCUMENTS])),
+            question_record(
+                lookup_item, chat_outcome(answer="Twelve", retrieved_sources=[ALL_DOCUMENTS])
+            ),
             question_record(lookup_item, chat_outcome(retrieved_sources=None)),
             question_record(
                 direct_item,
@@ -315,7 +337,9 @@ class TestSummary:
 
     def test_rank_summary_counts_expected_documents_never_retrieved(self, make_item):
         item = make_item(expected_source=["ferry-timetable.md", "north-pier.md"])
-        record = question_record(item, chat_outcome(retrieved_sources=[["north-pier.md", "harbour-rules.md"]]))
+        record = question_record(
+            item, chat_outcome(retrieved_sources=[["north-pier.md", "harbour-rules.md"]])
+        )
         assert rank_summary([record]) == {
             "n": 1,
             "mean": 1,
@@ -330,7 +354,9 @@ class TestSummary:
 
     def test_usage_summary_needs_a_usage_block(self):
         assert usage_summary([{"usage": None}, {}]) is None
-        summary = usage_summary([{"usage": {"prompt_tokens": 10, "completion_tokens": 4}}, {"usage": {}}])
+        summary = usage_summary(
+            [{"usage": {"prompt_tokens": 10, "completion_tokens": 4}}, {"usage": {}}]
+        )
         assert summary["questions"] == 2
         assert summary["prompt_tokens"]["n"] == 1
         assert summary["completion_tokens"]["sum"] == 4
@@ -375,7 +401,15 @@ class TestBuildReport:
             testset={"version": "1.0.0"},
             records=[question_record(lookup_item, chat_outcome())],
         )
-        assert list(report) == ["kind", "schema_version", "label", "run", "testset", "summary", "questions"]
+        assert list(report) == [
+            "kind",
+            "schema_version",
+            "label",
+            "run",
+            "testset",
+            "summary",
+            "questions",
+        ]
         assert (report["kind"], report["schema_version"]) == ("horus-bench-kit-eval", 1)
         assert report["summary"]["questions"] == 1
         json.dumps(report)
@@ -412,7 +446,9 @@ class TestResummarize:
         return slots
 
     def test_resummarize_picks_up_filled_verdicts(self, lookup_item):
-        report = build_report(label="x", run={}, testset={}, records=[question_record(lookup_item, chat_outcome())])
+        report = build_report(
+            label="x", run={}, testset={}, records=[question_record(lookup_item, chat_outcome())]
+        )
         report["questions"][0]["review"] = self.review()
         refreshed = resummarize(json.loads(json.dumps(report)))
         assert refreshed["summary"]["manual_review"]["answer_correct_pct"] == 100.0
@@ -420,7 +456,9 @@ class TestResummarize:
         assert list(refreshed) == list(report)
 
     def test_resummarize_rejects_other_kinds(self):
-        with pytest.raises(ValueError, match=r"not a horus-bench-kit-eval report \(kind='llama-bench'\)"):
+        with pytest.raises(
+            ValueError, match=r"not a horus-bench-kit-eval report \(kind='llama-bench'\)"
+        ):
             resummarize({"kind": "llama-bench"})
 
     def test_resummarize_uses_the_profile_kind(self, lookup_item):

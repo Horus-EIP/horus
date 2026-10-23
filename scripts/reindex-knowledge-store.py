@@ -103,7 +103,9 @@ def main(argv: list[str] | None = None) -> int:
             job = start_reindex(client, ks_url, args.token)
             print(f"[info] re-index {job.get('job_id')} running with {job.get('embed_model')}")
             final = wait_for_reindex(
-                client, ks_url, args.token,
+                client,
+                ks_url,
+                args.token,
                 timeout=args.timeout,
                 interval=args.poll_interval,
                 report=lambda status: print(progress_line(status), flush=True),

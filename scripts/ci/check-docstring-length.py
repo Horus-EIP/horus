@@ -46,9 +46,7 @@ def _iter_py_files(paths: Iterable[str]) -> Iterable[pathlib.Path]:
                 yield sub
 
 
-def _find_long_docstrings(
-    src: str, max_lines: int
-) -> list[tuple[int, int]]:
+def _find_long_docstrings(src: str, max_lines: int) -> list[tuple[int, int]]:
     """Return (line_no, length) for every overlong triple-quoted string."""
     try:
         tree = ast.parse(src)

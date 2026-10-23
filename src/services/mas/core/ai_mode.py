@@ -105,8 +105,10 @@ def mock_warning() -> str:
     faked = "answers MAS's model calls"
     if embeddings() == MOCK:
         faked += " and computes its embeddings from the words of each text"
-    message = (f"Mock AI mode: llm-mock {faked}, so routing, plans and answers are simulated, "
-               "not produced by a model")
+    message = (
+        f"Mock AI mode: llm-mock {faked}, so routing, plans and answers are simulated, "
+        "not produced by a model"
+    )
     if os.getenv(TRACES_OFF_ENV, "").strip().lower() in TRUE_VALUES:
         message += "; monitoring is off, so MAS exports no trace"
     return message

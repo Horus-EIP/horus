@@ -17,9 +17,7 @@ WITH_CUDA = ["CUDAExecutionProvider", "CPUExecutionProvider"]
 @pytest.fixture
 def embedder(monkeypatch):
     model = MagicMock()
-    model.embed.side_effect = lambda texts: [
-        np.array([float(len(text)), 1.0]) for text in texts
-    ]
+    model.embed.side_effect = lambda texts: [np.array([float(len(text)), 1.0]) for text in texts]
     monkeypatch.setattr(setup, "model", model)
     return model
 
@@ -38,7 +36,9 @@ class TestBgeQueryPrefix:
 
         embedded = [text for call in embedder.embed.call_args_list for text in call.args[0]]
         assert embedded == [
-            "Q4 revenue was $4.2M.", "Q4 revenue was $4.2M.", "Operating costs were $3.1M.",
+            "Q4 revenue was $4.2M.",
+            "Q4 revenue was $4.2M.",
+            "Operating costs were $3.1M.",
         ]
         assert not any(setup.BGE_QUERY_PREFIX in text for text in embedded)
 
@@ -108,7 +108,9 @@ class TestCollectionRecordsTheEmbedder:
         self, fake_collection
     ):
         fake_collection.metadata = {
-            "embedding_model": "BAAI/bge-base-en-v1.5", "dimensions": 768, "owner": "horus",
+            "embedding_model": "BAAI/bge-base-en-v1.5",
+            "dimensions": 768,
+            "owner": "horus",
         }
 
         assert reindex.record_embedder_in_collection() is True

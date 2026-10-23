@@ -178,8 +178,7 @@ class AgentCommunicator:
         chain = list(request.delegation_chain)
         if len(chain) >= MAX_DELEGATION_DEPTH:
             logger.warning(
-                f"Delegation depth limit reached ({MAX_DELEGATION_DEPTH}). "
-                f"Chain: {chain}"
+                f"Delegation depth limit reached ({MAX_DELEGATION_DEPTH}). Chain: {chain}"
             )
             return DelegationResponse(
                 delegation_id="",
@@ -205,11 +204,13 @@ class AgentCommunicator:
         chain.append(request.sender_agent_id)
 
         context = list(request.delegation_context)
-        context.append(DelegationContextEntry(
-            agent_id=request.sender_agent_id,
-            request=request.request,
-            data=request.data,
-        ))
+        context.append(
+            DelegationContextEntry(
+                agent_id=request.sender_agent_id,
+                request=request.request,
+                data=request.data,
+            )
+        )
 
         message = AgentMessage(
             sender_agent_id=request.sender_agent_id,
@@ -243,9 +244,7 @@ class AgentCommunicator:
         except TimeoutError:
             self.message_store.update_status(message.id, MessageStatus.TIMEOUT)
             self.delegation_registry.cancel(message.id)
-            logger.warning(
-                f"Delegation {message.id} timed out after {timeout}s"
-            )
+            logger.warning(f"Delegation {message.id} timed out after {timeout}s")
             return DelegationResponse(
                 delegation_id=message.id,
                 status="timeout",
@@ -268,9 +267,7 @@ class AgentCommunicator:
             error=result.get("error", "Unknown delegation error") if result else "No result",
         )
 
-    def receive_delegation_result(
-        self, delegation_id: str, result: str, agent_id: str
-    ) -> bool:
+    def receive_delegation_result(self, delegation_id: str, result: str, agent_id: str) -> bool:
         """Called when a delegate agent posts its result back."""
         return self.delegation_registry.resolve(
             delegation_id, {"result": result, "agent_id": agent_id}

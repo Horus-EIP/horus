@@ -19,7 +19,10 @@ from horus_bench_kit.files import (
 
 class TestReportPath:
     def test_path_is_label_and_date(self, tmp_path):
-        assert report_path(tmp_path, "laptop-q4", date(2026, 10, 5)) == tmp_path / "laptop-q4-2026-10-05.json"
+        assert (
+            report_path(tmp_path, "laptop-q4", date(2026, 10, 5))
+            == tmp_path / "laptop-q4-2026-10-05.json"
+        )
 
     def test_existing_report_is_never_overwritten(self, tmp_path):
         (tmp_path / "gpu8-2026-10-05.json").write_text("{}")

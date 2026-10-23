@@ -50,11 +50,16 @@ class FakeGitHub(claims.GitHub):
         if parts == ["issues"]:
             return self.items
         number = int(parts[1])
-        return self.events.get(number, []) if parts[2] == "events" else self.comments.get(number, [])
+        return (
+            self.events.get(number, []) if parts[2] == "events" else self.comments.get(number, [])
+        )
 
     def written(self):
-        return [(method, path.removeprefix("/repos/example/kit"), body)
-                for method, path, body in self.calls if method != "GET"]
+        return [
+            (method, path.removeprefix("/repos/example/kit"), body)
+            for method, path, body in self.calls
+            if method != "GET"
+        ]
 
 
 def claimed(number=7, assignees=("ada",), created=None):
@@ -77,12 +82,23 @@ def comment(login, when, body="Still on it", kind="User"):
 
 
 def reminder(login, when):
-    return comment("github-actions[bot]", when, body=claims.reminder_mark(login) + f"\nHi @{login}", kind="Bot")
+    return comment(
+        "github-actions[bot]", when, body=claims.reminder_mark(login) + f"\nHi @{login}", kind="Bot"
+    )
 
 
 def pull_request(login, body, number=40):
-    return {"number": number, "title": "A change", "body": body, "state": "open", "labels": [], "assignees": [],
-            "user": {"login": login}, "pull_request": {}, "created_at": stamp(ago(1))}
+    return {
+        "number": number,
+        "title": "A change",
+        "body": body,
+        "state": "open",
+        "labels": [],
+        "assignees": [],
+        "user": {"login": login},
+        "pull_request": {},
+        "created_at": stamp(ago(1)),
+    }
 
 
 class TestRules:
@@ -101,11 +117,19 @@ class TestRules:
         assert claims.stale_action(NOW, idle, reminded, has_open_pull_request=False) == expected
 
     def test_an_open_pull_request_keeps_the_claim(self):
-        assert claims.stale_action(NOW, ago(30), False, has_open_pull_request=True) == claims.NOTHING
+        assert (
+            claims.stale_action(NOW, ago(30), False, has_open_pull_request=True) == claims.NOTHING
+        )
 
     @pytest.mark.parametrize(
         "text",
-        ["Fixes #7", "Part of #7.", "(#7)", "Fixes example/kit#7", "Closes https://github.com/example/kit/issues/7"],
+        [
+            "Fixes #7",
+            "Part of #7.",
+            "(#7)",
+            "Fixes example/kit#7",
+            "Closes https://github.com/example/kit/issues/7",
+        ],
     )
     def test_a_pull_request_mentions_the_issue_by_number_or_link(self, text):
         assert claims.mentions({"title": "A change", "body": text}, 7, "example/kit")
@@ -113,7 +137,13 @@ class TestRules:
 
     @pytest.mark.parametrize(
         "text",
-        ["Fixes #70", "Fixes other/repo#7", "See https://github.com/other/repo/issues/7", "issue 7", ""],
+        [
+            "Fixes #70",
+            "Fixes other/repo#7",
+            "See https://github.com/other/repo/issues/7",
+            "issue 7",
+            "",
+        ],
     )
     def test_another_number_or_another_repository_is_not_a_mention(self, text):
         assert not claims.mentions({"title": "A change", "body": text}, 7, "example/kit")
@@ -129,7 +159,7 @@ class TestHandleStale:
     def test_seven_quiet_days_bring_one_reminder(self):
         github = FakeGitHub([claimed()], events={7: [assigned("ada", ago(8))]})
         assert claims.handle_stale(github, NOW) == [(7, "ada", claims.REMIND)]
-        (method, path, body), = github.written()
+        ((method, path, body),) = github.written()
         assert (method, path) == ("POST", "/issues/7/comments")
         assert body["body"].startswith(claims.reminder_mark("ada"))
         assert "Hi @ada, how is #7 going?" in body["body"]
@@ -156,7 +186,11 @@ class TestHandleStale:
         assert claims.handle_stale(github, NOW) == [(7, "ada", claims.REMIND)]
 
     def test_a_comment_from_the_assignee_restarts_the_clock(self):
-        github = FakeGitHub([claimed()], events={7: [assigned("ada", ago(20))]}, comments={7: [comment("ada", ago(3))]})
+        github = FakeGitHub(
+            [claimed()],
+            events={7: [assigned("ada", ago(20))]},
+            comments={7: [comment("ada", ago(3))]},
+        )
         assert claims.handle_stale(github, NOW) == [(7, "ada", claims.NOTHING)]
 
     def test_fourteen_quiet_days_release_the_issue(self):
@@ -172,7 +206,10 @@ class TestHandleStale:
     def test_the_label_stays_while_another_assignee_holds_the_issue(self):
         events = {7: [assigned("ada", ago(15)), assigned("grace", ago(2))]}
         github = FakeGitHub([claimed(assignees=("ada", "grace"))], events=events)
-        assert claims.handle_stale(github, NOW) == [(7, "ada", claims.RELEASE), (7, "grace", claims.NOTHING)]
+        assert claims.handle_stale(github, NOW) == [
+            (7, "ada", claims.RELEASE),
+            (7, "grace", claims.NOTHING),
+        ]
         assert ("DELETE", "/issues/7/labels/claimed", None) not in github.written()
 
     def test_an_open_pull_request_from_the_assignee_that_mentions_the_issue_keeps_it(self):
@@ -181,7 +218,11 @@ class TestHandleStale:
         assert claims.handle_stale(github, NOW) == [(7, "ada", claims.NOTHING)]
 
     def test_a_pull_request_from_someone_else_or_about_another_issue_does_not(self):
-        items = [claimed(), pull_request("grace", "Fixes #7"), pull_request("ada", "Fixes #71", number=41)]
+        items = [
+            claimed(),
+            pull_request("grace", "Fixes #7"),
+            pull_request("ada", "Fixes #71", number=41),
+        ]
         github = FakeGitHub(items, events={7: [assigned("ada", ago(20))]})
         assert claims.handle_stale(github, NOW) == [(7, "ada", claims.RELEASE)]
 
@@ -189,4 +230,6 @@ class TestHandleStale:
         unclaimed = dict(claimed(), labels=[{"name": "good first issue"}])
         github = FakeGitHub([unclaimed], events={7: [assigned("ada", ago(20))]})
         assert claims.handle_stale(github, NOW) == []
-        assert github.calls == [("GET", "/repos/example/kit/issues?state=open&per_page=100&page=1", None)]
+        assert github.calls == [
+            ("GET", "/repos/example/kit/issues?state=open&per_page=100&page=1", None)
+        ]

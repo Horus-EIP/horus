@@ -138,7 +138,7 @@ def write_entries(entries: Sequence[StoredEntry], embed_passages: EmbedPassages)
     written: list[str] = []
     try:
         for start in range(0, len(head_last), WRITE_BATCH_SIZE):
-            batch = head_last[start:start + WRITE_BATCH_SIZE]
+            batch = head_last[start : start + WRITE_BATCH_SIZE]
             texts = [entry.text for entry in batch]
             knowledge_collection.add(
                 ids=[entry.id for entry in batch],
@@ -163,7 +163,8 @@ async def store_file(
     page_starts: Sequence[int] = (),
 ) -> int:
     extra = {
-        key: value for key, value in (extra_metadata or {}).items()
+        key: value
+        for key, value in (extra_metadata or {}).items()
         if isinstance(value, _SCALAR_TYPES)
     }
     analysis = _analysis_metadata(auto_analysis)
@@ -265,11 +266,13 @@ def fetch_entries(with_text: bool = False, **selector: Any) -> list[StoredEntry]
     for index, entry_id in enumerate(ids):
         metadata = metadatas[index] if index < len(metadatas) else None
         text = documents[index] if index < len(documents) else ""
-        entries.append(StoredEntry(
-            str(entry_id),
-            text if isinstance(text, str) else str(text or ""),
-            dict(metadata or {}),
-        ))
+        entries.append(
+            StoredEntry(
+                str(entry_id),
+                text if isinstance(text, str) else str(text or ""),
+                dict(metadata or {}),
+            )
+        )
     return entries
 
 
@@ -327,7 +330,8 @@ def document_texts(doc_ids: Iterable[str]) -> dict[str, DocumentText]:
             grouped.setdefault(doc_id, {})[entry.id] = entry
     return {
         doc_id: _assembled(doc_id, list(grouped[doc_id].values()))
-        for doc_id in wanted if doc_id in grouped
+        for doc_id in wanted
+        if doc_id in grouped
     }
 
 
@@ -368,7 +372,7 @@ def _joined(chunks: list[StoredEntry]) -> str:
         elif start >= reached:
             parts.append(("\n" if start > reached else "") + entry.text)
         else:
-            parts.append(entry.text[reached - start:])
+            parts.append(entry.text[reached - start :])
         reached = end
     return "".join(parts)
 
@@ -389,13 +393,15 @@ def passages_of(results: Mapping[str, Any]) -> list[Passage]:
         metadata = dict((metadatas[index] if index < len(metadatas) else None) or {})
         text = documents[index] if index < len(documents) else ""
         distance = distances[index] if index < len(distances) else None
-        passages.append(Passage(
-            document_id_of(str(entry_id), metadata),
-            str(entry_id),
-            text if isinstance(text, str) else str(text or ""),
-            metadata,
-            distance,
-        ))
+        passages.append(
+            Passage(
+                document_id_of(str(entry_id), metadata),
+                str(entry_id),
+                text if isinstance(text, str) else str(text or ""),
+                metadata,
+                distance,
+            )
+        )
     return passages
 
 
@@ -418,9 +424,7 @@ def _passage_conditions(request: SmartSearchRequest) -> list[dict]:
 
 
 def _document_conditions(request: SmartSearchRequest) -> list[dict]:
-    conditions = [
-        {"entities_people": {"$contains": entity}} for entity in request.entities or []
-    ]
+    conditions = [{"entities_people": {"$contains": entity}} for entity in request.entities or []]
     if request.min_confidence is not None:
         conditions.append({"confidence_score": {"$gte": request.min_confidence}})
     if request.entity_type:
@@ -441,11 +445,13 @@ def build_where_clause(request: SmartSearchRequest) -> dict | None:
 
 
 def _documents_matching(document_where: dict) -> list[str]:
-    return list(dict.fromkeys(
-        document_id_of(entry.id, entry.metadata)
-        for entry in fetch_entries(where=document_where)
-        if is_document_head(entry.metadata)
-    ))
+    return list(
+        dict.fromkeys(
+            document_id_of(entry.id, entry.metadata)
+            for entry in fetch_entries(where=document_where)
+            if is_document_head(entry.metadata)
+        )
+    )
 
 
 def _head_metadata(doc_ids: Sequence[str]) -> dict[str, dict[str, Any]]:
@@ -495,9 +501,9 @@ def _entries(**selector: Any) -> dict[str, dict[str, Any]]:
 
 def _entries_of_document(doc_id: str) -> dict[str, dict[str, Any]]:
     entries = {entry.id: entry.metadata for entry in entries_of(doc_id)}
-    source_paths = sorted({
-        metadata["source_path"] for metadata in entries.values() if metadata.get("source_path")
-    })
+    source_paths = sorted(
+        {metadata["source_path"] for metadata in entries.values() if metadata.get("source_path")}
+    )
     if source_paths:
         entries.update(_entries(where={"source_path": {"$in": source_paths}}))
     return entries
@@ -533,8 +539,7 @@ def _stored_file(metadata: Mapping[str, Any]) -> Path | None:
 
 def _still_used(path: Path, title: str) -> bool:
     return any(
-        _stored_file(metadata) == path
-        for metadata in _entries(where={"title": title}).values()
+        _stored_file(metadata) == path for metadata in _entries(where={"title": title}).values()
     )
 
 

@@ -31,17 +31,31 @@ AGENT_MODEL_FILES = (
 )
 LOCAL_FILES = {
     "agent": ("app/offload/layer.dat", "app/qwen3-4b-instruct-q4_k_m.gguf"),
-    "mas": ("models/llm/config.json", "logs/mas_20261008.log", "offload/layer.dat",
-            "qwen3-4b-instruct-q4_k_m.gguf"),
-    "knowledge-store": ("chroma_data/chroma.sqlite3", "chroma_data/0b1c/data_level0.bin",
-                        "documents/pdf/report.pdf"),
-    "web-client": ("node_modules/next/package.json", ".next/cache/webpack/client.pack",
-                   "tsconfig.tsbuildinfo", ".env", ".env.production"),
+    "mas": (
+        "models/llm/config.json",
+        "logs/mas_20261008.log",
+        "offload/layer.dat",
+        "qwen3-4b-instruct-q4_k_m.gguf",
+    ),
+    "knowledge-store": (
+        "chroma_data/chroma.sqlite3",
+        "chroma_data/0b1c/data_level0.bin",
+        "documents/pdf/report.pdf",
+    ),
+    "web-client": (
+        "node_modules/next/package.json",
+        ".next/cache/webpack/client.pack",
+        "tsconfig.tsbuildinfo",
+        ".env",
+        ".env.production",
+    ),
 }
 TRACKED_BUT_NOT_BUILT = {"mas": ("logs/", "models/"), "web-client": ("README.md",)}
 
-needs_git = unittest.skipUnless(shutil.which("git") and (REPO / ".git").exists(),
-                                "needs the git checkout to list the tracked files")
+needs_git = unittest.skipUnless(
+    shutil.which("git") and (REPO / ".git").exists(),
+    "needs the git checkout to list the tracked files",
+)
 
 
 def read_patterns(text: str) -> list[str]:
@@ -138,9 +152,11 @@ def copied_sources(service: str) -> list[str]:
 
 
 def copied(sources: list[str], path: str) -> bool:
-    return any(source == "." or any(docker_match(source, candidate)
-                                    for candidate in path_and_parents(path))
-               for source in sources)
+    return any(
+        source == "."
+        or any(docker_match(source, candidate) for candidate in path_and_parents(path))
+        for source in sources
+    )
 
 
 def service_gitignore_entries() -> list[tuple[str, str]]:
@@ -155,8 +171,14 @@ def service_gitignore_entries() -> list[tuple[str, str]]:
 
 
 def tracked_files(service: str) -> list[str]:
-    listing = subprocess.run(["git", "ls-files", "-z", "--", "."], cwd=SERVICES / service,
-                             capture_output=True, text=True, encoding="utf-8", check=True).stdout
+    listing = subprocess.run(
+        ["git", "ls-files", "-z", "--", "."],
+        cwd=SERVICES / service,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout
     return [path for path in listing.split("\0") if path]
 
 
@@ -220,8 +242,11 @@ class BuildContexts(unittest.TestCase):
     def test_python_caches_and_environments_stay_out_at_any_depth(self):
         for service, code in PYTHON_CODE.items():
             patterns = dockerignore(service)
-            kept = [code + leftover for leftover in PYTHON_LEFTOVERS
-                    if not left_out(patterns, code + leftover)]
+            kept = [
+                code + leftover
+                for leftover in PYTHON_LEFTOVERS
+                if not left_out(patterns, code + leftover)
+            ]
             with self.subTest(service):
                 self.assertEqual(kept, [])
 
@@ -237,8 +262,11 @@ class BuildContexts(unittest.TestCase):
     def test_every_file_a_dockerfile_names_reaches_the_build(self):
         for service in IMAGE_SERVICES:
             patterns = dockerignore(service)
-            named = [source for source in copied_sources(service)
-                     if source != "." and "*" not in source and left_out(patterns, source)]
+            named = [
+                source
+                for source in copied_sources(service)
+                if source != "." and "*" not in source and left_out(patterns, source)
+            ]
             with self.subTest(service):
                 self.assertEqual(named, [])
 
@@ -248,9 +276,13 @@ class BuildContexts(unittest.TestCase):
             patterns = dockerignore(service)
             sources = copied_sources(service)
             skipped = TRACKED_BUT_NOT_BUILT.get(service, ())
-            dropped = [path for path in tracked_files(service)
-                       if copied(sources, path) and not path.startswith(skipped)
-                       and left_out(patterns, path)]
+            dropped = [
+                path
+                for path in tracked_files(service)
+                if copied(sources, path)
+                and not path.startswith(skipped)
+                and left_out(patterns, path)
+            ]
             with self.subTest(service):
                 self.assertEqual(dropped, [])
 

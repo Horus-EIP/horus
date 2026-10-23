@@ -26,20 +26,22 @@ def client():
 class TestMatchStoredTitle:
     def test_match_variants(self):
         m = file_mod._match_stored_title
-        assert m("report.pdf", "report.pdf") is True       # exact
-        assert m("report", "report.pdf") is True           # same stem
+        assert m("report.pdf", "report.pdf") is True  # exact
+        assert m("report", "report.pdf") is True  # same stem
         assert m("/a/b/report.pdf", "report.pdf") is True  # basename
-        assert m("other", "report.pdf") is False           # no match
-        assert m("", "report.pdf") is False                # empty guard
+        assert m("other", "report.pdf") is False  # no match
+        assert m("", "report.pdf") is False  # empty guard
 
 
 class TestResolve:
     def test_match_returns_combined_text(self, client, monkeypatch):
-        getter = MagicMock(return_value={
-            "ids": ["a", "b"],
-            "documents": ["body A", "body B"],
-            "metadatas": [{"title": "notes.txt"}, {"title": "other.txt"}],
-        })
+        getter = MagicMock(
+            return_value={
+                "ids": ["a", "b"],
+                "documents": ["body A", "body B"],
+                "metadatas": [{"title": "notes.txt"}, {"title": "other.txt"}],
+            }
+        )
         monkeypatch.setattr(file_service.knowledge_collection, "get", getter)
         r = client.get("/file/resolve", params={"name": "notes.txt"})
         assert r.status_code == 200
@@ -48,29 +50,47 @@ class TestResolve:
         assert "body A" in body["text"]
 
     def test_no_match_returns_404(self, client, monkeypatch):
-        monkeypatch.setattr(file_service.knowledge_collection, "get", MagicMock(return_value={
-            "ids": ["a"], "documents": ["x"], "metadatas": [{"title": "zzz.txt"}],
-        }))
+        monkeypatch.setattr(
+            file_service.knowledge_collection,
+            "get",
+            MagicMock(
+                return_value={
+                    "ids": ["a"],
+                    "documents": ["x"],
+                    "metadatas": [{"title": "zzz.txt"}],
+                }
+            ),
+        )
         r = client.get("/file/resolve", params={"name": "nope.txt"})
         assert r.status_code == 404
 
     def test_backend_error_returns_404(self, client, monkeypatch):
-        monkeypatch.setattr(file_service.knowledge_collection, "get", MagicMock(side_effect=RuntimeError("boom")))
+        monkeypatch.setattr(
+            file_service.knowledge_collection, "get", MagicMock(side_effect=RuntimeError("boom"))
+        )
         r = client.get("/file/resolve", params={"name": "x"})
         assert r.status_code == 404
 
 
 class TestListFiles:
     def test_returns_documents(self, client, monkeypatch):
-        getter = MagicMock(return_value={
-            "ids": ["a"],
-            "documents": ["the body text"],
-            "metadatas": [{
-                "title": "doc.pdf", "size": 10, "date": "2023",
-                "auto_summary": "sum", "auto_category": "finance",
-                "auto_type": "report", "confidence_score": 0.7,
-            }],
-        })
+        getter = MagicMock(
+            return_value={
+                "ids": ["a"],
+                "documents": ["the body text"],
+                "metadatas": [
+                    {
+                        "title": "doc.pdf",
+                        "size": 10,
+                        "date": "2023",
+                        "auto_summary": "sum",
+                        "auto_category": "finance",
+                        "auto_type": "report",
+                        "confidence_score": 0.7,
+                    }
+                ],
+            }
+        )
         monkeypatch.setattr(file_service.knowledge_collection, "get", getter)
         r = client.get("/file")
         assert r.status_code == 200
@@ -80,7 +100,9 @@ class TestListFiles:
         assert docs[0]["confidence_score"] == 0.7
 
     def test_backend_error_returns_404(self, client, monkeypatch):
-        monkeypatch.setattr(file_service.knowledge_collection, "get", MagicMock(side_effect=RuntimeError("boom")))
+        monkeypatch.setattr(
+            file_service.knowledge_collection, "get", MagicMock(side_effect=RuntimeError("boom"))
+        )
         r = client.get("/file")
         assert r.status_code == 404
 
@@ -89,7 +111,9 @@ class TestUpload:
     def test_pdf_success(self, client, monkeypatch):
         monkeypatch.setattr(file_mod, "save_file", AsyncMock(return_value="/tmp/x.pdf"))
         monkeypatch.setattr(file_mod, "pdf_pages", AsyncMock(return_value=["text"]))
-        monkeypatch.setattr(file_mod._content_analyzer, "analyze", MagicMock(return_value={"auto_category": "c"}))
+        monkeypatch.setattr(
+            file_mod._content_analyzer, "analyze", MagicMock(return_value={"auto_category": "c"})
+        )
         monkeypatch.setattr(file_mod, "store_file", AsyncMock())
         monkeypatch.setattr(file_mod.os.path, "getsize", lambda p: 123)
         # POST "" takes `files: list[UploadFile]` → multipart field name is "files".
@@ -138,11 +162,16 @@ class TestUploadToText:
     def test_pdf_success(self, client, monkeypatch):
         monkeypatch.setattr(file_mod, "save_file", AsyncMock(return_value="/tmp/x.pdf"))
         monkeypatch.setattr(file_mod, "pdf_pages", AsyncMock(return_value=["extracted"]))
-        monkeypatch.setattr(file_mod._content_analyzer, "analyze", MagicMock(return_value={"auto_category": "c"}))
+        monkeypatch.setattr(
+            file_mod._content_analyzer, "analyze", MagicMock(return_value={"auto_category": "c"})
+        )
         monkeypatch.setattr(file_mod, "store_file", AsyncMock())
         monkeypatch.setattr(file_mod.os.path, "exists", lambda p: False)
-        r = client.post("/file/pdf", params={"doc_id": "d1"},
-                        files={"file": ("x.pdf", b"%PDF", "application/pdf")})
+        r = client.post(
+            "/file/pdf",
+            params={"doc_id": "d1"},
+            files={"file": ("x.pdf", b"%PDF", "application/pdf")},
+        )
         assert r.status_code == 200
         assert r.json()["text"] == "extracted\n"
 
@@ -154,17 +183,21 @@ class TestUploadToText:
         monkeypatch.setattr(file_mod, "store_file", store)
         monkeypatch.setattr(file_mod.os.path, "exists", lambda p: False)
 
-        client.post("/file/image", params={"doc_id": "d1"},
-                    files={"file": ("x.pdf", b"%PDF", "application/pdf")})
+        client.post(
+            "/file/image",
+            params={"doc_id": "d1"},
+            files={"file": ("x.pdf", b"%PDF", "application/pdf")},
+        )
 
-        assert store.await_args.kwargs["extra_metadata"] == {
-            "stored_path": "documents/image/x.pdf"
-        }
+        assert store.await_args.kwargs["extra_metadata"] == {"stored_path": "documents/image/x.pdf"}
 
     def test_invalid_type_returns_400(self, client, monkeypatch):
         monkeypatch.setattr(file_mod, "save_file", AsyncMock(return_value="/tmp/x.bin"))
-        r = client.post("/file/exe", params={"doc_id": "d1"},
-                        files={"file": ("x.bin", b"x", "application/octet-stream")})
+        r = client.post(
+            "/file/exe",
+            params={"doc_id": "d1"},
+            files={"file": ("x.bin", b"x", "application/octet-stream")},
+        )
         assert r.status_code == 400
 
     def test_docx_success(self, client, monkeypatch):
@@ -173,8 +206,11 @@ class TestUploadToText:
         monkeypatch.setattr(file_mod._content_analyzer, "analyze", MagicMock(return_value={}))
         monkeypatch.setattr(file_mod, "store_file", AsyncMock())
         monkeypatch.setattr(file_mod.os.path, "exists", lambda p: False)
-        r = client.post("/file/docx", params={"doc_id": "d1"},
-                        files={"file": ("x.docx", b"PK", "application/octet-stream")})
+        r = client.post(
+            "/file/docx",
+            params={"doc_id": "d1"},
+            files={"file": ("x.docx", b"PK", "application/octet-stream")},
+        )
         assert r.status_code == 200
 
     def test_image_success(self, client, monkeypatch):
@@ -184,8 +220,11 @@ class TestUploadToText:
         monkeypatch.setattr(file_mod, "store_file", AsyncMock())
         monkeypatch.setattr(file_mod.os.path, "exists", lambda p: True)
         monkeypatch.setattr(file_mod.os.path, "getsize", lambda p: 9)
-        r = client.post("/file/image", params={"doc_id": "d2"},
-                        files={"file": ("x.png", b"\x89PNG", "image/png")})
+        r = client.post(
+            "/file/image",
+            params={"doc_id": "d2"},
+            files={"file": ("x.png", b"\x89PNG", "image/png")},
+        )
         assert r.status_code == 200
         assert r.json()["text"] == "ocr"
 
@@ -226,15 +265,17 @@ class TestUploadMoreFormats:
 class TestListEdges:
     def test_bad_metadata_and_long_text(self, client, monkeypatch):
         long_text = "x" * 500
-        getter = MagicMock(return_value={
-            "ids": ["a"],
-            "documents": [long_text],
-            "metadatas": [{"title": "d", "size": "notint", "confidence_score": "bad"}],
-        })
+        getter = MagicMock(
+            return_value={
+                "ids": ["a"],
+                "documents": [long_text],
+                "metadatas": [{"title": "d", "size": "notint", "confidence_score": "bad"}],
+            }
+        )
         monkeypatch.setattr(file_service.knowledge_collection, "get", getter)
         r = client.get("/file")
         assert r.status_code == 200
         doc = r.json()["documents"][0]
-        assert doc["size"] == 0                  # int("notint") → ValueError → 0
-        assert doc["excerpt"].endswith("...")    # text > 400 chars → truncated
-        assert "confidence_score" not in doc     # float("bad") → None → key omitted
+        assert doc["size"] == 0  # int("notint") → ValueError → 0
+        assert doc["excerpt"].endswith("...")  # text > 400 chars → truncated
+        assert "confidence_score" not in doc  # float("bad") → None → key omitted

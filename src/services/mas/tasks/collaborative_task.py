@@ -35,9 +35,7 @@ class CollaborativeTask(BaseModel):
         """
         ready = []
         # Get IDs of completed tasks
-        completed_ids = {
-            t.id for t in self.sub_tasks if t.status == TaskStatus.COMPLETED
-        }
+        completed_ids = {t.id for t in self.sub_tasks if t.status == TaskStatus.COMPLETED}
 
         for task in self.sub_tasks:
             if task.status == TaskStatus.PENDING:
@@ -52,9 +50,7 @@ class CollaborativeTask(BaseModel):
                     ready.append(task)
         return ready
 
-    def update_subtask_status(
-        self, subtask_id: str, status: TaskStatus, result: str | None = None
-    ):
+    def update_subtask_status(self, subtask_id: str, status: TaskStatus, result: str | None = None):
         """
         Updates the status and result of a specific subtask.
         """

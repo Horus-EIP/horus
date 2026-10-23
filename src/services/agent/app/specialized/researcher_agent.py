@@ -4,6 +4,7 @@ from ai_agents.summarizer_tool import SummarizerTool
 
 logger = logging.getLogger(__name__)
 
+
 class ResearcherAgent:
     def __init__(self, retrieval_agent):
         self.knowledge_retriever = retrieval_agent
@@ -24,7 +25,7 @@ class ResearcherAgent:
     async def process_request(self, task_type: str, data: str, extra_parameters: dict = None):
         """
         Perform searches, summaries, or combined research tasks.
-        
+
         Args:
             task_type: 'search' (fetch data), 'summarize' (text summary), or 'research' (both).
             data: The query or text to process.
@@ -46,4 +47,3 @@ class ResearcherAgent:
             return final_result
         else:
             return "Task type not found"
-

@@ -22,13 +22,18 @@ REPO = Path(__file__).resolve().parent.parent.parent
 INFRA = REPO / "src" / "infra"
 KEY = "SUPER_USER_PASSWORD"
 CHOSEN = "Chosen-Pass-2026!"
-MAS_OUTPUT = ("Starting MAS Service Container...\n"
-              '{"event": "Admin user already exists: admin", "level": "info"}\n')
+MAS_OUTPUT = (
+    "Starting MAS Service Container...\n"
+    '{"event": "Admin user already exists: admin", "level": "info"}\n'
+)
 
 
 def policy_shaped(value: str) -> bool:
-    return (len(value) >= 10 and bool(re.match("[A-Za-z0-9]", value))
-            and all(re.search(pattern, value) for pattern in ("[a-z]", "[A-Z]", "[0-9]", "[-_]")))
+    return (
+        len(value) >= 10
+        and bool(re.match("[A-Za-z0-9]", value))
+        and all(re.search(pattern, value) for pattern in ("[a-z]", "[A-Z]", "[0-9]", "[-_]"))
+    )
 
 
 class InfraCase(unittest.TestCase):
@@ -170,8 +175,9 @@ class AnUpgradeRewritesOnlyTheShippedPassword(InfraCase):
     def test_the_profile_json_never_holds_it(self):
         password, _generated = horus_install.admin_password(self.log, self.infra)
         path = self.repo / "horus-profile.json"
-        hardware.write_profile_json(path, dict(horus_install.SIMULATIONS["nvidia-8gb"]),
-                                    "gpu-8g", {KEY: password}, ["test"])
+        hardware.write_profile_json(
+            path, dict(horus_install.SIMULATIONS["nvidia-8gb"]), "gpu-8g", {KEY: password}, ["test"]
+        )
         self.assertNotIn(password, path.read_text(encoding="utf-8"))
 
 
@@ -190,8 +196,16 @@ class TheAdminAccountCheck(InfraCase):
         self.write_env(f"{KEY}={CHOSEN}\n")
         outcome, calls = self.outcome(MAS_OUTPUT + "admin-account: matches\n")
         self.assertEqual(outcome, "matches")
-        self.assertEqual(calls, [(["docker", "compose", "exec", "-T", "mas", "python", "-m",
-                                   "db.admin_account"], False, "")])
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ["docker", "compose", "exec", "-T", "mas", "python", "-m", "db.admin_account"],
+                    False,
+                    "",
+                )
+            ],
+        )
         self.assertNotIn(CHOSEN, self.log_text())
 
     def test_each_outcome_is_read_from_the_last_line(self):
@@ -229,8 +243,16 @@ class TheAgentAccountCheck(InfraCase):
     def test_it_runs_the_mas_agent_account_command(self):
         outcome, calls = self.outcome("agent-account: matches\n")
         self.assertEqual(outcome, "matches")
-        self.assertEqual(calls, [(["docker", "compose", "exec", "-T", "mas", "python", "-m",
-                                   "db.agent_account"], False, "")])
+        self.assertEqual(
+            calls,
+            [
+                (
+                    ["docker", "compose", "exec", "-T", "mas", "python", "-m", "db.agent_account"],
+                    False,
+                    "",
+                )
+            ],
+        )
         self.assertNotIn("Could not check the agent account", self.out.getvalue())
 
     def test_a_missing_outcome_is_reported_as_unverified(self):
@@ -247,11 +269,19 @@ class TheAgentAccountCheck(InfraCase):
 class TheEndOfTheInstallShowsThePasswordOnce(InfraCase):
     def succeed(self, password: str | None, terminal: bool = True, outcome: str = "") -> str:
         self.write_env("SUPER_USER_USERNAME=root\n")
-        with mock.patch.object(horus_install, "terminal_output", return_value=terminal), \
-                mock.patch.object(horus_install, "offer_to_reclaim"):
-            horus_install._success(self.log, self.infra, "gpu-8g", {"mode": "demo"},
-                                   non_interactive=True, admin_password=password,
-                                   admin_outcome=outcome)
+        with (
+            mock.patch.object(horus_install, "terminal_output", return_value=terminal),
+            mock.patch.object(horus_install, "offer_to_reclaim"),
+        ):
+            horus_install._success(
+                self.log,
+                self.infra,
+                "gpu-8g",
+                {"mode": "demo"},
+                non_interactive=True,
+                admin_password=password,
+                admin_outcome=outcome,
+            )
         return self.out.getvalue()
 
     def test_an_account_on_another_password_is_not_pointed_at_the_env(self):
@@ -286,7 +316,8 @@ class TheEndOfTheInstallShowsThePasswordOnce(InfraCase):
 class InstallChecksTheAdminAccount(InfraCase):
     def install(self, outcome: str) -> mock.Mock:
         args = horus_install.build_parser().parse_args(
-            ["--profile", "gpu-8g", "--non-interactive", "--skip-smoke"])
+            ["--profile", "gpu-8g", "--non-interactive", "--skip-smoke"]
+        )
         order = mock.Mock()
         with contextlib.ExitStack() as stack:
             patch = stack.enter_context
@@ -300,12 +331,18 @@ class InstallChecksTheAdminAccount(InfraCase):
             machine.probe.return_value = dict(horus_install.SIMULATIONS["nvidia-8gb"])
             for name in ("apply_env", "pull_and_build", "wait_for_health", "_success"):
                 order.attach_mock(patch(mock.patch.object(horus_install, name)), name)
-            order.attach_mock(patch(mock.patch.object(horus_install, "check_admin_account",
-                                                      return_value=outcome)),
-                              "check_admin_account")
-            order.attach_mock(patch(mock.patch.object(horus_install, "check_agent_account",
-                                                      return_value="matches")),
-                              "check_agent_account")
+            order.attach_mock(
+                patch(
+                    mock.patch.object(horus_install, "check_admin_account", return_value=outcome)
+                ),
+                "check_admin_account",
+            )
+            order.attach_mock(
+                patch(
+                    mock.patch.object(horus_install, "check_agent_account", return_value="matches")
+                ),
+                "check_agent_account",
+            )
             code = horus_install._dispatch(self.log, args)
         self.assertEqual(code, EXIT_OK)
         return order
@@ -344,15 +381,25 @@ class InstallChecksTheAdminAccount(InfraCase):
 
     def test_the_account_is_checked_once_the_stack_is_healthy(self):
         names = [call[0] for call in self.install("matches").mock_calls if call[0]]
-        self.assertEqual(names, ["apply_env", "pull_and_build", "wait_for_health",
-                                 "check_admin_account", "check_agent_account", "_success"])
+        self.assertEqual(
+            names,
+            [
+                "apply_env",
+                "pull_and_build",
+                "wait_for_health",
+                "check_admin_account",
+                "check_agent_account",
+                "_success",
+            ],
+        )
 
 
 class TheTemplateShipsNoInitialPasswords(InfraCase):
     def test_the_env_example_leaves_it_empty(self):
         self.assertEqual(smoke.read_env(INFRA / ".env.example")[KEY], "")
-        self.assertEqual(smoke.read_env(INFRA / ".env.example")[
-            horus_install.AGENT_PASSWORD_KEY], "")
+        self.assertEqual(
+            smoke.read_env(INFRA / ".env.example")[horus_install.AGENT_PASSWORD_KEY], ""
+        )
 
     def test_the_built_in_bootstrap_generates_it(self):
         shutil.copy(INFRA / ".env.example", self.infra / ".env.example")
@@ -365,8 +412,13 @@ class TheTemplateShipsNoInitialPasswords(InfraCase):
     def test_init_env_generates_it(self):
         for name in (".env.example", "init-env.sh"):
             shutil.copy(INFRA / name, self.infra / name)
-        result = subprocess.run([shutil.which("bash"), "init-env.sh", "--quiet"],
-                                cwd=self.infra, capture_output=True, text=True, timeout=60)
+        result = subprocess.run(
+            [shutil.which("bash"), "init-env.sh", "--quiet"],
+            cwd=self.infra,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertGenerated(self.env_value(KEY))
         self.assertGenerated(self.env_value(horus_install.AGENT_PASSWORD_KEY))

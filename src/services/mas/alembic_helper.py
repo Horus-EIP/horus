@@ -17,9 +17,7 @@ def run_command(cmd, description=""):
         print("─" * 70)
 
     try:
-        result = subprocess.run(
-            cmd, shell=False, cwd="db", capture_output=False, text=True
-        )
+        result = subprocess.run(cmd, shell=False, cwd="db", capture_output=False, text=True)
         return result.returncode == 0
     except Exception as e:
         print(f"❌ Error: {e}")
@@ -57,7 +55,7 @@ Run from: src/services/mas/
     command = sys.argv[1].lower()
 
     if command == "status":
-        run_command(["alembic",  "current"], "Current Migration Status")
+        run_command(["alembic", "current"], "Current Migration Status")
 
     elif command == "history":
         run_command(["alembic", "history"], "Migration History")
@@ -74,9 +72,7 @@ Run from: src/services/mas/
     elif command == "create":
         if len(sys.argv) < 3:
             print("Usage: python alembic_helper.py create <description>")
-            print(
-                'Example: python alembic_helper.py create "Add email column to users"'
-            )
+            print('Example: python alembic_helper.py create "Add email column to users"')
             sys.exit(1)
         description = " ".join(sys.argv[2:])
         cmd = ["alembic", "revision", "--autogenerate", "-m", description]

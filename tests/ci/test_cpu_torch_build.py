@@ -47,15 +47,21 @@ CPU_REQUIREMENT_FILES = (
 )
 GPU_REQUIREMENT_FILES = tuple(context / GPU_REQUIREMENTS for context in TORCH_SERVICES.values())
 TEST_REQUIREMENTS = "requirements-test.txt"
-REQUIREMENT_FILES = tuple(sorted(path for path in SERVICES.glob("*/requirements*.txt")
-                                 if path.name != TEST_REQUIREMENTS))
+REQUIREMENT_FILES = tuple(
+    sorted(path for path in SERVICES.glob("*/requirements*.txt") if path.name != TEST_REQUIREMENTS)
+)
 TEST_TOOLS = {"pytest", "pytest-cov", "pytest-asyncio", "pytest-html", "coverage", "fakeredis"}
 LOCK_ENTRY = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)(?:==(\S+)|\s+@\s+(\S+))")
 EXACT_PIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(?:\[[^\]]*\])?==(\S+)")
 
 NEEDS_TORCH = {
-    "torch", "sentence-transformers", "transformers", "accelerate", "bitsandbytes",
-    "en-core-web-trf", "spacy-curated-transformers",
+    "torch",
+    "sentence-transformers",
+    "transformers",
+    "accelerate",
+    "bitsandbytes",
+    "en-core-web-trf",
+    "spacy-curated-transformers",
 }
 
 FASTEMBED_SERVICES = ("mas", "knowledge_store")
@@ -69,8 +75,14 @@ TEST_JOBS = {
 EXACT_PUBLIC_TORCH_PIN = re.compile(r"torch==\d+(?:\.\d+)*")
 
 REINSTALLING_PIP_OPTIONS = {
-    "-U", "--upgrade", "--force-reinstall", "-I", "--ignore-installed",
-    "-i", "--index-url", "--extra-index-url",
+    "-U",
+    "--upgrade",
+    "--force-reinstall",
+    "-I",
+    "--ignore-installed",
+    "-i",
+    "--index-url",
+    "--extra-index-url",
 }
 
 REQUIREMENTS_CHOICE = re.compile(
@@ -131,8 +143,11 @@ def lock_entries(path: Path) -> dict[str, dict]:
 
 
 def torch_requirements(path: Path) -> list[str]:
-    return [line.replace(" ", "") for line in requirement_lines(path)
-            if not line.startswith("-") and project_name(line) == "torch"]
+    return [
+        line.replace(" ", "")
+        for line in requirement_lines(path)
+        if not line.startswith("-") and project_name(line) == "torch"
+    ]
 
 
 def instructions(dockerfile: Path) -> list[tuple[int, str, str]]:
@@ -151,8 +166,11 @@ def instructions(dockerfile: Path) -> list[tuple[int, str, str]]:
 
 
 def pip_installs(steps: list[tuple[int, str, str]]) -> list[tuple[int, int, str]]:
-    return [(index, stage, rest) for index, (stage, keyword, rest) in enumerate(steps)
-            if keyword == "RUN" and "pip install" in rest]
+    return [
+        (index, stage, rest)
+        for index, (stage, keyword, rest) in enumerate(steps)
+        if keyword == "RUN" and "pip install" in rest
+    ]
 
 
 def requirements_install(steps) -> tuple[int, int, str]:
@@ -216,7 +234,9 @@ def load_yaml(path: Path) -> dict:
     return yaml.load(path.read_text(encoding="utf-8"), Loader=loader)
 
 
-def run_check(packages: str, requirements: str | None = "fastapi\ntorch==2.14.1\n") -> tuple[int, str]:
+def run_check(
+    packages: str, requirements: str | None = "fastapi\ntorch==2.14.1\n"
+) -> tuple[int, str]:
     with tempfile.TemporaryDirectory() as tmp:
         listing = Path(tmp) / "packages.txt"
         listing.write_text(packages, encoding="utf-8")
@@ -250,12 +270,15 @@ class RequirementSets(unittest.TestCase):
             with self.subTest(str(path.relative_to(REPO))):
                 pins = torch_requirements(path)
                 self.assertEqual(len(pins), 1, pins)
-                self.assertIsNotNone(EXACT_PUBLIC_TORCH_PIN.fullmatch(pins[0]),
-                                     f"{pins[0]} is not torch==X, which both indexes serve")
+                self.assertIsNotNone(
+                    EXACT_PUBLIC_TORCH_PIN.fullmatch(pins[0]),
+                    f"{pins[0]} is not torch==X, which both indexes serve",
+                )
 
     def test_all_services_pin_the_same_torch_version(self):
-        pins = {str(path.relative_to(REPO)): torch_requirements(path)
-                for path in GPU_REQUIREMENT_FILES}
+        pins = {
+            str(path.relative_to(REPO)): torch_requirements(path) for path in GPU_REQUIREMENT_FILES
+        }
         self.assertEqual(len({tuple(found) for found in pins.values()}), 1, pins)
 
     def test_a_gpu_image_installs_everything_a_cpu_image_does(self):
@@ -274,8 +297,11 @@ class RequirementSets(unittest.TestCase):
     def test_the_embedders_run_on_a_pinned_fastembed(self):
         for name in FASTEMBED_SERVICES:
             with self.subTest(name):
-                pins = [line for line in requirement_lines(TORCH_SERVICES[name] / CPU_REQUIREMENTS)
-                        if project_name(line) == "fastembed"]
+                pins = [
+                    line
+                    for line in requirement_lines(TORCH_SERVICES[name] / CPU_REQUIREMENTS)
+                    if project_name(line) == "fastembed"
+                ]
                 self.assertEqual(len(pins), 1, pins)
                 self.assertRegex(pins[0], r"^fastembed==\d+(?:\.\d+)*$")
 
@@ -328,20 +354,29 @@ class ProductionImages(unittest.TestCase):
         for context in TORCH_SERVICES.values():
             with self.subTest(context.name):
                 self.assertTrue(projects(context / TEST_REQUIREMENTS) & TEST_TOOLS)
-                self.assertNotIn(TEST_REQUIREMENTS, (context / "Dockerfile").read_text(encoding="utf-8"))
+                self.assertNotIn(
+                    TEST_REQUIREMENTS, (context / "Dockerfile").read_text(encoding="utf-8")
+                )
 
     def test_no_compiler_is_installed_in_a_final_stage(self):
         for name, context in TORCH_SERVICES.items():
             steps = instructions(context / "Dockerfile")
             final = max(stage for stage, _, _ in steps)
-            installs = " ".join(rest for stage, keyword, rest in steps if stage == final and keyword == "RUN")
+            installs = " ".join(
+                rest for stage, keyword, rest in steps if stage == final and keyword == "RUN"
+            )
             with self.subTest(name):
-                self.assertIsNone(re.search(r"\b(build-essential|gcc|g\+\+|python3-dev|make)\b", installs), installs)
+                self.assertIsNone(
+                    re.search(r"\b(build-essential|gcc|g\+\+|python3-dev|make)\b", installs),
+                    installs,
+                )
 
     def test_pip_resolves_the_locks_with_its_default_resolver(self):
         for name, context in TORCH_SERVICES.items():
             with self.subTest(name):
-                self.assertNotIn("legacy-resolver", (context / "Dockerfile").read_text(encoding="utf-8"))
+                self.assertNotIn(
+                    "legacy-resolver", (context / "Dockerfile").read_text(encoding="utf-8")
+                )
 
 
 @needs_yaml
@@ -389,10 +424,14 @@ class CiTestJobs(unittest.TestCase):
                 check = self.runs(job)[self.step_running(job, "scripts/ci/check-cpu-image.py")]
                 self.assertIn("pip list --format=freeze", check)
                 self.assertIn(f"--requirements {requirements}", check)
-                self.assertLess(self.step_running(job, "scripts/ci/check-cpu-image.py"),
-                                self.step_running(job, "pytest -c"))
-                self.assertGreater(self.step_running(job, "scripts/ci/check-cpu-image.py"),
-                                   self.step_running(job, f"-r {requirements}"))
+                self.assertLess(
+                    self.step_running(job, "scripts/ci/check-cpu-image.py"),
+                    self.step_running(job, "pytest -c"),
+                )
+                self.assertGreater(
+                    self.step_running(job, "scripts/ci/check-cpu-image.py"),
+                    self.step_running(job, f"-r {requirements}"),
+                )
 
     def test_the_jobs_without_torch_check_against_a_set_that_pins_none(self):
         for job, (requirements, _, index) in TEST_JOBS.items():
@@ -418,8 +457,11 @@ class DockerfileRequirementSets(unittest.TestCase):
     def test_both_requirement_sets_are_copied_into_the_build(self):
         for name, context in TORCH_SERVICES.items():
             with self.subTest(name):
-                copies = [rest for _, keyword, rest in instructions(context / "Dockerfile")
-                          if keyword == "COPY" and GPU_LOCK in rest]
+                copies = [
+                    rest
+                    for _, keyword, rest in instructions(context / "Dockerfile")
+                    if keyword == "COPY" and GPU_LOCK in rest
+                ]
                 self.assertEqual(len(copies), 1, copies)
                 self.assertIn(CPU_LOCK, copies[0].split())
 
@@ -559,8 +601,9 @@ class ComposeCpuOverlay(unittest.TestCase):
     def test_the_cpu_overlay_builds_every_torch_service_from_the_cpu_index(self):
         for name in TORCH_SERVICES:
             with self.subTest(name):
-                self.assertEqual(build_args(self.overlay[name]).get("TORCH_INDEX_URL"),
-                                 CPU_TORCH_INDEX)
+                self.assertEqual(
+                    build_args(self.overlay[name]).get("TORCH_INDEX_URL"), CPU_TORCH_INDEX
+                )
 
     def test_the_overlay_only_adds_build_args_to_the_base_build(self):
         for name in TORCH_SERVICES:
@@ -596,7 +639,9 @@ class ComposeCpuOverlay(unittest.TestCase):
             cpu = profiles.is_cpu_profile(profile)
             for name, context in TORCH_SERVICES.items():
                 with self.subTest(f"{profile} {name}"):
-                    chosen = chosen_requirements(context, self.resolved_index(profile, name, context))
+                    chosen = chosen_requirements(
+                        context, self.resolved_index(profile, name, context)
+                    )
                     self.assertEqual(chosen, CPU_LOCK if cpu else GPU_LOCK)
                     self.assertEqual(bool(torch_requirements(context / chosen)), not cpu)
 
@@ -632,7 +677,9 @@ class CiCpuImageJob(unittest.TestCase):
     def test_the_requirements_the_job_checks_against_pin_no_torch(self):
         for entry in self.matrix:
             with self.subTest(entry["service"]):
-                self.assertEqual(torch_requirements(SERVICES / entry["context"] / CPU_REQUIREMENTS), [])
+                self.assertEqual(
+                    torch_requirements(SERVICES / entry["context"] / CPU_REQUIREMENTS), []
+                )
 
     def test_the_job_waits_for_the_wiring_checks(self):
         self.assertIn("cpu-build-wiring", self.job.get("needs", []))

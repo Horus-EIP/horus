@@ -113,9 +113,7 @@ async def check_task_timeout(test_mode=False):
                     try:
                         await _report_timeout(task, _timeout_notice(limit_s), db)
                     except Exception:
-                        logger.exception(
-                            "Failed to report the timeout of task %s", task.id
-                        )
+                        logger.exception("Failed to report the timeout of task %s", task.id)
 
                 await asyncio.sleep(5 if not test_mode else 1)
             finally:

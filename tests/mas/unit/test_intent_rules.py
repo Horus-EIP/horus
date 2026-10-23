@@ -176,7 +176,9 @@ class TestTrivialClauses:
     def test_full_width_input_is_folded_before_it_is_returned(self):
         assert trivial_clauses("２＋２") == [TrivialClause(TrivialIntent.ARITHMETIC, "2+2")]
 
-    @pytest.mark.parametrize("text", ["What is the capital of Peru?", "hello, who is the CFO?", "", None])
+    @pytest.mark.parametrize(
+        "text", ["What is the capital of Peru?", "hello, who is the CFO?", "", None]
+    )
     def test_a_request_that_is_not_trivial_has_no_clauses(self, text):
         assert trivial_clauses(text) == []
 
@@ -258,7 +260,9 @@ def test_repeated_small_talk_within_the_length_limit_is_still_small_talk():
         pytest.param("2 equals " * 6_000 + "a", id="equals-words"),
         pytest.param("1 " * 25_000 + "a", id="numbers-without-operator"),
         pytest.param("1+" + "-" * 50_000 + "a", id="signs"),
-        pytest.param("hello " + "=" * 50_000 + " what is the capital of Peru", id="greeting-then-question"),
+        pytest.param(
+            "hello " + "=" * 50_000 + " what is the capital of Peru", id="greeting-then-question"
+        ),
     ],
 )
 def test_long_pathological_input_is_classified_quickly_even_without_the_length_limit(

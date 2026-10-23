@@ -6,7 +6,9 @@ from pathlib import Path
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-RELEASE_VERSION = (Path(__file__).resolve().parents[3] / "VERSION").read_text(encoding="utf-8").strip()
+RELEASE_VERSION = (
+    (Path(__file__).resolve().parents[3] / "VERSION").read_text(encoding="utf-8").strip()
+)
 
 
 class TestMainApp:
@@ -50,7 +52,8 @@ class TestMainApp:
         monkeypatch.delenv("HORUS_SPACY")
         monkeypatch.delenv("OTEL_SDK_DISABLED")
         assert main.mock_ai_warning() == (
-            "Mock AI mode: the answers built on this knowledge store are simulated by llm-mock")
+            "Mock AI mode: the answers built on this knowledge store are simulated by llm-mock"
+        )
 
     def test_openapi_reports_the_release_version(self):
         from app.main import app  # noqa: PLC0415

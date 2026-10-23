@@ -110,7 +110,9 @@ def test_every_call_names_its_purpose_in_a_header(llama_server_env):
         llm_setup.ask_llm_with_json_schema(messages, "task_route", {"type": "object"}, 32)
     purposes = [request.get_header("X-horus-purpose") for request in server.requests]
     assert purposes == ["plan", llm_setup.UNLABELLED_CALL, "task_route"]
-    assert all(request.get_header("Content-type") == "application/json" for request in server.requests)
+    assert all(
+        request.get_header("Content-type") == "application/json" for request in server.requests
+    )
 
 
 def test_a_long_prompt_leaves_the_answer_inside_the_llama_server_context(llama_server_env):
@@ -189,7 +191,10 @@ def test_the_constrained_router_call_sends_a_json_schema_and_a_32_token_budget(l
 def test_the_constrained_router_call_needs_the_server_backend(monkeypatch):
     monkeypatch.setenv("LLM_BACKEND", "transformers")
     server = FakeUrlopen(llama_server_completion(ROUTING_REPLY))
-    with patch("urllib.request.urlopen", server), pytest.raises(RuntimeError, match="LLM_BACKEND=vllm"):
+    with (
+        patch("urllib.request.urlopen", server),
+        pytest.raises(RuntimeError, match="LLM_BACKEND=vllm"),
+    ):
         llm_setup.ask_llm_with_json_schema([], "task_route", ROUTE_SCHEMA, 32)
     assert server.requests == []
 

@@ -34,7 +34,10 @@ def _offline_model_tokenizer():
         from tokenizers import Tokenizer
     except ImportError:
         return None
-    candidates = [LOCAL_MODEL_DIR / "tokenizer.json", *sorted(APP_DIR.glob("models/*/tokenizer.json"))]
+    candidates = [
+        LOCAL_MODEL_DIR / "tokenizer.json",
+        *sorted(APP_DIR.glob("models/*/tokenizer.json")),
+    ]
     for path in candidates:
         if path.is_file() and _is_the_agent_model(path.parent):
             return Tokenizer.from_file(str(path))
@@ -64,7 +67,9 @@ class TestSystemPromptBudget:
     def test_the_estimate_alone_keeps_every_system_prompt_under_the_budget(self, profile):
         assert estimate_tokens(profile.system_prompt) < SYSTEM_PROMPT_TOKEN_BUDGET
 
-    @pytest.mark.skipif(MODEL_TOKENIZER is None, reason="the model tokenizer is not on this machine")
+    @pytest.mark.skipif(
+        MODEL_TOKENIZER is None, reason="the model tokenizer is not on this machine"
+    )
     def test_the_estimate_never_counts_fewer_tokens_than_the_model_tokenizer(self):
         fixed_prompts = [profile.system_prompt for profile in DEFAULT_PROFILES]
         fixed_prompts += [answer_prompt("q", "", labels)[0] for labels in (["S1"], [])]
@@ -118,9 +123,7 @@ class TestIdentityTools:
 
     def test_an_unknown_tool_is_refused(self):
         with pytest.raises(ValueError, match="unknown tools"):
-            AgentProfile(
-                name="Odd", type="general", skills=[], description="", tools=("teleport",)
-            )
+            AgentProfile(name="Odd", type="general", skills=[], description="", tools=("teleport",))
 
     def test_a_tool_listed_twice_is_refused(self):
         with pytest.raises(ValueError, match=r"\['calc'\] more than once"):

@@ -16,6 +16,7 @@ from common import Log  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent.parent
 
+
 class InstallerVersion(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -47,6 +48,7 @@ class InstallerVersion(unittest.TestCase):
         with contextlib.redirect_stdout(out), self.assertRaises(SystemExit):
             horus_install.build_parser().parse_args(["--version"])
         self.assertIn(common.VERSION, out.getvalue())
+
 
 class InstallWritesTheVersion(unittest.TestCase):
     def setUp(self) -> None:
@@ -83,6 +85,7 @@ class InstallWritesTheVersion(unittest.TestCase):
 
     def test_a_full_install_writes_the_release_version_into_the_env(self):
         self.assertEqual(self.written_env()["HORUS_VERSION"], common.VERSION)
+
 
 if __name__ == "__main__":
     unittest.main()

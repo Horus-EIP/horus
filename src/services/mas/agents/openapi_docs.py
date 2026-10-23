@@ -52,9 +52,7 @@ REGISTER_AGENT_RESPONSES = {
                 "examples": {
                     "forbidden": {
                         "summary": "User does not have admin permissions",
-                        "value": {
-                            "detail": "Admin rights required to perform this operation"
-                        },
+                        "value": {"detail": "Admin rights required to perform this operation"},
                     },
                 }
             }
@@ -67,9 +65,7 @@ REGISTER_AGENT_RESPONSES = {
                 "examples": {
                     "name_conflict": {
                         "summary": "Name already taken",
-                        "value": {
-                            "detail": "An agent already has the name 'DocumentAnalyzer'"
-                        },
+                        "value": {"detail": "An agent already has the name 'DocumentAnalyzer'"},
                     },
                 }
             }
@@ -86,15 +82,11 @@ REGISTER_AGENT_RESPONSES = {
                     },
                     "rabbitmq_error": {
                         "summary": "Failed to create RabbitMQ queue",
-                        "value": {
-                            "detail": "Failed to create RabbitMQ queue: Connection refused"
-                        },
+                        "value": {"detail": "Failed to create RabbitMQ queue: Connection refused"},
                     },
                     "database_error": {
                         "summary": "Database transaction error",
-                        "value": {
-                            "detail": "Failed to create agent: database error"
-                        },
+                        "value": {"detail": "Failed to create agent: database error"},
                     },
                 }
             }
@@ -240,9 +232,7 @@ REGENERATE_KEY_RESPONSES = {
                 "examples": {
                     "not_found": {
                         "summary": "Agent ID does not exist",
-                        "value": {
-                            "detail": "Agent 00000000-0000-0000-0000-000000000000 not found"
-                        },
+                        "value": {"detail": "Agent 00000000-0000-0000-0000-000000000000 not found"},
                     },
                 }
             }
@@ -295,9 +285,7 @@ UNREGISTER_AGENT_RESPONSES = {
                 "examples": {
                     "forbidden": {
                         "summary": "User does not have admin privileges",
-                        "value": {
-                            "detail": "Admin rights required to perform this operation"
-                        },
+                        "value": {"detail": "Admin rights required to perform this operation"},
                     },
                 }
             }
@@ -331,9 +319,7 @@ UNREGISTER_AGENT_RESPONSES = {
                 "examples": {
                     "database_error": {
                         "summary": "Database transaction error",
-                        "value": {
-                            "detail": "Error: could not delete agent from database"
-                        },
+                        "value": {"detail": "Error: could not delete agent from database"},
                     },
                 }
             }
@@ -423,9 +409,7 @@ AGENT_DETAILS_RESPONSES = {
                     },
                     "invalid_id_format": {
                         "summary": "Invalid UUID format",
-                        "value": {
-                            "message": "Agent not found for the id: invalid-id-format"
-                        },
+                        "value": {"message": "Agent not found for the id: invalid-id-format"},
                     },
                 }
             }

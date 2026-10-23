@@ -259,9 +259,7 @@ def test_get_agent_id_returns_none_when_not_found(db_session: Session):
 
 def test_is_agent_recently_alive_with_recent_heartbeat(db_session: Session):
     """Test that recently heartbeat agent is considered alive."""
-    agent_id, _ = _create_agent(
-        "RecentAgent", ["test"], "Test", db_session, AgentTypes.GENERAL
-    )
+    agent_id, _ = _create_agent("RecentAgent", ["test"], "Test", db_session, AgentTypes.GENERAL)
     agent = db_session.query(Agents).filter(Agents.id == agent_id).first()
 
     result = _is_agent_recently_alive(agent, max_age_seconds=90)
@@ -271,9 +269,7 @@ def test_is_agent_recently_alive_with_recent_heartbeat(db_session: Session):
 
 def test_is_agent_recently_alive_with_old_heartbeat(db_session: Session):
     """Test that old heartbeat agent is considered dead."""
-    agent_id, _ = _create_agent(
-        "OldAgent", ["test"], "Test", db_session, AgentTypes.GENERAL
-    )
+    agent_id, _ = _create_agent("OldAgent", ["test"], "Test", db_session, AgentTypes.GENERAL)
     agent = db_session.query(Agents).filter(Agents.id == agent_id).first()
 
     # Set heartbeat to old time
@@ -317,9 +313,7 @@ def test_is_agent_recently_alive_returns_false_if_invalid_heartbeat():
 def test_get_available_agents_returns_recently_alive(db_session: Session):
     """Test that get_available_agents returns only recently alive agents."""
     # Create one active agent
-    agent1_id, _ = _create_agent(
-        "Active", ["test"], "Active agent", db_session, AgentTypes.GENERAL
-    )
+    agent1_id, _ = _create_agent("Active", ["test"], "Active agent", db_session, AgentTypes.GENERAL)
 
     # Create one inactive agent (by not updating heartbeat)
     agent2_id, _ = _create_agent(

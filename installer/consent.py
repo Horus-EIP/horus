@@ -97,11 +97,12 @@ CHAR_NAMES = {
     "\r": "a carriage return",
 }
 
-class PathRejected(Exception):
 
+class PathRejected(Exception):
     def __init__(self, reason: str):
         super().__init__(reason)
         self.reason = reason
+
 
 def strip_device_prefix(path: Path) -> Path:
     if os.name != "nt":
@@ -110,11 +111,12 @@ def strip_device_prefix(path: Path) -> Path:
     for prefix in DEVICE_PREFIXES:
         if not text.startswith(prefix):
             continue
-        rest = text[len(prefix):]
-        if rest[:len(_UNC_MARKER)].upper() == _UNC_MARKER:
-            return Path("\\\\" + rest[len(_UNC_MARKER):])
+        rest = text[len(prefix) :]
+        if rest[: len(_UNC_MARKER)].upper() == _UNC_MARKER:
+            return Path("\\\\" + rest[len(_UNC_MARKER) :])
         return Path(rest)
     return path
+
 
 def _is_mount_point(path: Path) -> bool:
     try:
@@ -122,11 +124,13 @@ def _is_mount_point(path: Path) -> bool:
     except OSError:
         return False
 
+
 def _immediate_subdirs(path: Path) -> list[Path]:
     try:
         return [child for child in path.iterdir() if child.is_dir()]
     except OSError:
         return []
+
 
 def _windows_dir_via_mount(resolved: Path) -> str | None:
     parts = resolved.parts
@@ -144,11 +148,13 @@ def _windows_dir_via_mount(resolved: Path) -> str | None:
         return str(Path(*parts[: depth + 1]))
     return None
 
+
 def _home() -> Path:
     try:
         return Path.home().resolve()
     except (RuntimeError, OSError):  # pragma: no cover - no HOME set anywhere
         return Path(os.path.expanduser("~")).absolute()
+
 
 def _drive_roots() -> list[Path]:
     roots: list[Path] = []
@@ -164,6 +170,7 @@ def _drive_roots() -> list[Path]:
         if p not in roots:
             roots.append(p)
     return roots
+
 
 def forbidden_roots() -> list[tuple[Path, str]]:
     raw: list[tuple[Path, str]] = []
@@ -199,36 +206,45 @@ def forbidden_roots() -> list[tuple[Path, str]]:
         out.append((resolved, kind))
     return out
 
+
 def system_location_reason(resolved: Path) -> str | None:
     if resolved.parent == resolved:
         return "that is a whole drive / filesystem root"
 
     if os.name != "nt" and _is_mount_point(resolved):
-        return ("that is the top of a mounted filesystem - a whole device by "
-                "another name; pick a folder inside it, or choose option 3 if "
-                "you really do mean the whole device")
+        return (
+            "that is the top of a mounted filesystem - a whole device by "
+            "another name; pick a folder inside it, or choose option 3 if "
+            "you really do mean the whole device"
+        )
 
     if os.name != "nt":
         for child in _immediate_subdirs(resolved):
             if _is_mount_point(child):
-                return (f"that folder contains {child}, the top of a mounted "
-                        "filesystem - granting it would hand over that whole "
-                        "device; pick a folder inside it, or choose option 3 "
-                        "if you really do mean a whole device")
+                return (
+                    f"that folder contains {child}, the top of a mounted "
+                    "filesystem - granting it would hand over that whole "
+                    "device; pick a folder inside it, or choose option 3 "
+                    "if you really do mean a whole device"
+                )
 
         windows_dir = _windows_dir_via_mount(resolved)
         if windows_dir:
-            return (f"{windows_dir} is a Windows system location reached "
-                    "through a mounted drive - the same folder your Windows "
-                    "side would refuse; pick a folder inside your own "
-                    "profile instead")
+            return (
+                f"{windows_dir} is a Windows system location reached "
+                "through a mounted drive - the same folder your Windows "
+                "side would refuse; pick a folder inside your own "
+                "profile instead"
+            )
 
     home = _home()
     inside_own_home = home in resolved.parents
 
     if resolved == home:
-        return ("that is your entire home directory - a folder inside it "
-                "is fine, the whole thing is not")
+        return (
+            "that is your entire home directory - a folder inside it "
+            "is fine, the whole thing is not"
+        )
 
     table = forbidden_roots()
 
@@ -245,6 +261,7 @@ def system_location_reason(resolved: Path) -> str | None:
             return f"it is inside the system location {root}"
     return None
 
+
 def validate_folder(raw: str) -> Path:
     text = raw.strip()
     if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
@@ -255,7 +272,9 @@ def validate_folder(raw: str) -> Path:
     candidate = Path(os.path.expanduser(text))
     if not candidate.is_absolute():
         example = "C:\\Users\\you\\Documents\\reports" if os.name == "nt" else "/home/you/reports"
-        raise PathRejected(f"that is not an absolute path (it must start from the top, e.g. {example})")
+        raise PathRejected(
+            f"that is not an absolute path (it must start from the top, e.g. {example})"
+        )
     if not candidate.exists():
         raise PathRejected("there is nothing at that path (check the spelling)")
     if not candidate.is_dir():
@@ -304,6 +323,7 @@ def validate_folder(raw: str) -> Path:
             )
     return resolved
 
+
 def add_folder(accepted: list[Path], candidate: Path) -> None:
     for existing in accepted:
         if existing == candidate:
@@ -317,16 +337,20 @@ def add_folder(accepted: list[Path], candidate: Path) -> None:
             )
     accepted.append(candidate)
 
+
 def to_compose_path(path: Path) -> str:
     return str(path).replace("\\", "/")
+
 
 def whole_device_root() -> Path:
     if os.name == "nt":
         return Path(_home().anchor or os.environ.get("SystemDrive", "C:") + "\\")
     return Path("/")
 
+
 def _now_iso() -> str:
     return datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+
 
 def _choice(mode: str, paths: list[Path], corpus_dir: str) -> dict:
     return {
@@ -336,8 +360,10 @@ def _choice(mode: str, paths: list[Path], corpus_dir: str) -> dict:
         "accepted_at": _now_iso(),
     }
 
+
 def demo_choice(repo: Path) -> dict:
     return _choice(CONSENT_DEMO, [repo / "demo_assets"], DEMO_CORPUS_DIR)
+
 
 def describe(choice: dict) -> str:
     mode = choice.get("mode")
@@ -361,6 +387,7 @@ def describe(choice: dict) -> str:
         f"  accepted at  {when}"
     )
 
+
 _MENU = """
   1) Bundled demo corpus only            (default, recommended)
      Five short example documents that ship with Horus. Nothing outside
@@ -374,11 +401,13 @@ _MENU = """
      Everything readable on this machine. Requires a typed confirmation.
 """
 
+
 def _stdin_is_interactive() -> bool:
     try:
         return bool(sys.stdin) and sys.stdin.isatty()
     except (ValueError, AttributeError):
         return False
+
 
 def _prompt(log: Log, input_fn, text: str) -> str:
     try:
@@ -395,6 +424,7 @@ def _prompt(log: Log, input_fn, text: str) -> str:
         ) from None
     log.debug(f"consent prompt {text.strip()!r} -> {answer.strip()!r}")
     return answer
+
 
 def _ask_folder(log: Log, input_fn) -> list[Path]:
     log.say("")
@@ -441,6 +471,7 @@ def _ask_folder(log: Log, input_fn) -> list[Path]:
             return [accepted[int(text) - 1]]
         log.fail(f"Type a number between 1 and {len(accepted)}.")
 
+
 def _ask_whole_device(log: Log, input_fn) -> bool:
     root = whole_device_root()
     log.say("")
@@ -478,6 +509,7 @@ def _ask_whole_device(log: Log, input_fn) -> bool:
     log.ok("Phrase did not match. Whole-device access NOT granted.")
     return False
 
+
 def choose(
     log: Log,
     repo: Path,
@@ -502,11 +534,14 @@ def choose(
 
     if non_interactive or not interactive:
         if preselect == CONSENT_WHOLE_DEVICE:
-            log.warn("--consent=whole-device needs a person to type the confirmation "
-                     "phrase; there is no terminal here.")
+            log.warn(
+                "--consent=whole-device needs a person to type the confirmation "
+                "phrase; there is no terminal here."
+            )
         elif preselect == CONSENT_FOLDERS:
-            log.warn("--consent=folders needs a person to type a folder path; "
-                     "there is no terminal here.")
+            log.warn(
+                "--consent=folders needs a person to type a folder path; there is no terminal here."
+            )
         choice = demo_choice(repo)
         log.info(f"consent: non-interactive, defaulted to {CONSENT_DEMO}")
         log.ok("Data access: bundled demo corpus only (unattended run).")
@@ -526,7 +561,9 @@ def choose(
     )
 
     while True:
-        raw = _prompt(log, input_fn, f"  Choose 1, 2 or 3 [default {default_key}], or q to cancel: ")
+        raw = _prompt(
+            log, input_fn, f"  Choose 1, 2 or 3 [default {default_key}], or q to cancel: "
+        )
         answer = raw.strip().lower() or default_key
 
         if answer in ("q", "quit", "cancel"):
@@ -542,8 +579,10 @@ def choose(
             choice = demo_choice(repo)
             demo = repo / "demo_assets"
             if not demo.is_dir():
-                log.warn(f"Expected demo documents at {demo} but that folder is missing; "
-                         "chat will work, document questions will not.")
+                log.warn(
+                    f"Expected demo documents at {demo} but that folder is missing; "
+                    "chat will work, document questions will not."
+                )
             log.ok("Data access: bundled demo corpus only.")
             log.info(f"consent: {CONSENT_DEMO} at {choice['accepted_at']}")
             return choice
@@ -563,8 +602,10 @@ def choose(
             if _ask_whole_device(log, input_fn):
                 root = whole_device_root()
                 choice = _choice(CONSENT_WHOLE_DEVICE, [root], to_compose_path(root))
-                log.info(f"consent: {CONSENT_WHOLE_DEVICE} -> {root} at {choice['accepted_at']} "
-                         f"(phrase typed exactly)")
+                log.info(
+                    f"consent: {CONSENT_WHOLE_DEVICE} -> {root} at {choice['accepted_at']} "
+                    f"(phrase typed exactly)"
+                )
                 return choice
             log.say("")
             continue

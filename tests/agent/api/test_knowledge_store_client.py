@@ -15,9 +15,14 @@ async def test_query_returns_documents(mock_httpx):
     from ai_agents.knowledge_store_client import KnowledgeStoreClient  # noqa: PLC0415
 
     response = MagicMock()
-    response.json.return_value = {"documents": [["chunk-a"]], "metadatas": [[{"source": "doc.pdf"}]]}
+    response.json.return_value = {
+        "documents": [["chunk-a"]],
+        "metadatas": [[{"source": "doc.pdf"}]],
+    }
     response.raise_for_status = lambda: None
-    mock_httpx.AsyncClient.return_value.__aenter__.return_value.get = AsyncMock(return_value=response)
+    mock_httpx.AsyncClient.return_value.__aenter__.return_value.get = AsyncMock(
+        return_value=response
+    )
 
     client = KnowledgeStoreClient(base_url="http://fake")
     result = await client.query("invoice fraud", n_results=3)
@@ -31,7 +36,9 @@ async def test_query_handles_empty_result(mock_httpx):
     response = MagicMock()
     response.json.return_value = {"documents": [[]], "metadatas": [[]]}
     response.raise_for_status = lambda: None
-    mock_httpx.AsyncClient.return_value.__aenter__.return_value.get = AsyncMock(return_value=response)
+    mock_httpx.AsyncClient.return_value.__aenter__.return_value.get = AsyncMock(
+        return_value=response
+    )
 
     client = KnowledgeStoreClient(base_url="http://fake")
     result = await client.query("anything", n_results=3)

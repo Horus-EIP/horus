@@ -45,7 +45,12 @@ def eval_report(
             "routing_decision": {"decisions": 1, "methods": {method: 1}, "seconds": seconds},
             "retrieval_steps": 1,
             "retrieved_sources": [["4_Expense_Policy.md"]],
-            "llm": {"prompt_s": total / 2, "prompt_tokens": 1000, "generation_s": total / 4, "generated_tokens": 100},
+            "llm": {
+                "prompt_s": total / 2,
+                "prompt_tokens": 1000,
+                "generation_s": total / 4,
+                "generated_tokens": 100,
+            },
         }
         record = question_record(item, outcome)
         if reviewed:
@@ -60,7 +65,14 @@ def eval_report(
         llama_cpp_build="b11382",
         llama_server={"settings": {"cache_type_k": kv, "cache_type_v": kv}},
         model={"file": Q4, "sha256": "3605803b982c" + "0" * 52},
-        machine={"reference": "cpu16", "cpu_model": "AMD Ryzen 5 5600U", "physical_cores": 6, "avx2": True, "ram": "16 GiB installed", "docker": {"mem_total_bytes": 15 * GIB}},
+        machine={
+            "reference": "cpu16",
+            "cpu_model": "AMD Ryzen 5 5600U",
+            "physical_cores": 6,
+            "avx2": True,
+            "ram": "16 GiB installed",
+            "docker": {"mem_total_bytes": 15 * GIB},
+        },
         resources={
             "samples": 40,
             "container_peak_mem_bytes": {"llm": 4 * GIB, "mas": GIB},
@@ -84,8 +96,17 @@ def bench_rows():
     for model in (Q4, Q5):
         for type_kv in ("f16", "q8_0"):
             for threads in (4, 8):
-                for prompt, generated, depth in ((512, 0, 0), (0, 128, 0), (512, 0, 4096), (0, 128, 4096)):
-                    speed = (100.0 if prompt else 10.0) * (threads / 4) * (0.9 if type_kv == "q8_0" else 1.0)
+                for prompt, generated, depth in (
+                    (512, 0, 0),
+                    (0, 128, 0),
+                    (512, 0, 4096),
+                    (0, 128, 4096),
+                ):
+                    speed = (
+                        (100.0 if prompt else 10.0)
+                        * (threads / 4)
+                        * (0.9 if type_kv == "q8_0" else 1.0)
+                    )
                     speed *= 0.8 if model == Q5 else 1.0
                     speed *= 0.5 if depth else 1.0
                     rows.append(
@@ -120,23 +141,54 @@ def table_row(markdown, label):
 
 class TestEndToEnd:
     def test_two_eval_runs_give_values_and_changes(self, tmp_path, make_item):
-        before = write(tmp_path, "eval-a.json", eval_report(make_item, [20.0, 40.0], label="before"))
+        before = write(
+            tmp_path, "eval-a.json", eval_report(make_item, [20.0, 40.0], label="before")
+        )
         after = write(tmp_path, "eval-b.json", eval_report(make_item, [10.0, 20.0], label="after"))
         markdown = compare_markdown([before], [after], BenchSelection())
         assert markdown.startswith("# Benchmark comparison")
-        assert table_row(markdown, "Total time, median")[2:] == ["30.0 s (n=2)", "15.0 s (n=2)", "-15.0 s (-50%)"]
-        assert table_row(markdown, "Total time, whole run")[2:] == ["60.0 s (n=2)", "30.0 s (n=2)", "-30.0 s (-50%)"]
-        assert table_row(markdown, "Time to first token, median")[2:] == ["7.50 s (n=2)", "3.75 s (n=2)", "-3.75 s (-50%)"]
-        assert table_row(markdown, "Submit to dispatch, median")[1:3] == ["task events, queue wait included", "250 ms (n=2)"]
-        assert table_row(markdown, "Routing decision, median")[1:3] == ["MAS /metrics, B-92 router", "1,206 ms (n=2)"]
+        assert table_row(markdown, "Total time, median")[2:] == [
+            "30.0 s (n=2)",
+            "15.0 s (n=2)",
+            "-15.0 s (-50%)",
+        ]
+        assert table_row(markdown, "Total time, whole run")[2:] == [
+            "60.0 s (n=2)",
+            "30.0 s (n=2)",
+            "-30.0 s (-50%)",
+        ]
+        assert table_row(markdown, "Time to first token, median")[2:] == [
+            "7.50 s (n=2)",
+            "3.75 s (n=2)",
+            "-3.75 s (-50%)",
+        ]
+        assert table_row(markdown, "Submit to dispatch, median")[1:3] == [
+            "task events, queue wait included",
+            "250 ms (n=2)",
+        ]
+        assert table_row(markdown, "Routing decision, median")[1:3] == [
+            "MAS /metrics, B-92 router",
+            "1,206 ms (n=2)",
+        ]
         assert table_row(markdown, "Routing decision without the LLM, p90")[2] == "12 ms (n=1)"
-        assert table_row(markdown, "Routed by the LLM fallback")[2:] == ["50.0% (n=2)", "50.0% (n=2)", "+0.0 pts"]
-        assert table_row(markdown, "Routing methods")[2:] == ["embedding 1, llm 1", "embedding 1, llm 1", "same"]
+        assert table_row(markdown, "Routed by the LLM fallback")[2:] == [
+            "50.0% (n=2)",
+            "50.0% (n=2)",
+            "+0.0 pts",
+        ]
+        assert table_row(markdown, "Routing methods")[2:] == [
+            "embedding 1, llm 1",
+            "embedding 1, llm 1",
+            "same",
+        ]
         assert table_row(markdown, "Peak RAM of the stack (ADR-006 P)")[1:3] == [
             "docker stats total + model pages left out, in one sample",
             "11.50 GiB",
         ]
-        assert table_row(markdown, "Peak RAM, all containers at once")[1:3] == ["docker stats samples", "9.00 GiB"]
+        assert table_row(markdown, "Peak RAM, all containers at once")[1:3] == [
+            "docker stats samples",
+            "9.00 GiB",
+        ]
         assert table_row(markdown, "Model pages docker stats left out")[1:3] == [
             "llama-server RssFile, memory.stat, in the sample of P",
             "2.50 GiB",
@@ -148,7 +200,11 @@ class TestEndToEnd:
         assert table_row(markdown, "Peak swap used")[2] == "0.50 GiB"
         assert table_row(markdown, "Swap growth during the questions")[2] == "0.25 GiB"
         assert "memory.peak" not in markdown.split("## Section 10 metrics")[0]
-        assert table_row(markdown, "Answer correct, two reviewers")[2:] == ["50.0% (n=2)", "50.0% (n=2)", "+0.0 pts"]
+        assert table_row(markdown, "Answer correct, two reviewers")[2:] == [
+            "50.0% (n=2)",
+            "50.0% (n=2)",
+            "+0.0 pts",
+        ]
         assert table_row(markdown, "Generation speed in the stack")[2] == "13.3 t/s (n=2)"
         assert table_row(markdown, "Install time without the model")[2:4] == ["—", "—"]
         assert table_row(markdown, "Docker memory")[1:] == ["15.0 GiB", "15.0 GiB"]
@@ -158,7 +214,11 @@ class TestEndToEnd:
         before = write(tmp_path, "f16.json", eval_report(make_item, [10.0], kv="f16"))
         after = write(tmp_path, "q8.json", eval_report(make_item, [10.0], kv="q8_0"))
         markdown = compare_markdown([before], [after], BenchSelection())
-        assert table_row(markdown, "KV cache K/V (q8_0 quality check)")[2:] == ["f16/f16", "q8_0/q8_0", "changed"]
+        assert table_row(markdown, "KV cache K/V (q8_0 quality check)")[2:] == [
+            "f16/f16",
+            "q8_0/q8_0",
+            "changed",
+        ]
         assert "The KV cache differs (f16/f16 before, q8_0/q8_0 after)" in markdown
 
     def test_a_peak_missed_between_samples_asks_for_a_shorter_interval(self, tmp_path, make_item):
@@ -192,18 +252,28 @@ class TestEndToEnd:
             ),
         ],
     )
-    def test_samples_without_the_llm_pages_are_called_out(self, tmp_path, make_item, stack_peak, warning):
+    def test_samples_without_the_llm_pages_are_called_out(
+        self, tmp_path, make_item, stack_peak, warning
+    ):
         report = eval_report(make_item, [10.0], stack_peak=stack_peak, samples_without_llm_pages=3)
         markdown = compare_markdown([write(tmp_path, "a.json", report)], None, BenchSelection())
         assert warning in markdown
 
     def test_unread_oom_kills_or_restarts_leave_their_rows_empty(self, tmp_path, make_item):
-        report = eval_report(make_item, [10.0], oom_kills={"llm": 0, "agent": None, "mas": None}, restarts={})
+        report = eval_report(
+            make_item, [10.0], oom_kills={"llm": 0, "agent": None, "mas": None}, restarts={}
+        )
         markdown = compare_markdown([write(tmp_path, "a.json", report)], None, BenchSelection())
         assert table_row(markdown, "Out-of-memory kills")[2] == "—"
         assert table_row(markdown, "Container restarts")[2] == "—"
-        assert "eval-cpu16: the OOM kills of agent, mas could not be read, so its row stays empty." in markdown
-        assert "eval-cpu16: the restart count of every container could not be read, so its row stays empty." in markdown
+        assert (
+            "eval-cpu16: the OOM kills of agent, mas could not be read, so its row stays empty."
+            in markdown
+        )
+        assert (
+            "eval-cpu16: the restart count of every container could not be read, so its row stays empty."
+            in markdown
+        )
 
     def test_pending_reviews_and_incomplete_runs_are_flagged(self, tmp_path, make_item):
         report = eval_report(make_item, [10.0], reviewed=False)
@@ -215,11 +285,23 @@ class TestEndToEnd:
     def test_the_recorded_2026_09_01_baseline_against_a_run(self, tmp_path, make_item):
         after = write(tmp_path, "eval.json", eval_report(make_item, [60.0, 120.0]))
         markdown = compare_markdown([BASELINE], [after], BenchSelection())
-        assert table_row(markdown, "Total time, median")[2:] == ["854.0 s (n=1, 14m 14s)", "90.0 s (n=2)", "-764.0 s (-89%)"]
-        assert table_row(markdown, "Answer correct, two reviewers")[2] == "0.0% (n=1, judged by hand)"
-        assert table_row(markdown, "Total time, whole run")[4] == "not comparable: different question counts"
+        assert table_row(markdown, "Total time, median")[2:] == [
+            "854.0 s (n=1, 14m 14s)",
+            "90.0 s (n=2)",
+            "-764.0 s (-89%)",
+        ]
+        assert (
+            table_row(markdown, "Answer correct, two reviewers")[2] == "0.0% (n=1, judged by hand)"
+        )
+        assert (
+            table_row(markdown, "Total time, whole run")[4]
+            == "not comparable: different question counts"
+        )
         assert table_row(markdown, "Run started")[1] == "2026-09-01"
-        assert table_row(markdown, "llama.cpp / runtime")[1:] == ["Transformers in-process (no llama.cpp)", "b11382"]
+        assert table_row(markdown, "llama.cpp / runtime")[1:] == [
+            "Transformers in-process (no llama.cpp)",
+            "b11382",
+        ]
         assert "cpu-transformers is a recorded result" in markdown
         assert "The two sides come from different machines." in markdown
         assert "## Notes" in markdown
@@ -227,7 +309,9 @@ class TestEndToEnd:
 
 class TestLlamaBench:
     def test_a_report_written_by_run_llama_bench_compares(self):
-        markdown = compare_markdown([BENCHMARKS / "cpu-laptop-2026-10-06.json"], None, BenchSelection())
+        markdown = compare_markdown(
+            [BENCHMARKS / "cpu-laptop-2026-10-06.json"], None, BenchSelection()
+        )
         assert markdown.startswith("# Benchmark\n")
         assert table_row(markdown, "Label")[1] == "cpu-laptop"
         assert table_row(markdown, "Prompt processing pp512")[2:] == ["172.6 t/s (t=12)"]
@@ -261,7 +345,9 @@ def compare_cli():
 
 
 class TestCommandLine:
-    def test_main_prints_and_writes_the_section_10_markdown(self, compare_cli, tmp_path, make_item, capsys):
+    def test_main_prints_and_writes_the_section_10_markdown(
+        self, compare_cli, tmp_path, make_item, capsys
+    ):
         run = write(tmp_path, "eval.json", eval_report(make_item, [10.0]))
         out = tmp_path / "compare.md"
         assert compare_cli.main([str(BASELINE), str(run), "--out", str(out)]) == 0

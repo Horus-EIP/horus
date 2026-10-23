@@ -24,6 +24,7 @@ def server_frame(fin: bool, opcode: int, payload: bytes) -> bytes:
         head += struct.pack("!Q", n)
     return bytes(head) + payload
 
+
 class TestMultipart(unittest.TestCase):
     def test_exact_body_for_one_file(self):
         built = smoke.build_multipart(
@@ -79,14 +80,16 @@ class TestMultipart(unittest.TestCase):
         self.assertTrue(boundary.startswith("----horus-smoke-"))
         self.assertIn(boundary.encode(), body)
 
+
 class TestFrameEncoding(unittest.TestCase):
     def test_client_frame_is_masked(self):
         raw = smoke.encode_frame(smoke.OP_TEXT, b"hello", mask_key=b"\x01\x02\x03\x04")
         self.assertEqual(raw[0], 0x81)
         self.assertEqual(raw[1], 0x80 | 5)
         self.assertEqual(raw[2:6], b"\x01\x02\x03\x04")
-        self.assertEqual(raw[6:], bytes(b ^ b"\x01\x02\x03\x04"[i % 4]
-                                        for i, b in enumerate(b"hello")))
+        self.assertEqual(
+            raw[6:], bytes(b ^ b"\x01\x02\x03\x04"[i % 4] for i, b in enumerate(b"hello"))
+        )
         self.assertNotIn(b"hello", raw)
 
     def test_masking_is_random_per_frame(self):
@@ -110,6 +113,7 @@ class TestFrameEncoding(unittest.TestCase):
     def test_bad_mask_key_is_rejected(self):
         with self.assertRaises(ValueError):
             smoke.encode_frame(smoke.OP_TEXT, b"x", mask_key=b"\x01\x02")
+
 
 class TestFrameDecoding(unittest.TestCase):
     def test_round_trip_of_a_masked_client_frame(self):
@@ -149,6 +153,7 @@ class TestFrameDecoding(unittest.TestCase):
         self.assertEqual(frame.payload, payload)
         self.assertEqual(used, 10 + 70000)
 
+
 class TestMessageAssembly(unittest.TestCase):
     def test_fragmented_text_message(self):
         asm = smoke.MessageAssembler()
@@ -178,9 +183,7 @@ class TestMessageAssembly(unittest.TestCase):
 
     def test_ping_alone_is_returned_immediately(self):
         asm = smoke.MessageAssembler()
-        self.assertEqual(
-            asm.push(smoke.Frame(True, smoke.OP_PING, b"")), (smoke.OP_PING, b"")
-        )
+        self.assertEqual(asm.push(smoke.Frame(True, smoke.OP_PING, b"")), (smoke.OP_PING, b""))
 
     def test_stray_continuation_is_a_protocol_error(self):
         asm = smoke.MessageAssembler()
@@ -192,6 +195,7 @@ class TestMessageAssembly(unittest.TestCase):
         asm.push(smoke.Frame(False, smoke.OP_TEXT, b"open"))
         with self.assertRaises(smoke.WebSocketError):
             asm.push(smoke.Frame(True, smoke.OP_TEXT, b"another"))
+
 
 class TestHandshake(unittest.TestCase):
     def test_accept_matches_the_rfc_example(self):
@@ -210,6 +214,7 @@ class TestHandshake(unittest.TestCase):
         self.assertIn("Sec-WebSocket-Key: KEY==\r\n", text)
         self.assertIn("Sec-WebSocket-Version: 13\r\n", text)
         self.assertTrue(text.endswith("\r\n\r\n"))
+
 
 class TestAnswerMatching(unittest.TestCase):
     GOOD = [
@@ -265,6 +270,7 @@ class TestAnswerMatching(unittest.TestCase):
         self.assertIsNone(smoke.NEGATIVE_RE.search("That is not in the documents."))
         self.assertIsNone(smoke.NEGATIVE_RE.search("Climate limitations apply."))
 
+
 class TestFrameClassification(unittest.TestCase):
     def test_specialist_answer_is_accepted(self):
         self.assertTrue(
@@ -295,6 +301,7 @@ class TestFrameClassification(unittest.TestCase):
             smoke._is_answer_frame({"type": "task_step", "step_type": "reasoning.start"})
         )
         self.assertFalse(smoke._is_answer_frame({"type": "agent", "content": "   "}))
+
 
 class TestMiscParsing(unittest.TestCase):
     def test_token_is_redacted_from_a_url(self):
@@ -332,11 +339,13 @@ class TestMiscParsing(unittest.TestCase):
         self.assertEqual(smoke._extract_text(None), "")
         self.assertEqual(smoke._extract_text({}), "")
 
+
 class SmokeAddresses(unittest.TestCase):
     def test_the_smoke_test_calls_the_address_the_ports_are_published_on(self):
         for name, url in smoke.DEFAULT_BASE_URLS.items():
             with self.subTest(name):
                 self.assertTrue(url.startswith("http://127.0.0.1:"), url)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

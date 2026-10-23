@@ -30,14 +30,29 @@ class Commit:
 
 def git_log(base: str, head: str, run: Callable = subprocess.run) -> str:
     done = run(
-        ["git", "log", "--no-merges", f"--format=%H{FIELD}%an{FIELD}%ae{FIELD}%B{RECORD}", f"{base}..{head}"],
-        capture_output=True, text=True, encoding="utf-8", check=True,
+        [
+            "git",
+            "log",
+            "--no-merges",
+            f"--format=%H{FIELD}%an{FIELD}%ae{FIELD}%B{RECORD}",
+            f"{base}..{head}",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
     )
     return done.stdout
 
 
 def fork_point(base: str, head: str, run: Callable = subprocess.run) -> str:
-    done = run(["git", "merge-base", base, head], capture_output=True, text=True, encoding="utf-8", check=True)
+    done = run(
+        ["git", "merge-base", base, head],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    )
     return done.stdout.strip()
 
 
@@ -53,13 +68,19 @@ def parse(log: str) -> list[Commit]:
 
 
 def signed_by_author(commit: Commit) -> bool:
-    return any(name.strip() == commit.author.strip() and address.strip().lower() == commit.email.strip().lower()
-               for name, address in TRAILER.findall(commit.message))
+    return any(
+        name.strip() == commit.author.strip()
+        and address.strip().lower() == commit.email.strip().lower()
+        for name, address in TRAILER.findall(commit.message)
+    )
 
 
 def problems(commits: list[Commit]) -> list[str]:
-    return [f"{commit.sha[:12]} by {commit.author} <{commit.email}> has no matching Signed-off-by line"
-            for commit in commits if not signed_by_author(commit)]
+    return [
+        f"{commit.sha[:12]} by {commit.author} <{commit.email}> has no matching Signed-off-by line"
+        for commit in commits
+        if not signed_by_author(commit)
+    ]
 
 
 def main(argv: list[str] | None = None, run: Callable = subprocess.run) -> int:

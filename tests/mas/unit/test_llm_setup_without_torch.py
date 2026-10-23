@@ -6,7 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-LLM_SETUP = Path(__file__).resolve().parents[3] / "src" / "services" / "mas" / "core" / "llm_setup.py"
+LLM_SETUP = (
+    Path(__file__).resolve().parents[3] / "src" / "services" / "mas" / "core" / "llm_setup.py"
+)
 
 
 @pytest.fixture

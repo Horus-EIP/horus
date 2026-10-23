@@ -59,7 +59,11 @@ def main(argv: Sequence[str] | None = None, root: Path = KIT_ROOT) -> int:
         description="Check that the horus-bench-kit folder can be published, then zip it."
     )
     parser.add_argument(
-        "--out", "--out-dir", dest="out", default=str(root / "dist"), help="folder for the .zip (default: dist/)"
+        "--out",
+        "--out-dir",
+        dest="out",
+        default=str(root / "dist"),
+        help="folder for the .zip (default: dist/)",
     )
     args = parser.parse_args(argv)
     problems = checks.problems(root)

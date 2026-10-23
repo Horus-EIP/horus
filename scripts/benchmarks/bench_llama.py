@@ -54,7 +54,9 @@ from horus_profile import (  # noqa: E402, F401
 
 
 def fetch_command(image: str, source: str, script: str, model: KnownModel) -> list[str]:
-    return fetch.fetch_command(image, source, script, model, container_script=CONTAINER_FETCH_SCRIPT)
+    return fetch.fetch_command(
+        image, source, script, model, container_script=CONTAINER_FETCH_SCRIPT
+    )
 
 
 def model_records(

@@ -24,12 +24,20 @@ CORE_PROFILE = Profile(summary_sections=())
 REQUIRED_QUESTION_KEYS = ("id", "category")
 METRIC_ROWS = (
     MetricRow("answer_auto", "Answers correct, automatic", "every answer pattern matches", "%"),
-    MetricRow("answer_reviewed", "Answers correct, reviewed", "both reviewers marked it correct", "%"),
+    MetricRow(
+        "answer_reviewed", "Answers correct, reviewed", "both reviewers marked it correct", "%"
+    ),
     MetricRow("source", "Sources correct", "expected documents cited, or ranked at the top", "%"),
     MetricRow("route", "Route correct", "direct answer or retrieval, as expected", "%"),
     MetricRow("answered", "Questions answered", "status ok", "count", is_total=True),
     MetricRow("failed", "Errors and timeouts", "any other status", "count", is_total=True),
-    MetricRow("fallbacks", "Fallback answers", "the answer holds a fallback marker", "count", is_total=True),
+    MetricRow(
+        "fallbacks",
+        "Fallback answers",
+        "the answer holds a fallback marker",
+        "count",
+        is_total=True,
+    ),
     MetricRow("total_median", "Total time, median", "question sent to full answer", "s"),
     MetricRow("total_p90", "Total time, p90", "question sent to full answer", "s"),
     MetricRow("total_sum", "Total time, sum", "every question", "s", is_total=True),
@@ -66,7 +74,11 @@ def load_eval_report(path: Path | str) -> dict[str, Any]:
     if document.get("kind") == REPORT_KIND:
         check_report(document, REPORT_KIND, SCHEMA_VERSION)
     for question in questions:
-        missing = [key for key in REQUIRED_QUESTION_KEYS if not isinstance(question, dict) or key not in question]
+        missing = [
+            key
+            for key in REQUIRED_QUESTION_KEYS
+            if not isinstance(question, dict) or key not in question
+        ]
         if missing:
             raise ValueError(f"{name}: a question record has no {', '.join(missing)}")
     return document
@@ -155,7 +167,9 @@ def comparison_warnings(sides: Sequence[Side]) -> list[str]:
         planned = side.testset.get("items_run")
         if side.run.get("completed") is False:
             shown = f" of {planned}" if planned is not None else ""
-            warnings.append(f"{side.name} did not finish: {len(side.questions)}{shown} questions recorded.")
+            warnings.append(
+                f"{side.name} did not finish: {len(side.questions)}{shown} questions recorded."
+            )
         review = side.summary["manual_review"]
         if review["pending"]:
             warnings.append(
@@ -235,12 +249,21 @@ def changed_questions(sides: Sequence[Side]) -> list[list[str]]:
 def render(sides: Sequence[Side]) -> str:
     names = [side.name for side in sides]
     two = len(sides) == 2
-    lines = ["# Evaluation comparison" if two else "# Evaluation", "", *table(["", *names], header_rows(sides))]
+    lines = [
+        "# Evaluation comparison" if two else "# Evaluation",
+        "",
+        *table(["", *names], header_rows(sides)),
+    ]
     warnings = comparison_warnings(sides)
     if warnings:
         lines += ["", *[f"- {warning}" for warning in warnings]]
     change = ["Change"] if two else []
-    lines += ["", "## Metrics", "", *table(["Metric", "How it's measured", *names, *change], metric_rows(sides))]
+    lines += [
+        "",
+        "## Metrics",
+        "",
+        *table(["Metric", "How it's measured", *names, *change], metric_rows(sides)),
+    ]
     categories = category_rows(sides)
     if categories:
         header = ["Category", *[f"{name} (answers correct)" for name in names], *change]

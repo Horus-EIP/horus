@@ -27,9 +27,7 @@ class Conversations(Base):
 
     name = Column(String, nullable=True)
 
-    created_at = Column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     modified_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -63,9 +61,7 @@ class Conversations(Base):
 @event.listens_for(Conversations, "after_insert")
 def log_conversation_insert(mapper, connection, target):
     """Log conversation creation events for usage tracking."""
-    log_db_operation(
-        "CREATE", "conversations", f"id: {target.id}, owner: {target.owner_username}"
-    )
+    log_db_operation("CREATE", "conversations", f"id: {target.id}, owner: {target.owner_username}")
 
 
 @event.listens_for(Conversations, "after_update")

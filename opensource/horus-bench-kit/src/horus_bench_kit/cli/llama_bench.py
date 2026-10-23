@@ -49,7 +49,9 @@ from horus_bench_kit.llama_bench import (
 )
 from horus_bench_kit.shell import Shell
 
-DESCRIPTION = "Run llama-bench in a llama.cpp container and save the result with the machine and model facts."
+DESCRIPTION = (
+    "Run llama-bench in a llama.cpp container and save the result with the machine and model facts."
+)
 CHECKSUM_TIMEOUT_S = 1800.0
 LISTING_TIMEOUT_S = 600.0
 OPTION_HELP = {
@@ -97,7 +99,9 @@ class LlamaBenchProfile:
     busy_containers: tuple[str, ...] = ()
     busy_warning: str = "containers are running ({names}) and compete for CPU and RAM"
     fetch_hint: str = "pass --fetch with --known-models to download the missing models"
-    known_mismatch: str = "{file} does not match the SHA-256 of the known model; record its SHA-256 with the result"
+    known_mismatch: str = (
+        "{file} does not match the SHA-256 of the known model; record its SHA-256 with the result"
+    )
     option_help: Mapping[str, str | None] = field(default_factory=lambda: dict(OPTION_HELP))
     known_models_option: bool = True
     version_option: bool = True
@@ -124,14 +128,24 @@ def build_parser(profile: LlamaBenchProfile = DEFAULT_PROFILE) -> argparse.Argum
     parser.add_argument("--reference", default=profile.reference, help=helps.get("--reference"))
     parser.add_argument("--label", help=helps.get("--label"))
     parser.add_argument("--image", default=profile.bench_image, help=helps.get("--image"))
-    parser.add_argument("--fetch-image", default=profile.fetch_image, help=helps.get("--fetch-image"))
+    parser.add_argument(
+        "--fetch-image", default=profile.fetch_image, help=helps.get("--fetch-image")
+    )
     parser.add_argument("--prompts", default=DEFAULT_PROMPTS, help=helps.get("--prompts"))
-    parser.add_argument("--generations", default=DEFAULT_GENERATIONS, help=helps.get("--generations"))
+    parser.add_argument(
+        "--generations", default=DEFAULT_GENERATIONS, help=helps.get("--generations")
+    )
     parser.add_argument("--depths", default=DEFAULT_DEPTHS, help=helps.get("--depths"))
-    parser.add_argument("--cache-types-k", default=DEFAULT_CACHE_TYPES, help=helps.get("--cache-types-k"))
-    parser.add_argument("--cache-types-v", default=DEFAULT_CACHE_TYPES, help=helps.get("--cache-types-v"))
+    parser.add_argument(
+        "--cache-types-k", default=DEFAULT_CACHE_TYPES, help=helps.get("--cache-types-k")
+    )
+    parser.add_argument(
+        "--cache-types-v", default=DEFAULT_CACHE_TYPES, help=helps.get("--cache-types-v")
+    )
     parser.add_argument("--threads", default=DEFAULT_THREADS, help=helps.get("--threads"))
-    parser.add_argument("--repetitions", type=int, default=DEFAULT_REPETITIONS, help=helps.get("--repetitions"))
+    parser.add_argument(
+        "--repetitions", type=int, default=DEFAULT_REPETITIONS, help=helps.get("--repetitions")
+    )
     parser.add_argument("--from-json", metavar="RAW_JSON", help=helps.get("--from-json"))
     parser.add_argument("--cpu-model", help=helps.get("--cpu-model"))
     parser.add_argument("--ram", help=helps.get("--ram"))
@@ -162,7 +176,11 @@ def argument_errors(
         safe_label(run_label(args, profile))
     except ValueError as exc:
         errors.append(f"--label: {exc}")
-    if not args.models and not args.from_json and not (profile.known_models if known is None else known):
+    if (
+        not args.models
+        and not args.from_json
+        and not (profile.known_models if known is None else known)
+    ):
         errors.append("give --model at least once, or --known-models to run every known model")
     return errors
 
@@ -188,7 +206,9 @@ def matrix_from(args: argparse.Namespace) -> BenchMatrix:
 
 
 def image_digest(shell: Shell, image: str) -> str | None:
-    digest = shell.run_text(["docker", "image", "inspect", "--format", "{{index .RepoDigests 0}}", image])
+    digest = shell.run_text(
+        ["docker", "image", "inspect", "--format", "{{index .RepoDigests 0}}", image]
+    )
     return (digest or "").strip() or None
 
 
@@ -236,7 +256,9 @@ class LlamaBenchRun:
             if known is None:
                 failures[file] = "not a known model, copy it into the models folder yourself"
                 continue
-            print(f"[info] downloading {file} ({known.size_bytes:,} bytes) and checking its SHA-256")
+            print(
+                f"[info] downloading {file} ({known.size_bytes:,} bytes) and checking its SHA-256"
+            )
             if self.shell.run(self.fetch_command(known)) != 0:
                 failures[file] = "the download or its SHA-256 check failed"
         return failures
@@ -252,7 +274,9 @@ class LlamaBenchRun:
             failures = self.fetch_missing(missing)
             sizes = parse_listing(self.shell.run_text(listing, timeout=LISTING_TIMEOUT_S))
             missing = [file for file in model_files if file not in sizes]
-        problems = [f"{file}: {failures.get(file, f'not found in {self.source}')}" for file in missing]
+        problems = [
+            f"{file}: {failures.get(file, f'not found in {self.source}')}" for file in missing
+        ]
         present = [file for file in model_files if file in sizes]
         checksums = {}
         if present:
@@ -316,7 +340,9 @@ class LlamaBenchRun:
         command = None
         if rows is None:
             command = bench_command(args.image, self.source, model_files, self.matrix)
-            print(f"[info] {self.matrix.test_count(len(model_files))} tests, {self.matrix.repetitions} repetitions each")
+            print(
+                f"[info] {self.matrix.test_count(len(model_files))} tests, {self.matrix.repetitions} repetitions each"
+            )
             print("[info] " + shlex.join(command))
             rows = self.run_bench(command)
             if rows is None:
@@ -331,7 +357,9 @@ class LlamaBenchRun:
             "ram_speed": args.ram_speed,
             "disk_type": args.disk_type,
         }
-        machine = machine_section(args.reference, self.shell.collect_host(disk_path), overrides, docker)
+        machine = machine_section(
+            args.reference, self.shell.collect_host(disk_path), overrides, docker
+        )
         for item in missing_fields(machine):
             print(f"[warn] machine {item}")
         run = {

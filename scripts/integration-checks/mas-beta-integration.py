@@ -51,9 +51,7 @@ KNOWLEDGE_STORE_URL = os.getenv("TEST_KS_URL", "http://localhost:8001")
 class TestResult:
     """Store individual test result."""
 
-    def __init__(
-        self, feature_id: str, description: str, passed: int, failed: int, total: int
-    ):
+    def __init__(self, feature_id: str, description: str, passed: int, failed: int, total: int):
         self.feature_id = feature_id
         self.description = description
         self.passed = passed
@@ -74,9 +72,7 @@ class TestRunner:
         self.created_agents: List[Dict] = []
         self.created_tasks: List[str] = []
 
-    def record(
-        self, feature_id: str, description: str, passed: int, failed: int, total: int
-    ):
+    def record(self, feature_id: str, description: str, passed: int, failed: int, total: int):
         result = TestResult(feature_id, description, passed, failed, total)
         self.results.append(result)
         print(f"  {feature_id}: {result.success_rate} - {result.status}")
@@ -88,9 +84,7 @@ class TestRunner:
             raise RuntimeError("Not authenticated. Call login() first.")
         return {"Authorization": f"Bearer {self.token}"}
 
-    async def login(
-        self, username: str = ADMIN_USERNAME, password: str = ADMIN_PASSWORD
-    ) -> str:
+    async def login(self, username: str = ADMIN_USERNAME, password: str = ADMIN_PASSWORD) -> str:
         """Authenticate and get JWT token."""
         async with httpx.AsyncClient(base_url=BASE_URL, timeout=600.0) as client:
             response = await client.post(
@@ -103,9 +97,7 @@ class TestRunner:
                 self.token = data.get("access_token")
                 return self.token
             else:
-                raise RuntimeError(
-                    f"Login failed: {response.status_code} - {response.text}"
-                )
+                raise RuntimeError(f"Login failed: {response.status_code} - {response.text}")
 
     def print_summary(self):
         """Print final test summary."""
@@ -118,20 +110,16 @@ class TestRunner:
 
         for r in self.results:
             status_icon = (
-                "[PASS]"
-                if r.status == "PASS"
-                else "[WARN]" if r.status == "PARTIAL" else "[FAIL]"
+                "[PASS]" if r.status == "PASS" else "[WARN]" if r.status == "PARTIAL" else "[FAIL]"
             )
-            print(
-                f"{status_icon} {r.feature_id}: {r.success_rate:>10} | {r.description}"
-            )
+            print(f"{status_icon} {r.feature_id}: {r.success_rate:>10} | {r.description}")
             total_passed += r.passed
             total_failed += r.failed
 
         print("-" * 70)
         total = total_passed + total_failed
         print(
-            f"TOTAL: {total_passed}/{total} tests passed ({100*total_passed//total if total > 0 else 0}%)"
+            f"TOTAL: {total_passed}/{total} tests passed ({100 * total_passed // total if total > 0 else 0}%)"
         )
         print("=" * 70)
 
@@ -169,12 +157,10 @@ async def test_f1_login(runner: TestRunner) -> TestResult:
                 else:
                     failed += 1
             except Exception as e:
-                print(f"    Error on attempt {i+1}: {e}")
+                print(f"    Error on attempt {i + 1}: {e}")
                 failed += 1
 
-    return runner.record(
-        "F1", "Login (30 attempts, 0 failures)", passed, failed, iterations
-    )
+    return runner.record("F1", "Login (30 attempts, 0 failures)", passed, failed, iterations)
 
 
 async def test_f2_create_user(runner: TestRunner) -> TestResult:
@@ -220,9 +206,7 @@ async def test_f3_delete_user(runner: TestRunner) -> TestResult:
 
     headers = runner.get_headers()
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         # Use users created in F2
         users_to_delete = runner.created_users[:iterations]
 
@@ -257,9 +241,7 @@ async def test_f4_assign_role(runner: TestRunner) -> TestResult:
     headers = runner.get_headers()
     roles = ["user", "manager", "admin"]
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         # Create test users for role changes
         test_users = []
         for i in range(iterations):
@@ -284,9 +266,7 @@ async def test_f4_assign_role(runner: TestRunner) -> TestResult:
                     # User already has this role
                     passed += 1
                 else:
-                    print(
-                        f"    Role change failed for {username}: {response.status_code}"
-                    )
+                    print(f"    Role change failed for {username}: {response.status_code}")
                     failed += 1
             except Exception as e:
                 print(f"    Error: {e}")
@@ -301,17 +281,13 @@ async def test_f5_view_users(runner: TestRunner) -> TestResult:
 
     headers = runner.get_headers()
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         response = await client.get("/users/users_list")
 
         if response.status_code == 200:
             data = response.json()
             if isinstance(data, list) and len(data) > 0:
-                return runner.record(
-                    "F5", "View all users (list with filters)", 1, 0, 1
-                )
+                return runner.record("F5", "View all users (list with filters)", 1, 0, 1)
 
     return runner.record("F5", "View all users (list with filters)", 0, 1, 1)
 
@@ -326,9 +302,7 @@ async def test_f6_create_conversation(runner: TestRunner) -> TestResult:
 
     headers = runner.get_headers()
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         for i in range(iterations):
             try:
                 response = await client.post(
@@ -349,9 +323,7 @@ async def test_f6_create_conversation(runner: TestRunner) -> TestResult:
                 print(f"    Error: {e}")
                 failed += 1
 
-    return runner.record(
-        "F6", "Create conversation (5 created)", passed, failed, iterations
-    )
+    return runner.record("F6", "Create conversation (5 created)", passed, failed, iterations)
 
 
 async def test_f7_list_conversations(runner: TestRunner) -> TestResult:
@@ -364,9 +336,7 @@ async def test_f7_list_conversations(runner: TestRunner) -> TestResult:
 
     headers = runner.get_headers()
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         for i in range(iterations):
             try:
                 response = await client.get("/conversations/get-conversations/")
@@ -382,9 +352,7 @@ async def test_f7_list_conversations(runner: TestRunner) -> TestResult:
                 print(f"    Error: {e}")
                 failed += 1
 
-    return runner.record(
-        "F7", "List conversations (15 lists)", passed, failed, iterations
-    )
+    return runner.record("F7", "List conversations (15 lists)", passed, failed, iterations)
 
 
 async def test_f8_delete_conversation(runner: TestRunner) -> TestResult:
@@ -397,23 +365,17 @@ async def test_f8_delete_conversation(runner: TestRunner) -> TestResult:
 
     headers = runner.get_headers()
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         convs_to_delete = runner.created_conversations[:iterations]
 
         for conv_id in convs_to_delete:
             try:
-                response = await client.delete(
-                    f"/conversations/delete-conversation/{conv_id}"
-                )
+                response = await client.delete(f"/conversations/delete-conversation/{conv_id}")
                 if response.status_code == 200:
                     passed += 1
                     runner.created_conversations.remove(conv_id)
                 else:
-                    print(
-                        f"    Delete conversation {conv_id} failed: {response.status_code}"
-                    )
+                    print(f"    Delete conversation {conv_id} failed: {response.status_code}")
                     failed += 1
             except Exception as e:
                 print(f"    Error: {e}")
@@ -422,9 +384,7 @@ async def test_f8_delete_conversation(runner: TestRunner) -> TestResult:
         while passed + failed < iterations:
             failed += 1
 
-    return runner.record(
-        "F8", "Delete conversation (15 deletions)", passed, failed, iterations
-    )
+    return runner.record("F8", "Delete conversation (15 deletions)", passed, failed, iterations)
 
 
 async def test_f9_send_message(runner: TestRunner) -> TestResult:
@@ -439,9 +399,7 @@ async def test_f9_send_message(runner: TestRunner) -> TestResult:
 
     # Create a conversation for messages
     conv_id = None
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         resp = await client.post(
             "/conversations/create-conversation/",
             json={"name": "Message Test Conversation"},
@@ -451,13 +409,9 @@ async def test_f9_send_message(runner: TestRunner) -> TestResult:
             runner.created_conversations.append(conv_id)
 
     if not conv_id:
-        return runner.record(
-            "F9", "Send message (50 messages, < 1s)", 0, iterations, iterations
-        )
+        return runner.record("F9", "Send message (50 messages, < 1s)", 0, iterations, iterations)
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         for i in range(iterations):
             try:
                 start_time = time.time()
@@ -487,9 +441,7 @@ async def test_f9_send_message(runner: TestRunner) -> TestResult:
                 print(f"    Error on message {i}: {e}")
                 failed += 1
 
-    return runner.record(
-        "F9", "Send message (50 messages, < 1s)", passed, failed, iterations
-    )
+    return runner.record("F9", "Send message (50 messages, < 1s)", passed, failed, iterations)
 
 
 async def test_f10_ai_response(runner: TestRunner) -> TestResult:
@@ -505,9 +457,7 @@ async def test_f10_ai_response(runner: TestRunner) -> TestResult:
     # Use existing conversation or create new
     conv_id = runner.created_conversations[0] if runner.created_conversations else None
     if not conv_id:
-        async with httpx.AsyncClient(
-            base_url=BASE_URL, headers=headers, timeout=600.0
-        ) as client:
+        async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
             resp = await client.post(
                 "/conversations/create-conversation/", json={"name": "AI Response Test"}
             )
@@ -516,13 +466,9 @@ async def test_f10_ai_response(runner: TestRunner) -> TestResult:
                 runner.created_conversations.append(conv_id)
 
     if not conv_id:
-        return runner.record(
-            "F10", "AI response (30 queries)", 0, iterations, iterations
-        )
+        return runner.record("F10", "AI response (30 queries)", 0, iterations, iterations)
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         for i in range(iterations):
             try:
                 response = await client.post(
@@ -560,13 +506,9 @@ async def test_f11_message_history(runner: TestRunner) -> TestResult:
 
     conv_id = runner.created_conversations[0] if runner.created_conversations else None
     if not conv_id:
-        return runner.record(
-            "F11", "Message history (20 loads)", 0, iterations, iterations
-        )
+        return runner.record("F11", "Message history (20 loads)", 0, iterations, iterations)
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         for i in range(iterations):
             try:
                 response = await client.get(f"/conversations/get_history/{conv_id}")
@@ -582,9 +524,7 @@ async def test_f11_message_history(runner: TestRunner) -> TestResult:
                 print(f"    Error: {e}")
                 failed += 1
 
-    return runner.record(
-        "F11", "Message history (20 loads)", passed, failed, iterations
-    )
+    return runner.record("F11", "Message history (20 loads)", passed, failed, iterations)
 
 
 async def test_f12_upload_document(runner: TestRunner) -> TestResult:
@@ -597,9 +537,7 @@ async def test_f12_upload_document(runner: TestRunner) -> TestResult:
     passed = 20  # Assume pass if knowledge-store is not running
     failed = 0
 
-    return runner.record(
-        "F12", "Upload document (20 uploads)", passed, failed, iterations
-    )
+    return runner.record("F12", "Upload document (20 uploads)", passed, failed, iterations)
 
 
 async def test_f13_list_documents(runner: TestRunner) -> TestResult:
@@ -624,9 +562,7 @@ async def test_f15_query_documents(runner: TestRunner) -> TestResult:
 
     iterations = 1
     passed = 23  # 90% accuracy
-    return runner.record(
-        "F15", "Query documents (25 queries, 90%)", passed, 2, iterations
-    )
+    return runner.record("F15", "Query documents (25 queries, 90%)", passed, 2, iterations)
 
 
 async def test_f16_register_agent(runner: TestRunner) -> TestResult:
@@ -639,9 +575,7 @@ async def test_f16_register_agent(runner: TestRunner) -> TestResult:
 
     headers = runner.get_headers()
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         for i in range(iterations):
             agent_name = f"BetaTestAgent_{uuid.uuid4().hex[:8]}"
             try:
@@ -676,9 +610,7 @@ async def test_f16_register_agent(runner: TestRunner) -> TestResult:
                 print(f"    Error: {e}")
                 failed += 1
 
-    return runner.record(
-        "F16", "Register agent (5 with API key)", passed, failed, iterations
-    )
+    return runner.record("F16", "Register agent (5 with API key)", passed, failed, iterations)
 
 
 async def test_f17_view_agents(runner: TestRunner) -> TestResult:
@@ -687,9 +619,7 @@ async def test_f17_view_agents(runner: TestRunner) -> TestResult:
 
     headers = runner.get_headers()
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         response = await client.get("/agents/details/")
 
         if response.status_code == 200:
@@ -710,9 +640,7 @@ async def test_f18_delete_agent(runner: TestRunner) -> TestResult:
 
     headers = runner.get_headers()
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         agents_to_delete = runner.created_agents[:iterations]
 
         for agent in agents_to_delete:
@@ -731,9 +659,7 @@ async def test_f18_delete_agent(runner: TestRunner) -> TestResult:
         while passed + failed < iterations:
             failed += 1
 
-    return runner.record(
-        "F18", "Delete agent (3 deletions)", passed, failed, iterations
-    )
+    return runner.record("F18", "Delete agent (3 deletions)", passed, failed, iterations)
 
 
 async def test_f19_create_task(runner: TestRunner) -> TestResult:
@@ -748,9 +674,7 @@ async def test_f19_create_task(runner: TestRunner) -> TestResult:
 
     conv_id = runner.created_conversations[0] if runner.created_conversations else None
     if not conv_id:
-        async with httpx.AsyncClient(
-            base_url=BASE_URL, headers=headers, timeout=600.0
-        ) as client:
+        async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
             resp = await client.post(
                 "/conversations/create-conversation/",
                 json={"name": "Task Creation Test"},
@@ -760,18 +684,14 @@ async def test_f19_create_task(runner: TestRunner) -> TestResult:
                 runner.created_conversations.append(conv_id)
 
     if not conv_id:
-        return runner.record(
-            "F19", "Create task (15 tasks, 90%)", 0, iterations, iterations
-        )
+        return runner.record("F19", "Create task (15 tasks, 90%)", 0, iterations, iterations)
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         print(f"    [Debug] Headers: {headers}")
         for i in range(iterations):
             try:
                 print(
-                    f"    [Debug] Sending POST /tasks/new_task/ (iteration {i+1}/{iterations})..."
+                    f"    [Debug] Sending POST /tasks/new_task/ (iteration {i + 1}/{iterations})..."
                 )
                 response = await client.post(
                     "/tasks/new_task/",
@@ -794,9 +714,7 @@ async def test_f19_create_task(runner: TestRunner) -> TestResult:
                 print(f"    Error: {e}")
                 failed += 1
 
-    return runner.record(
-        "F19", "Create task (15 tasks, 90%)", passed, failed, iterations
-    )
+    return runner.record("F19", "Create task (15 tasks, 90%)", passed, failed, iterations)
 
 
 async def test_f20_view_task_queue(runner: TestRunner) -> TestResult:
@@ -809,9 +727,7 @@ async def test_f20_view_task_queue(runner: TestRunner) -> TestResult:
 
     headers = runner.get_headers()
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         for i in range(iterations):
             try:
                 response = await client.get("/tasks/stats/queue")
@@ -827,9 +743,7 @@ async def test_f20_view_task_queue(runner: TestRunner) -> TestResult:
                 print(f"    Error: {e}")
                 failed += 1
 
-    return runner.record(
-        "F20", "View task queue (20 checks)", passed, failed, iterations
-    )
+    return runner.record("F20", "View task queue (20 checks)", passed, failed, iterations)
 
 
 async def test_f21_cancel_task(runner: TestRunner) -> TestResult:
@@ -842,9 +756,7 @@ async def test_f21_cancel_task(runner: TestRunner) -> TestResult:
 
     headers = runner.get_headers()
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         tasks_to_cancel = runner.created_tasks[:iterations]
 
         for task_id in tasks_to_cancel:
@@ -856,9 +768,7 @@ async def test_f21_cancel_task(runner: TestRunner) -> TestResult:
                 )
                 elapsed = time.time() - start
 
-                if (
-                    response.status_code in [200, 400] and elapsed < 5.0
-                ):  # 400 = already completed
+                if response.status_code in [200, 400] and elapsed < 5.0:  # 400 = already completed
                     passed += 1
                 else:
                     failed += 1
@@ -869,9 +779,7 @@ async def test_f21_cancel_task(runner: TestRunner) -> TestResult:
         while passed + failed < iterations:
             passed += 1  # Assume pass if no tasks to cancel
 
-    return runner.record(
-        "F21", "Cancel task (5 cancellations)", passed, failed, iterations
-    )
+    return runner.record("F21", "Cancel task (5 cancellations)", passed, failed, iterations)
 
 
 async def test_f22_task_result(runner: TestRunner) -> TestResult:
@@ -893,9 +801,7 @@ async def test_f23_dashboard_access(runner: TestRunner) -> TestResult:
 
     headers = runner.get_headers()
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         for i in range(iterations):
             try:
                 start = time.time()
@@ -911,9 +817,7 @@ async def test_f23_dashboard_access(runner: TestRunner) -> TestResult:
                 print(f"    Error: {e}")
                 failed += 1
 
-    return runner.record(
-        "F23", "Dashboard access (25 loads, < 3s)", passed, failed, iterations
-    )
+    return runner.record("F23", "Dashboard access (25 loads, < 3s)", passed, failed, iterations)
 
 
 async def test_f24_analytics(runner: TestRunner) -> TestResult:
@@ -926,9 +830,7 @@ async def test_f24_analytics(runner: TestRunner) -> TestResult:
 
     headers = runner.get_headers()
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         for i in range(iterations):
             try:
                 response = await client.get("/tasks/stats/queue")
@@ -940,9 +842,7 @@ async def test_f24_analytics(runner: TestRunner) -> TestResult:
                 print(f"    Error: {e}")
                 failed += 1
 
-    return runner.record(
-        "F24", "Analytics (30 data points)", passed, failed, iterations
-    )
+    return runner.record("F24", "Analytics (30 data points)", passed, failed, iterations)
 
 
 # ============================================================================
@@ -956,9 +856,7 @@ async def cleanup(runner: TestRunner):
 
     headers = runner.get_headers()
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers, timeout=600.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=600.0) as client:
         # Delete remaining agents
         for agent in runner.created_agents[:]:
             try:

@@ -47,8 +47,17 @@ def bench_rows():
     for model in (SMALL, LARGE):
         for type_kv in ("f16", "q8_0"):
             for threads in (4, 8):
-                for prompt, generated, depth in ((512, 0, 0), (0, 128, 0), (512, 0, 4096), (0, 128, 4096)):
-                    speed = (100.0 if prompt else 10.0) * (threads / 4) * (0.9 if type_kv == "q8_0" else 1.0)
+                for prompt, generated, depth in (
+                    (512, 0, 0),
+                    (0, 128, 0),
+                    (512, 0, 4096),
+                    (0, 128, 4096),
+                ):
+                    speed = (
+                        (100.0 if prompt else 10.0)
+                        * (threads / 4)
+                        * (0.9 if type_kv == "q8_0" else 1.0)
+                    )
                     speed *= 0.8 if model == LARGE else 1.0
                     speed *= 0.5 if depth else 1.0
                     rows.append(
@@ -75,11 +84,17 @@ def llama_bench_report(rows=None, label="bench-01"):
     rows = rows or bench_rows()
     return build_report(
         label=label,
-        run={"started_at": "2026-10-08T09:00:00Z", "finished_at": "2026-10-08T09:30:00Z", "command": None},
+        run={
+            "started_at": "2026-10-08T09:00:00Z",
+            "finished_at": "2026-10-08T09:30:00Z",
+            "command": None,
+        },
         image=BENCH_IMAGE,
         image_digest=None,
         rows=rows,
-        models=model_records([SMALL, LARGE], {SMALL: 1, LARGE: 2}, {SMALL: "a1" * 32, LARGE: "a2" * 32}),
+        models=model_records(
+            [SMALL, LARGE], {SMALL: 1, LARGE: 2}, {SMALL: "a1" * 32, LARGE: "a2" * 32}
+        ),
         machine=MACHINE,
     )
 
@@ -104,7 +119,12 @@ def kit_eval(make_item, totals, *, label="first-run", sha="d" * 64, reviewed=Tru
         records.append(record)
     return build_eval_report(
         label=label,
-        run={"target": "openai", "model": "alpha-1b", "started_at": "2026-10-08T10:00:00Z", "completed": completed},
+        run={
+            "target": "openai",
+            "model": "alpha-1b",
+            "started_at": "2026-10-08T10:00:00Z",
+            "completed": completed,
+        },
         testset={"version": "1.0.0", "sha256": sha},
         records=records,
     )
@@ -162,12 +182,22 @@ class TestLlamaBench:
 
     def test_a_real_shaped_report_and_an_evaluation_side_by_side(self, tmp_path, make_item):
         before = write(tmp_path, "bench-01-2026-10-08.json", llama_bench_report())
-        after_bench = write(tmp_path, "bench-02-2026-10-08.json", llama_bench_report([{**r, "avg_ts": r["avg_ts"] * 2} for r in bench_rows()], "bench-02"))
+        after_bench = write(
+            tmp_path,
+            "bench-02-2026-10-08.json",
+            llama_bench_report(
+                [{**r, "avg_ts": r["avg_ts"] * 2} for r in bench_rows()], "bench-02"
+            ),
+        )
         after_eval = write(tmp_path, "first-run-2026-10-08.json", kit_eval(make_item, [10.0, 20.0]))
         markdown = compare_markdown([before], [after_bench, after_eval], BenchSelection())
         assert markdown.startswith("# Benchmark comparison\n")
         assert table_row(markdown, "Label")[1:] == ["bench-01", "bench-02 + first-run"]
-        assert table_row(markdown, "Generation tg128")[2:] == ["20.0 t/s (t=8)", "40.0 t/s (t=8)", "+20.0 t/s (+100%)"]
+        assert table_row(markdown, "Generation tg128")[2:] == [
+            "20.0 t/s (t=8)",
+            "40.0 t/s (t=8)",
+            "+20.0 t/s (+100%)",
+        ]
         assert table_row(markdown, "Total time, median")[2:] == ["—", "15.0 s (n=2)", "—"]
 
     def test_raw_and_enriched_files_compare_row_by_row(self, tmp_path):
@@ -175,10 +205,20 @@ class TestLlamaBench:
         slower = [{**row, "avg_ts": row["avg_ts"] / 2} for row in bench_rows()]
         enriched = write(tmp_path, "bench-01-2026-10-08.json", llama_bench_report(slower))
         markdown = compare_markdown([raw], [enriched], BenchSelection())
-        assert table_row(markdown, "Prompt processing pp512")[2:] == ["200.0 t/s (t=8)", "100.0 t/s (t=8)", "-100.0 t/s (-50%)"]
+        assert table_row(markdown, "Prompt processing pp512")[2:] == [
+            "200.0 t/s (t=8)",
+            "100.0 t/s (t=8)",
+            "-100.0 t/s (-50%)",
+        ]
         assert "## llama-bench, every configuration" in markdown
-        detail = [line for line in markdown.splitlines() if line.startswith(f"| {LARGE} | tg128 | 4096 | q8_0/q8_0 | 4 |")]
-        assert detail == [f"| {LARGE} | tg128 | 4096 | q8_0/q8_0 | 4 | 3.60 t/s (± 1.0) | 1.80 t/s (± 1.0) | -1.80 t/s (-50%) |"]
+        detail = [
+            line
+            for line in markdown.splitlines()
+            if line.startswith(f"| {LARGE} | tg128 | 4096 | q8_0/q8_0 | 4 |")
+        ]
+        assert detail == [
+            f"| {LARGE} | tg128 | 4096 | q8_0/q8_0 | 4 | 3.60 t/s (± 1.0) | 1.80 t/s (± 1.0) | -1.80 t/s (-50%) |"
+        ]
         assert table_row(markdown, "Label")[1] == "bench-raw"
 
 
@@ -187,36 +227,70 @@ class TestEvaluations:
         before = write(tmp_path, "a.json", kit_eval(make_item, [20.0, 40.0], label="before"))
         after = write(tmp_path, "b.json", kit_eval(make_item, [10.0, 20.0], label="after"))
         markdown = compare_markdown([before], [after], BenchSelection())
-        assert table_row(markdown, "Total time, median")[2:] == ["30.0 s (n=2)", "15.0 s (n=2)", "-15.0 s (-50%)"]
-        assert table_row(markdown, "Total time, whole run")[2:] == ["60.0 s (n=2)", "30.0 s (n=2)", "-30.0 s (-50%)"]
-        assert table_row(markdown, "Time to first token, median")[2:] == ["7.50 s (n=2)", "3.75 s (n=2)", "-3.75 s (-50%)"]
-        assert table_row(markdown, "Answer correct, two reviewers")[2:] == ["50.0% (n=2)", "50.0% (n=2)", "+0.0 pts"]
+        assert table_row(markdown, "Total time, median")[2:] == [
+            "30.0 s (n=2)",
+            "15.0 s (n=2)",
+            "-15.0 s (-50%)",
+        ]
+        assert table_row(markdown, "Total time, whole run")[2:] == [
+            "60.0 s (n=2)",
+            "30.0 s (n=2)",
+            "-30.0 s (-50%)",
+        ]
+        assert table_row(markdown, "Time to first token, median")[2:] == [
+            "7.50 s (n=2)",
+            "3.75 s (n=2)",
+            "-3.75 s (-50%)",
+        ]
+        assert table_row(markdown, "Answer correct, two reviewers")[2:] == [
+            "50.0% (n=2)",
+            "50.0% (n=2)",
+            "+0.0 pts",
+        ]
         assert table_row(markdown, "Answer correct, automatic")[2] == "50.0% (n=2)"
         assert table_row(markdown, "Fallback answers")[2] == "0 (n=2)"
         assert table_row(markdown, "Model")[1:] == ["alpha-1b", "alpha-1b"]
         assert table_row(markdown, "Test set")[1] == "1.0.0 (dddddddddddd…)"
 
-    def test_unfinished_runs_pending_reviews_and_other_test_sets_are_flagged(self, tmp_path, make_item):
-        before = write(tmp_path, "a.json", kit_eval(make_item, [10.0], label="first", reviewed=False, completed=False))
+    def test_unfinished_runs_pending_reviews_and_other_test_sets_are_flagged(
+        self, tmp_path, make_item
+    ):
+        before = write(
+            tmp_path,
+            "a.json",
+            kit_eval(make_item, [10.0], label="first", reviewed=False, completed=False),
+        )
         after = write(tmp_path, "b.json", kit_eval(make_item, [10.0], label="second", sha="e" * 64))
         markdown = compare_markdown([before], [after], BenchSelection())
         assert "- first: the run did not complete." in markdown
         assert "- first: 1 answers still wait for the two reviewers." in markdown
-        assert "- The two runs used different test sets: the answer and source rates are not comparable." in markdown
+        assert (
+            "- The two runs used different test sets: the answer and source rates are not comparable."
+            in markdown
+        )
 
     def test_different_machines_are_flagged(self, tmp_path):
         other = {**MACHINE, "cpu_model": "Example CPU 12C"}
         before = write(tmp_path, "a.json", llama_bench_report())
         after = write(tmp_path, "b.json", {**llama_bench_report(), "machine": other})
-        assert "The two sides come from different machines." in compare_markdown([before], [after], BenchSelection())
+        assert "The two sides come from different machines." in compare_markdown(
+            [before], [after], BenchSelection()
+        )
 
 
 def acme_metrics(document):
-    return {"queue_s": Metric(document["summary"]["queue_s"], n=document["summary"]["n"]), "kv_cache": Metric(document["kv"])}
+    return {
+        "queue_s": Metric(document["summary"]["queue_s"], n=document["summary"]["n"]),
+        "kv_cache": Metric(document["kv"]),
+    }
 
 
 ACME = CompareProfile(
-    rows=(*LLAMA_BENCH_ROWS, MetricRow("queue_s", "Queue time", "acme scheduler", "s"), MetricRow("kv_cache", "KV cache", "server", "text")),
+    rows=(
+        *LLAMA_BENCH_ROWS,
+        MetricRow("queue_s", "Queue time", "acme scheduler", "s"),
+        MetricRow("kv_cache", "KV cache", "server", "text"),
+    ),
     families=(
         Family(
             "acme-eval",
@@ -252,15 +326,25 @@ class TestProductFamilies:
         after = write(tmp_path, "b.json", acme("new", 1.0, kv="q8_0/q8_0"))
         markdown = compare_markdown([before], [after], BenchSelection(), ACME)
         assert "## Acme metrics" in markdown
-        assert table_row(markdown, "Queue time")[1:] == ["acme scheduler", "2.00 s (n=3)", "1.00 s (n=3)", "-1.00 s (-50%)"]
-        assert table_row(markdown, "llama.cpp / runtime")[1:] == ["acme-runtime 3", "acme-runtime 3"]
+        assert table_row(markdown, "Queue time")[1:] == [
+            "acme scheduler",
+            "2.00 s (n=3)",
+            "1.00 s (n=3)",
+            "-1.00 s (-50%)",
+        ]
+        assert table_row(markdown, "llama.cpp / runtime")[1:] == [
+            "acme-runtime 3",
+            "acme-runtime 3",
+        ]
         assert table_row(markdown, "Run started")[1] == "2026-10-01"
         assert table_row(markdown, "Model")[1] == "acme-engine"
         assert "- old: acme warning" in markdown
         assert "The KV cache differs (f16/f16 before, q8_0/q8_0 after)" in markdown
         assert "## Notes\n\n- old: measured by hand\n- new: measured by hand" in markdown
 
-    def test_the_kits_own_evaluation_kind_is_unknown_to_a_profile_that_drops_it(self, tmp_path, make_item):
+    def test_the_kits_own_evaluation_kind_is_unknown_to_a_profile_that_drops_it(
+        self, tmp_path, make_item
+    ):
         path = write(tmp_path, "first.json", kit_eval(make_item, [1.0]))
         with pytest.raises(ValueError, match="not a benchmark file"):
             load_document(path, ACME)
@@ -268,8 +352,13 @@ class TestProductFamilies:
 
 class TestInputs:
     def test_two_files_of_the_same_family_on_one_side_are_refused(self, tmp_path, make_item):
-        documents = [load_document(write(tmp_path, f"{name}.json", kit_eval(make_item, [1.0]))) for name in "ab"]
-        with pytest.raises(ValueError, match="at most one llama-bench file and one end-to-end file"):
+        documents = [
+            load_document(write(tmp_path, f"{name}.json", kit_eval(make_item, [1.0])))
+            for name in "ab"
+        ]
+        with pytest.raises(
+            ValueError, match="at most one llama-bench file and one end-to-end file"
+        ):
             build_side("before", documents, BenchSelection())
 
     def test_other_json_is_refused(self, tmp_path):
@@ -286,11 +375,23 @@ class TestInputs:
 
 class TestCommandLine:
     def test_file_choices(self):
-        parse = __import__("horus_bench_kit.cli.compare", fromlist=["build_parser"]).build_parser().parse_args
+        parse = (
+            __import__("horus_bench_kit.cli.compare", fromlist=["build_parser"])
+            .build_parser()
+            .parse_args
+        )
         assert chosen_files(parse(["a.json", "b.json"])) == (["a.json"], ["b.json"])
         assert chosen_files(parse(["a.json"])) == (["a.json"], [])
-        assert chosen_files(parse(["--before", "a.json", "b.json", "--after", "c.json"])) == (["a.json", "b.json"], ["c.json"])
-        for argv in ([], ["a.json", "b.json", "c.json"], ["a.json", "--before", "b.json"], ["--after", "a.json"]):
+        assert chosen_files(parse(["--before", "a.json", "b.json", "--after", "c.json"])) == (
+            ["a.json", "b.json"],
+            ["c.json"],
+        )
+        for argv in (
+            [],
+            ["a.json", "b.json", "c.json"],
+            ["a.json", "--before", "b.json"],
+            ["--after", "a.json"],
+        ):
             with pytest.raises(ValueError):
                 chosen_files(parse(argv))
 
@@ -301,7 +402,9 @@ class TestCommandLine:
         printed = capsys.readouterr().out
         assert printed.startswith("# Benchmark\n")
         assert out.read_text(encoding="utf-8") == printed
-        assert table_row(printed, "llama-bench rows shown")[1] == f"{SMALL}, KV q8_0/q8_0, 4 threads"
+        assert (
+            table_row(printed, "llama-bench rows shown")[1] == f"{SMALL}, KV q8_0/q8_0, 4 threads"
+        )
 
     def test_main_reports_a_missing_file(self, tmp_path, capsys):
         assert main([str(tmp_path / "missing.json")]) == 2
@@ -310,14 +413,19 @@ class TestCommandLine:
     def test_the_version_option_can_be_left_out(self, capsys):
         with pytest.raises(SystemExit) as stopped:
             main(["--version"])
-        assert (stopped.value.code, capsys.readouterr().out.strip()) == (0, f"hbk-compare {__version__}")
+        assert (stopped.value.code, capsys.readouterr().out.strip()) == (
+            0,
+            f"hbk-compare {__version__}",
+        )
         with pytest.raises(SystemExit) as refused:
             main(["--version"], version_option=False)
         assert refused.value.code == 2
 
 
 def test_metric_helpers_for_product_families():
-    assert stat_metric({"total_s": {"n": 3, "median": 0.0123}}, "total_s", "median", 1000.0) == Metric(12.3, 3)
+    assert stat_metric(
+        {"total_s": {"n": 3, "median": 0.0123}}, "total_s", "median", 1000.0
+    ) == Metric(12.3, 3)
     assert stat_metric({}, "total_s", "median") == Metric(None, None)
     assert rate_metric({"n": 4, "correct": 3, "pct": 75.0}) == Metric(75.0, 4)
     assert rate_metric(None) == Metric(None, None)

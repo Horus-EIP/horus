@@ -41,7 +41,9 @@ def _init_db(engine, tables):
         stack.enter_context(patch.object(init_setup, "run_migrations", return_value=True))
         stack.enter_context(patch.object(init_setup, "engine", engine))
         stack.enter_context(patch("sqlalchemy.inspect", return_value=inspector))
-        stack.enter_context(patch.object(init_setup, "create_critical_logs_table", return_value=True))
+        stack.enter_context(
+            patch.object(init_setup, "create_critical_logs_table", return_value=True)
+        )
         stack.enter_context(patch.object(init_setup, "SessionLocal", MagicMock()))
         stack.enter_context(patch("db.seed_agents.seed_manager_agent"))
         create_all = stack.enter_context(patch.object(init_setup.Base.metadata, "create_all"))

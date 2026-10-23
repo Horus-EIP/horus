@@ -197,9 +197,7 @@ TOKEN_RESPONSES = {
                     },
                     "token_generation_error": {
                         "summary": "Error generating JWT token",
-                        "value": {
-                            "detail": "Error: could not generate authentication token"
-                        },
+                        "value": {"detail": "Error: could not generate authentication token"},
                     },
                 }
             }

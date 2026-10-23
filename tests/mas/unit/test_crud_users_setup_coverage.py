@@ -261,9 +261,7 @@ class TestGetAllTasksInternal:
         db = MagicMock()
         filtered = [MagicMock()]
         db.query.return_value.filter.return_value.all.return_value = filtered
-        out = task_crud._get_all_tasks_internal(
-            db, status_filter=TaskRunStatus.RUNNING
-        )
+        out = task_crud._get_all_tasks_internal(db, status_filter=TaskRunStatus.RUNNING)
         assert out is filtered
         db.query.return_value.filter.assert_called_once()
 
@@ -288,9 +286,7 @@ class TestGetAllTasksInternal:
 class TestGetTasksInProgress:
     def test_success_delegates_with_queued_and_running_filter(self):
         running = [MagicMock()]
-        with patch.object(
-            task_crud, "_get_all_tasks_internal", return_value=running
-        ) as inner:
+        with patch.object(task_crud, "_get_all_tasks_internal", return_value=running) as inner:
             out = task_crud.get_tasks_in_progress(MagicMock())
         assert out is running
         assert inner.call_args.kwargs["status_in"] == [
@@ -505,8 +501,7 @@ class TestCollaborativeTask:
     def test_aggregate_results_only_completed(self):
         ct = CollaborativeTask(
             sub_tasks=[
-                _subtask(agent_type="writer", status=TaskStatus.COMPLETED,
-                         result="A"),
+                _subtask(agent_type="writer", status=TaskStatus.COMPLETED, result="A"),
                 _subtask(agent_type="coder", status=TaskStatus.PENDING, result="B"),
                 _subtask(agent_type="qa", status=TaskStatus.COMPLETED, result="C"),
             ]
@@ -576,31 +571,34 @@ class TestEnsureEmbedderLoaded:
     def test_test_mode_short_circuits(self, monkeypatch):
         # conftest sets TEST_MODE=1; confirm we never touch the loader.
         monkeypatch.setenv("TEST_MODE", "1")
-        with patch.object(embedding_setup, "_embedder", None), \
-             patch.object(embedding_setup, "_load_embedder") as loader:
+        with (
+            patch.object(embedding_setup, "_embedder", None),
+            patch.object(embedding_setup, "_load_embedder") as loader,
+        ):
             embedding_setup._ensure_embedder_loaded()
             loader.assert_not_called()
 
     def test_loads_when_not_in_test_mode_and_unloaded(self, monkeypatch):
         monkeypatch.delenv("TEST_MODE", raising=False)
         fake_model = MagicMock()
-        with patch.object(embedding_setup, "_embedder", None), \
-             patch.object(embedding_setup, "_load_embedder",
-                          return_value=fake_model) as loader:
+        with (
+            patch.object(embedding_setup, "_embedder", None),
+            patch.object(embedding_setup, "_load_embedder", return_value=fake_model) as loader,
+        ):
             embedding_setup._ensure_embedder_loaded()
             loader.assert_called_once()
             assert embedding_setup._embedder is fake_model
 
     def test_already_loaded_skips_loader(self, monkeypatch):
         monkeypatch.delenv("TEST_MODE", raising=False)
-        with patch.object(embedding_setup, "_embedder", MagicMock()), \
-             patch.object(embedding_setup, "_load_embedder") as loader:
+        with (
+            patch.object(embedding_setup, "_embedder", MagicMock()),
+            patch.object(embedding_setup, "_load_embedder") as loader,
+        ):
             embedding_setup._ensure_embedder_loaded()
             loader.assert_not_called()
 
-    def test_double_checked_lock_skips_loader_when_set_under_lock(
-        self, monkeypatch
-    ):
+    def test_double_checked_lock_skips_loader_when_set_under_lock(self, monkeypatch):
         # Simulate the race: _embedder is None at the first check, but another
         # thread populated it by the time we acquire the lock. The second guard
         # inside the lock must short-circuit before calling the loader.
@@ -614,10 +612,11 @@ class TestEnsureEmbedderLoaded:
             def __exit__(self_lock, *exc):
                 return False
 
-        with patch.object(embedding_setup, "_embedder", None), \
-             patch.object(embedding_setup, "_embedder_load_lock",
-                          _LockSettingEmbedder()), \
-             patch.object(embedding_setup, "_load_embedder") as loader:
+        with (
+            patch.object(embedding_setup, "_embedder", None),
+            patch.object(embedding_setup, "_embedder_load_lock", _LockSettingEmbedder()),
+            patch.object(embedding_setup, "_load_embedder") as loader,
+        ):
             embedding_setup._ensure_embedder_loaded()
             loader.assert_not_called()
 
@@ -651,13 +650,14 @@ class TestPreloadBackgroundThread:
         router_warm = MagicMock()
         fake_router = MagicMock(warm_router_examples=router_warm)
 
-        with patch.object(embedding_setup.threading, "Thread",
-                          side_effect=fake_thread), \
-             patch.object(embedding_setup, "_ensure_embedder_loaded") as ensure, \
-             patch.dict(
-                 "sys.modules",
-                 {"core.skill_cache": fake_skill_cache, "tasks.router": fake_router},
-             ):
+        with (
+            patch.object(embedding_setup.threading, "Thread", side_effect=fake_thread),
+            patch.object(embedding_setup, "_ensure_embedder_loaded") as ensure,
+            patch.dict(
+                "sys.modules",
+                {"core.skill_cache": fake_skill_cache, "tasks.router": fake_router},
+            ),
+        ):
             embedding_setup.start_embedding_preload_background_thread()
             # Invoke the captured worker as the thread would have.
             captured["target"]()
@@ -678,15 +678,17 @@ class TestPreloadBackgroundThread:
         failing_router = MagicMock()
         failing_router.warm_router_examples.side_effect = RuntimeError("examples failed")
 
-        with patch.object(embedding_setup.threading, "Thread", side_effect=fake_thread), \
-             patch.object(embedding_setup, "_ensure_embedder_loaded"), \
-             patch.dict(
-                 "sys.modules",
-                 {
-                     "core.skill_cache": MagicMock(warm_skill_cache=skill_warm),
-                     "tasks.router": failing_router,
-                 },
-             ):
+        with (
+            patch.object(embedding_setup.threading, "Thread", side_effect=fake_thread),
+            patch.object(embedding_setup, "_ensure_embedder_loaded"),
+            patch.dict(
+                "sys.modules",
+                {
+                    "core.skill_cache": MagicMock(warm_skill_cache=skill_warm),
+                    "tasks.router": failing_router,
+                },
+            ),
+        ):
             embedding_setup.start_embedding_preload_background_thread()
             captured["target"]()
 
@@ -701,10 +703,12 @@ class TestPreloadBackgroundThread:
             captured["target"] = target
             return MagicMock()
 
-        with patch.object(embedding_setup.threading, "Thread",
-                          side_effect=fake_thread), \
-             patch.object(embedding_setup, "_ensure_embedder_loaded",
-                          side_effect=RuntimeError("load failed")):
+        with (
+            patch.object(embedding_setup.threading, "Thread", side_effect=fake_thread),
+            patch.object(
+                embedding_setup, "_ensure_embedder_loaded", side_effect=RuntimeError("load failed")
+            ),
+        ):
             embedding_setup.start_embedding_preload_background_thread()
             # Worker must not propagate the exception.
             captured["target"]()
@@ -720,12 +724,13 @@ class TestPreloadBackgroundThread:
         boom_cache = MagicMock()
         boom_cache.warm_skill_cache.side_effect = RuntimeError("warm failed")
 
-        with patch.object(embedding_setup.threading, "Thread",
-                          side_effect=fake_thread), \
-             patch.object(embedding_setup, "_ensure_embedder_loaded"), \
-             patch.dict(
-                 "sys.modules", {"core.skill_cache": boom_cache, "tasks.router": MagicMock()}
-             ):
+        with (
+            patch.object(embedding_setup.threading, "Thread", side_effect=fake_thread),
+            patch.object(embedding_setup, "_ensure_embedder_loaded"),
+            patch.dict(
+                "sys.modules", {"core.skill_cache": boom_cache, "tasks.router": MagicMock()}
+            ),
+        ):
             embedding_setup.start_embedding_preload_background_thread()
             captured["target"]()  # inner warm raises, outer try swallows
 
@@ -733,11 +738,11 @@ class TestPreloadBackgroundThread:
 class TestEmbedTexts:
     def test_embed_texts_returns_float32_matrix(self):
         fake_model = MagicMock()
-        fake_model.embed.return_value = iter(
-            [np.array([1.0, 2.0]), np.array([3.0, 4.0])]
-        )
-        with patch.object(embedding_setup, "_embedder", fake_model), \
-             patch.object(embedding_setup, "_ensure_embedder_loaded"):
+        fake_model.embed.return_value = iter([np.array([1.0, 2.0]), np.array([3.0, 4.0])])
+        with (
+            patch.object(embedding_setup, "_embedder", fake_model),
+            patch.object(embedding_setup, "_ensure_embedder_loaded"),
+        ):
             out = embedding_setup.embed_texts(["a", "b"])
         assert out.dtype == np.float32
         assert out.shape == (2, 2)
@@ -746,23 +751,29 @@ class TestEmbedTexts:
     def test_embed_texts_of_nothing_is_an_empty_matrix_of_the_model_width(self):
         fake_model = MagicMock(embedding_size=384)
         fake_model.embed.return_value = iter([])
-        with patch.object(embedding_setup, "_embedder", fake_model), \
-             patch.object(embedding_setup, "_ensure_embedder_loaded"):
+        with (
+            patch.object(embedding_setup, "_embedder", fake_model),
+            patch.object(embedding_setup, "_ensure_embedder_loaded"),
+        ):
             out = embedding_setup.embed_texts([])
         assert out.shape == (0, 384)
         assert out.dtype == np.float32
 
     def test_embed_texts_raises_when_model_not_loaded(self):
-        with patch.object(embedding_setup, "_embedder", None), \
-             patch.object(embedding_setup, "_ensure_embedder_loaded"):
+        with (
+            patch.object(embedding_setup, "_embedder", None),
+            patch.object(embedding_setup, "_ensure_embedder_loaded"),
+        ):
             with pytest.raises(RuntimeError, match="Embedding model is not loaded"):
                 embedding_setup.embed_texts(["x"])
 
     def test_embed_text_returns_single_vector(self):
         fake_model = MagicMock()
         fake_model.embed.return_value = iter([np.array([5.0, 6.0, 7.0])])
-        with patch.object(embedding_setup, "_embedder", fake_model), \
-             patch.object(embedding_setup, "_ensure_embedder_loaded"):
+        with (
+            patch.object(embedding_setup, "_embedder", fake_model),
+            patch.object(embedding_setup, "_ensure_embedder_loaded"),
+        ):
             vec = embedding_setup.embed_text("hello")
         assert vec.shape == (3,)
         assert vec.dtype == np.float32
@@ -790,8 +801,7 @@ class TestRunCommand:
             assert alembic_helper.run_command(["alembic", "bogus"]) is False
 
     def test_subprocess_exception_returns_false(self):
-        with patch.object(alembic_helper.subprocess, "run",
-                          side_effect=OSError("no alembic")):
+        with patch.object(alembic_helper.subprocess, "run", side_effect=OSError("no alembic")):
             assert alembic_helper.run_command(["alembic", "current"], "d") is False
 
 
@@ -799,8 +809,7 @@ class TestAlembicMain:
     def _run_main(self, argv, monkeypatch):
         """Invoke main() with patched argv + run_command; return the mock."""
         monkeypatch.setattr(alembic_helper.sys, "argv", argv)
-        with patch.object(alembic_helper, "run_command",
-                          return_value=True) as run:
+        with patch.object(alembic_helper, "run_command", return_value=True) as run:
             alembic_helper.main()
         return run
 
@@ -833,13 +842,9 @@ class TestAlembicMain:
         assert run.call_args.args[0] == ["alembic", "current"]
 
     def test_create_with_description_builds_autogenerate(self, monkeypatch):
-        run = self._run_main(
-            ["alembic_helper.py", "create", "Add", "email", "column"], monkeypatch
-        )
+        run = self._run_main(["alembic_helper.py", "create", "Add", "email", "column"], monkeypatch)
         cmd = run.call_args.args[0]
-        assert cmd == [
-            "alembic", "revision", "--autogenerate", "-m", "Add email column"
-        ]
+        assert cmd == ["alembic", "revision", "--autogenerate", "-m", "Add email column"]
 
     def test_create_without_description_exits_1(self, monkeypatch):
         monkeypatch.setattr(alembic_helper.sys, "argv", ["alembic_helper.py", "create"])
@@ -858,9 +863,7 @@ class TestAlembicMain:
         assert called_cmds.count(["alembic", "current"]) >= 2
 
     def test_unknown_command_exits_1(self, monkeypatch):
-        monkeypatch.setattr(
-            alembic_helper.sys, "argv", ["alembic_helper.py", "frobnicate"]
-        )
+        monkeypatch.setattr(alembic_helper.sys, "argv", ["alembic_helper.py", "frobnicate"])
         with patch.object(alembic_helper, "run_command") as run:
             with pytest.raises(SystemExit) as exc:
                 alembic_helper.main()

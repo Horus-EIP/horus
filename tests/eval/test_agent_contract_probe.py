@@ -25,9 +25,27 @@ def probe():
 
 
 PASSAGES = [
-    {"chunk_id": "d4:2", "doc_id": "d4", "title": "4_Expense_Policy.md", "page": None, "text": "Hotels: $250 per night in the US."},
-    {"chunk_id": "d2:7", "doc_id": "d2", "title": "2_Employee_Handbook.md", "page": 3, "text": "Travel is booked through the portal."},
-    {"chunk_id": "d4:3", "doc_id": "d4", "title": "4_Expense_Policy.md", "page": None, "text": "Meals: $75 per day."},
+    {
+        "chunk_id": "d4:2",
+        "doc_id": "d4",
+        "title": "4_Expense_Policy.md",
+        "page": None,
+        "text": "Hotels: $250 per night in the US.",
+    },
+    {
+        "chunk_id": "d2:7",
+        "doc_id": "d2",
+        "title": "2_Employee_Handbook.md",
+        "page": 3,
+        "text": "Travel is booked through the portal.",
+    },
+    {
+        "chunk_id": "d4:3",
+        "doc_id": "d4",
+        "title": "4_Expense_Policy.md",
+        "page": None,
+        "text": "Meals: $75 per day.",
+    },
 ]
 
 
@@ -41,7 +59,12 @@ class FakeCatalog:
         for passage in passages:
             label = f"S{len(self.labels) + 1}"
             self.labels.append(label)
-            self.records[label] = {"doc_id": passage["doc_id"], "chunk_id": passage["chunk_id"], "title": passage["title"], "page": passage["page"]}
+            self.records[label] = {
+                "doc_id": passage["doc_id"],
+                "chunk_id": passage["chunk_id"],
+                "title": passage["title"],
+                "page": passage["page"],
+            }
             blocks.append(f"[{label}] {passage['title']}\n{passage['text']}")
         return "\n\n".join(blocks)[:budget]
 
@@ -54,17 +77,34 @@ class FakeContractModule:
 
     @staticmethod
     def answer_prompt(request, context, labels):
-        return f"rules for {len(labels)} labels", f"Request: {request}\n\nPassages:\n{context or '(no passages)'}"
+        return (
+            f"rules for {len(labels)} labels",
+            f"Request: {request}\n\nPassages:\n{context or '(no passages)'}",
+        )
 
     @staticmethod
     def answer_response_format(labels):
-        properties = {"status": {"type": "string", "enum": ["ok", "not_found"]}, "answer": {"type": "string"}}
+        properties = {
+            "status": {"type": "string", "enum": ["ok", "not_found"]},
+            "answer": {"type": "string"},
+        }
         required = ["status", "answer"]
         if labels:
-            properties["sources"] = {"type": "array", "items": {"type": "string", "enum": list(labels)}}
+            properties["sources"] = {
+                "type": "array",
+                "items": {"type": "string", "enum": list(labels)},
+            }
             required.append("sources")
-        schema = {"type": "object", "properties": properties, "required": required, "additionalProperties": False}
-        return {"type": "json_schema", "json_schema": {"name": "agent_answer", "strict": True, "schema": schema}}
+        schema = {
+            "type": "object",
+            "properties": properties,
+            "required": required,
+            "additionalProperties": False,
+        }
+        return {
+            "type": "json_schema",
+            "json_schema": {"name": "agent_answer", "strict": True, "schema": schema},
+        }
 
 
 class FakeAgentModule:
@@ -111,9 +151,21 @@ def contract(probe, results):
 
 def llama_response(content, **extra):
     return {
-        "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": content, **extra}}],
+        "choices": [
+            {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {"role": "assistant", "content": content, **extra},
+            }
+        ],
         "usage": {"prompt_tokens": 812, "completion_tokens": 31, "total_tokens": 843},
-        "timings": {"prompt_n": 812, "prompt_ms": 15000.0, "predicted_n": 31, "predicted_ms": 3100.0, "predicted_per_second": 10.0},
+        "timings": {
+            "prompt_n": 812,
+            "prompt_ms": 15000.0,
+            "predicted_n": 31,
+            "predicted_ms": 3100.0,
+            "predicted_per_second": 10.0,
+        },
     }
 
 
@@ -124,11 +176,23 @@ class TestPrepare:
         assert prepared.url == "http://llm:8080/v1/chat/completions"
         assert prepared.timeout == 900.0
         assert prepared.labels == ["S1", "S2", "S3"]
-        assert prepared.sources_by_label["S2"] == {"doc_id": "d2", "chunk_id": "d2:7", "title": "2_Employee_Handbook.md", "page": 3}
+        assert prepared.sources_by_label["S2"] == {
+            "doc_id": "d2",
+            "chunk_id": "d2:7",
+            "title": "2_Employee_Handbook.md",
+            "page": 3,
+        }
         assert prepared.retrieved_titles == ["4_Expense_Policy.md", "2_Employee_Handbook.md"]
         assert prepared.schema["properties"]["sources"]["items"]["enum"] == ["S1", "S2", "S3"]
         payload = prepared.payload
-        assert set(payload) == {"model", "messages", "max_tokens", "temperature", "stream", "response_format"}
+        assert set(payload) == {
+            "model",
+            "messages",
+            "max_tokens",
+            "temperature",
+            "stream",
+            "response_format",
+        }
         assert payload["model"] == "qwen3-4b"
         assert payload["max_tokens"] == 1536
         assert payload["temperature"] == 0.0
@@ -137,7 +201,9 @@ class TestPrepare:
         assert "[S1] 4_Expense_Policy.md" in payload["messages"][1]["content"]
 
     def test_without_passages_the_store_text_is_the_context_and_nothing_can_be_cited(self, probe):
-        prepared = contract(probe, {}).prepare("hello", {"query": "hello", "data": "Documents in the store: ..."})
+        prepared = contract(probe, {}).prepare(
+            "hello", {"query": "hello", "data": "Documents in the store: ..."}
+        )
         assert prepared.labels == []
         assert prepared.sources_by_label == {}
         assert "sources" not in prepared.schema["properties"]
@@ -145,7 +211,10 @@ class TestPrepare:
 
     def test_a_failed_search_is_a_retrieval_error_like_the_rag_pipeline(self, probe):
         glue = contract(probe, {})
-        assert glue.retrieval_error({"data": "Error", "error": "Failed to query knowledge store"}) == "Failed to query knowledge store"
+        assert (
+            glue.retrieval_error({"data": "Error", "error": "Failed to query knowledge store"})
+            == "Failed to query knowledge store"
+        )
         assert glue.retrieval_error({"passages": PASSAGES, "error": "ignored"}) is None
         assert glue.retrieval_error({"data": ""}) is None
 
@@ -162,7 +231,12 @@ class TestProbeItem:
 
         ticks = iter([10.0, 22.5])
         record = asyncio.run(
-            probe.probe_item({"id": "exp-01", "question": "What is the hotel limit?"}, glue, post, clock=lambda: next(ticks))
+            probe.probe_item(
+                {"id": "exp-01", "question": "What is the hotel limit?"},
+                glue,
+                post,
+                clock=lambda: next(ticks),
+            )
         )
         assert sent[0][0] == "http://llm:8080/v1/chat/completions"
         assert record["id"] == "exp-01"
@@ -175,10 +249,16 @@ class TestProbeItem:
         assert check_reply(record)[1] is None
 
     def test_a_retrieval_failure_never_reaches_the_model(self, probe):
-        glue = contract(probe, {"q": RuntimeError("store down"), "r": {"data": "", "error": "Invalid request"}})
+        glue = contract(
+            probe, {"q": RuntimeError("store down"), "r": {"data": "", "error": "Invalid request"}}
+        )
         posted = []
-        first = asyncio.run(probe.probe_item({"id": "a", "question": "q"}, glue, lambda *a: posted.append(a)))
-        second = asyncio.run(probe.probe_item({"id": "b", "question": "r"}, glue, lambda *a: posted.append(a)))
+        first = asyncio.run(
+            probe.probe_item({"id": "a", "question": "q"}, glue, lambda *a: posted.append(a))
+        )
+        second = asyncio.run(
+            probe.probe_item({"id": "b", "question": "r"}, glue, lambda *a: posted.append(a))
+        )
         assert first == {"id": "a", "error_stage": "retrieval", "error": "RuntimeError: store down"}
         assert second == {"id": "b", "error_stage": "retrieval", "error": "Invalid request"}
         assert posted == []
@@ -191,7 +271,10 @@ class TestProbeItem:
 
         record = asyncio.run(probe.probe_item({"id": "a", "question": "q"}, glue, post))
         assert record["error_stage"] == "llm"
-        assert record["error"] == "RuntimeError: HTTP 400: the request exceeds the available context size"
+        assert (
+            record["error"]
+            == "RuntimeError: HTTP 400: the request exceeds the available context size"
+        )
         assert record["labels"] == ["S1", "S2", "S3"]
 
 
@@ -207,14 +290,21 @@ def test_reply_from_response_tolerates_a_missing_choice(probe):
 
 
 def test_run_probe_warms_up_unscored_and_emits_one_line_per_question(probe):
-    results = {"warm": {"passages": PASSAGES}, "q1": {"passages": PASSAGES}, "q2": {"passages": PASSAGES[:1]}}
+    results = {
+        "warm": {"passages": PASSAGES},
+        "q1": {"passages": PASSAGES},
+        "q2": {"passages": PASSAGES[:1]},
+    }
     glue = contract(probe, results)
     emitted = []
 
     def post(url, payload, timeout):
         return llama_response(json.dumps({"status": "ok", "answer": "x", "sources": []}))
 
-    job = {"warmup": "warm", "items": [{"id": "i1", "question": "q1"}, {"id": "i2", "question": "q2"}]}
+    job = {
+        "warmup": "warm",
+        "items": [{"id": "i1", "question": "q1"}, {"id": "i2", "question": "q2"}],
+    }
     count = asyncio.run(probe.run_probe(job, glue, emitted.append, post))
     assert count == 2
     assert [record["id"] for record in emitted] == ["i1", "i2"]
@@ -225,7 +315,9 @@ def test_main_reads_the_job_from_stdin_and_writes_json_lines(probe, monkeypatch,
     glue = contract(probe, {"q1": {"passages": PASSAGES}})
     monkeypatch.setattr(probe, "load_agent_contract", lambda app_dir: glue)
     monkeypatch.setattr(probe, "post_json", lambda url, payload, timeout: llama_response("{}"))
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({"items": [{"id": "i1", "question": "q1"}]})))
+    monkeypatch.setattr(
+        sys, "stdin", io.StringIO(json.dumps({"items": [{"id": "i1", "question": "q1"}]}))
+    )
     assert probe.main() == 0
     captured = capsys.readouterr()
     assert [json.loads(line)["id"] for line in captured.out.splitlines()] == ["i1"]
@@ -267,7 +359,9 @@ def test_the_probe_drives_the_real_agent_contract_and_the_checker_accepts_its_sc
         env=env,
     )
     if completed.returncode != 0 and "ModuleNotFoundError" in completed.stderr:
-        pytest.skip(f"the agent's modules do not import here: {completed.stderr.strip().splitlines()[-1]}")
+        pytest.skip(
+            f"the agent's modules do not import here: {completed.stderr.strip().splitlines()[-1]}"
+        )
     assert completed.returncode == 0, completed.stderr
     found = json.loads(completed.stdout.strip().splitlines()[-1])
     assert found["labels"] == ["S1", "S2", "S3"]
@@ -277,6 +371,12 @@ def test_the_probe_drives_the_real_agent_contract_and_the_checker_accepts_its_sc
     schema = found["schema"]
     good = {"status": "ok", "answer": "$250 per night.", "sources": ["S1"]}
     assert check_reply({"content": json.dumps(good), "schema": schema})[1] is None
-    assert check_reply({"content": json.dumps({**good, "sources": ["S7"]}), "schema": schema})[1] == "schema"
+    assert (
+        check_reply({"content": json.dumps({**good, "sources": ["S7"]}), "schema": schema})[1]
+        == "schema"
+    )
     refusal = {"status": "not_found", "answer": "The documents do not say."}
-    assert check_reply({"content": json.dumps(refusal), "schema": found["schema_without_passages"]})[1] is None
+    assert (
+        check_reply({"content": json.dumps(refusal), "schema": found["schema_without_passages"]})[1]
+        is None
+    )

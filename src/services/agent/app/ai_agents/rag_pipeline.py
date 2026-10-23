@@ -272,7 +272,8 @@ class RAGPipeline:
         attached_ids = {str(f["doc_id"]) for f in attached_files if f.get("doc_id")}
         attached_names = {f["filename"] for f in attached_files if f.get("filename")}
         others = [
-            passage for passage in passages or []
+            passage
+            for passage in passages or []
             if isinstance(passage, dict)
             and passage.get("doc_id") not in attached_ids
             and passage.get("title") not in attached_names
@@ -310,17 +311,14 @@ class RAGPipeline:
         if operation and self.tool_registry.has(operation):
             # Tools are CPU-bound, run in thread pool
             import asyncio
+
             emit_step(
                 "tool.invoke",
                 f"Running tool: {operation}",
                 f"Dispatching to the '{operation}' tool in the registry.",
                 tool=operation,
             )
-            response_text = await asyncio.to_thread(
-                self.tool_registry.run,
-                operation,
-                task
-            )
+            response_text = await asyncio.to_thread(self.tool_registry.run, operation, task)
             return {
                 "task_id": task.get("task_id"),
                 "response": response_text,
@@ -375,8 +373,22 @@ class RAGPipeline:
     def _build_default_registry(self) -> ToolRegistry:
         registry = ToolRegistry()
         registry.register(CalculatorTool(), aliases=["calc", "calculator"])
-        registry.register(FileParserTool(), aliases=["parse", "file_parse", "file"],)
+        registry.register(
+            FileParserTool(),
+            aliases=["parse", "file_parse", "file"],
+        )
         registry.register(SummarizerTool(), aliases=["summary", "summarize_text"])
-        registry.register(DataExtractorTool(), aliases=["data_extractor", "extract_data", "data", "extract"])
-        registry.register(PaymentAnalyzerTool(), aliases=["payment_analysis", "analyze_payments", "payment_analyzer", "payment", "analyze"])
+        registry.register(
+            DataExtractorTool(), aliases=["data_extractor", "extract_data", "data", "extract"]
+        )
+        registry.register(
+            PaymentAnalyzerTool(),
+            aliases=[
+                "payment_analysis",
+                "analyze_payments",
+                "payment_analyzer",
+                "payment",
+                "analyze",
+            ],
+        )
         return registry

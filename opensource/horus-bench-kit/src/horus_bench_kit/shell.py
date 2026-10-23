@@ -39,7 +39,9 @@ class Shell:
             return COMMAND_NOT_STARTED, ""
         return completed.returncode, completed.stdout or ""
 
-    def run_and_echo(self, argv: Sequence[str], stdin_text: str | None = None) -> tuple[int, list[str]]:
+    def run_and_echo(
+        self, argv: Sequence[str], stdin_text: str | None = None
+    ) -> tuple[int, list[str]]:
         command = list(argv)
         print("[info] " + shlex.join(command), flush=True)
         try:
@@ -98,4 +100,6 @@ class Shell:
 
     def git_commit(self, directory: Path | str | None = None) -> str | None:
         folder = Path(directory) if directory is not None else Path.cwd()
-        return (self.run_text(["git", "-C", str(folder), "rev-parse", "--short", "HEAD"]) or "").strip() or None
+        return (
+            self.run_text(["git", "-C", str(folder), "rev-parse", "--short", "HEAD"]) or ""
+        ).strip() or None

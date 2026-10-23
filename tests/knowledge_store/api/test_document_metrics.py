@@ -15,9 +15,7 @@ MEMO = "Lunch is served after the Monday meeting."
 
 
 def operations(operation: str, status: str) -> float:
-    return REGISTRY.get_sample_value(
-        OPERATIONS, {"operation": operation, "status": status}
-    ) or 0.0
+    return REGISTRY.get_sample_value(OPERATIONS, {"operation": operation, "status": status}) or 0.0
 
 
 def documents() -> float | None:
@@ -115,9 +113,7 @@ class TestDocumentOperations:
         assert counted.since("get", "success") == 1
         assert counted.since("get", "error") == 1
 
-    def test_a_count_that_cannot_be_read_leaves_the_gauge_alone(
-        self, fake_collection, monkeypatch
-    ):
+    def test_a_count_that_cannot_be_read_leaves_the_gauge_alone(self, fake_collection, monkeypatch):
         file_service.refresh_document_count()
         before = documents()
 

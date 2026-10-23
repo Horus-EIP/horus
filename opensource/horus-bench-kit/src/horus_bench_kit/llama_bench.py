@@ -48,13 +48,20 @@ class BenchMatrix:
 
     def llama_bench_args(self) -> list[str]:
         return [
-            "-p", self.prompts,
-            "-n", self.generations,
-            "-d", self.depths,
-            "-ctk", self.cache_types_k,
-            "-ctv", self.cache_types_v,
-            "-t", self.threads,
-            "-r", str(self.repetitions),
+            "-p",
+            self.prompts,
+            "-n",
+            self.generations,
+            "-d",
+            self.depths,
+            "-ctk",
+            self.cache_types_k,
+            "-ctv",
+            self.cache_types_v,
+            "-t",
+            self.threads,
+            "-r",
+            str(self.repetitions),
         ]
 
     def test_count(self, model_count: int) -> int:
@@ -90,7 +97,10 @@ def recorded_command(command: list[str] | None, models_dir: str | None) -> list[
     if not command or not models_dir:
         return command
     host = f"{models_dir}:"
-    return [MODELS_DIR_PLACEHOLDER + arg[len(models_dir):] if arg.startswith(host) else arg for arg in command]
+    return [
+        MODELS_DIR_PLACEHOLDER + arg[len(models_dir) :] if arg.startswith(host) else arg
+        for arg in command
+    ]
 
 
 def bench_command(image: str, source: str, files: list[str], matrix: BenchMatrix) -> list[str]:
@@ -102,16 +112,32 @@ def bench_command(image: str, source: str, files: list[str], matrix: BenchMatrix
 
 def listing_command(image: str, source: str) -> list[str]:
     return [
-        "docker", "run", "--rm", *models_mount(source),
-        "--entrypoint", "find", image,
-        CONTAINER_MODELS_DIR, "-maxdepth", "1", "-name", "*.gguf", "-printf", "%s %f\\n",
+        "docker",
+        "run",
+        "--rm",
+        *models_mount(source),
+        "--entrypoint",
+        "find",
+        image,
+        CONTAINER_MODELS_DIR,
+        "-maxdepth",
+        "1",
+        "-name",
+        "*.gguf",
+        "-printf",
+        "%s %f\\n",
     ]
 
 
 def checksum_command(image: str, source: str, files: list[str]) -> list[str]:
     return [
-        "docker", "run", "--rm", *models_mount(source),
-        "--entrypoint", "sha256sum", image,
+        "docker",
+        "run",
+        "--rm",
+        *models_mount(source),
+        "--entrypoint",
+        "sha256sum",
+        image,
         *[container_path(file) for file in files],
     ]
 
@@ -147,7 +173,11 @@ def parse_bench_output(text: str) -> list[dict[str, Any]]:
 
 
 def model_files_in(rows: list[dict[str, Any]]) -> list[str]:
-    return list(dict.fromkeys(file_name(row.get("model_filename")) for row in rows if row.get("model_filename")))
+    return list(
+        dict.fromkeys(
+            file_name(row.get("model_filename")) for row in rows if row.get("model_filename")
+        )
+    )
 
 
 def model_records(

@@ -103,9 +103,7 @@ class RabbitMQ:
             self._ensure_connection()
             return func()
         except pika.exceptions.AMQPError as e:
-            logger.warning(
-                f"RabbitMQ error {type(e).__name__}: {e}, reconnecting and retrying..."
-            )
+            logger.warning(f"RabbitMQ error {type(e).__name__}: {e}, reconnecting and retrying...")
             try:
                 self.connect()
             except Exception as conn_err:
@@ -151,9 +149,7 @@ class RabbitMQ:
                 time.sleep(timeout)
                 timeout *= 2
 
-        logger.error(
-            f"RabbitMQ connection failed after {self.retries} retries: {last_err}"
-        )
+        logger.error(f"RabbitMQ connection failed after {self.retries} retries: {last_err}")
         raise last_err
 
     def _open_channel(self):
@@ -200,9 +196,7 @@ class RabbitMQ:
 
     def ensure_work_queue(self, queue_name: str) -> int:
         with self._lock:
-            depth, _bounded = self._execute_with_retry(
-                lambda: self._declare_work_queue(queue_name)
-            )
+            depth, _bounded = self._execute_with_retry(lambda: self._declare_work_queue(queue_name))
         return depth
 
     def work_queue_depth(self, queue_name: str) -> int:
@@ -299,14 +293,17 @@ class RabbitMQ:
                     raise WorkQueueUnroutable(queue_name) from None
             logger.info(f"Sent task to work queue {queue_name}")
 
-        with tracer.start_as_current_span(
-            f"publish {queue_name}",
-            kind=trace.SpanKind.PRODUCER,
-            attributes={
-                "messaging.system": "rabbitmq",
-                "messaging.destination.name": queue_name,
-            },
-        ), self._lock:
+        with (
+            tracer.start_as_current_span(
+                f"publish {queue_name}",
+                kind=trace.SpanKind.PRODUCER,
+                attributes={
+                    "messaging.system": "rabbitmq",
+                    "messaging.destination.name": queue_name,
+                },
+            ),
+            self._lock,
+        ):
             self._execute_with_retry(_action)
 
     def consume(self, queue_name, callback):
@@ -386,14 +383,17 @@ class RabbitMQ:
             )
             logger.info(f"Sent message to queue {queue_name}: {message}")
 
-        with tracer.start_as_current_span(
-            f"publish {queue_name}",
-            kind=trace.SpanKind.PRODUCER,
-            attributes={
-                "messaging.system": "rabbitmq",
-                "messaging.destination.name": queue_name,
-            },
-        ), self._lock:
+        with (
+            tracer.start_as_current_span(
+                f"publish {queue_name}",
+                kind=trace.SpanKind.PRODUCER,
+                attributes={
+                    "messaging.system": "rabbitmq",
+                    "messaging.destination.name": queue_name,
+                },
+            ),
+            self._lock,
+        ):
             self._execute_with_retry(_action)
 
     # ------------------------------------------------------------------

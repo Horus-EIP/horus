@@ -14,7 +14,9 @@ from horus_profile import COMPARE, COMPARE_DESCRIPTION  # noqa: E402
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    return compare.main(argv, profile=COMPARE, prog=None, description=COMPARE_DESCRIPTION, version_option=False)
+    return compare.main(
+        argv, profile=COMPARE, prog=None, description=COMPARE_DESCRIPTION, version_option=False
+    )
 
 
 if __name__ == "__main__":

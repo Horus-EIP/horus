@@ -52,12 +52,16 @@ def read_allowlist(path: Path) -> dict[tuple[str, str], str]:
     allowed = {}
     for item in data.get("allow") or []:
         if not str(item.get("reason", "")).strip():
-            raise SystemExit(f"{path.name}: {item.get('ecosystem')} {item.get('name')} has no reason")
+            raise SystemExit(
+                f"{path.name}: {item.get('ecosystem')} {item.get('name')} has no reason"
+            )
         allowed[(item["ecosystem"], notices.normalise(item["name"]))] = item["reason"]
     return allowed
 
 
-def allowed_by(allowed: dict[tuple[str, str], str], ecosystem: str, name: str) -> tuple[str, str] | None:
+def allowed_by(
+    allowed: dict[tuple[str, str], str], ecosystem: str, name: str
+) -> tuple[str, str] | None:
     for key in allowed:
         if key[0] == ecosystem and fnmatch.fnmatchcase(notices.normalise(name), key[1]):
             return key
@@ -83,11 +87,15 @@ def check(allowlist: Path) -> int:
         else:
             warnings.append(label)
     for label in sorted(set(warnings)):
-        print(f"warning  {label}: weak copyleft, keep it unmodified and listed in THIRD_PARTY_NOTICES")
+        print(
+            f"warning  {label}: weak copyleft, keep it unmodified and listed in THIRD_PARTY_NOTICES"
+        )
     for label in sorted(set(failures)):
         print(f"error    {label}: GPL, AGPL or SSPL inside a Horus process")
     for ecosystem, name in sorted(set(allowed) - used):
-        print(f"error    {allowlist.name}: {ecosystem} {name} is allowed but no longer used; remove it")
+        print(
+            f"error    {allowlist.name}: {ecosystem} {name} is allowed but no longer used; remove it"
+        )
     for problem in report.stale:
         print(f"error    {problem}")
     stale = len(set(allowed) - used) + len(report.stale)
@@ -98,8 +106,9 @@ def check(allowlist: Path) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Fail on GPL, AGPL or SSPL among the Python packages, the web client's production "
-                    "dependencies and the desktop app's Rust crates. LGPL is a warning. Images and "
-                    "models run as separate processes and are not checked.")
+        "dependencies and the desktop app's Rust crates. LGPL is a warning. Images and "
+        "models run as separate processes and are not checked."
+    )
     parser.add_argument("--allowlist", type=Path, default=ALLOWLIST)
     args = parser.parse_args(argv)
     return check(args.allowlist)

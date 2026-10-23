@@ -93,9 +93,7 @@ async def handle_agent_creation(
         log_error("AGENT", f"Failed to create agent {agent.name}")
         raise HTTPException(status_code=500, detail="Failed to create agent")
 
-    log_agent_operation(
-        agent.name, "REGISTER", f"ID: {agent_id}, Skills: {agent.skills}"
-    )
+    log_agent_operation(agent.name, "REGISTER", f"ID: {agent_id}, Skills: {agent.skills}")
 
     AGENT_COUNT.labels(status="active").inc()
 

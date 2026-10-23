@@ -102,9 +102,7 @@ def _store_event(task_id: str, event: dict) -> dict:
 
 
 def read_task_events(task_id: str, since: int = 0, limit: int = 1000) -> list[dict]:
-    entries = redis_db.xrange(
-        task_events_key(task_id), min=f"{since + 1}-0", max="+", count=limit
-    )
+    entries = redis_db.xrange(task_events_key(task_id), min=f"{since + 1}-0", max="+", count=limit)
     return [json.loads(fields["event"]) for _entry_id, fields in entries]
 
 
@@ -174,14 +172,10 @@ async def publish_agent_message(
     )
 
 
-async def publish_task_step(
-    task_id: str, conversation_id: int | str | None, step: dict
-) -> dict:
+async def publish_task_step(task_id: str, conversation_id: int | str | None, step: dict) -> dict:
     data = task_step_payload({**step, "task_id": task_id})
     event_type = (
-        TaskEventType.TOKEN
-        if data["step_type"] == TOKEN_STEP_TYPE
-        else TaskEventType.PROGRESS
+        TaskEventType.TOKEN if data["step_type"] == TOKEN_STEP_TYPE else TaskEventType.PROGRESS
     )
     return await publish_task_event(
         task_id,

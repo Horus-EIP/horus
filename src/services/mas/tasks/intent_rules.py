@@ -57,7 +57,9 @@ _GREETING_PHRASES = (
     r"ciao",
 )
 
-_THANKS_OBJECT = r"(?:\s+for\s+(?:the\s+|your\s+|all\s+the\s+)?(?:help|answer|info|information|reply))?"
+_THANKS_OBJECT = (
+    r"(?:\s+for\s+(?:the\s+|your\s+|all\s+the\s+)?(?:help|answer|info|information|reply))?"
+)
 
 _SMALL_TALK_PHRASES = (
     r"how\s+are\s+(?:you|u)(?:\s+doing)?(?:\s+today)?",

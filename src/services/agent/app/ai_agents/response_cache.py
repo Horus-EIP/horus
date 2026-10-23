@@ -53,9 +53,12 @@ _corpus_version_memo: tuple[str, float] | None = None
 
 
 def cache_enabled() -> bool:
-    return _REDIS_AVAILABLE and os.getenv(
-        "AGENT_RESPONSE_CACHE", "0"
-    ).strip().lower() in ("1", "true", "yes", "on")
+    return _REDIS_AVAILABLE and os.getenv("AGENT_RESPONSE_CACHE", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def _ttl_seconds() -> int:
@@ -76,7 +79,8 @@ def _gen_params_signature() -> str:
             # Backend + model: an AWQ vLLM answer differs from a bnb-NF4
             # transformers answer for the same (query, context) — cache apart.
             os.getenv("LLM_BACKEND", "transformers"),
-            os.getenv("LLM_VLLM_MODEL", "") if os.getenv("LLM_BACKEND") == "vllm"
+            os.getenv("LLM_VLLM_MODEL", "")
+            if os.getenv("LLM_BACKEND") == "vllm"
             else os.getenv("MODEL_NAME", "Qwen/Qwen3-4B-Instruct-2507"),
             os.getenv("AGENT_MAX_NEW_TOKENS", "256"),
             str(_max_context_chars()),
@@ -178,9 +182,7 @@ def _cached_answer(entry: str) -> AgentAnswer | None:
     return answer if is_cacheable_answer(answer.answer) else None
 
 
-async def get_cached(
-    query: str, context: str, corpus_version: str | None
-) -> AgentAnswer | None:
+async def get_cached(query: str, context: str, corpus_version: str | None) -> AgentAnswer | None:
     """Return a cached answer for this exact (query, context), or None."""
     if corpus_version is None or not cache_enabled():
         return None
@@ -207,9 +209,7 @@ async def set_cached(
     ):
         return
     key = _key(query, context, corpus_version)
-    entry = json.dumps(
-        {"answer": _normalize_model_text(answer.answer), "sources": answer.sources}
-    )
+    entry = json.dumps({"answer": _normalize_model_text(answer.answer), "sources": answer.sources})
     client = _new_client()
     try:
         ttl = _ttl_seconds()

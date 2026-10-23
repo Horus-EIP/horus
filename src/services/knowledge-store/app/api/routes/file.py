@@ -251,12 +251,14 @@ async def upload_file(files: list[UploadFile] = File(...)):
             )
 
             logger.info(f"File {file.filename} stored successfully with ID {doc_id}")
-            responses.append({
-                "filename": file.filename,
-                "doc_id": doc_id,
-                "stored_at": doc_path,
-                "auto_analysis": auto_analysis,
-            })
+            responses.append(
+                {
+                    "filename": file.filename,
+                    "doc_id": doc_id,
+                    "stored_at": doc_path,
+                    "auto_analysis": auto_analysis,
+                }
+            )
 
         except Exception as e:
             logger.error(f"Error processing file {file.filename}: {str(e)}")
@@ -379,7 +381,11 @@ async def delete_file(filename: str):
             "description": "File uploaded and converted",
             "content": {
                 "application/json": {
-                    "example": {"filename": "doc.pdf", "stored_at": "/path/doc.pdf", "text": "Extracted text"}
+                    "example": {
+                        "filename": "doc.pdf",
+                        "stored_at": "/path/doc.pdf",
+                        "text": "Extracted text",
+                    }
                 }
             },
         },

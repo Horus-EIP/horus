@@ -40,7 +40,9 @@ def keyword_embedder(texts):
 EXAMPLES = RouterExamples(
     "test",
     (
-        ExampleGroup("Finance-Analyst", ("financial_analysis",), ("revenue quarter", "revenue budget")),
+        ExampleGroup(
+            "Finance-Analyst", ("financial_analysis",), ("revenue quarter", "revenue budget")
+        ),
         ExampleGroup("Compliance-Officer", ("audit",), ("password policy", "password length")),
         ExampleGroup("HR-Assistant", ("leave_policy",), ("vacation days", "vacation policy")),
     ),
@@ -93,7 +95,9 @@ def testset(testset_path):
 
 def report(testset, ask=None):
     settings = RouterSettings(min_score=0.40, min_margin=0.10)
-    routed = route_testset(testset, TaskRouter(ExampleIndex(EXAMPLES, keyword_embedder)), settings, ask)
+    routed = route_testset(
+        testset, TaskRouter(ExampleIndex(EXAMPLES, keyword_embedder)), settings, ask
+    )
     return summarise(
         routed,
         testset_version=testset.version,
@@ -165,9 +169,7 @@ class TestFormattedReport:
         assert "Accuracy without the LLM fallback: 80.0%" in text
         assert "Accuracy with the LLM fallback: not run (pass --llm)" in text
         assert "Latency when no fallback is needed: p50" in text
-        assert re.search(
-            r"^llm\s+1\s+16\.7%\s+not run\s+not run\s+not run$", text, re.MULTILINE
-        )
+        assert re.search(r"^llm\s+1\s+16\.7%\s+not run\s+not run\s+not run$", text, re.MULTILINE)
         assert "s2: 'password length' expected SINGLE_AGENT HR-Assistant" in text
         assert "Sent to the LLM: s3" in text
 
@@ -195,7 +197,9 @@ class TestCommandLine:
         assert summary["min_margin"] == 0.2
         assert summary["llm_ran"] is False
 
-    def test_the_llm_option_needs_the_server_backend(self, fake_embedder, testset_path, monkeypatch):
+    def test_the_llm_option_needs_the_server_backend(
+        self, fake_embedder, testset_path, monkeypatch
+    ):
         monkeypatch.setattr(router_eval, "llm_server_backend", lambda: False)
 
         assert router_eval.main(["--testset", str(testset_path), "--llm"]) == 2

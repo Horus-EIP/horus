@@ -61,7 +61,9 @@ DEFAULT_PROFILE = Profile()
 
 
 def blank_review() -> list[dict[str, Any]]:
-    return [{"reviewer": None, "answer_correct": None, "comment": None} for _ in range(REVIEWER_SLOTS)]
+    return [
+        {"reviewer": None, "answer_correct": None, "comment": None} for _ in range(REVIEWER_SLOTS)
+    ]
 
 
 def question_record(
@@ -70,7 +72,9 @@ def question_record(
     answer = outcome.get("answer")
     chat_mode = outcome.get("mode", MODE_CHAT) == MODE_CHAT
     observed_route = outcome.get("observed_route")
-    status, error = profile.final_status(outcome.get("status", "error"), outcome.get("error"), answer)
+    status, error = profile.final_status(
+        outcome.get("status", "error"), outcome.get("error"), answer
+    )
     sources = source_check(
         item,
         retrieval_steps=outcome.get("retrieval_steps"),
@@ -101,7 +105,9 @@ def question_record(
             "cited_sources": outcome.get("cited_sources"),
             "fallback": detect_fallback(answer, markers),
             "answer_correct_auto": answer_correct(item, answer, markers) if chat_mode else None,
-            "missing_patterns": missing_patterns(item["answer_patterns"], answer) if chat_mode else None,
+            "missing_patterns": missing_patterns(item["answer_patterns"], answer)
+            if chat_mode
+            else None,
             **sources,
             "route_correct": route_correct(item, observed_route) if chat_mode else None,
             "review": blank_review() if chat_mode else None,
@@ -134,7 +140,9 @@ def manual_review_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
         "pending": len(reviewable) - len(reviewed),
         "agreed_correct": agreed_correct,
         "disagreements": disagreements,
-        "answer_correct_pct": round(100.0 * agreed_correct / len(reviewed), 1) if reviewed else None,
+        "answer_correct_pct": round(100.0 * agreed_correct / len(reviewed), 1)
+        if reviewed
+        else None,
     }
 
 
@@ -158,7 +166,9 @@ def _group_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def build_summary(records: list[dict[str, Any]], profile: Profile = DEFAULT_PROFILE) -> dict[str, Any]:
+def build_summary(
+    records: list[dict[str, Any]], profile: Profile = DEFAULT_PROFILE
+) -> dict[str, Any]:
     summary = _group_summary(records)
     summary["status"] = dict(Counter(r.get("status") for r in records))
     summary["fallbacks"] = dict(Counter(r["fallback"] for r in records if r.get("fallback")))

@@ -24,8 +24,10 @@ HOW_TO_SET = (
     "(openssl rand -hex 16 makes one), then run `docker compose up -d mas agent` in src/infra."
 )
 
+
 def usable_agent_password(password: str | None) -> bool:
     return bool(password and password.strip()) and password.strip() != SHIPPED_PASSWORD
+
 
 def create_agent(db, username: str, password: str) -> str:
     if not usable_agent_password(password):
@@ -49,6 +51,7 @@ def create_agent(db, username: str, password: str) -> str:
     )
     return CREATED
 
+
 def replace_shipped_agent_password(db, agent: Users, password: str) -> str:
     if not usable_agent_password(password):
         log_error(
@@ -66,6 +69,7 @@ def replace_shipped_agent_password(db, agent: Users, password: str) -> str:
         details=f"The shipped password of {agent.username} was replaced",
     )
     return REPLACED
+
 
 def ensure_agent_account(db, username: str, password: str) -> str:
     agent = db.query(Users).filter_by(username=username).first()
@@ -86,6 +90,7 @@ def ensure_agent_account(db, username: str, password: str) -> str:
     )
     return DIFFERS
 
+
 def main() -> int:
     db = SessionLocal()
     try:
@@ -96,6 +101,7 @@ def main() -> int:
         db.close()
     print(OUTCOME_PREFIX + outcome, flush=True)
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

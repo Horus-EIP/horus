@@ -29,13 +29,49 @@ NOTICE_FILE = re.compile(
     r"(?:\.(?:txt|md|rst))?$",
     re.IGNORECASE,
 )
-CODE_SUFFIXES = (".py", ".pyi", ".pyc", ".js", ".mjs", ".cjs", ".ts", ".rs", ".json", ".html", ".h", ".c")
+CODE_SUFFIXES = (
+    ".py",
+    ".pyi",
+    ".pyc",
+    ".js",
+    ".mjs",
+    ".cjs",
+    ".ts",
+    ".rs",
+    ".json",
+    ".html",
+    ".h",
+    ".c",
+)
 METADATA_LICENCE_DIRS = {"licenses", "license_files"}
-SKIPPED_FOLDERS = {"test", "tests", "testing", "__tests__", "fixtures", "examples", "example", "docs", "doc"}
+SKIPPED_FOLDERS = {
+    "test",
+    "tests",
+    "testing",
+    "__tests__",
+    "fixtures",
+    "examples",
+    "example",
+    "docs",
+    "doc",
+}
 
 COPYRIGHT_LICENCES = {
-    "MIT", "MIT-0", "X11", "ISC", "0BSD", "Zlib", "PSF-2.0", "Python-2.0", "HPND", "NCSA", "curl",
-    "Unicode-3.0", "Unicode-DFS-2016", "CC-BY-4.0", "BlueOak-1.0.0",
+    "MIT",
+    "MIT-0",
+    "X11",
+    "ISC",
+    "0BSD",
+    "Zlib",
+    "PSF-2.0",
+    "Python-2.0",
+    "HPND",
+    "NCSA",
+    "curl",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "CC-BY-4.0",
+    "BlueOak-1.0.0",
 }
 SPDX_IDS_URL = "https://raw.githubusercontent.com/spdx/license-list-data/{version}/json/{kind}.json"
 SPDX_TOKEN = re.compile(r"[A-Za-z0-9.+-]+")
@@ -45,7 +81,10 @@ TEXT_SIGNS = (
     ("Apache-2.0", ("apache license", "version 2.0")),
     ("MPL-2.0", ("mozilla public license", "version 2.0")),
     ("BSD-3-Clause", ("redistribution and use in source and binary forms", "neither the name")),
-    ("BSD-3-Clause", ("redistribution and use in source and binary forms", "names of its contributors")),
+    (
+        "BSD-3-Clause",
+        ("redistribution and use in source and binary forms", "names of its contributors"),
+    ),
     ("BSD-2-Clause", ("redistribution and use in source and binary forms",)),
     ("ISC", ("permission to use, copy, modify, and/or distribute this software for any purpose",)),
     ("ISC", ("permission to use, copy, modify, and distribute this software for any purpose",)),
@@ -83,7 +122,8 @@ class RangeFile(io.RawIOBase):
             start = index * BLOCK
             end = min(self.size, start + BLOCK) - 1
             request = urllib.request.Request(
-                self.url, headers={"Range": f"bytes={start}-{end}", "User-Agent": USER_AGENT})
+                self.url, headers={"Range": f"bytes={start}-{end}", "User-Agent": USER_AGENT}
+            )
             with urllib.request.urlopen(request, timeout=120) as response:
                 data = response.read()
             if len(data) != end - start + 1:
@@ -98,7 +138,7 @@ class RangeFile(io.RawIOBase):
         chunks = []
         while size > 0:
             index, offset = divmod(self.position, BLOCK)
-            data = self.block(index)[offset:offset + size]
+            data = self.block(index)[offset : offset + size]
             chunks.append(data)
             self.position += len(data)
             size -= len(data)
@@ -106,7 +146,7 @@ class RangeFile(io.RawIOBase):
 
     def readinto(self, buffer) -> int:
         data = self.read(len(buffer))
-        buffer[:len(data)] = data
+        buffer[: len(data)] = data
         return len(data)
 
 
@@ -139,9 +179,11 @@ def classify(path: str) -> str | None:
     base = parts[-1]
     if is_notice_name(base):
         return "notice"
-    metadata = [index for index, part in enumerate(parts[:-1]) if part.endswith((".dist-info", ".egg-info"))]
+    metadata = [
+        index for index, part in enumerate(parts[:-1]) if part.endswith((".dist-info", ".egg-info"))
+    ]
     if metadata:
-        below = parts[metadata[0] + 1:-1]
+        below = parts[metadata[0] + 1 : -1]
         if is_licence_name(base) or (below and below[0] in METADATA_LICENCE_DIRS):
             return "licence"
     if is_licence_name(base) and not any(part.lower() in SKIPPED_FOLDERS for part in parts[:-1]):
@@ -186,7 +228,9 @@ def python_files(name: str, version: str, direct_url: str | None) -> tuple[str, 
         return direct_url.rsplit("/", 1)[-1], *zip_files(RangeFile(direct_url))
     release = json.loads(fetch(PYPI_RELEASE.format(name=name, version=version), timeout=60))
     files = release.get("urls") or []
-    wheels = sorted((item for item in files if item["filename"].endswith(".whl")), key=wheel_preference)
+    wheels = sorted(
+        (item for item in files if item["filename"].endswith(".whl")), key=wheel_preference
+    )
     sdists = [item for item in files if item["packagetype"] == "sdist"]
     if wheels:
         label, licences, notices = wheels[0]["filename"], *zip_files(RangeFile(wheels[0]["url"]))
@@ -221,7 +265,9 @@ def wheel_preference(item: dict) -> tuple[int, str]:
 def npm_files(package_path: str, info: dict, node_modules: Path) -> tuple[str, dict, dict]:
     local = node_modules.parent / package_path
     manifest = local / "package.json"
-    if manifest.is_file() and json.loads(manifest.read_text(encoding="utf-8")).get("version") == info.get("version"):
+    if manifest.is_file() and json.loads(manifest.read_text(encoding="utf-8")).get(
+        "version"
+    ) == info.get("version"):
         return f"{package_path} (local node_modules)", *folder_files(local)
     url = info["resolved"]
     data = cached_fetch(url, url.rsplit("/", 1)[-1])
@@ -260,33 +306,51 @@ def split_expression(expression: str) -> tuple[list[str], list[str]]:
 
 def needs_own_copy(expression: str) -> bool:
     licences, _ = split_expression(expression)
-    return any(atom in COPYRIGHT_LICENCES or atom.startswith(("BSD-", "LicenseRef-")) for atom in licences)
+    return any(
+        atom in COPYRIGHT_LICENCES or atom.startswith(("BSD-", "LicenseRef-")) for atom in licences
+    )
 
 
 def generic_licence(data: bytes) -> bool:
     folded = " ".join(data.decode("utf-8", "replace").lower().split())
     names_a_template = identify(folded) in {"Apache-2.0", "MPL-2.0"}
-    carries_a_notice = any(sign in folded for sign in (
-        "permission is hereby granted", "redistribution and use in source and binary forms",
-        "permission to use, copy, modify"))
-    names_an_owner = re.search(r"copyright\s+(?:\(c\)\s*|©\s*)?(?:\d{4}|[a-z][a-z .,-]{2,}\d{4})", folded)
+    carries_a_notice = any(
+        sign in folded
+        for sign in (
+            "permission is hereby granted",
+            "redistribution and use in source and binary forms",
+            "permission to use, copy, modify",
+        )
+    )
+    names_an_owner = re.search(
+        r"copyright\s+(?:\(c\)\s*|©\s*)?(?:\d{4}|[a-z][a-z .,-]{2,}\d{4})", folded
+    )
     return names_a_template and not carries_a_notice and not names_an_owner
 
 
 def spdx_ids() -> tuple[set[str], set[str]]:
-    licences = json.loads(fetch(SPDX_IDS_URL.format(version=SPDX_LIST_VERSION, kind="licenses"), timeout=60))
-    exceptions = json.loads(fetch(SPDX_IDS_URL.format(version=SPDX_LIST_VERSION, kind="exceptions"), timeout=60))
-    return ({item["licenseId"] for item in licences["licenses"]},
-            {item["licenseExceptionId"] for item in exceptions["exceptions"]})
+    licences = json.loads(
+        fetch(SPDX_IDS_URL.format(version=SPDX_LIST_VERSION, kind="licenses"), timeout=60)
+    )
+    exceptions = json.loads(
+        fetch(SPDX_IDS_URL.format(version=SPDX_LIST_VERSION, kind="exceptions"), timeout=60)
+    )
+    return (
+        {item["licenseId"] for item in licences["licenses"]},
+        {item["licenseExceptionId"] for item in exceptions["exceptions"]},
+    )
 
 
 def valid_expression(expression: str, licence_ids: set[str], exception_ids: set[str]) -> bool:
     words = tokens(expression)
-    if not words or any(word not in OPERATORS | {"(", ")"} and not SPDX_TOKEN.fullmatch(word) for word in words):
+    if not words or any(
+        word not in OPERATORS | {"(", ")"} and not SPDX_TOKEN.fullmatch(word) for word in words
+    ):
         return False
     licences, exceptions = split_expression(expression)
-    return (all(atom in licence_ids or atom.startswith("LicenseRef-") for atom in licences)
-            and all(atom in exception_ids for atom in exceptions))
+    return all(atom in licence_ids or atom.startswith("LicenseRef-") for atom in licences) and all(
+        atom in exception_ids for atom in exceptions
+    )
 
 
 def identify(text: str) -> str | None:
@@ -321,7 +385,9 @@ def target_names(stem: str, files: list[tuple[str, bytes]]) -> list[tuple[str, b
         if label in used and len(parts) > 1:
             label = safe_name(f"{parts[-2]}.{parts[-1]}")
         used.add(label)
-        named.append((f"{stem}.{label}.txt" if not label.endswith(".txt") else f"{stem}.{label}", data))
+        named.append(
+            (f"{stem}.{label}.txt" if not label.endswith(".txt") else f"{stem}.{label}", data)
+        )
     return named
 
 
@@ -356,7 +422,9 @@ def github_licence(repository_url: str) -> tuple[str, bytes] | None:
         answer = json.loads(cached.read_text(encoding="utf-8"))
     else:
         try:
-            answer = json.loads(fetch(f"https://api.github.com/repos/{repository}/license", timeout=60))
+            answer = json.loads(
+                fetch(f"https://api.github.com/repos/{repository}/license", timeout=60)
+            )
         except urllib.error.HTTPError as error:
             if error.code != 404:
                 raise
@@ -372,4 +440,6 @@ def spdx_text(identifier: str) -> bytes:
     try:
         return fetch(SPDX_TEXT_URL.format(version=SPDX_LIST_VERSION, id=identifier), timeout=60)
     except urllib.error.HTTPError as error:
-        raise OSError(f"{identifier} is not on the SPDX licence list {SPDX_LIST_VERSION}") from error
+        raise OSError(
+            f"{identifier} is not on the SPDX licence list {SPDX_LIST_VERSION}"
+        ) from error

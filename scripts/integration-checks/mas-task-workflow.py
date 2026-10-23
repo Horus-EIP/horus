@@ -68,9 +68,7 @@ async def setup_agents_and_conversation(headers_http: dict) -> tuple[dict, str]:
     """
     agent_ids = {}
     agent_keys = {}
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers_http, timeout=150.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers_http, timeout=150.0) as client:
         # Register first agent - math operations
         response = await client.post(
             "/agents/register",
@@ -87,9 +85,7 @@ async def setup_agents_and_conversation(headers_http: dict) -> tuple[dict, str]:
             r = await client.get("/agents/details/")
             r.raise_for_status()
             agents = r.json()
-            existing_id = next(
-                (a["id"] for a in agents if a["name"] == "agent_test"), None
-            )
+            existing_id = next((a["id"] for a in agents if a["name"] == "agent_test"), None)
             if existing_id:
                 await client.delete(f"/agents/unregister/{existing_id}")
                 # Retry registration
@@ -124,9 +120,7 @@ async def setup_agents_and_conversation(headers_http: dict) -> tuple[dict, str]:
             r = await client.get("/agents/details/")
             r.raise_for_status()
             agents = r.json()
-            existing_id = next(
-                (a["id"] for a in agents if a["name"] == "agent_test2"), None
-            )
+            existing_id = next((a["id"] for a in agents if a["name"] == "agent_test2"), None)
             if existing_id:
                 await client.delete(f"/agents/unregister/{existing_id}")
                 # Retry registration
@@ -157,9 +151,7 @@ async def setup_agents_and_conversation(headers_http: dict) -> tuple[dict, str]:
         # List conversations to verify
         response = await client.get("/conversations/get-conversations/")
         response.raise_for_status()
-        print(
-            f"✅ Conversations list retrieved: {len(response.json())} conversation(s)"
-        )
+        print(f"✅ Conversations list retrieved: {len(response.json())} conversation(s)")
 
     return agent_ids, agent_keys, conv_id
 
@@ -180,9 +172,7 @@ async def create_initial_task(headers_http: dict, conv_id: str, agent_ids: dict)
     Returns:
         str: Created task ID
     """
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers_http, timeout=150.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers_http, timeout=150.0) as client:
         response = await client.post(
             "/tasks/new_task/",
             json={
@@ -237,9 +227,7 @@ async def submit_task_result(
         "future_actions": future_actions,
     }
 
-    async with httpx.AsyncClient(
-        base_url=BASE_URL, headers=headers_http, timeout=10.0
-    ) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, headers=headers_http, timeout=10.0) as client:
         response = await client.post("/tasks/task-result/", json=payload)
         response.raise_for_status()
         return response.json()
@@ -428,9 +416,7 @@ async def main():
         # Step 5: Simulate agent task flow
         print("\n[Step 5] Simulating agent task flow...")
         print("-" * 60)
-        await simulate_agent_task_flow(
-            headers, agent_ids, agent_keys, conv_id, initial_task_id
-        )
+        await simulate_agent_task_flow(headers, agent_ids, agent_keys, conv_id, initial_task_id)
 
         # Wait for WebSocket to finish (timeout)
         await ws_task

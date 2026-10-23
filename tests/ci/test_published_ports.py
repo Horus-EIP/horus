@@ -15,8 +15,18 @@ LOOPBACK = "127.0.0.1:"
 BROWSER_FACING = "web-client"
 WEB_MAPPING = "${HORUS_WEB_BIND:-127.0.0.1}:3000:3000"
 DEV_TOOLS = ("pgadmin",)
-PUBLISHING_SERVICES = {"rabbitmq", "mas", "web-client", "agent", "vllm", "knowledge_store",
-                       "postgres", "redis", "pgadmin", "tempo"}
+PUBLISHING_SERVICES = {
+    "rabbitmq",
+    "mas",
+    "web-client",
+    "agent",
+    "vllm",
+    "knowledge_store",
+    "postgres",
+    "redis",
+    "pgadmin",
+    "tempo",
+}
 
 sys.path.insert(0, str(REPO / "installer"))
 import preflight  # noqa: E402
@@ -77,9 +87,12 @@ class PublishedPorts(unittest.TestCase):
         self.assertEqual(published_ports(MONITORING_OFF_OVERLAY), {})
 
     def test_the_installer_checks_every_port_the_stack_publishes(self):
-        published = {default_host_port(mapping)
-                     for service, mappings in self.base.items() if service not in DEV_TOOLS
-                     for mapping in mappings}
+        published = {
+            default_host_port(mapping)
+            for service, mappings in self.base.items()
+            if service not in DEV_TOOLS
+            for mapping in mappings
+        }
         self.assertEqual(published, {port for port, _service, _key in preflight.PORTS})
 
 

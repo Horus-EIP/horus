@@ -66,14 +66,18 @@ class TestAnswerCorrect:
         assert not answer_correct(item, None)
 
     @pytest.mark.parametrize("fallback", [LOOP_TEXT, TIMEOUT_TEXT])
-    def test_a_fallback_text_is_never_correct_even_when_the_patterns_match(self, make_item, fallback):
+    def test_a_fallback_text_is_never_correct_even_when_the_patterns_match(
+        self, make_item, fallback
+    ):
         item = make_item()
         assert answer_correct(item, fallback)
         assert not answer_correct(item, fallback, MARKERS)
 
     def test_missing_patterns_lists_what_did_not_match(self):
         patterns = [r"Island\s+run", r"Lighthouse\s+run"]
-        assert missing_patterns(patterns, "Island run and the sunset cruise") == [r"Lighthouse\s+run"]
+        assert missing_patterns(patterns, "Island run and the sunset cruise") == [
+            r"Lighthouse\s+run"
+        ]
 
 
 class TestFallbackDetection:
@@ -152,7 +156,10 @@ class TestSourceCheck:
         top_two = ["north-pier", "ferry-timetable.md", "harbour-rules.md"]
         assert source_check(item, retrieved_sources=[top_two])["source_correct_auto"] is True
         assert source_check(item, retrieved_sources=[ALL_DOCUMENTS])["source_correct_auto"] is False
-        assert source_check(item, retrieved_sources=[["north-pier.md"]])["source_ranks"] == [None, 1]
+        assert source_check(item, retrieved_sources=[["north-pier.md"]])["source_ranks"] == [
+            None,
+            1,
+        ]
 
     def test_retrieval_without_titles_is_not_observable(self, make_item):
         assert source_check(make_item(), retrieval_steps=1, retrieved_sources=None) == {
@@ -164,28 +171,43 @@ class TestSourceCheck:
     def test_incomplete_event_stream_cannot_prove_a_wrong_source(self, make_item):
         missed = source_check(make_item(), retrieved_sources=[], events_complete=False)
         assert missed["source_correct_auto"] is None
-        seen = source_check(make_item(), retrieved_sources=[["north-pier.md"]], events_complete=False)
+        seen = source_check(
+            make_item(), retrieved_sources=[["north-pier.md"]], events_complete=False
+        )
         assert seen["source_correct_auto"] is True
 
     def test_citations_take_precedence_over_retrieval(self, make_item):
-        result = source_check(make_item(), retrieved_sources=[ALL_DOCUMENTS], cited_sources=["north-pier.md"])
+        result = source_check(
+            make_item(), retrieved_sources=[ALL_DOCUMENTS], cited_sources=["north-pier.md"]
+        )
         assert result == {
             "source_basis": SOURCE_BASIS_CITED,
             "source_ranks": None,
             "source_correct_auto": True,
         }
-        assert source_check(make_item(), cited_sources=["harbour-rules.md"])["source_correct_auto"] is False
+        assert (
+            source_check(make_item(), cited_sources=["harbour-rules.md"])["source_correct_auto"]
+            is False
+        )
 
     def test_direct_item_is_correct_only_when_nothing_was_retrieved(self, make_item):
         item = make_item(category="direct", expected_source=None)
         assert source_check(item, retrieval_steps=0)["source_correct_auto"] is True
         assert source_check(item, retrieval_steps=1)["source_correct_auto"] is False
         cited = ["north-pier.md"]
-        assert source_check(item, retrieval_steps=0, cited_sources=cited)["source_correct_auto"] is False
+        assert (
+            source_check(item, retrieval_steps=0, cited_sources=cited)["source_correct_auto"]
+            is False
+        )
 
-    def test_direct_item_with_an_incomplete_stream_or_unknown_retrieval_is_not_scored(self, make_item):
+    def test_direct_item_with_an_incomplete_stream_or_unknown_retrieval_is_not_scored(
+        self, make_item
+    ):
         item = make_item(category="direct", expected_source=None)
-        assert source_check(item, retrieval_steps=0, events_complete=False)["source_correct_auto"] is None
+        assert (
+            source_check(item, retrieval_steps=0, events_complete=False)["source_correct_auto"]
+            is None
+        )
         assert source_check(item, retrieval_steps=None)["source_correct_auto"] is None
 
     def test_not_in_corpus_items_are_not_scored(self, make_item):

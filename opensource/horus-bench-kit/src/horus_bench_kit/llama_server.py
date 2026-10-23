@@ -71,7 +71,9 @@ def parse_prometheus(text: str | None) -> dict[str, float]:
     return values
 
 
-def llm_usage(before: dict[str, float] | None, after: dict[str, float] | None) -> dict[str, Any] | None:
+def llm_usage(
+    before: dict[str, float] | None, after: dict[str, float] | None
+) -> dict[str, Any] | None:
     if not before or not after:
         return None
     usage: dict[str, Any] = {}

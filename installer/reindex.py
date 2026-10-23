@@ -72,24 +72,36 @@ def about(seconds: float) -> str:
 
 def announce(log: Log, corpus: Corpus | None, towards_local: bool) -> None:
     if corpus is None:
-        log.say("  The knowledge store did not answer, so how many documents it holds is "
-                "unknown. Whatever it holds is re-embedded after the switch.")
+        log.say(
+            "  The knowledge store did not answer, so how many documents it holds is "
+            "unknown. Whatever it holds is re-embedded after the switch."
+        )
         return
-    log.events.emit("reembed", documents=corpus.documents, passages=corpus.passages,
-                    cpu_seconds=round(corpus.cpu_seconds))
+    log.events.emit(
+        "reembed",
+        documents=corpus.documents,
+        passages=corpus.passages,
+        cpu_seconds=round(corpus.cpu_seconds),
+    )
     if corpus.documents == 0:
         log.say("  The knowledge store holds no document, so nothing needs re-embedding.")
         return
-    log.say(f"  The knowledge store holds {corpus.documents} documents ({corpus.passages} "
-            "passages). They are re-embedded with the new mode's embeddings before the "
-            "smoke test.")
+    log.say(
+        f"  The knowledge store holds {corpus.documents} documents ({corpus.passages} "
+        "passages). They are re-embedded with the new mode's embeddings before the "
+        "smoke test."
+    )
     cpu = about(corpus.cpu_seconds)
     if towards_local:
-        log.say(f"  On the processor that takes {cpu} ({CPU_PASSAGES_PER_SECOND:g} passages "
-                "per second, measured).")
+        log.say(
+            f"  On the processor that takes {cpu} ({CPU_PASSAGES_PER_SECOND:g} passages "
+            "per second, measured)."
+        )
     else:
-        log.say(f"  llm-mock does it in seconds. Switching back to local later re-embeds "
-                f"them on the processor again: {cpu}.")
+        log.say(
+            f"  llm-mock does it in seconds. Switching back to local later re-embeds "
+            f"them on the processor again: {cpu}."
+        )
 
 
 def needs_confirmation(corpus: Corpus | None) -> bool:
@@ -108,8 +120,12 @@ def runs_at_start(setting: str | None) -> bool:
 
 def request(ks: str, token: str, method: str) -> smoke.Response | None:
     try:
-        return smoke.http(method, f"{ks}/corpus/reindex", data=b"" if method == "POST" else None,
-                          headers={TOKEN_HEADER: token})
+        return smoke.http(
+            method,
+            f"{ks}/corpus/reindex",
+            data=b"" if method == "POST" else None,
+            headers={TOKEN_HEADER: token},
+        )
     except smoke.Unreachable:
         return None
 
@@ -119,47 +135,68 @@ def denied(log: Log, res: smoke.Response) -> bool:
         return False
     body = res.json()
     reason = body.get("error") if isinstance(body, dict) else res.text()
-    log.warn(f"The installer cannot follow the knowledge store's re-index "
-             f"(HTTP {res.status}: {reason}). The smoke test runs without waiting for it.")
+    log.warn(
+        f"The installer cannot follow the knowledge store's re-index "
+        f"(HTTP {res.status}: {reason}). The smoke test runs without waiting for it."
+    )
     return True
 
 
 def done_of(job: dict) -> tuple[int, int, int]:
     totals = job.get("totals") if isinstance(job.get("totals"), dict) else {}
-    done = sum(int(totals.get(key) or 0) for key in ("migrated", "reembedded", "unchanged", "failed"))
+    done = sum(
+        int(totals.get(key) or 0) for key in ("migrated", "reembedded", "unchanged", "failed")
+    )
     return done, int(totals.get("pending") or 0), int(totals.get("failed") or 0)
 
 
 def retry_advice(startup: bool) -> str:
     if startup:
         return "the next start of Horus tries them again"
-    return ("KNOWLEDGE_STORE_REINDEX_ON_STARTUP is off, so run scripts/reindex-knowledge-store.py "
-            "or this switch again to finish")
+    return (
+        "KNOWLEDGE_STORE_REINDEX_ON_STARTUP is off, so run scripts/reindex-knowledge-store.py "
+        "or this switch again to finish"
+    )
 
 
 def report(log: Log, job: dict, seconds: float, startup: bool) -> None:
     done, pending, failed = done_of(job)
     log.events.emit("reindex", state=job.get("state"), done=done, pending=pending, failed=failed)
     if job.get("state") == "failed":
-        log.warn(f"The knowledge store's re-index stopped after {elapsed(seconds)}: "
-                 f"{job.get('error') or 'no reason given'}. Search may mix old and new vectors; "
-                 f"{retry_advice(startup)}.")
+        log.warn(
+            f"The knowledge store's re-index stopped after {elapsed(seconds)}: "
+            f"{job.get('error') or 'no reason given'}. Search may mix old and new vectors; "
+            f"{retry_advice(startup)}."
+        )
     elif failed:
-        names = ", ".join(str(item.get("doc_id")) for item in (job.get("failures") or [])[:SHOWN_FAILURES]
-                          if isinstance(item, dict))
-        log.warn(f"{failed} of {pending} documents could not be re-embedded ({names}). They keep "
-                 f"their old vectors; {retry_advice(startup)}.")
+        names = ", ".join(
+            str(item.get("doc_id"))
+            for item in (job.get("failures") or [])[:SHOWN_FAILURES]
+            if isinstance(item, dict)
+        )
+        log.warn(
+            f"{failed} of {pending} documents could not be re-embedded ({names}). They keep "
+            f"their old vectors; {retry_advice(startup)}."
+        )
     elif pending:
-        log.ok(f"Re-embedded {pending} documents with {job.get('embed_model')} "
-               f"in {elapsed(seconds)}")
+        log.ok(
+            f"Re-embedded {pending} documents with {job.get('embed_model')} in {elapsed(seconds)}"
+        )
     else:
         log.ok(f"Every stored document already uses {job.get('embed_model')}: nothing to re-embed")
 
 
-def follow(log: Log, ks: str, token: str, start_now: bool, may_start: bool, startup: bool,
-           wait_seconds: float,
-           sleep: Callable[[float], None] = time.sleep,
-           clock: Callable[[], float] = time.monotonic) -> dict | None:
+def follow(
+    log: Log,
+    ks: str,
+    token: str,
+    start_now: bool,
+    may_start: bool,
+    startup: bool,
+    wait_seconds: float,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
+) -> dict | None:
     began = clock()
     must_start = start_now
     posted_at: float | None = None
@@ -175,8 +212,10 @@ def follow(log: Log, ks: str, token: str, start_now: bool, may_start: bool, star
                 return None
             if res is not None and res.status == BUSY and not told_busy:
                 told_busy = True
-                log.say("  The knowledge store is busy with a corpus scan or another re-index; "
-                        "the installer waits for it.")
+                log.say(
+                    "  The knowledge store is busy with a corpus scan or another re-index; "
+                    "the installer waits for it."
+                )
         res = request(ks, token, "GET")
         if res is not None and denied(log, res):
             return None
@@ -195,10 +234,13 @@ def follow(log: Log, ks: str, token: str, start_now: bool, may_start: bool, star
                 shown = (job.get("job_id"), *done_of(job))
                 done, pending, failed = done_of(job)
                 log.say(f"  re-embedding the stored documents: {done}/{pending or '?'}")
-                log.events.emit("reindex", state="running", done=done, pending=pending,
-                                failed=failed)
+                log.events.emit(
+                    "reindex", state="running", done=done, pending=pending, failed=failed
+                )
         if clock() - began >= wait_seconds:
-            log.warn(f"The knowledge store's re-index did not end within {elapsed(wait_seconds)}; "
-                     "the smoke test runs without waiting longer.")
+            log.warn(
+                f"The knowledge store's re-index did not end within {elapsed(wait_seconds)}; "
+                "the smoke test runs without waiting longer."
+            )
             return job
         sleep(POLL_SECONDS)

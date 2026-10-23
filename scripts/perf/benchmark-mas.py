@@ -29,6 +29,7 @@ import httpx
 @dataclass
 class BenchmarkResult:
     """Results from a benchmark run."""
+
     name: str
     iterations: int
     total_time: float
@@ -74,9 +75,7 @@ class MASBenchmark:
                 if response.status_code == 200:
                     self.token = response.json().get("access_token")
                     return bool(self.token)
-                print(
-                    f"Authentication failed: HTTP {response.status_code} — {response.text[:500]}"
-                )
+                print(f"Authentication failed: HTTP {response.status_code} — {response.text[:500]}")
             except Exception as e:
                 print(f"Authentication failed: {e}")
         return False
@@ -187,7 +186,7 @@ class MASBenchmark:
                     response = await client.get(
                         f"{self.base_url}/tasks/stats/queue",
                         headers=self._get_headers(),
-                        timeout=10.0
+                        timeout=10.0,
                     )
                     if response.status_code == 200:
                         successes += 1
@@ -198,12 +197,7 @@ class MASBenchmark:
         return self._create_result("Task Queue Stats", iterations, times, successes, errors)
 
     def _create_result(
-        self,
-        name: str,
-        iterations: int,
-        times: list[float],
-        successes: int,
-        errors: list[str]
+        self, name: str, iterations: int, times: list[float], successes: int, errors: list[str]
     ) -> BenchmarkResult:
         """Create a benchmark result from timing data."""
         if not times:
@@ -219,17 +213,17 @@ class MASBenchmark:
             min_time=min(times) * 1000,
             max_time=max(times) * 1000,
             success_rate=(successes / iterations) * 100,
-            errors=errors[:5]  # Keep only first 5 errors
+            errors=errors[:5],  # Keep only first 5 errors
         )
 
     async def run_all_benchmarks(self, iterations: int = 100) -> list[BenchmarkResult]:
         """Run all benchmarks."""
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("MAS Performance Benchmark Suite")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"Base URL: {self.base_url}")
         print(f"Iterations: {iterations}")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
         benchmarks = [
             ("Health Check", self.benchmark_health_check),
@@ -251,11 +245,13 @@ class MASBenchmark:
 
     def print_results(self):
         """Print benchmark results in a formatted table."""
-        print(f"\n{'='*80}")
+        print(f"\n{'=' * 80}")
         print("BENCHMARK RESULTS")
-        print(f"{'='*80}")
-        print(f"{'Benchmark':<25} {'Mean (ms)':<12} {'Median':<12} {'Std Dev':<12} {'Success %':<10}")
-        print(f"{'-'*80}")
+        print(f"{'=' * 80}")
+        print(
+            f"{'Benchmark':<25} {'Mean (ms)':<12} {'Median':<12} {'Std Dev':<12} {'Success %':<10}"
+        )
+        print(f"{'-' * 80}")
 
         for result in self.results:
             print(
@@ -266,7 +262,7 @@ class MASBenchmark:
                 f"{result.success_rate:>8.1f}%"
             )
 
-        print(f"{'-'*80}")
+        print(f"{'-' * 80}")
         print("\nMin/Max Latencies:")
         for result in self.results:
             print(f"  {result.name}: {result.min_time:.2f}ms - {result.max_time:.2f}ms")
@@ -296,7 +292,7 @@ class MASBenchmark:
                     "success_rate": r.success_rate,
                 }
                 for r in self.results
-            ]
+            ],
         }
 
         with open(filename, "w") as f:
@@ -307,9 +303,15 @@ class MASBenchmark:
 async def main():
     parser = argparse.ArgumentParser(description="MAS Performance Benchmark Suite")
     parser.add_argument("--url", default="http://localhost:8000", help="MAS API URL")
-    parser.add_argument("--iterations", type=int, default=100, help="Number of iterations per benchmark")
-    parser.add_argument("--username", default=None, help="Username (default: SUPER_USER_USERNAME or admin)")
-    parser.add_argument("--password", default=None, help="Password (default: SUPER_USER_PASSWORD or secret)")
+    parser.add_argument(
+        "--iterations", type=int, default=100, help="Number of iterations per benchmark"
+    )
+    parser.add_argument(
+        "--username", default=None, help="Username (default: SUPER_USER_USERNAME or admin)"
+    )
+    parser.add_argument(
+        "--password", default=None, help="Password (default: SUPER_USER_PASSWORD or secret)"
+    )
     parser.add_argument(
         "--token",
         default=None,

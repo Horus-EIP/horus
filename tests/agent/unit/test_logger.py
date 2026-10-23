@@ -40,7 +40,7 @@ class TestLoggerCoverage:
                 lineno=10,
                 msg="Test error message",
                 args=(),
-                exc_info=None
+                exc_info=None,
             )
 
             # Simulate exception info
@@ -76,18 +76,18 @@ class TestLoggerCoverage:
 
         try:
             # Configure with JSON and file
-            AgentLogger.configure(
-                level="DEBUG",
-                json_output=True,
-                log_file=log_file
-            )
+            AgentLogger.configure(level="DEBUG", json_output=True, log_file=log_file)
 
             logger = AgentLogger.get_logger("test_json")
             logger.info("Test JSON log")
 
             # Check console handler
             root = logging.getLogger()
-            console = [h for h in root.handlers if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)]
+            console = [
+                h
+                for h in root.handlers
+                if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+            ]
             assert len(console) > 0
             assert isinstance(console[0].formatter, StructuredFormatter)
 
@@ -100,12 +100,12 @@ class TestLoggerCoverage:
             # Need to flush first
             for h in root.handlers:
                 h.flush()
-                h.close() # Close to ensure write to disk
+                h.close()  # Close to ensure write to disk
 
             with open(log_file) as f:
                 content = f.read()
                 assert "Test JSON log" in content
-                assert "{" in content # it is JSON
+                assert "{" in content  # it is JSON
 
         finally:
             if os.path.exists(log_file):

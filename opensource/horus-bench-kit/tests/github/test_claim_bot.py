@@ -29,7 +29,9 @@ def issue(number=7, state="open", labels=("good first issue",), assignees=(), pu
 
 
 def decide(body, commenter="ada", open_claims=0, bot=False, **fields):
-    return claims.decide(body, commenter, issue(**fields), open_claims, PHRASES, commenter_is_bot=bot)
+    return claims.decide(
+        body, commenter, issue(**fields), open_claims, PHRASES, commenter_is_bot=bot
+    )
 
 
 class FakeGitHub(claims.GitHub):
@@ -59,22 +61,35 @@ class FakeGitHub(claims.GitHub):
     def open_issues(self, query):
         found = [item for item in self.items.values() if item["state"] == "open"]
         if "labels" in query:
-            found = [item for item in found if query["labels"] in {label["name"] for label in item["labels"]}]
+            found = [
+                item
+                for item in found
+                if query["labels"] in {label["name"] for label in item["labels"]}
+            ]
         if query.get("assignee") == "none":
             found = [item for item in found if not item["assignees"]]
         elif "assignee" in query:
-            found = [item for item in found if query["assignee"] in {user["login"] for user in item["assignees"]}]
+            found = [
+                item
+                for item in found
+                if query["assignee"] in {user["login"] for user in item["assignees"]}
+            ]
         return found
 
     def written(self):
-        return [(method, path.removeprefix("/repos/example/kit"), body)
-                for method, path, body in self.calls if method != "GET"]
+        return [
+            (method, path.removeprefix("/repos/example/kit"), body)
+            for method, path, body in self.calls
+            if method != "GET"
+        ]
 
     def comments(self):
         return [body["body"] for method, path, body in self.calls if path.endswith("/comments")]
 
 
-def item(number, labels=("good first issue",), assignees=(), title=None, pull_request=False, state="open"):
+def item(
+    number, labels=("good first issue",), assignees=(), title=None, pull_request=False, state="open"
+):
     data = {
         "number": number,
         "title": title or f"Issue {number}",
@@ -197,27 +212,49 @@ class TestDecisions:
 
 
 class TestReplies:
-    @pytest.mark.parametrize("name", ["assigned", "taken", "limit", "unassigned", "stale-reminder", "stale-released"])
+    @pytest.mark.parametrize(
+        "name", ["assigned", "taken", "limit", "unassigned", "stale-reminder", "stale-released"]
+    )
     def test_every_placeholder_is_filled(self, name):
-        text = claims.reply(name, user="ada", issue=7, suggestions="- #8 Issue 8", mark=claims.reminder_mark("ada"))
+        text = claims.reply(
+            name, user="ada", issue=7, suggestions="- #8 Issue 8", mark=claims.reminder_mark("ada")
+        )
         assert re.search(r"\{[a-z_]+\}", text) is None
         assert "@ada" in text
 
     def test_the_assigned_reply_gives_the_steps_and_the_rules(self):
         text = claims.reply("assigned", user="ada", issue=7)
-        for expected in ("`7-<short-name>`", "git commit -s", 'pip install -e ".[test]"', "Fixes #7",
-                         "within 7 days", "at most 2 claimed", "`/unassign`", "After 14 days"):
+        for expected in (
+            "`7-<short-name>`",
+            "git commit -s",
+            'pip install -e ".[test]"',
+            "Fixes #7",
+            "within 7 days",
+            "at most 2 claimed",
+            "`/unassign`",
+            "After 14 days",
+        ):
             assert expected in text
 
 
 class TestHandleComment:
     def test_a_claim_assigns_labels_and_replies_and_creates_the_label_if_missing(self):
         github = FakeGitHub([item(7)], labels=())
-        assert claims.handle_comment(comment_event(7, "I'd like to work on this"), github, PHRASES) == claims.ASSIGN
+        assert (
+            claims.handle_comment(comment_event(7, "I'd like to work on this"), github, PHRASES)
+            == claims.ASSIGN
+        )
         written = github.written()
         assert written[0] == ("POST", "/issues/7/assignees", {"assignees": ["ada"]})
-        assert written[1] == ("POST", "/labels", {"name": "claimed", "color": "c5def5",
-                                                   "description": "Someone is working on this issue"})
+        assert written[1] == (
+            "POST",
+            "/labels",
+            {
+                "name": "claimed",
+                "color": "c5def5",
+                "description": "Someone is working on this issue",
+            },
+        )
         assert written[2] == ("POST", "/issues/7/labels", {"labels": ["claimed"]})
         assert "issue #7 is yours" in github.comments()[0]
 
@@ -229,7 +266,11 @@ class TestHandleComment:
 
     def test_a_taken_issue_lists_up_to_five_free_good_first_issues(self):
         free = [item(number) for number in range(10, 17)]
-        others = [item(8, assignees=("lin",)), item(9, pull_request=True), item(20, labels=("help wanted",))]
+        others = [
+            item(8, assignees=("lin",)),
+            item(9, pull_request=True),
+            item(20, labels=("help wanted",)),
+        ]
         github = FakeGitHub([item(7, assignees=("grace",)), *free, *others])
         claims.handle_comment(comment_event(7, "Can I work on this?"), github, PHRASES)
         listed = re.findall(r"^- #(\d+) ", github.comments()[0], re.MULTILINE)
@@ -241,8 +282,10 @@ class TestHandleComment:
         assert "no other free good first issue" in github.comments()[0]
 
     def test_the_limit_counts_open_claimed_issues_of_the_commenter(self):
-        held = [item(1, labels=("good first issue", "claimed"), assignees=("ada",)),
-                item(2, labels=("help wanted", "claimed"), assignees=("ada",))]
+        held = [
+            item(1, labels=("good first issue", "claimed"), assignees=("ada",)),
+            item(2, labels=("help wanted", "claimed"), assignees=("ada",)),
+        ]
         github = FakeGitHub([item(7), *held])
         assert claims.handle_comment(comment_event(7, "/assign"), github, PHRASES) == claims.LIMIT
         assert "already hold 2 claimed issues" in github.comments()[0]
@@ -250,7 +293,9 @@ class TestHandleComment:
 
     def test_unassign_removes_the_assignee_and_the_label(self):
         github = FakeGitHub([item(7, labels=("good first issue", "claimed"), assignees=("ada",))])
-        assert claims.handle_comment(comment_event(7, "/unassign"), github, PHRASES) == claims.UNASSIGN
+        assert (
+            claims.handle_comment(comment_event(7, "/unassign"), github, PHRASES) == claims.UNASSIGN
+        )
         assert github.written()[:2] == [
             ("DELETE", "/issues/7/assignees", {"assignees": ["ada"]}),
             ("DELETE", "/issues/7/labels/claimed", None),
@@ -266,7 +311,10 @@ class TestHandleComment:
 
     def test_a_claim_on_an_issue_that_is_not_eligible_changes_nothing(self):
         github = FakeGitHub([item(7, labels=("bug",))])
-        assert claims.handle_comment(comment_event(7, "/assign"), github, PHRASES) == claims.NOT_ELIGIBLE
+        assert (
+            claims.handle_comment(comment_event(7, "/assign"), github, PHRASES)
+            == claims.NOT_ELIGIBLE
+        )
         assert github.written() == []
 
 
@@ -307,9 +355,14 @@ class TestGitHubApi:
     def test_a_request_sends_the_token_the_api_version_and_a_json_body(self, api):
         api.replies.append({"id": 1})
         github = claims.GitHub("example/kit", "secret")
-        assert github.request("POST", "/repos/example/kit/issues/7/comments", {"body": "Hi"}) == {"id": 1}
+        assert github.request("POST", "/repos/example/kit/issues/7/comments", {"body": "Hi"}) == {
+            "id": 1
+        }
         request, timeout = api.sent[0]
-        assert (request.get_method(), request.full_url) == ("POST", "https://api.github.com/repos/example/kit/issues/7/comments")
+        assert (request.get_method(), request.full_url) == (
+            "POST",
+            "https://api.github.com/repos/example/kit/issues/7/comments",
+        )
         assert request.get_header("Authorization") == "Bearer secret"
         assert request.get_header("Accept") == "application/vnd.github+json"
         assert request.get_header("X-github-api-version") == "2022-11-28"
@@ -318,11 +371,18 @@ class TestGitHubApi:
 
     def test_an_empty_answer_is_none_and_a_get_has_no_body(self, api):
         api.replies.append(None)
-        assert claims.GitHub("example/kit", "secret").request("GET", "/repos/example/kit/labels/claimed") is None
+        assert (
+            claims.GitHub("example/kit", "secret").request(
+                "GET", "/repos/example/kit/labels/claimed"
+            )
+            is None
+        )
         assert api.sent[0][0].data is None
 
     def test_every_page_is_read_until_one_is_not_full(self, api):
-        api.replies.extend([[{"number": n} for n in range(100)], [{"number": n} for n in range(100, 103)]])
+        api.replies.extend(
+            [[{"number": n} for n in range(100)], [{"number": n} for n in range(100, 103)]]
+        )
         github = claims.GitHub("example/kit", "secret")
         found = github.open_items(labels="good first issue", assignee="none")
         assert [item["number"] for item in found] == list(range(103))
@@ -334,7 +394,9 @@ class TestGitHubApi:
 
     def test_a_path_without_a_query_gets_one(self, api):
         api.replies.append([])
-        assert claims.GitHub("example/kit", "secret").every("/repos/example/kit/issues/7/events") == []
+        assert (
+            claims.GitHub("example/kit", "secret").every("/repos/example/kit/issues/7/events") == []
+        )
         assert api.sent[0][0].full_url.endswith("/issues/7/events?per_page=100&page=1")
 
     def test_the_claimed_label_is_created_only_when_it_is_missing(self, api):
@@ -343,8 +405,12 @@ class TestGitHubApi:
         github = claims.GitHub("example/kit", "secret")
         github.ensure_claimed_label()
         github.ensure_claimed_label()
-        assert [(request.get_method(), request.full_url.rsplit("/kit", 1)[1]) for request, _ in api.sent] == [
-            ("GET", "/labels/claimed"), ("POST", "/labels"), ("GET", "/labels/claimed"),
+        assert [
+            (request.get_method(), request.full_url.rsplit("/kit", 1)[1]) for request, _ in api.sent
+        ] == [
+            ("GET", "/labels/claimed"),
+            ("POST", "/labels"),
+            ("GET", "/labels/claimed"),
         ]
 
     def test_other_errors_are_not_hidden(self, api):

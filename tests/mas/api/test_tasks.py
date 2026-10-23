@@ -206,9 +206,7 @@ class TestTaskDetailSkillsAndTimes:
         assert subtask["createdAt"]
         assert subtask["completedAt"]
 
-    def test_task_list_includes_skills_and_completion_time(
-        self, make_db_client, task_db, as_admin
-    ):
+    def test_task_list_includes_skills_and_completion_time(self, make_db_client, task_db, as_admin):
         task = _add_task(task_db, task_id="t1", skills_required=["analysis"])
         task.status = "completed"
         task_db.commit()
@@ -255,9 +253,7 @@ class TestTaskCompletionTime:
 
         assert _stored_task(task_db, "t1").skills_required == ["analysis"]
 
-    def test_last_chain_step_records_root_completion_time(
-        self, _allowed, make_db_client, task_db
-    ):
+    def test_last_chain_step_records_root_completion_time(self, _allowed, make_db_client, task_db):
         _add_task(task_db, task_id="root", agent_id="manager")
         _add_task(task_db, task_id="sub-1", parent_task_id="root")
         client = make_db_client(agent_api_auth=("agent-1", "k"))

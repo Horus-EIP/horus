@@ -149,14 +149,23 @@ class FakeOpenAI:
     def completion(self, text: str) -> dict[str, Any]:
         return {
             "model": self.model,
-            "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": text},
+                    "finish_reason": "stop",
+                }
+            ],
             "usage": {"prompt_tokens": 40, "completion_tokens": len(text.split())},
         }
 
     def chunks(self, text: str, include_usage: bool) -> list[dict[str, Any]]:
         chunks: list[dict[str, Any]] = [
             {"model": self.model, "choices": [{"index": 0, "delta": {"role": "assistant"}}]},
-            {"model": self.model, "choices": [{"index": 0, "delta": {"reasoning_content": "Reading."}}]},
+            {
+                "model": self.model,
+                "choices": [{"index": 0, "delta": {"reasoning_content": "Reading."}}],
+            },
         ]
         if self.stream_error:
             return [*chunks, {"error": self.stream_error}]
@@ -166,7 +175,9 @@ class FakeOpenAI:
             for piece in (text[:middle], text[middle:])
             if piece
         ]
-        chunks.append({"model": self.model, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]})
+        chunks.append(
+            {"model": self.model, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+        )
         if include_usage:
             usage = {"prompt_tokens": 40, "completion_tokens": len(text.split())}
             chunks.append({"model": self.model, "choices": [], "usage": usage})
@@ -211,7 +222,9 @@ def handler_for(fake: FakeOpenAI) -> type[BaseHTTPRequestHandler]:
 @pytest.fixture
 def fake_openai():
     fake = FakeOpenAI()
-    thread = threading.Thread(target=fake.server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+    thread = threading.Thread(
+        target=fake.server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True
+    )
     thread.start()
     yield fake
     fake.server.shutdown()
@@ -224,7 +237,9 @@ def example_answers() -> Callable[..., Callable[[dict[str, Any]], str]]:
     expected = {item["question"]: item["expected_answer"] for item in testset["items"]}
 
     def factory(**wrong: str) -> Callable[[dict[str, Any]], str]:
-        by_id = {item["question"]: wrong.get(item["id"].replace("-", "_")) for item in testset["items"]}
+        by_id = {
+            item["question"]: wrong.get(item["id"].replace("-", "_")) for item in testset["items"]
+        }
 
         def answer(body: dict[str, Any]) -> str:
             question = question_of(body)
@@ -295,7 +310,9 @@ def run_module(module: str, *args: str, stdin: str | None = None) -> subprocess.
     )
 
 
-def gguf(gguf_id, file, quant, *, default=True, publisher="model author", size=900_000_000, sha="c3"):
+def gguf(
+    gguf_id, file, quant, *, default=True, publisher="model author", size=900_000_000, sha="c3"
+):
     return {
         "id": gguf_id,
         "file": file,
@@ -322,7 +339,11 @@ def candidate(candidate_id, name, role, ggufs, *, licence="Apache-2.0", since=No
         "licence_flags": list(flags),
         "architecture": "ExampleForCausalLM",
         "gguf_architecture": "example",
-        "llama_cpp": {"since_build": since, "since_pr": None, "evidence": "Supported since long ago."},
+        "llama_cpp": {
+            "since_build": since,
+            "since_pr": None,
+            "evidence": "Supported since long ago.",
+        },
         "parameters": 1_000_000_000,
         "active_parameters": None,
         "size_note": "Small dense model.",
@@ -359,8 +380,21 @@ def make_catalog():
                 "Alpha-1B",
                 "baseline",
                 [
-                    gguf("alpha-1b-q4km", "alpha-1b-Q4_K_M.gguf", "Q4_K_M", publisher="community", sha="a1"),
-                    gguf("alpha-1b-q5km", "alpha-1b-Q5_K_M.gguf", "Q5_K_M", default=False, publisher="community", sha="a2"),
+                    gguf(
+                        "alpha-1b-q4km",
+                        "alpha-1b-Q4_K_M.gguf",
+                        "Q4_K_M",
+                        publisher="community",
+                        sha="a1",
+                    ),
+                    gguf(
+                        "alpha-1b-q5km",
+                        "alpha-1b-Q5_K_M.gguf",
+                        "Q5_K_M",
+                        default=False,
+                        publisher="community",
+                        sha="a2",
+                    ),
                 ],
             ),
             candidate(

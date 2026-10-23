@@ -35,7 +35,9 @@ class TestSelection:
     def test_build_output_caches_and_results_are_left_out(self, make_zip, path):
         assert not make_zip.is_packaged(PurePosixPath(path))
 
-    @pytest.mark.parametrize("path", ["LICENSE", "src/horus_bench_kit/files.py", "examples/corpus/plot-fees.txt"])
+    @pytest.mark.parametrize(
+        "path", ["LICENSE", "src/horus_bench_kit/files.py", "examples/corpus/plot-fees.txt"]
+    )
     def test_sources_docs_and_examples_are_kept(self, make_zip, path):
         assert make_zip.is_packaged(PurePosixPath(path))
 
@@ -44,7 +46,9 @@ class TestSelection:
 
 
 class TestArchive:
-    def test_the_archive_holds_the_kit_under_one_folder_with_lf_text(self, make_zip, tmp_path, capsys):
+    def test_the_archive_holds_the_kit_under_one_folder_with_lf_text(
+        self, make_zip, tmp_path, capsys
+    ):
         assert make_zip.main(["--out-dir", str(tmp_path)]) == 0
         archive = tmp_path / f"horus-bench-kit-{__version__}.zip"
         assert capsys.readouterr().out.startswith(f"[done] wrote {archive} (")
@@ -53,7 +57,13 @@ class TestArchive:
             licence = bundle.read(f"horus-bench-kit-{__version__}/LICENSE")
         prefix = f"horus-bench-kit-{__version__}/"
         assert all(name.startswith(prefix) for name in names)
-        for required in ("LICENSE", "NOTICE", "README.md", "pyproject.toml", "src/horus_bench_kit/__init__.py"):
+        for required in (
+            "LICENSE",
+            "NOTICE",
+            "README.md",
+            "pyproject.toml",
+            "src/horus_bench_kit/__init__.py",
+        ):
             assert prefix + required in names
         assert not any("__pycache__" in name or ".egg-info" in name for name in names)
         assert b"\r\n" not in licence
@@ -63,7 +73,9 @@ class TestArchive:
         second, _ = make_zip.build_zip(tmp_path / "two")
         assert first.read_bytes() == second.read_bytes()
 
-    def test_every_entry_says_it_was_made_on_unix_whichever_system_builds_it(self, make_zip, tmp_path):
+    def test_every_entry_says_it_was_made_on_unix_whichever_system_builds_it(
+        self, make_zip, tmp_path
+    ):
         archive, _ = make_zip.build_zip(tmp_path)
         with zipfile.ZipFile(archive) as bundle:
             assert {entry.create_system for entry in bundle.infolist()} == {make_zip.MADE_ON_UNIX}
@@ -73,12 +85,16 @@ class TestChecks:
     @pytest.fixture
     def kit_copy(self, tmp_path):
         target = tmp_path / "kit"
-        ignored = shutil.ignore_patterns("__pycache__", ".pytest_cache", ".ruff_cache", "dist", "build", "*.egg-info")
+        ignored = shutil.ignore_patterns(
+            "__pycache__", ".pytest_cache", ".ruff_cache", "dist", "build", "*.egg-info"
+        )
         shutil.copytree(SCRIPT.parents[1], target, ignore=ignored)
         return target
 
     def test_a_kit_with_problems_is_not_zipped(self, make_zip, kit_copy, tmp_path, capsys):
-        (kit_copy / "src" / "horus_bench_kit" / "extra.py").write_text("import requests\n", encoding="utf-8")
+        (kit_copy / "src" / "horus_bench_kit" / "extra.py").write_text(
+            "import requests\n", encoding="utf-8"
+        )
         (kit_copy / "NOTICE").unlink()
         assert make_zip.main(["--out", str(tmp_path / "zips")], root=kit_copy) == 1
         lines = capsys.readouterr().out.splitlines()
@@ -99,7 +115,11 @@ class TestChecks:
         archive = kit_copy / "dist" / f"horus-bench-kit-{__version__}.zip"
         with zipfile.ZipFile(archive) as bundle:
             names = bundle.namelist()
-            script = bundle.getinfo(f"horus-bench-kit-{__version__}/src/horus_bench_kit/data/fetch-model.sh")
-        assert not any("/results/" in name or "/out/" in name or name.endswith(".zip") for name in names)
+            script = bundle.getinfo(
+                f"horus-bench-kit-{__version__}/src/horus_bench_kit/data/fetch-model.sh"
+            )
+        assert not any(
+            "/results/" in name or "/out/" in name or name.endswith(".zip") for name in names
+        )
         assert script.external_attr >> 16 == 0o755
         assert f"horus-bench-kit-{__version__}/examples/probe/command_probe.py" in names

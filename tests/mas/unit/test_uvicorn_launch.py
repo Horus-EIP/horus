@@ -17,7 +17,7 @@ def _uvicorn_commands(path: Path) -> list[list[str]]:
     for line in path.read_text(encoding="utf-8").splitlines():
         tokens = line.split()
         if "uvicorn" in tokens and "main:app" in tokens:
-            commands.append(tokens[tokens.index("uvicorn"):])
+            commands.append(tokens[tokens.index("uvicorn") :])
     return commands
 
 

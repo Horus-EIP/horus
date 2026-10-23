@@ -76,9 +76,7 @@ class TestANewInstall:
 
 
 class TestAnUpgradeFromAnInstallThatStillHasTheShippedAgentPassword:
-    def test_the_shipped_password_is_replaced_by_the_one_in_the_environment(
-        self, session, logs
-    ):
+    def test_the_shipped_password_is_replaced_by_the_one_in_the_environment(self, session, logs):
         add_agent(session, "agent")
 
         assert agent_account.ensure_agent_account(session, "agent", GENERATED) == "replaced"
@@ -139,9 +137,11 @@ class TestTheCommandTheInstallerRuns:
         settings = MagicMock(super_agent_username="agent", super_agent_password=GENERATED)
         session.close = MagicMock()
 
-        with patch.object(agent_account, "SessionLocal", return_value=session), \
-                patch.object(agent_account, "settings", settings), \
-                patch.object(agent_account, "ensure_agent_account", return_value="matches") as ensure:
+        with (
+            patch.object(agent_account, "SessionLocal", return_value=session),
+            patch.object(agent_account, "settings", settings),
+            patch.object(agent_account, "ensure_agent_account", return_value="matches") as ensure,
+        ):
             assert agent_account.main() == 0
 
         printed = capsys.readouterr().out

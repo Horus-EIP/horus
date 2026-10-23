@@ -16,13 +16,30 @@ import consent  # noqa: E402
 from common import EXIT_CONSENT_CANCELLED, EXIT_USAGE, InstallError, Log  # noqa: E402
 
 POSIX_REJECTED = [
-    "/", "/etc", "/usr", "/bin", "/sbin", "/lib", "/var", "/boot", "/dev",
-    "/proc", "/sys", "/System", "/Library", "/Applications", "/private",
+    "/",
+    "/etc",
+    "/usr",
+    "/bin",
+    "/sbin",
+    "/lib",
+    "/var",
+    "/boot",
+    "/dev",
+    "/proc",
+    "/sys",
+    "/System",
+    "/Library",
+    "/Applications",
+    "/private",
     "/opt/homebrew",
 ]
 WINDOWS_REJECTED = [
-    "C:\\", "C:\\Windows", "C:\\Program Files", "C:\\Program Files (x86)",
-    "C:\\ProgramData", "C:\\Users",
+    "C:\\",
+    "C:\\Windows",
+    "C:\\Program Files",
+    "C:\\Program Files (x86)",
+    "C:\\ProgramData",
+    "C:\\Users",
 ]
 
 POSIX_MOUNT_EQUIVALENT_REJECTED = ["/run", "/srv", "/snap", "/home", "/Users"]
@@ -42,8 +59,8 @@ WINDOWS_UNC_REJECTED = [
 
 IS_WINDOWS = os.name == "nt"
 
-class Script:
 
+class Script:
     def __init__(self, *answers: str):
         self.answers = list(answers)
         self.prompts: list[str] = []
@@ -56,8 +73,8 @@ class Script:
             raise EOFError("script exhausted")
         return self.answers.pop(0)
 
-class ConsentTestCase(unittest.TestCase):
 
+class ConsentTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
@@ -87,8 +104,8 @@ class ConsentTestCase(unittest.TestCase):
                 consent.choose(self.log, self.repo, input_fn=script, **kwargs)
         return caught.exception
 
-class TestSystemPathsRejected(ConsentTestCase):
 
+class TestSystemPathsRejected(ConsentTestCase):
     @unittest.skipIf(IS_WINDOWS, "POSIX system paths")
     def test_every_posix_system_path_is_rejected(self):
         for raw in POSIX_REJECTED:
@@ -118,7 +135,7 @@ class TestSystemPathsRejected(ConsentTestCase):
 
     def test_validate_folder_rejects_the_system_paths_that_exist(self):
         checked = 0
-        for raw in (WINDOWS_REJECTED if IS_WINDOWS else POSIX_REJECTED):
+        for raw in WINDOWS_REJECTED if IS_WINDOWS else POSIX_REJECTED:
             if not Path(raw).is_dir():
                 continue
             checked += 1
@@ -163,8 +180,8 @@ class TestSystemPathsRejected(ConsentTestCase):
             consent.forbidden_roots = real_table
             consent._home = real_home
 
-class TestSymlinkResolution(ConsentTestCase):
 
+class TestSymlinkResolution(ConsentTestCase):
     def setUp(self) -> None:
         super().setUp()
         self._links: list[Path] = []
@@ -191,7 +208,8 @@ class TestSymlinkResolution(ConsentTestCase):
         if IS_WINDOWS:
             rc = subprocess.run(
                 ["cmd", "/c", "mklink", "/J", str(link), str(target)],
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
             )
             if rc.returncode == 0 and link.exists():
                 self._links.append(link)
@@ -221,8 +239,8 @@ class TestSymlinkResolution(ConsentTestCase):
         got = consent.validate_folder(str(link))
         self.assertEqual(got, real.resolve())
 
-class TestHomeDirectory(ConsentTestCase):
 
+class TestHomeDirectory(ConsentTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.home = Path.home().resolve()
@@ -254,8 +272,8 @@ class TestHomeDirectory(ConsentTestCase):
         self.assertIsNotNone(consent.system_location_reason(self.home.parent))
         self.assertIsNone(consent.system_location_reason(self.sub.resolve()))
 
-class TestValidateFolder(ConsentTestCase):
 
+class TestValidateFolder(ConsentTestCase):
     def test_relative_path_is_rejected(self):
         with self.assertRaises(consent.PathRejected) as caught:
             consent.validate_folder("documents")
@@ -299,8 +317,8 @@ class TestValidateFolder(ConsentTestCase):
         with self.assertRaises(consent.PathRejected):
             consent.add_folder(accepted, outer.resolve())
 
-class TestWholeDevicePhrase(ConsentTestCase):
 
+class TestWholeDevicePhrase(ConsentTestCase):
     NEAR_MISSES = [
         "i accept full disk access",
         "I Accept Full Disk Access",
@@ -331,8 +349,15 @@ class TestWholeDevicePhrase(ConsentTestCase):
 
     def test_the_warning_names_what_is_exposed(self):
         _, _, printed = self.choose("3", "no", "1")
-        for phrase in ("SSH private key", "browser profile", "password", "tax",
-                       "medical", "index", "quote it back"):
+        for phrase in (
+            "SSH private key",
+            "browser profile",
+            "password",
+            "tax",
+            "medical",
+            "index",
+            "quote it back",
+        ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase.lower(), printed.lower())
 
@@ -341,11 +366,15 @@ class TestWholeDevicePhrase(ConsentTestCase):
         self.assertEqual(result["mode"], consent.CONSENT_DEMO)
         self.assertTrue(any("phrase" in p for p in script.prompts))
 
-class TestNonInteractive(ConsentTestCase):
 
+class TestNonInteractive(ConsentTestCase):
     def test_non_interactive_cannot_reach_whole_device(self):
-        for preselect in (None, consent.CONSENT_DEMO, consent.CONSENT_FOLDERS,
-                          consent.CONSENT_WHOLE_DEVICE):
+        for preselect in (
+            None,
+            consent.CONSENT_DEMO,
+            consent.CONSENT_FOLDERS,
+            consent.CONSENT_WHOLE_DEVICE,
+        ):
             with self.subTest(preselect=preselect):
                 script = Script(consent.WHOLE_DEVICE_PHRASE, "3", "y")
                 result, _, _ = self.choose(
@@ -375,8 +404,8 @@ class TestNonInteractive(ConsentTestCase):
         exc = self.choose_expecting(InstallError, "1", preselect="everything")
         self.assertEqual(exc.code, EXIT_USAGE)
 
-class TestChoiceShape(ConsentTestCase):
 
+class TestChoiceShape(ConsentTestCase):
     def test_demo_is_the_default_answer(self):
         result, _, _ = self.choose("")
         self.assertEqual(result["mode"], consent.CONSENT_DEMO)
@@ -421,8 +450,8 @@ class TestChoiceShape(ConsentTestCase):
         self.assertIn(consent.CONTAINER_CORPUS_PATH, text)
         self.assertIn(consent.HORUS_CORPUS_ENV_KEY, text)
 
-class TestDevicePrefixesAndUNC(ConsentTestCase):
 
+class TestDevicePrefixesAndUNC(ConsentTestCase):
     @unittest.skipUnless(IS_WINDOWS, "NT device prefixes are Windows-only")
     def test_device_prefixed_system_paths_are_rejected(self):
         checked = 0
@@ -480,8 +509,8 @@ class TestDevicePrefixesAndUNC(ConsentTestCase):
         weird = Path("/tmp/\\\\?\\C:\\Windows")
         self.assertEqual(consent.strip_device_prefix(weird), weird)
 
-class TestPosixWholeDeviceEquivalents(ConsentTestCase):
 
+class TestPosixWholeDeviceEquivalents(ConsentTestCase):
     @unittest.skipIf(IS_WINDOWS, "POSIX system paths")
     def test_the_mount_equivalent_roots_are_rejected(self):
         for raw in POSIX_MOUNT_EQUIVALENT_REJECTED:
@@ -526,8 +555,11 @@ class TestPosixWholeDeviceEquivalents(ConsentTestCase):
     @unittest.skipIf(IS_WINDOWS, "mount roots are drive letters on Windows")
     def test_a_real_mount_point_is_rejected(self):
         candidates = ["/mnt/c", "/run", "/tmp", "/boot", "/media"]
-        found = [c for c in candidates
-                 if Path(c).is_dir() and os.path.ismount(c) and Path(c).parent != Path(c)]
+        found = [
+            c
+            for c in candidates
+            if Path(c).is_dir() and os.path.ismount(c) and Path(c).parent != Path(c)
+        ]
         if not found:
             self.skipTest("no non-root mount point on this host")
         for raw in found:
@@ -536,16 +568,14 @@ class TestPosixWholeDeviceEquivalents(ConsentTestCase):
 
     @unittest.skipIf(IS_WINDOWS, "mount roots are drive letters on Windows")
     def test_a_directory_that_contains_a_mount_root_is_rejected(self):
-        base = Path(tempfile.mkdtemp(prefix="horus-consent-parent-",
-                                     dir=str(Path.home())))
+        base = Path(tempfile.mkdtemp(prefix="horus-consent-parent-", dir=str(Path.home())))
         child = base / "c"
         child.mkdir()
         real_ismount = os.path.ismount
         os.path.ismount = lambda p: str(p) == str(child)
         try:
             reason = consent.system_location_reason(base.resolve())
-            self.assertIsNotNone(reason, "a directory containing a mount root "
-                                         "must be rejected")
+            self.assertIsNotNone(reason, "a directory containing a mount root must be rejected")
             self.assertIn("mounted filesystem", reason)
             with self.assertRaises(consent.PathRejected):
                 consent.validate_folder(str(base))
@@ -556,8 +586,7 @@ class TestPosixWholeDeviceEquivalents(ConsentTestCase):
 
     @unittest.skipIf(IS_WINDOWS, "reaching Windows through a mount is a POSIX view")
     def test_a_windows_system_dir_reached_through_a_mount_is_rejected(self):
-        base = Path(tempfile.mkdtemp(prefix="horus-consent-wsl-",
-                                     dir=str(Path.home())))
+        base = Path(tempfile.mkdtemp(prefix="horus-consent-wsl-", dir=str(Path.home())))
         users = base / "Users"
         deep = users / "someone" / "reports"
         deep.mkdir(parents=True)
@@ -570,7 +599,8 @@ class TestPosixWholeDeviceEquivalents(ConsentTestCase):
                 with self.subTest(path=str(path)):
                     self.assertIsNotNone(
                         consent.system_location_reason(path.resolve()),
-                        f"{path} should be refused as a Windows system location")
+                        f"{path} should be refused as a Windows system location",
+                    )
             self.assertEqual(consent.validate_folder(str(deep)), deep.resolve())
         finally:
             os.path.ismount = real_ismount
@@ -597,8 +627,8 @@ class TestPosixWholeDeviceEquivalents(ConsentTestCase):
         finally:
             folder.rmdir()
 
-class TestComposeUnsafeNames(ConsentTestCase):
 
+class TestComposeUnsafeNames(ConsentTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.base = Path(tempfile.mkdtemp(prefix="horus-consent-env-", dir=str(Path.home())))
@@ -660,6 +690,7 @@ class TestComposeUnsafeNames(ConsentTestCase):
         self.assertEqual(got, folder.resolve())
         for char in "#$\"'\n\r":
             self.assertNotIn(char, consent.to_compose_path(got))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

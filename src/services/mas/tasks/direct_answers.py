@@ -21,9 +21,7 @@ _IDENTITY = re.compile(
 )
 _THANKS = re.compile(r"\bthank|\bthx\b|\bty\b|\bcheers\b|\bappreciate")
 _CLOSING = re.compile(r"\bthat(?:'s|\s+is|\s+will\s+be|'ll\s+be)\s+all\b|\bnothing\s+else\b")
-_FAREWELL = re.compile(
-    r"\b(?:good\s*)?bye\b|\bsee\s+(?:you|ya)\b|\bgood\s+night\b|\btake\s+care\b"
-)
+_FAREWELL = re.compile(r"\b(?:good\s*)?bye\b|\bsee\s+(?:you|ya)\b|\bgood\s+night\b|\btake\s+care\b")
 
 
 def direct_answer(text: str | None, agent_names: Sequence[str] = ()) -> str | None:

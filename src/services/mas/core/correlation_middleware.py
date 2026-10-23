@@ -24,7 +24,7 @@ logger = get_structured_logger("middleware")
 class CorrelationIDMiddleware(BaseHTTPMiddleware):
     """
     Middleware to manage correlation IDs for request tracing.
-    
+
     Features:
     - Extracts correlation ID from incoming request headers
     - Generates new correlation ID if not present
@@ -93,7 +93,7 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
                     "error": str(e),
                     "error_type": type(e).__name__,
                 },
-                exc_info=True
+                exc_info=True,
             )
             raise
         finally:

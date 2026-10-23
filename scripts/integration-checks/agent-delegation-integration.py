@@ -30,6 +30,7 @@ from ai_agents.tool_registry import ToolRegistry
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_retrieval_agent():
     agent = MagicMock()
@@ -46,10 +47,7 @@ def mock_retrieval_agent():
 def mock_decision_agent():
     agent = MagicMock()
     agent.decide = MagicMock(
-        return_value=(
-            "THOUGHT: I have enough information.\n"
-            "FINAL_ANSWER: Revenue grew 15% in Q1."
-        )
+        return_value=("THOUGHT: I have enough information.\nFINAL_ANSWER: Revenue grew 15% in Q1.")
     )
     return agent
 
@@ -68,12 +66,14 @@ def tool_registry():
 @pytest.fixture
 def mock_delegation_handler():
     handler = MagicMock(spec=DelegationHandler)
-    handler.delegate = MagicMock(return_value={
-        "status": "completed",
-        "result": "Calculated total: $600",
-        "agent_id": "agent-analyst",
-        "delegation_id": "del-test-123",
-    })
+    handler.delegate = MagicMock(
+        return_value={
+            "status": "completed",
+            "result": "Calculated total: $600",
+            "agent_id": "agent-analyst",
+            "delegation_id": "del-test-123",
+        }
+    )
     handler.get_history = MagicMock(return_value=[])
     handler.reset_chain = MagicMock()
     return handler
@@ -97,6 +97,7 @@ def react_agent_with_delegation(
 # Test: Delegate tool is registered
 # ---------------------------------------------------------------------------
 
+
 class TestDelegateToolRegistration:
     def test_delegate_in_tool_descriptions(self):
         assert "delegate" in TOOL_DEFINITIONS
@@ -113,11 +114,11 @@ class TestDelegateToolRegistration:
 # Test: Agent can delegate to another agent type
 # ---------------------------------------------------------------------------
 
+
 class TestAgentDelegation:
     @pytest.mark.asyncio
     async def test_delegation_in_react_loop(
-        self, mock_decision_agent, mock_retrieval_agent, tool_registry,
-        mock_delegation_handler
+        self, mock_decision_agent, mock_retrieval_agent, tool_registry, mock_delegation_handler
     ):
         """Full ReAct loop: agent delegates then produces final answer."""
         call_count = 0
@@ -151,8 +152,7 @@ class TestAgentDelegation:
 
     @pytest.mark.asyncio
     async def test_delegation_result_used_in_reasoning(
-        self, mock_decision_agent, mock_retrieval_agent, tool_registry,
-        mock_delegation_handler
+        self, mock_decision_agent, mock_retrieval_agent, tool_registry, mock_delegation_handler
     ):
         """Delegation result is incorporated into the reasoning trace."""
         call_count = 0
@@ -188,6 +188,7 @@ class TestAgentDelegation:
 # Test: Delegation results return to original agent
 # ---------------------------------------------------------------------------
 
+
 class TestDelegationResults:
     @pytest.mark.asyncio
     async def test_delegation_result_in_history(
@@ -214,16 +215,19 @@ class TestDelegationResults:
 # Test: Delegation loops prevented
 # ---------------------------------------------------------------------------
 
+
 class TestDelegationLoopPrevention:
     @pytest.mark.asyncio
     async def test_delegation_fails_when_handler_reports_depth_limit(
         self, mock_decision_agent, mock_retrieval_agent, tool_registry
     ):
         handler = MagicMock(spec=DelegationHandler)
-        handler.delegate = MagicMock(return_value={
-            "status": "error",
-            "error": "Maximum delegation depth (5) reached.",
-        })
+        handler.delegate = MagicMock(
+            return_value={
+                "status": "error",
+                "error": "Maximum delegation depth (5) reached.",
+            }
+        )
 
         call_count = 0
 
@@ -245,13 +249,16 @@ class TestDelegationLoopPrevention:
         result = await agent.run("Deep delegation")
         steps = result["history"]["steps"]
         observation_steps = [s for s in steps if s["type"] == "OBSERVATION"]
-        assert any("failed" in s["content"].lower() or "depth" in s["content"].lower()
-                    for s in observation_steps)
+        assert any(
+            "failed" in s["content"].lower() or "depth" in s["content"].lower()
+            for s in observation_steps
+        )
 
 
 # ---------------------------------------------------------------------------
 # Test: Timeout handling for delegations
 # ---------------------------------------------------------------------------
+
 
 class TestDelegationTimeout:
     @pytest.mark.asyncio
@@ -259,10 +266,12 @@ class TestDelegationTimeout:
         self, mock_decision_agent, mock_retrieval_agent, tool_registry
     ):
         handler = MagicMock(spec=DelegationHandler)
-        handler.delegate = MagicMock(return_value={
-            "status": "timeout",
-            "error": "Delegation timed out after 30s",
-        })
+        handler.delegate = MagicMock(
+            return_value={
+                "status": "timeout",
+                "error": "Delegation timed out after 30s",
+            }
+        )
 
         call_count = 0
 
@@ -288,6 +297,7 @@ class TestDelegationTimeout:
 # ---------------------------------------------------------------------------
 # Test: Delegation without handler configured
 # ---------------------------------------------------------------------------
+
 
 class TestDelegationWithoutHandler:
     @pytest.mark.asyncio
@@ -321,11 +331,11 @@ class TestDelegationWithoutHandler:
 # Test: Context chain propagated through delegation
 # ---------------------------------------------------------------------------
 
+
 class TestDelegationContextPropagation:
     @pytest.mark.asyncio
     async def test_incoming_context_forwarded_to_handler(
-        self, mock_decision_agent, mock_retrieval_agent, tool_registry,
-        mock_delegation_handler
+        self, mock_decision_agent, mock_retrieval_agent, tool_registry, mock_delegation_handler
     ):
         """When _incoming_delegation_context is set, it is passed through to
         the delegation handler so the next agent receives all prior context."""
@@ -356,13 +366,14 @@ class TestDelegationContextPropagation:
 
         mock_delegation_handler.delegate.assert_called_once()
         call_args = mock_delegation_handler.delegate.call_args
-        forwarded_ctx = call_args[0][4] if len(call_args[0]) > 4 else call_args[1].get("delegation_context")
+        forwarded_ctx = (
+            call_args[0][4] if len(call_args[0]) > 4 else call_args[1].get("delegation_context")
+        )
         assert forwarded_ctx == prior_ctx
 
     @pytest.mark.asyncio
     async def test_no_context_when_not_set(
-        self, mock_decision_agent, mock_retrieval_agent, tool_registry,
-        mock_delegation_handler
+        self, mock_decision_agent, mock_retrieval_agent, tool_registry, mock_delegation_handler
     ):
         """When _incoming_delegation_context is None, handler receives None."""
         call_count = 0
@@ -385,7 +396,9 @@ class TestDelegationContextPropagation:
         await agent.run("Simple delegation")
 
         call_args = mock_delegation_handler.delegate.call_args
-        forwarded_ctx = call_args[0][4] if len(call_args[0]) > 4 else call_args[1].get("delegation_context")
+        forwarded_ctx = (
+            call_args[0][4] if len(call_args[0]) > 4 else call_args[1].get("delegation_context")
+        )
         assert forwarded_ctx is None
 
 
@@ -393,17 +406,16 @@ class TestDelegationContextPropagation:
 # Test: RAGPipeline integration with delegation
 # ---------------------------------------------------------------------------
 
+
 class TestRAGPipelineDelegation:
     @pytest.mark.asyncio
     async def test_pipeline_react_mode_with_delegation(
-        self, mock_retrieval_agent, mock_decision_agent, tool_registry,
-        mock_delegation_handler
+        self, mock_retrieval_agent, mock_decision_agent, tool_registry, mock_delegation_handler
     ):
         """RAGPipeline in react mode supports delegation via the ReactAgent."""
         mock_decision_agent.decide = MagicMock(
             return_value=(
-                "THOUGHT: I have enough information.\n"
-                "FINAL_ANSWER: Answer with delegation support."
+                "THOUGHT: I have enough information.\nFINAL_ANSWER: Answer with delegation support."
             )
         )
 

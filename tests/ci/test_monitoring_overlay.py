@@ -59,8 +59,11 @@ class MonitoringOffOverlay(unittest.TestCase):
         cls.off = services(profiles.MONITORING_OVERLAY)
 
     def test_the_four_monitoring_services_do_not_run(self):
-        backends = {name for name, spec in self.base.items()
-                    if str(spec.get("image", "")).startswith(("grafana/", "prom/"))}
+        backends = {
+            name
+            for name, spec in self.base.items()
+            if str(spec.get("image", "")).startswith(("grafana/", "prom/"))
+        }
         self.assertEqual(backends, set(profiles.MONITORING_SERVICES))
         for name in profiles.MONITORING_SERVICES:
             with self.subTest(name):
@@ -78,8 +81,11 @@ class MonitoringOffOverlay(unittest.TestCase):
                     self.assertIs(self.off[name]["depends_on"][needed]["required"], False)
 
     def test_the_services_stop_exporting_traces(self):
-        exporting = {name for name, spec in self.base.items()
-                     if "tempo" in environment(spec).get("OTEL_EXPORTER_OTLP_ENDPOINT", "")}
+        exporting = {
+            name
+            for name, spec in self.base.items()
+            if "tempo" in environment(spec).get("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+        }
         self.assertEqual(exporting, set(TRACED))
         for name in TRACED:
             with self.subTest(name):

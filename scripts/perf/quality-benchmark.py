@@ -86,7 +86,9 @@ DEFAULT_QUERIES: list[QueryCase] = [
     QueryCase(
         query="What is the password complexity requirement?",
         expected_keywords=["password", "complexity"],
-        answer_predicate=lambda a: bool(re.search(r"\d+\s*(?:chars?|characters?|caractères?)", a, re.I)),
+        answer_predicate=lambda a: bool(
+            re.search(r"\d+\s*(?:chars?|characters?|caractères?)", a, re.I)
+        ),
         answer_predicate_name="answer_contains_char_count",
     ),
     QueryCase(
@@ -231,12 +233,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         return round(sum(xs) / len(xs), 4) if xs else 0.0
 
     retrieval_precisions = [c.get("keyword_match_precision_retrieval", 0.0) for c in results]
-    answer_precisions = [c.get("keyword_match_precision_answer") for c in results if c.get("answer_ok")]
+    answer_precisions = [
+        c.get("keyword_match_precision_answer") for c in results if c.get("answer_ok")
+    ]
     predicate_pass_rate = (
-        sum(1 for c in results if c.get("answer_predicate_passed")) / max(
-            1, sum(1 for c in results if c.get("answer_ok"))
-        )
-        if any(c.get("answer_ok") for c in results) else None
+        sum(1 for c in results if c.get("answer_predicate_passed"))
+        / max(1, sum(1 for c in results if c.get("answer_ok")))
+        if any(c.get("answer_ok") for c in results)
+        else None
     )
 
     summary = {
@@ -259,22 +263,41 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--ks-url", default=os.environ.get("KS_URL", "http://localhost:8080"),
-                        help="Knowledge Store base URL")
-    parser.add_argument("--mas-url", default=os.environ.get("MAS_URL", "http://localhost:8000"),
-                        help="MAS base URL")
-    parser.add_argument("--token", default=os.environ.get("MAS_TOKEN", ""),
-                        help="JWT bearer token for MAS (skip MAS calls if empty)")
-    parser.add_argument("--conversation-id", type=int, default=int(os.environ.get("CONVERSATION_ID", "0")),
-                        help="Existing conversation ID for the chat endpoint")
-    parser.add_argument("--top-k", type=int, default=5,
-                        help="Top-k chunks to retrieve from the Knowledge Store")
-    parser.add_argument("--label", required=True,
-                        help="Run label, e.g. 'baseline' or 'after-chunk-tuning'")
-    parser.add_argument("--no-chat", action="store_true",
-                        help="Skip the MAS chat call; only exercise retrieval (faster)")
-    parser.add_argument("--out-dir", default=str(Path(__file__).parent / "results-archive"),
-                        help="Directory to write the JSON result into")
+    parser.add_argument(
+        "--ks-url",
+        default=os.environ.get("KS_URL", "http://localhost:8080"),
+        help="Knowledge Store base URL",
+    )
+    parser.add_argument(
+        "--mas-url", default=os.environ.get("MAS_URL", "http://localhost:8000"), help="MAS base URL"
+    )
+    parser.add_argument(
+        "--token",
+        default=os.environ.get("MAS_TOKEN", ""),
+        help="JWT bearer token for MAS (skip MAS calls if empty)",
+    )
+    parser.add_argument(
+        "--conversation-id",
+        type=int,
+        default=int(os.environ.get("CONVERSATION_ID", "0")),
+        help="Existing conversation ID for the chat endpoint",
+    )
+    parser.add_argument(
+        "--top-k", type=int, default=5, help="Top-k chunks to retrieve from the Knowledge Store"
+    )
+    parser.add_argument(
+        "--label", required=True, help="Run label, e.g. 'baseline' or 'after-chunk-tuning'"
+    )
+    parser.add_argument(
+        "--no-chat",
+        action="store_true",
+        help="Skip the MAS chat call; only exercise retrieval (faster)",
+    )
+    parser.add_argument(
+        "--out-dir",
+        default=str(Path(__file__).parent / "results-archive"),
+        help="Directory to write the JSON result into",
+    )
     args = parser.parse_args()
 
     summary = run(args)

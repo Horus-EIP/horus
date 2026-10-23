@@ -7,7 +7,6 @@ from core.rabbitmq_manager import RabbitMQ
 
 
 class TestRabbitMQManager:
-
     @pytest.fixture
     def rabbitmq(self):
         return RabbitMQ(retries=1, delay=0.1)
@@ -60,19 +59,25 @@ class TestRabbitMQManager:
 
     def test_publish_without_connection(self, rabbitmq):
         # Mock connect to verify behavior when connection fails
-        with patch.object(rabbitmq, 'connect', side_effect=Exception("Connection is not established")):
+        with patch.object(
+            rabbitmq, "connect", side_effect=Exception("Connection is not established")
+        ):
             with pytest.raises(Exception) as excinfo:
                 rabbitmq.publish("test_queue", "message")
             assert "Connection is not established" in str(excinfo.value)
 
     def test_consume_without_connection(self, rabbitmq):
-        with patch.object(rabbitmq, 'connect', side_effect=Exception("Connection is not established")):
+        with patch.object(
+            rabbitmq, "connect", side_effect=Exception("Connection is not established")
+        ):
             with pytest.raises(Exception) as excinfo:
                 rabbitmq.consume("test_queue", lambda x: x)
             assert "Connection is not established" in str(excinfo.value)
 
     def test_create_queue_without_connection(self, rabbitmq):
-        with patch.object(rabbitmq, 'connect', side_effect=Exception("Connection is not established")):
+        with patch.object(
+            rabbitmq, "connect", side_effect=Exception("Connection is not established")
+        ):
             with pytest.raises(Exception) as excinfo:
                 rabbitmq.create_queue("test_queue")
             assert "Connection is not established" in str(excinfo.value)
@@ -154,9 +159,7 @@ class TestRabbitMQManager:
     @patch("core.rabbitmq_manager.pika.BlockingConnection")
     @patch("core.rabbitmq_manager.tracer")
     @patch("core.rabbitmq_manager.extract")
-    def test_consume_success(
-        self, mock_extract, mock_tracer, mock_connection, rabbitmq
-    ):
+    def test_consume_success(self, mock_extract, mock_tracer, mock_connection, rabbitmq):
         # Setup connection
         mock_conn_instance = MagicMock()
         mock_channel = MagicMock()
@@ -188,9 +191,7 @@ class TestRabbitMQManager:
 
         mock_extract.return_value = "context"
         mock_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
-            mock_span
-        )
+        mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
 
         # Call the wrapper
         traced_callback(mock_ch, mock_method, mock_properties, mock_body)
@@ -202,7 +203,5 @@ class TestRabbitMQManager:
         assert mock_tracer.start_as_current_span.call_args[1]["context"] == "context"
 
         # Verify original callback called
-        original_callback.assert_called_once_with(
-            mock_ch, mock_method, mock_properties, mock_body
-        )
+        original_callback.assert_called_once_with(mock_ch, mock_method, mock_properties, mock_body)
         mock_channel.start_consuming.assert_called_once()
