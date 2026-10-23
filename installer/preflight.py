@@ -588,7 +588,10 @@ def run_install_checks(log: Log, infra: Path,
         summary["disk"] = {"checked": False, "path": None,
                            "free_bytes": None, "skipped": True}
     elif mock_free_gib is None:
-        summary["disk"] = check_disk(log)
+        if cpu_profile:
+            summary["disk"] = check_disk(log, REQUIRED_FREE_BYTES)
+        else:
+            summary["disk"] = check_disk(log, GPU_FREE_BYTES)
     else:
         summary["disk"] = check_disk(log, int(mock_free_gib * 1024**3), mock=True)
     llama_image = model_server_image(infra) if cpu_profile else None
