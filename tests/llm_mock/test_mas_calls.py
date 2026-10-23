@@ -1,9 +1,11 @@
 import json
 from pathlib import Path
-import yaml
+
 import jsonschema
 import pytest
+import yaml
 from clients import ROSTER, mas_prompts, route_body, text_body
+
 from llm_mock.mas_calls import SMALL_TALK_REPLY
 
 PROMPTS = mas_prompts()

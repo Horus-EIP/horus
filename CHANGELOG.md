@@ -156,6 +156,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 ### Changed
 
+- Improved `llm-mock` agent routing for demo questions and added a separate 26-question holdout evaluation with a 90% minimum accuracy gate (B-138, 04766d6)
 - MAS passes Alembic commands as argument lists with shell execution disabled (B-42, `aae370c`)
 - CPU images install the CPU PyTorch wheel, and torch is pinned to 2.14.1 (B-87, `c0f89b3`); since B-96 the CPU images contain no torch at all
 - Memory limits for the agent and the knowledge store, thread budgets from the physical core count, and one MAS generation at a time (B-88, `39fc78c`)
