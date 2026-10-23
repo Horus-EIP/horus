@@ -273,6 +273,17 @@ class MockDisk(unittest.TestCase):
                 contextlib.redirect_stdout(io.StringIO()):
             return preflight.check_disk(self.log, int(required_gib * GIB), mock=mock_install)
 
+    def install_with_free_bytes(self, free_bytes: int, cpu_profile: bool):
+        usage = mock.Mock(free=free_bytes, total=500 * GIB)
+        with mock.patch.object(preflight, "_docker_root", return_value=str(self.tmp)), \
+                mock.patch.object(preflight.shutil, "disk_usage", return_value=usage), \
+                mock.patch.object(preflight, "check_network", return_value={}), \
+                mock.patch.object(preflight, "check_ports", return_value={}), \
+                contextlib.redirect_stdout(io.StringIO()):
+            return preflight.run_install_checks(
+                self.log, self.tmp, cpu_profile=cpu_profile
+            )
+
     def test_a_mock_install_with_less_free_disk_than_it_needs_stops_with_its_own_figure(self):
         with self.assertRaises(InstallError) as caught:
             self.check(10.0, profiles.MOCK_FREE_GIB, mock_install=True)
@@ -296,9 +307,29 @@ class MockDisk(unittest.TestCase):
                 mock.patch.object(preflight, "check_ports"), \
                 contextlib.redirect_stdout(io.StringIO()):
             preflight.run_install_checks(self.log, self.tmp, mock_free_gib=profiles.MOCK_FREE_GIB)
-            preflight.run_install_checks(self.log, self.tmp)
+            preflight.run_install_checks(self.log, self.tmp, cpu_profile=False)
+            preflight.run_install_checks(self.log, self.tmp, cpu_profile=True)
         self.assertEqual(disk.call_args_list[0], mock.call(self.log, int(profiles.MOCK_FREE_GIB * GIB), mock=True))
-        self.assertEqual(disk.call_args_list[1], mock.call(self.log))
+        self.assertEqual(disk.call_args_list[1], mock.call(self.log, preflight.GPU_FREE_BYTES))
+        self.assertEqual(disk.call_args_list[2], mock.call(self.log, preflight.REQUIRED_FREE_BYTES))
+
+    def test_a_gpu_install_passes_at_125_gib_and_fails_one_byte_below(self):
+        self.assertEqual(
+            self.install_with_free_bytes(preflight.GPU_FREE_BYTES, cpu_profile=False)["disk"]["free_bytes"],
+            preflight.GPU_FREE_BYTES,
+        )
+        with self.assertRaises(InstallError) as caught:
+            self.install_with_free_bytes(preflight.GPU_FREE_BYTES - 1, cpu_profile=False)
+        self.assertEqual(caught.exception.code, preflight.EXIT_DISK_SPACE)
+
+    def test_a_cpu_install_passes_at_150_gib_and_fails_one_byte_below(self):
+        self.assertEqual(
+            self.install_with_free_bytes(preflight.REQUIRED_FREE_BYTES, cpu_profile=True)["disk"]["free_bytes"],
+            preflight.REQUIRED_FREE_BYTES,
+        )
+        with self.assertRaises(InstallError) as caught:
+            self.install_with_free_bytes(preflight.REQUIRED_FREE_BYTES - 1, cpu_profile=True)
+        self.assertEqual(caught.exception.code, preflight.EXIT_DISK_SPACE)
 
 
 class InstalledStack(unittest.TestCase):
