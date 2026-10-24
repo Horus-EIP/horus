@@ -509,6 +509,9 @@ jobs:
         with:
           python-version-file: src/services/PYTHON_VERSION
 
+      - name: Install the test license generator dependency
+        run: python -m pip install cryptography==50.0.2
+
       - name: Start the clock
         run: echo "E2E_START=$(date +%s)" >> "$GITHUB_ENV"
 
@@ -554,6 +557,26 @@ jobs:
           start=$(date +%s)
           env -i PATH="$PATH" HOME="$HOME" docker compose up -d --wait --wait-timeout 900
           echo "START_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+
+      - name: Install an ephemeral test license for the end-to-end run
+        working-directory: src/infra
+        run: |
+          site_id=$(env -i PATH="$PATH" HOME="$HOME" docker compose exec -T postgres sh -c \
+            'psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT site_id FROM global_config WHERE id = 1"')
+          license_output=$(python ../../scripts/generate_test_license.py "$site_id" \
+            --out license/licence.jws)
+          public_key=$(printf '%s\n' "$license_output" \
+            | sed -n 's/^HORUS_LICENSE_PUBKEY_HEX=//p')
+          test -n "$public_key"
+
+          sed -i \
+            -e 's/^HORUS_LICENSE_KID=.*/HORUS_LICENSE_KID=horus-test-v1/' \
+            -e '/^HORUS_LICENSE_PUBKEY_HEX=/d' \
+            .env
+          printf '\nHORUS_LICENSE_PUBKEY_HEX=%s\n' "$public_key" >> .env
+
+          env -i PATH="$PATH" HOME="$HOME" docker compose \
+            up -d --no-deps --force-recreate --wait --wait-timeout 900 mas
 
       - name: Upload the demo corpus
         run: |
