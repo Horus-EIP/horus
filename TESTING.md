@@ -32,7 +32,7 @@ These need their own, stricter tests.
 | **Document deletion** | A deleted document must leave search *and* chat (ATP F15) | API test + a check on a live stack | `tests/knowledge_store/api/test_document_deletion_flow.py` |
 | **Grounding and refusal** | The core promise: never invent an answer | The evaluation set (section 6) before each release | `tests/eval/testset.yaml`, `scripts/eval/run-eval.py` |
 | **Installer preflight** | A wrong check wastes hours of a tester's time | Disk, ports, hardware and profile choice | `installer/tests/` (`test_preflight_requirements.py`, `test_hardware_decision.py`, `test_profile_tuning.py`) |
-| **Licence key** | A bug blocks paying customers or gives Horus away | Unit tests for every state: valid, warning, grace, expired, tampered, clock rollback | Not built yet; design in `docs/adr/ADR-004-closed-source-licence.md` |
+| **Licence key** | A bug blocks paying customers or gives Horus away | `tests/mas/unit/test_licensing.py` covers JWS/Ed25519 verification, payload validation, time states, user-cap reporting and clock rollback | Pure offline verifier in `src/services/mas/core/licensing.py`; endpoint enforcement, state persistence and key issuance are not wired yet |
 
 ---
 

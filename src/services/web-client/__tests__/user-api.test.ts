@@ -7,6 +7,7 @@ vi.mock("@/lib/api-client", () => ({
   apiClient: {
     get: vi.fn(),
     post: vi.fn(),
+    postMultipart: vi.fn(),
     delete: vi.fn(),
   },
 }));
@@ -33,6 +34,78 @@ describe("userApi", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("loads current license status and installation site ID", async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: {
+        site_id: "site-id",
+        state: "invalid",
+        reason: "Public key configuration is invalid",
+        license: null,
+      },
+    });
+
+    const result = await userApi.getLicenseInfo();
+
+    expect(apiClient.get).toHaveBeenCalledWith("/users/license");
+    expect(result.data?.site_id).toBe("site-id");
+    expect(result.data?.state).toBe("invalid");
+    expect(result.data?.license).toBeNull();
+  });
+
+  it("loads a summary of verified license claims", async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: {
+        site_id: "site-id",
+        state: "valid",
+        reason: null,
+        license: {
+          license_id: "license-id",
+          license_type: "commercial",
+          customer_id: "customer-id",
+          customer_name: "Example Customer",
+          site_ids: ["site-id"],
+          tier: "team",
+          user_cap: 100,
+          issued_at: "2026-10-24T12:00:00+00:00",
+          valid_from: "2026-01-01",
+          valid_until: "2026-12-31",
+          grace_days: 15,
+          features: ["core"],
+        },
+      },
+    });
+
+    const result = await userApi.getLicenseInfo();
+
+    expect(result.data?.license).toMatchObject({
+      customer_name: "Example Customer",
+      tier: "team",
+      user_cap: 100,
+      site_ids: ["site-id"],
+    });
+  });
+
+  it("uploads a license as multipart form data", async () => {
+    vi.mocked(apiClient.postMultipart).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { message: "License installed", state: "valid" },
+    });
+    const file = new File(["signed-license"], "license.jws");
+
+    const result = await userApi.uploadLicense(file);
+
+    expect(apiClient.postMultipart).toHaveBeenCalledWith(
+      "/users/upload-license",
+      expect.any(FormData)
+    );
+    expect(result.data?.state).toBe("valid");
   });
 
   it("getCurrentUser returns mapped user when /users/me succeeds", async () => {

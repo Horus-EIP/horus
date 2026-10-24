@@ -2,6 +2,43 @@
 
 This chapter covers everything you need to go from a fresh clone to a running stack: prerequisites and onboarding, configuration via environment variables, and troubleshooting when things go wrong.
 
+## Choose your path
+
+- **Using an existing Horus deployment:** start with [Using Horus and installing a license](#using-horus-and-installing-a-license). You do not need the source code or a signing key.
+- **Setting up a deployment:** follow [Developer onboarding](#developer-onboarding), then configure a license as described below.
+- **Contributing to Horus:** follow Developer onboarding and the [developer workflow](#developer-workflow-and-tests).
+
+## Using Horus and installing a license
+
+These steps are for an organization using a deployment that has already been
+installed. Ask your Horus administrator for the deployment URL and account.
+
+1. Sign in to the Horus web client with your account. An administrator creates
+   user accounts and assigns permissions; use the account and role supplied by
+   your organization.
+2. If you are a regular user, open Chat or the document area and follow your
+   organization's workflow. No environment variables or license files need to
+   be configured on an end-user workstation.
+3. If you administer Horus, open **Admin → License**
+   (`/admin/license`). Review the installation `site_id` and current license
+   state. The site ID is generated and stored for the installation independently
+   of any license file, so it is available even before the first license is
+   installed.
+4. Obtain a signed `.jws` license from the authorized Horus license issuer. It
+   must authorize the exact `site_id` shown in the UI. Upload it on the License
+   page and confirm the resulting state is `valid` or `warning`.
+5. Keep the `.jws` file and the deployment's public-key configuration under
+   the operator's normal backup and secrets-management process. Never request,
+   store, or upload a signing private key to Horus.
+
+Core features (chat, agents, and tasks) require an active license in `valid`,
+`warning`, or `grace`. Missing, invalid, not-yet-valid, restricted, or clock
+rollback states deny those operations. The admin UI and the permissioned data
+export remain available so an administrator can inspect status, install or
+renew a license, and export data. Contact the deployment administrator if the
+license page reports an unexpected state or you receive a license-related
+403 response. See [licensing states](eip/licensing-rules.md) for details.
+
 ---
 
 ## Developer onboarding
@@ -88,6 +125,18 @@ bash init-env.sh
 
 `init-env.sh` writes a random `JWT_SECRET_KEY`, `REDIS_PASSWORD` and `SUPER_USER_PASSWORD`, the admin's password, which you read in `.env`; if you copy `.env.example` by hand instead, set all three (`openssl rand -hex 32`): with an empty password Valkey refuses the other containers, and MAS refuses to create the admin account with an empty password or `admin`. Review the other values in `.env`. Defaults are suitable for many local setups. Important keys include `POSTGRES_*`, `REDIS_PASSWORD`, `RABBITMQ_*`, `JWT_SECRET_KEY`, and `SUPER_USER_*`. Never commit `.env`; only `.env.example` is tracked.
 
+For a deployment that should serve licensed users, configure the issuer-provided
+`HORUS_LICENSE_KID` and matching `HORUS_LICENSE_PUBKEY_HEX` in the deployment
+environment before accepting users. The public key is 64 hexadecimal characters
+(32 raw Ed25519 bytes); it is not a password or a signature. Obtain the public
+key and the signed license from your authorized issuer, and never put the
+signing private key on the server. Set `HORUS_LICENSE_PATH` and
+`HORUS_LICENSE_DIR` consistently with the mounted license directory (defaults
+are `/run/horus/license/licence.jws` in the container and `./license` on the
+host). An installation can boot without a license so an administrator can
+configure it, but core features stay blocked until a valid license is installed.
+See [license deployment and setup](eip/licensing-development.md#runtime-configuration).
+
 #### Step 3: Start the stack
 
 ```bash
@@ -130,6 +179,40 @@ docker compose exec postgres psql -U postgres -d mas_db -c "SELECT version();"
 docker compose exec redis sh -c 'VALKEYCLI_AUTH="$REDIS_PASSWORD" valkey-cli ping'
 ```
 
+#### Step 5: First administrator sign-in and license setup
+
+Open http://localhost:3000 and sign in with `SUPER_USER_USERNAME` and
+`SUPER_USER_PASSWORD` from the local `.env` file. Keep that file private; do
+not paste its contents into tickets or commit it.
+
+Open **Admin → License** (`/admin/license`) to confirm the installation
+`site_id` and license state. MAS generates and persists this installation ID
+when the license status is requested; a license or certificate file is not
+needed to create or display it. The ID is stored in the database's
+installation-wide configuration, not in the license file or container
+filesystem. Preserve the database when backing up, restoring, or replacing a
+deployment. Reinitializing the database creates a different site ID, so a
+license issued for the old ID will not authorize the reinitialized deployment.
+
+When MAS has verified license claims, the page also summarizes the customer,
+license ID and type, tier and user cap, issue and validity dates, grace period,
+authorized site IDs, and enabled features. If no verified claims are loaded,
+the page still shows the installation ID and current state, and explains that
+no verified claims are available. The summary is informational: the displayed
+state is the result of license verification and determines feature access.
+
+An operator must configure the matching trusted public key in the MAS
+environment and obtain a signed license for that exact site ID from the
+authorized issuer. Upload the `.jws` through this page. A successful upload
+should report `valid` or `warning`; check the status again after a restart. If
+the state is `missing`, core features remain unavailable until installation.
+If it is `invalid`, check the configured key ID, public key, uploaded file, and
+site ID with the issuer or deployment operator.
+
+Do not generate a key pair or create a production license on the Horus server.
+Local developers can use the isolated, explicitly non-production workflow in
+[Developer license setup](eip/licensing-development.md#generate-and-install-a-local-test-license).
+
 ---
 
 ### Web interfaces
@@ -150,7 +233,45 @@ There is **no** Metabase or PostgreSQL Exporter service in the default `docker-c
 
 ---
 
-### Running tests
+### Developer workflow and tests
+
+#### Local license setup for development
+
+Local MAS/API tests that mount protected routers should initialize
+`app.state.license` to `LicenseState.VALID` by default. Tests specifically
+covering enforcement must explicitly use a missing or non-active state; do not
+remove the license dependency to make unrelated endpoint tests pass.
+
+To exercise a running local stack, start MAS once, sign in as the local
+administrator, and read the installation `site_id` from **Admin → License**.
+This works before installing a license: the endpoint creates the ID on first
+read and persists it in the database. Generate a local-only signed JWS for
+that exact ID and a matching ephemeral public key:
+
+```bash
+python scripts/generate_test_license.py \
+  <site-id-from-the-license-page> \
+  --out src/infra/license/licence.jws
+```
+
+Copy the printed `HORUS_LICENSE_KID` and `HORUS_LICENSE_PUBKEY_HEX` into the
+local `src/infra/.env` only. Change the local test key ID from the production
+example if needed, keep `HORUS_LICENSE_PATH` aligned with the container path,
+and recreate MAS so it loads the new public-key settings:
+
+```bash
+cd src/infra
+docker compose up -d --no-deps --force-recreate mas
+```
+
+Then upload `src/infra/license/licence.jws` in **Admin → License** and verify
+the status. Each generator run creates a new ephemeral key pair. If rerun,
+update the public key and re-upload its newly generated file together. This
+script and its output are strictly for local tests, never for production.
+Detailed format, recovery nonce behavior, CI checks, and implementation notes
+are in [Licensing development](eip/licensing-development.md).
+
+#### Run tests
 
 From the repository root:
 
@@ -162,6 +283,27 @@ MAS-focused tests:
 
 ```bash
 bash scripts/test/run-mas.sh
+```
+
+The same non-stack pytest command used by MAS CI is:
+
+```bash
+pytest -c tests/mas/pytest.ini tests/mas \
+  -m "not requires_stack" \
+  --ignore=tests/mas/test_integration.py \
+  --cov=src/services/mas \
+  --cov-branch \
+  --cov-fail-under=85 \
+  --cov-report=xml:coverage-mas.xml \
+  --cov-report=term-missing \
+  --cov-report=html:htmlcov-mas \
+  --junitxml=junit-mas.xml
+```
+
+Repository-wide lint, matching CI:
+
+```bash
+ruff check src tests scripts installer packaging opensource
 ```
 
 Or directly:

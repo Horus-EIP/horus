@@ -211,12 +211,16 @@ class ApiClient {
   ): Promise<ApiResponse<T>> {
     try {
       const url = `${this.baseUrl()}${endpoint}`;
+      const headers = new Headers(this.getHeaders());
+      if (typeof FormData !== "undefined" && init.body instanceof FormData) {
+        headers.delete("Content-Type");
+      }
+      new Headers(init.headers).forEach((value, key) => {
+        headers.set(key, value);
+      });
       const result = await this.fetchFollowingOrchestratorRedirects(url, {
         ...init,
-        headers: {
-          ...this.getHeaders(),
-          ...(init.headers || {}),
-        },
+        headers,
         credentials: "include",
       });
 
@@ -343,6 +347,24 @@ class ApiClient {
           method: "POST",
           body: body ? JSON.stringify(body) : undefined,
           headers: options?.headers,
+          signal,
+        }),
+      retry
+    );
+  }
+
+  postMultipart<T>(
+    endpoint: string,
+    body: FormData,
+    options?: RequestOptions
+  ): Promise<ApiResponse<T>> {
+    const retry = options?.retry ?? 0;
+    const signal = this.buildSignal(options?.signal, options?.timeoutMs);
+    return this.withRetry(
+      () =>
+        this.requestOnce<T>(endpoint, {
+          method: "POST",
+          body,
           signal,
         }),
       retry

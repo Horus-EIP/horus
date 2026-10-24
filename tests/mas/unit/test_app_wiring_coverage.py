@@ -133,6 +133,9 @@ class TestCreateAppEnvironment:
         paths = _collect_route_paths(app)
         # Routers from each feature package are included.
         assert "/rabbitmq/heartbeat" in paths
+        assert "/users/license" in paths
+        assert "/users/upload-license" in paths
+        assert "/system/system/license-status" in paths
         # Instrumentator.expose() adds the Prometheus scrape endpoint.
         assert "/metrics" in paths
 

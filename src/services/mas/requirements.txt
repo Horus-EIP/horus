@@ -10,6 +10,7 @@ fastembed==0.8.1
 numpy
 PyYAML>=6.0.1,<7
 python-jose[cryptography]
+cryptography>=41.0,<51.0
 python-multipart
 SQLAlchemy>=2.0,<2.2
 alembic>=1.12.0

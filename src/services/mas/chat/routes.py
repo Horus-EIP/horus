@@ -7,6 +7,7 @@ and client examples.
 
 
 from fastapi import APIRouter, Depends, Query, WebSocket, status
+from licensing.access import require_active_license
 from sqlalchemy.orm import Session
 
 from auth.auth_tool_functions import get_current_user_from_token
@@ -18,7 +19,7 @@ from db.models import Conversations
 
 logger = get_logger("chat")
 
-router = APIRouter(prefix="/chat", tags=["Chat"])
+router = APIRouter(prefix="/chat", tags=["Chat"], dependencies=[Depends(require_active_license)])
 
 
 @router.websocket("/{conversation_id}/")

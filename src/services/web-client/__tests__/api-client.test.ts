@@ -61,6 +61,25 @@ describe("apiClient", () => {
     expect(res.status).toBe(200);
   });
 
+  it("sends multipart form data without overriding its boundary content type", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      createMockResponse({
+        ok: true,
+        status: 200,
+        json: async () => ({ message: "installed", state: "valid" }),
+      })
+    );
+    const formData = new FormData();
+    formData.append("file", new File(["signed-license"], "license.jws"));
+
+    const res = await apiClient.postMultipart("/users/upload-license", formData);
+
+    const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
+    expect(request?.body).toBe(formData);
+    expect(new Headers(request?.headers).has("Content-Type")).toBe(false);
+    expect(res.ok).toBe(true);
+  });
+
   it("should map 4xx errors to user-friendly message", async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(
       createMockResponse({

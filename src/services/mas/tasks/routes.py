@@ -14,6 +14,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
+from licensing.access import require_active_license
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
@@ -94,7 +95,7 @@ from tasks.work_queue_line import BUSY_RETRY_INTERVAL_S, BUSY_STATUS, work_queue
 
 logger = get_logger("task_routes")
 
-router = APIRouter(prefix="/tasks", tags=["Tasks"])
+router = APIRouter(prefix="/tasks", tags=["Tasks"], dependencies=[Depends(require_active_license)])
 
 QUEUED_TASK_AGENT_ID = "unassigned"
 ROUTE_DIRECT_ANSWER = "direct_answer"

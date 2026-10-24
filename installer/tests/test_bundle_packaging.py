@@ -345,6 +345,14 @@ class ModelFilesStayOutOfTheBundle(unittest.TestCase):
                 self.assertTrue(build_bundle.pruned(Path(name)))
         self.assertFalse(build_bundle.pruned(Path("models/manifest.json")))
 
+
+class LocalLicensesStayOutOfTheBundle(unittest.TestCase):
+    def test_local_license_files_are_pruned(self):
+        self.assertTrue(
+            build_bundle.pruned(Path("src/infra/license/test_licence.jws"))
+        )
+
+
 @needs_yaml
 class ComposeReleaseVersion(unittest.TestCase):
     def test_every_python_service_receives_the_release_version(self):

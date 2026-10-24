@@ -7,7 +7,8 @@ Reads environment variables (optionally from ``.env``) into a typed
 
 from pathlib import Path
 
-from pydantic import AliasChoices, Field, model_validator
+from licensing.config import trusted_license_keys
+from pydantic import AliasChoices, Field, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -32,6 +33,23 @@ class Settings(BaseSettings):
     super_user_username: str
     super_user_password: str
 
+    license_path: str = Field(
+        default="/run/horus/license/license.jws",
+        validation_alias=AliasChoices("HORUS_LICENSE_PATH", "LICENSE_PATH"),
+    )
+    license_kid: str = Field(
+        default="horus-prod-v1",
+        validation_alias=AliasChoices("HORUS_LICENSE_KID", "LICENSE_KID"),
+    )
+    license_pubkey_hex: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "HORUS_LICENSE_PUBKEY_HEX",
+            "LICENSE_PUBKEY_HEX",
+        ),
+    )
+    site_id: str | None = None
+
     # Initial Agent Account Configuration
     super_agent_username: str = "agent"
     super_agent_password: str = ""
@@ -41,6 +59,12 @@ class Settings(BaseSettings):
         if not self.super_agent_password:
             self.super_agent_password = self.super_user_password
         return self
+
+    @computed_field
+    @property
+    def trusted_license_keys(self) -> dict[str, bytes]:
+        """Return configured Ed25519 public keys, indexed by JWS key ID."""
+        return trusted_license_keys(self.license_kid, self.license_pubkey_hex)
 
     # Redis Cache Configuration
     redis_password: str

@@ -8,8 +8,11 @@ lifespan that boots/teardown background tasks.
 import asyncio
 from contextlib import asynccontextmanager
 
+import admin.routes
+import licensing.routes
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from licensing.lifecycle import initialize_license_state
 from prometheus_fastapi_instrumentator import Instrumentator
 
 import agents.routes
@@ -23,6 +26,7 @@ import users.routes
 from agents.controller import check_agent_heartbeat
 from auth.routes import router as auth_router
 from core.ai_mode import start_probe_background_thread
+from core.config import settings
 from core.correlation_middleware import CorrelationIDMiddleware
 from core.embedding_setup import start_embedding_preload_background_thread
 from core.llm_setup import start_llm_preload_background_thread
@@ -44,8 +48,8 @@ def create_app_environment():
     """Build the configured ``FastAPI`` instance.
 
     Registers CORS, logging middleware, all routers (/agents, /chat,
-    /conversations, /tasks, /auth, /users, /rabbitmq), tracing, and
-    Prometheus instrumentation.
+    /conversations, /tasks, /auth, /users, /rabbitmq, and license management),
+    tracing, and Prometheus instrumentation.
     """
     log_startup("APP", "Creating FastAPI application environment...")
 
@@ -62,6 +66,7 @@ def create_app_environment():
         - **Chat**: Real-time communication
         - **Conversations**: History and management
         - **Users**: User administration
+        - **License**: Installation license status and management
         """,
         version=HORUS_VERSION,
         openapi_tags=[
@@ -87,12 +92,17 @@ def create_app_environment():
                 "description": "Conversation history and management",
             },
             {"name": "Users", "description": "User management (Admin only)"},
+            {
+                "name": "License",
+                "description": "Installation license status and management",
+            },
             {"name": "RabbitMQ", "description": "Message queue management"},
             {"name": "System", "description": "Which AI answers: a language model or the mock"},
         ],
     )
 
     app.add_middleware(CorrelationIDMiddleware)
+    app.state.settings = settings
     log_success("app", "Correlation middleware added")
 
     app.add_middleware(
@@ -106,6 +116,7 @@ def create_app_environment():
     log_success("app", "CORS middleware configured")
 
     routers = [
+        (admin.routes.router, "Admin"),
         (agents.routes.router, "Agents"),
         (analytics.routes.router, "Analytics"),
         (chat.routes.router, "Chat"),
@@ -113,6 +124,8 @@ def create_app_environment():
         (tasks.routes.router, "Tasks"),
         (auth_router, "Authentication"),
         (users.routes.router, "Users"),
+        (licensing.routes.router, "License"),
+        (licensing.routes.system_router, "System License Status"),
         (core.rabbitmq_tool.router, "RabbitMQ"),
         (system.routes.router, "System"),
     ]
@@ -150,6 +163,8 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log_error("lifespan", f"Failed to initialize database: {str(e)}", exc_info=True)
         raise
+
+    app.state.license = initialize_license_state()
 
     await fail_interrupted_routing()
 
