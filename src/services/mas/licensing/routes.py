@@ -21,44 +21,85 @@ from licensing.clock import (
     force_reset_last_seen_clock,
     get_last_seen_clock,
 )
+from licensing.openapi_docs import (
+    LICENSE_STATUS_RESPONSES,
+    LICENSE_UPLOAD_RESPONSES,
+    LicenseLiveStatusResponse,
+    LicenseStatusResponse,
+    LicenseUploadResponse,
+)
 from licensing.site import get_or_create_site_id
 from licensing.verification import LicenseState, editing_license_file, verify_license
 
-router = APIRouter(prefix="/users", tags=["License"])
-system_router = APIRouter(prefix="/system", tags=["System"])
+router = APIRouter(prefix="/license", tags=["License"])
 logger = get_logger("licensing_routes")
 
 MAX_LICENSE_SIZE = 16 * 1024
 
 
-@system_router.get(
-    "/system/license-status",
+@router.get(
+    "/live-status",
     summary="Get current license status",
-    description="Returns the live state of the license for UI rendering (warnings, locks).",
+    description="Return the current license state for UI warnings and restrictions.",
+    response_model=LicenseLiveStatusResponse,
+    responses={
+        200: {
+            "description": "Current evaluated status for license-aware UI.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "warning": {
+                            "summary": "License is approaching expiration",
+                            "value": {
+                                "state": "warning",
+                                "warning_threshold_days": 14,
+                                "tier": "team",
+                                "features": ["core"],
+                            },
+                        },
+                        "missing": {
+                            "summary": "License state is not initialized",
+                            "value": {
+                                "state": "missing",
+                                "warning_threshold_days": None,
+                                "tier": None,
+                                "features": [],
+                            },
+                        },
+                    }
+                }
+            },
+        }
+    },
 )
-def get_live_license_status(request: Request) -> dict[str, object]:
+def get_live_license_status(request: Request) -> LicenseLiveStatusResponse:
     license_check = getattr(request.app.state, "license", None)
     if license_check is None:
-        return {"state": LicenseState.MISSING.value}
+        return LicenseLiveStatusResponse(state=LicenseState.MISSING.value)
 
-    return {
-        "state": license_check.state.value,
-        "warning_threshold_days": license_check.warning_threshold_days,
-        "tier": license_check.claims.tier if license_check.claims else None,
-        "features": license_check.claims.features if license_check.claims else [],
-    }
+    return LicenseLiveStatusResponse(
+        state=license_check.state.value,
+        warning_threshold_days=license_check.warning_threshold_days,
+        tier=license_check.claims.tier if license_check.claims else None,
+        features=list(license_check.claims.features) if license_check.claims else [],
+    )
 
 
 @router.get(
-    "/license",
+    "/status",
     summary="Get license status",
-    description="Return the current license state and installation site ID.",
+    description=(
+        "Return the persistent installation site ID and evaluated license state. "
+        "The verified claim summary is null if no signed license is loaded."
+    ),
+    response_model=LicenseStatusResponse,
+    responses=LICENSE_STATUS_RESPONSES,
 )
 def get_license_status(
     request: Request,
     user: Annotated[dict, Depends(PermissionChecker(Permission.SYSTEM_CONFIG))],
     db: Session = Depends(get_db),
-) -> dict[str, object]:
+) -> LicenseStatusResponse:
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
 
@@ -87,27 +128,33 @@ def get_license_status(
             "features": list(claims.features),
         }
 
-    return {
-        "site_id": get_or_create_site_id(db),
-        "state": license_check.state.value,
-        "reason": license_check.reason,
-        "license": license_summary,
-    }
+    return LicenseStatusResponse(
+        site_id=get_or_create_site_id(db),
+        state=license_check.state.value,
+        reason=license_check.reason,
+        license=license_summary,
+    )
 
 
 @router.post(
-    "/upload-license",
+    "/upload",
     summary="Upload license file",
-    description="Install a signed license file",
-    status_code=200,
-    tags=["License"],
+    description=(
+        "Install a compact signed JWS license. The license must verify against "
+        "the configured trusted key and authorize this installation's site ID."
+    ),
+    response_model=LicenseUploadResponse,
+    responses=LICENSE_UPLOAD_RESPONSES,
 )
 async def upload_license(
     request: Request,
     user: Annotated[dict, Depends(PermissionChecker(Permission.SYSTEM_CONFIG))],
-    file: UploadFile = File(...),
+    file: UploadFile = File(
+        ...,
+        description="Compact signed JWS license file; maximum size is 16 KiB.",
+    ),
     db: Session = Depends(get_db),
-) -> dict[str, str]:
+) -> LicenseUploadResponse:
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
 
@@ -222,10 +269,10 @@ async def upload_license(
         ) from exc
 
     request.app.state.license = license_check
-    return {
-        "message": "License installed successfully",
-        "state": license_check.state.value,
-    }
+    return LicenseUploadResponse(
+        message="License installed successfully",
+        state=license_check.state.value,
+    )
 
 
 def _restore_license_file(

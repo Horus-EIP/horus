@@ -94,7 +94,10 @@ def create_app_environment():
             {"name": "Users", "description": "User management (Admin only)"},
             {
                 "name": "License",
-                "description": "Installation license status and management",
+                "description": (
+                    "Installation license status, verified claims, upload, and "
+                    "clock-recovery workflow."
+                ),
             },
             {"name": "RabbitMQ", "description": "Message queue management"},
             {"name": "System", "description": "Which AI answers: a language model or the mock"},
@@ -125,7 +128,6 @@ def create_app_environment():
         (auth_router, "Authentication"),
         (users.routes.router, "Users"),
         (licensing.routes.router, "License"),
-        (licensing.routes.system_router, "System License Status"),
         (core.rabbitmq_tool.router, "RabbitMQ"),
         (system.routes.router, "System"),
     ]

@@ -60,7 +60,7 @@ row is deleted, a new ID is generated; a licence tied to the previous ID will
 not match and must be reissued for the new installation identity. Do not copy
 an ID from another deployment.
 
-`GET /users/license` requires an authenticated account with
+`GET /license/status` requires an authenticated account with
 system-configuration permission and initialized license state in the MAS
 application. It returns:
 
@@ -84,7 +84,7 @@ A newly issued license must include the exact installation UUID in its signed
 to the authorized issuer; do not generate one manually or copy one from a
 different environment.
 
-`POST /users/upload-license` accepts a multipart file upload from an account
+`POST /license` accepts a multipart file upload from an account
 with system-configuration permission. MAS limits the file to 16 KiB, verifies
 the signature and claims against the configured public key and installation
 ID, evaluates the state, and persists the clock state with the installed file.
@@ -96,6 +96,20 @@ licence state. If the endpoint returns `503`, the application license state
 has not been initialized; this is different from a missing license, where the
 endpoint can return the persisted site ID and a `missing` state.
 
+The license API is documented in Swagger/OpenAPI under the **License** tag:
+
+| Operation | Purpose | Documented error responses |
+|---|---|---|
+| `GET /license/status` | Site ID, evaluated state/reason, and optional verified claims | `401` unauthenticated, `403` insufficient permission, `503` license state not initialized |
+| `POST /license/upload` | Multipart upload of the signed JWS (form field `file`, max 16 KiB) | `400` invalid license or failed recovery check, `401` unauthenticated, `403` insufficient permission, `413` file too large, `422` invalid/missing multipart file, `500` invalid key configuration or install failure, `503` no trusted key configured |
+| `GET /license/live-status` | Lightweight state, warning threshold, tier, and feature values for UI warnings | Returns `200`; if in-memory state is not initialized it reports `missing` |
+
+Swagger includes example status payloads both with and without verified claims,
+an upload success payload, state/tier/date/feature values, and example error
+`detail` bodies. These examples are illustrative and do not contain a usable
+license signature. Error responses use FastAPI's standard JSON shape:
+`{"detail": "..."}`; request validation (`422`) uses a list of field errors.
+
 ## Generate and install a local test licence
 
 The generator creates a fresh Ed25519 key pair for each invocation. It writes
@@ -104,7 +118,7 @@ private key is neither printed nor saved; after the process exits, that signer
 cannot issue another licence. The default key ID is `horus-test-v1`, deliberately
 distinct from the production-looking ID used in deployment examples.
 
-1. Read the `site_id` from the local MAS `GET /users/license` endpoint.
+1. Read the `site_id` from the local MAS `GET /license/status` endpoint.
 2. Generate a local test file:
 
    ```bash
@@ -118,7 +132,7 @@ distinct from the production-looking ID used in deployment examples.
    only in the local test environment. Ensure `HORUS_LICENSE_PATH` resolves to
    the generated file inside MAS.
 4. Upload the file through the admin license page or
-   `POST /users/upload-license`, then confirm the reported state is `valid` or
+   `POST /license`, then confirm the reported state is `valid` or
    `warning`.
 
 The generated licence is valid for one site, uses the Starter cap, and is

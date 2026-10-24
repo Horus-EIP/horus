@@ -104,7 +104,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "site_id",
         type=uuid.UUID,
-        help="Installation site UUID returned by GET /users/license.",
+        help="Installation site UUID returned by GET /license/status.",
     )
     parser.add_argument(
         "--out",
@@ -142,7 +142,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print("The signing private key was not saved and cannot be reused.")
     if args.rollback_nonce is not None:
         print(f"Recovery nonce: {args.rollback_nonce}")
-    print("Upload the JWS with an authorized account using POST /users/upload-license.")
+    print("Upload the JWS with an authorized account using POST /license/upload.")
     return 0
 
 

@@ -133,9 +133,21 @@ class TestCreateAppEnvironment:
         paths = _collect_route_paths(app)
         # Routers from each feature package are included.
         assert "/rabbitmq/heartbeat" in paths
-        assert "/users/license" in paths
-        assert "/users/upload-license" in paths
-        assert "/system/system/license-status" in paths
+        assert "/license/status" in paths
+        assert "/license/upload" in paths
+        assert "/license/live-status" in paths
+        openapi = app.openapi()
+        assert openapi["paths"]["/license/status"]["get"]["tags"] == ["License"]
+        assert openapi["paths"]["/license/upload"]["post"]["tags"] == ["License"]
+        assert openapi["paths"]["/license/live-status"]["get"]["tags"] == ["License"]
+        upload_openapi = openapi["paths"]["/license/upload"]["post"]
+        assert {400, 401, 403, 413, 422, 500, 503} <= {
+            int(code) for code in upload_openapi["responses"]
+        }
+        assert "Example Customer" in str(
+            openapi["paths"]["/license/status"]["get"]["responses"]["200"]
+        )
+        assert "License rejected" in str(upload_openapi["responses"]["400"])
         # Instrumentator.expose() adds the Prometheus scrape endpoint.
         assert "/metrics" in paths
 

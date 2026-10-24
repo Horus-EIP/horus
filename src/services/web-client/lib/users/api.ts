@@ -16,47 +16,7 @@ export interface CreateUserResponse {
   role: string;
 }
 
-export interface LicenseUploadResponse {
-  message: string;
-  state: string;
-}
-
-export interface LicenseInfo {
-  site_id: string;
-  state: string;
-  reason: string | null;
-  license: LicenseSummary | null;
-}
-
-export interface LicenseSummary {
-  license_id: string;
-  license_type: string;
-  customer_id: string;
-  customer_name: string;
-  site_ids: string[];
-  tier: string;
-  user_cap: number | null;
-  issued_at: string;
-  valid_from: string;
-  valid_until: string;
-  grace_days: number;
-  features: string[];
-}
-
 export const userApi = {
-  async getLicenseInfo(): Promise<ApiResponse<LicenseInfo>> {
-    return apiClient.get<LicenseInfo>("/users/license");
-  },
-
-  async uploadLicense(file: File): Promise<ApiResponse<LicenseUploadResponse>> {
-    const formData = new FormData();
-    formData.append("file", file);
-    return apiClient.postMultipart<LicenseUploadResponse>(
-      "/users/upload-license",
-      formData
-    );
-  },
-
   async createUser(payload: CreateUserPayload): Promise<{ ok: boolean; data?: CreateUserResponse; error?: string }> {
     const response = await apiClient.post<CreateUserResponse>(
       "/auth/register",

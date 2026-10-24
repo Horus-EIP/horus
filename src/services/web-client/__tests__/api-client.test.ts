@@ -72,7 +72,7 @@ describe("apiClient", () => {
     const formData = new FormData();
     formData.append("file", new File(["signed-license"], "license.jws"));
 
-    const res = await apiClient.postMultipart("/users/upload-license", formData);
+    const res = await apiClient.postMultipart("/license/upload", formData);
 
     const request = vi.mocked(global.fetch).mock.calls[0]?.[1];
     expect(request?.body).toBe(formData);

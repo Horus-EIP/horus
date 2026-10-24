@@ -10,8 +10,8 @@ User routes under test (``src/services/mas/users/routes.py``):
 * ``POST   /users/me/password_modification``             (body: UserPasswordModification)
 * ``POST   /users/me/username_modification/{new_username}``
 
-The licence API cases use ``src/services/mas/licensing/routes.py`` while
-retaining the existing ``/users/license`` and ``/users/upload-license`` paths.
+The licence API cases use ``src/services/mas/licensing/routes.py`` and the
+dedicated ``/license`` API paths.
 """
 
 from __future__ import annotations
@@ -141,7 +141,7 @@ class TestLicenseUpload:
         with patch(
             "licensing.routes.get_or_create_site_id", return_value="site-id"
         ):
-            response = client.get("/users/license")
+            response = client.get("/license/status")
 
         assert response.status_code == 200
         assert response.json() == {
@@ -178,7 +178,7 @@ class TestLicenseUpload:
             "licensing.routes.get_or_create_site_id",
             return_value="018f0f6a-7b2c-7d5a-9b8c-0123456789ad",
         ):
-            response = client.get("/users/license")
+            response = client.get("/license/status")
 
         assert response.status_code == 200
         assert response.json() == {
@@ -227,7 +227,7 @@ class TestLicenseUpload:
         ):
             client = make_client(license_router, current_user=as_admin)
             response = client.post(
-                "/users/upload-license",
+                "/license/upload",
                 files={"file": ("license.jws", b"signed-license")},
             )
 
@@ -266,7 +266,7 @@ class TestLicenseUpload:
         ):
             client = make_client(license_router, current_user=as_admin)
             response = client.post(
-                "/users/upload-license",
+                "/license/upload",
                 files={"file": ("license.jws", b"signed-license")},
             )
 
@@ -301,7 +301,7 @@ class TestLicenseUpload:
         ):
             client = make_client(license_router, current_user=as_admin)
             response = client.post(
-                "/users/upload-license",
+                "/license/upload",
                 files={"file": ("license.jws", b"invalid-license")},
             )
 
@@ -339,7 +339,7 @@ class TestLicenseUpload:
         ):
             client = make_client(license_router, current_user=as_admin)
             response = client.post(
-                "/users/upload-license",
+                "/license/upload",
                 files={"file": ("license.jws", b"replayed-recovery-license")},
             )
 
@@ -391,7 +391,7 @@ class TestLicenseUpload:
         ):
             client = make_client(license_router, current_user=as_admin)
             response = client.post(
-                "/users/upload-license",
+                "/license/upload",
                 files={"file": ("license.jws", b"new-recovery-license")},
             )
 
@@ -406,7 +406,7 @@ class TestLicenseUpload:
         with patch("licensing.routes.verify_license") as verify:
             client = make_client(license_router, current_user=as_admin)
             response = client.post(
-                "/users/upload-license",
+                "/license/upload",
                 files={"file": ("license.jws", b"x" * (16 * 1024 + 1))},
             )
 

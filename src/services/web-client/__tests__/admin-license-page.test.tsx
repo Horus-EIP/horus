@@ -3,10 +3,10 @@ import { render, screen } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AdminLicensePage from "@/app/(protected)/admin/license/page";
-import { userApi } from "@/lib/users/api";
+import { licenseApi } from "@/lib/license/api";
 
-vi.mock("@/lib/users/api", () => ({
-  userApi: {
+vi.mock("@/lib/license/api", () => ({
+  licenseApi: {
     getLicenseInfo: vi.fn(),
     uploadLicense: vi.fn(),
   },
@@ -35,7 +35,7 @@ describe("AdminLicensePage", () => {
   });
 
   it("shows installation identity and verified license details", async () => {
-    vi.mocked(userApi.getLicenseInfo).mockResolvedValue({
+    vi.mocked(licenseApi.getLicenseInfo).mockResolvedValue({
       ok: true,
       status: 200,
       data: {
@@ -75,7 +75,7 @@ describe("AdminLicensePage", () => {
   });
 
   it("does not show a claims summary when no verified license is present", async () => {
-    vi.mocked(userApi.getLicenseInfo).mockResolvedValue({
+    vi.mocked(licenseApi.getLicenseInfo).mockResolvedValue({
       ok: true,
       status: 200,
       data: {

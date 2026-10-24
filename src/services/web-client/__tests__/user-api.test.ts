@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { userApi } from "@/lib/users/api";
+import { licenseApi } from "@/lib/license/api";
 import { apiClient } from "@/lib/api-client";
 import type { User } from "@/lib/types";
 
@@ -48,9 +49,9 @@ describe("userApi", () => {
       },
     });
 
-    const result = await userApi.getLicenseInfo();
+    const result = await licenseApi.getLicenseInfo();
 
-    expect(apiClient.get).toHaveBeenCalledWith("/users/license");
+    expect(apiClient.get).toHaveBeenCalledWith("/license/status");
     expect(result.data?.site_id).toBe("site-id");
     expect(result.data?.state).toBe("invalid");
     expect(result.data?.license).toBeNull();
@@ -81,7 +82,7 @@ describe("userApi", () => {
       },
     });
 
-    const result = await userApi.getLicenseInfo();
+    const result = await licenseApi.getLicenseInfo();
 
     expect(result.data?.license).toMatchObject({
       customer_name: "Example Customer",
@@ -99,10 +100,10 @@ describe("userApi", () => {
     });
     const file = new File(["signed-license"], "license.jws");
 
-    const result = await userApi.uploadLicense(file);
+    const result = await licenseApi.uploadLicense(file);
 
     expect(apiClient.postMultipart).toHaveBeenCalledWith(
-      "/users/upload-license",
+      "/license/upload",
       expect.any(FormData)
     );
     expect(result.data?.state).toBe("valid");

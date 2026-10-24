@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Button, Card, FileInput, Group, SimpleGrid, Text } from "@mantine/core";
 import { IconAlertCircle, IconCheck, IconKey, IconRefresh } from "@tabler/icons-react";
-import { userApi } from "@/lib/users/api";
-import type { LicenseInfo, LicenseUploadResponse } from "@/lib/users/api";
+import { licenseApi } from "@/lib/license/api";
+import type { LicenseInfo, LicenseUploadResponse } from "@/lib/license/api";
 
 const MAX_LICENSE_BYTES = 16 * 1024;
 
@@ -29,7 +29,7 @@ export default function AdminLicensePage() {
   const loadLicenseInfo = useCallback(async () => {
     setIsLoadingInfo(true);
     setInfoError(null);
-    const response = await userApi.getLicenseInfo();
+    const response = await licenseApi.getLicenseInfo();
     if (!response.ok || !response.data) {
       setInfoError(response.error ?? "Could not load license status.");
     } else {
@@ -56,7 +56,7 @@ export default function AdminLicensePage() {
     setError(null);
     setResult(null);
     try {
-      const response = await userApi.uploadLicense(file);
+      const response = await licenseApi.uploadLicense(file);
       if (!response.ok || !response.data) {
         setError(response.error ?? "The license could not be installed.");
         return;
