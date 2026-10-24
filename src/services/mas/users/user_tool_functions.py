@@ -58,6 +58,7 @@ def get_user_details(user_id: int, db: Session):
             user_id,
             user.username,
             user.role,
+            user.is_active,
         )
     except Exception as e:
         logger.error(

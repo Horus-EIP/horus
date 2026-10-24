@@ -31,9 +31,18 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 ### Added
 
 - [+] Added outreach posts for five communities and recorded feedback on asynchronous CPU-bound work, memory limits, container isolation and Python packaging (`docs/eip/community-outreach.md`; `64c7632`).
+- [+] Added signed licence parsing and Ed25519 verification, claim and site-ID validation, and lifecycle evaluation for missing, invalid, not-yet-valid, valid, warning, grace, restricted, and clock-rollback states. MAS verifies the configured licence at startup; core chat, agent, and task routes allow only valid, warning, or grace states (B-13, cc6e4ed).
+- [+] Added `GET /license/status` and `POST /license/upload` for license status and upload, restricted to system-configuration permission, with a 16 KiB upload limit, signature/site validation, installation, and clock-recovery handling. Swagger documents status, error codes, and example payloads. The API does not return the raw JWS, signature, or recovery nonce (B-13, cc6e4ed).
+- [+] Added the Admin → License page for viewing the site ID and state with or without a licence, reviewing verified customer, licence, tier/cap, validity, grace-period, authorized-site, and feature information, and uploading a licence (B-13, cc6e4ed).
+- [+] Added persistent installation identity and clock-recovery state in `global_config`, `license_clock_state`, and consumed reset nonces, plus a local-only test licence generator and user/operator/developer setup documentation (B-13, cc6e4ed).
+
+### Changed
+
+- [~] Account registration and user reactivation require a valid, warning, or grace licence and enforce the licensed cap against active users only. Administrators can suspend and reactivate accounts; suspended users cannot log in and their existing tokens are rejected. Existing accounts migrate as active, and the admin license summary reports active-seat usage and capped status (B-13, cc6e4ed).
 
 ### Upgrading an existing install
 
+- Configure the issuer-provided `HORUS_LICENSE_KID` and `HORUS_LICENSE_PUBKEY_HEX` for MAS, and mount the signed `.jws` at the path configured by `HORUS_LICENSE_PATH`. Apply the MAS database migrations that create `license_clock_state`, `global_config`, consumed reset nonces, and `users.is_active` (existing accounts default to active). Each licence must authorize the installation's persisted site ID; preserve the database to keep that identity across upgrades or restores. See `docs/getting-started.md` and `docs/eip/licensing-development.md` (B-13, cc6e4ed).
 - Database migrations add the `queued` task status, `tasks.owner_username`, `tasks.skills_required` and `tasks.completed_at`, and the worker-claim columns. MAS also adds a missing `queued` value to a `taskstatus` enum built by the `create_all` fallback.
 - The knowledge store re-embeds every stored document once on its first start (passages instead of whole files, FastEmbed instead of sentence-transformers). `KNOWLEDGE_STORE_REINDEX_ON_STARTUP=0` turns it off.
 - RabbitMQ work queues get a length limit: an empty queue declared by an older version is deleted and declared again; a queue that still holds tasks is kept and limited by MAS until it drains.
@@ -52,6 +61,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 ### Fixed
 
+- Prevented local licence files and other contents of `src/infra/license/` from being included in installer bundles (B-13, cc6e4ed).
 - `compare-benchmarks.py` crashed on every llama-bench report (B-122, `3711a7b`)
 - `ruff` failed CI on a `dict()` call in the agent (C408, `0ebc769`)
 - Valkey answered on every network interface with the password every install shipped, `redis_password`; it is bound to 127.0.0.1 and gets a generated password (B-123, `d586e09`)

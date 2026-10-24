@@ -1,6 +1,6 @@
 """``Users`` ORM model + CRUD audit listeners."""
 
-from sqlalchemy import Column, Integer, String, event
+from sqlalchemy import Boolean, Column, Integer, String, event, true
 from sqlalchemy.orm import relationship
 
 from auth.permissions import Role
@@ -9,7 +9,7 @@ from db.database import Base
 
 
 class Users(Base):
-    """Authenticated user (bcrypt password, RBAC role).
+    """Authenticated user (bcrypt password, RBAC role, active status).
 
     Passwords are always stored hashed. Owns 0..N ``Conversations``.
     """
@@ -19,6 +19,7 @@ class Users(Base):
     username = Column(String, unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
     role = Column(String, default=Role.USER.value, nullable=False)
+    is_active = Column(Boolean, default=True, server_default=true(), nullable=False)
 
     conversations = relationship(
         "Conversations",

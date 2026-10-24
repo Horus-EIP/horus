@@ -9,7 +9,8 @@ import {
   IconLogs,
   IconChartArea,
   IconBinaryTree2,
-  IconUsersGroup
+  IconUsersGroup,
+  IconKey
 } from '@tabler/icons-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Center, Image, Stack, Tooltip, UnstyledButton } from '@mantine/core';
@@ -108,6 +109,12 @@ export function NavbarMinimal() {
                 !pathname?.startsWith('/admin/traces')
               }
               onClick={() => router.push('/admin/users')}
+            />
+            <NavbarLink
+              icon={IconKey}
+              label="License"
+              active={pathname?.startsWith('/admin/license')}
+              onClick={() => router.push('/admin/license')}
             />
             <NavbarLink
               icon={IconLogs}

@@ -63,6 +63,7 @@ services:
     environment:
       - HORUS_VERSION=${HORUS_VERSION:-}
       - HORUS_AI_MODE=local
+      - HORUS_LICENSE_PATH=${HORUS_LICENSE_PATH:-/run/horus/license/licence.jws}
       # Must be the Docker service name, not localhost (compose passes .env which may use localhost for host-side tools).
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=${RABBITMQ_USER}
@@ -128,6 +129,7 @@ services:
       - horus-net
     volumes:
       - mas_model_cache:/app/models/llm
+      - ${HORUS_LICENSE_DIR:-./license}:/run/horus/license
 
   web-client:
     image: ${HORUS_REGISTRY:+${HORUS_REGISTRY}/horus-web-client:${HORUS_VERSION:?HORUS_VERSION names the release of the prebuilt images}-gpu}

@@ -8,6 +8,7 @@ All endpoints are RBAC-gated; heartbeats additionally require the agent's
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from licensing.access import require_active_license
 from sqlalchemy.orm import Session
 
 from agents.openapi_docs import (
@@ -35,7 +36,7 @@ from db.database import get_db
 from db.models import AgentTypes
 from schemas.schemas import RegistrationForm
 
-router = APIRouter(prefix="/agents", tags=["Agents"])
+router = APIRouter(prefix="/agents", tags=["Agents"], dependencies=[Depends(require_active_license)])
 
 
 @router.post(

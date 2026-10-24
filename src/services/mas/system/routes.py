@@ -15,7 +15,6 @@ class AiModeOut(BaseModel):
     spacy: str
     monitoring: str
 
-
 @router.get(
     "/ai",
     response_model=AiModeOut,

@@ -89,11 +89,7 @@ def configure_structlog_for_testing():
 
 @pytest.fixture(autouse=True)
 def task_event_store(monkeypatch):
-    try:
-        import fakeredis  # noqa: PLC0415
-    except ImportError:
-        yield None
-        return
+    import fakeredis  # noqa: PLC0415
 
     import core.task_events as task_events  # noqa: PLC0415
     import tasks.agent_answers as agent_answers  # noqa: PLC0415

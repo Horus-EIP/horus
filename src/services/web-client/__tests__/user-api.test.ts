@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { userApi } from "@/lib/users/api";
+import { licenseApi } from "@/lib/license/api";
 import { apiClient } from "@/lib/api-client";
 import type { User } from "@/lib/types";
 
@@ -7,6 +8,8 @@ vi.mock("@/lib/api-client", () => ({
   apiClient: {
     get: vi.fn(),
     post: vi.fn(),
+    patch: vi.fn(),
+    postMultipart: vi.fn(),
     delete: vi.fn(),
   },
 }));
@@ -16,6 +19,7 @@ describe("userApi", () => {
     id: 1,
     username: "testuser",
     role: "user",
+    is_active: true,
   };
 
   const mockUserAdmin: User[] = [
@@ -23,16 +27,94 @@ describe("userApi", () => {
         id: 1,
         username: "user1",
         role: "user",
+        is_active: true,
     },
     {
         id: 2,
         username: "admin",
         role: "admin",
+        is_active: true,
     }
   ];
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("loads current license status and installation site ID", async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: {
+        site_id: "site-id",
+        state: "invalid",
+        reason: "Public key configuration is invalid",
+        license: null,
+        active_user_count: 0,
+        is_capped: false,
+      },
+    });
+
+    const result = await licenseApi.getLicenseInfo();
+
+    expect(apiClient.get).toHaveBeenCalledWith("/license/status");
+    expect(result.data?.site_id).toBe("site-id");
+    expect(result.data?.state).toBe("invalid");
+    expect(result.data?.license).toBeNull();
+  });
+
+  it("loads a summary of verified license claims", async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: {
+        site_id: "site-id",
+        state: "valid",
+        reason: null,
+        active_user_count: 42,
+        is_capped: false,
+        license: {
+          license_id: "license-id",
+          license_type: "commercial",
+          customer_id: "customer-id",
+          customer_name: "Example Customer",
+          site_ids: ["site-id"],
+          tier: "team",
+          user_cap: 100,
+          issued_at: "2026-10-24T12:00:00+00:00",
+          valid_from: "2026-01-01",
+          valid_until: "2026-12-31",
+          grace_days: 15,
+          features: ["core"],
+        },
+      },
+    });
+
+    const result = await licenseApi.getLicenseInfo();
+
+    expect(result.data?.license).toMatchObject({
+      customer_name: "Example Customer",
+      tier: "team",
+      user_cap: 100,
+      site_ids: ["site-id"],
+    });
+  });
+
+  it("uploads a license as multipart form data", async () => {
+    vi.mocked(apiClient.postMultipart).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { message: "License installed", state: "valid" },
+    });
+    const file = new File(["signed-license"], "license.jws");
+
+    const result = await licenseApi.uploadLicense(file);
+
+    expect(apiClient.postMultipart).toHaveBeenCalledWith(
+      "/license/upload",
+      expect.any(FormData)
+    );
+    expect(result.data?.state).toBe("valid");
   });
 
   it("getCurrentUser returns mapped user when /users/me succeeds", async () => {
@@ -107,7 +189,7 @@ describe("userApi", () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({
       ok: true,
       status: 200,
-      data: { id: 42, username: "detailUser", role: "user" },
+      data: { id: 42, username: "detailUser", role: "user", is_active: true },
     });
 
     const result = await userApi.getUserDetails(42);
@@ -119,6 +201,7 @@ describe("userApi", () => {
       id: 42,
       username: "detailUser",
       role: "user",
+      is_active: true,
     });
   });
 
@@ -172,6 +255,21 @@ describe("userApi", () => {
     });
 
     expect(result).toBe(false);
+  });
+
+  it("setActiveStatus sends the requested account status", async () => {
+    vi.mocked(apiClient.patch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { is_active: false },
+    });
+
+    const result = await userApi.setActiveStatus(5, false);
+
+    expect(apiClient.patch).toHaveBeenCalledWith("/users/5/active", {
+      is_active: false,
+    });
+    expect(result).toBe(true);
   });
 
   it("deleteUser returns true when backend returns ok", async () => {

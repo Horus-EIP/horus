@@ -67,6 +67,17 @@ def authenticate_user(username: str, password: str, db, ip_address: str = None):
         logger.warning(f"Authentication failed - User not found: {username}")
         return False
 
+    if not user.is_active:
+        log_auth_operation("LOGIN", username, success=False)
+        log_security_event(
+            "LOGIN_INACTIVE_USER",
+            user_id=user.id,
+            details=f"Login denied for inactive user: {username}",
+            ip_address=ip_address,
+        )
+        logger.warning(f"Authentication failed - Inactive user: {username}")
+        return False
+
     if not bcrypt_context.verify(password, user.hashed_password):
         log_auth_operation("LOGIN", username, success=False)
         log_security_event(
@@ -151,6 +162,8 @@ def get_current_user(
         user = db.query(Users).filter(Users.id == user_id).first()
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
+        if not user.is_active:
+            raise HTTPException(status_code=403, detail="User account is inactive")
 
         logger.debug(f"Token validated successfully for user: {username}")
         return {
@@ -159,6 +172,7 @@ def get_current_user(
             "nonce": nonce,
             "exp": exp,
             "role": user.role,
+            "is_active": user.is_active,
         }
 
     except JWTError as e:
@@ -168,7 +182,9 @@ def get_current_user(
         )
 
 
-def get_current_user_from_token(token: str) -> dict[str, Any]:
+def get_current_user_from_token(
+    token: str, db: Session | None = None
+) -> dict[str, Any]:
     """Extract user info from token string"""
     try:
         payload = jwt.decode(
@@ -180,6 +196,11 @@ def get_current_user_from_token(token: str) -> dict[str, Any]:
         if not username or not user_id:
             log_error("auth", "Token parsing failed: missing username or user_id")
             raise JWTError("Invalid token payload")
+
+        if db is not None:
+            user = db.query(Users).filter(Users.id == user_id).first()
+            if user is None or not user.is_active:
+                raise JWTError("User account is inactive or does not exist")
 
         logger.debug(f"User info extracted from token for: {username}")
 

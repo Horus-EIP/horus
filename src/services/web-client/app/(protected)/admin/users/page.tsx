@@ -5,7 +5,7 @@ import { userApi } from "@/lib/users/api";
 import { registerField } from "@/lib/auth/schemas";
 import type { User, UserRole } from "@/lib/types";
 import Info from "@/components/ui/info";
-import { IconEdit, IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconEdit, IconLock, IconPlus, IconTrash } from "@tabler/icons-react";
 import { Modal, Button, Group, Text, Select, TextInput, PasswordInput } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
@@ -21,7 +21,7 @@ const ROLES_OPTIONS = [
   { value: "user", label: "User" },
 ];
 
-const header = ["ID", "Username", "Role"];
+const header = ["ID", "Username", "Role", "Status"];
 
 const AdminUsersPage = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -78,7 +78,57 @@ const AdminUsersPage = () => {
     u.id,
     u.username,
     (u.role as UserRole | undefined) ?? "user",
+    u.is_active === false ? "Suspended" : "Active",
   ]);
+
+  const handleToggleActiveStatus = (rowIndex: number) => {
+    const targetUser = filteredUsers[rowIndex];
+    if (!targetUser) return;
+
+    const nextIsActive = targetUser.is_active === false;
+    modals.openConfirmModal({
+      title: (
+        <span className="font-semibold text-[var(--text)] text-lg">
+          {nextIsActive ? "Reactivate User" : "Suspend User"}
+        </span>
+      ),
+      centered: true,
+      children: (
+        <Text size="md" p={6}>
+          {nextIsActive
+            ? `Reactivate ${targetUser.username}? This requires an available license seat.`
+            : `Suspend ${targetUser.username}? They will be signed out and unable to log in.`}
+        </Text>
+      ),
+      labels: {
+        confirm: nextIsActive ? "Reactivate User" : "Suspend User",
+        cancel: "Cancel",
+      },
+      confirmProps: { color: nextIsActive ? "blue" : "orange" },
+      onConfirm: async () => {
+        const ok = await userApi.setActiveStatus(targetUser.id, nextIsActive);
+        if (!ok) {
+          notifyError(
+            nextIsActive
+              ? "Failed to reactivate user. Check license status and available seats."
+              : "Failed to suspend user."
+          );
+          return;
+        }
+
+        setUsers((current) =>
+          current.map((item) =>
+            item.id === targetUser.id
+              ? { ...item, is_active: nextIsActive }
+              : item
+          )
+        );
+        notifySuccess(
+          nextIsActive ? "User reactivated successfully." : "User suspended successfully."
+        );
+      },
+    });
+  };
 
   const handleDeleteRow = async (rowIndex: number) => {
     const userToDelete = filteredUsers[rowIndex];
@@ -207,6 +257,11 @@ const AdminUsersPage = () => {
       icon: <IconEdit className="w-5 h-5" stroke={1.25} />,
       ariaLabel: "Edit user role",
       onClick: handleEditClick,
+    },
+    {
+      icon: <IconLock className="w-5 h-5" stroke={1.25} />,
+      ariaLabel: "Toggle user active status",
+      onClick: handleToggleActiveStatus,
     },
     {
       icon: <IconTrash className="w-5 h-5" stroke={1.25} />,

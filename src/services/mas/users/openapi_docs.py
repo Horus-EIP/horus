@@ -106,8 +106,18 @@ USERS_LIST_RESPONSES = {
                     "success": {
                         "summary": "List of users",
                         "value": [
-                            {"id": 1, "username": "admin", "role": "admin"},
-                            {"id": 2, "username": "user1", "role": "user"},
+                            {
+                                "id": 1,
+                                "username": "admin",
+                                "role": "admin",
+                                "is_active": True,
+                            },
+                            {
+                                "id": 2,
+                                "username": "user1",
+                                "role": "user",
+                                "is_active": True,
+                            },
                         ],
                     }
                 }
@@ -145,6 +155,90 @@ USERS_LIST_RESPONSES = {
 }
 
 
+# --- PATCH /users/{user_id}/active --------------------------------------
+
+SET_USER_ACTIVE_STATUS_RESPONSES = {
+    200: {
+        "description": "User active status updated",
+        "content": {
+            "application/json": {
+                "examples": {
+                    "suspended": {
+                        "summary": "User suspended",
+                        "value": {
+                            "id": 2,
+                            "username": "user1",
+                            "is_active": False,
+                            "message": "User status updated successfully.",
+                        },
+                    },
+                    "reactivated": {
+                        "summary": "User reactivated",
+                        "value": {
+                            "id": 2,
+                            "username": "user1",
+                            "is_active": True,
+                            "message": "User status updated successfully.",
+                        },
+                    },
+                }
+            }
+        },
+    },
+    401: {
+        "description": "Authentication failed",
+        "content": {"application/json": {"example": {"detail": "Authentication Failed"}}},
+    },
+    402: {
+        "description": "The licensed active-user cap has been reached",
+        "content": {
+            "application/json": {
+                "example": {"detail": "License user limit reached (25)."}
+            }
+        },
+    },
+    403: {
+        "description": "Insufficient permission, inactive license, or protected account",
+        "content": {
+            "application/json": {
+                "examples": {
+                    "forbidden": {"value": {"detail": "Insufficient permissions"}},
+                    "inactive_license": {
+                        "value": {
+                            "detail": (
+                                "Account reactivation is unavailable because the "
+                                "license is missing, invalid, not yet valid, "
+                                "restricted, or in clock rollback."
+                            )
+                        }
+                    },
+                    "protected_account": {
+                        "value": {
+                            "detail": (
+                                "Cannot suspend your own account or a protected "
+                                "system account."
+                            )
+                        }
+                    },
+                }
+            }
+        },
+    },
+    404: {
+        "description": "User not found",
+        "content": {"application/json": {"example": {"detail": "User not found"}}},
+    },
+    500: {
+        "description": "Database error updating the account",
+        "content": {
+            "application/json": {
+                "example": {"detail": "Failed to update user status."}
+            }
+        },
+    },
+}
+
+
 # --- GET /users/user_details/{user_id} -----------------------------------
 
 USER_DETAILS_RESPONSES = {
@@ -155,7 +249,12 @@ USER_DETAILS_RESPONSES = {
                 "examples": {
                     "success": {
                         "summary": "User details",
-                        "value": {"id": 2, "username": "user1", "role": "user"},
+                        "value": {
+                            "id": 2,
+                            "username": "user1",
+                            "role": "user",
+                            "is_active": True,
+                        },
                     }
                 }
             }
@@ -219,6 +318,7 @@ ME_RESPONSES = {
                             "id": 1,
                             "username": "current_user",
                             "role": "user",
+                            "is_active": True,
                         },
                     }
                 }

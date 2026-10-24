@@ -10,6 +10,8 @@ Everything is re-exported from this package so ``from db.models import X``
 continues to work.
 """
 
+from licensing.models import ConsumedResetNonce, GlobalConfig, LicenseClockState
+
 from db.models.agent_types import AgentTypes
 from db.models.agents import Agents
 from db.models.conversations import Conversations
@@ -23,8 +25,11 @@ __all__ = [
     "Agents",
     "Conversations",
     "CriticalLogs",
+    "GlobalConfig",
+    "LicenseClockState",
     "Messages",
     "Task",
     "TaskResult",
     "Users",
+    "ConsumedResetNonce",
 ]

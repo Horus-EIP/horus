@@ -2,6 +2,7 @@
 
 import { apiClient } from "@/lib/api-client";
 import { User, UpdatePassword, UpdateRole, UserRole } from "@/lib/types";
+import type { ApiResponse } from "@/lib/api-client";
 
 export interface CreateUserPayload {
   username: string;
@@ -74,6 +75,7 @@ export const userApi = {
       id: data.id,
       username: data.username,
       role: data.role,
+      is_active: data.is_active,
     };
   },
 
@@ -90,6 +92,7 @@ export const userApi = {
       id: u.id,
       username: u.username,
       role: u.role,
+      is_active: u.is_active,
     }));
   },
 
@@ -109,7 +112,17 @@ export const userApi = {
       id: data.id,
       username: data.username,
       role: data.role,
+      is_active: data.is_active,
     };
+  },
+
+  async setActiveStatus(userId: number, isActive: boolean): Promise<boolean> {
+    const response = await apiClient.patch<{ is_active: boolean }>(
+      `/users/${userId}/active`,
+      { is_active: isActive }
+    );
+
+    return response.ok;
   },
 
   async updateRole(payload: UpdateRole): Promise<boolean> {

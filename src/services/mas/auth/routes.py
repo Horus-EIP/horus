@@ -7,8 +7,9 @@ a Redis blacklist keyed by the JWT's ``nonce``.
 from datetime import datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
+from licensing.access import enforce_registration_license
 from sqlalchemy.exc import IntegrityError
 from starlette import status
 
@@ -44,12 +45,16 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
     responses=REGISTER_RESPONSES,
     openapi_extra=REGISTER_OPENAPI_EXTRA,
 )
-async def create_user(db: db_dependency, create_user_request: CreateUserRequest):
+async def create_user(db: db_dependency, create_user_request: CreateUserRequest, request: Request):
     """Create a user with a bcrypt-hashed password. 409 if username exists."""
     create_user_model = Users(
         username=create_user_request.username,
         hashed_password=bcrypt_context.hash(create_user_request.password),
     )
+
+    license_check = getattr(request.app.state, "license", None)
+    enforce_registration_license(license_check, db)
+
     db.add(create_user_model)
     try:
         db.commit()

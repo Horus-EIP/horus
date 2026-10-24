@@ -14,6 +14,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from licensing.verification import LicenseCheck, LicenseState
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -86,6 +87,9 @@ def make_client(mock_db: MagicMock):
         agent_api_auth: tuple[str, str] | None = None,
     ) -> TestClient:
         app = FastAPI()
+        # Ordinary endpoint tests exercise licensed operation; enforcement
+        # tests set missing and non-active states explicitly.
+        app.state.license = LicenseCheck(state=LicenseState.VALID)
         app.include_router(router)
         app.dependency_overrides[get_db] = lambda: mock_db
         if current_user is not None:
@@ -123,6 +127,7 @@ def mas_client(routing_db):
 
     def _factory(user: dict) -> httpx.AsyncClient:
         app = FastAPI()
+        app.state.license = LicenseCheck(state=LicenseState.VALID)
         app.include_router(router)
         app.dependency_overrides[get_db] = lambda: routing_db
         app.dependency_overrides[get_current_user] = lambda: user

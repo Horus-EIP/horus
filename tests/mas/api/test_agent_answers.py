@@ -6,6 +6,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 from fastapi import FastAPI
+from licensing.verification import LicenseCheck, LicenseState
 
 from auth.auth_tool_functions import get_current_user, verify_agent_api_key
 from core.task_events import read_task_events
@@ -94,6 +95,7 @@ def _dispatched(task_id, demand=QUESTION, **extra):
 @pytest.fixture
 def agent_client(routing_db):
     app = FastAPI()
+    app.state.license = LicenseCheck(state=LicenseState.VALID)
     app.include_router(routes.router)
     app.dependency_overrides[get_db] = lambda: routing_db
     app.dependency_overrides[verify_agent_api_key] = lambda: ("agent-1", "key")
@@ -103,6 +105,7 @@ def agent_client(routing_db):
 @pytest.fixture
 def user_client(routing_db):
     app = FastAPI()
+    app.state.license = LicenseCheck(state=LicenseState.VALID)
     app.include_router(routes.router)
     app.dependency_overrides[get_db] = lambda: routing_db
     app.dependency_overrides[get_current_user] = lambda: {

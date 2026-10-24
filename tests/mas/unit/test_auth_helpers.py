@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
-from jose import jwt
+from jose import JWTError, jwt
 from starlette import status
 
 from auth.auth_tool_functions import (
@@ -34,6 +34,7 @@ class TestAuthenticateUser:
         self.mock_user = MagicMock()
         self.mock_user.id = 1
         self.mock_user.username = "testuser"
+        self.mock_user.is_active = True
         self.mock_user.hashed_password = bcrypt_context.hash("password123")
 
     @patch("auth.auth_tool_functions.log_auth_operation")
@@ -88,6 +89,25 @@ class TestAuthenticateUser:
             user_id=1,
             details="Invalid password for: testuser",
             ip_address="127.0.0.1",
+        )
+
+    @patch("auth.auth_tool_functions.log_auth_operation")
+    @patch("auth.auth_tool_functions.log_security_event")
+    def test_inactive_user_cannot_authenticate(
+        self, mock_log_security, mock_log_auth
+    ):
+        self.mock_user.is_active = False
+        self.mock_db.query().filter().first.return_value = self.mock_user
+
+        result = authenticate_user("testuser", "password123", self.mock_db)
+
+        assert result is False
+        mock_log_auth.assert_called_with("LOGIN", "testuser", success=False)
+        mock_log_security.assert_called_with(
+            "LOGIN_INACTIVE_USER",
+            user_id=1,
+            details="Login denied for inactive user: testuser",
+            ip_address=None,
         )
 
     @patch("auth.auth_tool_functions.log_auth_operation")
@@ -206,6 +226,7 @@ class TestGetCurrentUser:
         self.mock_user.id = 1
         self.mock_user.username = "testuser"
         self.mock_user.role = "user"
+        self.mock_user.is_active = True
         self.mock_db.query.return_value.filter.return_value.first.return_value = (
             self.mock_user
         )
@@ -222,6 +243,18 @@ class TestGetCurrentUser:
         assert result["nonce"] == "test-nonce-123"
         assert result["exp"] == self.valid_payload["exp"]
         assert result["role"] == "user"
+        assert result["is_active"] is True
+
+    @patch("auth.auth_tool_functions.redis_db")
+    def test_get_current_user_rejects_inactive_user(self, mock_redis):
+        mock_redis.exists.return_value = False
+        self.mock_user.is_active = False
+
+        with pytest.raises(HTTPException) as exc_info:
+            get_current_user(self.valid_token, self.mock_db)
+
+        assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+        assert exc_info.value.detail == "User account is inactive"
 
     @patch("auth.auth_tool_functions.redis_db")
     def test_get_current_user_revoked_token(self, mock_redis):
@@ -309,6 +342,15 @@ class TestGetCurrentUserFromToken:
         assert result["username"] == "testuser"
         assert result["id"] == 1
         assert result["payload"] == self.valid_payload
+
+    def test_get_current_user_from_token_rejects_inactive_database_user(self):
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = MagicMock(
+            is_active=False
+        )
+
+        with pytest.raises(JWTError, match="User account is inactive"):
+            get_current_user_from_token(self.valid_token, db)
 
     def test_get_current_user_from_token_invalid_token(self):
         """Test user info extraction from invalid token."""

@@ -7,28 +7,39 @@ error codes.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from licensing.access import enforce_user_reactivation_license
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from auth.auth_tool_functions import PermissionChecker, get_current_user, modify_user_password
-from auth.permissions import Permission
+from auth.auth_tool_functions import (
+    PermissionChecker,
+    get_current_user,
+    modify_user_password,
+)
+from auth.permissions import Permission, Role
 from core.config import settings
 from core.logger import get_logger
 from db.database import get_db
 from db.models import Users
-from schemas.schemas import UpdateRole, UserPasswordModification
+from schemas.schemas import UpdateRole, UserActiveStatusUpdate, UserPasswordModification
 from users.openapi_docs import (
     CHANGE_PASSWORD_OPENAPI_EXTRA,
     CHANGE_PASSWORD_RESPONSES,
     CHANGE_USERNAME_RESPONSES,
     DELETE_USER_RESPONSES,
     ME_RESPONSES,
+    SET_USER_ACTIVE_STATUS_RESPONSES,
     UPDATE_ROLE_RESPONSES,
     USER_DETAILS_RESPONSES,
     USERS_LIST_RESPONSES,
 )
 from users.user_tool_functions import delete_user as delete_user_tool
-from users.user_tool_functions import get_all_users, get_user_details, modify_user_username
+from users.user_tool_functions import (
+    get_all_users,
+    get_user_details,
+    modify_user_username,
+)
 
 router = APIRouter(prefix="/users", tags=["Users"])
 logger = get_logger("users_routes")
@@ -138,7 +149,7 @@ def user_details(
     user: Annotated[dict, Depends(PermissionChecker(Permission.USER_READ))],
     db: Session = Depends(get_db),
 ):
-    """Return ``{id, username, role}`` for a given user (admin-only)."""
+    """Return ``{id, username, role, is_active}`` for a given user (admin-only)."""
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
 
@@ -151,7 +162,12 @@ def user_details(
     logger.info(
         f"User details retrieved for ID: {user_id} by admin: {user.get('username', 'unknown')}"
     )
-    return {"id": details[0], "username": details[1], "role": details[2]}
+    return {
+        "id": details[0],
+        "username": details[1],
+        "role": details[2],
+        "is_active": details[3],
+    }
 
 
 @router.get(
@@ -163,7 +179,7 @@ def user_details(
     responses=ME_RESPONSES,
 )
 def get_current_user_info(user: user_dependency, db: Session = Depends(get_db)):
-    """Return the current authenticated user's ``{id, username, role}``."""
+    """Return the current authenticated user's identity and active status."""
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
 
@@ -172,6 +188,82 @@ def get_current_user_info(user: user_dependency, db: Session = Depends(get_db)):
         "id": user.get("id"),
         "username": user.get("username"),
         "role": user.get("role"),
+        "is_active": user.get("is_active", True),
+    }
+
+
+@router.patch(
+    "/{user_id}/active",
+    summary="Activate or suspend a user",
+    description=(
+        "Change a user's active status. Only administrators can perform this "
+        "operation. Reactivating a user requires an active license and an "
+        "available user seat."
+    ),
+    status_code=200,
+    responses=SET_USER_ACTIVE_STATUS_RESPONSES,
+)
+def set_user_active_status(
+    user_id: int,
+    payload: UserActiveStatusUpdate,
+    request: Request,
+    user: Annotated[dict, Depends(PermissionChecker(Permission.USER_UPDATE))],
+    db: Session = Depends(get_db),
+):
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication Failed")
+
+    target_user = db.query(Users).filter(Users.id == user_id).first()
+    if target_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not payload.is_active and (
+        str(user.get("id")) == str(user_id)
+        or target_user.username == Role.ADMIN.value
+        or target_user.username == settings.super_agent_username
+        or target_user.role == Role.AGENT.value
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot suspend your own account or a protected system account.",
+        )
+
+    if target_user.is_active == payload.is_active:
+        return {
+            "id": target_user.id,
+            "username": target_user.username,
+            "is_active": target_user.is_active,
+            "message": "User status is unchanged.",
+        }
+
+    if payload.is_active:
+        enforce_user_reactivation_license(
+            getattr(request.app.state, "license", None), db
+        )
+
+    target_user.is_active = payload.is_active
+    try:
+        db.commit()
+        db.refresh(target_user)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.error(f"Failed to update active status for user {user_id}: {exc}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to update user status.",
+        ) from exc
+
+    logger.info(
+        "User status updated: %s is_active=%s by %s",
+        target_user.username,
+        target_user.is_active,
+        user.get("username", "unknown"),
+    )
+    return {
+        "id": target_user.id,
+        "username": target_user.username,
+        "is_active": target_user.is_active,
+        "message": "User status updated successfully.",
     }
 
 

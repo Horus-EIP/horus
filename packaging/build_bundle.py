@@ -63,6 +63,7 @@ PRUNE_PATHS = (
     "src/services/mas/logs/",
     "src/services/agent/logs/",
     "src/services/knowledge-store/logs/",
+    "src/infra/license/",
     "installer/tests/",
     "src/services/knowledge-store/tests/",
     "src/services/agent/app/models/",

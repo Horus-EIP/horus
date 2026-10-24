@@ -103,6 +103,7 @@ export interface User {
   id: number;
   username: string;
   role?: string;
+  is_active?: boolean;
 }
 
 export interface AuthResponse {
