@@ -564,10 +564,12 @@ jobs:
           site_id=$(env -i PATH="$PATH" HOME="$HOME" docker compose exec -T postgres sh -c \
             'psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT site_id FROM global_config WHERE id = 1"')
           license_output=$(python ../../scripts/generate_test_license.py "$site_id" \
-            --out license/licence.jws)
+            --out "$RUNNER_TEMP/horus-e2e-licence.jws")
           public_key=$(printf '%s\n' "$license_output" \
             | sed -n 's/^HORUS_LICENSE_PUBKEY_HEX=//p')
           test -n "$public_key"
+          sudo install -D -m 0644 "$RUNNER_TEMP/horus-e2e-licence.jws" \
+            license/licence.jws
 
           sed -i \
             -e 's/^HORUS_LICENSE_KID=.*/HORUS_LICENSE_KID=horus-test-v1/' \
