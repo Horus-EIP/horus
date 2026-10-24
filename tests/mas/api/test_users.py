@@ -90,6 +90,69 @@ class TestUserUpdateRole:
         assert r.status_code == 422  # Pydantic Role(str, Enum) validation
 
 
+class TestUserActiveStatus:
+    def test_admin_can_suspend_a_user(self, make_client, mock_db, as_admin):
+        target = MagicMock(
+            id=2,
+            username="target",
+            role="user",
+            is_active=True,
+        )
+        mock_db.query.return_value.filter.return_value.first.return_value = target
+        client = make_client(router, current_user=as_admin)
+
+        response = client.patch(
+            "/users/2/active",
+            json={"is_active": False},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["is_active"] is False
+        mock_db.commit.assert_called_once()
+
+    @patch("users.routes.enforce_user_reactivation_license")
+    def test_admin_can_reactivate_a_user(
+        self, mock_enforce, make_client, mock_db, as_admin
+    ):
+        target = MagicMock(
+            id=2,
+            username="target",
+            role="user",
+            is_active=False,
+        )
+        mock_db.query.return_value.filter.return_value.first.return_value = target
+        client = make_client(router, current_user=as_admin)
+        client.app.state.license = LicenseCheck(state=LicenseState.VALID)
+
+        response = client.patch(
+            "/users/2/active",
+            json={"is_active": True},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["is_active"] is True
+        mock_enforce.assert_called_once_with(client.app.state.license, mock_db)
+        mock_db.commit.assert_called_once()
+
+    def test_admin_cannot_suspend_self(self, make_client, mock_db, as_admin):
+        target = MagicMock(
+            id=as_admin["id"],
+            username=as_admin["username"],
+            role="admin",
+            is_active=True,
+        )
+        mock_db.query.return_value.filter.return_value.first.return_value = target
+        client = make_client(router, current_user=as_admin)
+
+        response = client.patch(
+            f"/users/{as_admin['id']}/active",
+            json={"is_active": False},
+        )
+
+        assert response.status_code == 403
+        mock_db.commit.assert_not_called()
+
+
 class TestUserSelfService:
     @patch("users.routes.modify_user_password", return_value=True)
     def test_password_change_with_valid_payload(self, _mod, make_client, as_user):
@@ -133,6 +196,7 @@ class TestLicenseUpload:
     def test_admin_can_read_license_status_and_site_id(
         self, make_client, as_admin, mock_db
     ):
+        mock_db.query.return_value.filter.return_value.count.return_value = 0
         client = make_client(license_router, current_user=as_admin)
         client.app.state.license = LicenseCheck(
             state=LicenseState.INVALID,
@@ -149,11 +213,14 @@ class TestLicenseUpload:
             "state": "invalid",
             "reason": "Public key configuration is invalid",
             "license": None,
+            "active_user_count": 0,
+            "is_capped": False,
         }
 
     def test_admin_can_read_verified_license_summary(
-        self, make_client, as_admin
+        self, make_client, as_admin, mock_db
     ):
+        mock_db.query.return_value.filter.return_value.count.return_value = 100
         claims = SimpleNamespace(
             license_id=UUID("018f0f6a-7b2c-7d5a-9b8c-0123456789ab"),
             license_type="commercial",
@@ -185,6 +252,8 @@ class TestLicenseUpload:
             "site_id": "018f0f6a-7b2c-7d5a-9b8c-0123456789ad",
             "state": "valid",
             "reason": None,
+            "active_user_count": 100,
+            "is_capped": True,
             "license": {
                 "license_id": "018f0f6a-7b2c-7d5a-9b8c-0123456789ab",
                 "license_type": "commercial",

@@ -335,13 +335,14 @@ class TestGetAllUsers:
 
 
 class TestGetUserDetails:
-    def test_found_returns_triplet(self):
+    def test_found_returns_user_active_status(self):
         user = MagicMock()
         user.username = "carol"
         user.role = "admin"
+        user.is_active = True
         db = _query_returning(user)
         result = user_tool_functions.get_user_details(42, db)
-        assert result == (42, "carol", "admin")
+        assert result == (42, "carol", "admin", True)
 
     def test_not_found_returns_triple_none(self):
         db = _query_returning(None)

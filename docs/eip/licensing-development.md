@@ -14,7 +14,8 @@ transitions and feature access, see [the licensing rules](./licensing-rules.md).
 | Persistent installation `site_id` | `src/services/mas/licensing/site.py` and `src/services/mas/licensing/models/global_config.py` |
 | Clock high-water mark and one-time recovery nonces | `src/services/mas/licensing/clock.py` and `src/services/mas/licensing/models/clock_state.py` |
 | License status, upload, and live status endpoints | `src/services/mas/licensing/routes.py` |
-| Core feature access and registration cap | `src/services/mas/licensing/access.py` |
+| Core feature access, active-user cap, and reactivation enforcement | `src/services/mas/licensing/access.py` |
+| User active status and migration | `src/services/mas/db/models/users.py`, `src/services/mas/db/alembic/versions/a13c9e4b6d02_add_user_active_status.py` |
 | Startup license initialization | `src/services/mas/licensing/lifecycle.py`, invoked by `src/services/mas/core/app.py` |
 | Local-only test licence generator | `scripts/generate_test_license.py` |
 
@@ -70,10 +71,13 @@ application. It returns:
 | `state` | Current evaluated license state, such as `missing`, `valid`, or `restricted`. |
 | `reason` | Optional verifier/configuration explanation for the current state. |
 | `license` | `null` when verified claims are unavailable; otherwise a summary of signed claims. |
+| `active_user_count` | Number of accounts with `is_active = true`. |
+| `is_capped` | Whether a valid, warning, or grace license has reached its active-user cap. |
 
 When present, `license` includes the license ID and type, customer ID and
 name, authorized site IDs, tier, user cap, issue and validity dates, grace
-period, and features. It does not include recovery nonces, signature bytes,
+period, and features. The response also reports active-user count and whether
+the cap is currently reached. It does not include recovery nonces, signature bytes,
 private key material, or the raw JWS. The Admin → License page displays the
 site ID and state even when `license` is `null`; it renders the claims summary
 only when verified claims are available. This page is an administrative view,
@@ -84,12 +88,20 @@ A newly issued license must include the exact installation UUID in its signed
 to the authorized issuer; do not generate one manually or copy one from a
 different environment.
 
-`POST /license` accepts a multipart file upload from an account
+`POST /license/upload` accepts a multipart file upload from an account
 with system-configuration permission. MAS limits the file to 16 KiB, verifies
 the signature and claims against the configured public key and installation
 ID, evaluates the state, and persists the clock state with the installed file.
 Invalid signatures and claims are rejected; an invalid new file does not become
 the installed licence.
+
+The user cap applies to active accounts only. All existing accounts are
+migrated as active. Administrators can suspend or reactivate users with
+`PATCH /users/{user_id}/active` and `{"is_active": false|true}`. Suspended
+accounts cannot log in, and existing access tokens are rejected. Reactivation
+requires an active licence and an available licensed seat; registration uses
+the same active-account count. The built-in admin, agent, and the administrator
+making the request cannot be suspended.
 
 The status endpoint is the source of truth for the installation ID and loaded
 licence state. If the endpoint returns `503`, the application license state
@@ -132,7 +144,7 @@ distinct from the production-looking ID used in deployment examples.
    only in the local test environment. Ensure `HORUS_LICENSE_PATH` resolves to
    the generated file inside MAS.
 4. Upload the file through the admin license page or
-   `POST /license`, then confirm the reported state is `valid` or
+   `POST /license/upload`, then confirm the reported state is `valid` or
    `warning`.
 
 The generated licence is valid for one site, uses the Starter cap, and is
@@ -173,19 +185,14 @@ route is deliberately exempt from the license gate but still requires the
 export permission. See the feature matrix in
 [the licensing rules](./licensing-rules.md).
 
-Account registration is allowed only in `valid`, `warning`, or `grace` states.
-It is denied when the license is missing, invalid, not yet valid, restricted,
-or in clock rollback. When a finite cap is configured, the current route counts
-all user rows before allowing registration.
+Account registration and reactivation are allowed only in `valid`, `warning`,
+or `grace` states. They are denied when the license is missing, invalid, not
+yet valid, restricted, or in clock rollback. A finite cap counts active user
+accounts only; suspending an account frees a seat.
 
 The shared `require_active_license` dependency allows only `valid`, `warning`,
 and `grace`. Missing application state returns `503`; all other non-active
 states return `403`.
-
-The rules document describes the intended cap in terms of active accounts.
-Current account creation code compares the total number of user rows against
-the cap. It does not currently filter that count by `is_active`; do not treat
-inactive-account exclusion as implemented behavior.
 
 ## CI validation
 

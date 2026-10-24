@@ -12,7 +12,7 @@ from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, 
 ALEMBIC_DIR = Path(__file__).resolve().parents[3] / "src" / "services" / "mas" / "db" / "alembic"
 REVISION = "d2e6b8f4a1c9"
 PREVIOUS_HEAD = "c3f9a7e1d5b2"
-CURRENT_HEAD = "8e48716efaad"
+CURRENT_HEAD = "a13c9e4b6d02"
 
 
 def _load_migration():

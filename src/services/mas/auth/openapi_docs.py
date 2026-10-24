@@ -18,6 +18,7 @@ REGISTER_RESPONSES = {
                             "id": 1,
                             "username": "newuser123",
                             "role": "user",
+                            "is_active": True,
                         },
                     },
                 }
@@ -33,6 +34,28 @@ REGISTER_RESPONSES = {
                         "summary": "Username already taken",
                         "value": {
                             "detail": "User Registration Error : UNIQUE constraint failed: users.username"
+                        },
+                    },
+                    402: {
+                        "description": "The licensed active-user cap has been reached",
+                        "content": {
+                            "application/json": {
+                                "example": {"detail": "License user limit reached (25)."}
+                            }
+                        },
+                    },
+                    403: {
+                        "description": "The license is not active",
+                        "content": {
+                            "application/json": {
+                                "example": {
+                                    "detail": (
+                                        "Account creation is unavailable because the license is "
+                                        "missing, invalid, not yet valid, restricted, or in clock "
+                                        "rollback."
+                                    )
+                                }
+                            }
                         },
                     },
                 }

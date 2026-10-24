@@ -41,7 +41,7 @@ interface Props {
 
 const statusClass = (val: string) => {
   const v = (val || '').toLowerCase();
-  if (['online', 'completed'].includes(v)) {
+  if (['online', 'completed', 'active'].includes(v)) {
     return 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30';
   }
   if (['idle', 'running'].includes(v)) {
@@ -53,7 +53,7 @@ const statusClass = (val: string) => {
   if (v === 'pending' || v === 'queued') {
     return 'bg-gray-500/20 text-gray-300 ring-1 ring-gray-500/30';
   }
-  if (v === 'offline'){
+  if (['offline', 'suspended'].includes(v)){
     return 'bg-red-500/20 text-red-400 ring-1 ring-red-500/30';
   }
   return '';

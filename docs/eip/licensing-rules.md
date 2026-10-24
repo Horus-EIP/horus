@@ -20,12 +20,6 @@ The licensing model enforces subscription tiers based on site deployment and act
 * **Orthogonal `capped` Flag:** The `capped` status is an operational flag (`is_capped = true`) that can overlay any valid, warning, or grace state if active users reach or exceed the tier limit (`active_user_count >= user_cap`).
 * **Impact of `capped`:** Core product features (chat, RAG, document uploads, agent execution) **remain fully operational**. However, any action attempting to create a new user or reactivate a suspended account is strictly blocked if it causes the active user count to exceed the tier cap (or if it is already at/above the limit) until the count drops below the threshold or a higher tier license is uploaded.
 
-**Implementation note:** The current account-creation route compares the total
-number of user rows to the licence cap. It does not currently exclude inactive
-accounts, despite the intended active-account rule above. See
-[Licensing implementation and local development](./licensing-development.md)
-for the implementation status.
-
 ---
 
 ## 2. Temporal Boundaries, Grace Period End & Evaluation Frequency

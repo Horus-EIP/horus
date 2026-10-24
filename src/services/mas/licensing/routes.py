@@ -14,7 +14,7 @@ from auth.permissions import Permission
 from core.config import settings
 from core.logger import get_logger
 from db.database import get_db
-from licensing.access import ACTIVE_LICENSE_STATES
+from licensing.access import ACTIVE_LICENSE_STATES, get_active_user_count
 from licensing.clock import (
     advance_last_seen_clock,
     consume_reset_nonce,
@@ -111,6 +111,13 @@ def get_license_status(
         )
 
     claims = license_check.claims
+    active_user_count = get_active_user_count(db)
+    is_capped = (
+        license_check.state in ACTIVE_LICENSE_STATES
+        and claims is not None
+        and claims.user_cap is not None
+        and active_user_count >= claims.user_cap
+    )
     license_summary = None
     if claims is not None:
         license_summary = {
@@ -133,6 +140,8 @@ def get_license_status(
         state=license_check.state.value,
         reason=license_check.reason,
         license=license_summary,
+        active_user_count=active_user_count,
+        is_capped=is_capped,
     )
 
 

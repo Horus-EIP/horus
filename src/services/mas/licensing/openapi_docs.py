@@ -60,6 +60,8 @@ class LicenseStatusResponse(BaseModel):
     state: LicenseStateValue = Field(examples=["valid"])
     reason: str | None = Field(default=None, examples=[None])
     license: LicenseClaimsSummary | None
+    active_user_count: int = Field(examples=[42])
+    is_capped: bool = Field(examples=[False])
 
 
 class LicenseUploadResponse(BaseModel):
@@ -101,6 +103,8 @@ LICENSE_STATUS_RESPONSES = {
                             "state": "missing",
                             "reason": "No licence file is configured.",
                             "license": None,
+                            "active_user_count": 0,
+                            "is_capped": False,
                         },
                     },
                     "verifiedLicense": {
@@ -109,6 +113,8 @@ LICENSE_STATUS_RESPONSES = {
                             "site_id": "018f0f6a-7b2c-7d5a-9b8c-0123456789ad",
                             "state": "valid",
                             "reason": None,
+                            "active_user_count": 42,
+                            "is_capped": False,
                             "license": {
                                 "license_id": "018f0f6a-7b2c-7d5a-9b8c-0123456789ab",
                                 "license_type": "commercial",

@@ -37,11 +37,30 @@ def enforce_registration_license(
     license_check: LicenseCheck | None,
     db: Session,
 ) -> None:
+    _enforce_active_account_change(license_check, db, "creation")
+
+
+def enforce_user_reactivation_license(
+    license_check: LicenseCheck | None,
+    db: Session,
+) -> None:
+    _enforce_active_account_change(license_check, db, "reactivation")
+
+
+def get_active_user_count(db: Session) -> int:
+    return db.query(Users).filter(Users.is_active.is_(True)).count()
+
+
+def _enforce_active_account_change(
+    license_check: LicenseCheck | None,
+    db: Session,
+    action: str,
+) -> None:
     if license_check is None or license_check.state not in ACTIVE_LICENSE_STATES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
-                "Account creation is unavailable because the license is missing, "
+                f"Account {action} is unavailable because the license is missing, "
                 "invalid, not yet valid, restricted, or in clock rollback."
             ),
         )
@@ -52,7 +71,7 @@ def enforce_registration_license(
         return
 
     db.query(LicenseClockState).filter_by(id=1).with_for_update().first()
-    current_users_count = db.query(Users).count()
+    current_users_count = get_active_user_count(db)
     if current_users_count >= user_cap:
         db.rollback()
         raise HTTPException(

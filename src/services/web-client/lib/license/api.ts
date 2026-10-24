@@ -13,6 +13,8 @@ export interface LicenseInfo {
   state: string;
   reason: string | null;
   license: LicenseSummary | null;
+  active_user_count?: number;
+  is_capped?: boolean;
 }
 
 export interface LicenseSummary {

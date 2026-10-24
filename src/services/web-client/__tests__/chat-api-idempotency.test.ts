@@ -16,8 +16,16 @@ function reply(status: number, body: unknown): Response {
 
 function sentKeys(): (string | undefined)[] {
   return vi.mocked(global.fetch).mock.calls.map(([, init]) => {
-    const headers = (init?.headers ?? {}) as Record<string, string>;
-    return headers[IDEMPOTENCY_HEADER];
+    const candidate = init?.headers;
+    if (!candidate) return undefined;
+    if (candidate instanceof Headers) {
+      return candidate.get(IDEMPOTENCY_HEADER) ?? undefined;
+    }
+    if (Array.isArray(candidate)) {
+      const pair = candidate.find(([key]) => key === IDEMPOTENCY_HEADER);
+      return pair?.[1];
+    }
+    return (candidate as Record<string, string>)[IDEMPOTENCY_HEADER];
   });
 }
 

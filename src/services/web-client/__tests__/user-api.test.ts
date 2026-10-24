@@ -8,6 +8,7 @@ vi.mock("@/lib/api-client", () => ({
   apiClient: {
     get: vi.fn(),
     post: vi.fn(),
+    patch: vi.fn(),
     postMultipart: vi.fn(),
     delete: vi.fn(),
   },
@@ -18,6 +19,7 @@ describe("userApi", () => {
     id: 1,
     username: "testuser",
     role: "user",
+    is_active: true,
   };
 
   const mockUserAdmin: User[] = [
@@ -25,11 +27,13 @@ describe("userApi", () => {
         id: 1,
         username: "user1",
         role: "user",
+        is_active: true,
     },
     {
         id: 2,
         username: "admin",
         role: "admin",
+        is_active: true,
     }
   ];
 
@@ -46,6 +50,8 @@ describe("userApi", () => {
         state: "invalid",
         reason: "Public key configuration is invalid",
         license: null,
+        active_user_count: 0,
+        is_capped: false,
       },
     });
 
@@ -65,6 +71,8 @@ describe("userApi", () => {
         site_id: "site-id",
         state: "valid",
         reason: null,
+        active_user_count: 42,
+        is_capped: false,
         license: {
           license_id: "license-id",
           license_type: "commercial",
@@ -181,7 +189,7 @@ describe("userApi", () => {
     vi.mocked(apiClient.get).mockResolvedValueOnce({
       ok: true,
       status: 200,
-      data: { id: 42, username: "detailUser", role: "user" },
+      data: { id: 42, username: "detailUser", role: "user", is_active: true },
     });
 
     const result = await userApi.getUserDetails(42);
@@ -193,6 +201,7 @@ describe("userApi", () => {
       id: 42,
       username: "detailUser",
       role: "user",
+      is_active: true,
     });
   });
 
@@ -246,6 +255,21 @@ describe("userApi", () => {
     });
 
     expect(result).toBe(false);
+  });
+
+  it("setActiveStatus sends the requested account status", async () => {
+    vi.mocked(apiClient.patch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { is_active: false },
+    });
+
+    const result = await userApi.setActiveStatus(5, false);
+
+    expect(apiClient.patch).toHaveBeenCalledWith("/users/5/active", {
+      is_active: false,
+    });
+    expect(result).toBe(true);
   });
 
   it("deleteUser returns true when backend returns ok", async () => {

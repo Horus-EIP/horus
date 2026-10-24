@@ -177,6 +177,15 @@ class CreateUserRequest(BaseModel):
         return check_password_policy(value)
 
 
+class UserActiveStatusUpdate(BaseModel):
+    """Request to activate or suspend an existing user account."""
+
+    is_active: bool = Field(
+        description="True to reactivate, false to suspend the account.",
+        examples=[False, True],
+    )
+
+
 class Token(BaseModel):
     """JWT access token response. Use as ``Authorization: Bearer <token>``."""
 

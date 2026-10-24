@@ -87,7 +87,7 @@ class TestRegister:
         assert response.status_code == 201
 
     def test_register_rejects_when_user_cap_is_reached(self, make_client, mock_db):
-        mock_db.query.return_value.count.return_value = 25
+        mock_db.query.return_value.filter.return_value.count.return_value = 25
         client = make_client(auth_router)
         client.app.state.license = LicenseCheck(
             state=LicenseState.VALID,

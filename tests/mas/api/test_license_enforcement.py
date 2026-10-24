@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -14,11 +14,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from licensing.verification import LicenseCheck, LicenseState, verify_license
 from starlette.testclient import WebSocketDenialResponse
+from starlette.websockets import WebSocketDisconnect
 
-from auth.auth_tool_functions import get_current_user
+from auth.auth_tool_functions import create_access_token, get_current_user
 from chat.routes import router as chat_router
 from db.database import get_db
-from db.models import Conversations, Messages
+from db.models import Conversations, Messages, Users
 
 SITE_ID = str(uuid.uuid4())
 KEY_ID = "license-integration-test-key"
@@ -125,6 +126,39 @@ def test_uninitialized_license_status_denies_chat_websocket_with_503():
             pytest.fail("Chat unexpectedly accepted a request before license initialization.")
 
     assert denied.value.status_code == 503
+
+
+def test_suspended_user_cannot_open_chat_with_an_existing_token(routing_db):
+    account = Users(
+        username="suspended-chat-user",
+        hashed_password="not-used",
+        role="user",
+        is_active=False,
+    )
+    routing_db.add(account)
+    routing_db.commit()
+    routing_db.refresh(account)
+    token = create_access_token(
+        account.username,
+        account.id,
+        timedelta(minutes=20),
+        account.role,
+    )
+
+    app = FastAPI()
+    app.include_router(chat_router)
+    app.state.license = LicenseCheck(state=LicenseState.VALID)
+    app.dependency_overrides[get_db] = lambda: routing_db
+    client = TestClient(app)
+
+    with pytest.raises((WebSocketDenialResponse, WebSocketDisconnect)) as denied:
+        with client.websocket_connect(f"/chat/1/?token={token}"):
+            pytest.fail("A suspended user unexpectedly opened a chat socket.")
+
+    if isinstance(denied.value, WebSocketDenialResponse):
+        assert denied.value.status_code == 403
+    else:
+        assert denied.value.code == 1008
 
 
 @pytest.mark.parametrize(

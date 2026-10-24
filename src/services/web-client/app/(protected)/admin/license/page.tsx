@@ -105,6 +105,16 @@ export default function AdminLicensePage() {
             {licenseInfo && (
               <>
                 <Text size="sm">State: {licenseInfo.state}</Text>
+                {licenseInfo.active_user_count !== undefined && (
+                  <Text size="sm" c={licenseInfo.is_capped ? "orange" : undefined}>
+                    Active users: {licenseInfo.active_user_count}
+                    {licenseInfo.license?.user_cap !== null &&
+                      licenseInfo.license?.user_cap !== undefined
+                      ? ` / ${licenseInfo.license.user_cap}`
+                      : ""}
+                    {licenseInfo.is_capped ? " — license seat limit reached" : ""}
+                  </Text>
+                )}
                 {licenseInfo.reason && (
                   <Text size="sm" c="dimmed">{licenseInfo.reason}</Text>
                 )}

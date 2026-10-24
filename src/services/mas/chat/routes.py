@@ -45,7 +45,7 @@ async def chat_websocket(
     session_id = None
     try:
         token_str = _extract_token_from_ws(websocket, token)
-        user = get_current_user_from_token(token_str)
+        user = get_current_user_from_token(token_str, db)
         user_id = user.get("id")
         username = user.get("username")
         user_role = user.get("payload", {}).get("role")
