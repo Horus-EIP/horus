@@ -71,12 +71,9 @@ from tasks.openapi_docs import (
 from tasks.router import route_task
 from tasks.status import IN_PROGRESS_STATUSES, TaskStatus, is_final_status
 from tasks.task_access import (
-    NEW_TASK_REFUSED,
-    RUNNING_TASKS_REFUSED,
     TASK_EVENTS_REFUSED,
     TASK_READ_REFUSED,
     may_add_task_to,
-    may_read_conversation_tasks,
     may_read_task,
     root_tasks_visible_to,
 )
@@ -575,14 +572,13 @@ def _build_files_payload(task: "TaskForm") -> list[dict]:
     return files
 
 
-def get_task_queue_stats(db: Session) -> dict[str, Any]:
+def get_task_queue_stats(db: Session, user: dict) -> dict[str, Any]:
     """Aggregate task counts by status from the database."""
-    rows = (
-        db.query(Task.status, func.count(Task.id))
-        .filter(Task.parent_task_id.is_(None))
-        .group_by(Task.status)
-        .all()
-    )
+
+    query = db.query(Task.status, func.count(Task.id)).filter(Task.parent_task_id.is_(None))
+    rows = root_tasks_visible_to(user, query).group_by(Task.status).all()
+
+
     counts = {
         "queued": 0,
         "pending": 0,
@@ -661,7 +657,7 @@ async def get_queue_stats(
     Returns:
         dict: Counts by status and total.
     """
-    stats = get_task_queue_stats(db)
+    stats = get_task_queue_stats(db, user)
     logger.info("Queue statistics retrieved", stats=stats)
     return stats
 
@@ -687,7 +683,8 @@ def _isoformat_or_none(moment) -> str | None:
         "in-progress spinner + working-agents bar instead of a stale chat "
         "that looks finished. Subtasks (rows with parent_task_id) are "
         "excluded — only the user-visible root surfaces. Allowed for the "
-        "conversation's owner, a manager or an admin."
+        "conversation's owner or an admin. Other callers get the same 404 "
+        "as for a missing conversation."
     ),
     status_code=200,
     dependencies=[Depends(PermissionChecker(Permission.TASK_READ))],
@@ -700,10 +697,8 @@ def list_running_tasks_for_conversation(
     conversation = (
         db.query(Conversations).filter(Conversations.id == conversation_id).first()
     )
-    if conversation is None:
+    if conversation is None or not may_add_task_to(user, conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
-    if not may_read_conversation_tasks(user, conversation):
-        raise HTTPException(status_code=403, detail=RUNNING_TASKS_REFUSED)
     rows = (
         db.query(Task)
         .filter(
@@ -908,7 +903,7 @@ async def create_new_task(
         if conversation is None:
             raise HTTPException(status_code=404, detail="Conversation not found")
         if not may_add_task_to(user, conversation):
-            raise HTTPException(status_code=403, detail=NEW_TASK_REFUSED)
+            raise HTTPException(status_code=404, detail="Conversation not found")
 
     files_payload = _build_files_payload(task)
     task_id = str(uuid.uuid4())
@@ -2286,6 +2281,7 @@ async def fail_abandoned_claims(
     verified_agent: Annotated[tuple[str, str], Depends(verify_agent_api_key)],
     db: Session = Depends(get_db),
 ):
+    verified_agent_id, _ = verified_agent
     abandoned = (
         db.query(Task)
         .filter(
@@ -2298,6 +2294,14 @@ async def fail_abandoned_claims(
         )
         .all()
     )
+
+    agent_info = db.query(Agents).filter(Agents.id == verified_agent_id).first()
+
+    for task in abandoned[:]:
+        agent_info = db.query(Agents).filter(Agents.id == task.agent_id).first()
+        if not agent_may_submit_task_result(verified_agent_id, task.agent_id, db) and agent_info:
+            abandoned.remove(task)
+
     failed = [task.id for task in abandoned]
     for task in abandoned:
         await _fail_task_tree(
