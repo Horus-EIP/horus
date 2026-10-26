@@ -32,13 +32,17 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 - [+] Added outreach posts for five communities and recorded feedback on asynchronous CPU-bound work, memory limits, container isolation and Python packaging (`docs/eip/community-outreach.md`; `64c7632`).
 
+### Fixed
+
+- [x] Refused access to another user's conversation now returns the same `404` response as a missing conversation, preventing enumeration of sequential IDs (B-117; ca7b7da).
+
 ### Upgrading an existing install
 
 - Database migrations add the `queued` task status, `tasks.owner_username`, `tasks.skills_required` and `tasks.completed_at`, and the worker-claim columns. MAS also adds a missing `queued` value to a `taskstatus` enum built by the `create_all` fallback.
 - The knowledge store re-embeds every stored document once on its first start (passages instead of whole files, FastEmbed instead of sentence-transformers). `KNOWLEDGE_STORE_REINDEX_ON_STARTUP=0` turns it off.
 - RabbitMQ work queues get a length limit: an empty queue declared by an older version is deleted and declared again; a queue that still holds tasks is kept and limited by MAS until it drains.
 - The CPU profiles download a 2.5 GB GGUF for llama-server instead of the in-process 1.5B router and 4B worker. Docker Compose 2.33.0 or later is required.
-- Tasks are now read, created and cancelled per owner (B-110): a `user` sees and cancels their own tasks and every task in a conversation they own, and posts only into their own conversations; a `manager` reads and cancels every task but posts only into, and reads the history and chat of, their own conversations; an `admin` can do everything. A client that read other users' tasks with the `user` role now gets `403`, and reading another user's conversation history answers `403` instead of `404`. The full matrix is in `docs/security.md` ("Who can see what").
+- Tasks are read, created and cancelled per owner (B-110): a `user` sees and cancels their own tasks and every task in a conversation they own, and posts only into their own conversations; a `manager` reads and cancels every task but posts only into, and reads the history and chat of, their own conversations; an `admin` can do everything. Reading another user's task as `user` returns `403`; refusing access to another user's conversation returns the same `404` as a missing conversation (B-117). The full matrix is in `docs/security.md` ("Who can see what").
 - The cache is now Valkey 9.1.2 on a new volume, `valkey_data`, because Valkey refuses the files Redis 7.4 wrote. The old `redis_data` volume only held keys that expire within a day (sessions, task events, idempotency records): once the stack runs, delete it with `docker volume rm horus_betatest_redis_data` (the prefix is `COMPOSE_PROJECT_NAME` in `src/infra/.env`) (`9b72084`). `--uninstall` now lists it, with RedisInsight's volume, and deletes them when you answer yes (B-124, `816d592`).
 - The installer's `--admin-profile` flag is gone. PgAdmin starts with `docker compose --profile dev-tools up` (`01df0ee`); RedisInsight is gone (`17b0cce`).
 - Grafana Alloy replaces Promtail (`79679bc`), and RedisInsight is removed (`17b0cce`). The installer, START-HERE and the desktop app's start now pass `--remove-orphans` when `COMPOSE_PROJECT_NAME` names the project, which every release `.env` does, so the old `promtail` and `redisinsight` containers go away (B-124, `816d592`). A stack started by hand with a plain `docker compose up` keeps them, and Promtail would then send every log line to Loki a second time: run `docker compose up -d --remove-orphans` once from `src/infra`, or `docker rm -f promtail redisinsight`. On its first start Alloy reads each container's log from the beginning; Loki refuses the lines older than a week and Alloy logs a warning for them, once.
@@ -107,7 +111,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - Access decisions after that review:
   - A conversation's owner can read and cancel every task in it, whoever posted it, for example an admin; the chat page no longer re-asks such a task every 1.6 s (`7e5275f`)
   - The chat page stops polling a task the server answers `403` or `404` for, drops its spinner and says the task is no longer available (`94f4bc0`)
-  - Managers keep reading every task but not other users' conversations: the history route answers `403` with an explicit message and the chat WebSocket gives its reason when it refuses (`aca0a9c`)
+  - Managers keep reading every task but not other users' conversations. An initial change made the history route answer `403` with an explicit message and the chat WebSocket give its reason when it refused; B-117 restores indistinguishable `404` responses for refused and missing conversations before release (`aca0a9c`)
 
 ### Added
 

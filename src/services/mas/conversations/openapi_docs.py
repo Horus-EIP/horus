@@ -244,10 +244,6 @@ GET_HISTORY_RESPONSES = {
                         "summary": "User lacks TASK_READ permission",
                         "value": {"detail": "Insufficient permissions"},
                     },
-                    "not_owner": {
-                        "summary": "Neither the conversation's owner nor an admin (managers included)",
-                        "value": {"detail": "Only the conversation's owner or an admin can read it"},
-                    },
                 }
             }
         },
@@ -258,7 +254,7 @@ GET_HISTORY_RESPONSES = {
             "application/json": {
                 "examples": {
                     "not_found": {
-                        "summary": "Conversation ID does not exist",
+                        "summary": "Conversation ID does not exist, or is not accessible to the caller",
                         "value": {"detail": "Conversation 123 not found"},
                     }
                 }
@@ -321,17 +317,13 @@ DELETE_CONVERSATION_RESPONSES = {
         },
     },
     403: {
-        "description": "Forbidden - Insufficient permissions or not owner",
+        "description": "Forbidden - Insufficient permissions",
         "content": {
             "application/json": {
                 "examples": {
                     "forbidden": {
                         "summary": "User lacks TASK_DELETE permission",
                         "value": {"detail": "Insufficient permissions"},
-                    },
-                    "not_owner": {
-                        "summary": "Attempting to delete conversation owned by another user",
-                        "value": {"detail": "Conversation not found"},
                     },
                 }
             }
@@ -343,7 +335,11 @@ DELETE_CONVERSATION_RESPONSES = {
             "application/json": {
                 "examples": {
                     "not_found": {
-                        "summary": "Conversation ID does not exist",
+                        "summary": "Conversation ID does not exist or belongs to another user",
+                        "value": {"detail": "Conversation not found"},
+                    },
+                    "not_owner": {
+                        "summary": "Conversation belongs to another user",
                         "value": {"detail": "Conversation not found"},
                     },
                     "already_deleted": {
