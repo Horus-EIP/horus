@@ -11,58 +11,96 @@ SMALL_TALK_REPLY = "Hello! Horus is running in mock AI mode."
 SMALL_TALK = re.compile(
     r"(hi|hello|hey|hiya|good (morning|afternoon|evening|day)|thanks|thank you"
     r"( (so|very) much)?|many thanks|cheers|bye|goodbye|see you( later| soon)?"
-    r"|how are you( doing)?( today)?)( there| horus| everyone| all)?"
+    r"|how are you( doing)?( today)?)( there| horus| everyone| all)?|what can you do\?"
 )
 COMPARISON_WORDS = frozenset(
     {"compare", "compared", "comparing", "comparison", "versus", "vs", "against"}
 )
+MATH_WORDS = frozenset({"divided", "divide", "square", "root", "power", "multiply", "multiplied", "minus", "math"})
+STOP_WORDS = frozenset({
+    "the", "a", "an", "is", "are", "was", "were", "and", "or", "but", "in", "on",
+    "at", "to", "for", "of", "with", "by", "about", "as", "this", "that", "it",
+    "from", "be", "have", "has", "do", "does", "did", "what", "how", "who", "when",
+    "where", "why", "which", "can", "could", "will", "would", "should",
+    "i", "you", "he", "she", "they", "we", "me", "my", "your", "their", "our", "us"
+})
+
 DOMAINS = {
     "finance": frozenset(
         {
-            "revenue", "profit", "margin", "earning", "income", "ebitda", "budget", "financial",
-            "finance", "quarter", "quarterly", "q1", "q2", "q3", "q4", "sale", "spend", "spent",
-            "cost", "cash", "forecast", "segment", "fiscal", "opex", "payroll",
+            "revenue", "revenues", "profit", "profits", "margin", "margins", "earning", "earnings", "earn",
+            "income", "incomes", "ebitda", "budget", "budgets", "financial", "financials", "finance", "finances",
+            "quarter", "quarterly", "quarters", "q1", "q2", "q3", "q4", "sale", "sales", "spend", "spending",
+            "spent", "cost", "costs", "cash", "forecast", "forecasts", "segment", "segments", "fiscal", "opex",
+            "payroll", "growth", "operating", "net", "contract", "contracts", "ticker", "tickers", "licensing",
+            "value", "values", "report", "reports", "stock", "stocks", "asset", "assets",
+            "management", "technology", "cloud", "rate", "rates", "results", "exceed", "exceeds", "period"
         }
     ),
     "hr": frozenset(
         {
-            "hr", "leave", "vacation", "holiday", "benefit", "handbook", "employee", "remote",
-            "onboard", "pto", "conduct", "parental", "sick", "recruit", "salary", "overtime",
-            "probation", "staff", "workplace", "harassment",
+            "hr", "leave", "leaves", "vacation", "vacations", "holiday", "holidays", "benefit", "benefits",
+            "handbook", "handbooks", "employee", "employees", "remote", "onboard", "onboarding", "onboarded",
+            "pto", "conduct", "conducts", "parental", "sick", "recruit", "recruiting", "salary", "salaries",
+            "overtime", "probation", "staff", "workplace", "harassment", "working", "work", "hours", "hour", "office",
+            "retirement", "notice", "notices", "grievance", "grievances", "dog", "dogs", "pay", "manager",
+            "managers", "director", "directors", "days", "policy", "policies", "collaboration", "window",
+            "dependents", "insurance", "premium", "premiums", "service", "base", "senior", "year", "years",
+            "daily", "standard"
         }
     ),
     "compliance": frozenset(
         {
-            "compliance", "sox", "gdpr", "mica", "finra", "audit", "regulatory", "regulation",
-            "aml", "kyc", "sanction",
-        }
-    ),
-    "it_security": frozenset(
-        {
-            "password", "security", "mfa", "encryption", "phish", "incident", "vpn",
-            "classification", "breach", "malware", "access", "laptop", "device",
+            "compliance", "sox", "gdpr", "mica", "finra", "audit", "audits", "regulatory", "regulator", "regulators",
+            "regulation", "regulations", "aml", "kyc", "sanction", "sanctions", "protection", "protections", "access",
+            "breach", "breaches", "processing", "ropa", "suspicious", "activity", "activities", "simulations", "simulation",
+            "insider", "classification", "classifications", "password", "passwords", "mfa", "factor", "factors",
+            "incident", "incidents", "encryption", "logs", "phishing", "phish", "security", "dpo", "subject", "request",
+            "requests", "transactions", "diligence", "trading", "trade", "trades", "mitigation", "privacy", "sms",
+            "revoked", "terminated", "p1", "p2", "p3", "restricted", "pre", "approve", "approves",
+            "clear", "executive", "detection", "blocked", "reuse", "flag", "flagged", "tests", "test",
+            "soc", "type", "ii", "controls", "control", "officer", "records", "record", "rules", "rule",
+            "levels", "characters", "privileged", "account", "accounts", "administrator", "reported", "address",
+            "email", "organises", "organizes", "organise", "organize"
         }
     ),
     "expenses": frozenset(
         {
-            "expense", "reimbursement", "reimburse", "hotel", "travel", "diem", "meal",
-            "mileage", "receipt", "allowance",
+            "expense", "expenses", "reimbursement", "reimbursements", "reimburse", "hotel", "hotels", "travel",
+            "travels", "diem", "meal", "meals", "mileage", "receipt", "receipts", "allowance", "allowances",
+            "plane", "planes", "business", "trip", "trips", "claim", "claims", "alcohol", "corporate", "card",
+            "cards", "ticket", "tickets", "limit", "limits", "cap", "caps", "domestic", "class", "nightly", "night",
+            "car", "drive", "bank", "approved"
+        }
+    ),
+    "research": frozenset(
+        {
+            "cite", "citations", "citation", "all", "files", "every", "document", "documents", "knowledge", "across", "sources",
+            "source", "summary", "summaries", "summarise", "summarize", "store", "stores", "passages", "passage", "published",
+            "base", "bases", "list", "lists", "collect", "look", "appears", "everything", "references", "search",
+            "find", "deadline", "deadlines", "related"
         }
     ),
 }
+
 DOMAIN_HINTS = {
-    "finance": frozenset({"finance", "financial"}),
+    "finance": frozenset({"finance"}),
     "hr": frozenset({"hr", "human", "handbook"}),
-    "compliance": frozenset({"compliance"}),
-    "it_security": frozenset({"security"}),
-    "expenses": frozenset({"expense"}),
+    "compliance": frozenset({"compliance", "security"}),
+    "expenses": frozenset({"finance", "hr"}),
+    "research": frozenset({"research", "researcher"}),
 }
-ROSTER_LINE = re.compile(r"^- (?P<name>[^:\n]+?)(?:: (?P<description>.*))?$")
-PLAN_ROSTER_LINE = re.compile(r"^- Type: [^\n]*? \(Name: (?P<name>[^)\n]+)\)(?:: (?P<description>.*))?$")
+
+ROSTER_LINE = re.compile(r"^[-\s]*(?P<name>[a-zA-Z0-9_-]+)(?:: (?P<description>.*))?$")
+PLAN_ROSTER_LINE = re.compile(
+    r"^[-\s]*Type: [^\n]*? \(Name: (?P<name>[^)\n]+)\)(?:: (?P<description>.*))?$"
+)
 TYPE_SUFFIX = re.compile(r" \(Type: [^)]*\)$")
 DOCUMENTS_OF = re.compile(r"From the (.+?) documents:")
 PLANNED_STEP = re.compile(r"^ {2}\d+\. ([^:\n]+):", re.MULTILINE)
-SOURCE_TAG = re.compile(r"\[Source: ([^\]]+)\]")
+
+SOURCE_TAG = re.compile(r"\[(?:Source:\s*)?([a-zA-Z0-9_.-]+\.[a-zA-Z0-9]+)\]")
+
 NO_STEP_LEFT = "(none"
 RETRY_KEYS = frozenset({"status", "reason", "attempt"})
 MANAGER = "manager"
@@ -84,11 +122,12 @@ def after(text: str, marker: str) -> str:
 
 
 def question_of(call: Call) -> str:
-    return after(call.user, "USER INPUT:\n").strip()
-
-
-def is_small_talk(question: str) -> bool:
-    return bool(SMALL_TALK.fullmatch(" ".join(re.sub(r"[^a-z ]+", " ", question.lower()).split())))
+    text = call.user
+    for marker in ["ORIGINAL USER REQUEST:\n", "USER DEMAND:\n", "USER INPUT:\n"]:
+        if marker in text:
+            text = after(text, marker)
+            break
+    return text.strip()
 
 
 def is_comparison(question: str) -> bool:
@@ -109,12 +148,13 @@ def roster_from(system: str, line_pattern: re.Pattern = ROSTER_LINE) -> list[Age
 
 
 def domains_in(question: str) -> list[str]:
-    found: dict[str, int] = {}
-    for position, word in enumerate(words(question)):
+    scores = {}
+    clean_q = question.replace('-', ' ').replace("'", ' ')
+    for word in words(clean_q):
         for domain, keywords in DOMAINS.items():
             if word in keywords:
-                found.setdefault(domain, position)
-    return sorted(found, key=found.get)
+                scores[domain] = scores.get(domain, 0) + 1
+    return sorted(scores, key=scores.get, reverse=True)
 
 
 def agent_for(domain: str, roster: list[Agent], question: frozenset[str],
@@ -133,41 +173,121 @@ def general_agent(roster: list[Agent]) -> Agent | None:
 def choose_agents(question: str, roster: list[Agent]) -> list[str]:
     if not roster:
         return []
-    asked = word_set(question)
+    
+    clean_q = question.replace('-', ' ').replace("'", ' ')
+    asked = word_set(clean_q)
+    
+    is_multi = multiple_question(question) or is_comparison(question)
     chosen: list[str] = []
+    
     for domain in domains_in(question):
         agent = agent_for(domain, roster, asked, chosen)
         if agent is not None and agent.name not in chosen:
             chosen.append(agent.name)
-    if chosen:
+            
+    if (is_multi or " and " in question.lower()) and len(chosen) >= 2:
         return chosen
-    best = max(roster, key=lambda agent: len(agent.words & asked))
-    if best.words & asked:
+        
+    if chosen:
+        return [chosen[0]]
+        
+    asked_clean = asked - STOP_WORDS
+    best = max(roster, key=lambda agent: len(agent.words & asked_clean))
+    if len(best.words & asked_clean) > 0:
         return [best.name]
     return [(general_agent(roster) or roster[0]).name]
 
 
+def multiple_question(question: str) -> bool:
+    q_lower = question.lower()
+    if question.count("?") >= 2 or ";" in question:
+        return True
+
+    complex_phrases = [
+        "and also", "as well as", "in addition to", 
+        "and how", "and what", "and when", "and who", "and which", "and why", "and where"
+    ]
+    if any(phrase in q_lower for phrase in complex_phrases):
+        return True
+
+    wh_words = {"who", "what", "when", "where", "why", "how", "which"}
+    words_in_q = set(re.findall(r'\b[a-z]+\b', q_lower))
+    if len(words_in_q & wh_words) >= 2 and " and " in q_lower:
+        return True
+
+    return False
+
+
 def is_complex(question: str, agents: list[str]) -> bool:
-    return len(agents) > 1 or is_comparison(question)
+    return len(agents) > 1 or is_comparison(question) or multiple_question(question)
+
+
+def is_direct(question: str) -> bool:
+    q_lower = question.lower().strip()
+
+    if any(c in q_lower for c in ["+", "*", "%", "="]) or re.search(r'\d+\s*[\-\/]\s*\d+', q_lower):
+        return True
+
+    clean_q = " ".join(re.sub(r"[^a-z ]+", " ", q_lower).split())
+    if SMALL_TALK.fullmatch(q_lower) or SMALL_TALK.fullmatch(clean_q) or SMALL_TALK.fullmatch(clean_q + "?"):
+        return True
+
+    if bool(plain_words(clean_q) & MATH_WORDS):
+        return True
+
+    extra_greetings = {
+        "ok bye", "nice to meet you", "thanks that s all for today", 
+        "hi there how s it going", "hey horus", "good evening everyone", "thank you so much",
+        "good night", "goodnight", "see ya", "talk to you later",
+        "good day to you horus", "hey horus what can you do", "what can you do"
+    }
+    if clean_q in extra_greetings:
+        return True
+
+    words_in_q = plain_words(clean_q)
+    has_math = bool(words_in_q & MATH_WORDS)
+    has_domain = any(bool(words_in_q & keywords) for keywords in DOMAINS.values())
+    if has_math and not has_domain:
+        return True
+
+    return False
 
 
 def task_route(call: Call, settings: Settings) -> str:
     properties = call.schema.get("properties") or {}
     allowed = list((properties.get("agent") or {}).get("enum") or [])
     routes = list((properties.get("route") or {}).get("enum") or [])
+
+    question = question_of(call)
+
+    if is_direct(question):
+            wanted_route = "DIRECT_ANSWER" if "DIRECT_ANSWER" in routes else "SINGLE_AGENT"
+            agent_name = "General-Assistant"
+            if allowed:
+                described = {a.name: a for a in roster_from(call.system)}
+                roster = [described.get(n, Agent(n)) for n in allowed if n.lower() != MANAGER]
+                agent_name = (general_agent(roster) or roster[0]).name if roster else allowed[0]
+                
+            return dumps({
+                "route": wanted_route if wanted_route in routes else (routes[0] if routes else "SINGLE_AGENT"), 
+                "agent": agent_name
+            })
+
     if not allowed or not routes:
         return dumps(example(call.schema, SMALL_TALK_REPLY))
+
     described = {agent.name: agent for agent in roster_from(call.system)}
     roster = [described.get(name, Agent(name)) for name in allowed if name.lower() != MANAGER]
-    question = call.user.strip()
+
     agents = choose_agents(question, roster) or allowed[:1]
     wanted = "COMPLEX_TASK" if is_complex(question, agents) else "SINGLE_AGENT"
+
     return dumps({"route": wanted if wanted in routes else routes[0], "agent": agents[0]})
 
 
 def intent(call: Call, settings: Settings) -> str:
     question = question_of(call)
-    if is_small_talk(question):
+    if is_direct(question):
         return dumps({
             "classification": "DIRECT_ANSWER",
             "agent_name": "",
