@@ -1,0 +1,85 @@
+name: Sync benchmark kit
+
+on:
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-bench-kit
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync standalone kit into Horus
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require a token that can trigger Horus CI
+        env:
+          HORUS_SYNC_TOKEN: ${{ secrets.HORUS_SYNC_TOKEN }}
+        run: |
+          if [ -z "$HORUS_SYNC_TOKEN" ]; then
+            echo "::error::Add the HORUS_SYNC_TOKEN repository secret. It needs contents and pull-requests read/write access to Horus."
+            exit 1
+          fi
+
+      - name: Check out Horus
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          token: ${{ secrets.HORUS_SYNC_TOKEN }}
+
+      - name: Check out the standalone kit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Horus-EIP/horus-bench-kit
+          ref: main
+          path: standalone-bench-kit
+          persist-credentials: false
+
+      - name: Sync the kit and open or update a pull request
+        env:
+          GH_TOKEN: ${{ secrets.HORUS_SYNC_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          KIT_SHA="$(git -C standalone-bench-kit rev-parse HEAD)"
+          rsync -a --delete --exclude='.git/' \
+            standalone-bench-kit/ opensource/horus-bench-kit/
+
+          git add opensource/horus-bench-kit
+          if git diff --cached --quiet; then
+            echo "The vendored kit already matches horus-bench-kit at $KIT_SHA."
+            exit 0
+          fi
+
+          branch="automation/sync-horus-bench-kit"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git commit \
+            -m "chore: sync horus-bench-kit" \
+            -m "Upstream: Horus-EIP/horus-bench-kit@${KIT_SHA}" \
+            -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+          git push --force origin "$branch"
+
+          pr_number="$(gh pr list \
+            --repo "$REPOSITORY" \
+            --head "$branch" \
+            --base main \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')"
+          if [ -n "$pr_number" ]; then
+            echo "Updated existing sync PR #$pr_number with kit commit $KIT_SHA."
+          else
+            gh pr create \
+              --repo "$REPOSITORY" \
+              --base main \
+              --head "$branch" \
+              --title "chore: sync horus-bench-kit" \
+              --body "Updates the vendored benchmark kit from [Horus-EIP/horus-bench-kit](https://github.com/Horus-EIP/horus-bench-kit) at commit \`${KIT_SHA}\`. The Horus CI will validate the vendored copy."
+          fi

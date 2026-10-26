@@ -225,7 +225,7 @@ jobs:
             echo "- pushed tags: ${PUSHED_TAGS:-none}"
             echo "- digest: \`${DIGEST:-none}\`"
             echo "- size unpacked: $(( size / 1000000 )) MB, built in ${BUILD_SECONDS:-?} s"
-          }
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
   bundle:
     name: Bundle · ${{ matrix.service }} · ${{ matrix.flavor }}

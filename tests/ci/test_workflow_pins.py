@@ -13,7 +13,7 @@ except ImportError:
 REPO = Path(__file__).resolve().parents[2]
 NOT_OURS = {".git", "node_modules", ".venv", "venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
             ".next", "target", "dist", "build"}
-ROOT_WORKFLOWS = ["ci.yml", "desktop-release.yml", "eval-testset.yml", "images.yml"]
+ROOT_WORKFLOWS = ["ci.yml", "desktop-release.yml", "eval-testset.yml", "images.yml", "sync-bench-kit.yml"]
 KIT_WORKFLOWS = ["ci.yml", "claims.yml", "dco.yml", "stale-claims.yml", "welcome.yml"]
 
 
