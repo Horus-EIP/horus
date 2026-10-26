@@ -157,7 +157,7 @@ The permissions above open the task and conversation routes to several roles; ow
 | `agent` | no role-based task access | no | no | no | no |
 
 - A task's owner is its `owner_username` (the user who queued it), else the owner of its root task. A subtask therefore belongs to whoever owns its chain.
-- `GET /tasks/conversation/{id}/running` is for the conversation's owner, a manager or an admin. The agent routes (`/claim`, `/task-result/`, `/task-step/`, `/abandoned-claims`) use the agent's API key, not a role.
+- `GET /tasks/conversation/{id}/running` is for the conversation's owner or an admin; other users, managers and the `system` role get the same `404` as for an unknown ID. All conversation-specific routes hide whether another user's sequential conversation ID exists, to prevent enumeration.
 - The Agent service logs in to MAS with the dedicated `agent` account to register its worker identities. That account is not an administrator and has only `agent:create` and `agent:execute`. Worker heartbeats require both the role permission and that worker's API key.
 - Task claim, abandoned-claim, result and step routes authenticate with a worker API key and verify the worker's relationship to the task; this does not give the `agent` account role-based access to task lists, user data or administrator routes.
 - **A conversation's owner reads and cancels every task in it, whoever posted it.** An admin may post into a user's conversation; the answer reaches the user's chat and history anyway, so refusing them the task protected nothing.

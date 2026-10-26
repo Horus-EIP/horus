@@ -88,7 +88,7 @@ CREATE_TASK_RESPONSES = {
             "application/json": {
                 "examples": {
                     "conversation_not_found": {
-                        "summary": "Conversation ID does not exist",
+                        "summary": "Conversation ID does not exist or belongs to another user",
                         "value": {"detail": "Conversation not found"},
                     },
                 }

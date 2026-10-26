@@ -34,14 +34,9 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
     """
 
     CORRELATION_ID_HEADERS = ["X-Request-ID", "X-Correlation-ID"]
-    EXCLUDED_PATHS = ["/docs", "/redoc", "/openapi.json", "/favicon.ico", "/metrics"]
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Process request with correlation ID tracking."""
-        # Skip excluded paths
-        if request.url.path in self.EXCLUDED_PATHS:
-            return await call_next(request)
-
         # Extract or generate correlation ID
         correlation_id = None
         for header in self.CORRELATION_ID_HEADERS:

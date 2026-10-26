@@ -678,20 +678,31 @@ class TestChatWebSocketRoute:
                     pass
         assert exc.value.code == 1008
 
-    def test_unauthorized_non_owner_non_admin_closes_1008(self, make_client, mock_db):
+    @pytest.mark.parametrize(
+        ("role", "username"),
+        [("user", "user"), ("manager", "manager"), ("system", "robot")],
+        ids=["another-user", "manager", "system"],
+    )
+    def test_non_owner_gets_the_same_close_as_for_a_missing_chat(
+        self, make_client, mock_db, role, username
+    ):
         from starlette.websockets import WebSocketDisconnect  # noqa: PLC0415
 
         conv = _make_conv(owner_username="someone-else")
-        mock_db.query.return_value.filter.return_value.first.return_value = conv
+        mock_db.query.return_value.filter.return_value.first.side_effect = [conv, None]
         client = make_client(chat_router)
         with patch(
             "chat.routes.get_current_user_from_token",
-            return_value=_token_user(role="user", username="user"),
+            return_value=_token_user(role=role, username=username),
         ):
             with pytest.raises(WebSocketDisconnect) as exc:
                 with client.websocket_connect("/chat/1/?token=abc"):
                     pass
-        assert exc.value.code == 1008
+            with pytest.raises(WebSocketDisconnect) as missing:
+                with client.websocket_connect("/chat/1/?token=abc"):
+                    pass
+        assert exc.value.code == missing.value.code == 1008
+        assert exc.value.reason == missing.value.reason
 
     def test_auth_raises_exception_closes_1008(self, make_client, mock_db):
         from starlette.websockets import WebSocketDisconnect  # noqa: PLC0415
@@ -749,22 +760,6 @@ class TestChatWebSocketRoute:
             with client.websocket_connect("/chat/1/?token=abc") as ws:
                 ws.send_text("ping")
         fake_delete.assert_not_called()
-
-    def test_a_manager_cannot_open_another_users_chat(self, make_client, mock_db):
-        from starlette.websockets import WebSocketDisconnect  # noqa: PLC0415
-
-        conv = _make_conv(owner_username="someone-else")
-        mock_db.query.return_value.filter.return_value.first.return_value = conv
-        client = make_client(chat_router)
-        with patch(
-            "chat.routes.get_current_user_from_token",
-            return_value=_token_user(role="manager", username="manager", uid="2"),
-        ):
-            with pytest.raises(WebSocketDisconnect) as exc:
-                with client.websocket_connect("/chat/1/?token=abc"):
-                    pass
-        assert exc.value.code == 1008
-        assert exc.value.reason == "Only the conversation's owner or an admin can open its chat"
 
     def test_admin_can_connect_to_foreign_conversation(self, make_client, mock_db):
         conv = _make_conv(owner_username="someone-else")
@@ -901,20 +896,22 @@ class TestGetHistoryRoute:
         r = client.get("/conversations/get_history/9999")
         assert r.status_code == 404
 
-    def test_non_owner_non_admin_gets_403(self, make_client, mock_db, as_user):
+    @pytest.mark.parametrize(
+        ("role", "username"),
+        [("user", "user"), ("manager", "manager"), ("system", "robot")],
+        ids=["another-user", "manager", "system"],
+    )
+    def test_non_owner_non_admin_gets_same_404_as_missing(
+        self, make_client, mock_db, role, username
+    ):
         conv = _make_conv(owner_username="someone-else")
-        mock_db.query.return_value.filter.return_value.first.return_value = conv
-        client = make_client(conv_router, current_user=as_user)
-        r = client.get("/conversations/get_history/1")
-        assert r.status_code == 403
-
-    def test_a_manager_cannot_read_another_users_history(self, make_client, mock_db, as_manager):
-        conv = _make_conv(owner_username="someone-else")
-        mock_db.query.return_value.filter.return_value.first.return_value = conv
-        client = make_client(conv_router, current_user=as_manager)
-        r = client.get("/conversations/get_history/1")
-        assert r.status_code == 403
-        assert r.json()["detail"] == "Only the conversation's owner or an admin can read it"
+        mock_db.query.return_value.filter.return_value.first.side_effect = [None, conv]
+        current_user = {"id": 1, "username": username, "role": role}
+        client = make_client(conv_router, current_user=current_user)
+        missing = client.get("/conversations/get_history/1")
+        refused = client.get("/conversations/get_history/1")
+        assert refused.status_code == missing.status_code == 404
+        assert refused.json() == missing.json()
 
     def test_non_int_chat_id_422(self, make_client, mock_db, as_user):
         # Path is declared {chat_id:int}; a non-int segment doesn't match -> 404,
