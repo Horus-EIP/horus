@@ -1199,8 +1199,10 @@ def volumes_in_use(services: dict[str, dict]) -> set[str]:
             for mount in spec.get("volumes") or []
             if isinstance(mount, dict) and mount.get("type") == "volume"}
 
-def existing_volumes(log: Log) -> list[tuple[str, str]]:
-    res = run(["docker", "volume", "ls", "--format", VOLUME_ROWS], log, timeout=60)
+def existing_volumes(log: Log, project: str) -> list[tuple[str, str]]:
+    res = run(["docker", "volume", "ls", "--filter",
+               f"label={PROJECT_LABEL}={project}", "--format", VOLUME_ROWS],
+              log, timeout=60)
     if not res.ok:
         log.fail(f"Critical Docker command failure. Error: {res.err}")
         raise DockerCommandError(f"Failed to list Docker volumes: {res.err}")
@@ -2068,7 +2070,8 @@ def detect_timestamp(file_name: str) -> datetime.datetime | None:
             return None
     return None
 
-def checking_backup_env_attendance(log: Log, infra: Path) -> None:
+def checking_backup_env_attendance(log: Log, infra: Path,
+                                  non_interactive: bool = False) -> None:
     file_pattern = ".env.bak.*"
     env_file = ".env"
     backup_list = []
@@ -2087,8 +2090,11 @@ def checking_backup_env_attendance(log: Log, infra: Path) -> None:
 
     if not backup_list:
         log.info("Checking for orphan volumes from a previous installation...")
+        project = (explicit_project_name(infra)
+                   or smoke.read_env(infra / ".env.example").get(PROJECT_NAME_KEY, "").strip()
+                   or infra.name.lower())
         try:
-            volumes = existing_volumes(log)
+            volumes = existing_volumes(log, project)
         except DockerCommandError as e:
             raise InstallError(
                 EXIT_ENV_WRITE_FAILED,
@@ -2112,8 +2118,31 @@ def checking_backup_env_attendance(log: Log, infra: Path) -> None:
                 )
     else:
         backup_list.sort(key=lambda item: item[1], reverse=True)
+        log.say("Found these .env backups (newest first):")
+        for path, date in backup_list:
+            log.say(f"  {path.name}  ({date:%Y-%m-%d %H:%M:%S})")
+        selected_backup = backup_list[0][0]
+        log.say(f"Selected backup: {selected_backup}")
+        if non_interactive or not interactive_terminal():
+            raise InstallError(
+                EXIT_ENV_WRITE_FAILED,
+                "A .env backup needs confirmation before it can be restored.",
+                f"The newest backup is {selected_backup}.",
+                "Run the installer in an interactive terminal, review the backup path, and confirm its restore.",
+            )
         try:
-            shutil.copy2(backup_list[0][0], env_path)
+            answer = input(f"  Restore {selected_backup.name} as .env? [y/N]: ")
+        except (EOFError, KeyboardInterrupt):
+            answer = ""
+        if answer.strip().lower() not in ("y", "yes"):
+            raise InstallError(
+                EXIT_ENV_WRITE_FAILED,
+                "Restore of the .env backup was not confirmed.",
+                f"No backup was copied. The selected file was {selected_backup}.",
+                "Review the backup and rerun the installer to confirm, or restore .env manually.",
+            )
+        try:
+            shutil.copy2(selected_backup, env_path)
         except OSError as exc:
             raise InstallError(
                 EXIT_ENV_WRITE_FAILED,
@@ -2122,7 +2151,7 @@ def checking_backup_env_attendance(log: Log, infra: Path) -> None:
                 "Check that the folder is writable, then restore the backup and retry.",
             ) from exc
         _lock_down(env_path)
-        log.info(f".env created with success using .env backup ({backup_list[0][0]})")
+        log.info(f".env created with success using .env backup ({selected_backup})")
 
 def _dispatch(log: Log, args) -> int:
     repo = find_repo(args.repo)
@@ -2169,7 +2198,7 @@ def _dispatch(log: Log, args) -> int:
         preselect=args.consent,
     )
 
-    checking_backup_env_attendance(log, infra)
+    checking_backup_env_attendance(log, infra, non_interactive=args.non_interactive)
 
     env = profiles.env_for(name, probe)
     env[COMPOSE_FILE_KEY] = with_wanted_monitoring(log, infra, env[COMPOSE_FILE_KEY],
