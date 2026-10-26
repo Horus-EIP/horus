@@ -685,6 +685,11 @@ Our goal is to gather architectural advice on CPU-only optimization and recruit 
 - **Status:** Published & Active
 
 - **Key Community Feedback & Advice Received (FastAPI Discussions):**
+  - **WebSocket Handler Non-Blocking Pattern (`asyncio.create_task`):**
+    Awaiting the worker or streaming job directly inside `while True: receive_json()` prevents the server from reading incoming WebSocket frames during the 40s pass. Wrap the stream/worker call in `asyncio.create_task()` so the loop immediately returns to reading messages. This enables client-side cancellation (`{"type": "cancel"}`), multiple prompts, and instant disconnect detection.
+  - **Worker Cancellation Caveat:** Cancelling an `asyncio.Task` only stops the ASGI/WebSocket forwarding, not the underlying process in `ProcessPoolExecutor`. Real cancellation requires workers to check a shared `multiprocessing.Event` between reasoning steps or executing passes in manageable process bounds.
+  - **`BrokenProcessPool` Recovery:** Catch `concurrent.futures.process.BrokenProcessPool` explicitly. If an inference worker is OOM-killed while loading a model, the backend must catch the exception, notify the client (`{"type": "error", "code": "INFERENCE_CRASHED"}`), and re-instantiate the pool.
+  - **Explicit CPU PyTorch Wheels & `uv`:** Eliminate multi-gigabyte CUDA bloat (`nvidia-*` wheels) on CPU installs using `pip install torch --index-url https://download.pytorch.org/whl/cpu`. Combining explicit CPU index resolution with `uv` reduces install times from 45 minutes down to a few seconds.
   - **Provide a Minimal Reproducible Example (MRE):** Abstract questions often trigger automated or vague responses. Providing a runnable MRE using dummy CPU loops (`time.sleep` / heavy CPU functions) yields direct, code-level architectural fixes from maintainers.
   - **Root Cause Identified (Event Loop Starvation):** WebSocket dropouts are caused by the `asyncio` event loop freezing during 30s+ CPU calls. Uvicorn runs on a single thread and cannot process incoming I/O frames or respond to keepalive pings (20s defaults) when blocked.
   - **The GIL makes `to_thread` a lie for CPU work:** Standard thread pools or `asyncio.to_thread` do not solve the problem because the Python Global Interpreter Lock (GIL) will still stall the event loop. You *must* offload to a separate OS process.
