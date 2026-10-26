@@ -24,6 +24,7 @@ from sqlalchemy.exc import ProgrammingError
 
 from agents import registry_tool_functions as rtf
 from db.models import AgentTypes
+from unit.password_test_helpers import verify_password
 
 # --------------------------------------------------------------------------- #
 # Helpers
@@ -289,7 +290,7 @@ class TestCreateAgent:
         # The stored api_key on the row is the bcrypt hash, not the plaintext.
         stored = db.add.call_args[0][0]
         assert stored.api_key != api_key
-        assert rtf.bcrypt_context.verify(api_key, stored.api_key)
+        assert verify_password(api_key, stored.api_key)
 
     async def test_failure_rolls_back_and_returns_none_none(self, monkeypatch):
         db = MagicMock()
@@ -391,7 +392,7 @@ class TestRegenerateAgentApiKey:
         # The stored value is a fresh bcrypt hash of the new plaintext.
         assert agent.api_key != old_hash
         assert agent.api_key != api_key
-        assert rtf.bcrypt_context.verify(api_key, agent.api_key)
+        assert verify_password(api_key, agent.api_key)
 
     def test_unknown_agent_returns_none_without_commit(self):
         db = _db_first(None)

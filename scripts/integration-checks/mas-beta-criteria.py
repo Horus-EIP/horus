@@ -239,13 +239,13 @@ class TestF2CreateUser:
 
     ITERATIONS = 10
 
-    @patch("auth.routes.bcrypt_context")
-    def test_create_users_success(self, mock_bcrypt, app, mock_db):
+    @patch("auth.routes.hash_credential")
+    def test_create_users_success(self, mock_hash_credential, app, mock_db):
         """Test 10 user creations."""
         setup_app_overrides(app, mock_db, None)
         client = TestClient(app)
 
-        mock_bcrypt.hash.return_value = "hashed_password"
+        mock_hash_credential.return_value = "hashed_password"
 
         passed = 0
         failed = 0

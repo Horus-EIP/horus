@@ -9,11 +9,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import db.models  # noqa: F401
-from auth.auth_tool_functions import bcrypt_context
 from auth.permissions import Role
 from db import admin_account, init_setup
 from db.database import Base
 from db.models import Users
+from unit.password_test_helpers import hash_legacy_password, hash_password, verify_password
 
 GENERATED = "Kq3-vT9xLm2_Rw7pZc4Nd8"
 CHOSEN = "Chosen-Pass-2026!"
@@ -56,7 +56,9 @@ def logged_text(logs) -> str:
 
 def add_admin(db, password: str) -> Users:
     admin = Users(
-        username="admin", hashed_password=bcrypt_context.hash(password), role=Role.ADMIN.value
+        username="admin",
+        hashed_password=hash_password(password),
+        role=Role.ADMIN.value,
     )
     db.add(admin)
     db.commit()
@@ -72,7 +74,7 @@ class TestANewInstall:
         assert admin_account.ensure_admin_account(session, "admin", GENERATED) == "created"
         admin = session.query(Users).filter_by(username="admin").one()
         assert admin.role == Role.ADMIN.value
-        assert bcrypt_context.verify(GENERATED, admin.hashed_password)
+        assert verify_password(GENERATED, admin.hashed_password)
 
     @pytest.mark.parametrize("password", ["", "   ", "admin", " admin "])
     def test_an_empty_or_shipped_password_creates_no_account(self, session, logs, password):
@@ -92,8 +94,8 @@ class TestAnUpgradeFromAnInstallThatStillHasAdmin:
 
         assert admin_account.ensure_admin_account(session, "admin", GENERATED) == "replaced"
 
-        assert bcrypt_context.verify(GENERATED, stored_hash(session))
-        assert not bcrypt_context.verify("admin", stored_hash(session))
+        assert verify_password(GENERATED, stored_hash(session))
+        assert not verify_password("admin", stored_hash(session))
         logs["log_user_action"].assert_called_once()
 
     def test_a_second_start_finds_the_account_already_on_the_new_password(
@@ -133,8 +135,20 @@ class TestAnUpgradeWhereTheAdminChangedThePassword:
         assert admin_account.ensure_admin_account(session, "admin", environment) == "differs"
 
         assert stored_hash(session) == before
-        assert bcrypt_context.verify(CHOSEN, stored_hash(session))
+        assert verify_password(CHOSEN, stored_hash(session))
         assert "SUPER_USER_PASSWORD" in logs["logger"].warning.call_args.args[0]
+
+    def test_a_legacy_password_matches_the_environment_during_startup(
+        self, session, logs
+    ):
+        admin = add_admin(session, GENERATED)
+        admin.hashed_password = hash_legacy_password(GENERATED)
+        session.commit()
+        before = stored_hash(session)
+
+        assert admin_account.ensure_admin_account(session, "admin", GENERATED) == "matches"
+
+        assert stored_hash(session) == before
 
 
 class TestThePasswordStaysOutOfTheLogs:

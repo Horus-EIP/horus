@@ -29,24 +29,24 @@ Package sets: the service's requirements lock file, or uv pip compile for Python
 The last line of each entry names the requirements files that install it.
 
 - accelerate 1.15.0
-  Licence: Apache (source: metadata, installed environment)
+  Licence: Apache (source: metadata, PyPI)
   https://github.com/huggingface/accelerate
   requirements-gpu.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - annotated-doc 0.0.5
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/fastapi/annotated-doc
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/annotated-doc-0.0.5.txt
 - annotated-types 0.8.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/annotated-types/annotated-types
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/annotated-types-0.8.0.txt
 - anyio 4.15.1
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/agronholm/anyio
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -56,13 +56,13 @@ The last line of each entry names the requirements files that install it.
   https://github.com/aio-libs/async-timeout
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
-- bcrypt 3.2.2
-  Licence: Apache License, Version 2.0 (source: metadata, installed environment)
+- bcrypt 5.0.0
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/pyca/bcrypt/
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - bitsandbytes 0.50.2
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/bitsandbytes-foundation/bitsandbytes
   requirements-gpu.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -80,30 +80,24 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/catalogue-2.0.10.txt
 - certifi 2026.7.22
-  Licence: MPL-2.0 (source: metadata, installed environment)
+  Licence: MPL-2.0 (source: metadata, PyPI)
   https://github.com/certifi/python-certifi
   requirements-gpu.txt, requirements.txt
   Licence text (MPL-2.0): LICENSES/MPL-2.0.txt
-- cffi 2.1.1
-  Licence: MIT-0 (source: metadata, installed environment)
-  https://github.com/python-cffi/cffi
-  requirements-gpu.txt, requirements.txt
-  Licence text (MIT-0): LICENSES/MIT-0.txt
-  Its own licence file: LICENSES/components/python/cffi-2.1.1.txt
 - charset-normalizer 3.5.2
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://charset-normalizer.readthedocs.io/
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/charset-normalizer-3.5.2.txt
 - click 8.5.0
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/pallets/click/
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/click-8.5.0.txt
 - cloudpathlib 0.26.0
-  Licence: MIT License (source: metadata, installed environment)
+  Licence: MIT License (source: metadata, PyPI)
   https://github.com/drivendataorg/cloudpathlib
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -148,7 +142,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/cymem-2.0.13.txt
 - distro 1.9.0
-  Licence: Apache License, Version 2.0 (source: metadata, installed environment)
+  Licence: Apache License, Version 2.0 (source: metadata, PyPI)
   https://github.com/python-distro/distro
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -177,18 +171,18 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/filelock-4.0.12.txt
 - fsspec 2026.9.0
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/fsspec/filesystem_spec
   requirements-gpu.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/fsspec-2026.9.0.txt
 - googleapis-common-protos 1.75.5
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/googleapis/google-cloud-python/tree/main/packages/googleapis-common-protos
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - grpcio 1.84.0
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://grpc.io
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -210,7 +204,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/httpcore-1.0.9.txt
 - httpcore2 2.13.1
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/pydantic/httpx2
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -222,7 +216,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/httpx-0.28.1.txt
 - httpx2 2.13.1
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/pydantic/httpx2
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -233,7 +227,7 @@ The last line of each entry names the requirements files that install it.
   requirements-gpu.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - idna 3.20
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/kjd/idna
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -257,7 +251,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (BSD-2-Clause): LICENSES/BSD-2-Clause.txt
   Its own licence file: LICENSES/components/python/jsonpointer-3.2.0.AUTHORS.txt, LICENSES/components/python/jsonpointer-3.2.0.LICENSE.txt
 - langchain 1.4.3
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://docs.langchain.com/
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -269,7 +263,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/langchain-core-1.6.7.txt
 - langchain-protocol 0.0.19
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/langchain-ai/agent-protocol/tree/main/streaming
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -281,13 +275,13 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/langgraph-1.2.14.txt
 - langgraph-checkpoint 4.2.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/langgraph-checkpoint-4.2.0.txt
 - langgraph-prebuilt 1.1.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/langchain-ai/langgraph/tree/main/libs/prebuilt
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -299,19 +293,19 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/langgraph-sdk-0.4.6.txt
 - langsmith 0.14.4
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://smith.langchain.com/
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/langsmith-0.14.4.txt
 - markdown-it-py 4.2.0
-  Licence: MIT License (source: metadata, installed environment)
+  Licence: MIT License (source: metadata, PyPI)
   https://github.com/executablebooks/markdown-it-py
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/markdown-it-py-4.2.0.LICENSE.txt, LICENSES/components/python/markdown-it-py-4.2.0.LICENSE.markdown-it.txt
 - markupsafe 3.0.4
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/pallets/markupsafe/
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -341,7 +335,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/networkx-3.6.1.txt
 - numpy 2.4.6
-  Licence: BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 (source: metadata, installed environment)
+  Licence: BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 (source: metadata, PyPI)
   https://numpy.org
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0): LICENSES/BSD-3-Clause.txt, LICENSES/0BSD.txt, LICENSES/MIT.txt, LICENSES/Zlib.txt, LICENSES/CC0-1.0.txt
@@ -353,22 +347,22 @@ The last line of each entry names the requirements files that install it.
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cublas-13.1.1.3.txt
 - nvidia-cuda-cupti 13.0.85
-  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, PyPI)
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
   https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cuda-cupti-13.0.85.txt
 - nvidia-cuda-nvrtc 13.0.88
-  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, PyPI)
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
   https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cuda-nvrtc-13.0.88.txt
 - nvidia-cuda-runtime 13.0.96
-  Licence: LicenseRef-NVIDIA-CUDA-Toolkit-EULA (source: project page, no licence in the package metadata)
-  https://docs.nvidia.com/cuda/eula/
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
+  https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
-  Licence text (LicenseRef-NVIDIA-CUDA-Toolkit-EULA): LICENSES/LicenseRef-NVIDIA-CUDA-Toolkit-EULA.txt
+  Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cuda-runtime-13.0.96.txt
 - nvidia-cudnn-cu13 9.24.0.43
   Licence: LicenseRef-NVIDIA-cuDNN-SLA (source: project page, no licence in the package metadata)
@@ -383,13 +377,13 @@ The last line of each entry names the requirements files that install it.
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cufft-12.0.0.61.txt
 - nvidia-cufile 1.15.1.6
-  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, PyPI)
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
   https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cufile-1.15.1.6.txt
 - nvidia-curand 10.4.0.35
-  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, PyPI)
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
   https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
@@ -425,13 +419,13 @@ The last line of each entry names the requirements files that install it.
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-nvjitlink-13.4.92.txt
 - nvidia-nvshmem-cu13 3.4.5
-  Licence: LicenseRef-NVIDIA-NVSHMEM-SLA (source: project page, no licence in the package metadata)
-  https://docs.nvidia.com/nvshmem/api/sla.html
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
+  https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
-  Licence text (LicenseRef-NVIDIA-NVSHMEM-SLA): LICENSES/LicenseRef-NVIDIA-NVSHMEM-SLA.txt
+  Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-nvshmem-cu13-3.4.5.txt
 - nvidia-nvtx 13.0.85
-  Licence: Apache 2.0 (source: metadata, PyPI)
+  Licence: Apache 2.0 (source: metadata, installed environment)
   https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -508,13 +502,13 @@ The last line of each entry names the requirements files that install it.
   Licence text (Apache-2.0 OR MIT): LICENSES/Apache-2.0.txt, LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/ormsgpack-1.12.2.txt
 - packaging 26.3
-  Licence: Apache-2.0 OR BSD-2-Clause (source: metadata, installed environment)
+  Licence: Apache-2.0 OR BSD-2-Clause (source: metadata, PyPI)
   https://github.com/pypa/packaging
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0 OR BSD-2-Clause): LICENSES/Apache-2.0.txt, LICENSES/BSD-2-Clause.txt
   Its own licence file: LICENSES/components/python/packaging-26.3.LICENSE.txt, LICENSES/components/python/packaging-26.3.LICENSE.BSD.txt
 - pika 1.4.4
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://pika.readthedocs.io
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -526,13 +520,13 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/preshed-3.0.13.txt
 - prometheus-client 0.26.0
-  Licence: Apache-2.0 AND BSD-2-Clause (source: metadata, installed environment)
+  Licence: Apache-2.0 AND BSD-2-Clause (source: metadata, PyPI)
   https://github.com/prometheus/client_python
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0 AND BSD-2-Clause): LICENSES/Apache-2.0.txt, LICENSES/BSD-2-Clause.txt
   NOTICE: NOTICES/python/prometheus-client-0.26.0.txt
 - protobuf 7.36.2
-  Licence: 3-Clause BSD License (source: metadata, installed environment)
+  Licence: 3-Clause BSD License (source: metadata, PyPI)
   https://developers.google.com/protocol-buffers/
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -543,26 +537,20 @@ The last line of each entry names the requirements files that install it.
   requirements-gpu.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/psutil-7.2.2.txt
-- pycparser 3.0
-  Licence: BSD-3-Clause (source: metadata, installed environment)
-  https://github.com/eliben/pycparser
-  requirements-gpu.txt, requirements.txt
-  Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
-  Its own licence file: LICENSES/components/python/pycparser-3.0.txt
 - pydantic 2.13.5
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/pydantic/pydantic
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/pydantic-2.13.5.txt
 - pydantic-core 2.46.5
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/pydantic
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/pydantic-core-2.46.5.txt
 - pygments 2.21.0
-  Licence: BSD-2-Clause (source: metadata, installed environment)
+  Licence: BSD-2-Clause (source: metadata, PyPI)
   https://pygments.org
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-2-Clause): LICENSES/BSD-2-Clause.txt
@@ -574,7 +562,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/pypdf-6.19.0.txt
 - python-multipart 0.0.32
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/Kludex/python-multipart
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -585,18 +573,18 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/pyyaml-6.0.3.txt
 - redis 8.1.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/redis/redis-py
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/redis-8.1.0.txt
 - regex 2026.9.29
-  Licence: Apache-2.0 AND CNRI-Python (source: metadata, installed environment)
+  Licence: Apache-2.0 AND CNRI-Python (source: metadata, PyPI)
   https://github.com/mrabarnett/mrab-regex
   requirements-gpu.txt
   Licence text (Apache-2.0 AND CNRI-Python): LICENSES/Apache-2.0.txt, LICENSES/CNRI-Python.txt
 - requests 2.34.2
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/psf/requests
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -613,17 +601,17 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/rich-15.0.0.txt
 - safetensors 0.8.0
-  Licence: Apache Software License (source: metadata, installed environment)
+  Licence: Apache Software License (source: metadata, PyPI)
   https://github.com/huggingface/safetensors
   requirements-gpu.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - sentencepiece 0.2.2
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/google/sentencepiece
   requirements-gpu.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - setuptools 84.0.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/pypa/setuptools
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -636,20 +624,20 @@ The last line of each entry names the requirements files that install it.
   Licence text (ISC): LICENSES/ISC.txt
   Its own licence file: LICENSES/components/python/shellingham-1.5.4.txt
 - smart-open 8.0.2
-  Licence: MIT License (source: metadata, installed environment)
+  Licence: MIT License (source: metadata, PyPI)
   https://github.com/piskvorky/smart_open
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/smart-open-8.0.2.txt
 - sniffio 1.3.1
-  Licence: MIT OR Apache-2.0 (source: metadata, installed environment)
+  Licence: MIT OR Apache-2.0 (source: metadata, PyPI)
   https://github.com/python-trio/sniffio
   requirements-gpu.txt, requirements.txt
   Licence text (MIT OR Apache-2.0): LICENSES/MIT.txt, LICENSES/Apache-2.0.txt
   Its own licence file: LICENSES/components/python/sniffio-1.3.1.LICENSE.txt, LICENSES/components/python/sniffio-1.3.1.LICENSE.MIT.txt
 - spacy 3.8.16
-  Licence: MIT (source: metadata, installed environment)
-  https://github.com/explosion/spaCy
+  Licence: MIT (source: metadata, PyPI)
+  https://spacy.io
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/spacy-3.8.16.txt
@@ -672,13 +660,13 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/spacy-loggers-1.0.5.txt
 - srsly 2.5.4
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/explosion/srsly
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/srsly-2.5.4.txt
 - starlette 1.7.0
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/Kludex/starlette
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -712,13 +700,13 @@ The last line of each entry names the requirements files that install it.
   Licence text (Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT): LICENSES/Apache-2.0.txt, LICENSES/BSD-2-Clause.txt, LICENSES/BSD-3-Clause.txt, LICENSES/BSL-1.0.txt, LICENSES/MIT.txt, LICENSES/LLVM-exception.txt
   Its own licence file: LICENSES/components/python/torch-2.14.1.LICENSE.txt, LICENSES/components/python/torch-2.14.1.packaging.LICENSE.txt, LICENSES/components/python/torch-2.14.1.LICENSE.BSD.txt, LICENSES/components/python/torch-2.14.1.FP16.LICENSE.txt, LICENSES/components/python/torch-2.14.1.FXdiv.LICENSE.txt, LICENSES/components/python/torch-2.14.1.NNPACK.LICENSE.txt, LICENSES/components/python/torch-2.14.1.LICENSE.txt, LICENSES/components/python/torch-2.14.1.XNNPACK.LICENSE.txt, LICENSES/components/python/torch-2.14.1.aiter.LICENSE.txt, LICENSES/components/python/torch-2.14.1.composable_kernel.LICENSE.txt, LICENSES/components/python/torch-2.14.1.cpp-httplib.LICENSE.txt, LICENSES/components/python/torch-2.14.1.cpuinfo.LICENSE.txt, LICENSES/components/python/torch-2.14.1.cudnn_frontend.LICENSE.txt, LICENSES/components/python/torch-2.14.1.cutlass.LICENSE.txt, LICENSES/components/python/torch-2.14.1.fbgemm.LICENSE.txt, LICENSES/components/python/torch-2.14.1.flash-attention.LICENSE.txt, LICENSES/components/python/torch-2.14.1.fmt.LICENSE.txt, LICENSES/components/python/torch-2.14.1.gloo.LICENSE.txt, LICENSES/components/python/torch-2.14.1.googletest.LICENSE.txt, LICENSES/components/python/torch-2.14.1.ideep.LICENSE.txt, LICENSES/components/python/torch-2.14.1.kineto.LICENSE.txt, LICENSES/components/python/torch-2.14.1.llvm-openmp.LICENSE.txt, LICENSES/components/python/torch-2.14.1.mimalloc.LICENSE.txt, LICENSES/components/python/torch-2.14.1.miniz-3.0.2.LICENSE.txt, LICENSES/components/python/torch-2.14.1.mslk.LICENSE.txt, LICENSES/components/python/torch-2.14.1.perfetto.LICENSE.txt, LICENSES/components/python/torch-2.14.1.protobuf.LICENSE.txt, LICENSES/components/python/torch-2.14.1.psimd.LICENSE.txt, LICENSES/components/python/torch-2.14.1.pthreadpool.LICENSE.txt, LICENSES/components/python/torch-2.14.1.pybind11.LICENSE.txt, LICENSES/components/python/torch-2.14.1.LICENSE.rst.txt, LICENSES/components/python/torch-2.14.1.sleef.LICENSE.txt, LICENSES/components/python/torch-2.14.1.tensorpipe.LICENSE.txt, LICENSES/components/python/torch-2.14.1.rust.LICENSE.txt, LICENSES/components/python/torch-2.14.1.python.LICENSE.txt, LICENSES/components/python/torch-2.14.1.dart.LICENSE.txt, LICENSES/components/python/torch-2.14.1.mkl-dnn.LICENSE.txt, LICENSES/components/python/torch-2.14.1.clog.LICENSE.txt, LICENSES/components/python/torch-2.14.1.cutlass.LICENSE.txt, LICENSES/components/python/torch-2.14.1.hipify_torch.LICENSE.txt, LICENSES/components/python/torch-2.14.1.utf8_range.LICENSE.txt, LICENSES/components/python/torch-2.14.1.libnop.LICENSE.txt, LICENSES/components/python/torch-2.14.1.libuv.LICENSE.txt, LICENSES/components/python/torch-2.14.1.pybind11.LICENSE.txt, LICENSES/components/python/torch-2.14.1.python.LICENSE.txt, LICENSES/components/python/torch-2.14.1.dynolog_headers.LICENSE.txt, LICENSES/components/python/torch-2.14.1.fmt.LICENSE.txt, LICENSES/components/python/torch-2.14.1.mx.LICENSE.txt
 - tqdm 4.70.1
-  Licence: MPL-2.0 AND MIT (source: metadata, installed environment)
+  Licence: MPL-2.0 AND MIT (source: metadata, PyPI)
   https://tqdm.github.io
   requirements-gpu.txt, requirements.txt
   Licence text (MPL-2.0 AND MIT): LICENSES/MPL-2.0.txt, LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/tqdm-4.70.1.txt
 - transformers 4.57.6
-  Licence: Apache 2.0 License (source: metadata, installed environment)
+  Licence: Apache 2.0 License (source: metadata, PyPI)
   https://github.com/huggingface/transformers
   requirements-gpu.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -729,7 +717,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/triton-3.8.0.txt
 - truststore 0.10.4
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/sethmlarson/truststore
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -741,31 +729,31 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/typer-0.27.3.LICENSE.txt, LICENSES/components/python/typer-0.27.3.LICENSE.txt
 - typing-extensions 4.16.0
-  Licence: PSF-2.0 (source: metadata, installed environment)
+  Licence: PSF-2.0 (source: metadata, PyPI)
   https://github.com/python/typing_extensions
   requirements-gpu.txt, requirements.txt
   Licence text (PSF-2.0): LICENSES/PSF-2.0.txt
   Its own licence file: LICENSES/components/python/typing-extensions-4.16.0.txt
 - typing-inspection 0.4.4
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/pydantic/typing-inspection
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/typing-inspection-0.4.4.txt
 - urllib3 2.8.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://urllib3.readthedocs.io
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/urllib3-2.8.0.txt
 - uuid-utils 0.17.1
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/aminalaee/uuid-utils
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/uuid-utils-0.17.1.txt
 - uvicorn 0.54.0
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://uvicorn.dev/
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -783,19 +771,19 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/weasel-1.0.0.txt
 - websockets 16.1.1
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/python-websockets/websockets
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/websockets-16.1.1.txt
 - wrapt 2.5.0
-  Licence: BSD-2-Clause (source: metadata, installed environment)
+  Licence: BSD-2-Clause (source: metadata, PyPI)
   https://github.com/GrahamDumpleton/wrapt
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-2-Clause): LICENSES/BSD-2-Clause.txt
   Its own licence file: LICENSES/components/python/wrapt-2.5.0.txt
 - xxhash 4.0.1
-  Licence: BSD-2-Clause (source: metadata, installed environment)
+  Licence: BSD-2-Clause (source: metadata, PyPI)
   https://github.com/ifduyue/python-xxhash
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-2-Clause): LICENSES/BSD-2-Clause.txt
@@ -812,13 +800,13 @@ The last line of each entry names the requirements files that install it.
 The last line of each entry names the requirements files that install it.
 
 - agent-detector 2.0.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/patrick91/agent-detector
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/agent-detector-2.0.0.txt
 - aiohappyeyeballs 2.7.1
-  Licence: PSF-2.0 (source: metadata, installed environment)
+  Licence: PSF-2.0 (source: metadata, PyPI)
   https://github.com/aio-libs/aiohappyeyeballs
   requirements-gpu.txt, requirements.txt
   Licence text (PSF-2.0): LICENSES/PSF-2.0.txt
@@ -836,31 +824,31 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/aiohttp-retry-2.9.1.txt
 - aiosignal 1.4.0
-  Licence: Apache 2.0 (source: metadata, installed environment)
+  Licence: Apache 2.0 (source: metadata, PyPI)
   https://github.com/aio-libs/aiosignal
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - annotated-doc 0.0.5
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/fastapi/annotated-doc
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/annotated-doc-0.0.5.txt
 - annotated-types 0.8.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/annotated-types/annotated-types
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/annotated-types-0.8.0.txt
 - anyio 4.15.1
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/agronholm/anyio
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/anyio-4.15.1.txt
 - asgiref 3.12.1
-  Licence: BSD-3-Clause (source: metadata, installed environment)
-  https://asgi.readthedocs.io/
+  Licence: BSD-3-Clause (source: metadata, PyPI)
+  https://github.com/django/asgiref/
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/asgiref-3.12.1.txt
@@ -871,13 +859,13 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/attrs-26.1.0.txt
 - backoff 2.2.1
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/litl/backoff
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/backoff-2.2.1.txt
 - bcrypt 5.0.0
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/pyca/bcrypt/
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -888,7 +876,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/blis-1.3.3.txt
 - build 1.6.1
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://build.pypa.io
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -900,35 +888,35 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/catalogue-2.0.10.txt
 - certifi 2026.7.22
-  Licence: MPL-2.0 (source: metadata, installed environment)
+  Licence: MPL-2.0 (source: metadata, PyPI)
   https://github.com/certifi/python-certifi
   requirements-gpu.txt, requirements.txt
   Licence text (MPL-2.0): LICENSES/MPL-2.0.txt
 - cffi 2.1.1
-  Licence: MIT-0 (source: metadata, installed environment)
+  Licence: MIT-0 (source: metadata, PyPI)
   https://github.com/python-cffi/cffi
   requirements-gpu.txt, requirements.txt
   Licence text (MIT-0): LICENSES/MIT-0.txt
   Its own licence file: LICENSES/components/python/cffi-2.1.1.txt
 - charset-normalizer 3.5.2
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://charset-normalizer.readthedocs.io/
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/charset-normalizer-3.5.2.txt
 - chromadb 1.5.2
-  Licence: Apache Software License (source: metadata, installed environment)
+  Licence: Apache Software License (source: metadata, PyPI)
   https://github.com/chroma-core/chroma
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - click 8.5.0
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/pallets/click/
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/click-8.5.0.txt
 - cloudpathlib 0.26.0
-  Licence: MIT License (source: metadata, installed environment)
+  Licence: MIT License (source: metadata, PyPI)
   https://github.com/drivendataorg/cloudpathlib
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -940,7 +928,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/confection-1.3.3.txt
 - cryptography 50.0.2
-  Licence: Apache-2.0 OR BSD-3-Clause (source: metadata, installed environment)
+  Licence: Apache-2.0 OR BSD-3-Clause (source: metadata, PyPI)
   https://github.com/pyca/cryptography
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0 OR BSD-3-Clause): LICENSES/Apache-2.0.txt, LICENSES/BSD-3-Clause.txt
@@ -979,30 +967,30 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/cymem-2.0.13.txt
 - detect-installer 0.2.1
-  Licence: 0BSD (source: metadata, installed environment)
+  Licence: 0BSD (source: metadata, PyPI)
   https://pypi.org/project/detect-installer/
   requirements-gpu.txt, requirements.txt
   Licence text (0BSD): LICENSES/0BSD.txt
   Its own licence file: LICENSES/components/python/detect-installer-0.2.1.txt
 - distro 1.9.0
-  Licence: Apache License, Version 2.0 (source: metadata, installed environment)
+  Licence: Apache License, Version 2.0 (source: metadata, PyPI)
   https://github.com/python-distro/distro
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - dnspython 2.8.0
-  Licence: ISC (source: metadata, installed environment)
+  Licence: ISC (source: metadata, PyPI)
   https://www.dnspython.org
   requirements-gpu.txt, requirements.txt
   Licence text (ISC): LICENSES/ISC.txt
   Its own licence file: LICENSES/components/python/dnspython-2.8.0.txt
 - durationpy 0.11
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/icholy/durationpy
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/durationpy-0.11.txt
 - email-validator 2.3.0
-  Licence: Unlicense (source: metadata, installed environment)
+  Licence: Unlicense (source: metadata, PyPI)
   https://github.com/JoshData/python-email-validator
   requirements-gpu.txt, requirements.txt
   Licence text (Unlicense): LICENSES/Unlicense.txt
@@ -1019,25 +1007,25 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/en-core-web-trf-3.8.0.txt
 - fastapi 0.128.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/fastapi/fastapi
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/fastapi-0.128.0.txt
 - fastapi-cli 0.0.32
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/fastapi/fastapi-cli
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/fastapi-cli-0.0.32.txt
 - fastapi-cloud-cli 0.26.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/fastapilabs/fastapi-cloud-cli
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/fastapi-cloud-cli-0.26.0.txt
 - fastar 0.12.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT License (source: metadata, PyPI)
   https://github.com/DoctorJohn/fastar
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -1060,23 +1048,23 @@ The last line of each entry names the requirements files that install it.
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - frozenlist 1.8.0
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/aio-libs/frozenlist
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - fsspec 2026.9.0
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/fsspec/filesystem_spec
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/fsspec-2026.9.0.txt
 - googleapis-common-protos 1.75.5
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/googleapis/google-cloud-python/tree/main/packages/googleapis-common-protos
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - grpcio 1.84.0
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://grpc.io
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -1098,7 +1086,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/httpcore-1.0.9.txt
 - httptools 0.8.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/MagicStack/httptools
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -1115,7 +1103,7 @@ The last line of each entry names the requirements files that install it.
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - idna 3.20
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/kjd/idna
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -1126,7 +1114,7 @@ The last line of each entry names the requirements files that install it.
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - itsdangerous 2.2.0
-  Licence: BSD License (source: metadata, installed environment)
+  Licence: BSD License (source: metadata, PyPI)
   https://github.com/pallets/itsdangerous/
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -1138,13 +1126,13 @@ The last line of each entry names the requirements files that install it.
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/jinja2-3.1.6.txt
 - jsonschema 4.26.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/python-jsonschema/jsonschema
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/jsonschema-4.26.0.txt
 - jsonschema-specifications 2025.9.1
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/python-jsonschema/jsonschema-specifications
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -1161,19 +1149,19 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/loguru-0.7.3.txt
 - lxml 6.1.3
-  Licence: BSD-3-Clause (source: metadata, installed environment)
-  https://github.com/lxml/lxml
+  Licence: BSD-3-Clause (source: metadata, PyPI)
+  https://lxml.de/
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/lxml-6.1.3.LICENSE.txt, LICENSES/components/python/lxml-6.1.3.LICENSES.txt
 - markdown-it-py 4.2.0
-  Licence: MIT License (source: metadata, installed environment)
+  Licence: MIT License (source: metadata, PyPI)
   https://github.com/executablebooks/markdown-it-py
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/markdown-it-py-4.2.0.LICENSE.txt, LICENSES/components/python/markdown-it-py-4.2.0.LICENSE.markdown-it.txt
 - markupsafe 3.0.4
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/pallets/markupsafe/
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -1185,7 +1173,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/mdurl-0.1.2.txt
 - mmh3 5.3.1
-  Licence: MIT License (source: metadata, installed environment)
+  Licence: MIT License (source: metadata, PyPI)
   https://pypi.org/project/mmh3/
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -1197,7 +1185,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/mpmath-1.3.0.txt
 - multidict 6.9.1
-  Licence: Apache License 2.0 (source: metadata, installed environment)
+  Licence: Apache License 2.0 (source: metadata, PyPI)
   https://github.com/aio-libs/multidict
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -1214,7 +1202,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/networkx-3.6.1.txt
 - numpy 1.26.4
-  Licence: BSD License (source: metadata, installed environment)
+  Licence: BSD License (source: metadata, PyPI)
   https://numpy.org
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -1226,22 +1214,22 @@ The last line of each entry names the requirements files that install it.
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cublas-13.1.1.3.txt
 - nvidia-cuda-cupti 13.0.85
-  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, PyPI)
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
   https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cuda-cupti-13.0.85.txt
 - nvidia-cuda-nvrtc 13.0.88
-  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, PyPI)
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
   https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cuda-nvrtc-13.0.88.txt
 - nvidia-cuda-runtime 13.0.96
-  Licence: LicenseRef-NVIDIA-CUDA-Toolkit-EULA (source: project page, no licence in the package metadata)
-  https://docs.nvidia.com/cuda/eula/
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
+  https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
-  Licence text (LicenseRef-NVIDIA-CUDA-Toolkit-EULA): LICENSES/LicenseRef-NVIDIA-CUDA-Toolkit-EULA.txt
+  Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cuda-runtime-13.0.96.txt
 - nvidia-cudnn-cu13 9.24.0.43
   Licence: LicenseRef-NVIDIA-cuDNN-SLA (source: project page, no licence in the package metadata)
@@ -1256,13 +1244,13 @@ The last line of each entry names the requirements files that install it.
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cufft-12.0.0.61.txt
 - nvidia-cufile 1.15.1.6
-  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, PyPI)
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
   https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cufile-1.15.1.6.txt
 - nvidia-curand 10.4.0.35
-  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, PyPI)
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
   https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
@@ -1298,24 +1286,24 @@ The last line of each entry names the requirements files that install it.
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-nvjitlink-13.4.92.txt
 - nvidia-nvshmem-cu13 3.4.5
-  Licence: LicenseRef-NVIDIA-NVSHMEM-SLA (source: project page, no licence in the package metadata)
-  https://docs.nvidia.com/nvshmem/api/sla.html
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
+  https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
-  Licence text (LicenseRef-NVIDIA-NVSHMEM-SLA): LICENSES/LicenseRef-NVIDIA-NVSHMEM-SLA.txt
+  Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-nvshmem-cu13-3.4.5.txt
 - nvidia-nvtx 13.0.85
-  Licence: Apache 2.0 (source: metadata, PyPI)
+  Licence: Apache 2.0 (source: metadata, installed environment)
   https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - oauthlib 4.0.0
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/oauthlib/oauthlib
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/oauthlib-4.0.0.txt
 - onnxruntime 1.30.0
-  Licence: MIT License (source: metadata, installed environment)
+  Licence: MIT License (source: metadata, PyPI)
   https://onnxruntime.ai
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -1413,7 +1401,7 @@ The last line of each entry names the requirements files that install it.
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - packaging 26.3
-  Licence: Apache-2.0 OR BSD-2-Clause (source: metadata, installed environment)
+  Licence: Apache-2.0 OR BSD-2-Clause (source: metadata, PyPI)
   https://github.com/pypa/packaging
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0 OR BSD-2-Clause): LICENSES/Apache-2.0.txt, LICENSES/BSD-2-Clause.txt
@@ -1437,12 +1425,12 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/pdfplumber-0.11.9.txt
 - pillow 12.3.0
-  Licence: MIT-CMU (source: metadata, installed environment)
+  Licence: MIT-CMU (source: metadata, PyPI)
   https://python-pillow.github.io
   requirements-gpu.txt, requirements.txt
   Licence text (MIT-CMU): LICENSES/MIT-CMU.txt
 - posthog 5.4.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/posthog/posthog-python
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -1454,19 +1442,19 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/preshed-3.0.13.txt
 - prometheus-client 0.26.0
-  Licence: Apache-2.0 AND BSD-2-Clause (source: metadata, installed environment)
+  Licence: Apache-2.0 AND BSD-2-Clause (source: metadata, PyPI)
   https://github.com/prometheus/client_python
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0 AND BSD-2-Clause): LICENSES/Apache-2.0.txt, LICENSES/BSD-2-Clause.txt
   NOTICE: NOTICES/python/prometheus-client-0.26.0.txt
 - propcache 0.5.4
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/aio-libs/propcache
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
   NOTICE: NOTICES/python/propcache-0.5.4.txt
 - protobuf 7.36.2
-  Licence: 3-Clause BSD License (source: metadata, installed environment)
+  Licence: 3-Clause BSD License (source: metadata, PyPI)
   https://developers.google.com/protocol-buffers/
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -1478,7 +1466,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/py-rust-stemmers-0.1.8.txt
 - pybase64 1.5.1
-  Licence: BSD-2-Clause (source: metadata, installed environment)
+  Licence: BSD-2-Clause (source: metadata, PyPI)
   https://github.com/mayeut/pybase64
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-2-Clause): LICENSES/BSD-2-Clause.txt
@@ -1490,37 +1478,37 @@ The last line of each entry names the requirements files that install it.
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/pycparser-3.0.txt
 - pydantic 2.13.5
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/pydantic/pydantic
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/pydantic-2.13.5.txt
 - pydantic-core 2.46.5
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/pydantic
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/pydantic-core-2.46.5.txt
 - pydantic-extra-types 2.11.1
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/pydantic/pydantic-extra-types
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/pydantic-extra-types-2.11.1.txt
 - pydantic-settings 2.15.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/pydantic/pydantic-settings
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/pydantic-settings-2.15.0.txt
 - pygments 2.21.0
-  Licence: BSD-2-Clause (source: metadata, installed environment)
+  Licence: BSD-2-Clause (source: metadata, PyPI)
   https://pygments.org
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-2-Clause): LICENSES/BSD-2-Clause.txt
   Its own licence file: LICENSES/components/python/pygments-2.21.0.AUTHORS.txt, LICENSES/components/python/pygments-2.21.0.LICENSE.txt
 - pypdfium2 5.14.0
-  Licence: BSD-3-Clause, Apache-2.0, dependency licenses (source: metadata, installed environment)
+  Licence: BSD-3-Clause, Apache-2.0, dependency licenses (source: metadata, PyPI)
   https://github.com/pypdfium2-team/pypdfium2
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause AND Apache-2.0): LICENSES/BSD-3-Clause.txt, LICENSES/Apache-2.0.txt
@@ -1531,7 +1519,7 @@ The last line of each entry names the requirements files that install it.
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - pyproject-hooks 1.3.3
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/pypa/pyproject-hooks
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -1547,19 +1535,19 @@ The last line of each entry names the requirements files that install it.
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - python-docx 1.1.2
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/python-openxml/python-docx
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/python-docx-1.1.2.txt
 - python-dotenv 1.2.4
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/theskumar/python-dotenv
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/python-dotenv-1.2.4.txt
 - python-multipart 0.0.32
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/Kludex/python-multipart
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -1576,18 +1564,18 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/referencing-0.37.0.txt
 - regex 2026.9.29
-  Licence: Apache-2.0 AND CNRI-Python (source: metadata, installed environment)
+  Licence: Apache-2.0 AND CNRI-Python (source: metadata, PyPI)
   https://github.com/mrabarnett/mrab-regex
   requirements-gpu.txt
   Licence text (Apache-2.0 AND CNRI-Python): LICENSES/Apache-2.0.txt, LICENSES/CNRI-Python.txt
 - requests 2.34.2
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/psf/requests
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
   NOTICE: NOTICES/python/requests-2.34.2.txt
 - requests-oauthlib 2.0.0
-  Licence: ISC (source: metadata, installed environment)
+  Licence: ISC (source: metadata, PyPI)
   https://github.com/requests/requests-oauthlib
   requirements-gpu.txt, requirements.txt
   Licence text (ISC): LICENSES/ISC.txt
@@ -1599,36 +1587,36 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/rich-15.0.0.txt
 - rich-toolkit 0.20.5
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://pypi.org/project/rich-toolkit/
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/rich-toolkit-0.20.5.LICENSE.txt, LICENSES/components/python/rich-toolkit-0.20.5.LICENSE-THIRD-PARTY.txt
 - rignore 0.8.1
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://pypi.org/project/rignore/
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/rignore-0.8.1.txt
 - rpds-py 2026.9.1
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/crate-py/rpds
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/rpds-py-2026.9.1.txt
 - safetensors 0.8.0
-  Licence: Apache Software License (source: metadata, installed environment)
+  Licence: Apache Software License (source: metadata, PyPI)
   https://github.com/huggingface/safetensors
   requirements-gpu.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - sentry-sdk 2.71.0
-  Licence: MIT (source: metadata, installed environment)
-  https://docs.sentry.io/platforms/python/
+  Licence: MIT (source: metadata, PyPI)
+  https://github.com/getsentry/sentry-python
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/sentry-sdk-2.71.0.txt
 - setuptools 84.0.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/pypa/setuptools
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -1647,14 +1635,14 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/six-1.17.0.txt
 - smart-open 8.0.2
-  Licence: MIT License (source: metadata, installed environment)
+  Licence: MIT License (source: metadata, PyPI)
   https://github.com/piskvorky/smart_open
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/smart-open-8.0.2.txt
 - spacy 3.8.16
-  Licence: MIT (source: metadata, installed environment)
-  https://github.com/explosion/spaCy
+  Licence: MIT (source: metadata, PyPI)
+  https://spacy.io
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/spacy-3.8.16.txt
@@ -1677,13 +1665,13 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/spacy-loggers-1.0.5.txt
 - srsly 2.5.4
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/explosion/srsly
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/srsly-2.5.4.txt
 - starlette 0.50.0
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/Kludex/starlette
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -1717,13 +1705,13 @@ The last line of each entry names the requirements files that install it.
   Licence text (Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT): LICENSES/Apache-2.0.txt, LICENSES/BSD-2-Clause.txt, LICENSES/BSD-3-Clause.txt, LICENSES/BSL-1.0.txt, LICENSES/MIT.txt, LICENSES/LLVM-exception.txt
   Its own licence file: LICENSES/components/python/torch-2.14.1.LICENSE.txt, LICENSES/components/python/torch-2.14.1.packaging.LICENSE.txt, LICENSES/components/python/torch-2.14.1.LICENSE.BSD.txt, LICENSES/components/python/torch-2.14.1.FP16.LICENSE.txt, LICENSES/components/python/torch-2.14.1.FXdiv.LICENSE.txt, LICENSES/components/python/torch-2.14.1.NNPACK.LICENSE.txt, LICENSES/components/python/torch-2.14.1.LICENSE.txt, LICENSES/components/python/torch-2.14.1.XNNPACK.LICENSE.txt, LICENSES/components/python/torch-2.14.1.aiter.LICENSE.txt, LICENSES/components/python/torch-2.14.1.composable_kernel.LICENSE.txt, LICENSES/components/python/torch-2.14.1.cpp-httplib.LICENSE.txt, LICENSES/components/python/torch-2.14.1.cpuinfo.LICENSE.txt, LICENSES/components/python/torch-2.14.1.cudnn_frontend.LICENSE.txt, LICENSES/components/python/torch-2.14.1.cutlass.LICENSE.txt, LICENSES/components/python/torch-2.14.1.fbgemm.LICENSE.txt, LICENSES/components/python/torch-2.14.1.flash-attention.LICENSE.txt, LICENSES/components/python/torch-2.14.1.fmt.LICENSE.txt, LICENSES/components/python/torch-2.14.1.gloo.LICENSE.txt, LICENSES/components/python/torch-2.14.1.googletest.LICENSE.txt, LICENSES/components/python/torch-2.14.1.ideep.LICENSE.txt, LICENSES/components/python/torch-2.14.1.kineto.LICENSE.txt, LICENSES/components/python/torch-2.14.1.llvm-openmp.LICENSE.txt, LICENSES/components/python/torch-2.14.1.mimalloc.LICENSE.txt, LICENSES/components/python/torch-2.14.1.miniz-3.0.2.LICENSE.txt, LICENSES/components/python/torch-2.14.1.mslk.LICENSE.txt, LICENSES/components/python/torch-2.14.1.perfetto.LICENSE.txt, LICENSES/components/python/torch-2.14.1.protobuf.LICENSE.txt, LICENSES/components/python/torch-2.14.1.psimd.LICENSE.txt, LICENSES/components/python/torch-2.14.1.pthreadpool.LICENSE.txt, LICENSES/components/python/torch-2.14.1.pybind11.LICENSE.txt, LICENSES/components/python/torch-2.14.1.LICENSE.rst.txt, LICENSES/components/python/torch-2.14.1.sleef.LICENSE.txt, LICENSES/components/python/torch-2.14.1.tensorpipe.LICENSE.txt, LICENSES/components/python/torch-2.14.1.rust.LICENSE.txt, LICENSES/components/python/torch-2.14.1.python.LICENSE.txt, LICENSES/components/python/torch-2.14.1.dart.LICENSE.txt, LICENSES/components/python/torch-2.14.1.mkl-dnn.LICENSE.txt, LICENSES/components/python/torch-2.14.1.clog.LICENSE.txt, LICENSES/components/python/torch-2.14.1.cutlass.LICENSE.txt, LICENSES/components/python/torch-2.14.1.hipify_torch.LICENSE.txt, LICENSES/components/python/torch-2.14.1.utf8_range.LICENSE.txt, LICENSES/components/python/torch-2.14.1.libnop.LICENSE.txt, LICENSES/components/python/torch-2.14.1.libuv.LICENSE.txt, LICENSES/components/python/torch-2.14.1.pybind11.LICENSE.txt, LICENSES/components/python/torch-2.14.1.python.LICENSE.txt, LICENSES/components/python/torch-2.14.1.dynolog_headers.LICENSE.txt, LICENSES/components/python/torch-2.14.1.fmt.LICENSE.txt, LICENSES/components/python/torch-2.14.1.mx.LICENSE.txt
 - tqdm 4.70.1
-  Licence: MPL-2.0 AND MIT (source: metadata, installed environment)
+  Licence: MPL-2.0 AND MIT (source: metadata, PyPI)
   https://tqdm.github.io
   requirements-gpu.txt, requirements.txt
   Licence text (MPL-2.0 AND MIT): LICENSES/MPL-2.0.txt, LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/tqdm-4.70.1.txt
 - transformers 4.57.6
-  Licence: Apache 2.0 License (source: metadata, installed environment)
+  Licence: Apache 2.0 License (source: metadata, PyPI)
   https://github.com/huggingface/transformers
   requirements-gpu.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -1740,31 +1728,31 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/typer-0.27.3.LICENSE.txt, LICENSES/components/python/typer-0.27.3.LICENSE.txt
 - typing-extensions 4.16.0
-  Licence: PSF-2.0 (source: metadata, installed environment)
+  Licence: PSF-2.0 (source: metadata, PyPI)
   https://github.com/python/typing_extensions
   requirements-gpu.txt, requirements.txt
   Licence text (PSF-2.0): LICENSES/PSF-2.0.txt
   Its own licence file: LICENSES/components/python/typing-extensions-4.16.0.txt
 - typing-inspection 0.4.4
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/pydantic/typing-inspection
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/typing-inspection-0.4.4.txt
 - ujson 6.0.0
-  Licence: BSD-3-Clause AND TCL (source: metadata, installed environment)
+  Licence: BSD-3-Clause AND TCL (source: metadata, PyPI)
   https://github.com/ultrajson/ultrajson
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause AND TCL): LICENSES/BSD-3-Clause.txt, LICENSES/TCL.txt
   Its own licence file: LICENSES/components/python/ujson-6.0.0.txt
 - urllib3 2.8.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://urllib3.readthedocs.io
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/urllib3-2.8.0.txt
 - uvicorn 0.34.0
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://www.uvicorn.org/
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -1782,7 +1770,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/wasabi-1.1.3.txt
 - watchfiles 1.3.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/samuelcolvin/watchfiles
   requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -1794,24 +1782,24 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/weasel-1.0.0.txt
 - websocket-client 1.9.2
-  Licence: Apache-2.0 (source: metadata, installed environment)
-  https://github.com/websocket-client/websocket-client/
+  Licence: Apache-2.0 (source: metadata, PyPI)
+  https://github.com/websocket-client/websocket-client
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - websockets 17.2
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/python-websockets/websockets
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/websockets-17.2.txt
 - wrapt 2.5.0
-  Licence: BSD-2-Clause (source: metadata, installed environment)
+  Licence: BSD-2-Clause (source: metadata, PyPI)
   https://github.com/GrahamDumpleton/wrapt
   requirements-gpu.txt, requirements.txt
   Licence text (BSD-2-Clause): LICENSES/BSD-2-Clause.txt
   Its own licence file: LICENSES/components/python/wrapt-2.5.0.txt
 - yarl 1.25.1
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/aio-libs/yarl
   requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -1822,7 +1810,7 @@ The last line of each entry names the requirements files that install it.
 The last line of each entry names the requirements files that install it.
 
 - accelerate 1.15.0
-  Licence: Apache (source: metadata, installed environment)
+  Licence: Apache (source: metadata, PyPI)
   https://github.com/huggingface/accelerate
   requirements-gpu.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -1833,26 +1821,26 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/alembic-1.20.0.txt
 - annotated-doc 0.0.5
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/fastapi/annotated-doc
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/annotated-doc-0.0.5.txt
 - annotated-types 0.8.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/annotated-types/annotated-types
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/annotated-types-0.8.0.txt
 - anyio 4.15.1
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/agronholm/anyio
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/anyio-4.15.1.txt
 - asgiref 3.12.1
-  Licence: BSD-3-Clause (source: metadata, installed environment)
-  https://asgi.readthedocs.io/
+  Licence: BSD-3-Clause (source: metadata, PyPI)
+  https://github.com/django/asgiref/
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/asgiref-3.12.1.txt
@@ -1861,36 +1849,36 @@ The last line of each entry names the requirements files that install it.
   https://github.com/aio-libs/async-timeout
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
-- bcrypt 3.2.2
-  Licence: Apache License, Version 2.0 (source: metadata, installed environment)
+- bcrypt 5.0.0
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/pyca/bcrypt/
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - bitsandbytes 0.50.2
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/bitsandbytes-foundation/bitsandbytes
   requirements-gpu.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/bitsandbytes-0.50.2.txt
 - certifi 2026.7.22
-  Licence: MPL-2.0 (source: metadata, installed environment)
+  Licence: MPL-2.0 (source: metadata, PyPI)
   https://github.com/certifi/python-certifi
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MPL-2.0): LICENSES/MPL-2.0.txt
 - cffi 2.1.1
-  Licence: MIT-0 (source: metadata, installed environment)
+  Licence: MIT-0 (source: metadata, PyPI)
   https://github.com/python-cffi/cffi
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT-0): LICENSES/MIT-0.txt
   Its own licence file: LICENSES/components/python/cffi-2.1.1.txt
 - charset-normalizer 3.5.2
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://charset-normalizer.readthedocs.io/
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/charset-normalizer-3.5.2.txt
 - click 8.5.0
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/pallets/click/
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -1902,7 +1890,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/colorama-0.4.6.txt
 - cryptography 50.0.2
-  Licence: Apache-2.0 OR BSD-3-Clause (source: metadata, installed environment)
+  Licence: Apache-2.0 OR BSD-3-Clause (source: metadata, PyPI)
   https://github.com/pyca/cryptography
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0 OR BSD-3-Clause): LICENSES/Apache-2.0.txt, LICENSES/BSD-3-Clause.txt
@@ -1952,13 +1940,13 @@ The last line of each entry names the requirements files that install it.
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - fsspec 2026.9.0
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/fsspec/filesystem_spec
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/fsspec-2026.9.0.txt
 - googleapis-common-protos 1.75.5
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/googleapis/google-cloud-python/tree/main/packages/googleapis-common-protos
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -1969,7 +1957,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (BSD-2-Clause): LICENSES/BSD-2-Clause.txt
   Its own licence file: LICENSES/components/python/graphlib-0.9.5.txt
 - grpcio 1.84.0
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://grpc.io
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -1995,7 +1983,7 @@ The last line of each entry names the requirements files that install it.
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - idna 3.20
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/kjd/idna
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -2019,13 +2007,13 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/mako-1.4.3.txt
 - markdown-it-py 4.2.0
-  Licence: MIT License (source: metadata, installed environment)
+  Licence: MIT License (source: metadata, PyPI)
   https://github.com/executablebooks/markdown-it-py
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/markdown-it-py-4.2.0.LICENSE.txt, LICENSES/components/python/markdown-it-py-4.2.0.LICENSE.markdown-it.txt
 - markupsafe 3.0.4
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/pallets/markupsafe/
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -2037,7 +2025,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/mdurl-0.1.2.txt
 - mmh3 5.3.1
-  Licence: MIT License (source: metadata, installed environment)
+  Licence: MIT License (source: metadata, PyPI)
   https://pypi.org/project/mmh3/
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -2055,7 +2043,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/networkx-3.6.1.txt
 - numpy 2.4.6
-  Licence: BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 (source: metadata, installed environment)
+  Licence: BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 (source: metadata, PyPI)
   https://numpy.org
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0): LICENSES/BSD-3-Clause.txt, LICENSES/0BSD.txt, LICENSES/MIT.txt, LICENSES/Zlib.txt, LICENSES/CC0-1.0.txt
@@ -2067,22 +2055,22 @@ The last line of each entry names the requirements files that install it.
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cublas-13.1.1.3.txt
 - nvidia-cuda-cupti 13.0.85
-  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, PyPI)
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
   https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cuda-cupti-13.0.85.txt
 - nvidia-cuda-nvrtc 13.0.88
-  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, PyPI)
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
   https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cuda-nvrtc-13.0.88.txt
 - nvidia-cuda-runtime 13.0.96
-  Licence: LicenseRef-NVIDIA-CUDA-Toolkit-EULA (source: project page, no licence in the package metadata)
-  https://docs.nvidia.com/cuda/eula/
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
+  https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
-  Licence text (LicenseRef-NVIDIA-CUDA-Toolkit-EULA): LICENSES/LicenseRef-NVIDIA-CUDA-Toolkit-EULA.txt
+  Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cuda-runtime-13.0.96.txt
 - nvidia-cudnn-cu13 9.24.0.43
   Licence: LicenseRef-NVIDIA-cuDNN-SLA (source: project page, no licence in the package metadata)
@@ -2097,13 +2085,13 @@ The last line of each entry names the requirements files that install it.
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cufft-12.0.0.61.txt
 - nvidia-cufile 1.15.1.6
-  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, PyPI)
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
   https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-cufile-1.15.1.6.txt
 - nvidia-curand 10.4.0.35
-  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, PyPI)
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
   https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
@@ -2139,18 +2127,18 @@ The last line of each entry names the requirements files that install it.
   Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-nvjitlink-13.4.92.txt
 - nvidia-nvshmem-cu13 3.4.5
-  Licence: LicenseRef-NVIDIA-NVSHMEM-SLA (source: project page, no licence in the package metadata)
-  https://docs.nvidia.com/nvshmem/api/sla.html
+  Licence: LicenseRef-NVIDIA-Proprietary (source: metadata, installed environment)
+  https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
-  Licence text (LicenseRef-NVIDIA-NVSHMEM-SLA): LICENSES/LicenseRef-NVIDIA-NVSHMEM-SLA.txt
+  Licence text (LicenseRef-NVIDIA-Proprietary): LICENSES/LicenseRef-NVIDIA-Proprietary.txt
   Its own licence file: LICENSES/components/python/nvidia-nvshmem-cu13-3.4.5.txt
 - nvidia-nvtx 13.0.85
-  Licence: Apache 2.0 (source: metadata, PyPI)
+  Licence: Apache 2.0 (source: metadata, installed environment)
   https://developer.nvidia.com/cuda-zone
   requirements-gpu.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - onnxruntime 1.30.0
-  Licence: MIT License (source: metadata, installed environment)
+  Licence: MIT License (source: metadata, PyPI)
   https://onnxruntime.ai
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -2227,42 +2215,36 @@ The last line of each entry names the requirements files that install it.
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - packaging 26.3
-  Licence: Apache-2.0 OR BSD-2-Clause (source: metadata, installed environment)
+  Licence: Apache-2.0 OR BSD-2-Clause (source: metadata, PyPI)
   https://github.com/pypa/packaging
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0 OR BSD-2-Clause): LICENSES/Apache-2.0.txt, LICENSES/BSD-2-Clause.txt
   Its own licence file: LICENSES/components/python/packaging-26.3.LICENSE.txt, LICENSES/components/python/packaging-26.3.LICENSE.BSD.txt
-- passlib 1.7.4
-  Licence: BSD (source: metadata, installed environment)
-  https://passlib.readthedocs.io
-  requirements-cpu.txt, requirements-gpu.txt, requirements.txt
-  Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
-  Its own licence file: LICENSES/components/python/passlib-1.7.4.txt
 - pika 1.4.4
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://pika.readthedocs.io
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/pika-1.4.4.txt
 - pillow 12.3.0
-  Licence: MIT-CMU (source: metadata, installed environment)
+  Licence: MIT-CMU (source: metadata, PyPI)
   https://python-pillow.github.io
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT-CMU): LICENSES/MIT-CMU.txt
 - prometheus-client 0.26.0
-  Licence: Apache-2.0 AND BSD-2-Clause (source: metadata, installed environment)
+  Licence: Apache-2.0 AND BSD-2-Clause (source: metadata, PyPI)
   https://github.com/prometheus/client_python
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0 AND BSD-2-Clause): LICENSES/Apache-2.0.txt, LICENSES/BSD-2-Clause.txt
   NOTICE: NOTICES/python/prometheus-client-0.26.0.txt
 - prometheus-fastapi-instrumentator 8.1.0
-  Licence: ISC (source: metadata, installed environment)
+  Licence: ISC (source: metadata, PyPI)
   https://github.com/trallnag/prometheus-fastapi-instrumentator
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (ISC): LICENSES/ISC.txt
   Its own licence file: LICENSES/components/python/prometheus-fastapi-instrumentator-8.1.0.txt
 - protobuf 7.36.2
-  Licence: 3-Clause BSD License (source: metadata, installed environment)
+  Licence: 3-Clause BSD License (source: metadata, PyPI)
   https://developers.google.com/protocol-buffers/
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -2274,7 +2256,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/psutil-7.2.2.txt
 - psycopg2-binary 2.9.10
-  Licence: LGPL with exceptions (source: metadata, PyPI)
+  Licence: LGPL with exceptions (source: metadata, installed environment)
   https://psycopg.org/
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (LGPL-3.0-or-later): LICENSES/LGPL-3.0-or-later.txt
@@ -2286,7 +2268,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/py-rust-stemmers-0.1.8.txt
 - pyasn1 0.6.4
-  Licence: BSD-2-Clause (source: metadata, installed environment)
+  Licence: BSD-2-Clause (source: metadata, PyPI)
   https://github.com/pyasn1/pyasn1
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-2-Clause): LICENSES/BSD-2-Clause.txt
@@ -2298,31 +2280,31 @@ The last line of each entry names the requirements files that install it.
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/pycparser-3.0.txt
 - pydantic 2.13.5
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/pydantic/pydantic
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/pydantic-2.13.5.txt
 - pydantic-core 2.46.5
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/pydantic
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/pydantic-core-2.46.5.txt
 - pydantic-settings 2.15.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/pydantic/pydantic-settings
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/pydantic-settings-2.15.0.txt
 - pygments 2.21.0
-  Licence: BSD-2-Clause (source: metadata, installed environment)
+  Licence: BSD-2-Clause (source: metadata, PyPI)
   https://pygments.org
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-2-Clause): LICENSES/BSD-2-Clause.txt
   Its own licence file: LICENSES/components/python/pygments-2.21.0.AUTHORS.txt, LICENSES/components/python/pygments-2.21.0.LICENSE.txt
 - python-dotenv 1.2.4
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/theskumar/python-dotenv
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
@@ -2334,7 +2316,7 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/python-jose-3.5.0.txt
 - python-multipart 0.0.32
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/Kludex/python-multipart
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -2345,18 +2327,18 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/pyyaml-6.0.3.txt
 - redis 8.1.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/redis/redis-py
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/redis-8.1.0.txt
 - regex 2026.9.29
-  Licence: Apache-2.0 AND CNRI-Python (source: metadata, installed environment)
+  Licence: Apache-2.0 AND CNRI-Python (source: metadata, PyPI)
   https://github.com/mrabarnett/mrab-regex
   requirements-gpu.txt
   Licence text (Apache-2.0 AND CNRI-Python): LICENSES/Apache-2.0.txt, LICENSES/CNRI-Python.txt
 - requests 2.34.2
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/psf/requests
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -2373,17 +2355,17 @@ The last line of each entry names the requirements files that install it.
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - safetensors 0.8.0
-  Licence: Apache Software License (source: metadata, installed environment)
+  Licence: Apache Software License (source: metadata, PyPI)
   https://github.com/huggingface/safetensors
   requirements-gpu.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - sentencepiece 0.2.2
-  Licence: Apache-2.0 (source: metadata, installed environment)
+  Licence: Apache-2.0 (source: metadata, PyPI)
   https://github.com/google/sentencepiece
   requirements-gpu.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
 - setuptools 84.0.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/pypa/setuptools
   requirements-gpu.txt
   Licence text (MIT): LICENSES/MIT.txt
@@ -2402,13 +2384,13 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/sqlalchemy-2.1.4.AUTHORS.txt, LICENSES/components/python/sqlalchemy-2.1.4.LICENSE.txt
 - starlette 1.7.0
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/Kludex/starlette
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/starlette-1.7.0.txt
 - structlog 26.1.0
-  Licence: MIT OR Apache-2.0 (source: metadata, installed environment)
+  Licence: MIT OR Apache-2.0 (source: metadata, PyPI)
   https://github.com/hynek/structlog
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT OR Apache-2.0): LICENSES/MIT.txt, LICENSES/Apache-2.0.txt
@@ -2432,13 +2414,13 @@ The last line of each entry names the requirements files that install it.
   Licence text (Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT): LICENSES/Apache-2.0.txt, LICENSES/BSD-2-Clause.txt, LICENSES/BSD-3-Clause.txt, LICENSES/BSL-1.0.txt, LICENSES/MIT.txt, LICENSES/LLVM-exception.txt
   Its own licence file: LICENSES/components/python/torch-2.14.1.LICENSE.txt, LICENSES/components/python/torch-2.14.1.packaging.LICENSE.txt, LICENSES/components/python/torch-2.14.1.LICENSE.BSD.txt, LICENSES/components/python/torch-2.14.1.FP16.LICENSE.txt, LICENSES/components/python/torch-2.14.1.FXdiv.LICENSE.txt, LICENSES/components/python/torch-2.14.1.NNPACK.LICENSE.txt, LICENSES/components/python/torch-2.14.1.LICENSE.txt, LICENSES/components/python/torch-2.14.1.XNNPACK.LICENSE.txt, LICENSES/components/python/torch-2.14.1.aiter.LICENSE.txt, LICENSES/components/python/torch-2.14.1.composable_kernel.LICENSE.txt, LICENSES/components/python/torch-2.14.1.cpp-httplib.LICENSE.txt, LICENSES/components/python/torch-2.14.1.cpuinfo.LICENSE.txt, LICENSES/components/python/torch-2.14.1.cudnn_frontend.LICENSE.txt, LICENSES/components/python/torch-2.14.1.cutlass.LICENSE.txt, LICENSES/components/python/torch-2.14.1.fbgemm.LICENSE.txt, LICENSES/components/python/torch-2.14.1.flash-attention.LICENSE.txt, LICENSES/components/python/torch-2.14.1.fmt.LICENSE.txt, LICENSES/components/python/torch-2.14.1.gloo.LICENSE.txt, LICENSES/components/python/torch-2.14.1.googletest.LICENSE.txt, LICENSES/components/python/torch-2.14.1.ideep.LICENSE.txt, LICENSES/components/python/torch-2.14.1.kineto.LICENSE.txt, LICENSES/components/python/torch-2.14.1.llvm-openmp.LICENSE.txt, LICENSES/components/python/torch-2.14.1.mimalloc.LICENSE.txt, LICENSES/components/python/torch-2.14.1.miniz-3.0.2.LICENSE.txt, LICENSES/components/python/torch-2.14.1.mslk.LICENSE.txt, LICENSES/components/python/torch-2.14.1.perfetto.LICENSE.txt, LICENSES/components/python/torch-2.14.1.protobuf.LICENSE.txt, LICENSES/components/python/torch-2.14.1.psimd.LICENSE.txt, LICENSES/components/python/torch-2.14.1.pthreadpool.LICENSE.txt, LICENSES/components/python/torch-2.14.1.pybind11.LICENSE.txt, LICENSES/components/python/torch-2.14.1.LICENSE.rst.txt, LICENSES/components/python/torch-2.14.1.sleef.LICENSE.txt, LICENSES/components/python/torch-2.14.1.tensorpipe.LICENSE.txt, LICENSES/components/python/torch-2.14.1.rust.LICENSE.txt, LICENSES/components/python/torch-2.14.1.python.LICENSE.txt, LICENSES/components/python/torch-2.14.1.dart.LICENSE.txt, LICENSES/components/python/torch-2.14.1.mkl-dnn.LICENSE.txt, LICENSES/components/python/torch-2.14.1.clog.LICENSE.txt, LICENSES/components/python/torch-2.14.1.cutlass.LICENSE.txt, LICENSES/components/python/torch-2.14.1.hipify_torch.LICENSE.txt, LICENSES/components/python/torch-2.14.1.utf8_range.LICENSE.txt, LICENSES/components/python/torch-2.14.1.libnop.LICENSE.txt, LICENSES/components/python/torch-2.14.1.libuv.LICENSE.txt, LICENSES/components/python/torch-2.14.1.pybind11.LICENSE.txt, LICENSES/components/python/torch-2.14.1.python.LICENSE.txt, LICENSES/components/python/torch-2.14.1.dynolog_headers.LICENSE.txt, LICENSES/components/python/torch-2.14.1.fmt.LICENSE.txt, LICENSES/components/python/torch-2.14.1.mx.LICENSE.txt
 - tqdm 4.70.1
-  Licence: MPL-2.0 AND MIT (source: metadata, installed environment)
+  Licence: MPL-2.0 AND MIT (source: metadata, PyPI)
   https://tqdm.github.io
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MPL-2.0 AND MIT): LICENSES/MPL-2.0.txt, LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/tqdm-4.70.1.txt
 - transformers 4.57.6
-  Licence: Apache 2.0 License (source: metadata, installed environment)
+  Licence: Apache 2.0 License (source: metadata, PyPI)
   https://github.com/huggingface/transformers
   requirements-gpu.txt
   Licence text (Apache-2.0): LICENSES/Apache-2.0.txt
@@ -2449,37 +2431,37 @@ The last line of each entry names the requirements files that install it.
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/triton-3.8.0.txt
 - typing-extensions 4.16.0
-  Licence: PSF-2.0 (source: metadata, installed environment)
+  Licence: PSF-2.0 (source: metadata, PyPI)
   https://github.com/python/typing_extensions
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (PSF-2.0): LICENSES/PSF-2.0.txt
   Its own licence file: LICENSES/components/python/typing-extensions-4.16.0.txt
 - typing-inspection 0.4.4
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://github.com/pydantic/typing-inspection
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/typing-inspection-0.4.4.txt
 - urllib3 2.8.0
-  Licence: MIT (source: metadata, installed environment)
+  Licence: MIT (source: metadata, PyPI)
   https://urllib3.readthedocs.io
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (MIT): LICENSES/MIT.txt
   Its own licence file: LICENSES/components/python/urllib3-2.8.0.txt
 - uvicorn 0.54.0
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://uvicorn.dev/
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/uvicorn-0.54.0.txt
 - websockets 17.2
-  Licence: BSD-3-Clause (source: metadata, installed environment)
+  Licence: BSD-3-Clause (source: metadata, PyPI)
   https://github.com/python-websockets/websockets
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-3-Clause): LICENSES/BSD-3-Clause.txt
   Its own licence file: LICENSES/components/python/websockets-17.2.txt
 - wrapt 2.5.0
-  Licence: BSD-2-Clause (source: metadata, installed environment)
+  Licence: BSD-2-Clause (source: metadata, PyPI)
   https://github.com/GrahamDumpleton/wrapt
   requirements-cpu.txt, requirements-gpu.txt, requirements.txt
   Licence text (BSD-2-Clause): LICENSES/BSD-2-Clause.txt
@@ -2545,27 +2527,22 @@ package-lock.json.
   Licence: MIT (source: package.json, through package-lock.json)
   https://www.npmjs.com/package/@mantine/charts
   Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/web/mantine+charts-8.3.12.txt
 - @mantine/core 8.3.12
   Licence: MIT (source: package.json, through package-lock.json)
   https://www.npmjs.com/package/@mantine/core
   Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/web/mantine+core-8.3.12.txt
 - @mantine/hooks 8.3.12
   Licence: MIT (source: package.json, through package-lock.json)
   https://www.npmjs.com/package/@mantine/hooks
   Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/web/mantine+hooks-8.3.12.txt
 - @mantine/modals 8.3.12
   Licence: MIT (source: package.json, through package-lock.json)
   https://www.npmjs.com/package/@mantine/modals
   Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/web/mantine+modals-8.3.12.txt
 - @next/env 16.1.1
   Licence: MIT (source: package.json, through package-lock.json)
   https://www.npmjs.com/package/@next/env
   Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/web/next+env-16.1.1.txt
 - @next/swc-linux-x64-musl 16.1.1
   Licence: MIT (source: package.json, through package-lock.json)
   https://www.npmjs.com/package/@next/swc-linux-x64-musl
@@ -3231,7 +3208,6 @@ package-lock.json.
   Licence: MIT (source: package.json, through package-lock.json)
   https://www.npmjs.com/package/react-remove-scroll-bar
   Licence text (MIT): LICENSES/MIT.txt
-  Its own licence file: LICENSES/components/web/react-remove-scroll-bar-2.3.8.txt
 - react-smooth 4.0.4
   Licence: MIT (source: package.json, through package-lock.json)
   https://www.npmjs.com/package/react-smooth

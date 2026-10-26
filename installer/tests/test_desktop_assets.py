@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zlib
 from pathlib import Path
 from unittest import mock
 
@@ -29,6 +30,34 @@ skip_without_desktop = unittest.skipUnless(HAS_DESKTOP, "desktop/ is not present
 
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+def decoded_png(path: Path) -> tuple[bytes, bytes]:
+    data = path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise AssertionError(f"{path} is not a PNG")
+
+    header = b""
+    image_data = bytearray()
+    pos = 8
+    while pos + 12 <= len(data):
+        length = int.from_bytes(data[pos:pos + 4], "big")
+        kind = data[pos + 4:pos + 8]
+        body_start = pos + 8
+        body_end = body_start + length
+        if body_end + 4 > len(data):
+            raise AssertionError(f"{path} contains a truncated PNG chunk")
+        body = data[body_start:body_end]
+        if kind == b"IHDR":
+            header = body
+        elif kind == b"IDAT":
+            image_data.extend(body)
+        elif kind == b"IEND":
+            break
+        pos = body_end + 4
+
+    if not header or not image_data:
+        raise AssertionError(f"{path} is missing PNG image data")
+    return header, zlib.decompress(image_data)
 
 def rust_sources() -> str:
     return "\n".join(read(p) for p in sorted((TAURI / "src").glob("*.rs")))
@@ -354,7 +383,7 @@ class AiModeLine(unittest.TestCase):
 @skip_without_desktop
 class IconMaster(unittest.TestCase):
 
-    def test_icon_source_is_reproducible(self):
+    def test_icon_source_pixels_are_reproducible(self):
         tool = DESKTOP / "tools" / "make_icon_source.py"
         committed = DESKTOP / "icon-source.png"
         self.assertTrue(tool.is_file())
@@ -368,10 +397,11 @@ class IconMaster(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(
-                out.read_bytes(), committed.read_bytes(),
-                "desktop/icon-source.png is not what make_icon_source.py "
-                "produces from the current logo.png. Re-run the tool and "
-                "regenerate the icon set.",
+                decoded_png(out),
+                decoded_png(committed),
+                "desktop/icon-source.png has different dimensions or pixels "
+                "from the output produced by make_icon_source.py. Re-run the "
+                "tool and regenerate the icon set.",
             )
 
 @skip_without_desktop

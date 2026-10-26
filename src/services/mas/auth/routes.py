@@ -14,7 +14,6 @@ from starlette import status
 
 from auth.auth_tool_functions import (
     authenticate_user,
-    bcrypt_context,
     create_access_token,
     get_current_user,
 )
@@ -25,6 +24,7 @@ from auth.openapi_docs import (
     TOKEN_OPENAPI_EXTRA,
     TOKEN_RESPONSES,
 )
+from auth.passwords import hash_credential
 from db.dependency import db_dependency
 from db.models import Users
 from db.redis_client import redis_db
@@ -48,7 +48,7 @@ async def create_user(db: db_dependency, create_user_request: CreateUserRequest)
     """Create a user with a bcrypt-hashed password. 409 if username exists."""
     create_user_model = Users(
         username=create_user_request.username,
-        hashed_password=bcrypt_context.hash(create_user_request.password),
+        hashed_password=hash_credential(create_user_request.password),
     )
     db.add(create_user_model)
     try:

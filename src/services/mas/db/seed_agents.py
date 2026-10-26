@@ -11,13 +11,14 @@ The seed is idempotent: rows are matched by ``name``; existing entries are
 left untouched so re-running ``init_db()`` is safe.
 """
 
+import hashlib
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from bcrypt import gensalt, hashpw
 from sqlalchemy.orm import Session
 
-from auth.auth_tool_functions import bcrypt_context
 from core.logger import get_logger, log_db_operation, log_success
 from db.models import Agents
 from db.models.agent_types import AgentTypes
@@ -106,6 +107,8 @@ def seed_default_agents(db: Session) -> int:
         # waiting for its real worker to register and override it.
         is_manager = entry["type"] == AgentTypes.MANAGER
         try:
+            password_sha = hashlib.sha256(secrets.token_urlsafe(32).encode('utf-8')).hexdigest()
+            salt = gensalt()
             agent = Agents(
                 id=str(uuid.uuid4()),
                 name=entry["name"],
@@ -117,7 +120,7 @@ def seed_default_agents(db: Session) -> int:
                 # Unguessable hash so the seeded row can't authenticate; a
                 # registering worker will replace this entry via the existing
                 # stale-cleanup path in the agent's register_agent() loop.
-                api_key=bcrypt_context.hash(secrets.token_urlsafe(32)),
+                api_key=hashpw(password_sha.encode('utf-8'), salt),
             )
             db.add(agent)
             inserted += 1
@@ -167,6 +170,8 @@ def seed_manager_agent(db: Session) -> int:
     if db.query(Agents.id).filter(Agents.name == manager_entry["name"]).first():
         return 0
     try:
+        password_sha = hashlib.sha256(secrets.token_urlsafe(32).encode('utf-8')).hexdigest()
+        salt = gensalt()
         db.add(
             Agents(
                 id=str(uuid.uuid4()),
@@ -176,7 +181,7 @@ def seed_manager_agent(db: Session) -> int:
                 description=manager_entry["description"],
                 last_heartbeat=datetime.now(UTC),
                 type=manager_entry["type"],
-                api_key=bcrypt_context.hash(secrets.token_urlsafe(32)),
+                api_key=hashpw(password_sha.encode('utf-8'), salt),
             )
         )
         db.commit()

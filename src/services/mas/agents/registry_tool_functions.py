@@ -10,11 +10,11 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Optional
 
-from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
+from auth.passwords import hash_credential
 from core.logger import get_logger
 from core.rabbitmq_tool import rabbitmq_instance
 from core.work_queues import work_queue_name_for_agent_type
@@ -40,8 +40,6 @@ def _skill_cache_evict(agent_id: str) -> None:
         logger.exception("Skill cache evict failed for agent %s", agent_id)
 
 logger = get_logger("registry_tool_functions")
-
-bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 MANAGER_AGENT_NAME = "Manager"
 
@@ -162,7 +160,7 @@ async def create_agent(
     """
     agent_id = str(uuid.uuid4())
     api_key = secrets.token_urlsafe(32)
-    hash_api_key = bcrypt_context.hash(api_key)
+    hash_api_key = hash_credential(api_key)
     try:
         existing_agent = get_agent_by_name(name, db)
         if existing_agent is not None:
@@ -215,7 +213,7 @@ def regenerate_agent_api_key(agent_id: str, db: Session) -> str | None:
             return None
 
         api_key = secrets.token_urlsafe(32)
-        agent.api_key = bcrypt_context.hash(api_key)
+        agent.api_key = hash_credential(api_key)
         db.commit()
         # Drop any cached verifications of the OLD key so it stops working
         # immediately (otherwise the positive-cache TTL would keep honouring it).

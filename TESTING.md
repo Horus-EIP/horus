@@ -173,7 +173,7 @@ bash src/infra/init-env.sh   # creates src/infra/.env only when missing, with a 
 pytest -c tests/mas/pytest.ini tests/mas -m "not requires_stack"
 pytest -c tests/agent/pytest.ini tests/agent
 pytest -c tests/knowledge_store/pytest.ini tests/knowledge_store
-./scripts/test/run-all.sh                  # all three; installs bcrypt<4.0 first
+./scripts/test/run-all.sh                  # all three; installs bcrypt 5.0.0 first
 
 # Regression tests (MAS)
 pytest -c tests/mas/pytest.ini tests/mas -m regression

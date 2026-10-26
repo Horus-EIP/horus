@@ -271,14 +271,19 @@ curl -X POST http://localhost:8000/users \
 **Python** (Direct database):
 
 ```python
+import hashlib
+import bcrypt
+
 from db.models import Users
-from auth.auth_tool_functions import bcrypt_context
 from sqlalchemy.orm import Session
+
+def _bcrypt_input(password: str) -> bytes:
+    return hashlib.sha256(password.encode("utf-8")).hexdigest().encode("ascii")
 
 def create_user(db: Session, username: str, password: str, role: str = "user"):
     user = Users(
         username=username,
-        hashed_password=bcrypt_context.hash(password),
+        hashed_password=bcrypt.hashpw(_bcrypt_input(password), bcrypt.gensalt()),
         role=role
     )
     db.add(user)
@@ -585,9 +590,15 @@ This document provides a security assessment of the Horus Multi-Agent System, co
 
 #### 1.2 Strengths
 
-1. **Password Hashing:** Using bcrypt with appropriate cost factor
+1. **Password Hashing:** SHA-256-prehashing passwords before bcrypt, then verifying with bcrypt. Existing raw-password bcrypt hashes are also verified; after a successful login they are replaced with the current pre-hashed format. Agent API keys follow the same migration on their first successful check.
    ```python
-   pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+   import bcrypt
+   import hashlib
+
+   bcrypt.checkpw(
+       hashlib.sha256(password.encode("utf-8")).hexdigest().encode("ascii"),
+       stored_hash,
+   )
    ```
 
 2. **JWT Tokens:** Industry-standard token format
@@ -679,7 +690,7 @@ See the [Role-Permission Matrix](#role-permission-matrix) above for the complete
 |-----------|---------|------------|
 | Passwords | PostgreSQL | bcrypt hashed |
 | JWT Tokens | Client-side | Signed, expiring |
-| API Keys | PostgreSQL | Plain text (recommend hashing) |
+| API Keys | PostgreSQL | bcrypt hashed; legacy hashes are upgraded after a successful check |
 | User Data | PostgreSQL | No encryption |
 | Documents | ChromaDB | No encryption |
 
@@ -688,7 +699,7 @@ See the [Role-Permission Matrix](#role-permission-matrix) above for the complete
 | Priority | Recommendation | Status |
 |----------|----------------|--------|
 | Critical | Enable HTTPS/TLS | Pending |
-| High | Hash agent API keys | Pending |
+| High | Hash agent API keys | Done |
 | Medium | Encrypt sensitive fields | Future |
 | Medium | Implement data retention policy | Future |
 

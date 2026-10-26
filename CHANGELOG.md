@@ -54,6 +54,10 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - A database migration adds `ai_provider` to `messages` and `task_results`; older answers keep `null` (B-75, `3853b6f`).
 - Nothing changes in local mode: `HORUS_AI_MODE` defaults to `local` and the stack starts as before. The new settings are unset or on by default (`MAS_EMBED_URL`, `KNOWLEDGE_STORE_EMBED_URL`, `HORUS_SPACY=on`, and `HORUS_MONITORING`, which is on in local mode), so FastEmbed and spaCy load and monitoring runs as before. `--ai mock` switches an install to mock AI mode; a prebuilt install then needs the `horus-llm-mock` image, which the release workflow builds from 0.2.0 on. A switch either way re-embeds the stored documents, and the installer waits for it.
 
+### Changed
+
+- MAS password and agent API-key hashing use `bcrypt` directly instead of Passlib; inputs are SHA-256-prehashed before bcrypt so long credentials fit bcrypt's 72-byte input limit (B-68, bde3f07). Existing raw-password bcrypt hashes are accepted and transparently re-hashed after a successful login or agent-key check. The MAS and agent locks and generated licence notices are refreshed.
+
 ### Fixed
 
 - `POST /tasks/abandoned-claims` now fails tasks from an earlier run only when the authenticated agent may run the assigned agent's work; cleanup for unregistered agents remains unchanged. Queue statistics and `GET /analytics/overview` now count only tasks visible to the caller, while managers and admins retain global counts (B-114; cc7bae1).
