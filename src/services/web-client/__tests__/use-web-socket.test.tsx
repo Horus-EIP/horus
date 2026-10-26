@@ -1,5 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { renderHook, waitFor, act } from "@testing-library/react";
 import { useWebSocket } from "@/hooks/use-web-socket";
 import { useTaskResync, type TaskResync } from "@/hooks/use-task-resync";
 import {
@@ -160,6 +160,91 @@ describe("useWebSocket", () => {
 
     await waitFor(() => expect(result.current.status).toBe("connected"));
     expect(MockWebSocket.instances).toHaveLength(3);
+  });
+
+  it("sets error on socket error and clears it on url change", async () => {
+    const { result, rerender } = renderHook(
+      ({ url }) =>
+        useWebSocket({
+          url,
+          autoReconnect: false,
+        }),
+      { initialProps: { url: "ws://example.com/a" as string | null } }
+    );
+
+    await waitFor(() => expect(result.current.status).toBe("connected"));
+
+    act(() => {
+      latestSocket()?.onerror?.();
+    });
+
+    expect(result.current.status).toBe("error");
+    expect(result.current.error).toBe("Connection error. The assistant may not respond.");
+
+    rerender({ url: "ws://example.com/b" });
+
+    expect(result.current.error).toBeNull();
+    await waitFor(() => expect(result.current.status).toBe("connected"));
+  });
+
+  it("transitions to disconnected when url becomes null", async () => {
+    const { result, rerender } = renderHook(
+      ({ url }) =>
+        useWebSocket({
+          url,
+          autoReconnect: false,
+        }),
+      { initialProps: { url: "ws://example.com/a" as string | null } }
+    );
+
+    await waitFor(() => expect(result.current.status).toBe("connected"));
+
+    act(() => {
+      latestSocket()?.onerror?.();
+    });
+
+    expect(result.current.status).toBe("error");
+    expect(result.current.error).not.toBeNull();
+
+    rerender({ url: null });
+
+    expect(result.current.status).toBe("disconnected");
+  });
+
+  it("disconnect() transitions status to disconnected", async () => {
+    const { result } = renderHook(() =>
+      useWebSocket({
+        url: "ws://example.com",
+        autoReconnect: false,
+      })
+    );
+
+    await waitFor(() => expect(result.current.status).toBe("connected"));
+
+    act(() => {
+      result.current.disconnect();
+    });
+
+    expect(result.current.status).toBe("disconnected");
+  });
+
+  it("reconnects and resets connection when options change", async () => {
+    const { rerender } = renderHook(
+      ({ maxRetries }) =>
+        useWebSocket({
+          url: "ws://example.com",
+          maxRetries,
+        }),
+      { initialProps: { maxRetries: 3 } }
+    );
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    const firstSocket = MockWebSocket.instances[0];
+
+    rerender({ maxRetries: 5 });
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(2));
+    expect(firstSocket.readyState).toBe(3);
   });
 });
 

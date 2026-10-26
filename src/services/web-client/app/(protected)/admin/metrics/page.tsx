@@ -87,12 +87,23 @@ function MetricPanel({
   onError,
 }: PanelProps) {
   const [series, setSeries] = useState<MetricSeries[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [emptyReason, setEmptyReason] = useState<string | null>(null);
+
+  const queryFingerprint = `${query}:${since}:${nameLabel ?? ""}:${refreshKey}`;
+  const [prevFingerprint, setPrevFingerprint] = useState(queryFingerprint);
+  const [querySeq, setQuerySeq] = useState(0);
+
+  if (prevFingerprint !== queryFingerprint) {
+    setPrevFingerprint(queryFingerprint);
+    setQuerySeq((s) => s + 1);
+  }
+
+  const currentKey = `${queryFingerprint}:${querySeq}`;
+  const loading = loadedKey !== currentKey;
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     metricsApi.query({ query, since, nameLabel }).then((res) => {
       if (cancelled) return;
       if (!res.ok) {
@@ -103,12 +114,12 @@ function MetricPanel({
         setSeries(res.series);
         setEmptyReason(res.series.length ? null : "No data in this range.");
       }
-      setLoading(false);
+      setLoadedKey(currentKey);
     });
     return () => {
       cancelled = true;
     };
-  }, [query, nameLabel, since, refreshKey, title, onError]);
+  }, [query, nameLabel, since, refreshKey, currentKey, title, onError]);
 
   const { data, names } = toWideData(series, timeFormatter(since));
   const chartSeries = names.map((name, i) => ({
@@ -298,4 +309,5 @@ const GatedAdminMetricsPage = () => (
   </MonitoringGate>
 );
 
+export { AdminMetricsPage };
 export default GatedAdminMetricsPage;

@@ -60,47 +60,73 @@ const AdminLogsPage = () => {
   const [since, setSince] = useState("1h");
   const [limit, setLimit] = useState("300");
   const [entries, setEntries] = useState<LogEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Read search lazily so auto-refresh/Enter use the latest value without
-  // re-creating loadLogs (which would restart the interval) on each keystroke.
+  // re-triggering effects on each keystroke.
   const searchRef = useRef(search);
-  searchRef.current = search;
+  useEffect(() => {
+    searchRef.current = search;
+  }, [search]);
 
-  const loadServices = useCallback(async () => {
-    setServices(await logsApi.listServices());
+  const currentQueryKey = `${service}|${since}|${limit}|${refreshTrigger}`;
+  const [completedQueryKey, setCompletedQueryKey] = useState<string | null>(null);
+
+  const isLoading = currentQueryKey !== completedQueryKey;
+
+  const handleRefresh = useCallback(() => {
+    setRefreshTrigger((prev) => prev + 1);
   }, []);
 
-  const loadLogs = useCallback(async () => {
-    setIsLoading(true);
-    const res = await logsApi.query({
-      service: service === "all" ? undefined : service,
-      search: searchRef.current.trim() || undefined,
-      since,
-      limit: Number(limit),
+  useEffect(() => {
+    let ignore = false;
+    void logsApi.listServices().then((list) => {
+      if (!ignore) setServices(list);
     });
-    if (!res.ok) {
-      notifyError(res.error || "Failed to load logs.");
-    } else {
-      setEntries(res.entries);
-    }
-    setIsLoading(false);
-  }, [service, since, limit, notifyError]);
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   useEffect(() => {
-    void loadServices();
-  }, [loadServices]);
-
-  useEffect(() => {
-    void loadLogs();
-  }, [loadLogs]);
+    const queryKey = `${service}|${since}|${limit}|${refreshTrigger}`;
+    let ignore = false;
+    logsApi
+      .query({
+        service: service === "all" ? undefined : service,
+        search: searchRef.current.trim() || undefined,
+        since,
+        limit: Number(limit),
+      })
+      .then((res) => {
+        if (ignore) return;
+        if (!res.ok) {
+          notifyError(res.error || "Failed to load logs.");
+        } else {
+          setEntries(res.entries);
+        }
+      })
+      .catch((err) => {
+        if (ignore) return;
+        notifyError(err?.message || "Failed to load logs.");
+      })
+      .finally(() => {
+        if (ignore) return;
+        setCompletedQueryKey(queryKey);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [service, since, limit, refreshTrigger, notifyError]);
 
   useEffect(() => {
     if (!autoRefresh) return;
-    const id = setInterval(() => void loadLogs(), 5000);
+    const id = setInterval(() => {
+      setRefreshTrigger((prev) => prev + 1);
+    }, 5000);
     return () => clearInterval(id);
-  }, [autoRefresh, loadLogs]);
+  }, [autoRefresh]);
 
   const serviceOptions = [
     { value: "all", label: "All services" },
@@ -152,9 +178,13 @@ const AdminLogsPage = () => {
           <label className="text-xs font-medium text-[var(--textSoft)]">Search</label>
           <TextInput
             value={search}
-            onChange={(e) => setSearch(e.currentTarget.value)}
+            onChange={(e) => {
+              const val = e.currentTarget.value;
+              searchRef.current = val;
+              setSearch(val);
+            }}
             onKeyDown={(e) => {
-              if (e.key === "Enter") void loadLogs();
+              if (e.key === "Enter") handleRefresh();
             }}
             placeholder="Filter lines (case-insensitive)…"
             leftSection={<IconSearch size={14} className="text-[var(--textSoft)]" />}
@@ -187,7 +217,7 @@ const AdminLogsPage = () => {
         </div>
 
         <button
-          onClick={() => void loadLogs()}
+          onClick={handleRefresh}
           disabled={isLoading}
           className="rounded-xl bg-blue-600 px-3 py-2 text-sm text-white shadow hover:bg-blue-700 cursor-pointer flex items-center gap-2 disabled:opacity-60"
         >
@@ -262,4 +292,5 @@ const GatedAdminLogsPage = () => (
   </MonitoringGate>
 );
 
+export { AdminLogsPage };
 export default GatedAdminLogsPage;

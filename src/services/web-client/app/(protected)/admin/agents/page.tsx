@@ -50,7 +50,7 @@ export default function AdminAgentsPage() {
       } else {
         notifyError(result.error || "Failed to load agents");
       }
-    } catch (e) {
+    } catch {
       notifyError("Failed to load agents");
     } finally {
       setIsLoading(false);
@@ -85,7 +85,7 @@ export default function AdminAgentsPage() {
     const role = getRole(a.skills ?? []);
     return [
       a.name,
-      <AgentTypeBadge role={role} />,
+      <AgentTypeBadge key={a.id || a.name} role={role} />,
       a.description || "-",
       a.status === 'active' ? 'Online' : 'Offline',
       formatDate(a.last_heartbeat),
@@ -123,7 +123,7 @@ export default function AdminAgentsPage() {
       } else {
         notifyError(result.error || "Failed to delete agent");
       }
-    } catch (e) {
+    } catch {
       notifyError("Failed to delete agent");
     } finally {
       setIsDeleting(false);
@@ -156,7 +156,7 @@ export default function AdminAgentsPage() {
       } else {
         notifyError(result.error || "Failed to register agent");
       }
-    } catch (e) {
+    } catch {
       notifyError("Failed to register agent");
     } finally {
       setIsRegistering(false);
@@ -196,7 +196,7 @@ export default function AdminAgentsPage() {
       } else {
         notifyError(result.error || "Failed to regenerate API key");
       }
-    } catch (e) {
+    } catch {
       notifyError("Failed to regenerate API key");
     } finally {
       setIsRegenerating(false);
@@ -244,7 +244,7 @@ export default function AdminAgentsPage() {
         <div className="flex flex-col gap-4">
           <Text size="md" className="text-[var(--textSoft)]">
             Are you sure you want to <span className="text-red-500 underline">permanently</span> delete the agent{' '}
-            <span className="text-[var(--text)] font-bold">"{deletingAgent?.name}"</span>?
+            <span className="text-[var(--text)] font-bold">&quot;{deletingAgent?.name}&quot;</span>?
           </Text>
           <Text size="sm" className="text-[var(--textSoft)]">
             This action <span className="text-red-500 underline">cannot</span> be undone. The agent will no longer receive tasks.
@@ -291,7 +291,7 @@ export default function AdminAgentsPage() {
           <div className="flex flex-col gap-4">
             <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
               <Text size="sm" className="text-green-400 font-medium mb-2">
-                Agent registered successfully! Save the API key below - it won't be shown again.
+                Agent registered successfully! Save the API key below - it won&apos;t be shown again.
               </Text>
               <div className="bg-black/30 p-3 rounded-md">
                 <code className="text-xs text-[var(--text)] break-all">{registeredApiKey}</code>
@@ -388,7 +388,7 @@ export default function AdminAgentsPage() {
           <div className="flex flex-col gap-4">
             <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
               <Text size="sm" className="text-green-400 font-medium mb-2">
-                New API key for "{regeneratingAgent?.name}". Save it now - it won't be shown again.
+                New API key for &quot;{regeneratingAgent?.name}&quot;. Save it now - it won&apos;t be shown again.
               </Text>
               <div className="bg-black/30 p-3 rounded-md">
                 <code className="text-xs text-[var(--text)] break-all">{regeneratedApiKey}</code>
@@ -408,7 +408,7 @@ export default function AdminAgentsPage() {
           <div className="flex flex-col gap-4">
             <Text size="md" className="text-[var(--textSoft)]">
               Generate a new API key for{' '}
-              <span className="text-[var(--text)] font-bold">"{regeneratingAgent?.name}"</span>?
+              <span className="text-[var(--text)] font-bold">&quot;{regeneratingAgent?.name}&quot;</span>?
             </Text>
             <Text size="sm" className="text-[var(--textSoft)]">
               The current key will <span className="text-red-500 underline">stop working immediately</span>. The agent must be reconfigured with the new key to keep sending heartbeats.
