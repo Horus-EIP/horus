@@ -349,6 +349,11 @@ class ModelFilesStayOutOfTheBundle(unittest.TestCase):
                 self.assertTrue(build_bundle.pruned(Path(name)))
         self.assertFalse(build_bundle.pruned(Path("models/manifest.json")))
 
+    def test_local_tls_certificates_are_pruned(self):
+        for name in ("src/infra/certs/horus.crt", "src/infra/certs/horus.key"):
+            with self.subTest(name):
+                self.assertTrue(build_bundle.pruned(Path(name)))
+
 @needs_yaml
 class ComposeReleaseVersion(unittest.TestCase):
     def test_every_python_service_receives_the_release_version(self):

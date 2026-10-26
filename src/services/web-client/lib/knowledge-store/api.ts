@@ -64,10 +64,19 @@ function ksUrl(path: string): string {
   return `${base}${config.knowledgeStoreApiPrefix}${path}`;
 }
 
+function knowledgeStoreHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem("auth_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export const knowledgeStoreApi = {
   async listDocuments(): Promise<KSResponse<KnowledgeStoreDocument[]>> {
     try {
-      const res = await fetch(ksUrl("/file"), { method: "GET" });
+      const res = await fetch(ksUrl("/file"), {
+        method: "GET",
+        headers: knowledgeStoreHeaders(),
+      });
       if (!res.ok) {
         return { ok: false, error: `Knowledge store responded ${res.status}` };
       }
@@ -87,7 +96,10 @@ export const knowledgeStoreApi = {
     try {
       const res = await fetch(ksUrl("/smart-search"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...knowledgeStoreHeaders(),
+        },
         body: JSON.stringify(request),
       });
       if (res.status === 404) {
@@ -119,7 +131,10 @@ export const knowledgeStoreApi = {
 
   async getCategories(): Promise<KSResponse<KnowledgeStoreCategory[]>> {
     try {
-      const res = await fetch(ksUrl("/categories"), { method: "GET" });
+      const res = await fetch(ksUrl("/categories"), {
+        method: "GET",
+        headers: knowledgeStoreHeaders(),
+      });
       if (!res.ok) {
         return { ok: false, error: `Knowledge store responded ${res.status}` };
       }
@@ -172,6 +187,8 @@ export const knowledgeStoreApi = {
     return new Promise((resolve) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", targetUrl);
+      const token = typeof window === "undefined" ? null : localStorage.getItem("auth_token");
+      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
       // Don't set responseType to "json" — when the server returns a body
       // the browser can't parse for any reason (e.g. server error page,
       // unexpected content-type), xhr.response goes silently to null and the

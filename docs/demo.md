@@ -24,8 +24,8 @@ Everything for a 20-minute live demo: the script, copy-paste commands for the li
    this and the "90 seconds" in Step 1 will not survive contact with the stage.
 6. Open these browser tabs, in order:
    - Terminal (visible, large font)
-   - https://localhost:3000 (web client — not yet up)
-   - https://localhost:3000/admin/traces (in-app traces page — backed by Tempo; same login as the web client, admin role)
+   - http://localhost:3000 (web client — not yet up)
+   - http://localhost:3000/admin/traces (in-app traces page — backed by Tempo; same login as the web client, admin role)
 7. Open `copy-paste-cheatsheet.md` (same folder) on a second monitor / phone.
 8. Have the `demo_assets/` folder open in a file explorer, ready to drag documents.
 9. Have the backup pre-recorded video queued up, just in case.
@@ -59,7 +59,7 @@ docker compose ps
 
 > "Twelve services, one network, fully self-hosted. In 90 seconds, Alice has her private AI platform running on her own infrastructure."
 
-Open https://localhost:3000 — landing page appears.
+Open http://localhost:3000 — landing page appears.
 
 ---
 
@@ -200,13 +200,13 @@ Expected: multi-step reasoning, cites both documents, identifies approver (Sarah
 > "Running in production means knowing what's happening. Horus ships with full observability."
 
 **What you do:**
-1. As Alice (admin role, already logged in), open the **Metrics** page at https://localhost:3000/admin/metrics — no separate login.
+1. As Alice (admin role, already logged in), open the **Metrics** page at http://localhost:3000/admin/metrics — no separate login.
 2. Point out the panels (the in-app "MAS Overview"):
    - Task Queue Depth
    - Task Errors Rate
    - Active Agents
-3. Open the **Logs** page at https://localhost:3000/admin/logs — live tail across services, backed by Loki.
-4. Open the **Traces** page at https://localhost:3000/admin/traces — search for a trace, then show one distributed trace end-to-end in the span waterfall: Web Client → MAS → RabbitMQ → Agent → Response.
+3. Open the **Logs** page at http://localhost:3000/admin/logs — live tail across services, backed by Loki.
+4. Open the **Traces** page at http://localhost:3000/admin/traces — search for a trace, then show one distributed trace end-to-end in the span waterfall: Web Client → MAS → RabbitMQ → Agent → Response.
 
 > "Every request is traced. Any failure, we see it. Any slow agent, we see it — all inside the app, no second tool to log into."
 
@@ -264,7 +264,7 @@ docker compose up -d
 docker compose ps
 ```
 
-Open afterwards: https://localhost:3000
+Open afterwards: http://localhost:3000
 
 ---
 
@@ -375,10 +375,10 @@ Paste these one per task, all with skill `financial_analysis`:
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| Web client | https://localhost:3000 | alice.chen / FinCorp2026! |
-| Metrics (in-app) | https://localhost:3000/admin/metrics | alice.chen / FinCorp2026! (admin role) |
-| Logs (in-app) | https://localhost:3000/admin/logs | alice.chen / FinCorp2026! (admin role) |
-| Traces (in-app) | https://localhost:3000/admin/traces | alice.chen / FinCorp2026! (admin role) |
+| Web client | http://localhost:3000 | alice.chen / FinCorp2026! |
+| Metrics (in-app) | http://localhost:3000/admin/metrics | alice.chen / FinCorp2026! (admin role) |
+| Logs (in-app) | http://localhost:3000/admin/logs | alice.chen / FinCorp2026! (admin role) |
+| Traces (in-app) | http://localhost:3000/admin/traces | alice.chen / FinCorp2026! (admin role) |
 | RabbitMQ | http://localhost:15672 | guest / guest |
 
 > Prometheus, Loki, and Tempo run as internal-only backends inside the Docker network (not published to the host) — view them through the in-app admin pages above.

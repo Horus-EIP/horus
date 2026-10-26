@@ -88,12 +88,15 @@ bash init-env.sh
 
 `init-env.sh` writes a random `JWT_SECRET_KEY`, `REDIS_PASSWORD` and `SUPER_USER_PASSWORD`, the admin's password, which you read in `.env`; if you copy `.env.example` by hand instead, set all three (`openssl rand -hex 32`): with an empty password Valkey refuses the other containers, and MAS refuses to create the admin account with an empty password or `admin`. Review the other values in `.env`. Defaults are suitable for many local setups. Important keys include `POSTGRES_*`, `REDIS_PASSWORD`, `RABBITMQ_*`, `JWT_SECRET_KEY`, and `SUPER_USER_*`. Never commit `.env`; only `.env.example` is tracked.
 
-#### HTTPS and LAN access
+#### Local and LAN access
 
-The gateway serves Horus over HTTPS on port 3000. `init-env.sh` generates a
-self-signed certificate and key for `localhost`. When you enable LAN access,
-it detects this PC's LAN address, lets you confirm or enter it, and adds it to
-the certificate. To use your own certificate, put it at:
+The local gateway serves Horus over HTTP at `http://localhost:3000`, bound to
+loopback only. It needs no certificate, so browsers and the desktop app do not
+show self-signed-certificate warnings and upgrades work without Bash or
+OpenSSL.
+
+LAN access is disabled unless a trusted TLS certificate and matching key are
+installed at:
 
 ```text
 src/infra/certs/horus.crt
@@ -101,11 +104,8 @@ src/infra/certs/horus.key
 ```
 
 These files are local to each installation and are ignored by Git. Never commit
-the private key. The certificate must include every hostname or IP address
-used to open Horus, and each client device must trust the certificate. A
-self-signed certificate encrypts traffic but does not establish a trusted
-server identity until each device explicitly trusts it; browsers otherwise show
-a warning.
+the private key. The certificate must include the hostname or IP address used
+by clients, and must chain to a CA trusted by each client.
 
 For a trusted LAN certificate, install [mkcert](https://github.com/FiloSottile/mkcert)
 on the Horus host, then run from the repository root (replace the example IP
@@ -122,19 +122,16 @@ mkcert -cert-file src/infra/certs/horus.crt \
 For an iPhone to trust that LAN certificate, install the public `rootCA.pem`
 from `mkcert -CAROOT` on the phone, then enable full trust under
 **Settings → General → About → Certificate Trust Settings**. Do not copy or
-share `rootCA-key.pem`. On another deployment, use a certificate from its
-organization's CA or a public CA instead. In all cases, use a URL whose
-hostname/IP is in the certificate, for example `https://192.168.1.20:3000`.
+share `rootCA-key.pem`. For another deployment, use a certificate from its
+organization's CA or a public CA instead.
 
-By default the HTTPS gateway binds to `127.0.0.1`. When `bash init-env.sh`
-creates a new `.env` or is run again interactively, it asks whether other
-devices should be allowed to connect. Answer `y`, confirm this PC's detected
-LAN IP (or enter it), and the script sets `HORUS_WEB_BIND=0.0.0.0` and creates
-a certificate containing that IP. Press Enter to keep the current setting.
-Automated/quiet runs keep local-only access unless already configured otherwise.
-LAN access makes the gateway reachable to devices on the network; use it only
-on a trusted LAN and do not expose it to the public Internet. The client device
-must explicitly trust the generated self-signed certificate.
+By default, only the local HTTP gateway is reachable. `bash init-env.sh` can
+set `HORUS_WEB_BIND=0.0.0.0` for LAN use, but LAN HTTPS remains disabled until
+you set `HORUS_LAN_TLS=1` in `src/infra/.env` after installing the trusted
+certificate/key pair above. LAN clients connect at `https://<host-or-ip>:3443`.
+The gateway starts without the certificate, but does not listen for LAN HTTPS
+until both files are present and TLS is explicitly enabled. Use LAN access
+only on a trusted network; do not expose Horus to the public Internet.
 
 #### Step 3: Start the stack
 
@@ -187,12 +184,12 @@ docker compose exec redis sh -c 'VALKEYCLI_AUTH="$REDIS_PASSWORD" valkey-cli pin
 | RabbitMQ management | http://localhost:15672 | User/password from `RABBITMQ_USER` / `RABBITMQ_PASSWORD` |
 | PgAdmin | http://localhost:5433 | Only with `--profile dev-tools`. `PGADMIN_DEFAULT_EMAIL` / `PGADMIN_DEFAULT_PASSWORD` |
 | MAS API docs | http://localhost:8000/docs | When `mas` is running |
-| Web client | https://localhost:3000 | When the gateway and `web-client` are running |
-| Logs | https://localhost:3000/admin/logs | Admin-only (requires `admin` role); backed by Loki |
-| Metrics | https://localhost:3000/admin/metrics | Admin-only; backed by Prometheus (Task Queue Depth, Task Errors Rate, Active Agents) |
-| Traces | https://localhost:3000/admin/traces | Admin-only; backed by Tempo (trace search + span waterfall) |
+| Web client | http://localhost:3000 | When the gateway and `web-client` are running |
+| Logs | http://localhost:3000/admin/logs | Admin-only (requires `admin` role); backed by Loki |
+| Metrics | http://localhost:3000/admin/metrics | Admin-only; backed by Prometheus (Task Queue Depth, Task Errors Rate, Active Agents) |
+| Traces | http://localhost:3000/admin/traces | Admin-only; backed by Tempo (trace search + span waterfall) |
 
-**Prometheus** is not published on the host in the default Compose file. View metrics from the admin **Metrics** page (https://localhost:3000/admin/metrics) or see [Monitoring](operations.md#monitoring-and-observability).
+**Prometheus** is not published on the host in the default Compose file. View metrics from the admin **Metrics** page (http://localhost:3000/admin/metrics) or see [Monitoring](operations.md#monitoring-and-observability).
 
 There is **no** Metabase or PostgreSQL Exporter service in the default `docker-compose.yml`.
 
@@ -381,11 +378,11 @@ Configured mainly via Compose and code defaults (Chroma persistence volumes, tel
 
 **Variables** (all optional at build time; defaults are in `config.ts`):
 
-- `NEXT_PUBLIC_KNOWLEDGE_STORE_URL` — Knowledge Store base URL. The Compose build sets this empty so browser requests use the current HTTPS gateway origin.
+- `NEXT_PUBLIC_KNOWLEDGE_STORE_URL` — Knowledge Store base URL. The Compose build sets this empty so browser requests use the current gateway origin.
 - `NEXT_PUBLIC_KNOWLEDGE_STORE_API_PREFIX` — gateway path prefix; Compose defaults it to `/api/knowledge`.
 - `NEXT_PUBLIC_WS_URL` — optional WebSocket base URL. In the browser, the default derives `ws:` or `wss:` from the page origin and connects through `/ws`.
 
-These Compose overrides are for the deployed stack. Direct local service development may use service URLs and does not use the HTTPS gateway.
+These Compose overrides are for the deployed stack. Direct local service development may use service URLs and does not use the gateway.
 
 Optional Zod (or similar) validation at startup is not implemented in the repo; you can add it if you want strict parsing of `process.env`.
 
@@ -436,12 +433,12 @@ bash init-env.sh   # skips if .env already exists
 nano .env          # optional: tune values for local/production
 docker compose up --build -d
 
-## Services are now available on this machine only (every host port is bound to 127.0.0.1; HORUS_WEB_BIND=0.0.0.0 in .env opens 3000 to the network):
+## Services are now available on this machine only (the local gateway stays on 127.0.0.1; HORUS_WEB_BIND=0.0.0.0 plus HORUS_LAN_TLS=1 and a trusted cert enables LAN HTTPS on 3443):
 ## - PostgreSQL: 127.0.0.1:${DB_PORT:-5432}
 ## - Valkey (service redis): 127.0.0.1:${REDIS_PORT:-6379}
 ## - RabbitMQ: AMQP 127.0.0.1:${RABBITMQ_PORT:-5672}, UI http://localhost:15672
 ## - PgAdmin: only with docker compose --profile dev-tools up (port 5433)
-## - Web client: https://localhost:3000 (observability lives here: /admin/logs, /admin/metrics, /admin/traces — admin role required)
+## - Web client: http://localhost:3000 (observability lives here: /admin/logs, /admin/metrics, /admin/traces — admin role required)
 ## - Prometheus, Loki, Tempo: no host ports by default (internal-only backends); view logs/metrics/traces from the admin pages above or add a port mapping (see docs/operations.md)
 ```
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create .env from .env.example, configure optional LAN access, and generate passwords.
+# Create .env from .env.example and generate passwords.
 # If .env already exists, does nothing (exit 0) so wrapper scripts can call this safely.
 #
 # Usage: from this directory: ./init-env.sh   or: bash init-env.sh
@@ -8,7 +8,7 @@
 #   ./init-env.sh --quiet    suppress output and use safe local-only defaults
 #
 # --force exists for the beta installer, which needs to (re)generate a .env it then layers
-# hardware-profile settings on top of. Quiet/non-interactive runs keep local-only access.
+# hardware-profile settings on top of. Quiet/non-interactive runs keep LAN access disabled.
 #
 # One-shot stack: run ./stack-up.sh from the top of this folder (runs this, then docker compose up --build)
 
@@ -39,12 +39,16 @@ say() { [[ "$QUIET" -eq 1 ]] || echo "$@"; }
 
 set_key() {
   local key="$1" value="$2"
-  if command -v perl >/dev/null 2>&1; then
-    perl -i -pe "s/^${key}=.*/${key}=${value}/" "$TARGET"
-  elif [[ "$(uname -s)" == Darwin ]]; then
-    sed -i '' "s/^${key}=.*/${key}=${value}/" "$TARGET"
+  if grep -q "^${key}=" "$TARGET"; then
+    if command -v perl >/dev/null 2>&1; then
+      perl -i -pe "s/^${key}=.*/${key}=${value}/" "$TARGET"
+    elif [[ "$(uname -s)" == Darwin ]]; then
+      sed -i '' "s/^${key}=.*/${key}=${value}/" "$TARGET"
+    else
+      sed -i "s/^${key}=.*/${key}=${value}/" "$TARGET"
+    fi
   else
-    sed -i "s/^${key}=.*/${key}=${value}/" "$TARGET"
+    printf '%s=%s\n' "$key" "$value" >> "$TARGET"
   fi
   if ! grep -q "^${key}=${value}\$" "$TARGET"; then
     echo "Error: failed to write ${key} into $TARGET"
@@ -70,70 +74,6 @@ valid_lan_ipv4() {
   [[ "$address" != 0.0.0.0 && ! "$address" =~ ^127\. ]]
 }
 
-generate_local_certificate() {
-  local cert_dir="$DIR/certs"
-  local cert="$cert_dir/horus.crt"
-  local key="$cert_dir/horus.key"
-  local lan_ip="${1:-}"
-  local san="DNS:localhost,IP:127.0.0.1,IP:::1"
-
-  if ! command -v openssl >/dev/null 2>&1; then
-    echo "Error: openssl is required to generate the local HTTPS certificate." >&2
-    echo "Install OpenSSL, then run this script again." >&2
-    exit 1
-  fi
-
-  mkdir -p "$cert_dir"
-  if [[ -e "$cert" || -e "$key" ]]; then
-    local backup_stamp
-    backup_stamp="$(date +%Y%m%d-%H%M%S)"
-    if [[ -f "$cert" ]]; then cp "$cert" "$cert.$backup_stamp.bak"; fi
-    if [[ -f "$key" ]]; then cp "$key" "$key.$backup_stamp.bak"; fi
-    if [[ -f "$key.$backup_stamp.bak" ]]; then
-      chmod 600 "$key.$backup_stamp.bak" 2>/dev/null || true
-    fi
-    say "Backed up the previous certificate pair in $cert_dir."
-  fi
-  if [[ -n "$lan_ip" ]]; then
-    san="$san,IP:$lan_ip"
-  fi
-  if ! openssl req -x509 -newkey rsa:2048 -sha256 -days 365 -nodes \
-      -keyout "$key" -out "$cert" -subj "/CN=localhost" \
-      -addext "subjectAltName=$san"; then
-    rm -f "$key" "$cert"
-    echo "Error: could not generate the HTTPS certificate." >&2
-    exit 1
-  fi
-  chmod 600 "$key"
-  chmod 644 "$cert"
-  say "Generated a self-signed HTTPS certificate in $cert_dir."
-  if [[ -n "$lan_ip" ]]; then
-    say "The certificate covers localhost and this PC's LAN address ($lan_ip)."
-    say "On other devices, install and trust this certificate before connecting."
-  else
-    say "The certificate covers localhost only. Browsers may show a certificate trust warning."
-  fi
-}
-
-ensure_local_certificate() {
-  local cert="$DIR/certs/horus.crt"
-  local key="$DIR/certs/horus.key"
-  local lan_ip="${1:-}"
-
-  if [[ -f "$cert" && -f "$key" ]]; then
-    if [[ -z "$lan_ip" ]] || openssl x509 -in "$cert" -noout -ext subjectAltName 2>/dev/null \
-        | grep -Fq "IP Address:$lan_ip"; then
-      return
-    fi
-  elif [[ -e "$cert" || -e "$key" ]]; then
-    echo "Error: only one of $cert and $key exists; refusing to replace either file." >&2
-    echo "Restore the matching certificate/key pair or remove both files to generate a local certificate." >&2
-    exit 1
-  fi
-
-  generate_local_certificate "$lan_ip"
-}
-
 configure_network_access() {
   local current_bind="${1:-127.0.0.1}"
   local default_ip lan_ip answer response
@@ -157,8 +97,8 @@ configure_network_access() {
 
   if [[ "$answer" == "n" ]]; then
     set_key HORUS_WEB_BIND "127.0.0.1"
-    ensure_local_certificate
-    say "LAN access disabled; Horus is available on this machine only."
+    set_key HORUS_LAN_TLS "0"
+    say "LAN access disabled; the local web client is available at http://localhost:3000."
     return
   fi
 
@@ -180,8 +120,12 @@ configure_network_access() {
   fi
 
   set_key HORUS_WEB_BIND "0.0.0.0"
-  ensure_local_certificate "$lan_ip"
-  say "LAN access enabled. Other devices can use https://$lan_ip:3000."
+  if ! grep -q '^HORUS_LAN_TLS=' "$TARGET"; then
+    set_key HORUS_LAN_TLS "0"
+  fi
+  say "Local access is available at http://localhost:3000."
+  say "LAN HTTPS stays disabled until a trusted certificate and matching key are installed in src/infra/certs/."
+  say "Then set HORUS_LAN_TLS=1 in src/infra/.env and use https://$lan_ip:3443."
 }
 
 if [[ ! -f "$EXAMPLE" ]]; then
@@ -193,19 +137,6 @@ if [[ -f "$TARGET" ]]; then
   if [[ "$FORCE" -eq 0 ]]; then
     current_bind="$(sed -n 's/^HORUS_WEB_BIND=//p' "$TARGET" | tail -n 1)"
     configure_network_access "${current_bind:-127.0.0.1}"
-    if [[ ! -t 0 || "$QUIET" -eq 1 ]]; then
-      if [[ "$current_bind" == "0.0.0.0" ]]; then
-        lan_ip="$(detect_lan_ipv4 || true)"
-        if [[ -z "$lan_ip" ]] || ! valid_lan_ipv4 "$lan_ip"; then
-          echo "Error: LAN access is enabled but this PC's LAN IPv4 address could not be detected." >&2
-          echo "Run init-env.sh interactively or provide a certificate covering the address used by other devices." >&2
-          exit 1
-        fi
-        ensure_local_certificate "$lan_ip"
-      else
-        ensure_local_certificate
-      fi
-    fi
     say "Using existing $TARGET (remove it to recreate from $EXAMPLE)."
     exit 0
   fi
@@ -275,11 +206,8 @@ set_key SUPER_AGENT_PASSWORD "$AGENT_PASSWORD"
 # The file holds database, broker and account passwords. Owner-only where the OS supports it.
 chmod 600 "$TARGET" 2>/dev/null || true
 
-if [[ ! -t 0 || "$QUIET" -eq 1 ]]; then
-  ensure_local_certificate
-fi
-
 say "Created $TARGET with generated JWT_SECRET_KEY and REDIS_PASSWORD (64 hex chars each), plus admin and agent account passwords."
 say "The admin account signs in with the SUPER_USER_USERNAME and the generated SUPER_USER_PASSWORD in $TARGET."
 say "The Agent service uses SUPER_AGENT_USERNAME and SUPER_AGENT_PASSWORD from $TARGET to register its workers."
-say "Next: docker compose up --build from this directory, or ./stack-up.sh from the top of this folder, then sign in in the web UI."
+say "Local access uses http://localhost:3000; LAN HTTPS needs a trusted certificate configured in $DIR/certs."
+say "Next: docker compose up --build from this directory, or ./stack-up.sh from the top of this folder."

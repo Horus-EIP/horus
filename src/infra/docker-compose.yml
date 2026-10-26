@@ -27,9 +27,8 @@ services:
     logging: *logging
     restart: unless-stopped
     ports:
-      - "${HORUS_WEB_BIND:-127.0.0.1}:3000:443"
-    env_file:
-      - .env
+      - "127.0.0.1:3000:80"
+      - "${HORUS_WEB_BIND:-127.0.0.1}:3443:443"
     environment:
       - CLIENT_HOST=web_client
       - CLIENT_PORT=3000
@@ -37,20 +36,13 @@ services:
       - MAS_PORT=8000
       - KNOWLEDGE_HOST=knowledge_store
       - KNOWLEDGE_PORT=8080
+      - HORUS_WEB_BIND=${HORUS_WEB_BIND:-127.0.0.1}
+      - HORUS_LAN_TLS=${HORUS_LAN_TLS:-0}
     volumes:
       - ./nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
-      - type: bind
-        source: ./certs/horus.crt
-        target: /etc/nginx/certs/horus.crt
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ./certs/horus.key
-        target: /etc/nginx/certs/horus.key
-        read_only: true
-        bind:
-          create_host_path: false
+      - ./nginx-https.conf.template:/etc/nginx/templates/https.conf.template:ro
+      - ./nginx-lan-https.sh:/docker-entrypoint.d/40-lan-https.sh:ro
+      - ./certs:/etc/nginx/certs:ro
     networks:
       - horus-net
     depends_on:

@@ -29,7 +29,7 @@ leaves it.
    - macOS: `app/Horus.app`
    - Linux: install `app/Horus_<version>_amd64.deb`, then launch Horus
 
-   Or just open `https://localhost:3000` in any browser.
+   Or just open `http://localhost:3000` in any browser.
 
 ## Your computer will warn you
 
@@ -41,7 +41,7 @@ These apps are not code-signed yet.
   first time.
 
 Would rather not bypass an OS warning? Fair. Use the browser at
-`https://localhost:3000` instead — it is a fully supported path.
+`http://localhost:3000` instead — it is a fully supported path.
 
 ## Known limitations
 

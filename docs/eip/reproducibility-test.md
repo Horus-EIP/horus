@@ -54,7 +54,7 @@ The tester does each step from the readme they were given. The observer writes t
 | 3 | Start the installer (the START-HERE file for their system, or `python installer/horus_install.py`) and go through the checks, from "1/6  Python" to "Preflight passed." | | | | |
 | 4 | Answer "What should Horus be allowed to read?", then wait through "Downloading container images" ("Building the images" with `--build-from-source`) and, on a CPU profile, "Downloading the language model" | | | | |
 | 5 | First start: "Starting the stack", "Waiting for services to become healthy" (on a GPU profile the model downloads here) and "Verifying the installation", until the installer prints "Horus is running." | | | | |
-| 6 | Provide a trusted certificate/key pair as described in Getting Started, then open https://localhost:3000 (or the Horus app in the `app` folder of the ZIP) and sign in with the username the installer prints after "Sign in as" and the password it prints after "Password" (shown once) | | | | |
+| 6 | Open http://localhost:3000 (or the Horus app in the `app` folder of the ZIP) and sign in with the username the installer prints after "Sign in as" and the password it prints after "Password" (shown once) | | | | |
 | 7 | Upload a document on the Knowledge Store page | | | | |
 | 8 | Ask a question about it in Chat; the answer lists the document under "Sources" | | | | |
 | 9 | Stop Horus and start it again: run the START-HERE file (or `installer/horus_install.py`) with `--stop`, then with `--start`, or use the Horus app | | | | |

@@ -12,6 +12,7 @@ function jsonResponse(status: number, body: unknown): Response {
 describe("knowledgeStoreApi.smartSearch", () => {
   beforeEach(() => {
     global.fetch = vi.fn();
+    localStorage.clear();
   });
 
   it("posts the query and category filter as JSON to /smart-search", async () => {
@@ -35,6 +36,25 @@ describe("knowledgeStoreApi.smartSearch", () => {
           n_results: 10,
           categories: ["finance"],
         }),
+      })
+    );
+  });
+
+  it("sends the signed-in user's bearer token to the gateway", async () => {
+    localStorage.setItem("auth_token", "signed-in-jwt");
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse(200, { results: { documents: [], metadatas: [], distances: [] } })
+    );
+
+    await knowledgeStoreApi.smartSearch({ query: "policy" });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer signed-in-jwt",
+        },
       })
     );
   });
@@ -137,6 +157,7 @@ describe("knowledgeStoreApi.smartSearch", () => {
 describe("knowledgeStoreApi.getCategories", () => {
   beforeEach(() => {
     global.fetch = vi.fn();
+    localStorage.clear();
   });
 
   it("returns the categories with their document counts", async () => {

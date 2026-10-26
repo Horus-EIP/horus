@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create src/infra/.env and the local HTTPS certificate when missing (init-env.sh),
+# Create src/infra/.env when missing (init-env.sh),
 # validate Compose, then build and start the stack.
 #
 # Usage (from the top of this folder):
@@ -30,7 +30,7 @@ echo "Compose file OK."
 cat <<'EOF'
 
 Horus — URLs from your host (browser / curl)
-  Web UI             https://localhost:3000   (health: /api/health)
+  Web UI             http://localhost:3000   (health: /api/health)
   MAS API            http://localhost:8000   (Swagger: /docs)
   Knowledge Store    http://localhost:8080   (health: /health, list: GET /file, search: GET /)
   Agent              http://localhost:8001   (health: /health)

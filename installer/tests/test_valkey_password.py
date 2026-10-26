@@ -187,8 +187,7 @@ class TheTemplateShipsNoPassword(InfraCase):
         self.assertGenerated(self.env_value("JWT_SECRET_KEY"))
         self.assertNotEqual(self.env_value("REDIS_PASSWORD"), self.env_value("JWT_SECRET_KEY"))
 
-    @unittest.skipUnless(shutil.which("bash") and shutil.which("openssl"),
-                         "needs bash and OpenSSL")
+    @unittest.skipUnless(shutil.which("bash"), "needs bash to run init-env.sh")
     def test_init_env_generates_it(self):
         for name in (".env.example", "init-env.sh"):
             shutil.copy(INFRA / name, self.infra / name)
@@ -198,17 +197,9 @@ class TheTemplateShipsNoPassword(InfraCase):
         self.assertGenerated(self.env_value("REDIS_PASSWORD"))
         self.assertGenerated(self.env_value("JWT_SECRET_KEY"))
         self.assertNotEqual(self.env_value("REDIS_PASSWORD"), self.env_value("JWT_SECRET_KEY"))
-        cert = self.infra / "certs/horus.crt"
-        key = self.infra / "certs/horus.key"
-        self.assertTrue(cert.is_file())
-        self.assertTrue(key.is_file())
-        details = subprocess.run(
-            [shutil.which("openssl"), "x509", "-in", str(cert), "-noout", "-ext", "subjectAltName"],
-            capture_output=True, text=True, check=True,
-        )
-        self.assertIn("DNS:localhost", details.stdout)
-        self.assertIn("IP Address:127.0.0.1", details.stdout)
-        self.assertIn("IP Address:0:0:0:0:0:0:0:1", details.stdout)
+        self.assertEqual(self.env_value("HORUS_LAN_TLS"), "0")
+        self.assertFalse((self.infra / "certs/horus.crt").exists())
+        self.assertFalse((self.infra / "certs/horus.key").exists())
 
     @unittest.skipUnless(shutil.which("bash"), "needs bash to run init-env.sh")
     def test_init_env_can_enable_lan_access(self):
@@ -217,13 +208,10 @@ class TheTemplateShipsNoPassword(InfraCase):
         result = self.run_init_env_interactively("y\n192.168.1.55\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.env_value("HORUS_WEB_BIND"), "0.0.0.0")
-        self.assertIn("LAN access enabled", result.stdout)
-        cert = self.infra / "certs/horus.crt"
-        details = subprocess.run(
-            [shutil.which("openssl"), "x509", "-in", str(cert), "-noout", "-ext", "subjectAltName"],
-            capture_output=True, text=True, check=True,
-        )
-        self.assertIn("IP Address:192.168.1.55", details.stdout)
+        self.assertEqual(self.env_value("HORUS_LAN_TLS"), "0")
+        self.assertIn("LAN HTTPS stays disabled", result.stdout)
+        self.assertFalse((self.infra / "certs/horus.crt").exists())
+        self.assertFalse((self.infra / "certs/horus.key").exists())
 
     @unittest.skipUnless(shutil.which("bash") and os.name == "posix" and pty is not None,
                          "needs bash and a POSIX pseudo-terminal")
@@ -235,22 +223,20 @@ class TheTemplateShipsNoPassword(InfraCase):
         self.assertEqual(self.env_value("HORUS_WEB_BIND"), "127.0.0.1")
         self.assertIn("LAN access disabled", result.stdout)
 
-    @unittest.skipUnless(shutil.which("bash") and shutil.which("openssl"),
-                         "needs bash and OpenSSL")
-    def test_existing_env_still_generates_missing_local_certificate(self):
+    @unittest.skipUnless(shutil.which("bash"), "needs bash to run init-env.sh")
+    def test_existing_env_without_certificate_does_not_block_bootstrap(self):
         shutil.copy(INFRA / ".env.example", self.infra / ".env.example")
         (self.infra / ".env").write_text("HORUS_WEB_BIND=127.0.0.1\n", encoding="utf-8")
         shutil.copy(INFRA / "init-env.sh", self.infra / "init-env.sh")
         result = subprocess.run([shutil.which("bash"), "init-env.sh", "--quiet"],
                                 cwd=self.infra, capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue((self.infra / "certs/horus.crt").is_file())
-        self.assertTrue((self.infra / "certs/horus.key").is_file())
+        self.assertFalse((self.infra / "certs/horus.crt").exists())
+        self.assertFalse((self.infra / "certs/horus.key").exists())
 
-    @unittest.skipUnless(shutil.which("bash") and shutil.which("openssl")
-                         and os.name == "posix" and pty is not None,
-                         "needs bash, OpenSSL and a POSIX pseudo-terminal")
-    def test_existing_install_can_enable_lan_and_back_up_its_local_certificate(self):
+    @unittest.skipUnless(shutil.which("bash") and os.name == "posix" and pty is not None,
+                         "needs bash and a POSIX pseudo-terminal")
+    def test_existing_install_can_enable_lan_without_a_self_signed_certificate(self):
         for name in (".env.example", "init-env.sh"):
             shutil.copy(INFRA / name, self.infra / name)
         (self.infra / ".env").write_text("HORUS_WEB_BIND=127.0.0.1\n", encoding="utf-8")
@@ -261,13 +247,10 @@ class TheTemplateShipsNoPassword(InfraCase):
         result = self.run_init_env_interactively("y\n192.168.1.55\n")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.env_value("HORUS_WEB_BIND"), "0.0.0.0")
-        self.assertTrue(list((self.infra / "certs").glob("horus.crt.*.bak")))
-        details = subprocess.run(
-            [shutil.which("openssl"), "x509", "-in",
-             str(self.infra / "certs/horus.crt"), "-noout", "-ext", "subjectAltName"],
-            capture_output=True, text=True, check=True,
-        )
-        self.assertIn("IP Address:192.168.1.55", details.stdout)
+        self.assertEqual(self.env_value("HORUS_LAN_TLS"), "0")
+        self.assertIn("LAN HTTPS stays disabled", result.stdout)
+        self.assertFalse((self.infra / "certs/horus.crt").exists())
+        self.assertFalse((self.infra / "certs/horus.key").exists())
 
     def run_init_env_interactively(self, answer: str) -> subprocess.CompletedProcess:
         master, slave = pty.openpty()
