@@ -3,7 +3,7 @@ pytest-cov
 pytest-asyncio
 httpx
 fakeredis
-mypy
+mypy==2.4.0
 types-python-jose
 types-passlib
 types-colorama

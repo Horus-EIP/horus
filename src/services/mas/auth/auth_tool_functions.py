@@ -272,11 +272,12 @@ def modify_user_password(
     try:
         db.commit()
         return True
-    except Exception as e:
+    except Exception:
         db.rollback()
-        error_message = str(e)
-        message = f"User Password Modification Error : {error_message}"
-        raise HTTPException(status_code=409, detail=message)
+        logger.error("User password modification failed")
+        raise HTTPException(
+            status_code=409, detail="Unable to modify password"
+        ) from None
 
 
 # ---------------------------------------------------------------------------

@@ -22,9 +22,14 @@ def create_critical_logs_table():
         operation VARCHAR(100) NOT NULL,
         details TEXT,
         ip_address VARCHAR(45),
-        user_agent TEXT
+        user_agent TEXT,
+        agent_id TEXT
     );
     """
+
+    ensure_agent_id_column_sql = (
+        "ALTER TABLE critical_logs ADD COLUMN IF NOT EXISTS agent_id TEXT;"
+    )
 
     create_indexes_sql = [
         "CREATE INDEX IF NOT EXISTS idx_critical_logs_timestamp ON critical_logs(timestamp);",
@@ -42,6 +47,7 @@ def create_critical_logs_table():
         with engine.connect() as conn:
 
             conn.execute(text(create_table_sql))
+            conn.execute(text(ensure_agent_id_column_sql))
 
             for index_sql in create_indexes_sql:
                 conn.execute(text(index_sql))
