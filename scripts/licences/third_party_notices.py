@@ -881,7 +881,11 @@ def system_lines(images: dict, kind: str) -> list[str]:
     return lines
 
 
-def library_lines(python: dict[str, list[Entry]], web: list[Entry]) -> list[str]:
+def library_lines(
+    python: dict[str, list[Entry]],
+    web: list[Entry],
+    components: dict,
+) -> list[str]:
     found: dict[tuple[str, str], tuple[Entry, list[str]]] = {}
     for service, entries in python.items():
         for entry in entries:
@@ -890,19 +894,40 @@ def library_lines(python: dict[str, list[Entry]], web: list[Entry]) -> list[str]
     for entry in web:
         if entry.name.startswith(OFFER_LIBRARIES[1]):
             found.setdefault((entry.name, entry.version), (entry, []))[1].append("web client")
+    for name, info in sorted((components.get("components") or {}).items()):
+        if info.get("offer"):
+            entry = Entry(
+                name,
+                info["version"],
+                info["licence"],
+                info.get("source_url", info["url"]),
+                info["source"],
+                spdx=info.get("spdx", ""),
+            )
+            found.setdefault((name, entry.version), (entry, []))[1].append(
+                "bundled native library"
+            )
     lines = []
     for (name, version), (entry, used_by) in sorted(found.items()):
         if name == OFFER_LIBRARIES[0]:
             source = f"https://pypi.org/project/{name}/{version}/#files"
-        else:
+        elif name.startswith(OFFER_LIBRARIES[1]):
             source = (f"https://www.npmjs.com/package/{name}/v/{version}, whose versions.json names the libvips "
                       "release; its source is at https://github.com/libvips/libvips/releases")
+        else:
+            source = entry.url
         lines.append(f"- {name} {version} ({'; '.join(used_by)})")
         lines += indented(f"Licence: {entry.spdx or entry.licence}. Source: {source}")
     return lines
 
 
-def offer_section(data: dict, python: dict[str, list[Entry]], web: list[Entry], report: Report) -> list[str]:
+def offer_section(
+    data: dict,
+    python: dict[str, list[Entry]],
+    web: list[Entry],
+    components: dict,
+    report: Report,
+) -> list[str]:
     images = data.get("images", {})
     texts = sorted({text for image in images.values() for row in image["packages"] for text in row["texts"]})
     addresses = offer_addresses(report)
@@ -913,8 +938,9 @@ def offer_section(data: dict, python: dict[str, list[Entry]], web: list[Entry], 
         "Our images, horus-mas, horus-agent, horus-knowledge-store, horus-web-client and horus-llm-mock, "
         "contain operating-system packages from Debian and Alpine Linux licensed under the GNU GPL or the GNU LGPL "
         "(7.1 and 7.2). They run as separate programs, or are system libraries that the Python and Node.js "
-        "runtimes load; Horus's own code does not link them. Two libraries among our dependencies are under "
-        "the LGPL too (7.3): psycopg2-binary, and the prebuilt libvips that sharp loads.")
+        "runtimes load; Horus's own code does not link them. LGPL-licensed dependencies are listed in 7.3: "
+        "psycopg2-binary, the prebuilt libvips that sharp loads, and the libkeyutils shared library bundled "
+        "inside the psycopg2-binary wheel.")
     out += ["Where the source is:", ""]
     for item in (
         "Debian packages: the source package of each version listed below (.dsc, original and Debian "
@@ -922,8 +948,8 @@ def offer_section(data: dict, python: dict[str, list[Entry]], web: list[Entry], 
         "Alpine packages: the build recipe and patches at the aports commit listed for each package, in "
         "https://gitlab.alpinelinux.org/alpine/aports, and the upstream archives it names, mirrored at "
         "https://distfiles.alpinelinux.org/distfiles/.",
-        "psycopg2-binary: its source distribution on PyPI; sharp's libvips: its package on npm. 7.3 gives "
-        "the links.",
+        "psycopg2-binary: its source distribution on PyPI; sharp's libvips: its package on npm; and libkeyutils: "
+        "the exact upstream keyutils source archive. 7.3 gives the links.",
     ):
         wrapped = textwrap.wrap(item, 77, break_on_hyphens=False, break_long_words=False)
         out += [f"- {wrapped[0]}"] + [f"  {line}" for line in wrapped[1:]]
@@ -949,7 +975,7 @@ def offer_section(data: dict, python: dict[str, list[Entry]], web: list[Entry], 
     out += ["", "", f"7.2 Alpine packages ({', '.join(systems['alpine'])})", ""]
     out += system_lines(images, "alpine")
     out += ["", "", "7.3 LGPL libraries among our dependencies", ""]
-    out += library_lines(python, web)
+    out += library_lines(python, web, components)
     return out
 
 
@@ -1040,7 +1066,7 @@ def render(report: Report) -> str:
         "",
     ]
     out += lines_for(others)
-    out += offer_section(system, python, web, report)
+    out += offer_section(system, python, web, components, report)
     return "\n".join(out).rstrip() + "\n"
 
 

@@ -5731,11 +5731,11 @@ Downloaded at install or build time, or by the services on first use.
   https://gcc.gnu.org/onlinedocs/libstdc++/manual/license.html
   GCC OpenMP runtime
   Licence text (GPL-3.0-or-later WITH GCC-exception-3.1): LICENSES/GPL-3.0-or-later.txt, LICENSES/GCC-exception-3.1.txt
-- libkeyutils bundled
-  Licence: GPL-2.0-or-later (source: bundled in psycopg2-binary wheel (libkeyutils.so))
+- libkeyutils 1.5.8
+  Licence: LGPL-2.1-or-later (source: bundled in psycopg2-binary 2.9.10 wheel (libkeyutils-dfe70bd6.so.1.5; upstream marker keyutils-1.5.8))
   https://git.kernel.org/pub/scm/linux/kernel/git/dhowells/keyutils.git
-  Linux key management utilities
-  Licence text (GPL-2.0-or-later): LICENSES/GPL-2.0-or-later.txt
+  LGPL-licensed shared library; the separate keyutils command-line tools are GPL-licensed
+  Licence text (LGPL-2.1-or-later): LICENSES/LGPL-2.1-or-later.txt
 - libpcre bundled
   Licence: BSD-3-Clause (source: bundled in psycopg2-binary wheel (libpcre.so))
   https://www.pcre.org/
@@ -5799,9 +5799,9 @@ Our images, horus-mas, horus-agent, horus-knowledge-store, horus-web-client and
 horus-llm-mock, contain operating-system packages from Debian and Alpine Linux
 licensed under the GNU GPL or the GNU LGPL (7.1 and 7.2). They run as separate
 programs, or are system libraries that the Python and Node.js runtimes load;
-Horus's own code does not link them. Two libraries among our dependencies are
-under the LGPL too (7.3): psycopg2-binary, and the prebuilt libvips that sharp
-loads.
+Horus's own code does not link them. LGPL-licensed dependencies are listed in
+7.3: psycopg2-binary, the prebuilt libvips that sharp loads, and the
+libkeyutils shared library bundled inside the psycopg2-binary wheel.
 
 Where the source is:
 
@@ -5813,7 +5813,8 @@ Where the source is:
   upstream archives it names, mirrored at
   https://distfiles.alpinelinux.org/distfiles/.
 - psycopg2-binary: its source distribution on PyPI; sharp's libvips: its
-  package on npm. 7.3 gives the links.
+  package on npm; and libkeyutils: the exact upstream keyutils source archive.
+  7.3 gives the links.
 
 Written offer:
 
@@ -6155,6 +6156,9 @@ file in /usr/share/doc/<package>/.
   https://www.npmjs.com/package/@img/sharp-libvips-linuxmusl-x64/v/1.2.4, whose
   versions.json names the libvips release; its source is at
   https://github.com/libvips/libvips/releases
+- libkeyutils 1.5.8 (bundled native library)
+  Licence: LGPL-2.1-or-later. Source:
+  https://git.kernel.org/pub/scm/linux/kernel/git/dhowells/keyutils.git/snapshot/keyutils-1.5.8.tar.gz
 - psycopg2-binary 2.9.10 (Python, mas)
   Licence: LGPL-3.0-or-later. Source:
   https://pypi.org/project/psycopg2-binary/2.9.10/#files

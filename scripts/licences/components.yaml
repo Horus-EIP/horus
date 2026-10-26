@@ -361,12 +361,14 @@ components:
     url: https://github.com/SELinuxProject/selinux
     note: SELinux userland library
   libkeyutils:
-    version: bundled
-    licence: GPL-2.0-or-later
-    spdx: GPL-2.0-or-later
-    source: bundled in psycopg2-binary wheel (libkeyutils.so)
+    version: 1.5.8
+    licence: LGPL-2.1-or-later
+    spdx: LGPL-2.1-or-later
+    source: bundled in psycopg2-binary 2.9.10 wheel (libkeyutils-dfe70bd6.so.1.5; upstream marker keyutils-1.5.8)
     url: https://git.kernel.org/pub/scm/linux/kernel/git/dhowells/keyutils.git
-    note: Linux key management utilities
+    source_url: https://git.kernel.org/pub/scm/linux/kernel/git/dhowells/keyutils.git/snapshot/keyutils-1.5.8.tar.gz
+    note: LGPL-licensed shared library; the separate keyutils command-line tools are GPL-licensed
+    offer: true
   libcom_err:
     version: bundled
     licence: MIT
