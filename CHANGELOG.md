@@ -61,6 +61,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - `ruff` failed CI on a `dict()` call in the agent (C408, `0ebc769`)
 - Valkey answered on every network interface with the password every install shipped, `redis_password`; it is bound to 127.0.0.1 and gets a generated password (B-123, `d586e09`)
 - A local build of the agent image sent the git-ignored `app/models` folder (7.6 GB of model snapshots) to Docker and baked it into the image: its build context went from 8.06 GB to 715 kB. The other images' `.dockerignore` files leave out caches, `.env` files, logs and the local Chroma index too (B-126, `5b8a9ae`)
+- The test and migration scripts now resolve the repository root correctly when launched from outside the repository; the installer disk check requires 150 GB for CPU profiles and 125 GB for GPU profiles (B-128, 4167d01)
 - An upgrade left the containers of services the compose files no longer define running next to the new stack; `COMPOSE_IGNORE_ORPHANS` is respected (B-124, `816d592`)
 - `scripts/dev/run-mas.sh` could not find the repository, and bound MAS to every interface; it now binds 127.0.0.1 (B-123, `d586e09`)
 - Every install shipped the admin password `admin`, which the web client's sign-in page and MAS API proxy offered to whoever reached port 3000, and the installer wrote it into `install-log.txt` at the end of each install. It is generated now, shown once on screen and never logged (B-131, `4a006ae`)
