@@ -151,6 +151,29 @@ class TestTaskList:
         }
 
 
+class TestQueueStatsVisibility:
+    async def test_a_user_only_counts_the_tasks_they_can_list(self, tasks, mas_client):
+        response = await _get(mas_client, OWNER, "/tasks/stats/queue")
+        listed = await _get(mas_client, OWNER, "/tasks/list")
+
+        assert response.status_code == listed.status_code == 200
+        stats = response.json()
+        assert stats["total"] == len(listed.json()) == 3
+        assert stats["running"] == 2
+        assert stats["completed"] == 1
+
+    @pytest.mark.parametrize("user", [MANAGER, ADMIN], ids=["manager", "admin"])
+    async def test_managers_and_admins_keep_global_queue_counts(
+        self, tasks, mas_client, user
+    ):
+        response = await _get(mas_client, user, "/tasks/stats/queue")
+
+        assert response.status_code == 200
+        assert response.json()["total"] == 4
+        assert response.json()["running"] == 3
+        assert response.json()["completed"] == 1
+
+
 @pytest.fixture
 def stays_queued(monkeypatch):
     async def no_routing(*_args, **_kwargs):

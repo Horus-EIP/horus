@@ -56,6 +56,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 ### Fixed
 
+- `POST /tasks/abandoned-claims` now fails tasks from an earlier run only when the authenticated agent may run the assigned agent's work; cleanup for unregistered agents remains unchanged. Queue statistics and `GET /analytics/overview` now count only tasks visible to the caller, while managers and admins retain global counts (B-114; cc7bae1).
 - `compare-benchmarks.py` crashed on every llama-bench report (B-122, `3711a7b`)
 - `ruff` failed CI on a `dict()` call in the agent (C408, `0ebc769`)
 - Valkey answered on every network interface with the password every install shipped, `redis_password`; it is bound to 127.0.0.1 and gets a generated password (B-123, `d586e09`)
