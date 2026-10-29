@@ -566,11 +566,11 @@ async def _run_reindex(job: dict[str, Any]) -> None:
                 logger.warning("re-index: %s failed: %s", doc_id, exc)
                 continue
             job["totals"][outcome] += 1
+        job["state"] = "completed"
+        logger.info("re-index %s complete: %s", job["job_id"], job["totals"])
         if not job["totals"]["failed"]:
             await asyncio.to_thread(reindex.record_embedder_in_collection)
         await asyncio.to_thread(file_service.refresh_document_count)
-        job["state"] = "completed"
-        logger.info("re-index %s complete: %s", job["job_id"], job["totals"])
     except Exception as exc:
         job["state"] = "failed"
         job["error"] = f"{type(exc).__name__}: {exc}"
