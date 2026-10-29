@@ -95,3 +95,17 @@ On a pull request, a new push cancels the run still going for that pull request;
 ### What GitHub enforces
 
 On `Horus-EIP/horus`, nothing: GitHub Free can't require checks or reviews on a private repository. We hold ourselves to it: merge only when every job is green and a maintainer has approved ([How we merge](../CONTRIBUTING.md#how-we-merge)). On the public bench kit, its ruleset does enforce both.
+
+---
+
+## The benchmark kit sync (`sync-bench-kit.yml`)
+
+Every day at 06:23 UTC, and by hand, this workflow copies `Horus-EIP/horus-bench-kit` (`main`) into `opensource/horus-bench-kit/` with `rsync --delete`, so a file removed from the kit is removed here. It never pushes to `main`: it force-pushes the branch `automation/sync-horus-bench-kit` and opens or updates one pull request. Nothing changes in `main` until a maintainer merges that pull request.
+
+| Question | Decision |
+|---|---|
+| Who owns `HORUS_SYNC_TOKEN`, and what can it write? | One maintainer of `Horus-EIP`, who creates it as a fine-grained personal access token and stores it as a repository secret. It is limited to the repository `Horus-EIP/horus`, with **Contents: read and write** and **Pull requests: read and write**, and nothing else. It expires within 90 days and its owner renews it. A leaked token could push branches, never merge: `main` changes only through a reviewed pull request. |
+| Does it replace the subtree process? | Yes. This workflow is now the normal way the kit comes back into `Horus-EIP/horus`. The `git subtree pull` in [CONTRIBUTING.md](../CONTRIBUTING.md#the-benchmark-kit) stays as a manual fallback when the workflow is down. The kit is still changed in its own repository first, never in `opensource/`. |
+| Who reviews the sync pull requests? | The pull request is opened with the token, so it is authored by the token's owner, who cannot approve it. Another maintainer reviews and merges it ([How we merge](../CONTRIBUTING.md#how-we-merge)): they read the diff of `opensource/horus-bench-kit/`, check that it only brings changes already merged in the kit repository, and wait for green CI. |
+
+The commit is made as `github-actions[bot]` and names the upstream kit commit in its message; it has no co-author.

@@ -62,8 +62,7 @@ jobs:
           git checkout -B "$branch"
           git commit \
             -m "chore: sync horus-bench-kit" \
-            -m "Upstream: Horus-EIP/horus-bench-kit@${KIT_SHA}" \
-            -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+            -m "Upstream: Horus-EIP/horus-bench-kit@${KIT_SHA}"
           git push --force origin "$branch"
 
           pr_number="$(gh pr list \
