@@ -108,9 +108,7 @@ async def get_conversation_history(
         conversation.owner_username != user.get("username")
         and user.get("role") != Role.ADMIN.value
     ):
-        raise HTTPException(
-            status_code=403, detail="Only the conversation's owner or an admin can read it"
-        )
+        raise HTTPException(status_code=404, detail=f"Conversation {chat_id} not found")
 
     history = get_history(chat_id, db)
     if not history:

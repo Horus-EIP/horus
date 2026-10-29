@@ -1921,7 +1921,7 @@ class TestQueueStatsHelper:
             (TaskStatus.COMPLETED.value, 2),
         ]
         fake = _FakeSession(all_map={"EXPR": rows})
-        stats = get_task_queue_stats(fake)
+        stats = get_task_queue_stats(fake, {"role": "admin"})
         assert stats["pending"] == 1
         assert stats["completed"] == 2
         assert stats["total"] == 3
@@ -1976,7 +1976,7 @@ class TestQueueStatsHelper:
         )
         sqlite_session.commit()
 
-        stats = get_task_queue_stats(sqlite_session)
+        stats = get_task_queue_stats(sqlite_session, {"role": "admin"})
 
         assert stats["total"] == 1
         assert stats["completed"] == 1

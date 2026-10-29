@@ -105,8 +105,19 @@ class TestReadingOneTask:
 
 
 class TestRunningTasksOfAConversation:
-    @pytest.mark.parametrize(("user", "expected"), WHO_READS, ids=WHO_READS_IDS)
-    async def test_they_are_for_the_conversation_owner_managers_and_admins(
+    WHO_CAN_READ = [
+        (OWNER, 200),
+        (OTHER, 404),
+        (MANAGER, 404),
+        (ADMIN, 200),
+        (SYSTEM, 404),
+    ]
+    WHO_CAN_READ_IDS = ["owner", "another-user", "manager", "admin", "system"]
+
+    @pytest.mark.parametrize(
+        ("user", "expected"), WHO_CAN_READ, ids=WHO_CAN_READ_IDS
+    )
+    async def test_they_are_for_the_conversation_owner_and_admins(
         self, tasks, mas_client, user, expected
     ):
         response = await _get(mas_client, user, "/tasks/conversation/7/running")
@@ -115,9 +126,9 @@ class TestRunningTasksOfAConversation:
         if expected == 200:
             assert [task["id"] for task in response.json()] == ["mine"]
         else:
-            assert response.json()["detail"] == (
-                "Only the conversation's owner, a manager or an admin can list its running tasks"
-            )
+            missing = await _get(mas_client, user, "/tasks/conversation/999/running")
+            assert response.status_code == missing.status_code
+            assert response.json() == missing.json()
 
 
 class TestTaskList:
@@ -140,6 +151,29 @@ class TestTaskList:
         }
 
 
+class TestQueueStatsVisibility:
+    async def test_a_user_only_counts_the_tasks_they_can_list(self, tasks, mas_client):
+        response = await _get(mas_client, OWNER, "/tasks/stats/queue")
+        listed = await _get(mas_client, OWNER, "/tasks/list")
+
+        assert response.status_code == listed.status_code == 200
+        stats = response.json()
+        assert stats["total"] == len(listed.json()) == 3
+        assert stats["running"] == 2
+        assert stats["completed"] == 1
+
+    @pytest.mark.parametrize("user", [MANAGER, ADMIN], ids=["manager", "admin"])
+    async def test_managers_and_admins_keep_global_queue_counts(
+        self, tasks, mas_client, user
+    ):
+        response = await _get(mas_client, user, "/tasks/stats/queue")
+
+        assert response.status_code == 200
+        assert response.json()["total"] == 4
+        assert response.json()["running"] == 3
+        assert response.json()["completed"] == 1
+
+
 @pytest.fixture
 def stays_queued(monkeypatch):
     async def no_routing(*_args, **_kwargs):
@@ -158,7 +192,7 @@ async def _post(mas_client, user: dict, conversation_id: int | None, headers: di
 
 
 WHO_POSTS = [
-    (OWNER, 7, 202), (OTHER, 7, 403), (MANAGER, 7, 403), (MANAGER, 9, 202),
+    (OWNER, 7, 202), (OTHER, 7, 404), (MANAGER, 7, 404), (MANAGER, 9, 202),
     (ADMIN, 8, 202), (SYSTEM, 7, 403),
 ]
 WHO_POSTS_IDS = [
@@ -179,12 +213,26 @@ class TestCreatingATask:
         tasks.expire_all()
         assert tasks.query(Task).count() == tasks_before + (1 if expected == 202 else 0)
 
-    async def test_a_refused_post_adds_no_message_and_says_why(self, tasks, mas_client, stays_queued):
-        response = await _post(mas_client, OTHER, 7)
+    async def test_system_role_is_denied_before_conversation_lookup(
+        self, tasks, mas_client, stays_queued
+    ):
+        existing = await _post(mas_client, SYSTEM, 7)
+        missing = await _post(mas_client, SYSTEM, 999)
 
-        assert response.json()["detail"] == (
-            "Only the conversation's owner or an admin can add a task to it"
-        )
+        assert existing.status_code == missing.status_code == 403
+        assert existing.json() == missing.json() == {"detail": "Insufficient permissions"}
+
+    @pytest.mark.parametrize(
+        "user", [OTHER, MANAGER], ids=["another-user", "manager-elsewhere"]
+    )
+    async def test_a_refused_post_matches_a_missing_conversation_and_adds_no_message(
+        self, tasks, mas_client, stays_queued, user
+    ):
+        response = await _post(mas_client, user, 7)
+        missing = await _post(mas_client, user, 999)
+
+        assert response.status_code == missing.status_code == 404
+        assert response.json() == missing.json() == {"detail": "Conversation not found"}
         assert tasks.query(Messages).filter(Messages.conversation_id == 7).count() == 0
 
     async def test_a_task_without_a_conversation_is_still_accepted(
@@ -201,7 +249,8 @@ class TestCreatingATask:
         replayed = await _post(mas_client, OTHER, 7, headers)
 
         assert own.status_code == 202
-        assert replayed.status_code == 403
+        assert replayed.status_code == 404
+        assert replayed.json()["detail"] == "Conversation not found"
         assert "task_id" not in replayed.json()
 
     async def test_an_unknown_conversation_is_404_and_does_not_use_up_the_key(
