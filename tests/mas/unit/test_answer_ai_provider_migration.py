@@ -12,6 +12,7 @@ from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, 
 ALEMBIC_DIR = Path(__file__).resolve().parents[3] / "src" / "services" / "mas" / "db" / "alembic"
 REVISION = "d2e6b8f4a1c9"
 PREVIOUS_HEAD = "c3f9a7e1d5b2"
+CURRENT_HEAD = "f8a03b219c7d"
 
 
 def _load_migration():
@@ -42,11 +43,12 @@ def _columns(engine, table):
     return {column["name"] for column in inspect(engine).get_columns(table)}
 
 
-def test_ai_provider_migration_follows_the_sources_migration_and_is_the_single_head():
+def test_ai_provider_migration_follows_sources_and_the_chain_has_one_head():
     script = ScriptDirectory(str(ALEMBIC_DIR))
 
     assert script.get_revision(REVISION).down_revision == PREVIOUS_HEAD
-    assert script.get_heads() == [REVISION]
+    assert script.get_heads() == [CURRENT_HEAD]
+    assert script.get_revision(CURRENT_HEAD).down_revision == REVISION
 
 
 def test_upgrade_adds_the_ai_provider_of_results_and_messages(answers_db):

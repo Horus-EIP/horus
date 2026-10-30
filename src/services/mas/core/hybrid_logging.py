@@ -52,10 +52,11 @@ class HybridLogger:
         category: LogCategory,
         component: str,
         operation: str,
-        details: str = None,
-        user_id: int = None,
-        ip_address: str = None,
-        user_agent: str = None,
+        details: str | None = None,
+        user_id: int | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+        agent_id: str | None = None,
     ):
         """
         Log a critical event to the database and standard logger.
@@ -84,6 +85,7 @@ class HybridLogger:
                     user_id=user_id,
                     ip_address=ip_address,
                     user_agent=user_agent,
+                    **({"agent_id": agent_id} if agent_id is not None else {}),
                 )
 
                 db.add(critical_log)
@@ -91,7 +93,9 @@ class HybridLogger:
 
                 # logger.info(f"Critical log stored in DB: {category.value}/{operation}")
                 logger.info(
-                    "critical_log_stored", category=category.value, operation=operation
+                    "critical_log_stored",
+                    category=category.value,
+                    operation=operation,
                 )
 
             except Exception as e:
@@ -110,7 +114,7 @@ class HybridLogger:
         )
 
     def log_system(
-        self, level: LogLevel, component: str, operation: str, details: str = None
+        self, level: LogLevel, component: str, operation: str, details: str | None = None
     ):
         """
         Log a system event to the standard logger.
@@ -134,7 +138,7 @@ hybrid_logger = HybridLogger()
 
 
 def log_security_event(
-    operation: str, user_id: int = None, details: str = None, ip_address: str = None
+    operation: str, user_id: int | None = None, details: str | None = None, ip_address: str | None = None, agent_id: str | None = None
 ):
     """
     Convenience function for logging security events.
@@ -145,6 +149,7 @@ def log_security_event(
         details (str): Details
         ip_address (str): Source IP
     """
+    agent_fields = {"agent_id": agent_id} if agent_id is not None else {}
     hybrid_logger.log_critical(
         LogLevel.WARNING,
         LogCategory.SECURITY,
@@ -153,10 +158,11 @@ def log_security_event(
         details,
         user_id,
         ip_address,
+        **agent_fields,
     )
 
 
-def log_user_action(operation: str, user_id: int, details: str = None):
+def log_user_action(operation: str, user_id: int, details: str | None = None):
     """
     Convenience function for logging user actions (audit trail).
 
@@ -170,7 +176,7 @@ def log_user_action(operation: str, user_id: int, details: str = None):
     )
 
 
-def log_business_operation(operation: str, details: str = None, user_id: int = None):
+def log_business_operation(operation: str, details: str | None = None, user_id: int | None = None):
     """
     Convenience function for logging business logic events.
 
@@ -185,7 +191,7 @@ def log_business_operation(operation: str, details: str = None, user_id: int = N
 
 
 def log_system_performance(
-    component: str, operation: str, duration: float = None, details: str = None
+    component: str, operation: str, duration: float | None = None, details: str | None = None
 ):
     """
     Convenience function for logging system performance metrics.
