@@ -34,7 +34,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 ### Fixed
 
-- [x] Refused access to another user's conversation now returns the same `404` response as a missing conversation, preventing enumeration of sequential IDs (B-117; ca7b7da).
+- [x] Refused access to another user's conversation now returns the same `404` response as a missing conversation, preventing enumeration of sequential IDs (B-117; `ca7b7da`).
 
 ### Upgrading an existing install
 
@@ -56,6 +56,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 ### Fixed
 
+- If `src/infra/.env` is missing, the installer shows the latest `.env.bak.*` and asks before restoring it; non-interactive runs stop for confirmation. Without a backup, it checks only this Compose project's data volumes and stops if data remains or Docker cannot verify them (B-140; `a593e265`).
 - [x] Mypy now checks `mas/auth` in CI without blocking the build, and the MAS and knowledge-store embeddings client copies remain identical (B-43; `d03c69d`).
 - `POST /tasks/abandoned-claims` now fails tasks from an earlier run only when the authenticated agent may run the assigned agent's work; cleanup for unregistered agents remains unchanged. Queue statistics and `GET /analytics/overview` now count only tasks visible to the caller, while managers and admins retain global counts (B-114; cc7bae1).
 - `compare-benchmarks.py` crashed on every llama-bench report (B-122, `3711a7b`)
@@ -114,7 +115,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - Access decisions after that review:
   - A conversation's owner can read and cancel every task in it, whoever posted it, for example an admin; the chat page no longer re-asks such a task every 1.6 s (`7e5275f`)
   - The chat page stops polling a task the server answers `403` or `404` for, drops its spinner and says the task is no longer available (`94f4bc0`)
-  - Managers keep reading every task but not other users' conversations. An initial change made the history route answer `403` with an explicit message and the chat WebSocket give its reason when it refused; B-117 restores indistinguishable `404` responses for refused and missing conversations before release (`aca0a9c`)
+  - Managers keep reading every task but not other users' conversations: an initial change made the history route answer `403` with an explicit message and the chat WebSocket give its reason when it refused; B-117 restores indistinguishable `404` responses for refused and missing conversations before release (`aca0a9c`)
 
 ### Added
 

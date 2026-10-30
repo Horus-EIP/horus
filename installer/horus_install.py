@@ -57,6 +57,12 @@ from common import (  # noqa: E402
     yellow,
 )
 
+
+class DockerCommandError(Exception):
+    """Custom exception for Docker execution failures."""
+    pass
+
+
 LOG_PATH = BUNDLE_DIR / "install-log.txt"
 PROFILE_JSON = BUNDLE_DIR / "horus-profile.json"
 
@@ -1173,6 +1179,7 @@ LEFT_BEHIND_VOLUMES = {
     "prometheus_data": "the metrics Prometheus kept before monitoring was turned off",
     "alloy_data": "the state of Alloy, which collected the logs for Loki",
 }
+DATA_VOLUMES = ["knowledge_store_documents", "knowledge_store_chroma", "postgresql_data"]
 PROJECT_LABEL = "com.docker.compose.project"
 VOLUME_ROWS = '{{.Name}} {{.Label "com.docker.compose.volume"}}'
 
@@ -1191,6 +1198,23 @@ def volumes_in_use(services: dict[str, dict]) -> set[str]:
     return {str(mount.get("source")) for spec in services.values()
             for mount in spec.get("volumes") or []
             if isinstance(mount, dict) and mount.get("type") == "volume"}
+
+def existing_volumes(log: Log, project: str) -> list[tuple[str, str]]:
+    res = run(["docker", "volume", "ls", "--filter",
+               f"label={PROJECT_LABEL}={project}", "--format", VOLUME_ROWS],
+              log, timeout=60)
+    if not res.ok:
+        log.fail(f"Critical Docker command failure. Error: {res.err}")
+        raise DockerCommandError(f"Failed to list Docker volumes: {res.err}")
+    volumes = []
+    for line_no, line in enumerate(res.out.splitlines(), 1):
+        row = line.split()
+        if len(row) < 2:
+            if line.strip():
+                log.warn(f"Malformed Docker output at line {line_no} ignored: '{line}'")
+            continue
+        volumes.append((row[0], row[1]))
+    return volumes
 
 def project_volumes(log: Log, project: str) -> list[tuple[str, str]]:
     if not project:
@@ -2034,6 +2058,101 @@ def decide_profile(log: Log, args, registry: str | None) -> tuple[dict, str, lis
         warn_mock_mode(log)
     return probe, name, reasons
 
+def detect_timestamp(file_name: str) -> datetime.datetime | None:
+    pattern = r"(\d{8}-\d{6})$"
+
+    match = re.search(pattern, str(file_name))
+    if match:
+        timestamp_str = match.group(1)
+        try:
+            return datetime.datetime.strptime(timestamp_str, "%Y%m%d-%H%M%S")
+        except ValueError:
+            return None
+    return None
+
+def checking_backup_env_attendance(log: Log, infra: Path,
+                                  non_interactive: bool = False) -> None:
+    file_pattern = ".env.bak.*"
+    env_file = ".env"
+    backup_list = []
+
+    folder_content = list(infra.glob(file_pattern))
+    env_path = infra / env_file
+
+    if env_path.is_file():
+        return
+
+    for path in folder_content:
+        if path.is_file():
+            date = detect_timestamp(path.name)
+            if date:
+                backup_list.append((path, date))
+
+    if not backup_list:
+        log.info("Checking for orphan volumes from a previous installation...")
+        project = (explicit_project_name(infra)
+                   or smoke.read_env(infra / ".env.example").get(PROJECT_NAME_KEY, "").strip()
+                   or infra.name.lower())
+        try:
+            volumes = existing_volumes(log, project)
+        except DockerCommandError as e:
+            raise InstallError(
+                EXIT_ENV_WRITE_FAILED,
+                "Safety check failed: Unable to verify Docker volume state.",
+                f"The installer could not check for existing data volumes because Docker failed: {e}",
+                "Ensure the Docker daemon is running and reachable, then retry the installation.",
+            )
+
+        if not volumes:
+            log.info("No Docker volumes found. Safe to generate a new .env file.")
+        else:
+            log.warn(f"Detected {len(volumes)} existing Docker volumes.")
+
+        for name, label in volumes:
+            if label in DATA_VOLUMES:
+                raise InstallError(
+                    EXIT_ENV_WRITE_FAILED,
+                    ".env file is not present but Horus still has data.",
+                    f"Docker volume '{name}' is still present. A new admin password would not match the stored data.",
+                    "Restore .env or a .env.bak.*, do not generate a new one.",
+                )
+    else:
+        backup_list.sort(key=lambda item: item[1], reverse=True)
+        log.say("Found these .env backups (newest first):")
+        for path, date in backup_list:
+            log.say(f"  {path.name}  ({date:%Y-%m-%d %H:%M:%S})")
+        selected_backup = backup_list[0][0]
+        log.say(f"Selected backup: {selected_backup}")
+        if non_interactive or not interactive_terminal():
+            raise InstallError(
+                EXIT_ENV_WRITE_FAILED,
+                "A .env backup needs confirmation before it can be restored.",
+                f"The newest backup is {selected_backup}.",
+                "Run the installer in an interactive terminal, review the backup path, and confirm its restore.",
+            )
+        try:
+            answer = input(f"  Restore {selected_backup.name} as .env? [y/N]: ")
+        except (EOFError, KeyboardInterrupt):
+            answer = ""
+        if answer.strip().lower() not in ("y", "yes"):
+            raise InstallError(
+                EXIT_ENV_WRITE_FAILED,
+                "Restore of the .env backup was not confirmed.",
+                f"No backup was copied. The selected file was {selected_backup}.",
+                "Review the backup and rerun the installer to confirm, or restore .env manually.",
+            )
+        try:
+            shutil.copy2(selected_backup, env_path)
+        except OSError as exc:
+            raise InstallError(
+                EXIT_ENV_WRITE_FAILED,
+                "Could not restore src/infra/.env from its backup.",
+                str(exc),
+                "Check that the folder is writable, then restore the backup and retry.",
+            ) from exc
+        _lock_down(env_path)
+        log.info(f".env created with success using .env backup ({selected_backup})")
+
 def _dispatch(log: Log, args) -> int:
     repo = find_repo(args.repo)
     infra = infra_dir(repo)
@@ -2078,6 +2197,8 @@ def _dispatch(log: Log, args) -> int:
         non_interactive=args.non_interactive,
         preselect=args.consent,
     )
+
+    checking_backup_env_attendance(log, infra, non_interactive=args.non_interactive)
 
     env = profiles.env_for(name, probe)
     env[COMPOSE_FILE_KEY] = with_wanted_monitoring(log, infra, env[COMPOSE_FILE_KEY],

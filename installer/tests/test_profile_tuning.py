@@ -445,6 +445,7 @@ class InstallWritesTheTuning(unittest.TestCase):
             patch(mock.patch.object(horus_install, "PROFILE_JSON",
                                     self.repo / "horus-profile.json"))
             patch(mock.patch.object(horus_install, "banner"))
+            patch(mock.patch.object(horus_install, "existing_volumes", return_value=[]))
             self.preflight = patch(mock.patch.object(horus_install, "preflight"))
             consent = patch(mock.patch.object(horus_install, "consent"))
             consent.choose.return_value = {"corpus_dir": "../../demo_assets"}
