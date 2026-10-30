@@ -5782,7 +5782,7 @@ scripts/licences/fetch-gpl-sources.py gathers the exact sources of the system
 packages of any of our images into one archive (docs/operations.md).
 
 The versions below were read with dpkg-query, and from the apk database, in CPU
-images built on 2026-10-08 from this repository; the GPU images install the
+images built on 2026-10-21 from this repository; the GPU images install the
 same system packages. An image built on another day can carry later Debian or
 Alpine security updates, and the script reads the exact list from the image it
 is given. The licence names are those of each package's copyright file (Debian)
@@ -5808,7 +5808,7 @@ file in /usr/share/doc/<package>/.
 - bsdutils 1:2.41.5-0+deb13u1 (source util-linux 2.41.5-0+deb13u1)
   Licence: GPL-2, GPL-2+, GPL-3+, LGPL, LGPL-2+, LGPL-2.1+, LGPL-3+. Images:
   agent, knowledge-store, llm-mock, mas.
-- ca-certificates 20250419
+- ca-certificates 20250419+deb13u1
   Licence: GPL-2+. Images: agent, knowledge-store, llm-mock, mas.
 - coreutils 9.7-3
   Licence: GPL-3+. Images: agent, knowledge-store, llm-mock, mas.
@@ -5953,7 +5953,7 @@ file in /usr/share/doc/<package>/.
   exception. Images: knowledge-store.
 - liblz4-1 1.10.0-4 (source lz4)
   Licence: GPL-2+. Images: agent, knowledge-store, llm-mock, mas.
-- liblzma5 5.8.1-1+deb13u1 (source xz-utils)
+- liblzma5 5.8.1-1+deb13u2 (source xz-utils)
   Licence: GPL-2+, GPL-3.0-or-later-WITH-Autoconf-exception-macro, LGPL-2.1+.
   Images: agent, knowledge-store, llm-mock, mas.
 - libmount1 2.41.5-0+deb13u1 (source util-linux)

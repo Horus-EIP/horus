@@ -64,7 +64,7 @@ The workflows are in `.github/workflows/`; each sync pull request brings the sam
 |---|---|---|
 | `ci.yml` | Every push to `main` or `master`, every pull request, and by hand | The jobs below |
 | `eval-testset.yml` | The same, but only when the evaluation files change: `demo_assets/`, `tests/eval/`, `scripts/eval/`, `scripts/benchmarks/`, the two benchmark scripts in `scripts/perf/`, the bench kit or the workflow itself | **Tests · Eval test set:** the test set, its runner and the bench kit's tests |
-| `images.yml`, `desktop-release.yml` | A `v*` tag, and by hand | The release: the service images and the desktop app ([VERSIONING.md](../VERSIONING.md)) |
+| `images.yml`, `desktop-release.yml` | A `v*` tag, and by hand | The release: service images, source bundles and the desktop app ([VERSIONING.md](../VERSIONING.md)); RC tags also run the full GPU evaluation on a `horus-gpu-8gb` self-hosted runner when one is registered |
 
 On a pull request, a new push cancels the run still going for that pull request; runs on `main` and `master` are never cancelled. A pull request from a fork waits until a maintainer clicks **Approve workflows to run**, at every push.
 
@@ -95,3 +95,17 @@ On a pull request, a new push cancels the run still going for that pull request;
 ### What GitHub enforces
 
 On `Horus-EIP/horus`, nothing: GitHub Free can't require checks or reviews on a private repository. We hold ourselves to it: merge only when every job is green and a maintainer has approved ([How we merge](../CONTRIBUTING.md#how-we-merge)). On the public bench kit, its ruleset does enforce both.
+
+---
+
+## The benchmark kit sync (`sync-bench-kit.yml`)
+
+Every day at 06:23 UTC, and by hand, this workflow copies `Horus-EIP/horus-bench-kit` (`main`) into `opensource/horus-bench-kit/` with `rsync --delete`, so a file removed from the kit is removed here. It never pushes to `main`: it force-pushes the branch `automation/sync-horus-bench-kit` and opens or updates one pull request. Nothing changes in `main` until a maintainer merges that pull request.
+
+| Question | Decision |
+|---|---|
+| Who owns `HORUS_SYNC_TOKEN`, and what can it write? | One maintainer of `Horus-EIP`, who creates it as a fine-grained personal access token and stores it as a repository secret. It is limited to the repository `Horus-EIP/horus`, with **Contents: read and write** and **Pull requests: read and write**, and nothing else. It expires within 90 days and its owner renews it. A leaked token could push branches, never merge: `main` changes only through a reviewed pull request. |
+| Does it replace the subtree process? | Yes. This workflow is now the normal way the kit comes back into `Horus-EIP/horus`. The `git subtree pull` in [CONTRIBUTING.md](../CONTRIBUTING.md#the-benchmark-kit) stays as a manual fallback when the workflow is down. The kit is still changed in its own repository first, never in `opensource/`. |
+| Who reviews the sync pull requests? | The pull request is opened with the token, so it is authored by the token's owner, who cannot approve it. Another maintainer reviews and merges it ([How we merge](../CONTRIBUTING.md#how-we-merge)): they read the diff of `opensource/horus-bench-kit/`, check that it only brings changes already merged in the kit repository, and wait for green CI. |
+
+The commit is made as `github-actions[bot]` and names the upstream kit commit in its message; it has no co-author.

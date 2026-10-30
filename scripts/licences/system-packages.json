@@ -75,11 +75,11 @@
      "licence": "GPL-2+",
      "name": "ca-certificates",
      "source": "ca-certificates",
-     "source_version": "20250419",
+     "source_version": "20250419+deb13u1",
      "texts": [
       "GPL-2.0-or-later"
      ],
-     "version": "20250419"
+     "version": "20250419+deb13u1"
     },
     {
      "licence": "GPL-3+",
@@ -426,13 +426,13 @@
      "licence": "GPL-2+, GPL-3.0-or-later-WITH-Autoconf-exception-macro, LGPL-2.1+",
      "name": "liblzma5",
      "source": "xz-utils",
-     "source_version": "5.8.1-1+deb13u1",
+     "source_version": "5.8.1-1+deb13u2",
      "texts": [
       "GPL-2.0-or-later",
       "GPL-3.0-or-later",
       "LGPL-2.1-or-later"
      ],
-     "version": "5.8.1-1+deb13u1"
+     "version": "5.8.1-1+deb13u2"
     },
     {
      "licence": "GPL-2, GPL-2+, GPL-3+, LGPL, LGPL-2+, LGPL-2.1+, LGPL-3+",
@@ -882,11 +882,11 @@
      "licence": "GPL-2+",
      "name": "ca-certificates",
      "source": "ca-certificates",
-     "source_version": "20250419",
+     "source_version": "20250419+deb13u1",
      "texts": [
       "GPL-2.0-or-later"
      ],
-     "version": "20250419"
+     "version": "20250419+deb13u1"
     },
     {
      "licence": "GPL-3+",
@@ -1573,13 +1573,13 @@
      "licence": "GPL-2+, GPL-3.0-or-later-WITH-Autoconf-exception-macro, LGPL-2.1+",
      "name": "liblzma5",
      "source": "xz-utils",
-     "source_version": "5.8.1-1+deb13u1",
+     "source_version": "5.8.1-1+deb13u2",
      "texts": [
       "GPL-2.0-or-later",
       "GPL-3.0-or-later",
       "LGPL-2.1-or-later"
      ],
-     "version": "5.8.1-1+deb13u1"
+     "version": "5.8.1-1+deb13u2"
     },
     {
      "licence": "GPL-2, GPL-2+, GPL-3+, LGPL, LGPL-2+, LGPL-2.1+, LGPL-3+",
@@ -2211,11 +2211,11 @@
      "licence": "GPL-2+",
      "name": "ca-certificates",
      "source": "ca-certificates",
-     "source_version": "20250419",
+     "source_version": "20250419+deb13u1",
      "texts": [
       "GPL-2.0-or-later"
      ],
-     "version": "20250419"
+     "version": "20250419+deb13u1"
     },
     {
      "licence": "GPL-3+",
@@ -2562,13 +2562,13 @@
      "licence": "GPL-2+, GPL-3.0-or-later-WITH-Autoconf-exception-macro, LGPL-2.1+",
      "name": "liblzma5",
      "source": "xz-utils",
-     "source_version": "5.8.1-1+deb13u1",
+     "source_version": "5.8.1-1+deb13u2",
      "texts": [
       "GPL-2.0-or-later",
       "GPL-3.0-or-later",
       "LGPL-2.1-or-later"
      ],
-     "version": "5.8.1-1+deb13u1"
+     "version": "5.8.1-1+deb13u2"
     },
     {
      "licence": "GPL-2, GPL-2+, GPL-3+, LGPL, LGPL-2+, LGPL-2.1+, LGPL-3+",
@@ -3018,11 +3018,11 @@
      "licence": "GPL-2+",
      "name": "ca-certificates",
      "source": "ca-certificates",
-     "source_version": "20250419",
+     "source_version": "20250419+deb13u1",
      "texts": [
       "GPL-2.0-or-later"
      ],
-     "version": "20250419"
+     "version": "20250419+deb13u1"
     },
     {
      "licence": "GPL-3+",
@@ -3369,13 +3369,13 @@
      "licence": "GPL-2+, GPL-3.0-or-later-WITH-Autoconf-exception-macro, LGPL-2.1+",
      "name": "liblzma5",
      "source": "xz-utils",
-     "source_version": "5.8.1-1+deb13u1",
+     "source_version": "5.8.1-1+deb13u2",
      "texts": [
       "GPL-2.0-or-later",
       "GPL-3.0-or-later",
       "LGPL-2.1-or-later"
      ],
-     "version": "5.8.1-1+deb13u1"
+     "version": "5.8.1-1+deb13u2"
     },
     {
      "licence": "GPL-2, GPL-2+, GPL-3+, LGPL, LGPL-2+, LGPL-2.1+, LGPL-3+",
@@ -3885,5 +3885,5 @@
    }
   }
  },
- "read_on": "2026-10-08"
+ "read_on": "2026-10-21"
 }

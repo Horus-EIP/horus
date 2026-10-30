@@ -173,6 +173,7 @@ class ReleaseWorkflow(unittest.TestCase):
         cls.workflow = load_yaml(WORKFLOW)
         cls.plan = cls.workflow["jobs"]["plan"]
         cls.job = cls.workflow["jobs"]["image"]
+        cls.bundle = cls.workflow["jobs"]["bundle"]
         cls.matrix = cls.job["strategy"]["matrix"]
         cls.steps = cls.job["steps"]
 
@@ -189,6 +190,8 @@ class ReleaseWorkflow(unittest.TestCase):
         triggers = workflow_triggers(self.workflow)
         self.assertEqual(set(triggers), {"push", "workflow_dispatch"})
         self.assertEqual(triggers["push"], {"tags": ["v*"]})
+        self.assertEqual(triggers["workflow_dispatch"]["inputs"]["run_gpu_eval"]["default"], False)
+        self.assertEqual(triggers["workflow_dispatch"]["inputs"]["run_gpu_eval"]["type"], "boolean")
 
     def test_the_matrix_builds_every_app_service_for_both_flavors(self):
         self.assertEqual(set(self.matrix["service"]), {*images.APP_SERVICES, images.MOCK_SERVICE})
@@ -241,16 +244,49 @@ class ReleaseWorkflow(unittest.TestCase):
         self.assertLess(check_at, login_at)
         self.assertLess(login_at, push_at)
 
+    def test_copyleft_scan_checks_real_section_7_before_push(self):
+        check_at, check = self.step(self.job, "report_image_copyleft.py")
+        login_at, _ = self.step(self.job, "docker/login-action")
+        push_at, _ = self.step(self.job, "docker push")
+        self.assertIn('--service "$SERVICE"', check["run"])
+        self.assertIn('--image "$IMAGE"', check["run"])
+        self.assertLess(check_at, login_at)
+        self.assertLess(login_at, push_at)
+
+        report_at, report = self.step(self.job, "size unpacked")
+        self.assertEqual(report["if"], "always()")
+        self.assertGreater(report_at, push_at)
+        self.assertIn("built in ${BUILD_SECONDS:-?} s", report["run"])
+
     def test_every_build_gets_a_commit_tag_and_only_a_release_moves_the_version_tag(self):
         _, plan = self.step(self.plan, "GITHUB_OUTPUT")
         self.assertIn('commit_tag=sha-${GITHUB_SHA::12}', plan["run"])
-        self.assertIn('if [ "$GITHUB_REF" = "refs/tags/v$version" ]; then\n  release=true',
-                      plan["run"])
+        self.assertIn('^refs/tags/v${version}(-rc[0-9]+|-rc\\.[0-9]+)?$', plan["run"])
         _, push = self.step(self.job, "docker push")
         self.assertIn('docker push "$REPOSITORY:$COMMIT_TAG"', push["run"])
-        self.assertIn('if [ "$RELEASE" = "true" ]; then\n  docker push "$IMAGE"', push["run"])
+        self.assertIn('RC_TAG="${REF_NAME#v}-${FLAVOR}"', push["run"])
+        self.assertIn('docker push "$IMAGE"', push["run"])
         self.assertEqual(push["env"]["COMMIT_TAG"],
                          "${{ needs.plan.outputs.commit_tag }}-${{ matrix.flavor }}")
+
+    def test_bundle_uses_the_same_rc_and_dispatch_image_tags_as_the_image_job(self):
+        env = self.bundle["env"]
+        self.assertEqual(env["SERVICE"], "${{ matrix.service }}")
+        self.assertEqual(env["FLAVOR"], "${{ matrix.flavor }}")
+        self.assertEqual(env["COMMIT_TAG"], "${{ needs.plan.outputs.commit_tag }}")
+        self.assertEqual(env["REF_NAME"], "${{ github.ref_name }}")
+        _, push = self.step(self.job, "docker push")
+        _, generate = self.step(self.bundle, "docker pull")
+        self.assertIn('RC_TAG="${REF_NAME#v}-${FLAVOR}"', push["run"])
+        self.assertIn('RC_TAG="${REF_NAME#v}-${FLAVOR}"', generate["run"])
+        self.assertIn('SAFE_SERVICE="${SERVICE//_/-}"', generate["run"])
+        self.assertIn('${COMMIT_TAG}-${FLAVOR}', generate["run"])
+
+    def test_bundle_verification_lists_archive_once_without_a_sigpipe_pipeline(self):
+        _, verify = self.step(self.bundle, 'tar -tzf "$BUNDLE_FILE"')
+        self.assertIn('tar -tzf "$BUNDLE_FILE" > bundle-files.txt', verify["run"])
+        self.assertNotIn('tar -tf "$BUNDLE_FILE" | grep', verify["run"])
+        self.assertIn('grep -F -q "gpl-sources/" bundle-files.txt', verify["run"])
 
     def test_a_release_tag_must_name_the_version_file(self):
         _, step = self.step(self.plan, "check-versions.py --tag")
@@ -293,6 +329,42 @@ class ReleaseWorkflow(unittest.TestCase):
         self.assertIn("import images; print(images.DEFAULT_REGISTRY)", step["run"])
         self.assertEqual(step["env"]["CONFIGURED_REGISTRY"], "${{ vars.HORUS_REGISTRY }}")
         self.assertIn('registry="${registry,,}"', step["run"])
+
+    def test_release_publishes_bundles_with_the_github_cli(self):
+        release = self.workflow["jobs"]["release"]
+        _, publish = self.step(release, "gh release create")
+        self.assertNotIn("uses", publish)
+        self.assertEqual(publish["env"]["GH_TOKEN"], "${{ secrets.GITHUB_TOKEN }}")
+        self.assertIn("assets=(assets/*.tar.gz)", publish["run"])
+        self.assertIn('args+=(--prerelease)', publish["run"])
+        self.assertEqual(release["permissions"], {"contents": "write"})
+
+    def test_rc_gpu_evaluation_requires_a_labelled_runner_and_sufficient_vram(self):
+        job = self.workflow["jobs"]["gpu-eval"]
+        self.assertEqual(job["needs"], ["plan", "image", "bundle"])
+        self.assertEqual(job["runs-on"], ["self-hosted", "linux", "x64", "horus-gpu-8gb"])
+        self.assertEqual(
+            job["env"]["IMAGE_VERSION"],
+            "${{ github.event_name == 'workflow_dispatch' && needs.plan.outputs.commit_tag || github.ref_name }}",
+        )
+        self.assertIn("contains(github.ref_name, '-rc')", job["if"])
+        self.assertIn("inputs.run_gpu_eval", job["if"])
+        self.assertNotIn("gpu-eval", self.workflow["jobs"]["release"]["needs"])
+        _, capacity = self.step(job, "nvidia-smi")
+        self.assertIn("total >= 8192", capacity["run"])
+        self.assertIn("free >= 7168", capacity["run"])
+        self.assertIn("docker run --rm --gpus all", capacity["run"])
+
+    def test_gpu_evaluation_runs_the_full_set_and_keeps_its_report(self):
+        job = self.workflow["jobs"]["gpu-eval"]
+        _, evaluate = self.step(job, "run-eval.py")
+        for argument in ("--reference gpu8", "--sample-resources", '--llm-container ""',
+                         "--corpus-token", "--out-dir"):
+            with self.subTest(argument):
+                self.assertIn(argument, evaluate["run"])
+        _, upload = self.step(job, "actions/upload-artifact")
+        self.assertEqual(upload["if"], "always()")
+        self.assertEqual(upload["with"]["retention-days"], 14)
 
     def test_registry_credentials_come_from_repository_variables_and_secrets(self):
         _, step = self.step(self.job, "docker/login-action")

@@ -30,7 +30,7 @@ PROMPT_WINDOW = 8
 SHORT_TEXT_WORDS = 6
 FORBIDDEN_STRINGS = {
     "a product source path": "src/services",
-    "a private registry": "ghcr.io/epitechpromo2027",
+    "a private registry": "ghcr.io/horus-eip",
     "closed licence wording": "Proprietary",
     "a maintainer email domain": "@epitech.eu",
 }

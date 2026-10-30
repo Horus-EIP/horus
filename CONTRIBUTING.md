@@ -88,7 +88,7 @@ GitHub can't enforce these rules on a private repository on the Free plan: requi
 
 The benchmark and evaluation kit in `opensource/horus-bench-kit/` is open source, under the Apache License 2.0, and lives in its public repository, [`Horus-EIP/horus-bench-kit`](https://github.com/Horus-EIP/horus-bench-kit). Once that repository is published, change the kit only there, with a pull request that follows its own CONTRIBUTING.md: never in this repository.
 
-Its changes come back here through a pull request in `Horus-EIP/horus` that pulls the public repository into the folder (the `git remote add` is needed once per clone):
+Its changes come back here through a daily pull request opened by the `sync-bench-kit.yml` workflow, reviewed by a maintainer other than the owner of its token ([docs/ci-and-branches.md](docs/ci-and-branches.md#the-benchmark-kit-sync-sync-bench-kityml)). If that workflow is down, pull the public repository into the folder yourself (the `git remote add` is needed once per clone):
 
 ```bash
 git remote add kit https://github.com/Horus-EIP/horus-bench-kit.git

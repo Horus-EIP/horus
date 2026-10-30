@@ -61,6 +61,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 - `POST /tasks/abandoned-claims` now fails tasks from an earlier run only when the authenticated agent may run the assigned agent's work; cleanup for unregistered agents remains unchanged. Queue statistics and `GET /analytics/overview` now count only tasks visible to the caller, while managers and admins retain global counts (B-114; cc7bae1).
 - `compare-benchmarks.py` crashed on every llama-bench report (B-122, `3711a7b`)
 - `ruff` failed CI on a `dict()` call in the agent (C408, `0ebc769`)
+- The Agent and Knowledge Store tests failed on every pull request once pytest 9.2.0 came out; the test requirements now pin `pytest==9.0.3` (`ab715f9b`)
 - Valkey answered on every network interface with the password every install shipped, `redis_password`; it is bound to 127.0.0.1 and gets a generated password (B-123, `d586e09`)
 - A local build of the agent image sent the git-ignored `app/models` folder (7.6 GB of model snapshots) to Docker and baked it into the image: its build context went from 8.06 GB to 715 kB. The other images' `.dockerignore` files leave out caches, `.env` files, logs and the local Chroma index too (B-126, `5b8a9ae`)
 - An upgrade left the containers of services the compose files no longer define running next to the new stack; `COMPOSE_IGNORE_ORPHANS` is respected (B-124, `816d592`)
@@ -119,6 +120,7 @@ The rest of the ATP fixes (Phase 0C) and the low-end hardware plan (Phases 1 to 
 
 ### Added
 
+- Release-candidate image runs now generate, verify and upload the GPL/LGPL source bundle alongside each CPU and GPU image bundle; the Alpine source fetcher falls back promptly to the GitHub APorts mirror when GitLab is unreachable. The workflow and all nine bundle artifacts completed successfully on `v0.1.2-rc8` (B-127, `07343cc`, `10453335`, `5cb1f6c`, `c2bdd37`, `05520096`).
 - A dedicated, least-privilege MAS account for agent workers (B-116): the installer and `init-env.sh` generate `SUPER_AGENT_PASSWORD`, MAS creates or upgrades the account at startup, and agent containers no longer authenticate with the super-user login. The role can register agents and execute agent work; it does not receive admin permissions (`ac5236e`, `05178b7`).
 - CI runs Bandit to scan Python code for security issues (B-42, `8561544`)
 - One llama-server (`ghcr.io/ggml-org/llama.cpp:server-b11382`, Qwen3-4B-Instruct-2507 Q4_K_M) serves MAS and every agent on the CPU profiles; neither service loads a local model (B-90, `9739864`)
