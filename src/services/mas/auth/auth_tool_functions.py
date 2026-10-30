@@ -27,7 +27,7 @@ oauth2_bearer = OAuth2PasswordBearer(tokenUrl="auth/token")
 api_key = APIKeyHeader(name="x-api-key")
 
 
-def authenticate_user(username: str, password: str, db, ip_address: str = None):
+def authenticate_user(username: str, password: str, db, ip_address: str | None = None):
     """
     Verifies the username and password against stored hashed password.
     Returns the user if authentication is successful, otherwise returns False.
@@ -129,10 +129,23 @@ def get_current_user(
         payload = jwt.decode(
             token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
         )
-        username: str = payload.get("sub")
-        user_id: str = payload.get("id")
-        nonce: str = payload.get("nonce")
-        exp: int = payload.get("exp")
+        raw_username = payload.get("sub")
+        raw_user_id = payload.get("id")
+        raw_nonce = payload.get("nonce")
+        raw_exp = payload.get("exp")
+
+        if (
+            not isinstance(raw_username, str)
+            or not isinstance(raw_user_id, int)
+            or not isinstance(raw_nonce, str)
+            or not isinstance(raw_exp, int)
+        ):
+            raise JWTError("Mandatory fiels missing in the JWT's payload")
+
+        username = raw_username
+        user_id = raw_user_id
+        nonce = raw_nonce
+        exp = raw_exp
 
         if username is None or user_id is None:
             log_error("auth", "Token validation failed: missing username or user_id")
@@ -198,7 +211,15 @@ class PermissionChecker:
         logger.info(
             f"DEBUG: PermissionChecker called for user {user.get('username')}, required: {self.required_permission}"
         )
-        if not check_permission(user.get("role"), self.required_permission):
+
+        role = user.get("role")
+        if not isinstance(role, str):
+            raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Invalid user data format: role must be a string"
+        )
+        
+        if not check_permission(role, self.required_permission):
             log_warning(
                 "auth",
                 f"User {user.get('username')} (role: {user.get('role')}) denied permission {self.required_permission}",
@@ -251,11 +272,12 @@ def modify_user_password(
     try:
         db.commit()
         return True
-    except Exception as e:
+    except Exception:
         db.rollback()
-        error_message = str(e.orig)
-        message = f"User Password Modification Error : {error_message}"
-        raise HTTPException(status_code=409, detail=message)
+        logger.error("User password modification failed")
+        raise HTTPException(
+            status_code=409, detail="Unable to modify password"
+        ) from None
 
 
 # ---------------------------------------------------------------------------

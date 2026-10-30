@@ -6,6 +6,7 @@ Reads environment variables (optionally from ``.env``) into a typed
 """
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -81,13 +82,16 @@ class Settings(BaseSettings):
 
 # Initialize settings
 # This will raise a ValidationError if required environment variables are missing
+
+class DummySettings:
+    def __getattr__(self, name: str) -> Any:
+        return None
+
+settings: Settings | DummySettings
+
 try:
     settings = Settings()
 except Exception as e:
     print(f"Warning: Configuration validation failed: {e}")
-
-    class DummySettings:
-        def __getattr__(self, name):
-            return None
 
     settings = DummySettings()

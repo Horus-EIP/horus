@@ -1,11 +1,16 @@
 """``Users`` ORM model + CRUD audit listeners."""
 
-from sqlalchemy import Column, Integer, String, event
-from sqlalchemy.orm import relationship
+from typing import TYPE_CHECKING
+
+from sqlalchemy import Integer, String, event
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from auth.permissions import Role
 from core.logger import log_db_operation
 from db.database import Base
+
+if TYPE_CHECKING:
+    from db.models.conversations import Conversations
 
 
 class Users(Base):
@@ -15,12 +20,12 @@ class Users(Base):
     """
 
     __tablename__ = "users"
-    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
-    username = Column(String, unique=True, nullable=False, index=True)
-    hashed_password = Column(String, nullable=False)
-    role = Column(String, default=Role.USER.value, nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, index=True)
+    username: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
+    hashed_password: Mapped[str] = mapped_column(String, nullable=False)
+    role: Mapped[str] = mapped_column(String, default=Role.USER.value, nullable=False)
 
-    conversations = relationship(
+    conversations: Mapped[list["Conversations"]] = relationship(
         "Conversations",
         back_populates="owner",
         passive_deletes=True,

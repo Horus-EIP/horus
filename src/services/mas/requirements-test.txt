@@ -1,5 +1,9 @@
-pytest
+pytest==9.0.3
 pytest-cov
 pytest-asyncio
 httpx
 fakeredis
+mypy==2.4.0
+types-python-jose
+types-passlib
+types-colorama

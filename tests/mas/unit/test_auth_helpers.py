@@ -453,7 +453,7 @@ class TestModifyUserPassword:
 
         # Mock the commit to raise an exception
         # We need to mock the exception structure to match what the code expects (e.orig)
-        mock_exception = Exception("DB Error")
+        mock_exception = Exception("SQL with password hash: secret-hash-value")
         mock_exception.orig = Exception("Constraint violation")
         self.mock_db.commit.side_effect = mock_exception
 
@@ -463,7 +463,8 @@ class TestModifyUserPassword:
             )
 
         assert exc_info.value.status_code == 409
-        assert "User Password Modification Error" in exc_info.value.detail
+        assert exc_info.value.detail == "Unable to modify password"
+        assert "secret-hash-value" not in exc_info.value.detail
         self.mock_db.rollback.assert_called_once()
 
     @patch("auth.auth_tool_functions.log_auth_operation")

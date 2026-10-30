@@ -25,7 +25,7 @@ class Task(Base):
     )
     parent_task_id = Column(String, ForeignKey("tasks.id"), nullable=True)
     agent_id = Column(String, nullable=False)
-    status = Column(
+    status: Column = Column(
         SQLEnum(TaskStatus, values_callable=lambda obj: [e.value for e in obj]),
         default=TaskStatus.PENDING.value,
     )

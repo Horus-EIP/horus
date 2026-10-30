@@ -3,10 +3,11 @@
 Extracted from ``auth/routes.py`` to keep that file focused on handler
 logic. Dict structure follows FastAPI's route decorator parameters.
 """
+from typing import Any
 
 # --- POST /auth/register -------------------------------------------------
 
-REGISTER_RESPONSES = {
+REGISTER_RESPONSES: dict[int | str, dict[str, Any]]= {
     201: {
         "description": "User successfully created",
         "content": {
@@ -108,7 +109,7 @@ REGISTER_OPENAPI_EXTRA = {
 
 # --- POST /auth/token ----------------------------------------------------
 
-TOKEN_RESPONSES = {
+TOKEN_RESPONSES: dict[int | str, dict[str, Any]] = {
     200: {
         "description": "Authentication successful - JWT token issued",
         "content": {
@@ -281,7 +282,7 @@ TOKEN_OPENAPI_EXTRA = {
 
 # --- POST /auth/logout ---------------------------------------------------
 
-LOGOUT_RESPONSES = {
+LOGOUT_RESPONSES: dict[int | str, dict[str, Any]] = {
     200: {
         "description": "Successfully logged out",
         "content": {
