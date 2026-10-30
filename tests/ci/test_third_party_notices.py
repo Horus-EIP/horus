@@ -308,6 +308,15 @@ class SystemPackages(unittest.TestCase):
                          "- poppler-utils ", "- busybox ", "- psycopg2-binary ", "- @img/sharp-libvips-linuxmusl-x64 ",
                          "https://pypi.org/project/psycopg2-binary/"):
             self.assertIn(expected, flat)
+        self.assertIn(
+            "- libkeyutils 1.5.8 (bundled native library)", flat
+        )
+        self.assertIn(
+            "Licence: LGPL-2.1-or-later. Source: "
+            "https://git.kernel.org/pub/scm/linux/kernel/git/dhowells/"
+            "keyutils.git/snapshot/keyutils-1.5.8.tar.gz",
+            flat,
+        )
         for identifier in ("GPL-2.0-only", "GPL-3.0-or-later", "LGPL-2.1-or-later"):
             self.assertTrue((notices.LICENSES_DIR / f"{identifier}.txt").is_file(), identifier)
 
