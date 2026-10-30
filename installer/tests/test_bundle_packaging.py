@@ -88,7 +88,11 @@ def image_ships(tool: str, base: str, stage: str) -> bool:
     return any(re.search(rf"\b{re.escape(tool)}\b", line) for line in installs)
 
 def container_ports(spec: dict) -> set[str]:
-    return {str(mapping).rsplit(":", 1)[-1] for mapping in spec.get("ports", [])}
+    published = {
+        str(mapping).rsplit(":", 1)[-1] for mapping in spec.get("ports", [])
+    }
+    exposed = {str(port).rsplit(":", 1)[-1] for port in spec.get("expose", [])}
+    return published | exposed
 
 def make_app(root: Path) -> Path:
     app = root / "Horus.app"
@@ -344,6 +348,11 @@ class ModelFilesStayOutOfTheBundle(unittest.TestCase):
             with self.subTest(name):
                 self.assertTrue(build_bundle.pruned(Path(name)))
         self.assertFalse(build_bundle.pruned(Path("models/manifest.json")))
+
+    def test_local_tls_certificates_are_pruned(self):
+        for name in ("src/infra/certs/horus.crt", "src/infra/certs/horus.key"):
+            with self.subTest(name):
+                self.assertTrue(build_bundle.pruned(Path(name)))
 
 @needs_yaml
 class ComposeReleaseVersion(unittest.TestCase):

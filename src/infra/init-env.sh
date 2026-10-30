@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Create .env from .env.example and generate the JWT, Valkey, admin and agent passwords.
+# Create .env from .env.example and generate passwords.
 # If .env already exists, does nothing (exit 0) so wrapper scripts can call this safely.
 #
 # Usage: from this directory: ./init-env.sh   or: bash init-env.sh
-#   ./init-env.sh            create .env only when it is missing (default, unchanged)
+#   ./init-env.sh            create .env only when it is missing; ask about LAN access
 #   ./init-env.sh --force    back up an existing .env to .env.bak.<timestamp>, then recreate
-#   ./init-env.sh --quiet    suppress the informational output (errors still print)
+#   ./init-env.sh --quiet    suppress output and use safe local-only defaults
 #
 # --force exists for the beta installer, which needs to (re)generate a .env it then layers
-# hardware-profile settings on top of. Without a flag the behaviour is exactly as before.
+# hardware-profile settings on top of. Quiet/non-interactive runs keep LAN access disabled.
 #
 # One-shot stack: run ./stack-up.sh from the top of this folder (runs this, then docker compose up --build)
 
@@ -37,6 +37,97 @@ done
 
 say() { [[ "$QUIET" -eq 1 ]] || echo "$@"; }
 
+set_key() {
+  local key="$1" value="$2"
+  if grep -q "^${key}=" "$TARGET"; then
+    if command -v perl >/dev/null 2>&1; then
+      perl -i -pe "s/^${key}=.*/${key}=${value}/" "$TARGET"
+    elif [[ "$(uname -s)" == Darwin ]]; then
+      sed -i '' "s/^${key}=.*/${key}=${value}/" "$TARGET"
+    else
+      sed -i "s/^${key}=.*/${key}=${value}/" "$TARGET"
+    fi
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$TARGET"
+  fi
+  if ! grep -q "^${key}=${value}\$" "$TARGET"; then
+    echo "Error: failed to write ${key} into $TARGET"
+    exit 1
+  fi
+}
+
+detect_lan_ipv4() {
+  local python
+  python="$(command -v python3 || command -v python || true)"
+  [[ -n "$python" ]] || return 1
+  "$python" -c 'import socket; s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.connect(("192.0.2.1", 80)); print(s.getsockname()[0]); s.close()' 2>/dev/null
+}
+
+valid_lan_ipv4() {
+  local address="$1" octet
+  local -a parts
+  IFS=. read -r -a parts <<< "$address"
+  [[ ${#parts[@]} -eq 4 ]] || return 1
+  for octet in "${parts[@]}"; do
+    [[ "$octet" =~ ^[0-9]{1,3}$ ]] && (( 10#$octet <= 255 )) || return 1
+  done
+  [[ "$address" != 0.0.0.0 && ! "$address" =~ ^127\. ]]
+}
+
+configure_network_access() {
+  local current_bind="${1:-127.0.0.1}"
+  local default_ip lan_ip answer response
+
+  [[ -t 0 && "$QUIET" -eq 0 ]] || return 0
+  if [[ "$current_bind" == "0.0.0.0" ]]; then
+    printf 'Allow other devices on your trusted LAN to access Horus? [Y/n] '
+    answer="y"
+  else
+    printf 'Allow other devices on your trusted LAN to access Horus? [y/N] '
+    answer="n"
+  fi
+  if IFS= read -r response; then
+    case "$response" in
+      y|Y|[yY][eE][sS]) answer="y" ;;
+      n|N|[nN][oO]) answer="n" ;;
+      "") ;;
+      *) say "Unrecognized answer; keeping the current setting." ;;
+    esac
+  fi
+
+  if [[ "$answer" == "n" ]]; then
+    set_key HORUS_WEB_BIND "127.0.0.1"
+    set_key HORUS_LAN_TLS "0"
+    say "LAN access disabled; the local web client is available at http://localhost:3000."
+    return
+  fi
+
+  default_ip="$(detect_lan_ipv4 || true)"
+  if [[ -z "$default_ip" ]] || ! valid_lan_ipv4 "$default_ip"; then
+    default_ip=""
+    say "Could not detect this PC's LAN IPv4 address."
+  fi
+  if [[ -n "$default_ip" ]]; then
+    printf "Enter this PC's LAN IPv4 address [%s]: " "$default_ip"
+  else
+    printf "Enter this PC's LAN IPv4 address: "
+  fi
+  IFS= read -r lan_ip || lan_ip=""
+  lan_ip="${lan_ip:-$default_ip}"
+  if ! valid_lan_ipv4 "$lan_ip"; then
+    echo "Error: '$lan_ip' is not a usable IPv4 address. LAN access was not enabled." >&2
+    exit 1
+  fi
+
+  set_key HORUS_WEB_BIND "0.0.0.0"
+  if ! grep -q '^HORUS_LAN_TLS=' "$TARGET"; then
+    set_key HORUS_LAN_TLS "0"
+  fi
+  say "Local access is available at http://localhost:3000."
+  say "LAN HTTPS stays disabled until a trusted certificate and matching key are installed in src/infra/certs/."
+  say "Then set HORUS_LAN_TLS=1 in src/infra/.env and use https://$lan_ip:3443."
+}
+
 if [[ ! -f "$EXAMPLE" ]]; then
   echo "Error: missing $EXAMPLE"
   exit 1
@@ -44,6 +135,8 @@ fi
 
 if [[ -f "$TARGET" ]]; then
   if [[ "$FORCE" -eq 0 ]]; then
+    current_bind="$(sed -n 's/^HORUS_WEB_BIND=//p' "$TARGET" | tail -n 1)"
+    configure_network_access "${current_bind:-127.0.0.1}"
     say "Using existing $TARGET (remove it to recreate from $EXAMPLE)."
     exit 0
   fi
@@ -97,20 +190,9 @@ random_password() {
   printf '%s\n' "$candidate"
 }
 
-set_key() {
-  local key="$1" value="$2"
-  if command -v perl >/dev/null 2>&1; then
-    perl -i -pe "s/^${key}=.*/${key}=${value}/" "$TARGET"
-  elif [[ "$(uname -s)" == Darwin ]]; then
-    sed -i '' "s/^${key}=.*/${key}=${value}/" "$TARGET"
-  else
-    sed -i "s/^${key}=.*/${key}=${value}/" "$TARGET"
-  fi
-  if ! grep -q "^${key}=${value}\$" "$TARGET"; then
-    echo "Error: failed to write ${key} into $TARGET"
-    exit 1
-  fi
-}
+
+
+configure_network_access "127.0.0.1"
 
 JWT_SECRET="$(random_hex)"
 VALKEY_PASSWORD="$(random_hex)"
@@ -127,4 +209,5 @@ chmod 600 "$TARGET" 2>/dev/null || true
 say "Created $TARGET with generated JWT_SECRET_KEY and REDIS_PASSWORD (64 hex chars each), plus admin and agent account passwords."
 say "The admin account signs in with the SUPER_USER_USERNAME and the generated SUPER_USER_PASSWORD in $TARGET."
 say "The Agent service uses SUPER_AGENT_USERNAME and SUPER_AGENT_PASSWORD from $TARGET to register its workers."
-say "Next: docker compose up --build from this directory, or ./stack-up.sh from the top of this folder, then sign in in the web UI."
+say "Local access uses http://localhost:3000; LAN HTTPS needs a trusted certificate configured in $DIR/certs."
+say "Next: docker compose up --build from this directory, or ./stack-up.sh from the top of this folder."

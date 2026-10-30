@@ -60,7 +60,7 @@ You need the Horus-Beta ZIP and the access token we sent you.
    - macOS: right-click `START-HERE-macOS.command` and choose Open
    - Linux: `./START-HERE-Linux.sh`
 
-The START-HERE files run `installer/horus_install.py`. It checks Docker, Compose, the disk, the network and the ports, picks a profile for your hardware, asks which folders Horus may read (read-only), downloads the prebuilt images and the model, and starts everything. It does not build anything. When it finishes, open http://localhost:3000 and sign in with the user name and password it prints.
+The START-HERE files run `installer/horus_install.py`. It checks Docker, Compose, the disk, the network and the ports, picks a profile for your hardware, asks which folders Horus may read (read-only), downloads the prebuilt images and the model, and starts everything. It does not build anything. Local access needs no certificate; configure a trusted TLS certificate first only if you want LAN access (see [Getting started](docs/getting-started.md#local-and-lan-access)). When it finishes, open http://localhost:3000 and sign in with the user name and password it prints.
 
 - To see which profile it would pick without changing anything: `--dry-run`.
 - To stop and keep your data: run your START-HERE file with `--stop`. To remove everything: `--uninstall` (this deletes the documents you added).
@@ -84,7 +84,7 @@ Or, on a machine with an NVIDIA GPU, with Docker Compose directly:
 
 ```bash
 cd src/infra
-./init-env.sh             # creates .env from .env.example with a random JWT secret and Valkey password
+./init-env.sh             # creates .env; no certificate is needed for localhost
 docker compose up --build
 ```
 

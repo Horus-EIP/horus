@@ -790,7 +790,7 @@ READ_ONLY_ROOTFS true
 - Local `.env` (not committed) for Compose  
 - The installer and `src/infra/init-env.sh` generate `JWT_SECRET_KEY` and `REDIS_PASSWORD` (64 hex characters each) and `SUPER_USER_PASSWORD` (24 characters that meet the MAS password policy) into `src/infra/.env`, and the installer also generates `CORPUS_SCAN_TOKEN`; `.env.example` leaves `REDIS_PASSWORD` and `SUPER_USER_PASSWORD` empty. On an install that still has the password earlier releases shipped (`redis_password`) or an empty one, the installer writes a generated one, and the `docker compose up -d` it ends with recreates `redis`, `mas` and `agent` with it.
 - `POSTGRES_PASSWORD`, `RABBITMQ_PASSWORD` and `PGADMIN_DEFAULT_PASSWORD` still ship as defaults; their ports answer on 127.0.0.1 only (see 6.3 for the Linux Engine caveat).
-- `SUPER_USER_PASSWORD` was `admin` in earlier releases, and no install keeps it now. On an install whose `.env` still has `admin` or an empty value, the installer writes a generated one; on its next start MAS gives it to an account still on `admin` (an account whose password was changed in Horus keeps its own), and the installer shows it once, at the end. Before B-116, the agent also used this admin login; it now uses the separate `SUPER_AGENT_USERNAME` / `SUPER_AGENT_PASSWORD` account described above. The web client forwards every `/api/orchestrator/*` request to MAS, `/auth/token` included; port 3000 answers on 127.0.0.1 only, unless `HORUS_WEB_BIND` opens it to the network (6.3).
+- `SUPER_USER_PASSWORD` was `admin` in earlier releases, and no install keeps it now. On an install whose `.env` still has `admin` or an empty value, the installer writes a generated one; on its next start MAS gives it to an account still on `admin` (an account whose password was changed in Horus keeps its own), and the installer shows it once, at the end. Before B-116, the agent also used this admin login; it now uses the separate `SUPER_AGENT_USERNAME` / `SUPER_AGENT_PASSWORD` account described above. The web client forwards every `/api/orchestrator/*` request to MAS, `/auth/token` included; the local gateway is loopback-only and optional LAN HTTPS is separately controlled (6.3).
 
 **Recommendations:**
 - Use Docker secrets for production
@@ -801,9 +801,10 @@ READ_ONLY_ROOTFS true
 
 | Service | Host port | Bound to | Reached from the host by |
 |---|---|---|---|
-| Web client | 3000 | 127.0.0.1, or the address in `HORUS_WEB_BIND` | the browser, the desktop app |
-| MAS | 8000 | 127.0.0.1 | the browser's chat WebSocket, the installer's smoke test, scripts |
-| Knowledge store | 8080 | 127.0.0.1 | the browser (`NEXT_PUBLIC_KNOWLEDGE_STORE_URL`), the smoke test, scripts |
+| Local HTTP gateway (web client, chat, knowledge store) | 3000 | 127.0.0.1 | browser and desktop app |
+| LAN HTTPS gateway | 3443 | the address in `HORUS_WEB_BIND`, only with `HORUS_LAN_TLS=1` and a trusted certificate | LAN browsers |
+| MAS | 8000 | 127.0.0.1 | gateway, installer smoke test, scripts |
+| Knowledge store | 8080 | 127.0.0.1 | gateway, smoke test, scripts |
 | Agent | 8001 | 127.0.0.1 | `scripts/perf/prompt-tokens.py` (metrics) |
 | vLLM (GPU profiles) | 18000 (`VLLM_HOST_PORT`) | 127.0.0.1 | debugging only; it has no API key |
 | PostgreSQL | 5432 (`DB_PORT`) | 127.0.0.1 | MAS run on the host |
@@ -813,15 +814,15 @@ READ_ONLY_ROOTFS true
 | PgAdmin (`dev-tools` profile) | 5433 | 127.0.0.1 | the browser |
 | Prometheus, Loki, Tempo queries, llama-server | none | not published | containers on `horus-net` only |
 
-By default no port answers other machines, provided Docker Engine is 28.0 or newer on Linux: on older Engines, hosts on the same network segment can reach ports published to 127.0.0.1 (moby/moby#45610, fixed in 28.0.0). The installer, START-HERE and the desktop app open `http://localhost:3000`.
+The local gateway uses HTTP on loopback port 3000 and requires no certificate. The optional LAN gateway uses HTTPS on port 3443 only when `HORUS_LAN_TLS=1` and both `src/infra/certs/horus.crt` and `horus.key` are present. The certificate must be trusted by clients and cover the LAN hostname/IP. The private key is ignored by Git and must never be committed. See [Getting started](getting-started.md#local-and-lan-access). The installer, START-HERE and desktop app open `http://localhost:3000`.
 
-`HORUS_WEB_BIND=0.0.0.0` in `src/infra/.env`, then `START-HERE --start` (or `docker compose up -d`), opens the web client, and only it, to the network on purpose. What that means:
+The local gateway is always bound to loopback. To allow trusted LAN clients, set `HORUS_WEB_BIND=0.0.0.0`, install a trusted certificate/key pair, set `HORUS_LAN_TLS=1`, then restart the stack. Only the HTTPS listener on port 3443 is exposed to the LAN; the local HTTP listener remains loopback-only. Without an enabled, configured certificate, the LAN HTTPS listener is disabled while local startup continues. Do not expose Horus to the public Internet. The gateway is the only network-facing service; it proxies web pages and MAS REST, upgrades the chat WebSocket to MAS, and forwards Knowledge Store requests.
 
-- The sign-in page is on the network. The web client proxies the whole MAS REST API under `/api/orchestrator`, `/auth/token` included, so any machine that reaches port 3000 can try passwords and, once signed in, use the API with that account's role. Binding 8000 to 127.0.0.1 does not change that.
-- Chat and the knowledge store do not work from other machines yet (B-133): the chat socket and the knowledge-store calls go to ports that answer on 127.0.0.1 only, and the knowledge store accepts only the origins `http://localhost:3000` and `http://127.0.0.1:3000`. Other machines can sign in, but chat and the knowledge-store page fail.
-- Use 127.0.0.1 or 0.0.0.0. With any other address, `http://localhost:3000` no longer answers on the machine itself.
+- Every device that uses the LAN URL must trust the issuing CA and use a hostname/IP included in the certificate. A locally generated CA is suitable for a private LAN; a public or organizational CA can be used when available.
+- The sign-in page and MAS REST API (`/api/orchestrator`, including `/auth/token`), chat WebSocket, and Knowledge Store are reachable through the gateway. Knowledge Store requests require a valid MAS bearer token; the gateway validates it against `/users/me` before proxying.
+- The gateway receives only explicit routing configuration, never the full `.env` or its passwords.
 
-`tests/ci/test_published_ports.py` fails when a port is published on every interface, except 3000 through `HORUS_WEB_BIND`, and when a launcher opens anything but `http://localhost:3000`.
+`tests/ci/test_published_ports.py` fails when a port is published on every interface except the opt-in LAN TLS port, or when a launcher opens anything but `http://localhost:3000`.
 
 ---
 

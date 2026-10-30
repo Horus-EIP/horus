@@ -117,7 +117,8 @@ def network_hosts(image_registry: str | None,
     return _labelled_once(hosts)
 
 PORTS = [
-    (3000, "web-client", None),
+    (3000, "Local HTTP gateway", None),
+    (3443, "LAN HTTPS gateway", None),
     (8000, "mas (API)", None),
     (8001, "agent", None),
     (8080, "knowledge_store", None),

@@ -60,6 +60,7 @@ PRUNE_GLOBS = [
 ]
 
 PRUNE_PATHS = (
+    "src/infra/certs/",
     "src/services/mas/logs/",
     "src/services/agent/logs/",
     "src/services/knowledge-store/logs/",

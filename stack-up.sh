@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Create src/infra/.env when missing (init-env.sh), validate Compose, then build and start the stack.
+# Create src/infra/.env when missing (init-env.sh),
+# validate Compose, then build and start the stack.
 #
 # Usage (from the top of this folder):
 #   ./stack-up.sh                  # build + up (foreground; Ctrl+C stops containers)
